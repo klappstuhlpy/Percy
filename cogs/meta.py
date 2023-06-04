@@ -4,6 +4,7 @@ import datetime
 import inspect
 import io
 import itertools
+import os
 import time
 from collections import Counter
 from typing import (Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
@@ -742,68 +743,43 @@ class Meta(commands.Cog):
             else:
                 await ctx.send(f'{ctx.tick(False)} Not marking as solved.')
 
+    @commands.command()
+    async def source(self, ctx: Context, *, command: str = None):
+        """Displays my full source code or for a specific command.
+
+        To display the source code of a subcommand you can separate it by
+        periods, e.g. tag.create for the create subcommand of the tag command
+        or by spaces.
+        """
+        source_url = 'https://github.com/klappstuhlpy/Percy'
+        branch = 'master'
+        if command is None:
+            return await ctx.send(source_url)
+
+        if command == 'help':
+            src = type(self.bot.help_command)
+            filename = inspect.getsourcefile(src)
+        else:
+            obj = self.bot.get_command(command.replace('.', ' '))
+            if obj is None:
+                return await ctx.send(f'{ctx.tick(False)} Could not find command.')
+
+            src = obj.callback.__code__
+            filename = src.co_filename
+
+        lines, firstlineno = inspect.getsourcelines(src)
+        if filename is None:
+            return await ctx.send(f'{ctx.tick(False)} Could not find source for command.')
+
+        location = os.path.relpath(filename).replace('\\', '/')
+
+        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+        await ctx.send(final_url)
+
     @solved.error
     async def on_solved_error(self, ctx: GuildContext, error: Exception):
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f'This command is on cooldown. Try again in {error.retry_after:.2f}s')
-
-    '''@command(
-        commands.hybrid_command,
-        name='unsolved',
-        description='Searches for threads that need attention.',
-        usage="[flags...]"
-    )
-    @discord.app_commands.guilds(RH_MUSIC_GUILD_ID)
-    async def unsolved(self, ctx: GuildContext, *, flags: UnsolvedFlags):
-        """Lists threads that were opened recently and need help.
-        This command uses a syntax similar to Discord's search bar.
-        The following flags are valid.
-        `messages:` The maximum number of messages needed to be considered unsolved.
-        `threshold:` How old the thread needs to be considered unsolved (e.g. "5m", "20m")
-        """
-
-        threads = await ctx.guild.active_threads()
-        now = ctx.message.created_at
-        threshold = now - flags.threshold
-
-        unsolved_threads: list[tuple[datetime.datetime, str]] = []
-        for thread in threads:
-            dt = discord.utils.snowflake_time(
-                thread.last_message_id) if thread.last_message_id else thread.created_at or now
-            if (
-                    thread.parent_id == RH_MUSIC_HELP_FORUM
-                    and not thread.archived
-                    and not thread.locked
-                    and thread.message_count <= flags.messages
-                    and dt < threshold
-            ):
-                unsolved_threads.append(
-                    (
-                        dt,
-                        f'{thread.mention}: <:thread:1087873209518522388> '
-                        f'`{thread.message_count}`・{discord.utils.format_dt(dt, "R")}',
-                    )
-                )
-
-        unsolved_threads.sort(key=lambda t: t[0])
-        to_paginate = [t[1] for t in unsolved_threads]
-        if not to_paginate:
-            return await ctx.send('No threads found.', ephemeral=True)
-
-        class EmbedPaginator(BasePaginator[str]):
-            colour = self.bot.colour.darker_red()
-
-            async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(title="Unsolved Threads",
-                                      timestamp=discord.utils.utcnow(),
-                                      color=self.colour)
-                embed.set_footer(text=f"{plural(len(to_paginate)):entry|entries}")
-
-                embed.description = '\n'.join(entries)
-
-                return embed
-
-        await EmbedPaginator.start(ctx, entries=to_paginate, per_page=12)'''
 
     @app_commands.command(name="help", description="Get help for a command or module.")
     @app_commands.guild_only()
