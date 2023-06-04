@@ -778,17 +778,16 @@ class Meta(commands.Cog):
                 return await ctx.send('Could not find source for command.')
 
             location = os.path.relpath(filename).replace('\\', '/')
+            location_parts = filename.split(os.path.sep)
+            cogs_index = location_parts.index("cogs")
+            location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
         else:
             location = module.replace('.', '/') + '.py'
             source_url = 'https://github.com/Rapptz/discord.py'
             branch = 'master'
 
         final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        parsed_url = urlparse(final_url)
-        path = parsed_url.path
-        _, path = os.path.splitdrive(path)
-        path = path.replace('\\', '/')
-        await ctx.send(path)
+        await ctx.send(final_url)
 
     @solved.error
     async def on_solved_error(self, ctx: GuildContext, error: Exception):
