@@ -308,7 +308,7 @@ class Stats(commands.Cog):
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 
         # [`hash`](url) message (offset)
-        offset = discord.utils.format_dt(commit_time.astimezone(datetime.timezone.utc), 1)
+        offset = discord.utils.format_dt(commit_time.astimezone(datetime.timezone.utc), 'R')
         return f'[`{short_sha2}`](https://github.com/Rapptz/RoboDanny/commit/{commit.hex}) {short} ({offset})'
 
     def get_last_commits(self, count=3, repo_path: str = str(Path(__file__).parent.parent.absolute())) -> str:
