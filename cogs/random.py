@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import datetime
 
 import yarl
@@ -141,24 +142,52 @@ class Random(commands.Cog):
 
         await ctx.send(embed=embed, file=discord.File(io.BytesIO(screenshot_bytes), filename='screenshot.png'))
 
+    @staticmethod
+    def extract_translation_info(content: str) -> tuple[Optional[str], Optional[str]]:
+        """Extracts the translation info from a message.
+
+        Returns a tuple of the target language and the text to translate.
+
+        Possible Contexts:
+        - `to <target_language>:? <text>`
+        - `in <target_language>:? <text>`
+        - `on <target_language>:? <text>`
+        - `<text> in <target_language>`
+        """
+
+        CONTEXT_PATTERN = re.compile(
+            r"(?:(?P<text>.+)\s+)?(?:to|in|on)\s+(?P<target_language>\w+)\b:\s*(?P<text2>.+)|(?P<text3>.+)\s+(?:to|in|on)\s+(?P<target_language2>\w+)\b",
+            re.IGNORECASE
+        )
+
+        match = CONTEXT_PATTERN.search(content)
+        if match:
+            target_language = match.group("target_language") or match.group("target_language2")
+            text = match.group("text") or match.group("text2") or match.group("text3")
+
+            return target_language.lower(), text.strip()
+
+        return "en", content
+
     @command(
         commands.command,
         name='translate',
         description='Translates a message to English using Google Translate.',
         usage='[to] <message>',
-        examples=['en こんにちは', 'french こんにちは', 'こんにちは']
+        examples=['to <target_language> <text>', 'in <target_language> <text>', '<text> to <target_language>']
     )
-    async def translate(self, ctx: Context, to: str, *, message: Annotated[Optional[str], commands.clean_content] = None):
+    async def translate(self, ctx: Context, *, message: Annotated[Optional[str], commands.clean_content] = None):
         """Translates a message to English using Google Translate."""
 
-        dest = fuzzy.finder(to, [*LANGUAGES.keys()])
-        dest = dest[0] if dest else None
-        if not dest:
-            dest = fuzzy.finder(to, [*LANGUAGES.items()], key=lambda x: x[1])
-            dest = dest[0][0] if dest else None
-            if not dest:
-                dest = 'en'
-                message = f'{to} ' + (message or '')
+        dest, message = self.extract_translation_info(message)
+
+        LANGS = LANGUAGES.keys() + LANGUAGES.values()
+
+        destinations = fuzzy.finder(dest, LANGS)
+        if destinations is None:
+            return await ctx.send(f'{ctx.tick(False)} Invalid language provided, take care of context matching.')
+        else:
+            dest = destinations[0]
 
         if message is None:
             reply = ctx.replied_message
