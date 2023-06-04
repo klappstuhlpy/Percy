@@ -158,7 +158,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         return (
             discord.Embed(
                 title='Hangman',
-                description="```\n{self._current_state}```",
+                description=f"```\n{self._current_state}```",
                 colour=self._current_colour,
             )
         )
