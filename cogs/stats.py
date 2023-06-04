@@ -4,19 +4,21 @@ import asyncio
 import datetime
 import gc
 import io
+import itertools
 import logging
 import os
-import pathlib
 import re
 import sys
 import textwrap
 import traceback
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, TypedDict, Dict
 
 import asyncpg
 import discord
 import psutil
+import pygit2
 from discord.ext import commands, tasks
 from sqlalchemy import func, Integer, String, DateTime, Boolean, Column, select, join, case, BigInteger, Result
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -274,9 +276,9 @@ class Stats(commands.Cog):
 
     @staticmethod
     def line_counter() -> str:
-        path = pathlib.Path(__file__).parent.parent
+        path = Path(__file__).parent.parent
         ignored = [
-            pathlib.Path(os.path.join(path, "venv")),
+            Path(os.path.join(path, "venv")),
         ]
         files = classes = funcs = comments = lines = characters = 0
         for f in path.rglob(f"*.py"):
@@ -298,13 +300,28 @@ class Stats(commands.Cog):
                  "Comments": comments, "Lines": lines, "Characters": characters}
         return "\n".join(f"{k}: {v}" for k, v in stats.items())
 
-    @command(
-        description="Tells you information about the bot itself.",
-    )
+    @staticmethod
+    def format_commit(commit: pygit2.Commit) -> str:
+        short, _, _ = commit.message.partition('\n')
+        short_sha2 = commit.hex[0:6]
+        commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
+        commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
+
+        # [`hash`](url) message (offset)
+        offset = discord.utils.format_dt(commit_time.astimezone(datetime.timezone.utc), 1)
+        return f'[`{short_sha2}`](https://github.com/Rapptz/RoboDanny/commit/{commit.hex}) {short} ({offset})'
+
+    def get_last_commits(self, count=3, repo_path: str = str(Path(__file__).parent.parent.absolute())) -> str:
+        repo = pygit2.Repository(repo_path + "/.git")
+        commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
+        return '\n'.join(self.format_commit(c) for c in commits)
+
+    @commands.command()
     async def about(self, ctx: Context):
         """Tells you information about the bot itself."""
 
-        embed = discord.Embed()
+        revision = self.get_last_commits()
+        embed = discord.Embed(description='Latest Changes:\n' + revision)
         embed.title = 'Official Bot Server Invite'
         embed.url = 'https://discord.gg/eKwMtGydqh'
         embed.colour = self.bot.colour.darker_red()
@@ -350,7 +367,7 @@ class Stats(commands.Cog):
             value=f"```py\n"
                   f"CPU: {cpu_usage:.2f}% CPU\n"
                   f"Memory: {memory_usage:.2f} MiB | {psutil.virtual_memory().percent}%\n"
-                  f"Disk: {psutil.disk_usage(str(pathlib.Path(__file__).parent.parent)).percent}%```"
+                  f"Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```"
         )
 
         embed.set_footer(text=f'Made with discord.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
