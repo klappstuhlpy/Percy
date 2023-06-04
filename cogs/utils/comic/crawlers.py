@@ -1,0 +1,327 @@
+import datetime
+import re
+from typing import Optional
+from urllib.parse import urljoin
+
+import aiohttp
+from bs4 import BeautifulSoup, Tag, NavigableString
+from dateutil.parser import parse
+
+from .client import Marvel
+from cogs.utils.comic.marvel.comic import Comic as MarvelComic
+from ..executor import executor
+
+# DC
+DC_ENDPOINT = 'https://www.dc.com'
+VIZ_ENDPOINT = 'https://www.viz.com/calendar/{year}/{month}'
+RAW_VIZ_ENDPOINT = 'https://www.viz.com'
+
+
+def remove_html_tags(content: str) -> str:
+    clean_text = re.sub('<.*?>', '', content)  # Remove HTML tags
+    clean_text = re.sub(r'\s+', ' ', clean_text)  # Remove extra whitespace
+    return clean_text
+
+
+def extract_authors(text: str) -> dict[str, list[str]]:
+    author_pattern = re.compile(r'(?P<position>[^,]+) by (?P<name>[^,]+)')
+
+    authors = author_pattern.findall(text)
+
+    author_dict = {}
+    for position, name in authors:
+        author_dict[position] = [name.strip()]
+
+    return author_dict
+
+
+async def parse_viz():
+    from cogs.comicpulls import GenericComic, Brand
+
+    ref = VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
+
+    elements = []
+    async with aiohttp.ClientSession() as session:
+        async with session.get(ref) as resp:
+            soup = BeautifulSoup(await resp.text(), 'html.parser')
+            for i in soup.find_all('a', class_='product-thumb ar-inner type-center'):
+                href = i.get('href')
+                elements.append(urljoin(RAW_VIZ_ENDPOINT, href))
+
+    mangas = []
+    async with aiohttp.ClientSession() as session:
+        for index, element in enumerate(elements):
+            async with session.get(element) as resp:
+
+                @executor
+                def bs4(text: str) -> Optional[GenericComic]:
+                    soup = BeautifulSoup(text, 'html.parser')
+                    base_prd = soup.find('h2', class_='type-lg type-xl--md line-solid weight-bold mar-b-md mar-b-lg--md')  # Title Section
+                    if base_prd is None:
+                        return None
+
+                    title = remove_html_tags(base_prd.text)
+                    image_url = soup.find('div', class_='product-image mar-x-auto mar-b-lg pad-x-md').find('img').get('src')
+
+                    store_table = soup.find('table', class_='purchase-table')
+                    price = store_table.find('span').text[1:]
+                    if price.endswith('*'):
+                        price = price[:-1]
+
+                    base_obj = soup.find('div', class_='o_geo-block')
+                    price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
+
+                    info_table = soup.find('div', class_='row pad-b-xl')
+                    desc = remove_html_tags(info_table.find('p').text.strip())
+                    authors = extract_authors(info_table.find('div', class_='mar-b-md').text)
+                    release_date = info_table.find('div', class_='o_release-date mar-b-md').text.replace('Release', '')
+                    isbn = info_table.find('div', class_='o_isbn13 mar-b-md').text if info_table.find('div', class_='o_isbn13 mar-b-md') else None
+                    trim_size = info_table.find('div', class_='o_trimsize mar-b-md').text if info_table.find('div', class_='o_trimsize mar-b-md') else None
+
+                    spec_table = soup.find('div', class_='g-6--md g-omega--md')
+                    result = {}
+                    for i in spec_table.find_all('div', class_='mar-b-md'):
+                        clean_text = remove_html_tags(i.text.strip())
+                        spec_map = ["Length", "Series", "Category", "Age Rating"]
+                        for spec in spec_map:
+                            if clean_text.startswith(spec):
+                                value = clean_text.replace(spec, "").strip()
+                                result[spec] = value
+
+                    if result.get('Category') in ["TV Series", "Movie"]:
+                        return None
+
+                    return GenericComic(
+                        brand=Brand.MANGA,
+                        id=index,
+                        title=title,
+                        description=desc,
+                        creators=authors,
+                        image_url=image_url,
+                        url=element,
+                        page_count=int(result.get("Length", 'N/A Pages')[0]),
+                        price=float(price),
+                        copyright=f"© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.",
+                        date=parse(release_date),
+                        # kwargs
+                        isbn=isbn,
+                        trim_size=trim_size,
+                        price_note=price_note,
+                        category=result.get('Category'),
+                        age_rating=result.get('Age Rating')
+                    )
+
+                _cs_manga = await bs4(await resp.text())
+                if _cs_manga is not None:
+                    mangas.append(_cs_manga)
+
+    return mangas
+
+
+def from_destination(c: str, details: dict[str, list]) -> str: return str(details[c][0]) if c in details else None
+
+
+def get_description(t: Tag) -> list[str]:
+    strings = []
+    for i in t.contents:
+        if type(i) == Tag:
+            if i.name in ['p', 'em']:
+                strings += get_description(i)
+        elif type(i) == NavigableString:
+            s = str(i)
+            if t.name == 'em':
+                s = (" " if s.startswith(" ") else "") + \
+                    f"*{s.strip()}*" + \
+                    (" " if s.endswith(" ") else "")
+            strings.append(s)
+    return strings
+
+
+async def parse_dc():
+    from cogs.comicpulls import GenericComic, Brand
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(DC_ENDPOINT + "/comics") as resp:
+            if resp.status != 200:
+                resp.raise_for_status()
+
+            page = await resp.text()
+
+        soup = BeautifulSoup(page, 'html.parser')
+        comics = []
+        links: Tag = soup.find('ul', class_="react-multi-carousel-track content-tray-slider")
+
+        for item in links.contents:
+            branch = item.findNext(class_="card-button usePointer").get("href")
+            link = DC_ENDPOINT + branch
+
+            async with session.get(link) as resp:
+                if resp.status != 200:
+                    resp.raise_for_status()
+
+                page = await resp.text()
+
+            if page is None:
+                continue
+
+            soup = BeautifulSoup(page, 'html.parser')
+            txt = soup.find_all(class_="sc-g8nqnn-0 dXApWk")
+
+            c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
+            if c_type != "COMIC BOOK":
+                continue
+            title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()
+
+            desc = None
+            if len(txt) > 1:
+                if txt[1].find('p'):
+                    desc_list = get_description(txt[1])
+                    desc = '\n'.join(i.strip() for i in ''.join(desc_list).split('\n') if i.strip())
+
+            details_list = [i.contents for i in soup.find_all('div', class_="sc-b3fnpg-3 eRdwCd")]
+            details = {}
+            for d in details_list:
+                for dd in d:
+                    d_id = dd['id'][len('page151-band11690-Subitem2847'):]
+                    x = None
+                    if '-' in d_id:
+                        d_id, x = d_id.split('-')
+                        x = None if d_id not in ['24', '12'] else x
+                    if d_id not in details:
+                        details[d_id] = []
+                    details[d_id] += [i.contents[0].contents[0] if x else i.contents[0] for i in dd.contents if
+                                      type(i) == Tag]
+
+            creators = {}
+            if '24' in details:
+                creators["Writer"] = [str(i) for i in details['24']]
+            if '12' in details:
+                creators["Artist"] = [str(i) for i in details['12']]
+
+            price = from_destination('33', details)
+            price = 0.0 if price == "FREE" else float(price) if price else None
+
+            date = from_destination('36', details)
+            date = parse(date) if date else None
+
+            page_count = from_destination('48', details)
+
+            img = soup.find('img', id="page151-band11672-Card11673-img")
+            image = img['src'].split('?')[0]
+            image = image if image else None
+
+            copyright = str(soup.find('div', class_="small legal d-inline-block").contents[0].contents[0])
+
+            _cs_comic = GenericComic(
+                brand=Brand.DC,
+                id=''.join(i for i in title if i.isalnum()),
+                title=title,
+                description=desc,
+                creators=creators,
+                image_url=image,
+                link=link,
+                page_count=int(page_count),
+                price=price,
+                copyright=copyright,
+                date=date
+            )
+
+            comics.append(_cs_comic)
+
+    return comics
+
+
+# Marvel
+
+
+def comic_obj_from_marvel(data: MarvelComic):
+    from cogs.comicpulls import GenericComic
+
+    _cs_comic = GenericComic(
+        id=data.id,
+        title=data.title,
+        page_count=data.pageCount,
+        description=data.description,
+    )
+
+    _cs_comic.creators = {}
+    _cs_comic.image_url = data.images[0].path + '/clean.jpg' \
+        if data.images else "https://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available/clean.jpg"
+
+    _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), None)
+    _cs_comic.price = next((i.price for i in data.prices if i.type == 'printPrice'), None)
+    _cs_comic.date = next((i.date for i in data.dates if i.type == 'onsaleDate'), None)
+
+    for cr in data.creators.items:
+        role = cr.role.title()
+        if role not in _cs_comic.creators:
+            _cs_comic.creators[role] = [cr.name]
+        else:
+            _cs_comic.creators[role].append(cr.name)
+    return _cs_comic
+
+
+async def marvel_from_api(marvel: Marvel):
+    from cogs.comicpulls import Brand
+
+    raw = await marvel.get_comics(format='comic', noVariants='true', dateDescriptor='thisWeek', limit=100)
+    m_copyright = raw.data['attributionText']
+
+    comics = [comic_obj_from_marvel(c) for c in raw.ex_data.results]
+    for c in comics:
+        c.brand = Brand.MARVEL
+        c.copyright = m_copyright
+    return comics
+
+
+async def parse_marvel():
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://marvel.com/comics/calendar/") as resp:
+            if resp.status != 200:
+                resp.raise_for_status()
+
+            page = await resp.text()
+
+    soup = BeautifulSoup(page, 'html.parser')
+    descs = {}
+
+    for link in soup.find_all('a', class_="meta-title"):
+        plink = 'https:' + link.get('href').strip()
+        id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
+
+        page = None
+        for i in range(10):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(plink) as resp:
+                        if resp.status != 200:
+                            resp.raise_for_status()
+
+                        page = await resp.text()
+                break
+            except aiohttp.ClientPayloadError:
+                pass
+        if page is None:
+            continue
+
+        soup = BeautifulSoup(page, 'html.parser')
+        try:
+            desc = next(i for i in soup.find_all('p') if 'data-blurb' in i.attrs).get_text().strip()
+        except StopIteration:
+            continue
+
+        descs[id] = desc
+
+    return descs
+
+
+async def marvel_crawl(marvel: Marvel):
+    from cogs.comicpulls import GenericComic
+
+    comics: list[GenericComic] = await marvel_from_api(marvel)
+    descs: dict[int, str] = await parse_marvel()
+
+    for c in comics:
+        c.description = descs.get(c.id, None)
+
+    return comics

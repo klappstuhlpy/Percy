@@ -1,0 +1,421 @@
+from __future__ import annotations
+
+import asyncio
+import datetime
+import logging
+import random
+from typing import Optional, TypedDict, Iterable
+
+import asyncpg
+import discord
+from discord import app_commands
+from discord.ext import commands, tasks
+
+from bot import Percy
+from cogs import command
+from cogs.mod import ModConfig, AutoModFlags
+from cogs.utils import cache, checks
+from cogs.utils.context import Context, GuildContext
+from cogs.utils.formats import PostgresItem
+from cogs.utils.render import Render
+
+
+class LevelConfig(PostgresItem):
+    """Represents a level configuration for a guild."""
+
+    user_id: int
+    guild_id: int
+    messages: int
+    experience: int
+    voice_minutes: int
+
+    __slots__ = ('user_id', 'guild_id', 'messages', 'experience', 'voice_minutes')
+
+    def __init__(self, cog: Leveling, *args, **kwargs) -> None:
+        self.cog: Leveling = cog
+        self.bot: Percy = cog.bot
+
+        super().__init__(*args, **kwargs)
+
+    def __len__(self):
+        return self.messages
+
+    def __int__(self):
+        return self.experience
+
+    def __str__(self):
+        return f"{self.experience:,}"
+
+    @property
+    def level(self) -> int:
+        """Returns the current level of a user from their total experience."""
+        level = 0
+
+        while (self.experience - self.get_experience(level)) >= self.get_required(level):
+            level += 1
+
+        return level
+
+    @staticmethod
+    def get_experience(level: int) -> int:
+        """Returns the total experience required for reaching a certain level."""
+        return (level ** 3) + (104 * level)
+
+    @staticmethod
+    def get_required(level: int) -> int:
+        """Returns the experience required for reaching the next level."""
+        return (3 * level ** 2) + (3 * level) + 105
+
+    async def get_rank(self, *, connection: Optional[asyncpg.Connection] = None) -> int:
+        con = connection or self.bot.pool
+
+        query = """
+            SELECT rank FROM ( 
+                SELECT user_id, guild_id, row_number() OVER (ORDER BY experience DESC) AS rank 
+                FROM levels
+                WHERE guild_id = $2
+            ) AS rank
+            WHERE user_id = $1 AND guild_id = $2
+            LIMIT 1;
+            """
+        record = await con.fetchval(query, self.user_id, self.guild_id)
+        return record
+
+    async def add_experience(self, experience: int) -> None:
+        self.experience += experience
+        await self.send_patch()
+
+    async def add_messages(self, messages: int) -> None:
+        self.messages += messages
+        await self.send_patch()
+
+    async def add_voice_minutes(self, voice_minutes: int, multiplier: int) -> None:
+        if voice_minutes <= 0:
+            return
+        self.voice_minutes = self.voice_minutes or 0
+        self.voice_minutes += voice_minutes
+        self.experience += round(voice_minutes * multiplier)
+        await self.send_patch()
+
+    async def send_patch(self):
+        async with self.cog._batch_lock:
+            self.cog._data_batch.append(
+                {
+                    'guild_id': self.guild_id,
+                    'user_id': self.user_id,
+                    'messages': self.messages,
+                    'experience': self.experience,
+                    'voice_minutes': self.voice_minutes
+                }
+            )
+            self.cog.get_level_config.refactor(self.user_id, self.guild_id, replic=self)
+
+
+log = logging.getLogger(__name__)
+
+
+class DataBatchEntry(TypedDict):
+    user_id: int
+    guild_id: int
+    messages: int
+    experience: int
+    voice_minutes: int
+
+
+class PointsWatch(TypedDict):
+    started: datetime.datetime
+    muted: bool
+
+
+class OverwriteList(list):
+
+    def append(self, other: DataBatchEntry):
+        if existing := discord.utils.find(lambda x: x['user_id'] == other['user_id'] and x['guild_id'] == other['guild_id'], self):
+            self[self.index(existing)] = other
+        else:
+            super().append(other)
+
+
+class Leveling(commands.Cog):
+    """Leveling system, commands and utilities."""
+
+    def __init__(self, bot: Percy):
+        self.bot: Percy = bot
+        self.render: Render = Render()
+
+        self._batch_lock = asyncio.Lock()
+        self._data_batch: OverwriteList[DataBatchEntry] = OverwriteList()
+
+        self._voice_data_batch: dict[int, PointsWatch] = {}
+
+        self.bulk_insert_loop.add_exception_type(asyncpg.PostgresConnectionError)
+        self.bulk_insert_loop.start()
+
+        self.message_cooldown = commands.CooldownMapping.from_cooldown(1, 60, commands.BucketType.member)
+
+    async def bulk_insert(self) -> None:
+        query = """INSERT INTO levels (guild_id, user_id, messages, experience, voice_minutes)
+                   SELECT x.guild_id, x.user_id, x.messages, x.experience, x.voice_minutes
+                   FROM jsonb_to_recordset($1::jsonb) AS
+                   x(
+                        guild_id BIGINT,
+                        user_id BIGINT,
+                        messages INTEGER,
+                        experience INTEGER,
+                        voice_minutes INTEGER
+                   )
+                """
+
+        if self._data_batch:
+            try:
+                await self.bot.pool.execute(query, self._data_batch)
+            except asyncpg.exceptions.UniqueViolationError:
+                query = """
+                    UPDATE levels AS l
+                    SET messages = x.messages, experience = x.experience, voice_minutes = x.voice_minutes
+                    FROM jsonb_to_recordset($1::jsonb) AS
+                    x(
+                        guild_id BIGINT,
+                        user_id BIGINT,
+                        messages INTEGER,
+                        experience INTEGER,
+                        voice_minutes INTEGER
+                    )
+                    WHERE l.guild_id = x.guild_id AND l.user_id = x.user_id
+                """
+                await self.bot.pool.execute(query, self._data_batch)
+
+            total = len(self._data_batch)
+            if total > 1:
+                log.debug('Registered %s *leveling messages to the database.', total)
+            self._data_batch.clear()
+
+    def cog_unload(self):
+        self.bulk_insert_loop.stop()
+
+    @tasks.loop(seconds=15.0)
+    async def bulk_insert_loop(self):
+        async with self._batch_lock:
+            await self.bulk_insert()
+
+    @property
+    def display_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name="oneup", id=1113286994378899516)
+
+    @cache.cache(strategy=cache.Strategy.ADDITIVE)
+    async def get_level_config(self, user_id: int, guild_id: int) -> Optional[LevelConfig]:
+        query = "SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2;"
+        record: asyncpg.Record = await self.bot.pool.fetchrow(query, user_id, guild_id)
+
+        if not record:
+            query = "INSERT INTO levels (user_id, guild_id) VALUES ($1, $2) RETURNING *;"
+            record: asyncpg.Record = await self.bot.pool.fetchrow(query, user_id, guild_id)
+
+        return LevelConfig(self, record=record)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+            self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+    ) -> None:
+        if member.bot:
+            return
+
+        mod_config = await self.bot.moderation.get_guild_config(member.guild.id)
+        if not mod_config.flags.leveling:
+            return
+
+        config = await self.get_level_config(member.id, member.guild.id)
+
+        if before.mute != after.mute:
+            if member.id in self._voice_data_batch:
+                total_time = discord.utils.utcnow() - self._voice_data_batch[member.id]['started']
+                total_minutes = total_time.total_seconds() // 60
+                await config.add_voice_minutes(
+                    total_minutes, 2 if self._voice_data_batch[member.id]['muted'] else 7)
+
+                self._voice_data_batch[member.id]['started'] = discord.utils.utcnow()
+                self._voice_data_batch[member.id]['muted'] = after.self_mute
+
+            return
+
+        if before.channel:
+            if member.id in self._voice_data_batch:
+                total_time = discord.utils.utcnow() - self._voice_data_batch[member.id]['started']
+                total_minutes = total_time.total_seconds() // 60
+                await config.add_voice_minutes(
+                    total_minutes, 2 if self._voice_data_batch[member.id]['muted'] else 7)
+
+        if after.channel:
+            self._voice_data_batch[member.id] = {
+                'started': discord.utils.utcnow(),
+                'muted': after.self_mute
+            }
+        else:
+            try:
+                del self._voice_data_batch[member.id]
+            except KeyError:
+                pass
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if not message.guild:
+            return
+
+        if message.author.bot:
+            return
+
+        mod_config = await self.bot.moderation.get_guild_config(message.guild.id)
+        if not mod_config.flags.leveling:
+            return
+
+        if any(user.bot for user in message.mentions):
+            return
+
+        if len(message.content) <= 3:
+            return
+
+        bucket = self.message_cooldown.get_bucket(message)
+        retry_after = bucket.update_rate_limit()
+
+        if retry_after:
+            return
+
+        config = await self.get_level_config(message.author.id, message.guild.id)
+        await config.add_messages(1)
+
+        experience = random.randint(7, 13)
+        leveled_up = config.experience + experience - config.get_experience(config.level) >= config.get_required(config.level)
+        await config.add_experience(experience)
+
+        if leveled_up:
+            await message.reply(
+                f"*Congratulations {message.author.mention}!* You leveled up to level **{config.level}**! <:oneup:1113286994378899516>")
+
+    @command(commands.hybrid_group, name="level", description="Leveling purpose Commands.")
+    @commands.guild_only()
+    async def level(self, ctx: Context) -> None:
+        """Leveling purpose Commands."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @command(level.command, description="Toggle leveling on or off.")
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def toggle(self, ctx: GuildContext) -> None:
+        """Toggle leveling on or off."""
+        config: ModConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
+        if config.flags.leveling:
+            update = f'flags = guild_mod_config.flags & ~{AutoModFlags.leveling.flag}'
+            content = f"Leveling is now **disabled** for {ctx.guild.name}."
+        else:
+            update = f'flags = guild_mod_config.flags | {AutoModFlags.leveling.flag}'
+            content = f"Leveling is now **enabled** for {ctx.guild.name}."
+
+        query = f'UPDATE guild_mod_config SET {update} WHERE id=$1;'
+        await ctx.db.execute(query, ctx.guild.id)
+        self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
+        await ctx.send(ctx.tick(True, content))
+
+    @command(level.command, aliases=['top'], description="View the server leaderboard.")
+    @commands.guild_only()
+    async def leaderboard(self, ctx: GuildContext):
+        """View the Top 3 active users of the server."""
+        query = "SELECT * FROM levels WHERE guild_id = $1 AND messages > 0 ORDER BY messages DESC LIMIT 3;"
+        records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
+
+        e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Level Statistics for {ctx.guild.name}')
+        e.set_thumbnail(url=ctx.guild.icon.url)
+        e.set_footer(text='Level Statistics for this Server.')
+
+        def emojize(seq: Iterable):
+            emoji = 129351  # ord(':first_place:')
+            for index, value in enumerate(seq):
+                yield chr(emoji + index), value
+
+        if not records:
+            e.description = '*There are no statistics available.*'
+        else:
+            value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.messages}** messages)'
+                     for emoji, record in emojize(records)]
+
+            e.add_field(name=f'**TOP 3 TEXT 💬**', value='\n'.join(value), inline=False)
+
+        query = "SELECT * FROM levels WHERE guild_id = $1 AND voice_minutes > 0 ORDER BY voice_minutes DESC LIMIT 3;"
+        records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
+
+        value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
+                 for emoji, record in emojize(records)]
+        e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='\n'.join(value), inline=False)
+
+        await ctx.send(embed=e)
+
+    @command(level.command, description="View your level card.")
+    @commands.guild_only()
+    @app_commands.describe(member="The member you want to see the rank card for.")
+    async def rank(self, ctx: GuildContext, member: Optional[discord.Member] = None):
+        """View yours or someone else's rank card."""
+        member = member or ctx.author
+
+        if member.bot:
+            return await ctx.send(f"{ctx.tick(False)} You can't view the rank card of a bot.")
+
+        if ctx.interaction:
+            await ctx.defer()
+        else:
+            await ctx.channel.typing()
+
+        config = await self.get_level_config(member.id, member.guild.id)
+
+        card = await self.render.generate_rank_card(
+            avatar=await member.display_avatar.read(),
+            user=member,
+            level=config.level,
+            current=config.experience - config.get_experience(config.level),
+            required=config.get_required(config.level),
+            rank=await config.get_rank(),
+            members=sum(not member.bot for member in ctx.guild.members),
+            messages=config.messages,
+        )
+        await ctx.send(file=discord.File(fp=card, filename="rank.png"))
+
+    @command(level.command, description="Set a member's experience or level.")
+    @commands.guild_only()
+    @checks.hybrid_permissions_check(administrator=True)
+    @app_commands.describe(target="The member you want to set XP to.")
+    @app_commands.describe(level="The amount of levels you want to set. Takes priority over xp if both provided.")
+    @app_commands.describe(xp="The amount of XP you want to set.")
+    async def set(
+            self,
+            ctx: GuildContext,
+            target: discord.Member,
+            xp: app_commands.Range[int, 0, 125052000] | None = None,
+            level: app_commands.Range[int, 0, 500] | None = None
+    ):
+        """Set a users experience/level."""
+        if target.bot:
+            return await ctx.send(f"{ctx.tick(False)} You can't manage Bot's Level/Experience.")
+
+        if xp is None and level is None:
+            return await ctx.send(f"{ctx.tick(False)} You need to provide either a level or xp to set.")
+        if xp and level:
+            return await ctx.send(f"{ctx.tick(False)} You can't provide both a level and xp to set.")
+
+        config = await self.get_level_config(target.id, target.guild.id)
+
+        experience = 0
+        if level:
+            experience = config.get_experience(level)
+        elif xp:
+            experience = xp
+
+        if experience > config.get_experience(500):
+            return await ctx.send(f"{ctx.tick(False)} Sorry. You can't set more than **125,052,000 XP**. (Level 500)")
+
+        await config.add_experience(experience)
+        await ctx.send(
+            f"{target.mention} is now level **{config.level}** with **{str(config)}** total XP. <:oneup:1113286994378899516>"
+        )
+
+
+async def setup(bot: Percy) -> None:
+    await bot.add_cog(Leveling(bot))
