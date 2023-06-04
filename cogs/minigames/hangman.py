@@ -83,7 +83,7 @@ HANG_MAN = [
 ]
 
 
-class HangManTyped(enum.Enum):
+class Action(enum.Enum):
     """Enum for the hangman game."""
 
     GUESSED_WORD = 1
@@ -114,7 +114,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    async def wait_for(self) -> AsyncIterable[tuple[HangManTyped, discord.Message]]:
+    async def wait_for(self) -> AsyncIterable[tuple[Action, discord.Message]]:
         """Starts a guessing session, and yields the result state of every type."""
         while not self.bot.is_closed():
             try:
@@ -129,28 +129,28 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
                 if content == self.word.lower():
                     self._current_colour = formats.Colour.lime_green()
-                    yield HangManTyped.GUESSED_WORD, message
+                    yield Action.GUESSED_WORD, message
                     break
 
                 elif content in self.guessed:
-                    yield HangManTyped.GUESSED_ALREADY, message
+                    yield Action.GUESSED_ALREADY, message
 
                 elif message.content.isdigit():
-                    yield HangManTyped.GUESSED_INVALID, message
+                    yield Action.GUESSED_INVALID, message
 
                 elif len(content) > 1:
-                    yield HangManTyped.GUESSED_INVALID, message
+                    yield Action.GUESSED_INVALID, message
 
                 elif content in self.word:
                     self.guessed.add(content)
-                    yield HangManTyped.GUESSED_LETTER, message
+                    yield Action.GUESSED_LETTER, message
                     self.update_remaining(content)
 
                 else:
                     self.fail_guessed.add(content)
                     self.update_remaining(content)
                     self.update_state()
-                    yield HangManTyped.GUESSED_WRONG, message
+                    yield Action.GUESSED_WRONG, message
 
         yield None
 
@@ -158,7 +158,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         return (
             discord.Embed(
                 title='Hangman',
-                description=self._current_state,
+                description="```\n{self._current_state}```",
                 colour=self._current_colour,
             )
         )
