@@ -7,6 +7,7 @@ import itertools
 import os
 import time
 from collections import Counter
+from pathlib import Path
 from typing import (Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
                     NamedTuple, Sequence, Type, Iterable, Callable)
 
@@ -758,6 +759,7 @@ class Meta(commands.Cog):
 
         if command == 'help':
             src = type(self.bot.help_command)
+            module = src.callback.__module__
             filename = inspect.getsourcefile(src)
         else:
             obj = self.bot.get_command(command.replace('.', ' '))
@@ -765,13 +767,20 @@ class Meta(commands.Cog):
                 return await ctx.send(f'{ctx.tick(False)} Could not find command.')
 
             src = obj.callback.__code__
+            module = obj.callback.__module__
             filename = src.co_filename
 
         lines, firstlineno = inspect.getsourcelines(src)
-        if filename is None:
-            return await ctx.send(f'{ctx.tick(False)} Could not find source for command.')
+        if not module.startswith('discord'):
+            # not a built-in command
+            if filename is None:
+                return await ctx.send('Could not find source for command.')
 
-        location = os.path.relpath(filename).replace('\\', '/')
+            location = os.path.relpath(filename).replace('\\', '/')
+        else:
+            location = module.replace('.', '/') + '.py'
+            source_url = 'https://github.com/Rapptz/discord.py'
+            branch = 'master'
 
         final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
         await ctx.send(final_url)
