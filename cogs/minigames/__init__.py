@@ -98,8 +98,8 @@ class Minigame(commands.GroupCog):
                 elif result == hangman.HangManTyped.GUESSED_WORD:
                     embed = message.embeds[1].set_footer(text='You guessed the word!')
                     return await message.edit(embeds=[message.embeds[0], embed])
-                elif result == hangman.HangManTyped.GUESSED_INVALID:
-                    await ctx.send('<:redTick:1079249771975413910> You can only guess latin letters.', ephemeral=True)
+                elif result == hangman.HangManTyped.GUESSED_ALREADY:
+                    await ctx.send('You already guessed that letter.', ephemeral=True)
 
                 if builder.remaining_guesses == 0:  # coalcase because we already checked for wins
                     builder._current_colour = formats.Colour.red()

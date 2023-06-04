@@ -12,69 +12,73 @@ from cogs.utils.context import Context
 
 HANG_MAN = [
     (
-        '           \n'
-        '           \n'
-        '           \n'
-        '           \n'
-        '           \n'
-        '           \n'
-        '           \n'
+        ""
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |       \n'
-        '   |       \n'
-        '   |       \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      
+         |      
+         |       
+         |      
+         |
+        _|___
+        """
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |   |   \n'
-        '   |   |   \n'
-        '   |       \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      (_)
+         |      
+         |       
+         |      
+         |
+        _|___
+        """
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |  \\|  \n'
-        '   |   |   \n'
-        '   |       \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      (_)
+         |       |
+         |       |
+         |      
+         |
+        _|___
+        """
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |  \\|/ \n'
-        '   |   |   \n'
-        '   |       \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      (_)
+         |      \\|/
+         |       |
+         |      
+         |
+        _|___
+        """
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |  \\|/ \n'
-        '   |   |   \n'
-        '   |  /    \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      (_)
+         |      \\|/
+         |       |
+         |      / \\
+         |
+        _|___
+        """
     ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   O   \n'
-        '   |  \\|/ \n'
-        '   |   |   \n'
-        '   |  / \\ \n'
-        '   |       \n'
-    ), (
-        '    ___    \n'
-        '   |   |   \n'
-        '   |   X   \n'
-        '   |  \\|/ \n'
-        '   |   |   \n'
-        '   |  / \\ \n'
-        '   |       \n'
+        """
+          _______
+         |/      |
+         |      (x)
+         |      \\|/
+         |       |
+         |      / \\
+         |
+        _|___
+        """
     )
 ]
 
@@ -129,28 +133,21 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                     break
 
                 elif content in self.guessed:
-                    self.update_remaining(content)
                     yield HangManTyped.GUESSED_ALREADY, message
 
                 elif message.content.isdigit():
                     yield HangManTyped.GUESSED_INVALID, message
 
+                elif len(content) > 1:
+                    yield HangManTyped.GUESSED_INVALID, message
+
                 elif content in self.word:
-                    for letter in content:
-                        if letter in self.guessed:
-                            yield HangManTyped.GUESSED_ALREADY, message
-                        elif letter in self.word:
-                            self.guessed.add(letter)
-                            yield HangManTyped.GUESSED_LETTER, message
-                        else:
-                            self.fail_guessed.add(letter)
-                            self.update_state()
-                            yield HangManTyped.GUESSED_WRONG, message
+                    self.guessed.add(content)
+                    yield HangManTyped.GUESSED_LETTER, message
                     self.update_remaining(content)
 
                 else:
-                    for letter in content:
-                        self.fail_guessed.add(letter)
+                    self.fail_guessed.add(content)
                     self.update_remaining(content)
                     self.update_state()
                     yield HangManTyped.GUESSED_WRONG, message
