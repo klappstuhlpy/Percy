@@ -102,7 +102,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
         self.guessed: Set[str] = set()
         self.fail_guessed: Set[str] = set()
-        self.remaining_guesses: int = len(HANG_MAN) + 1
+        self.remaining_guesses: int = 6
         self._current_colour: formats.Colour = formats.Colour.light_orange()
 
         self._current_state_index: int = 0

@@ -95,10 +95,10 @@ class Minigame(commands.GroupCog):
 
                 if isinstance(result, asyncio.TimeoutError):
                     return await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', ephemeral=True)
-                elif result == hangman.HangManTyped.GUESSED_WORD:
+                elif result == hangman.Action.GUESSED_WORD:
                     embed = message.embeds[1].set_footer(text='You guessed the word!')
                     return await message.edit(embeds=[message.embeds[0], embed])
-                elif result == hangman.HangManTyped.GUESSED_ALREADY:
+                elif result == hangman.Action.GUESSED_ALREADY:
                     await ctx.send('You already guessed that letter.', ephemeral=True)
 
                 if builder.remaining_guesses == 0:  # coalcase because we already checked for wins
