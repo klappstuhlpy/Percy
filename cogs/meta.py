@@ -10,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import (Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
                     NamedTuple, Sequence, Type, Iterable, Callable)
+from urllib.parse import urlparse
 
 import discord
 import psutil
@@ -783,7 +784,11 @@ class Meta(commands.Cog):
             branch = 'master'
 
         final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        await ctx.send(final_url)
+        parsed_url = urlparse(final_url)
+        path = parsed_url.path
+        _, path = os.path.splitdrive(path)
+        path = path.replace('\\', '/')
+        await ctx.send(path)
 
     @solved.error
     async def on_solved_error(self, ctx: GuildContext, error: Exception):
