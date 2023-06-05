@@ -765,7 +765,7 @@ class Meta(commands.Cog):
             module = src.callback.__module__
             filename = inspect.getsourcefile(src)
         else:
-            obj = self.bot.get_command(command.replace('.', ' '))
+            obj = self.bot.get_command(command.replace('.', ' ')) or discord.utils.get(self.bot.tree.walk_commands(), qualified_name=command)
             if obj is None:
                 return await ctx.send(f'{ctx.tick(False)} Could not find command.')
 
