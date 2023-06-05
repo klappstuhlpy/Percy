@@ -195,12 +195,24 @@ class Context(commands.Context):
     @property
     def user(self) -> discord.User:
         """Returns the author of the message as an :class:`discord.User`."""
-        return self.author._user
+        return self.author._user  # noqa
 
     @property
     def client(self) -> 'commands.Bot':
         """Returns the client."""
         return self.bot
+
+    @classmethod
+    def tick(cls, opt: Optional[bool], label: Optional[str] = None) -> str:
+        lookup = {
+            True: '<:greenTick:1079249732364406854>',
+            False: '<:redTick:1079249771975413910>',
+            None: '<:greyTick:1079250082819477634>',
+        }
+        emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
+        if label is not None:
+            return f'{emoji} {label}'
+        return emoji
 
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:
@@ -264,17 +276,6 @@ class Context(commands.Context):
         await view.wait()
         return view.value
 
-    def tick(self, opt: Optional[bool], label: Optional[str] = None) -> str:
-        lookup = {
-            True: '<:greenTick:1079249732364406854>',
-            False: '<:redTick:1079249771975413910>',
-            None: '<:greyTick:1079250082819477634>',
-        }
-        emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
-        if label is not None:
-            return f'{emoji} {label}'
-        return emoji
-
     @property
     def session(self) -> ClientSession:
         return self.bot.session
@@ -289,39 +290,8 @@ class Context(commands.Context):
             return EditTyping(self)
         return DeferTyping(self, ephemeral=ephemeral)
 
-    async def invoke(self, command: commands.Command | str, *args, **kwargs):
-        """A custom invoke method that allows us to invoke commands from other commands."""
-        if isinstance(command, str):
-            command = self.bot.get_command(command)
-
-        self.command = command
-        return await command(self, *args, **kwargs)
-
-    async def send_and_cache(self, *args: Any, **kwargs: Any) -> Message:
-        message = await super().send(*args, **kwargs)
-        self.bot.command_cache[self.message.id] = message
-        return message
-
-    async def edit_and_recache(self, message: discord.Message, *args: Any, **kwargs: Any) -> Message:
-        message = await message.edit(*args, **kwargs)
-        self.bot.command_cache[self.message.id] = message
-        return message
-
-    async def fetch_color(self, member: discord.Member | discord.User | None = None) -> discord.Color:
-        member = member or self.author
-        data = self.cache.users.get(member.id)
-        color = None
-        if data is not None and data["color"] is not None:
-            color = discord.Color(data["color"])
-        if not color:
-            color = member.color
-        if color == discord.Color(0):
-            color = discord.Color(0x2F3136)
-            if await self.bot.is_owner(member):
-                color = discord.Color(0x01B9C0)
-        return color
-
     async def post(self, filename: str, *, content: str) -> str | None:
+        """Create a GitHub Gist from content."""
         dpy: Optional[DPYHandlers] = self.bot.get_cog("Exclusives")
         posted_gist_url = await dpy.create_gist(description=str(self.author) + " - " + filename,
                                                 content=content, public=True)
@@ -408,34 +378,11 @@ class Context(commands.Context):
             "silent": silent,
         }
 
-        if self.message.id in self.bot.command_cache and self.message.edited_at and not no_edit:
-            edit_kwargs = kwargs.copy()
-            try:
-                to_pop = (
-                    "tts",
-                    "file",
-                    "files",
-                    "stickers",
-                    "nonce",
-                    "mention_author",
-                    "reference",
-                    "suppress_embeds",
-                )
-                for pop in to_pop:
-                    edit_kwargs.pop(pop, None)
-                edit_kwargs["embed"] = embed
-                edit_kwargs["embeds"] = MISSING if embeds is None else embeds
-                edit_kwargs["suppress"] = suppress_embeds
-                message = self.bot.command_cache[self.message.id]
-                return await self.edit_and_recache(message, **edit_kwargs)  # type: ignore
-            except discord.HTTPException:
-                return await self.send_and_cache(**kwargs)
-
         if self.interaction is None or self.interaction.is_expired():
             kwargs["reference"] = self.message.to_reference(fail_if_not_exists=False) or reference
             if no_reply:
                 kwargs["reference"] = None
-            return await self.send_and_cache(**kwargs)
+            return await self.send(**kwargs)
 
         kwargs = {
             "content": content,
@@ -464,8 +411,9 @@ class Context(commands.Context):
 
         return msg
 
+    @staticmethod
     async def string_to_file(
-            self, content: AnyStr = None, filename: str = "message.txt"
+            content: AnyStr = None, filename: str = "message.txt"
     ) -> discord.File:
         """Converts a string to a file."""
         if filename == "random":
