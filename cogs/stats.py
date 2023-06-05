@@ -29,6 +29,7 @@ from cogs.utils.paginator import FilePaginator
 from . import command
 from .meta import COMMAND_ICON_URL
 from .utils import formats, timetools
+from .utils.executor import executor
 from .utils.render import Render
 
 if TYPE_CHECKING:
@@ -274,8 +275,8 @@ class Stats(commands.Cog):
         """Tells you how long the bot has been up for."""
         await ctx.send(f'Uptime: **{self.get_bot_uptime()}**')
 
-    @staticmethod
-    def line_counter() -> str:
+    @executor
+    def line_counter(self) -> str:
         path = Path(__file__).parent.parent
         ignored = [
             Path(os.path.join(path, "venv")),
@@ -329,9 +330,6 @@ class Stats(commands.Cog):
         embed.set_author(name=str(self.bot.owner), icon_url=self.bot.owner.display_avatar.url)
         embed.set_thumbnail(url=self.bot.user.avatar.url)
 
-        f_stats = await self.bot.loop.run_in_executor(None, self.line_counter)
-
-        # statistics
         total_members = 0
         total_unique = len(self.bot.users)
 
@@ -361,7 +359,9 @@ class Stats(commands.Cog):
         embed.add_field(name='Commands run since last reboot', value=sum(self.bot.command_stats.values()))
         embed.add_field(name='Uptime', value=self.get_bot_uptime(brief=True))
         embed.add_field(name="​", value="​")
-        embed.add_field(name="File Stats", value=f"```py\n{f_stats}```")
+
+        file_stats = await self.line_counter()
+        embed.add_field(name="File Stats", value=f"```py\n{file_stats}```")
         embed.add_field(
             name="Process",
             value=f"```py\n"
