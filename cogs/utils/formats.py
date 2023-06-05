@@ -14,8 +14,9 @@ class PostgresItem(Generic[T]):
     def __init__(self, *, record: asyncpg.Record[T]) -> None:
         self.record: asyncpg.Record[T] = record
 
-        for k, v in record.items():
-            setattr(self, k, v)
+        if record:
+            for k, v in record.items():
+                setattr(self, k, v)
 
     def __call__(self, obj: T):
         self.record.update(obj)
