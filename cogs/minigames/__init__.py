@@ -86,7 +86,6 @@ class Minigame(commands.GroupCog):
                 return await ctx.send('Something went wrong while fetching the word.', ephemeral=True)
             data = await resp.json()
             word = data[0]
-            print(word)
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
             message = await ctx.send(embeds=[builder.build_hang_man(), builder.build_embed()])
