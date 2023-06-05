@@ -86,27 +86,29 @@ class Minigame(commands.GroupCog):
                 return await ctx.send('Something went wrong while fetching the word.', ephemeral=True)
             data = await resp.json()
             word = data[0]
+            print(word)
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
             message = await ctx.send(embeds=[builder.build_hang_man(), builder.build_embed()])
 
-            async for result in builder.wait_for():
+            async for action in builder.wait_for():
                 message = await message.edit(embeds=[builder.build_hang_man(), builder.build_embed()])
 
-                if isinstance(result, asyncio.TimeoutError):
-                    return await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', ephemeral=True)
-                elif result == hangman.Action.GUESSED_WORD:
-                    embed = message.embeds[1].set_footer(text='You guessed the word!')
-                    return await message.edit(embeds=[message.embeds[0], embed])
-                elif result == hangman.Action.GUESSED_ALREADY:
-                    await ctx.send('You already guessed that letter.', ephemeral=True)
+                if isinstance(action, asyncio.TimeoutError):
+                    await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', ephemeral=True)
+                elif action == hangman.Action.GUESSED_WORD or action == hangman.Action.GUESSED_ALL:
+                    pass
+                elif action == hangman.Action.GUESSED_ALREADY:
+                    await ctx.send('<:redTick:1079249771975413910> You already guessed that letter.', ephemeral=True)
+                elif action == hangman.Action.GUESSED_INVALID:
+                    await ctx.send('<:redTick:1079249771975413910> Invalid guess. Please enter a single letter.',
+                                   ephemeral=True)
 
-                if builder.remaining_guesses == 0:  # coalcase because we already checked for wins
+                if builder.errors == 6:  # coalcase because we already checked for wins
+                    builder.finished = -1
                     builder._current_colour = formats.Colour.red()
                     builder.guessed.update(builder.word)
-                    e = builder.build_embed()
-                    e.set_footer(text='You loose! You have no tries left.')
-                    return await message.edit(embeds=[builder.build_hang_man(), e])
+                    message = await message.edit(embeds=[builder.build_hang_man(), builder.build_embed()])
 
 
 async def setup(bot: Percy):

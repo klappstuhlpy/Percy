@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import enum
+import inspect
 from abc import ABC
 from typing import Set, AsyncIterable
 
@@ -92,6 +93,7 @@ class Action(enum.Enum):
     GUESSED_ALREADY = 4
     GUESSED_INVALID = 5
     NO_REMAINING_TRIES = 6
+    GUESSED_ALL = 7
 
 
 class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
@@ -102,11 +104,12 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
         self.guessed: Set[str] = set()
         self.fail_guessed: Set[str] = set()
-        self.remaining_guesses: int = 6
+        self.errors: int = 0
         self._current_colour: formats.Colour = formats.Colour.light_orange()
 
         self._current_state_index: int = 0
         self._current_state = HANG_MAN[self._current_state_index]
+        self.finished: 1 | 0 | -1 = 0
 
     async def __aenter__(self) -> 'WaitforHangman':
         return self
@@ -114,7 +117,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    async def wait_for(self) -> AsyncIterable[tuple[Action, discord.Message]]:
+    async def wait_for(self) -> AsyncIterable[Action | Exception]:
         """Starts a guessing session, and yields the result state of every type."""
         while not self.bot.is_closed():
             try:
@@ -128,29 +131,39 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                 content = message.content.lower()
 
                 if content == self.word.lower():
+                    self.finished = 1
                     self._current_colour = formats.Colour.lime_green()
-                    yield Action.GUESSED_WORD, message
+                    yield Action.GUESSED_WORD
                     break
 
-                elif content in self.guessed:
-                    yield Action.GUESSED_ALREADY, message
+                elif content in self.guessed or content in self.fail_guessed:
+                    yield Action.GUESSED_ALREADY
 
                 elif message.content.isdigit():
-                    yield Action.GUESSED_INVALID, message
+                    yield Action.GUESSED_INVALID
 
                 elif len(content) > 1:
-                    yield Action.GUESSED_INVALID, message
+                    yield Action.GUESSED_INVALID
 
                 elif content in self.word:
                     self.guessed.add(content)
-                    yield Action.GUESSED_LETTER, message
-                    self.update_remaining(content)
+                    yield Action.GUESSED_LETTER
 
                 else:
                     self.fail_guessed.add(content)
-                    self.update_remaining(content)
+                    self.errors += 1
                     self.update_state()
-                    yield Action.GUESSED_WRONG, message
+                    yield Action.GUESSED_WRONG
+
+                if set(self.word).issubset(self.guessed):
+                    self.finished = 1
+                    self._current_colour = formats.Colour.lime_green()
+                    yield Action.GUESSED_ALL
+                    break
+
+                if self.errors == 6:
+                    self.finished = -1
+                    break
 
         yield None
 
@@ -158,12 +171,22 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         return (
             discord.Embed(
                 title='Hangman',
-                description=f"```\n{self._current_state}```",
+                description=f"```\n{inspect.cleandoc(self._current_state)}```",
                 colour=self._current_colour,
             )
         )
 
     def build_embed(self):
+        if self.finished == 1:
+            if self.errors > 0:
+                text = f'You guessed the word with {self.errors}/6 errors!'
+            else:
+                text = f'You guessed the word first try!'
+        elif self.finished == 0:
+            text = f'You have {self.errors}/6 errors.'
+        else:
+            text = f'You have lost with {self.errors}/6 errors.'
+
         return (
             discord.Embed(
                 title='Hangman',
@@ -172,7 +195,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
             )
             .add_field(name="Word", value=f"**{self.hidden_word}**", inline=False)
             .add_field(name="Guessed", value=f"**{self.gussed_letters}**", inline=False)
-            .set_footer(text=f'You have {self.remaining_guesses} guesses remaining.')
+            .set_footer(text=text)
         )
 
     @property
@@ -189,10 +212,6 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
             ''.join(
                 letter if letter.lower() in self.guessed else ' ' if letter.isspace() else '_' for letter in self.word)
         )
-
-    def update_remaining(self, text: str):
-        self.remaining_guesses -= len(text)
-        self.remaining_guesses = max(self.remaining_guesses, 0)
 
     def update_state(self, index: int = None):
         if index:
