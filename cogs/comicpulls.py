@@ -4,6 +4,7 @@ import contextlib
 import datetime
 import json
 import logging
+import traceback
 from contextlib import suppress
 from enum import Enum
 from typing import Dict, List, Optional, Union, Self, Generic, TypeVar, Type
@@ -68,12 +69,10 @@ class Brand(Enum):
 
     @property
     def default_day(self):
-        if self == self.MARVEL:
-            return 1
-        elif self == self.DC:
+        if self == self.DC:
             return 3
-        elif self == self.MANGA:
-            return 1
+        else:
+            return 1  # Marvel and Manga
 
 
 class Format(Enum):
@@ -217,8 +216,7 @@ class GenericComic:
 
             embed.add_field(name="General Info",
                             value=f"Price: {self.price_format}\n"
-                                  f"Pages: {self.page_count}\n"
-                                  f"Browse for details on [{self.brand.link}]({self.url})")
+                                  f"Pages: {self.page_count}")
 
         embed.set_footer(text=f"{self.title} • {self.copyright}", icon_url=self.brand.icon_url)
 
@@ -278,7 +276,7 @@ class ComicFeed(PostgresItem):
         return embed
 
     async def create(self) -> Self:
-        self.next_pull = self.next_schedule()
+        self.next_pull = self.next_scheduled()
 
         query = """
             INSERT INTO comic_feed (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
@@ -306,28 +304,23 @@ class ComicFeed(PostgresItem):
         await self.cog.bot.pool.execute(query, self.guild_id, self.brand.name)
         self.cog.get_configs.invalidate(self.cog, self.guild_id)
 
-    def next_schedule(self, day: int = None) -> datetime.datetime:
+    def next_scheduled(self, day: int = None):
         day = day or self.day
-        now = datetime.datetime.utcnow().date()
+        now = discord.utils.utcnow().date()
+        soon = now + datetime.timedelta(days=(day - now.weekday()) % 7)
+        time = datetime.time(0)
+        combined = datetime.datetime.combine(soon, time, tzinfo=datetime.timezone.utc).astimezone(datetime.timezone.utc)
 
-        if self.brand == Brand.MANGA:
-            next_month = now.replace(day=1) + datetime.timedelta(days=32)
-            soon = next_month.replace(day=day)
-        else:
-            soon = now + datetime.timedelta(days=(day - now.isoweekday()) % 7)
-
-        soon = datetime.datetime.combine(soon, datetime.datetime.min.time())
-        return soon.replace(hour=6)
+        if combined < discord.utils.utcnow():
+            if self.brand == Brand.MANGA:
+                combined += datetime.timedelta(days=32)
+            else:
+                combined += datetime.timedelta(days=7)
+        return combined.replace(tzinfo=None)
 
     @property
-    def override_push_schedule(self) -> datetime.datetime:
-        if self.brand == Brand.MANGA:
-            return self.next_schedule(self.day)
-        else:
-            if self.day >= datetime.datetime.utcnow().isoweekday():
-                return self.next_schedule(self.day) + datetime.timedelta(days=7)
-            else:
-                return self.next_schedule(self.day)
+    def prev_scheduled(self):
+        return self.next_scheduled() - datetime.timedelta(days=7)
 
 
 class MultipleLock:
@@ -457,7 +450,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     async def call_feed(self, comic: ComicFeed) -> None:
         query = "UPDATE comic_feed SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
-        await self.bot.pool.execute(query, comic.override_push_schedule, comic.guild_id, comic.brand.name)
+        await self.bot.pool.execute(query, comic.next_scheduled(), comic.guild_id, comic.brand.name)
 
         self.bot.dispatch(f'comic_schedule', comic)
 
@@ -648,22 +641,25 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
     async def comic_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
-        await interaction.response.defer()
+        try:
+            await interaction.response.defer()
 
-        config: ComicFeed = await self.get_config(interaction.guild.id, brand)
-        if not config:
-            return await interaction.followup.send(
-                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+            config: ComicFeed = await self.get_config(interaction.guild.id, brand)
+            if not config:
+                return await interaction.followup.send(
+                    f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
 
-        if not config:
-            return await interaction.followup.send(
-                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+            if not config:
+                return await interaction.followup.send(
+                    f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
 
-        await self.call_feed(config)
-        self.rerun_dispatch()
+            await self.call_feed(config)
+            self.rerun_dispatch()
 
-        await interaction.followup.send(
-            f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
+            await interaction.followup.send(
+                f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
+        except Exception as e:
+            traceback.print_exc()
 
     @comics.command(name="subscribe", description="Subscribes to a comic brand feed.")
     @app_commands.default_permissions(manage_guild=True)
@@ -757,7 +753,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                 kwargs["channel_id"] = channel.id
             if day:
                 kwargs["day"] = day
-                kwargs["next_pull"] = config.next_schedule(day)
+                kwargs["next_pull"] = config.next_scheduled(day)
             if ping:
                 kwargs["ping"] = ping.id
             if pin:
