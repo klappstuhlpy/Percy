@@ -311,7 +311,7 @@ class Stats(commands.Cog):
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.timezone.utc), 'R')
         return f'[`{short_sha2}`](https://github.com/Rapptz/RoboDanny/commit/{commit.hex}) {short} ({offset})'
 
-    def get_last_commits(self, count=3, repo_path: str = str(Path(__file__).parent.parent.absolute())) -> str:
+    def get_last_commits(self, count=4, repo_path: str = str(Path(__file__).parent.parent.absolute())) -> str:
         repo = pygit2.Repository(repo_path + "/.git")
         commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
         return '\n'.join(self.format_commit(c) for c in commits)
@@ -1526,7 +1526,7 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:
         args_str.append(f'[{index}]: {arg!r}')
     args_str.append('```')
     e.add_field(name='Args', value='\n'.join(args_str), inline=False)
-    hook: discord.Webhook = self.get_cog('Stats').webhook  # type: ignore
+    hook: discord.Webhook = self.stats_webhook
 
     try:
         await hook.send(embed=e)
