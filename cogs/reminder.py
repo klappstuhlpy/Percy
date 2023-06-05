@@ -72,14 +72,19 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
         self.parent.snooze.disabled = True
         await interaction.response.edit_message(view=self.parent)
 
-        refreshed = await self.cog.create_timer(
-            when, self.timer.event, *self.timer.args, **self.timer.kwargs, created=interaction.created_at
+        zone = await self.cog.get_timezone(interaction.user.id)
+        await self.cog.create_timer(
+            when,
+            self.timer.event,
+            *self.timer.args,
+            **self.timer.kwargs,
+            created=interaction.created_at,
+            timezone=zone or 'UTC',
         )
         author_id, _, message = self.timer.args
         await interaction.followup.send(
             f"<:greenTick:1079249732364406854> Alright <@{author_id}>, "
-            f"I've snoozed your reminder for *{discord.utils.format_dt(when, 'R')}*:\n"
-            f"*{message}*",
+            f"I've snoozed your reminder till {discord.utils.format_dt(when, 'R')} for *{message}*",
             ephemeral=True
         )
 

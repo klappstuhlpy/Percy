@@ -4,7 +4,6 @@ import contextlib
 import datetime
 import json
 import logging
-import traceback
 from contextlib import suppress
 from enum import Enum
 from typing import Dict, List, Optional, Union, Self, Generic, TypeVar, Type
@@ -198,7 +197,8 @@ class GenericComic:
         embed = discord.Embed(
             title=self.title,
             colour=self.brand.colour,
-            description=self.description
+            description=self.description,
+            url=self.url,
         )
 
         if self.brand == Brand.MANGA:
@@ -207,8 +207,7 @@ class GenericComic:
                                   f"Pages: {self.page_count}\n"
                                   f"Release Date: {discord.utils.format_dt(self.date, 'D')}\n"
                                   f"Category: {self.kwargs.get('category')}\n"
-                                  f"Age Rating: {self.kwargs.get('age_rating')}\n"
-                                  f"Browse for details on [{self.brand.link}]({self.url})")
+                                  f"Age Rating: {self.kwargs.get('age_rating')}")
 
             if self.creators:
                 embed.add_field(name="Creators", value=self.format_creators())
