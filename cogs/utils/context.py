@@ -295,7 +295,7 @@ class Context(commands.Context):
             command = self.bot.get_command(command)
 
         self.command = command
-        return await command(*args, **kwargs)
+        return await command(self, *args, **kwargs)
 
     async def send_and_cache(self, *args: Any, **kwargs: Any) -> Message:
         message = await super().send(*args, **kwargs)
