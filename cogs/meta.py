@@ -7,10 +7,10 @@ import itertools
 import os
 import time
 from collections import Counter
-from pathlib import Path
-from typing import (Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-                    NamedTuple, Sequence, Type, Iterable, Callable)
-from urllib.parse import urlparse
+from typing import (
+    Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
+    NamedTuple, Sequence, Type, Iterable, Callable
+)
 
 import discord
 import psutil
@@ -226,8 +226,10 @@ class FrontHelpPaginator(BasePaginator[str]):
             ## Introduction
             Here you can find all *Message-/Slash-Commands* for {self.ctx.client.user.name}.
             Try using the dropdown to navigate through the categories to get a list of all Commands.
-            Alternatively you can use the following Commands to get Information about a specific Command or Category:
+            
+            I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
             ## More Help
+            Alternatively you can use the following Commands to get Information about a specific Command or Category:
             - `{pref}help` *`command`*
             - `{pref}help` *`category`*
             """
@@ -777,7 +779,6 @@ class Meta(commands.Cog):
             if filename is None:
                 return await ctx.send('Could not find source for command.')
 
-            location = os.path.relpath(filename).replace('\\', '/')
             location_parts = filename.split(os.path.sep)
             cogs_index = location_parts.index("cogs")
             location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
@@ -798,7 +799,8 @@ class Meta(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(module="Get help for a module.",
                            command="Get help for a command")
-    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None):
+    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None,
+                    command: Optional[str] = None):
         """Shows help for a command or module."""
         ctx: Context = await self.bot.get_context(interaction)
         await ctx.send_help(module or command)
@@ -1136,7 +1138,8 @@ class Meta(commands.Cog):
         embed = discord.Embed()
         user = user or ctx.author
         avatar = user.display_avatar.with_static_format('png')
-        embed.colour = discord.Colour.from_rgb(*self.bot.get_cog('Emoji').render.get_dominant_color(io.BytesIO(await avatar.read())))  # type: ignore
+        embed.colour = discord.Colour.from_rgb(
+            *self.bot.get_cog('Emoji').render.get_dominant_color(io.BytesIO(await avatar.read())))  # type: ignore
         embed.set_author(name=str(user), url=avatar)
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
