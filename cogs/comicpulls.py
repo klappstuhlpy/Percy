@@ -440,7 +440,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             return False
         return True
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=6)
     async def auto_fetch_comics(self):
         if 'fetch_comics' in self._cache.completed_tasks:
             self._cache.completed_tasks.remove('fetch_comics')
