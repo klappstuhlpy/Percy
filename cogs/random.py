@@ -181,9 +181,9 @@ class Random(commands.Cog):
 
         dest, message = self.extract_translation_info(message)
 
-        dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[0])
+        dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[1])
         if not dest:
-            dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[1])
+            dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[0])
 
         try:
             dest = dest[0]
