@@ -470,6 +470,15 @@ class Admin(commands.Cog):
     @command(
         commands.command,
         hidden=True,
+        description="Run git Commands in bots Directory in shell. (Shortcut to sh Command)"
+    )
+    async def git(self, ctx: Context, *, command: str):
+        """Runs a shell command."""
+        await ctx.invoke(self.sh, command=f"cd {Path(__file__).parent.parent.absolute()}\ngit {command}")  # noqa
+
+    @command(
+        commands.command,
+        hidden=True,
     )
     async def sh(self, ctx: Context, *, command: str):  # noqa
         """Runs a shell command."""
