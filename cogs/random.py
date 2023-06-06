@@ -181,11 +181,12 @@ class Random(commands.Cog):
 
         dest, message = self.extract_translation_info(message)
 
-        LANGS = LANGUAGES.keys() | LANGUAGES.values()
+        dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[0])
+        if not dest:
+            dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[1])
 
-        destinations = fuzzy.finder(dest, LANGS)
         try:
-            dest = destinations[0]
+            dest = dest[0]
         except IndexError:
             return await ctx.send(f'{ctx.tick(False)} Invalid language provided. Please provide a valid language.')
 
