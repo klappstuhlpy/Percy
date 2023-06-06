@@ -181,7 +181,7 @@ class Random(commands.Cog):
 
         dest, message = self.extract_translation_info(message)
 
-        LANGS = LANGUAGES.keys() + LANGUAGES.values()
+        LANGS = LANGUAGES.keys() | LANGUAGES.values()
 
         destinations = fuzzy.finder(dest, LANGS)
         if destinations is None:
