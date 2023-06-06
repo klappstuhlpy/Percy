@@ -753,6 +753,7 @@ class Mod(commands.Cog):
     @command(
         commands.hybrid_group,
         name="moderation",
+        aliases=["mod"],
         fallback="info",
         description="Show current Moderation (automatic moderation) behaviour on the server."
     )
@@ -779,7 +780,7 @@ class Mod(commands.Cog):
                 audit_log_broadcast = (
                     f'{channel}\n\n\N{WARNING SIGN}\ufe0f '
                     'This server requires migration for this feature to continue working.\n'
-                    f'Run "`{ctx.prefix}moderation disable Audit Logging`" followed by "`{ctx.prefix}moderation auditlog configure {channel}`" '
+                    f'Run "`{ctx.prefix}moderation disable Audit Logging`" followed by "`{ctx.prefix}moderation auditlog channel {channel}`" '
                     'to ensure this feature continues working!'
                 )
             else:
@@ -1000,16 +1001,17 @@ class Mod(commands.Cog):
         if not perms.ban_members:
             return await ctx.send('<:redTick:1079249771975413910> I do not have permissions to ban members.')
 
-        query = """INSERT INTO guild_mod_config (id, flags)
-                   VALUES ($1, $2) ON CONFLICT (id)
-                   DO UPDATE SET
-                        -- If we're toggling then we need to negate the previous result
-                        flags = CASE COALESCE($3, NOT (guild_mod_config.flags & $2 = $2))
-                                        WHEN TRUE THEN guild_mod_config.flags | $2
-                                        WHEN FALSE THEN guild_mod_config.flags & ~$2
-                                        END
-                   RETURNING COALESCE($3, (flags & $2 = $2));
-                """
+        query = """
+            INSERT INTO guild_mod_config (id, flags)
+            VALUES ($1, $2) ON CONFLICT (id)
+            DO UPDATE SET
+                -- If we're toggling then we need to negate the previous result
+                flags = CASE COALESCE($3, NOT (guild_mod_config.flags & $2 = $2))
+                                WHEN TRUE THEN guild_mod_config.flags | $2
+                                WHEN FALSE THEN guild_mod_config.flags & ~$2
+                        END
+            RETURNING COALESCE($3, (flags & $2 = $2));
+        """
 
         row: Optional[tuple[bool]] = await ctx.db.fetchrow(query, ctx.guild.id, AutoModFlags.raid.flag, enabled)
         enabled = row and row[0]
@@ -1034,11 +1036,12 @@ class Mod(commands.Cog):
         mentions aren't included.
         """
 
-        query = """INSERT INTO guild_mod_config (id, mention_count, safe_automod_entity_ids)
-                   VALUES ($1, $2, '{}')
-                   ON CONFLICT (id) DO UPDATE SET
-                       mention_count = $2;
-                """
+        query = """
+            INSERT INTO guild_mod_config (id, mention_count, safe_automod_entity_ids)
+            VALUES ($1, $2, '{}')
+            ON CONFLICT (id) DO UPDATE SET
+               mention_count = $2;
+        """
         await ctx.db.execute(query, ctx.guild.id, count)
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.send(f'<:greenTick:1079249732364406854> Mention spam protection threshold set to `{count}`.')
@@ -1064,11 +1067,12 @@ class Mod(commands.Cog):
         To use this command, you must have the Ban Members permission.
         """
 
-        query = """UPDATE guild_mod_config
-                   SET safe_automod_entity_ids =
-                       ARRAY(SELECT DISTINCT * FROM unnest(COALESCE(safe_automod_entity_ids, '{}') || $2::bigint[]))
-                   WHERE id = $1;
-                """
+        query = """
+            UPDATE guild_mod_config
+            SET safe_automod_entity_ids =
+               ARRAY(SELECT DISTINCT * FROM unnest(COALESCE(safe_automod_entity_ids, '{}') || $2::bigint[]))
+            WHERE id = $1;
+        """
 
         if len(entities) == 0:
             return await ctx.send('<:redTick:1079249771975413910> Missing entities to ignore.')
@@ -1099,12 +1103,13 @@ class Mod(commands.Cog):
         if len(entities) == 0:
             return await ctx.send('<:redTick:1079249771975413910> Missing entities to unignore.')
 
-        query = """UPDATE guild_mod_config
-                   SET safe_automod_entity_ids =
-                       ARRAY(SELECT element FROM unnest(safe_automod_entity_ids) AS element
-                             WHERE NOT(element = ANY($2::bigint[])))
-                   WHERE id = $1;
-                """
+        query = """
+            UPDATE guild_mod_config
+            SET safe_automod_entity_ids =
+               ARRAY(SELECT element FROM unnest(safe_automod_entity_ids) AS element
+                     WHERE NOT(element = ANY($2::bigint[])))
+            WHERE id = $1;
+        """
 
         await ctx.db.execute(query, ctx.guild.id, [c.id for c in entities])
         self.get_guild_config.invalidate(self, ctx.guild.id)
@@ -1953,11 +1958,6 @@ class Mod(commands.Cog):
 
         await ctx.send(f'<:greenTick:1079249732364406854> Banned `{count}`/`{len(members)}`')
 
-    @massban.error
-    async def massban_error(self, ctx: GuildContext, error: commands.CommandError):
-        if isinstance(error, commands.FlagError):
-            await ctx.send(str(error), ephemeral=True)
-
     @command(
         commands.command,
         name='softban',
@@ -2467,11 +2467,12 @@ class Mod(commands.Cog):
         except discord.HTTPException as e:
             return await ctx.send(f'<:redTick:1079249771975413910> An error happened: {e}')
 
-        query = """INSERT INTO guild_mod_config (id, mute_role_id)
-                   VALUES ($1, $2) ON CONFLICT (id)
-                   DO UPDATE SET
-                       mute_role_id = EXCLUDED.mute_role_id;
-                """
+        query = """
+            INSERT INTO guild_mod_config (id, mute_role_id)
+            VALUES ($1, $2) ON CONFLICT (id)
+            DO UPDATE SET
+               mute_role_id = EXCLUDED.mute_role_id;
+        """
         await ctx.db.execute(query, guild_id, role.id)
         self.get_guild_config.invalidate(self, guild_id)
 
@@ -2510,7 +2511,7 @@ class Mod(commands.Cog):
             msg = f'Are you sure you want to unbind and unmute {plural(muted_members):member}?'
             confirm = await ctx.prompt(msg)
             if not confirm:
-                return await ctx.send('... *Aborting.*')
+                return
 
         query = "UPDATE guild_mod_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.bot.pool.execute(query, guild_id)
@@ -2553,7 +2554,7 @@ class Mod(commands.Cog):
             return await ctx.send('<:redTick:1079249771975413910> Duration is too short. Must be at least 5 minutes.')
 
         delta = timetools.human_timedelta(duration.dt, source=created_at)
-        warning = f'Are you sure you want to be muted for {delta}?\n**Do not ask the moderators to undo this!**'
+        warning = f'Are you sure you want to be muted till {discord.utils.format_dt(duration.dt, "f")}?\n**Do not ask the moderators to undo this!**'
         confirm = await ctx.prompt(warning, ephemeral=True)
         if not confirm:
             return await ctx.send('Aborting', delete_after=5.0)
@@ -2571,7 +2572,7 @@ class Mod(commands.Cog):
         )
 
         await ctx.send(
-            f'<:greenTick:1079249732364406854> Muted for **{delta}**. Be sure not to bother anyone about it.')
+            f'<:greenTick:1079249732364406854> Muted till **{discord.utils.format_dt(duration.dt, "f")}**. Be sure not to bother anyone about it.')
 
 
 async def setup(bot):

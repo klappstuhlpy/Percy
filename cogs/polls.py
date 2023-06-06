@@ -5,9 +5,8 @@ import enum
 import random
 import traceback
 import warnings
-from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, Sequence, TypedDict, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple
 
-import asyncpg
 import discord
 from discord import app_commands, Interaction
 from discord.ext import commands, tasks
@@ -17,6 +16,7 @@ from cogs.utils.paginator import BasePaginator
 from . import command
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, formats
+from .utils.context import Context
 from .utils.converters import colour_autocomplete
 from .utils.formats import plural, get_shortened_string, PostgresItem
 
@@ -38,16 +38,7 @@ def to_emoji(index: int) -> str:
     return str(EMOJIS.get(index))
 
 
-def tick(opt: Optional[bool], label: Optional[str] = None) -> str:
-    lookup = {
-        True: '<:greenTick:1079249732364406854>',
-        False: '<:redTick:1079249771975413910>',
-        None: '<:greyTick:1079250082819477634>',
-    }
-    emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
-    if label is not None:
-        return f'{emoji}: {label}'
-    return emoji
+tick = Context.tick  # tick link because we have only app commands here
 
 
 LINE_EMOJIS = ['<:lf:1103076956645363712>', '<:le:1103076791666610197>', '<:lfc:1103076698687295568>',

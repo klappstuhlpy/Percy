@@ -118,20 +118,21 @@ class Stats(commands.Cog):
         return discord.PartialEmoji(name='graph', id=1104490238312718417)
 
     async def bulk_insert(self) -> None:
-        query = """INSERT INTO commands (guild_id, channel_id, author_id, used, prefix, command, failed, app_command)
-                   SELECT x.guild, x.channel, x.author, x.used, x.prefix, x.command, x.failed, x.app_command
-                   FROM jsonb_to_recordset($1::jsonb) AS
-                   x(
-                        guild BIGINT,
-                        channel BIGINT,
-                        author BIGINT,
-                        used TIMESTAMP,
-                        prefix TEXT,
-                        command TEXT,
-                        failed BOOLEAN,
-                        app_command BOOLEAN
-                    )
-                """
+        query = """
+            INSERT INTO commands (guild_id, channel_id, author_id, used, prefix, command, failed, app_command)
+            SELECT x.guild, x.channel, x.author, x.used, x.prefix, x.command, x.failed, x.app_command
+            FROM jsonb_to_recordset($1::jsonb) AS
+            x(
+                guild BIGINT,
+                channel BIGINT,
+                author BIGINT,
+                used TIMESTAMP,
+                prefix TEXT,
+                command TEXT,
+                failed BOOLEAN,
+                app_command BOOLEAN
+            )
+        """
 
         if self._data_batch:
             await self.bot.pool.execute(query, self._data_batch)
@@ -686,9 +687,16 @@ class Stats(commands.Cog):
                 ) AS g ON TRUE;
             """'''
 
+            # We use here AsyncAlchemy to improve the performance of the query because its a big one
+            # This might be a bit overkill, but it works
+            # Note: first time using ORM so this might be a bit messy
+
             record = await ctx.db.execute("SELECT * FROM commands WHERE command = $1 LIMIT 1;", command)
             if record == "SELECT 0":
                 return await ctx.send(f'{ctx.tick(False)} No command called {command!r} found in the database.')
+
+            # First check if the command is in the database
+            # because we want to avoid running this big query if we don't need to
 
             async_session = sessionmaker(self.bot.alchemy_engine, expire_on_commit=False, class_=AsyncSession)  # type: ignore
             async with async_session() as session:
@@ -782,11 +790,15 @@ class Stats(commands.Cog):
                 result: Result = await session.execute(stmt)
                 rows = result.fetchall()
 
-                assert rows is not None  # Why should it be None? Ok, if so, no good -.-
+                assert rows is not None  # can't be None
 
                 mapped = {}
                 for row in rows:
                     mapped |= row._mapping
+
+                # didn't find a better way to do this because rows returns only the values,
+                # what's a bit heavy to deal with on changes so we use a mapping,
+                # so I just did it like this
 
             await self.show_command_stats(ctx, command, mapped)
 

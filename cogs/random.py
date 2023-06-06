@@ -153,6 +153,7 @@ class Random(commands.Cog):
         - `in <target_language>:? <text>`
         - `on <target_language>:? <text>`
         - `<text> in <target_language>`
+        - ...
         """
 
         CONTEXT_PATTERN = re.compile(
@@ -184,6 +185,10 @@ class Random(commands.Cog):
         dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[1])
         if not dest:
             dest = fuzzy.find(dest, LANGUAGES.items(), key=lambda x: x[0])
+
+        # ex. output of dest: -> ('en', 'English')
+        # we want the language code, not the Name,
+        # so we get the first item in the tuple
 
         try:
             dest = dest[0]

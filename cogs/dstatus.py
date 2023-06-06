@@ -17,7 +17,6 @@ from discord.utils import MISSING
 from typing import TypeVar
 
 from bot import Percy
-from cogs.utils.context import Context
 from cogs.utils.executor import executor
 
 DS_RSS_FEED = "https://discordstatus.com/history.rss"
@@ -148,7 +147,7 @@ class DiscordStatus(commands.Cog):
             return parsed
         return None
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=5)
     async def check_new_incident(self):
         await self.bot.wait_until_ready()
 
@@ -192,7 +191,7 @@ class DiscordStatus(commands.Cog):
             status=incidents[0].state,
             link=entry.link,
             published_at=parse(entry.published).astimezone(datetime.timezone.utc),
-            last_updated_at=discord.utils.utcnow(),
+            last_updated_at=incidents[0].started_at,
             title=entry.title,
             updates=incidents
         )
