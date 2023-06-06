@@ -184,10 +184,10 @@ class Random(commands.Cog):
         LANGS = LANGUAGES.keys() | LANGUAGES.values()
 
         destinations = fuzzy.finder(dest, LANGS)
-        if destinations is None:
-            return await ctx.send(f'{ctx.tick(False)} Invalid language provided, take care of context matching.')
-        else:
+        try:
             dest = destinations[0]
+        except IndexError:
+            return await ctx.send(f'{ctx.tick(False)} Invalid language provided. Please provide a valid language.')
 
         if message is None:
             reply = ctx.replied_message
