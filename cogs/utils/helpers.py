@@ -67,19 +67,30 @@ class flag_value:
         return f'<flag_value flag={self.flag!r}>'
 
 
-class PostgresItem(abc.ABC, metaclass=abc.ABCMeta):
+class PostgresItemMeta(type):
+    def __call__(cls, *args, **kwargs):
+        if cls is PostgresItem:
+            raise TypeError("`PostgresItem` cannot be instantiated directly.")
+        return super().__call__(*args, **kwargs)
+
+
+class PostgresItem(metaclass=PostgresItemMeta):
     """The base class for PostgreSQL fetched rows."""
 
-    def __init__(self, *, record: asyncpg.Record) -> None:
-        if not issubclass(self.__class__, PostgresItem):
-            raise TypeError("`PostgresItem` cannot be instantiated directly.")
+    __slots__ = ('record',)
 
+    def __init__(self, *, record: asyncpg.Record) -> None:
         if record is None:
             raise TypeError("Subclasses of `PostgresItem` must provide a `record` keyword argument.")
 
         self.record: asyncpg.Record = record
         for k, v in record.items():
             setattr(self, k, v)
+
+    @classmethod
+    def __subclasshook__(cls, subclass: type[Any]) -> bool:
+        """Returns whether the subclass has a record attribute."""
+        return hasattr(subclass, 'record')
 
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls)
