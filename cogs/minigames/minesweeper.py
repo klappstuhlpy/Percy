@@ -11,6 +11,10 @@ from cogs.utils import helpers
 from cogs.utils.context import Context
 from cogs.utils.formats import readable_time
 
+
+# Credits for this Source Code https://github.com/MrArkon/MAGPB/blob/master/bot/plugins/fun/views.py#L25-L165
+
+
 neighbors: list[tuple[int, int]] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
@@ -22,7 +26,7 @@ class BoardKind:
 
 class Minesweeper(discord.ui.View):
     def __init__(self, ctx: Context | discord.Interaction, mines: int):
-        super().__init__(timeout=90)
+        super().__init__(timeout=250.0)
 
         self.ctx: Context | discord.Interaction = ctx
         self.mines = mines
