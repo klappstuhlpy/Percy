@@ -1,5 +1,4 @@
 from __future__ import annotations
-import abc
 import json
 import time
 from pathlib import Path
@@ -79,7 +78,9 @@ class PostgresItem(metaclass=PostgresItemMeta):
 
     __slots__ = ('record',)
 
-    def __init__(self, *, record: asyncpg.Record) -> None:
+    def __init__(self, *args, **kwargs) -> None:
+        record: asyncpg.Record = kwargs.pop('record', None)
+
         if record is None:
             raise TypeError("Subclasses of `PostgresItem` must provide a `record` keyword argument.")
 
@@ -87,22 +88,13 @@ class PostgresItem(metaclass=PostgresItemMeta):
         for k, v in record.items():
             setattr(self, k, v)
 
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
     @classmethod
     def __subclasshook__(cls, subclass: type[Any]) -> bool:
         """Returns whether the subclass has a record attribute."""
         return hasattr(subclass, 'record')
-
-    def __new__(cls, *args, **kwargs):
-        self = super().__new__(cls)
-        for arg in args:
-            if isinstance(arg, asyncpg.Record):
-                self.__init__(record=arg)
-                break
-
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-        return self
 
     def __iter__(self):
         """An iterator over the record's values."""
@@ -110,9 +102,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
 
     def __repr__(self):
         args = ['%s=%r' % (k, v) for k, v in self.record.items()]
-        return '<%s.%s(%s)>' % (self.__class__.__module__,
-                                self.__class__.__name__,
-                                ', '.join(args))
+        return '<%s.%s(%s)>' % (self.__class__.__module__, self.__class__.__name__, ', '.join(args))
 
     def __eq__(self, other: object) -> bool:
         """Returns whether the item's ID is equal to the other item's ID."""
@@ -131,7 +121,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
     @classmethod
     def temporary(cls, *args, **kwargs) -> 'PostgresItem':
         """Creates a temporary instance of this class."""
-        return cls.__new__(cls, *args, **kwargs)
+        return cls(*args, **kwargs)
 
 
 class Colour(discord.Colour):
