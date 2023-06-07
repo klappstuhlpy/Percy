@@ -71,7 +71,7 @@ class PostgresItem(abc.ABC, metaclass=abc.ABCMeta):
     """The base class for PostgreSQL fetched rows."""
 
     def __init__(self, *, record: asyncpg.Record) -> None:
-        if isinstance(self, PostgresItem):
+        if not issubclass(self.__class__, PostgresItem):
             raise TypeError("`PostgresItem` cannot be instantiated directly.")
 
         if record is None:

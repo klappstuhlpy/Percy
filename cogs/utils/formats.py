@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator
+from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
 
 import asyncpg
 import discord
 
-from bot import Percy
+if TYPE_CHECKING:
+    from bot import Percy
 
 T = TypeVar('T')
 
