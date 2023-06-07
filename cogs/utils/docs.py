@@ -15,12 +15,12 @@ from . import helpers
 from .paginator import BasePaginator
 from cogs.utils.context import Context
 from cogs.utils.formats import plural
-from cogs.utils.scraping.sphinx import SphinxScraper, SearchResults, MethObject, MetaSpec
+from cogs.utils.sphinx_scraper import SphinxScraper, SearchResults, MethObject, MetaSpec
 
 
 class DocType(enum.Enum):
-    ATTRIBUTES = enum.auto()
-    EXAMPLES = enum.auto()
+    ATTRIBUTES = 1
+    EXAMPLES = 2
 
 
 T = TypeVar('T')

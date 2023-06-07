@@ -9,7 +9,7 @@ from cogs import command
 from cogs.utils.docs import DocumentationView
 from .dstatus import DISCORD_ICON_URL
 from .utils.context import Context
-from .utils.scraping.sphinx import SphinxScraper
+from cogs.utils.sphinx_scraper import SphinxScraper
 
 
 def format_lib_list(iter: Dict[str, str]) -> str:  # noqa

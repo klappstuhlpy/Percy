@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import dataclasses
 import enum
+import inspect
 import io
 import os
 import re
@@ -17,10 +17,10 @@ from bs4 import BeautifulSoup, SoupStrainer, Tag, PageElement
 from discord.utils import MISSING
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from .. import fuzzy
-from ..context import Context
-from ..helpers import TimeMesh
-from ...utils.async_utils import executor, AsyncPartialCache, block_if_task_running
+from cogs.utils import fuzzy
+from cogs.utils.context import Context
+from cogs.utils.helpers import TimeMesh
+from cogs.utils.async_utils import executor, AsyncPartialCache, block_if_task_running
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -62,9 +62,6 @@ class Documentation:
     def __str__(self):
         return self.name
 
-    def to_json(self):
-        return dataclasses.asdict(self)
-
     def to_embed(self, library: str, color: int | Any):
         description = f"```py\n{self.full_name}\n```\n**Description**\n{self.description}".strip()
 
@@ -85,9 +82,6 @@ class Documentation:
 class SearchResults(NamedTuple):
     results: List[RTFMItem]
     query_time: float
-
-    def __list__(self):
-        return self.results
 
     def to_embed(self, title: str = None, url: str = None, color: int | Any = None):
         embed = discord.Embed(
@@ -160,6 +154,11 @@ class _utils:
         info_text = prefix_map.get(item_desc, "def") + " " + info_text
         return info_text
 
+    @staticmethod
+    def format_desc(text: List[str]) -> str:
+        text = re.sub(r"Example(?: Usage)?:", "", "\n".join(text)).strip()
+        return inspect.cleandoc(text)
+
     def format_attributes(
             self, item: Tag, desc_items: List[Tag], full_url: str, method: str = "ATTRIBUTES"
     ) -> List[MethObject]:
@@ -185,8 +184,8 @@ class _utils:
                         desc.append(text)
 
             meta = MetaSpec.ATTRIBUTE if method == "ATTRIBUTES" else MetaSpec.METHOD
-            results.append(MethObject(meta, name, url, "\n\n".join(desc).replace("Example:", "").replace("Example", "")
-                                      .replace("Example Usage:", "").strip()))
+
+            results.append(MethObject(meta, name, url, self.format_desc(desc)))
         return results
 
     @staticmethod
