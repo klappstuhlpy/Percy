@@ -401,7 +401,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self._cache: ComicCache = ComicCache(self)
+        self._cache: ComicCache = MISSING
         self._send_lock: MultipleLock = MultipleLock()
         self._batch_lock: asyncio.Lock = asyncio.Lock()
 
@@ -442,10 +442,11 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     @tasks.loop(hours=6)
     async def auto_fetch_comics(self):
-        if 'fetch_comics' in self._cache.completed_tasks:
-            self._cache.completed_tasks.remove('fetch_comics')
+        if self._cache is not MISSING:
+            if 'fetch_comics' in self._cache.completed_tasks:
+                self._cache.completed_tasks.remove('fetch_comics')
 
-        async with self._cache:
+        async with ComicCache(self) as self._cache:
             self._cache.add_task(self._cache.fetch_comics)
 
     async def call_feed(self, comic: ComicFeed) -> None:
@@ -641,25 +642,22 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
     async def comic_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
-        try:
-            await interaction.response.defer()
+        await interaction.response.defer()
 
-            config: ComicFeed = await self.get_config(interaction.guild.id, brand)
-            if not config:
-                return await interaction.followup.send(
-                    f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+        config: ComicFeed = await self.get_config(interaction.guild.id, brand)
+        if not config:
+            return await interaction.followup.send(
+                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
 
-            if not config:
-                return await interaction.followup.send(
-                    f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+        if not config:
+            return await interaction.followup.send(
+                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
 
-            await self.call_feed(config)
-            self.rerun_dispatch()
+        await self.call_feed(config)
+        self.rerun_dispatch()
 
-            await interaction.followup.send(
-                f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
-        except Exception as e:
-            traceback.print_exc()
+        await interaction.followup.send(
+            f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
 
     @comics.command(name="subscribe", description="Subscribes to a comic brand feed.")
     @app_commands.default_permissions(manage_guild=True)
