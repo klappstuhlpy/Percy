@@ -196,7 +196,7 @@ class Admin(commands.Cog):
 
         env.update(globals())
 
-        body = self.cleanup_code(ctx.message.content)
+        body = self.cleanup_code(body)
         stdout = io.StringIO()
 
         to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
