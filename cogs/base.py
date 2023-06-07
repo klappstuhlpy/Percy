@@ -220,14 +220,11 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         self.bot: Percy = bot
         self.bot.loop.create_task(self._prepare_invites())
         self._req_lock = asyncio.Lock()
+        self.auto_archive_old_forum_threads.start()
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='dpy', id=596577034537402378)
-
-    async def cog_load(self) -> None:
-        await self.bot.wait_until_ready()
-        self.auto_archive_old_forum_threads.start()
 
     def cog_unload(self) -> None:
         self.auto_archive_old_forum_threads.cancel()
@@ -327,6 +324,10 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
             expires = last_message + datetime.timedelta(minutes=thread.auto_archive_duration)
             if now > expires:
                 await thread.edit(archived=True, reason='Auto-archived due to inactivity.')
+
+    @auto_archive_old_forum_threads.before_loop
+    async def before_auto_archive_old_forum_threads(self):
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import config
 
 from bot import Percy
-
+from cogs.utils.scope import REVISION_FILE
 
 try:
     import uvloop  # type: ignore
@@ -33,9 +33,6 @@ else:
 class Revisions(TypedDict):
     version: int
     database_uri: str
-
-
-REVISION_FILE = re.compile(r'(?P<kind>V|U)(?P<version>[0-9]+)__(?P<description>.+).sql')
 
 
 class Revision:
@@ -208,7 +205,7 @@ def setup_logging():
         logging.getLogger('discord.state').addFilter(RemoveNoise())
         logging.getLogger('charset_normalizer').setLevel(logging.ERROR)
 
-        log.setLevel(logging.DEBUG)
+        log.setLevel(logging.INFO)
         handler = RotatingFileHandler(filename='percy.log', encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5)
         handler.setFormatter(fmt)
         log.addHandler(handler)
@@ -331,7 +328,7 @@ def upgrade(sql):
         applied = asyncio.run(run_upgrade(migrations))
     except Exception:
         traceback.print_exc()
-        click.secho('failed to apply migrations due to error', fg='red')
+        click.secho('Failed to apply migrations due to error', fg='red')
     else:
         click.secho(f'Applied {applied} revisions(s)', fg='green')
 

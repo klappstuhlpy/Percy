@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
-from cogs.utils import formats, helpers
+from cogs.utils import helpers
 from cogs.utils.comic.client import Marvel
 from cogs.utils.config import Config
 from cogs.utils.context import Context

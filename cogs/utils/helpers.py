@@ -6,7 +6,6 @@ from typing import TypeVar, Self, Callable, Optional, Any, overload, Dict, TYPE_
 
 import asyncpg
 import discord
-from discord.utils import MISSING
 
 T = TypeVar('T', bound='BaseFlags')
 
@@ -69,7 +68,7 @@ class flag_value:
 
 class PostgresItemMeta(type):
     if TYPE_CHECKING:
-        __ignore_record: bool
+        _ignore_record: bool
 
     def __new__(
         cls,
@@ -79,7 +78,7 @@ class PostgresItemMeta(type):
         *,
         ignore_record: bool = False,
     ) -> 'PostgresItemMeta':
-        attrs['__ignore_record'] = ignore_record
+        attrs['_ignore_record'] = ignore_record
         return super().__new__(cls, name, bases, attrs)
 
     def __call__(cls, *args, **kwargs):
@@ -96,7 +95,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
     def __init__(self, **kwargs) -> None:
         record: asyncpg.Record = kwargs.pop('record', None)
 
-        if record is None and not self.__class__.__ignore_record:
+        if record is None and not self.__class__._ignore_record:
             raise TypeError("Subclasses of `PostgresItem` must provide a `record` keyword argument.")
 
         self.record: asyncpg.Record = record

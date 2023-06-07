@@ -48,6 +48,8 @@ CMYK_REGEX = re.compile(r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,
 HEX_REGEX = re.compile(r"^(#|0x)(?P<hex>[a-fA-F0-9]{6})$")
 RGB_REGEX = re.compile(r"^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$")
 
+REVISION_FILE = re.compile(r'(?P<kind>V|U)(?P<version>[0-9]+)__(?P<description>.+).sql')
+
 GITHUB_FULL_REGEX = re.compile(
     r"""
         https?://                               # http:// or https://
