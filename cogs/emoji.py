@@ -2,15 +2,12 @@ import asyncio
 import io
 import logging
 from typing import Optional, Annotated, Counter
-import datetime
 from collections import defaultdict, Counter
 
 import asyncpg
 import discord
-import re
 
 import yarl
-from PIL import Image
 from discord import app_commands
 from discord.ext import commands, tasks
 
@@ -18,25 +15,12 @@ from bot import Percy
 from . import command
 from .utils import checks
 from .utils.context import GuildContext, Context
+from .utils.converters import usage_per_day
 from .utils.paginator import TextSource
 from .utils.render import Render
+from .utils.scope import EMOJI_REGEX, EMOJI_NAME_REGEX
 
-EMOJI_REGEX = re.compile(r'<a?:.+?:([0-9]{15,21})>')
-EMOJI_NAME_REGEX = re.compile(r'^[0-9a-zA-Z-_]{2,32}$')
 log = logging.getLogger(__name__)
-
-
-class OpenImage:
-    def __init__(self, img_bytes: io.BytesIO):
-        self.img_bytes: io.BytesIO = img_bytes
-
-    def __enter__(self):
-        self.img = Image.open(self.img_bytes)
-        return self.img
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.img:
-            self.img.close()
 
 
 def partial_emoji(argument: str, *, regex=EMOJI_REGEX) -> int:
@@ -79,15 +63,6 @@ class EmojiURL:
                 raise commands.BadArgument('<:redTick:1079249771975413910> Not a valid or supported emoji URL.') from None
         else:
             return cls(animated=partial.animated, url=str(partial.url))
-
-
-def usage_per_day(dt: datetime.datetime, usages: int) -> float:
-    now = discord.utils.utcnow()
-
-    days = (now - dt).total_seconds() / 86400
-    if int(days) == 0:
-        return usages
-    return usages / days
 
 
 class Emoji(commands.Cog):

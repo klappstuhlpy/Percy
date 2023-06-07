@@ -25,17 +25,17 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from __future__ import annotations
 import logging
-from pathlib import Path
 from typing import List, Dict, Any, NamedTuple, Optional
 
 import aiohttp
 import discord
-import json
 
 from dateutil.parser import parse
 from discord import DiscordException
 from discord.ext import commands, tasks
 import datetime
+
+from cogs.utils.helpers import config_file
 
 logger = logging.getLogger(__name__)
 
@@ -53,17 +53,6 @@ class YouTubeRequestError(DiscordException):
 
         fmt = '{0.status} {0.reason} (reason: {1}): {2}'
         super().__init__(fmt.format(self.response, self.reason, self.message))
-
-
-class config:
-    """A class for getting and setting the config.json file."""
-
-    path = Path(__file__).parent.parent / "config.json"
-
-    @classmethod
-    def get(cls) -> Dict[str, Any]:
-        with open(cls.path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
 
 BASE_URL = "https://www.googleapis.com/youtube/v3/{endpoint}"
@@ -101,8 +90,10 @@ class YouTubeNotifications(commands.Cog):
 
         self.running_streams: List[YouTubeStream] = []
 
+        self.config: config_file = config_file("youtube")
+
     def cog_check(self, ctx: commands.Context) -> bool:
-        return config.get().get("youtube") is not None
+        return self.config.load is not None
 
     async def cog_load(self) -> None:
         self.refresh_notify_check.start()
@@ -114,7 +105,7 @@ class YouTubeNotifications(commands.Cog):
 
     @property
     def api_key(self) -> str:
-        return config.get()["youtube"].get("api_key", None)
+        return self.config.load.get("api_key", None)
 
     @property
     def bearer_headers(self) -> dict:
@@ -197,7 +188,7 @@ class YouTubeNotifications(commands.Cog):
         return cache
 
     async def get_notifications(self) -> List[YouTubeStream]:
-        wl = config.get()["youtube"]["watchlist"]
+        wl = self.config.load["watchlist"]
         channels = await self.get_channels(wl)
         streams = await self.get_streams(channels)
 
@@ -221,7 +212,7 @@ class YouTubeNotifications(commands.Cog):
     @tasks.loop(minutes=20)
     async def refresh_notify_check(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(config.get()["youtube"]["channel_id"])
+        channel = self.bot.get_channel(self.config.load["channel_id"])
         if not channel:
             return
 

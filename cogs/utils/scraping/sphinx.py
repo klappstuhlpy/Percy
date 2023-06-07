@@ -19,8 +19,8 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .. import fuzzy
 from ..context import Context
-from ...utils.executor import executor, AsyncPartialCache, block_if_task_running
-from ...utils.timer import TimeMesh
+from ..helpers import TimeMesh
+from ...utils.async_utils import executor, AsyncPartialCache, block_if_task_running
 
 if TYPE_CHECKING:
     from bot import Percy

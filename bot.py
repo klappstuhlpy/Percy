@@ -3,25 +3,26 @@ from __future__ import annotations
 import datetime
 import logging
 from collections import defaultdict
-from typing import Optional, TYPE_CHECKING, Union, Dict, Iterable, AsyncIterator, Any, Counter, Callable, Coroutine, Type, Tuple
+from typing import Optional, TYPE_CHECKING, Union, Dict, Iterable, AsyncIterator, Any, Counter, Callable, Coroutine, Type
 
 import aiohttp
 import asyncpg
 import discord
+from discord import app_commands
 from discord.ext import commands
 from expiringdict import ExpiringDict
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Playwright, Browser
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
-from cogs.utils import formats
+from cogs.utils import formats, helpers
 from cogs.utils.comic.client import Marvel
 from cogs.utils.config import Config
 from cogs.utils.context import Context
-from cogs.utils.converters import GUILD_FEATURES
-from cogs.utils.executor import TaskInterruption
+from cogs.utils.async_utils import TaskInterruption
+from cogs.utils.scope import GUILD_FEATURES
 
 if TYPE_CHECKING:
     from cogs.reminder import Reminder
@@ -29,9 +30,9 @@ if TYPE_CHECKING:
     from cogs.config import Config as ConfigCog
     from discord.types.guild import GuildFeature
 
-    GuildFeatureA = Tuple[GuildFeature, str]
+    GuildFeatureA = tuple[GuildFeature, str]
 else:
-    GuildFeatureA = Tuple[str, str]
+    GuildFeatureA = tuple[str, str]
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ class Percy(commands.Bot):
     bot_app_info: discord.AppInfo
     pool: asyncpg.Pool
     alchemy_engine: AsyncEngine
+    session: aiohttp.ClientSession
+    playwright: Playwright
+    browser: Browser
     config: Config
     old_tree_error = Callable[[discord.Interaction, discord.app_commands.AppCommandError], Coroutine[Any, Any, None]]
 
@@ -85,7 +89,7 @@ class Percy(commands.Bot):
             pm_help=None,
             help_attrs=dict(hidden=True),
             chunk_guilds_at_startup=False,
-            heartbeat_timeout=150.0,
+            heartbeat_timeout=200.0,
             allowed_mentions=allowed_mentions,
             intents=intents,
             enable_debug_events=True,
@@ -103,7 +107,7 @@ class Percy(commands.Bot):
         self._auto_spam_count: Counter[int] = Counter()  # type: ignore # user_id: count
 
         self.context: Type[Context] = Context
-        self.colour: Type[formats.Colour] = formats.Colour
+        self.colour: Type[helpers.Colour] = helpers.Colour
         self.marvel_client: Marvel = Marvel(self)
         self._error_message_log: list[int] = []
 
@@ -119,7 +123,6 @@ class Percy(commands.Bot):
     def owner(self) -> discord.User:
         return self.bot_app_info.owner
 
-    # noinspection PyAttributeOutsideInit
     async def setup_hook(self) -> None:
         self.session: aiohttp.ClientSession = aiohttp.ClientSession()
 
@@ -238,6 +241,18 @@ class Percy(commands.Bot):
         embed.add_field(name='Channel Info', value=f'{message.channel} (ID: {message.channel.id}', inline=False)
         embed.timestamp = discord.utils.utcnow()
         return await self.stats_webhook.send(embed=embed, username='Percy Spam Control')
+
+    def resolve_command(self, command: str) -> Optional[Union[commands.Command, app_commands.commands.Command, Any]]:
+        resolved = self.get_command(command)
+        if not resolved:  # No message Command?
+            resolved = self.tree.get_command(command)
+            if not resolved:  # No root Command?
+                app_cmds = self.tree.walk_commands()
+                resolved = discord.utils.find(lambda c: c.qualified_name == command, app_cmds)  # find it by full name
+
+        if resolved:
+            return resolved
+        return None
 
     async def get_context(self, origin: Union[discord.Interaction, discord.Message], /, *, cls=Context) -> Context:
         return await super().get_context(origin, cls=cls)

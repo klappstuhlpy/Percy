@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
-import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from typing import NamedTuple, Dict, Any, Optional
+from typing import NamedTuple, Dict, Optional
 
 import discord
 import feedparser
@@ -17,12 +15,12 @@ from discord.utils import MISSING
 from typing import TypeVar
 
 from bot import Percy
-from cogs.utils.executor import executor
+from cogs.utils.async_utils import executor
+from cogs.utils.helpers import config_file
+from cogs.utils.scope import DSTATUS_CHANNEL_ID, PH_HEAD_DEV_ROLE_ID
 
 DS_RSS_FEED = "https://discordstatus.com/history.rss"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
-STATUS_CHANNEL_ID = 1066703170409070666
-HEAD_DEV_ROLE_ID = 1101538861663911986
 
 STATE_EMOJI = {
     "resolved": "<:online:1101531229188272279>",
@@ -42,25 +40,6 @@ EMBED_COLOR = {
 
 
 T = TypeVar('T')
-
-
-class config:
-    """A class for getting and setting the config.json file."""
-
-    path = Path(__file__).parent.parent / "config.json"
-
-    @classmethod
-    def set(cls, **params: dict | T) -> None:
-        payload = cls.get()
-
-        with open(cls.path, "w") as file:
-            payload["dstatus"].update(params)
-            json.dump(payload, file, indent=4, sort_keys=True, default=str)
-
-    @classmethod
-    def get(cls) -> Dict[str, Any]:
-        with open(cls.path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
 
 class State(NamedTuple):
@@ -90,7 +69,7 @@ class Incident:
         self.updates.insert(0, state)
         self.last_updated_at = state.started_at
 
-        message = await bot.get_channel(STATUS_CHANNEL_ID).fetch_message(self.message_id)
+        message = await bot.get_channel(DSTATUS_CHANNEL_ID).fetch_message(self.message_id)
         embed = message.embeds[0]
         embed.add_field(name=f"{STATE_EMOJI.get(state.state.lower())} {state.state} "
                              f"({discord.utils.format_dt(state.started_at, 'R')})",
@@ -126,9 +105,10 @@ class DiscordStatus(commands.Cog):
         self.bot: Percy = bot
 
         self._last_incident: Incident = MISSING
+        self.config: config_file = config_file("dstatus")
 
     async def cog_load(self) -> None:
-        record = config.get()["dstatus"].get("latest_incident")
+        record = self.config.load.get("latest_incident")
         if record:
             self._last_incident = Incident(**record)
         self.check_new_incident.start()
@@ -138,7 +118,7 @@ class DiscordStatus(commands.Cog):
 
     @discord.utils.cached_property
     def channel(self) -> discord.TextChannel:
-        return self.bot.get_channel(STATUS_CHANNEL_ID)
+        return self.bot.get_channel(DSTATUS_CHANNEL_ID)
 
     @executor
     def parse_feed(self, feed: str) -> Optional[feedparser.FeedParserDict]:
@@ -184,7 +164,7 @@ class DiscordStatus(commands.Cog):
 
             await self._last_incident.update(self.bot, incidents[0])
 
-            config.set(latest_incident=self._last_incident.as_dict())
+            self.config.set(latest_incident=self._last_incident.as_dict())
             return
 
         incident = Incident.temporary(
@@ -196,13 +176,13 @@ class DiscordStatus(commands.Cog):
             updates=incidents
         )
 
-        message = await self.channel.send(content=f"<@&{HEAD_DEV_ROLE_ID}>", embed=incident.build_embed(),
+        message = await self.channel.send(content=f"<@&{PH_HEAD_DEV_ROLE_ID}>", embed=incident.build_embed(),
                                           allowed_mentions=discord.AllowedMentions(roles=True))
 
         incident.message_id = message.id
         self._last_incident = incident
 
-        config.set(latest_incident=self._last_incident.as_dict())
+        self.config.set(latest_incident=self._last_incident.as_dict())
 
 
 async def setup(bot: Percy) -> None:

@@ -2,7 +2,7 @@ import asyncio
 import functools
 import logging
 
-from typing import Callable, Optional, Coroutine, Awaitable, ParamSpec, TypeVar
+from typing import Callable, Optional, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any
 
 import discord
 from discord.ext import commands
@@ -10,6 +10,47 @@ from discord.ext import commands
 
 T = TypeVar('T')
 P = ParamSpec('P')
+
+
+class PerformanceMocker:
+    """A mock object that can also be used in await expressions."""
+
+    def __init__(self):
+        self.loop = asyncio.get_running_loop()
+
+    @property
+    def permissions_for(self) -> discord.Permissions:
+        perms = discord.Permissions.all()
+        perms.administrator = False
+        perms.embed_links = False
+        perms.add_reactions = False
+        return perms
+
+    def __getattr__(self, attr: str) -> Self:
+        return self
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Self:
+        return self
+
+    def __repr__(self) -> str:
+        return '<PerformanceMocker>'
+
+    def __await__(self):
+        future: asyncio.Future[Self] = self.loop.create_future()
+        future.set_result(self)  # type: ignore
+        return future.__await__()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: Any) -> Self:
+        return self
+
+    def __len__(self) -> int:
+        return 0
+
+    def __bool__(self) -> bool:
+        return False
 
 
 def executor(sync_function: Callable[P, T]) -> Callable[P, Awaitable[T]]:

@@ -10,7 +10,7 @@ from discord.ext import commands
 from . import tictactoe, minesweeper, hangman
 from .hangman import WaitforHangman
 from .. import command
-from ..utils import formats
+from ..utils import helpers
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -50,7 +50,7 @@ class Minigame(commands.GroupCog):
             title="TicTacToe",
             description=f'{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n'
                         f'Do you accept this party, {other.mention}?',
-            colour=formats.Colour.light_orange(),
+            colour=helpers.Colour.light_orange(),
         )
         msg = await ctx.send(embed=embed,  view=prompt)
 
@@ -105,7 +105,7 @@ class Minigame(commands.GroupCog):
 
                 if builder.errors == 6:  # coalcase because we already checked for wins
                     builder.finished = -1
-                    builder._current_colour = formats.Colour.red()
+                    builder._current_colour = helpers.Colour.red()
                     builder.guessed.update(builder.word)
                     message = await message.edit(embeds=[builder.build_hang_man(), builder.build_embed()])
 

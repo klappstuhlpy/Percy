@@ -16,7 +16,7 @@ from cogs import command
 from cogs.mod import ModConfig, AutoModFlags
 from cogs.utils import cache, checks
 from cogs.utils.context import Context, GuildContext
-from cogs.utils.formats import PostgresItem
+from cogs.utils.helpers import PostgresItem
 from cogs.utils.render import Render
 
 
@@ -394,7 +394,6 @@ class Leveling(commands.Cog):
         """Set a users experience/level."""
         if target.bot:
             return await ctx.send(f"{ctx.tick(False)} You can't manage Bot's Level/Experience.")
-
         if xp is None and level is None:
             return await ctx.send(f"{ctx.tick(False)} You need to provide either a level or xp to set.")
         if xp and level:

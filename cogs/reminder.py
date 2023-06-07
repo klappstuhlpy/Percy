@@ -18,7 +18,8 @@ from typing_extensions import Annotated
 from . import command
 from .utils import timetools, formats, cache, fuzzy
 from .utils.context import Context
-from .utils.formats import plural, MaybeAcquire, PostgresItem
+from .utils.formats import plural, MaybeAcquire
+from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy

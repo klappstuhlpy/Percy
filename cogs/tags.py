@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import io
-from typing import TYPE_CHECKING, Optional, TypedDict, List, Iterable
+from typing import TYPE_CHECKING, Optional, List, Iterable
 
 import asyncpg
 import discord
@@ -16,24 +16,18 @@ from . import command
 from .emoji import usage_per_day
 from .utils import formats, checks, fuzzy
 from .utils.formats import plural
+from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
 
-class TagEntry(TypedDict):
+class TagPageEntry(PostgresItem):
     id: int
     name: str
-    content: str
 
-
-class TagPageEntry:
     __slots__ = ('id', 'name')
-
-    def __init__(self, entry: TagEntry):
-        self.id: int = entry['id']
-        self.name: str = entry['name']
 
     def __str__(self) -> str:
         return f'{self.name} [`{self.id}`]'
@@ -147,25 +141,13 @@ class Tags(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='navigate', id=1103420880056488038)
 
-    '''@cache.cache()
-    async def get_tag_config(self, guild_id, *, connection=None):
-        # tag config is stored as a special server-wide tag, 'config'
-        # this 'config' value is serialised as JSON in the content
-
-        query = """SELECT content FROM tags WHERE name = 'config' AND location_id = $1;"""
-        con = connection if connection else self.bot.pool
-        record = await con.fetchrow(query, guild_id)
-        if record is None:
-            return TagConfig({})
-        return TagConfig(json.loads(record['content']))'''
-
     async def get_possible_tag(
             self,
             guild: discord.abc.Snowflake,
             argument: str,
             *,
             connection: Optional[asyncpg.Connection | asyncpg.Pool] = None,
-    ) -> Optional[TagEntry]:
+    ) -> Optional[asyncpg.Record]:
         """Returns a possible Tag that can be executed in the Guild.   """
 
         con = connection or self.bot.pool
@@ -191,7 +173,7 @@ class Tags(commands.Cog):
             name: str,
             *,
             pool: Optional[asyncpg.Pool] = None,
-    ) -> TagEntry:
+    ) -> dict[str, str]:
         def disambiguate(rows):
             if rows is None or len(rows) == 0:
                 raise RuntimeError('<:redTick:1079249771975413910> No Tags with this or a similar name found.')
@@ -891,7 +873,7 @@ class Tags(commands.Cog):
                                    'icon_url': member.display_avatar.url}
             TagPaginator.colour = self.bot.colour.darker_red()
             await TagPaginator.start(
-                ctx, entries=[TagPageEntry(row) for row in rows], timeout=120, search_for=True, per_page=20
+                ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120, search_for=True, per_page=20
             )
         else:
             await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
@@ -950,7 +932,7 @@ class Tags(commands.Cog):
         if rows:
             TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
             TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(row) for row in rows], timeout=120, search_for=True,
+            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120, search_for=True,
                                      per_page=20)
         else:
             await ctx.send('<:redTick:1079249771975413910> There are no tags in this server.')
@@ -1012,7 +994,7 @@ class Tags(commands.Cog):
         if results:
             TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
             TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(row) for row in results], timeout=120, search_for=True,
+            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in results], timeout=120, search_for=True,
                                      per_page=20)
         else:
             await ctx.send('<:redTick:1079249771975413910> No tags found.')

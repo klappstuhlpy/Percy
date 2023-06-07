@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Optional
 
 from . import command
 from .utils import fuzzy
-from .utils.timer import TimeMesh
-from .utils.translation import translate, LANGUAGES
+from .utils.helpers import TimeMesh
+from .utils.scope import LANGUAGES
+from .utils.translation import translate
 from playwright._impl._api_types import TimeoutError as PlaywrightTimeoutError  # noqa
 
 from discord.ext import commands
@@ -22,10 +23,6 @@ import io
 if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import Context
-
-GUILD_ID = 1066703165669515264
-VOICE_ROOM_ID = 1077008868187578469
-GENERAL_VOICE_ID = 1079788410220322826
 
 
 class TranslateFlags(commands.FlagConverter, delimiter=" ", prefix="--"):
@@ -98,7 +95,7 @@ class Random(commands.Cog):
                             proxy={'server': 'socks5://184.178.172.17:4145'}
                         )
                     else:
-                        browser = await self.bot.browser
+                        browser = self.bot.browser
                     bcontext = await browser.new_context()
                     page: Page = await bcontext.new_page()
 

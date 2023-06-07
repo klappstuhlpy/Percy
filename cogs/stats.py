@@ -28,8 +28,8 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import FilePaginator
 from . import command
 from .meta import COMMAND_ICON_URL
-from .utils import formats, timetools
-from .utils.executor import executor
+from .utils import formats, timetools, helpers
+from .utils.async_utils import executor
 from .utils.render import Render
 
 if TYPE_CHECKING:
@@ -37,9 +37,6 @@ if TYPE_CHECKING:
     from .utils.context import GuildContext, Context
 
 log = logging.getLogger(__name__)
-
-LOGGING_CHANNEL = 1085947081094594693
-
 
 BaseTable = declarative_base()
 
@@ -393,7 +390,7 @@ class Stats(commands.Cog):
             '\N{SPORTS MEDAL}',
         )
 
-        embed = discord.Embed(title='Server Command Stats', colour=formats.Colour.darker_red())
+        embed = discord.Embed(title='Server Command Stats', colour=helpers.Colour.darker_red())
 
         query = "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1;"
         count: tuple[int, datetime.datetime] = await ctx.db.fetchrow(query, ctx.guild.id)  # type: ignore
@@ -559,7 +556,7 @@ class Stats(commands.Cog):
         await ctx.send(embed=embed)
 
     async def show_command_stats(self, ctx: Context, command: str, record: Dict[str, Any]) -> None:
-        embed = discord.Embed(colour=formats.Colour.darker_red())
+        embed = discord.Embed(colour=helpers.Colour.darker_red())
         embed.set_author(name='Command Statistic', icon_url=ctx.bot.user.display_avatar.url)
 
         resolved = self.bot.resolve_command(command)
@@ -618,6 +615,7 @@ class Stats(commands.Cog):
             else:
                 await self.show_member_stats(ctx, member)
 
+    # noinspection PyTypeChecker
     @command(
         stats.command,
         name='for',
@@ -687,7 +685,7 @@ class Stats(commands.Cog):
                 ) AS g ON TRUE;
             """'''
 
-            # We use here AsyncAlchemy to improve the performance of the query because its a big one
+            # We use here AsyncAlchemy to improve the performance of the query because is a big one
             # This might be a bit overkill, but it works
             # Note: first time using ORM so this might be a bit messy
 
@@ -695,7 +693,7 @@ class Stats(commands.Cog):
             if record == "SELECT 0":
                 return await ctx.send(f'{ctx.tick(False)} No command called {command!r} found in the database.')
 
-            # First check if the command is in the database
+            # First, check if the command is in the database
             # because we want to avoid running this big query if we don't need to
 
             async_session = sessionmaker(self.bot.alchemy_engine, expire_on_commit=False, class_=AsyncSession)  # type: ignore
@@ -794,7 +792,7 @@ class Stats(commands.Cog):
 
                 mapped = {}
                 for row in rows:
-                    mapped |= row._mapping
+                    mapped |= row._mapping  # noqa
 
                 # didn't find a better way to do this because rows returns only the values,
                 # what's a bit heavy to deal with on changes so we use a mapping,
@@ -814,7 +812,7 @@ class Stats(commands.Cog):
         query = "SELECT COUNT(*) FROM commands;"
         total: tuple[int] = await ctx.db.fetchrow(query)  # type: ignore
 
-        e = discord.Embed(title='Command Stats', colour=formats.Colour.darker_red())
+        e = discord.Embed(title='Command Stats', colour=helpers.Colour.darker_red())
         e.description = f'`{total[0]}` commands used.'
 
         lookup = (
@@ -899,7 +897,7 @@ class Stats(commands.Cog):
             else:
                 question += count
 
-        e = discord.Embed(title='Last 24 Hour Command Stats', colour=formats.Colour.darker_red())
+        e = discord.Embed(title='Last 24 Hour Command Stats', colour=helpers.Colour.darker_red())
         e.description = (
             f'`{failed + success + question}` commands used today. '
             f'(`{success}` succeeded, `{failed}` failed, `{question}` unknown)'

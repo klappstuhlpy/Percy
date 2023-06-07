@@ -9,7 +9,7 @@ from discord.http import Route
 
 from bot import Percy
 from cogs import command
-from cogs.base import RH_MUSIC_GUILD_ID
+from cogs.base import PH_GUILD_ID
 from cogs.utils.paginator import BasePaginator
 
 
@@ -248,7 +248,7 @@ class AutoModerationManaging(commands.Cog, name="AutoMod"):
         if not channel:
             return
 
-        if execution.guild_id != RH_MUSIC_GUILD_ID:
+        if execution.guild_id != PH_GUILD_ID:
             return
 
         action_list = []

@@ -11,7 +11,7 @@ from discord import SelectOption
 from discord.utils import MISSING
 
 from bot import Percy
-from . import formats
+from . import helpers
 from .paginator import BasePaginator
 from cogs.utils.context import Context
 from cogs.utils.formats import plural
@@ -35,7 +35,7 @@ class DocPaginator(BasePaginator[MethObject]):
             embed = discord.Embed(
                 title="Examples",
                 description=f"```py\n{entries[0]}\n```",
-                color=formats.Colour.darker_red(),
+                color=helpers.Colour.darker_red(),
             )
             embed.set_footer(text=f"Found {plural(len(self.entries)):example}.")
         elif self.extra == DocType.ATTRIBUTES:
@@ -48,7 +48,7 @@ class DocPaginator(BasePaginator[MethObject]):
 
             embed = discord.Embed(
                 title=typ,
-                color=formats.Colour.darker_red(),
+                color=helpers.Colour.darker_red(),
                 description="\n".join(fmt(i) for i in entries),
             )
             embed.set_footer(text=f"{plural(len(entries)):{typ.lower()[:-1]}} found")

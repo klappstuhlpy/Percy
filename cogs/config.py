@@ -3,16 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 
 from discord.ext import commands
-from discord.utils import MISSING
 
 from . import command
 from .utils import checks, cache
 from .utils.converters import aenumerate
-from .utils.formats import plural
+from .utils.formats import plural, plonk_iterator
 from cogs.utils.paginator import BasePaginator
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, AsyncIterator, Iterable, Optional, Union, Self, List
+from typing import TYPE_CHECKING, Iterable, Optional, Union, List
 import asyncpg
 import discord
 
@@ -23,27 +22,9 @@ if TYPE_CHECKING:
     from asyncpg import Record, Connection, Pool
 
 
-async def plonk_iterator(bot: Percy, guild: discord.Guild, records: list[Record]) -> AsyncIterator[str]:
-    for record in records:
-        entity_id = record[0]
-        resolved = guild.get_channel(entity_id) or await bot.get_or_fetch_member(guild, entity_id)
-        if resolved is None:
-            yield f'<Not Found: {entity_id}>'
-        yield str(resolved)
-
-
-class ChannelOrMember(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str):
-        try:
-            return await commands.TextChannelConverter().convert(ctx, argument)
-        except commands.BadArgument:
-            return await commands.MemberConverter().convert(ctx, argument)
-
-
 if TYPE_CHECKING:
     CommandName: TypeAlias = str
 else:
-
     class CommandName(commands.Converter):
         async def convert(self, ctx: Context, argument: str) -> str:
             lowered = argument.lower()

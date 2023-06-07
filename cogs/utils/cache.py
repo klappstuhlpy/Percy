@@ -9,10 +9,10 @@ from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol
 from lru import LRU
 
 R = TypeVar('R')
-# Cache Structure from R. Danny with modifications
-
 
 # Can't use ParamSpec due to https://github.com/python/typing/discussions/946
+
+
 class CacheProtocol(Protocol[R]):
     cache: MutableMapping[str, asyncio.Task[R]]
 

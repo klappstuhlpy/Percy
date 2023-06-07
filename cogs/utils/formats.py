@@ -1,66 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, Sequence, Self, Iterator, TypeVar, Generic
+from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator
 
 import asyncpg
 import discord
 
+from bot import Percy
+
 T = TypeVar('T')
-
-
-class PostgresItem(Generic[T]):
-    """The base class for PostgreSQL fetched items."""
-
-    def __init__(self, *, record: asyncpg.Record[T]) -> None:
-        self.record: asyncpg.Record[T] = record
-
-        if record:
-            for k, v in record.items():
-                setattr(self, k, v)
-
-    def __call__(self, obj: T):
-        self.record.update(obj)
-        return self
-
-    def __new__(cls, *args, **kwargs):
-        if cls is PostgresItem:
-            raise TypeError('PostgresItem cannot be instantiated directly.')
-
-        _new = super().__new__(cls)
-        for arg in args:
-            if isinstance(arg, asyncpg.Record):
-                _new.__init__(_record=arg)
-                break
-
-        for k, v in kwargs.items():
-            setattr(_new, k, v)
-
-        return _new
-
-    def __iter__(self):
-        """A better attr:`__dict__` Returns an iterator over the record's values."""
-        return {k: v for k, v in self.record.items() if not k.startswith('_')}
-
-    def __repr__(self):
-        args = ['%s=%r' % (k, v) for k, v in self.record.items()]
-        return '<%s.%s(%s)>' % (self.__class__.__module__,
-                                self.__class__.__name__,
-                                ', '.join(args))
-
-    def __eq__(self, other: object) -> bool:
-        """Returns whether the item's ID is equal to the other item's ID."""
-        if isinstance(other, self.__class__):
-            return getattr(self, 'id', None) == getattr(other, 'id', None)
-        return False
-
-    def __hash__(self) -> int:
-        """Returns the hash of the item's ID."""
-        return hash(getattr(self, 'id', 0))
-
-    @classmethod
-    def temporary(cls, *args, **kwargs) -> 'PostgresItem':
-        """Creates a temporary instance of this class."""
-        return cls.__new__(cls, *args, **kwargs)
 
 
 class MaybeAcquire:
@@ -101,6 +48,15 @@ class plural:
         if abs(s) != 1:
             return f'{s} {plural}'
         return f'{s} {singular}'
+
+
+async def plonk_iterator(bot: Percy, guild: discord.Guild, records: list[asyncpg.Record]) -> AsyncIterator[str]:
+    for record in records:
+        entity_id = record[0]
+        resolved = guild.get_channel(entity_id) or await bot.get_or_fetch_member(guild, entity_id)
+        if resolved is None:
+            yield f'<Not Found: {entity_id}>'
+        yield str(resolved)
 
 
 def readable_time(seconds: int | float, decimal: bool = False, short: bool = False) -> str:
@@ -255,38 +211,6 @@ def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) 
     if formatting:
         text = discord.utils.escape_markdown(text)
     return text
-
-
-class Colour(discord.Colour):
-    """A subclass of `discord.Colour` with some extra colours."""
-
-    @classmethod
-    def darker_red(cls) -> Self:
-        return cls(0xE32636)
-
-    @classmethod
-    def transparent(cls) -> Self:
-        return cls(0x2b2d31)
-
-    @classmethod
-    def lime_green(cls) -> Self:
-        return cls(0x3AFF76)
-
-    @classmethod
-    def light_red(cls) -> Self:
-        return cls(0xFF6666)
-
-    @classmethod
-    def light_orange(cls) -> Self:
-        return cls(0xFF8000)
-
-    @classmethod
-    def electric_violet(cls) -> Self:
-        return cls(0x9b00ff)
-
-    @classmethod
-    def royal_blue(cls) -> Self:
-        return cls(0x133549)
 
 
 def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:

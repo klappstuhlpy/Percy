@@ -20,10 +20,12 @@ from bot import Percy
 from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
 from . import command
-from .utils import timetools, checks, cache, flags, formats
+from .utils import timetools, checks, cache, helpers
 from .utils.context import GuildContext
-from .utils.converters import Snowflake
+from .utils.converters import Snowflake, IgnoreEntity
 from .utils.formats import plural, human_join
+from .utils.helpers import BaseFlags, flag_value
+from .utils.scope import IgnoreableEntity
 
 if TYPE_CHECKING:
     class ModGuildContext(GuildContext):
@@ -45,18 +47,18 @@ class Arguments(argparse.ArgumentParser):
         raise RuntimeError(message)
 
 
-class AutoModFlags(flags.BaseFlags):
-    @flags.flag_value
+class AutoModFlags(BaseFlags):
+    @flag_value
     def audit_log(self) -> int:
         """Whether the server is broadcasting audit logs."""
         return 1
 
-    @flags.flag_value
+    @flag_value
     def raid(self) -> int:
         """Whether the server is auto banning spammers."""
         return 2
 
-    @flags.flag_value
+    @flag_value
     def leveling(self) -> int:
         """Whether to enable leveling."""
         return 4
@@ -155,15 +157,6 @@ class ModConfig:
     async def apply_mute(self, member: discord.Member, reason: Optional[str]):
         if self.mute_role_id:
             await member.add_roles(discord.Object(id=self.mute_role_id), reason=reason)
-
-
-IgnoreableEntity = Union[discord.TextChannel, discord.VoiceChannel, discord.Thread, discord.User, discord.Role]
-
-
-class IgnoreEntity(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str):  # noqa
-        assert ctx.current_parameter is not None
-        return await commands.run_converters(ctx, IgnoreableEntity, argument, ctx.current_parameter)
 
 
 class PreExistingMuteRoleView(discord.ui.View):
@@ -330,9 +323,6 @@ class ActionReason(commands.Converter):
             raise commands.BadArgument(
                 f'<:redTick:1079249771975413910> Reason is too long ({len(argument)}/{reason_max})')
         return ret
-
-
-URL_REG = re.compile(r'https?://(?:www\.)?.+')
 
 
 class LockdownPermissionIssueView(discord.ui.View):
@@ -771,7 +761,7 @@ class Mod(commands.Cog):
 
         e = discord.Embed(title=f'{ctx.guild.name} Moderation',
                           timestamp=datetime.datetime.utcnow(),
-                          color=formats.Colour.darker_red())
+                          color=helpers.Colour.darker_red())
         e.set_thumbnail(url=ctx.guild.icon.url)
 
         if config.flags.audit_log:

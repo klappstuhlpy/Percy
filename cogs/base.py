@@ -1,28 +1,22 @@
 from __future__ import annotations
 
+import asyncio
+import base64
+import binascii
+import datetime
+import inspect
 import io
+import re
+from typing import TYPE_CHECKING, Optional, Any, List, NamedTuple, Self
 from urllib.parse import urlparse, urljoin
 
 import aiohttp
+import discord
 import yarl
 from discord.ext import commands, tasks
-from typing import TYPE_CHECKING, Optional, Any, List, NamedTuple, Self
-import binascii
-import datetime
-import discord
-import asyncio
-import base64
-import re
 
-RH_MUSIC_GUILD_ID = 1066703165669515264
-RH_MUSIC_BOTS_ROLE = 1066703165669515266
-RH_MUSIC_HELP_FORUM = 1079786704862445668
-RH_MUSIC_SOLVED_TAG = 1079787335803207701
-RH_MUSIC_MEMBERS_ROLE = 1066703165669515267
-PLAYGROUND_GUILD_ID = 1062074624935993424
-
-TOKEN_REGEX = re.compile(r'[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,}')
-GITHUB_URL_REGEX = re.compile(r'https?://(?:www\.)?github\.com/[^/\s]+/[^/\s]+(?:/[^/\s]+)*/?')
+from cogs.utils.scope import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
+    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -67,25 +61,6 @@ def validate_token(token: str) -> bool:
 class GithubError(commands.CommandError):
     """Base exception for GitHub errors."""
     pass
-
-
-class GistContent:
-    source: str
-    language: Optional[str]
-
-    def __init__(self, argument: str):
-        try:
-            block, code = argument.split('\n', 1)
-        except ValueError:
-            self.source = argument
-            self.language = None
-        else:
-            if not block.startswith('```') and not code.endswith('```'):
-                self.source = argument
-                self.language = None
-            else:
-                self.language = block[3:]
-                self.source = code.rstrip('`').replace('```', '')
 
 
 class ParsedGitHubCS(NamedTuple):
@@ -272,7 +247,7 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
 
     async def _prepare_invites(self):
         await self.bot.wait_until_ready()
-        guild = self.bot.get_guild(RH_MUSIC_GUILD_ID)
+        guild = self.bot.get_guild(PH_GUILD_ID)
 
         if guild is not None:
             invites = await guild.invites()
@@ -337,7 +312,7 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         return js['html_url']
 
     def cog_check(self, ctx: Context):
-        return ctx.guild and ctx.guild.id == RH_MUSIC_GUILD_ID
+        return ctx.guild and ctx.guild.id == PH_GUILD_ID
 
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, GithubError):
@@ -345,11 +320,11 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):
-        guild = self.bot.get_guild(RH_MUSIC_GUILD_ID)
+        guild = self.bot.get_guild(PH_GUILD_ID)
         if guild is None:
             return
 
-        forum: discord.ForumChannel = guild.get_channel(RH_MUSIC_HELP_FORUM)  # type: ignore
+        forum: discord.ForumChannel = guild.get_channel(PH_HELP_FORUM)  # type: ignore
         if forum is None:
             return
 
@@ -372,18 +347,18 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        if member.guild.id != RH_MUSIC_GUILD_ID:
+        if member.guild.id != PH_GUILD_ID:
             return
 
         if member.bot:
-            await member.add_roles(discord.Object(id=RH_MUSIC_BOTS_ROLE))
+            await member.add_roles(discord.Object(id=PH_BOTS_ROLE))
             return
 
-        await member.add_roles(discord.Object(id=RH_MUSIC_MEMBERS_ROLE))
+        await member.add_roles(discord.Object(id=PH_MEMBERS_ROLE))
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild or message.guild.id not in (RH_MUSIC_GUILD_ID, PLAYGROUND_GUILD_ID):
+        if not message.guild or message.guild.id not in (PH_GUILD_ID, PLAYGROUND_GUILD_ID):
             return
 
         tokens = [token for token in TOKEN_REGEX.findall(message.content) if validate_token(token)]
@@ -402,7 +377,7 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
-        if thread.parent_id != RH_MUSIC_HELP_FORUM:
+        if thread.parent_id != PH_HELP_FORUM:
             return
 
         if len(thread.name) <= 20:
@@ -428,12 +403,13 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         message = thread.get_partial_message(thread.id)
         try:
             await message.pin()
-            await thread.send(
-                """ ### Welcome to the Help Forum!
+            await thread.send(inspect.cleandoc(
+                """
+                ### Welcome to the Help Forum!
                 Please be patient and don't unnecessarily ping people while you're waiting for someone to help with your problem.
                 Once you solved your problem, please close this thread by invoking `?solved`.
                 """
-            )
+            ))
         except discord.HTTPException:
             pass
 

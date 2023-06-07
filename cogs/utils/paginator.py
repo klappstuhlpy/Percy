@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import uuid
@@ -14,7 +15,6 @@ from cogs.utils.context import Context
 from cogs.utils.converters import aenumerate
 from cogs.utils.formats import truncate
 
-URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')  # noqa
 T = TypeVar('T')
 
 
@@ -553,6 +553,211 @@ class FilePaginator(BasePaginator[AnyStr]):
         kwargs = {'files': page, 'view': self}
         if self.total_pages <= 1:
             kwargs.pop('view')
+
+        self.msg = await cls._send(context, ephemeral, **kwargs)
+        return self
+
+
+class PaginatorInterface(BasePaginator[AnyStr]):
+    """A message and reaction based interface for paginators.
+
+    This allows users to interactively navigate the pages of a Paginator, and supports live output."""
+
+    def __init__(self, *, prefix: str = "```", suffix: str = "```", max_size: int = 2000, entries: List[AnyStr],
+                 per_page: int = 10, clamp_pages: bool = True, timeout: int = 180) -> None:
+        self.interface: TextSource = TextSource(prefix=prefix, suffix=suffix, max_size=max_size)
+        self.sent_page_reactions = False
+
+        self.task: Optional[asyncio.Task[None]] = None
+        self.send_lock: asyncio.Event = asyncio.Event()
+
+        self.close_exception: Optional[BaseException] = None
+
+        if len(self.pages) > self.max_page_size:
+            raise ValueError(
+                f'Paginator passed has too large of a page size for this interface. '
+                f'({len(self.pages)} > {self.max_page_size})'
+            )
+
+        super().__init__(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
+
+    async def format_page(self, entries: List[AnyStr], /) -> str:
+        return entries[0]
+
+    @property
+    def pages(self):
+        """Returns the paginator's pages without prematurely closing the active page."""
+        paginator_pages = list(self.interface._pages)
+        if len(self.interface._current_page) > 1:
+            paginator_pages.append(
+                '\n'.join(self.interface._current_page)
+                + '\n'
+                + (self.interface.suffix or '')
+            )
+
+        return paginator_pages
+
+    @property
+    def page_count(self):
+        """Returns the page count of the internal paginator."""
+        return len(self.pages)
+
+    @property
+    def display_page(self):
+        """Returns the current page the paginator interface is on."""
+        self._current_page = max(0, min(self.page_count - 1, self._current_page))
+        return self._current_page
+
+    @display_page.setter
+    def display_page(self, value: int):
+        """
+        Sets the current page the paginator is on. Automatically pushes values inbounds.
+        """
+
+        self._current_page = max(0, min(self.page_count - 1, value))
+
+    max_page_size = 2000
+
+    async def add_line(self, *args: Any, **kwargs: Any):
+        """A proxy function that allows this PaginatorInterface to remain locked to the last page
+        if it is already on it."""
+
+        display_page = self.display_page
+        page_count = self.page_count
+
+        self.interface.add_line(*args, **kwargs)
+
+        new_page_count = self.page_count
+
+        if display_page + 1 == page_count:
+            self._current_page = new_page_count
+
+        self.send_lock.set()
+
+    async def send_to(self, destination: discord.abc.Messageable):
+        """Sends a message to the given destination with this interface.
+        This automatically creates the response task for you."""
+        page = await self.format_page([self.pages[self.display_page]])
+        self.msg = await destination.send(
+            **self._message_kwargs(page), allowed_mentions=discord.AllowedMentions.none()
+        )
+
+        self.send_lock.set()
+
+        if self.task:
+            self.task.cancel()
+
+        self.task = self.ctx.bot.loop.create_task(self.wait_loop())
+
+        return self
+
+    @property
+    def closed(self):
+        """Is this interface closed?"""
+        if not self.task:
+            return False
+        return self.task.done()
+
+    async def send_lock_delayed(self):
+        """A coroutine that returns 1 second after the send lock has been released
+        This helps reduce release spam that hits rate limits quickly."""
+
+        gathered = await self.send_lock.wait()
+        self.send_lock.clear()
+        await asyncio.sleep(1)
+        return gathered
+
+    async def wait_loop(self):
+        """Waits on a loop for updates to the interface. This should not be called manually - it is handled by `send_to`."""
+
+        if not self.msg:
+            raise RuntimeError("Message not set on PaginatorInterface")
+
+        if not self.ctx.bot.user:
+            raise RuntimeError("A PaginatorInterface cannot be started while the bot is offline")
+
+        try:
+            while not self.ctx.bot.is_closed():
+                await asyncio.wait_for(self.send_lock_delayed(), timeout=self.timeout)
+
+                self.update_buttons()
+
+                try:
+                    page = await self.format_page([self.pages[self._current_page]])
+                    await self.msg.edit(**self._message_kwargs(page))
+                except discord.NotFound:
+                    return
+
+        except (asyncio.CancelledError, asyncio.TimeoutError) as exception:
+            self.close_exception = exception
+
+            if self.ctx.bot.is_closed():
+                return
+
+            if not self.msg:
+                return
+
+            self.stop()
+
+    @classmethod
+    async def start(
+            cls: Type[PaginatorInterface],
+            context: Context | discord.Interaction,
+            *,
+            entries: List[AnyStr],
+            per_page: int = 10,
+            clamp_pages: bool = True,
+            timeout: int = 180,
+            search_for: bool = False,
+            ephemeral: bool = False,
+            prefix: str = '```',
+            suffix: str = '```',
+            max_size: int = 2000
+    ) -> PaginatorInterface[AnyStr]:
+        """
+        Starts a pagination session.
+
+        Parameters
+        ----------
+        context: Context | discord.Interaction
+            The context or interaction to start the pagination session in.
+        entries: List[AnyStr]
+            The entries to paginate.
+        per_page: int
+            How many entries to show per page.
+        clamp_pages: bool
+            Whether to clamp the page number to the number of pages.
+        timeout: int
+            How long to wait for new reactions before the pagination session closes.
+        search_for: bool
+            Whether to search for the message to edit.
+        ephemeral: bool
+            Whether to make the message ephemeral.
+        prefix: str
+            The prefix to add to each page.
+        suffix: str
+            The suffix to add to each page.
+        max_size: int
+            The maximum size of each page.
+
+        Returns
+        -------
+        PaginatorInterface[AnyStr]
+            The paginator object.
+        """
+        self = cls(
+            entries=entries,
+            per_page=per_page,
+            clamp_pages=clamp_pages,
+            timeout=timeout,
+            prefix=prefix,
+            suffix=suffix,
+            max_size=max_size
+        )
+        self.ctx = context
+
+        page = await self.format_page([self.pages[self.display_page]])
+        kwargs = self._message_kwargs(page)  # type: ignore  # lying
 
         self.msg = await cls._send(context, ephemeral, **kwargs)
         return self

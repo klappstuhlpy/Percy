@@ -1,6 +1,5 @@
 import importlib
 import sys
-import traceback
 import typing
 from importlib.metadata import distribution, packages_distributions
 from types import ModuleType
@@ -15,25 +14,11 @@ from jishaku.math import natural_size
 from jishaku.modules import package_version
 
 from cogs.utils import error_handling
+from cogs.utils.converters import ModuleConverter
 
 jishaku.Flags.NO_DM_TRACEBACK = True
 jishaku.Flags.NO_UNDERSCORE = True
 jishaku.Flags.HIDE = True
-
-
-class ModuleConverter(commands.Converter[ModuleType]):
-    """A converter interface to resolve imported modules."""
-
-    async def convert(self, ctx: commands.Context, argument: str) -> ModuleType:
-        """Converts a name into a :class:`ModuleType` object."""
-        argument = argument.lower().strip()
-        module = sys.modules.get(argument, None)
-
-        icon = "\N{OUTBOX TRAY}" if ctx.invoked_with == "ml" else "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
-
-        if not module:
-            raise commands.BadArgument(f"{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.")
-        return module
 
 
 class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):

@@ -21,11 +21,11 @@ from discord.ext import commands
 from lru import LRU
 
 from . import command
-from .base import RH_MUSIC_HELP_FORUM, RH_MUSIC_SOLVED_TAG
-from .utils import checks, formats, fuzzy
+from .utils import checks, formats, fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural
 from .utils.paginator import BasePaginator, TextSource
+from .utils.scope import PH_HELP_FORUM, PH_SOLVED_TAG
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -61,14 +61,14 @@ def can_close_threads(ctx: GuildContext) -> bool:
         return False
 
     permissions = ctx.channel.permissions_for(ctx.author)
-    return ctx.channel.parent_id == RH_MUSIC_HELP_FORUM and (
+    return ctx.channel.parent_id == PH_HELP_FORUM and (
             permissions.manage_threads or ctx.channel.owner_id == ctx.author.id
     )
 
 
 def is_help_thread():
     def predicate(ctx: GuildContext) -> bool:
-        return isinstance(ctx.channel, discord.Thread) and ctx.channel.parent_id == RH_MUSIC_HELP_FORUM
+        return isinstance(ctx.channel, discord.Thread) and ctx.channel.parent_id == PH_HELP_FORUM
 
     return commands.check(predicate)
 
@@ -94,7 +94,7 @@ class GroupHelpPaginator(BasePaginator[commands.Command]):
         emoji = getattr(self.group, 'display_emoji', None) or ''
         embed = discord.Embed(title=f'{emoji} {self.group.qualified_name} Commands',
                               description=self.group.description,
-                              colour=formats.Colour.darker_red())
+                              colour=helpers.Colour.darker_red())
 
         is_app_command_cog = False
         if isinstance(self.group, commands.Cog):
@@ -218,7 +218,7 @@ class FrontHelpPaginator(BasePaginator[str]):
     groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
     async def format_page(self, entries: List, /):
-        embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=formats.Colour.darker_red())
+        embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=self.ctx.client.user.avatar.url)
         pref = '/' if isinstance(self.ctx, discord.Interaction) else self.ctx.clean_prefix
         embed.description = inspect.cleandoc(
@@ -529,7 +529,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if not isinstance(command, app_commands.commands.Command):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
                 return await self.context.send(f'No Command called {command!r} found.')
-        embed = discord.Embed(colour=formats.Colour.darker_red())
+        embed = discord.Embed(colour=helpers.Colour.darker_red())
         self.common_command_formatting(embed, command)
         await self.context.send(embed=embed, silent=True)
 
@@ -632,7 +632,7 @@ class GuildUserJoinView(discord.ui.View):
         class EmbedPaginator(BasePaginator[str]):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(title=f"Join List in {interaction.guild}", color=formats.Colour.darker_red())
+                embed = discord.Embed(title=f"Join List in {interaction.guild}", color=helpers.Colour.darker_red())
                 embed.set_author(name=interaction.guild, icon_url=interaction.guild.icon.url)
                 embed.set_footer(text=f"{plural(len(chunked_users)):entry|entries}")
 
@@ -704,8 +704,8 @@ class Meta(commands.Cog):
     async def mark_as_solved(thread: discord.Thread, user: discord.abc.User) -> None:
         tags: Sequence[discord.ForumTag] = thread.applied_tags
 
-        if not any(tag.id == RH_MUSIC_SOLVED_TAG for tag in tags):
-            tags.append(discord.Object(id=RH_MUSIC_SOLVED_TAG))  # type: ignore
+        if not any(tag.id == PH_SOLVED_TAG for tag in tags):
+            tags.append(discord.Object(id=PH_SOLVED_TAG))  # type: ignore
 
         await thread.edit(
             locked=True,
@@ -762,30 +762,22 @@ class Meta(commands.Cog):
 
         if command == 'help':
             src = type(self.bot.help_command)
-            module = src.callback.__module__
             filename = inspect.getsourcefile(src)
         else:
-            obj = self.bot.get_command(command.replace('.', ' ')) or discord.utils.get(self.bot.tree.walk_commands(), qualified_name=command)
+            obj = self.bot.remove_command(command)
             if obj is None:
                 return await ctx.send(f'{ctx.tick(False)} Could not find command.')
 
             src = obj.callback.__code__
-            module = obj.callback.__module__
             filename = src.co_filename
 
         lines, firstlineno = inspect.getsourcelines(src)
-        if not module.startswith('discord'):
-            # not a built-in command
-            if filename is None:
-                return await ctx.send('Could not find source for command.')
+        if filename is None:
+            return await ctx.send('Could not find source for command.')
 
-            location_parts = filename.split(os.path.sep)
-            cogs_index = location_parts.index("cogs")
-            location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
-        else:
-            location = module.replace('.', '/') + '.py'
-            source_url = 'https://github.com/Rapptz/discord.py'
-            branch = 'master'
+        location_parts = filename.split(os.path.sep)
+        cogs_index = location_parts.index("cogs")
+        location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
 
         final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
         await ctx.send(final_url)
@@ -1276,7 +1268,7 @@ class Meta(commands.Cog):
         def build_embed(content: str) -> discord.Embed:
             return discord.Embed(
                 title="Pong!",
-                colour=formats.Colour.darker_red(),
+                colour=helpers.Colour.darker_red(),
                 description=content
             )
 

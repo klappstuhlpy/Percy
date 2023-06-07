@@ -7,7 +7,7 @@ from contextlib import suppress
 import discord
 from discord import Interaction
 
-from cogs.utils import formats
+from cogs.utils import helpers
 from cogs.utils.context import Context
 from cogs.utils.formats import readable_time
 
@@ -65,7 +65,7 @@ class Minesweeper(discord.ui.View):
             title="Minesweeper",
             description=f"You {'found all' if won else 'exploded by'} "
             f"**{self.mines}** mines in **{self.moves}** moves • Time: {readable_time(duration, short=True)}",
-            colour=formats.Colour.lime_green() if won else formats.Colour.light_red()
+            colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red()
         ).set_footer(text=f"Player: {self.ctx.author}")
 
         with suppress(discord.NotFound, discord.HTTPException):
@@ -78,7 +78,7 @@ class Minesweeper(discord.ui.View):
         return discord.Embed(
             title="Minesweeper",
             description=f"Moves: **{self.moves}** • Mines: **{self.mines}**",
-            colour=formats.Colour.light_orange(),
+            colour=helpers.Colour.light_orange(),
         ).set_footer(text=f"Player: {self.ctx.author}")
 
     def place_mines(self) -> None:

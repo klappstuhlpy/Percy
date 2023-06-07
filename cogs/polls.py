@@ -15,10 +15,11 @@ from discord.utils import MISSING
 from cogs.utils.paginator import BasePaginator
 from . import command
 from .reminder import Timer
-from .utils import timetools, converters, fuzzy, cache, formats
+from .utils import timetools, converters, fuzzy, cache, formats, helpers
 from .utils.context import Context
 from .utils.converters import colour_autocomplete
-from .utils.formats import plural, get_shortened_string, PostgresItem
+from .utils.formats import plural, get_shortened_string
+from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -715,7 +716,7 @@ class Polls(commands.Cog):
             question: str,
             when: app_commands.Transform[datetime.datetime, timetools.TimeTransformer],
             description: str = None,
-            color: app_commands.Transform[discord.Colour, converters.ColorTransformer] = formats.Colour.darker_red(),
+            color: app_commands.Transform[discord.Colour, converters.ColorTransformer] = helpers.Colour.darker_red(),
             thread_question: str = None,
             ping: bool = False,
             user_reason: bool = False,
@@ -1102,7 +1103,7 @@ class Polls(commands.Cog):
                 async def format_page(self, entries: List[PollItem], /) -> discord.Embed:
                     embed = discord.Embed(title="Poll Search",
                                           description=f"Sorted by: **{sort.lower()}**",
-                                          colour=formats.Colour.darker_red(),
+                                          colour=helpers.Colour.darker_red(),
                                           timestamp=discord.utils.utcnow())
                     embed.set_footer(text=f"{plural(len(records)):entry|entries}")
                     embed.add_field(name="Results",
@@ -1136,7 +1137,7 @@ class Polls(commands.Cog):
 
             async def format_page(self, entries: List[PollItem], /) -> discord.Embed:
                 embed = discord.Embed(title=f"Poll History for {member}",
-                                      colour=formats.Colour.darker_red(),
+                                      colour=helpers.Colour.darker_red(),
                                       timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f"{plural(len(polls)):entry|entries}")
 
@@ -1192,7 +1193,7 @@ class Polls(commands.Cog):
 
         if all(i is None for i in [poll_channel, poll_reason_channel, poll_role]):
             embed = discord.Embed(title="Poll Configuration",
-                                  colour=formats.Colour.darker_red(),
+                                  colour=helpers.Colour.darker_red(),
                                   timestamp=discord.utils.utcnow())
             embed.add_field(name="Poll Channel",
                             value=f"<#{config.poll_channel_id}>" if config.poll_channel_id else 'N/A')

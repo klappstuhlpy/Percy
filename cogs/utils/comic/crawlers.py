@@ -9,7 +9,7 @@ from dateutil.parser import parse
 
 from .client import Marvel
 from cogs.utils.comic.marvel.comic import Comic as MarvelComic
-from ..executor import executor
+from ..async_utils import executor
 
 # DC
 DC_ENDPOINT = 'https://www.dc.com'

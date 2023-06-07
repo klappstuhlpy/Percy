@@ -10,7 +10,7 @@ from discord.utils import MISSING
 
 from . import command
 from .reminder import Timer
-from .utils.formats import PostgresItem
+from .utils.helpers import PostgresItem
 from .utils.timetools import TimeTransformer
 
 if TYPE_CHECKING:

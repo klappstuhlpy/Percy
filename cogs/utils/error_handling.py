@@ -1,8 +1,4 @@
 import asyncio
-import inspect
-import logging
-import subprocess
-import time
 import traceback
 from types import TracebackType
 from typing import Union, Type, Optional, ParamSpec, TypeVar, Awaitable, Callable
@@ -10,85 +6,6 @@ from typing import Union, Type, Optional, ParamSpec, TypeVar, Awaitable, Callabl
 import discord
 
 from cogs.utils.paginator import TextSource
-
-
-# jishaku base code
-
-
-class DebugResponseReactor:
-    """Extension of the ReactionProcedureTimer that absorbs errors, sending tracebacks.
-
-    This is used for debugging purposes, and should not be used in production."""
-
-    __slots__ = ('message', 'loop', 'logger', 'start_time', 'handle', 'raised')
-
-    def __init__(self, message: discord.Message, loop: Optional[asyncio.BaseEventLoop] = None,
-                 logger: logging.Logger = None):
-        self.logger: logging.Logger = logger
-        self.message = message
-        self.loop = loop or asyncio.get_event_loop()
-        self.handle = None
-        self.raised = False
-        self.start_time: time.time = None
-
-    async def __aenter__(self):
-        self.start_time = time.time()
-        self.handle = self.loop.create_task(do_after_sleep(2, attempt_add_reaction, self.message,
-                                                           "\N{BLACK RIGHT-POINTING TRIANGLE}"))
-
-        if self.logger is None:
-            frame = inspect.currentframe().f_back
-            filename = frame.f_code.co_filename
-            lineno = frame.f_lineno
-
-            self.logger = logging.getLogger(f"DRR:{filename}:{lineno}")
-            self.logger.setLevel(logging.DEBUG)
-
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Type[BaseException],
-        exc_val: BaseException,
-        exc_tb: TracebackType
-    ) -> bool:
-        if self.handle:
-            self.handle.cancel()
-
-        if not exc_val:
-            await attempt_add_reaction(self.message, "\N{WHITE HEAVY CHECK MARK}")
-            return False
-
-        execution_time = time.time() - self.start_time
-        print(f"Execution time: {execution_time} seconds")
-
-        self.raised = True
-
-        if isinstance(exc_val, (SyntaxError, asyncio.TimeoutError, subprocess.TimeoutExpired)):
-            destination = self.message.channel
-
-            if destination != self.message.channel:
-                await attempt_add_reaction(
-                    self.message,
-                    "\N{HEAVY EXCLAMATION MARK SYMBOL}" if isinstance(exc_val, SyntaxError) else "\N{ALARM CLOCK}"
-                )
-
-            await send_traceback(
-                self.message if destination == self.message.channel else destination,
-                0, exc_type, exc_val, exc_tb
-            )
-        else:
-            destination = self.message.channel
-
-            if destination != self.message.channel:
-                await attempt_add_reaction(self.message, "\N{DOUBLE EXCLAMATION MARK}")
-
-            await send_traceback(
-                self.message if destination == self.message.channel else destination,
-                8, exc_type, exc_val, exc_tb
-            )
-
-        return True
 
 
 T = TypeVar('T')

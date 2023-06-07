@@ -1,10 +1,9 @@
-import os
 from io import BytesIO
-from typing import Optional, List, AnyStr
+from typing import Optional
 
 import discord
 from PIL import Image, ImageDraw, ImageFont
-from cogs.utils.executor import executor
+from cogs.utils.async_utils import executor
 from cogs.utils.formats import shorten_number
 from pathlib import Path
 

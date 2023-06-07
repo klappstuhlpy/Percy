@@ -6,7 +6,7 @@ import textwrap
 import time
 import traceback
 from pathlib import Path
-from typing import Any, Callable, Union, Awaitable, Self, Optional, Literal
+from typing import Any, Callable, Union, Awaitable, Optional
 
 import discord
 from asyncpg import Record
@@ -16,50 +16,10 @@ from contextlib import redirect_stdout
 
 from . import command
 from .utils import converters
+from .utils.async_utils import PerformanceMocker
 from .utils.context import Context
 from bot import Percy
 from cogs.utils.paginator import TextSource, TextPaginator
-
-
-class PerformanceMocker:
-    """A mock object that can also be used in await expressions."""
-
-    def __init__(self):
-        self.loop = asyncio.get_running_loop()
-
-    @property
-    def permissions_for(self) -> discord.Permissions:
-        perms = discord.Permissions.all()
-        perms.administrator = False
-        perms.embed_links = False
-        perms.add_reactions = False
-        return perms
-
-    def __getattr__(self, attr: str) -> Self:
-        return self
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Self:
-        return self
-
-    def __repr__(self) -> str:
-        return '<PerformanceMocker>'
-
-    def __await__(self):
-        future: asyncio.Future[Self] = self.loop.create_future()
-        future.set_result(self)  # type: ignore
-        return future.__await__()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: Any) -> Self:
-        return self
-
-    def __len__(self) -> int:
-        return 0
-
-    def __bool__(self) -> bool:
-        return False
 
 
 class Admin(commands.Cog):
@@ -502,7 +462,7 @@ class Admin(commands.Cog):
         name="showlog",
         hidden=True
     )
-    async def showlog(self, ctx: Context, log: str= 'percy', last_lines: int = 600):
+    async def showlog(self, ctx: Context, log: str = 'percy', last_lines: int = 600):
         """Shows the x last lines of a log file."""
         f_file = f'{log}.log'
         path = Path(f_file)

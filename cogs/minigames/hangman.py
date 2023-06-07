@@ -8,80 +8,9 @@ from typing import Set, AsyncIterable
 import discord
 
 from bot import Percy
-from cogs.utils import formats
+from cogs.utils import helpers
 from cogs.utils.context import Context
-
-HANG_MAN = [
-    (
-        ""
-    ), (
-        """
-          _______
-         |/      |
-         |      
-         |      
-         |       
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      
-         |       
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |       |
-         |       |
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      \\|/
-         |       |
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      \\|/
-         |       |
-         |      / \\
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (x)
-         |      \\|/
-         |       |
-         |      / \\
-         |
-        _|___
-        """
-    )
-]
+from cogs.utils.scope import HANG_MAN
 
 
 class Action(enum.Enum):
@@ -105,7 +34,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         self.guessed: Set[str] = set()
         self.fail_guessed: Set[str] = set()
         self.errors: int = 0
-        self._current_colour: formats.Colour = formats.Colour.light_orange()
+        self._current_colour: helpers.Colour = helpers.Colour.light_orange()
 
         self._current_state_index: int = 0
         self._current_state = HANG_MAN[self._current_state_index]
@@ -123,7 +52,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
             try:
                 message = await self.bot.wait_for('message', check=lambda m: m.author == self.ctx.user, timeout=300.0)
             except asyncio.TimeoutError as exc:
-                self._current_colour = formats.Colour.red()
+                self._current_colour = helpers.Colour.red()
                 self.update_state(-1)
                 yield exc
                 break
@@ -132,7 +61,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
                 if content == self.word.lower():
                     self.finished = 1
-                    self._current_colour = formats.Colour.lime_green()
+                    self._current_colour = helpers.Colour.lime_green()
                     yield Action.GUESSED_WORD
                     break
 
@@ -157,7 +86,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
                 if set(self.word).issubset(self.guessed):
                     self.finished = 1
-                    self._current_colour = formats.Colour.lime_green()
+                    self._current_colour = helpers.Colour.lime_green()
                     yield Action.GUESSED_ALL
                     break
 
@@ -206,7 +135,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
     @property
     def hidden_word(self) -> str:
         """Returns the hidden word."""
-        if self._current_colour == formats.Colour.red() or self._current_colour == formats.Colour.lime_green():
+        if self._current_colour == helpers.Colour.red() or self._current_colour == helpers.Colour.lime_green():
             return self.word
         return discord.utils.escape_markdown(
             ''.join(

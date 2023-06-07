@@ -26,11 +26,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 import asyncio
 import logging
 import time
-from pathlib import Path
 from typing import List, Dict, Any, Optional, NamedTuple, AsyncIterator
 
 import discord
-import json
 
 import yarl
 from discord import HTTPException
@@ -41,6 +39,7 @@ from discord.utils import cached_slot_property, MISSING
 
 from bot import Percy
 from cogs.utils import cache
+from cogs.utils.helpers import config_file
 
 logger = logging.getLogger(__name__)
 
@@ -53,25 +52,6 @@ class TwitchRequestError(HTTPException):
 GRANT_URL = "https://id.twitch.tv/oauth2/token"
 END_URL = "https://api.twitch.tv/helix"
 TWITCH_ICON_URL = "https://media.discordapp.net/attachments/1062074624935993427/1101142491450835036/5968819.png"
-
-
-class config:
-    """A class for getting and setting the config.json file."""
-
-    path = Path(__file__).parent.parent / "config.json"
-
-    @classmethod
-    def set(cls, **params: dict | Any) -> None:
-        payload = cls.get()
-
-        with open(cls.path, "w") as file:
-            payload["twitch"].update(params)
-            json.dump(payload, file, indent=4)
-
-    @classmethod
-    def get(cls) -> Dict[str, Any]:
-        with open(cls.path, 'r', encoding='utf8') as f:
-            return json.load(f)
 
 
 class TwitchUser(NamedTuple):
@@ -111,6 +91,8 @@ class TwitchNotifications(commands.Cog):
         self._refresh_lock = asyncio.Lock()
         self.online_users: set[str] = set()
 
+        self.config: config_file = config_file("twitch")
+
     async def cog_load(self) -> None:
         self.refresh_notify_check.start()
 
@@ -119,8 +101,8 @@ class TwitchNotifications(commands.Cog):
 
     def _expiry(self, *, expiry: Optional[float] = None) -> float:
         if expiry:
-            config.set(expiry=expiry)
-        return config.get()["twitch"].get("expiry", None)
+            self.config.set(expiry=expiry)
+        return self.config.load.get("expiry", None)
 
     def _bearer_token(self, *, bearer_token: Optional[str] = None) -> str:
         if not self._expiry() or (self._expiry() and self._expiry() < time.time()):
@@ -128,13 +110,13 @@ class TwitchNotifications(commands.Cog):
             self.bot.loop.create_task(self._get_bearer_token())
 
         if bearer_token:
-            config.set(bearer_token=bearer_token)
-        return config.get()["twitch"]["bearer_token"]
+            self.config.set(bearer_token=bearer_token)
+        return self.config.load["bearer_token"]
 
     @cached_slot_property(name="_cs_grant_params")
     def grant_params(self) -> dict:
-        return {'client_id': config.get()["twitch"]["client_id"],
-                'client_secret': config.get()["twitch"]["client_secret"],
+        return {'client_id': self.config.load["client_id"],
+                'client_secret': self.config.load["client_secret"],
                 'grant_type': 'client_credentials',
                 'Content-Type': 'application/x-www-form-urlencoded'}
 
@@ -154,7 +136,7 @@ class TwitchNotifications(commands.Cog):
             headers: Optional[dict[str, Any]] = MISSING,
     ) -> Optional[Dict]:
         hdrs = {'Accept': 'application/json',
-                'Client-Id': config.get()["twitch"]["client_id"],
+                'Client-Id': self.config.load["client_id"],
                 'Authorization': f'Bearer {self._bearer_token()}'}
 
         if headers is not MISSING and isinstance(headers, dict):
@@ -216,7 +198,7 @@ class TwitchNotifications(commands.Cog):
         return None
 
     async def get_notifications(self) -> AsyncIterator[TwitchStream]:
-        wl = config.get()["twitch"]["watchlist"]
+        wl = self.config.load["watchlist"]
         users = [await self.get_user(user_name) for user_name in wl]
         streams = [await self.get_stream(user) for user in users]
 
@@ -236,7 +218,7 @@ class TwitchNotifications(commands.Cog):
     @tasks.loop(minutes=2)
     async def refresh_notify_check(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(config.get()["twitch"]["channel_id"])
+        channel = self.bot.get_channel(self.config.load["channel_id"])
         if not channel:
             raise discord.NotFound(None, "Twitch Notification channel not found.")
 

@@ -38,7 +38,7 @@ CREATE EXTENSION pg_trgm;
 
 To configure the PostgreSQL database for use by the bot, go to the directory where `launcher.py` is located, and run the script by doing `python3.8 launcher.py db init`
 
-4. **Configure the bot:**
+4**Configure the bot:**
 
 - Setup a ``config.py`` File:
 

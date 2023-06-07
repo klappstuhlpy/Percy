@@ -1,12 +1,12 @@
 import json
 import os
-from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar, Union, overload
+from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union, overload
 import uuid
 import asyncio
 
-_T = TypeVar('_T')
+from cogs.utils.scope import ObjectHook
 
-ObjectHook = Callable[[Dict[str, Any]], Any]
+_T = TypeVar('_T')
 
 
 class Config(Generic[_T]):

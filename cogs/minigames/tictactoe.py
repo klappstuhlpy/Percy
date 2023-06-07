@@ -8,7 +8,7 @@ from typing import Optional
 import discord
 from discord import PartialEmoji
 
-from cogs.utils import formats
+from cogs.utils import helpers
 from cogs.utils.formats import plural
 
 
@@ -110,7 +110,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
                 )
                 embed.set_footer()
             else:
-                embed.colour = formats.Colour.light_red()
+                embed.colour = helpers.Colour.light_red()
                 embed.description = 'It\'s a tie!'
                 embed.set_footer(text='How boring...')
 
@@ -199,7 +199,7 @@ class TicTacToe(discord.ui.View):
             title="TicTacToe",
             description=f'It is now {self.current_player.kind.emoji} {self.current_player.member.mention}\'s turn with '
                         f'currently {plural(self.get_player_fields):field}.',
-            colour=formats.Colour.light_orange(),
+            colour=helpers.Colour.light_orange(),
         ).set_footer(text=f"Next Player: {next_player.member.name}")
 
     @property
@@ -255,7 +255,7 @@ class Prompt(discord.ui.View):
         embed = discord.Embed(
             title="TicTacToe",
             description=f'Your Challenge was declined.',
-            colour=formats.Colour.light_red(),
+            colour=helpers.Colour.light_red(),
         )
         await interaction.response.send_message(embed=embed)
         self.stop()

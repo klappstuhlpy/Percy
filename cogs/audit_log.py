@@ -1,17 +1,11 @@
 from contextlib import suppress
-from typing import Union, Optional
+from typing import Optional
 
 import discord
 from discord.ext import commands
 
 from bot import Percy
-
-PossibleTarget = Union[
-    discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel, discord.StageChannel, discord.GroupChannel,
-    discord.ForumChannel, discord.Member, discord.Role, discord.Emoji, discord.PartialEmoji, discord.Invite,
-    discord.StageInstance, discord.Webhook, discord.Message, discord.User, discord.Guild, discord.Thread,
-    discord.ThreadMember, discord.Interaction
-]
+from cogs.utils.scope import PossibleTarget
 
 
 class AuditLog(commands.Cog):

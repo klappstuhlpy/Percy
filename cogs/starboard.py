@@ -17,7 +17,9 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import BasePaginator
 from . import command
 from .utils import checks, cache
-from .utils.formats import plural, PostgresItem
+from .utils.formats import plural
+from .utils.helpers import PostgresItem
+from .utils.scope import StarableChannel
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -26,8 +28,6 @@ if TYPE_CHECKING:
     class StarboardContext(GuildContext):
         starboard: CompleteStarboardConfig
 
-
-    StarableChannel = Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
 
 log = logging.getLogger(__name__)
 

@@ -6,6 +6,7 @@ import re
 import sys
 import time
 from io import BufferedIOBase, BytesIO
+from types import ModuleType
 from typing import Any, List, Iterable, Sequence, overload, Union, BinaryIO
 from urllib.parse import urlparse
 
@@ -16,127 +17,8 @@ from discord import app_commands, Colour
 from discord.ext import commands
 
 from . import fuzzy
+from .scope import MENTION_REGEX, IgnoreableEntity, COLOUR_DICT
 from ..utils.context import Context, GuildContext
-
-MENTION_REGEX = re.compile(r"<@(!?)([0-9]*)>")
-COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
-
-GUILD_FEATURES = {
-    'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
-    'ANIMATED_ICON': ('🌟', 'Server can upload an animated icon.'),
-    'APPLICATION_COMMAND_PERMISSIONS_V2': ('🔒', 'Server is using the new command permissions system.'),
-    'AUTO_MODERATION': ('🛡️', 'Server has set up Auto Moderation.'),
-    'BANNER': ('🖼️', 'Server can upload and use a banner.'),
-    'COMMUNITY': ('👥', 'Server is a community server.'),
-    'CREATOR_MONETIZABLE_PROVISIONAL': ('💰', 'Server is a creator server.'),
-    'CREATOR_STORE_PAGE': ('🏪', 'Server has a store page.'),
-    'DEVELOPER_SUPPORT_SERVER': ('👨‍💻', 'Server is a dev support server.'),
-    'DISCOVERABLE': ('🔍', 'Server is discoverable.'),
-    'FEATURABLE': ('🌟', 'Server is featurable.'),
-    'INVITE_SPLASH': ('🌊', 'Server can upload an invite splash.'),
-    'INVITES_DISABLED': ('🚫', 'Server has disabled invites.'),
-    'MEMBER_VERIFICATION_GATE_ENABLED': ('✅', 'Server has enabled Membership Screening.'),
-    'MONETIZATION_ENABLED': ('💰', 'Server has enabled monetization.'),
-    'MORE_EMOJI': ('🔢', 'Server can upload more emojis.'),
-    'MORE_STICKERS': ('🔖', 'Server can upload more stickers.'),
-    'NEWS': ('📰', 'Server has set up news channels.'),
-    'PARTNERED': ('🤝', 'Server is partnered.'),
-    'PREVIEW_ENABLED': ('👀', 'Server has enabled preview.'),
-    'ROLE_ICONS': ('👑', 'Server can set role icons.'),
-    'ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE': ('💎', 'Server has purchasable role subscriptions.'),
-    'ROLE_SUBSCRIPTIONS_ENABLED': ('🔑', 'Server has enabled role subscriptions.'),
-    'TICKETED_EVENTS_ENABLED': ('🎟️', 'Server has enabled ticketed events.'),
-    'VANITY_URL': ('🌐', 'Server has a vanity URL.'),
-    'VERIFIED': ('✔️', 'Server is verified.'),
-    'VIP_REGIONS': ('🎤', 'Server has VIP voice regions.'),
-    'WELCOME_SCREEN_ENABLED': ('🚪', 'Server has enabled the welcome screen.')
-}
-
-PERMISSIONS = [
-    {'origin': 'connect', 'name': 'Connect', 'value': 0x100000},
-    {'origin': 'mute_members', 'name': 'Mute Members', 'value': 0x400000},
-    {'origin': 'move_members', 'name': 'Move Members', 'value': 0x1000000},
-    {'origin': 'speak', 'name': 'Speak', 'value': 0x200000},
-    {'origin': 'deafen_members', 'name': 'Deafen Members', 'value': 0x800000},
-    {'origin': 'use_voice_activity', 'name': 'Use Voice Activity', 'value': 0x2000000},
-    {'origin': 'go_live', 'name': 'Go Live', 'value': 0x200},
-    {'origin': 'priority_speaker', 'name': 'Priority Speaker', 'value': 0x100},
-    {'origin': 'request_to_speak', 'name': 'Request to Speak', 'value': 0x100000000},
-    {'origin': 'administrator', 'name': 'Administrator', 'value': 0x8},
-    {'origin': 'manage_roles', 'name': 'Manage Roles', 'value': 0x10000000},
-    {'origin': 'kick_members', 'name': 'Kick Members', 'value': 0x2},
-    {'origin': 'instant_invite', 'name': 'Create Instant Invite', 'value': 0x1},
-    {'origin': 'manage_nicknames', 'name': 'Manage Nicknames', 'value': 0x8000000},
-    {'origin': 'manage_server', 'name': 'Manage Server', 'value': 0x20},
-    {'origin': 'manage_channels', 'name': 'Manage Channels', 'value': 0x10},
-    {'origin': 'ban_members', 'name': 'Ban Members', 'value': 0x4},
-    {'origin': 'change_nickname', 'name': 'Change Nickname', 'value': 0x4000000},
-    {'origin': 'manage_webhooks', 'name': 'Manage Webhooks', 'value': 0x20000000},
-    {'origin': 'manage_emojis', 'name': 'Manage Emojis', 'value': 0x40000000},
-    {'origin': 'view_audit_log', 'name': 'View Audit Log', 'value': 0x80},
-    {'origin': 'view_guild_insights', 'name': 'View Server Insights', 'value': 0x80000},
-    {'origin': 'view_channel', 'name': 'View Channel', 'value': 0x400},
-    {'origin': 'send_tts_messages', 'name': 'Send TTS Messages', 'value': 0x1000},
-    {'origin': 'embed_links', 'name': 'Embed Links', 'value': 0x4000},
-    {'origin': 'read_message_history', 'name': 'Read Message History', 'value': 0x10000},
-    {'origin': 'use_external_emojis', 'name': 'Use External Emojis', 'value': 0x40000},
-    {'origin': 'send_messages', 'name': 'Send Messages', 'value': 0x800},
-    {'origin': 'manage_messaes', 'name': 'Manage Messages', 'value': 0x2000},
-    {'origin': 'attach_files', 'name': 'Attach Files', 'value': 0x8000},
-    {'origin': 'mention_everyone', 'name': 'Mention Everyone', 'value': 0x20000},
-    {'origin': 'add_reactions', 'name': 'Add Reactions', 'value': 0x40},
-    {'origin': 'use_slash_commands', 'name': 'Use Slash Commands', 'value': 0x80000000}
-]
-
-
-class NamedDict:
-    def __init__(self, name: str = 'NamedDict', layer: dict = {}) -> None:  # noqa
-        self.__name__ = name
-        self.__dict__.update(layer)
-        self.__dict__['__shape_set__'] = 'shape' in layer
-
-    def __len__(self):
-        return len(self.__dict__)
-
-    def __repr__(self):
-        return f'{self.__name__}(%s)' % ', '.join(
-            ('%s=%r' % (k, v) for k, v in self.__dict__.items() if not k.startswith('_')))
-
-    def __getattr__(self, attr):
-        if attr == 'shape':
-            if not self.__dict__['__shape_set__']:
-                return None
-        try:
-            return self.__dict__[attr]
-        except KeyError:
-            setattr(self, attr, NamedDict())
-            return self.__dict__[attr]
-
-    def __setattr__(self, key, value):
-        self.__dict__[key] = value
-
-    def _to_dict(self, include_names: bool = False) -> dict:
-        data = {}
-        for k, v in self.__dict__.items():
-            if isinstance(v, NamedDict):
-                data[k] = v._to_dict(include_names=include_names)
-            else:
-                if k != '__shape_set__':
-                    if k == '__name__' and not include_names:
-                        continue
-                    data[k] = v
-        return data
-
-    @classmethod
-    def _from_dict(cls, data: dict) -> 'NamedDict':
-        named = cls(name=data.pop('__name__', 'NamedDict'))
-        _dict = named.__dict__
-        for k, v in data.items():
-            if isinstance(v, dict):
-                _dict[k] = cls._from_dict(v)
-            else:
-                _dict[k] = v
-        return named
 
 
 def next_path(path: str | os.PathLike, pattern: str) -> str:
@@ -460,5 +342,43 @@ class FileConverter(commands.Converter):
         return attachment
 
 
+class IgnoreEntity(commands.Converter):
+    async def convert(self, ctx: GuildContext, argument: str):  # noqa
+        assert ctx.current_parameter is not None
+        return await commands.run_converters(ctx, IgnoreableEntity, argument, ctx.current_parameter)
+
+
+class ModuleConverter(commands.Converter[ModuleType]):
+    """A converter interface to resolve imported modules."""
+
+    async def convert(self, ctx: commands.Context, argument: str) -> ModuleType:
+        """Converts a name into a :class:`ModuleType` object."""
+        argument = argument.lower().strip()
+        module = sys.modules.get(argument, None)
+
+        icon = "\N{OUTBOX TRAY}" if ctx.invoked_with == "ml" else "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
+
+        if not module:
+            raise commands.BadArgument(f"{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.")
+        return module
+
+
+class ChannelOrMember(commands.Converter):
+    async def convert(self, ctx: GuildContext, argument: str):
+        try:
+            return await commands.TextChannelConverter().convert(ctx, argument)
+        except commands.BadArgument:
+            return await commands.MemberConverter().convert(ctx, argument)
+
+
 def convert_duration(seconds) -> time.time:
     return time.strftime("%H:%M:%S", time.gmtime(seconds))
+
+
+def usage_per_day(dt: datetime.datetime, usages: int) -> float:
+    now = discord.utils.utcnow()
+
+    days = (now - dt).total_seconds() / 86400
+    if int(days) == 0:
+        return usages
+    return usages / days

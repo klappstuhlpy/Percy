@@ -9,20 +9,16 @@ import logging
 import re
 
 from . import command
-from .base import RH_MUSIC_GUILD_ID
+from .base import PH_GUILD_ID
 from cogs.utils.paginator import BasePaginator
 from .utils.render import Render
+from .utils.scope import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .utils.context import Context
     from bot import Percy
-
-
-CMYK_REGEX = re.compile(r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$")
-HEX_REGEX = re.compile(r"^(#|0x)(?P<hex>[a-fA-F0-9]{6})$")
-RGB_REGEX = re.compile(r"^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$")
 
 
 def cmyk_to_rgb(c, m, y, k):
@@ -145,7 +141,7 @@ class Annotations(commands.Cog):
 
     @discord.utils.cached_property
     def feedback_channel(self) -> Optional[discord.TextChannel]:
-        guild = self.bot.get_guild(RH_MUSIC_GUILD_ID)
+        guild = self.bot.get_guild(PH_GUILD_ID)
         if guild is None:
             return None
 
