@@ -772,8 +772,8 @@ class Polls(commands.Cog):
             votes=0,
             index=new_index,
             running=True,
-            published=discord.utils.utcnow().timestamp(),
-            expires=when.timestamp(),
+            published=discord.utils.utcnow().timestamp(),  # TODO: Don't use timestamps for this
+            expires=when.timestamp(),  # TODO: Don't use timestamps for this
         )
 
         reminder = self.bot.reminder

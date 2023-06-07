@@ -562,7 +562,7 @@ class Stats(commands.Cog):
         embed = discord.Embed(colour=formats.Colour.darker_red())
         embed.set_author(name='Command Statistic', icon_url=ctx.bot.user.display_avatar.url)
 
-        resolved = self.bot.get_command(command) or discord.utils.get(self.bot.tree.walk_commands(), qualified_name=command)
+        resolved = self.bot.resolve_command(command)
 
         if resolved:
             embed.description = resolved.description or '*No help available.*'

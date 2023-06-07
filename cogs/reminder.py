@@ -484,7 +484,7 @@ class Reminder(commands.Cog):
 
         """
         zone = await self.get_timezone(ctx.author.id)
-        timer = await self.create_timer(
+        await self.create_timer(
             when.dt,
             'reminder',
             ctx.author.id,
@@ -513,7 +513,7 @@ class Reminder(commands.Cog):
     ):
         """Sets a reminder to remind you of something at a specific timetools."""
         zone = await self.get_timezone(interaction.user.id)
-        timer = await self.create_timer(
+        await self.create_timer(
             when,
             'reminder',
             interaction.user.id,

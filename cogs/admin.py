@@ -502,11 +502,12 @@ class Admin(commands.Cog):
         name="showlog",
         hidden=True
     )
-    async def showlog(self, ctx: Context, log: Literal['rparzival', 'rhashira'] = 'rparzival', lines: int = 650):
+    async def showlog(self, ctx: Context, log: str= 'percy', last_lines: int = 600):
+        """Shows the x last lines of a log file."""
         f_file = f'{log}.log'
         path = Path(f_file)
         with open(path, 'rb') as f:
-            lines = converters.tail(f, lines)
+            lines = converters.tail(f, last_lines)
             buf = io.BytesIO()
             for line in lines:
                 buf.write(line)
