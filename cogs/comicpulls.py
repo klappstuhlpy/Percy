@@ -251,10 +251,10 @@ class ComicFeed(PostgresItem):
     pin: bool
     next_pull: datetime.datetime
 
-    __slots__ = ('id', 'guild_id', 'channel_id', 'format', 'brand', 'day', 'ping', 'pin', 'next_pull')
+    __slots__ = ('cog', 'id', 'guild_id', 'channel_id', 'format', 'brand', 'day', 'ping', 'pin', 'next_pull')
 
-    def __init__(self, cog: ComicPulls, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, cog: ComicPulls, **kwargs):
+        super().__init__(**kwargs)
         self.cog: ComicPulls = cog
 
         self.brand = Brand[str(self.brand)]

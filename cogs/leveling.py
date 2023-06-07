@@ -29,13 +29,13 @@ class LevelConfig(PostgresItem):
     experience: int
     voice_minutes: int
 
-    __slots__ = ('user_id', 'guild_id', 'messages', 'experience', 'voice_minutes')
+    __slots__ = ('cog', 'bot', 'user_id', 'guild_id', 'messages', 'experience', 'voice_minutes')
 
-    def __init__(self, cog: Leveling, *args, **kwargs) -> None:
+    def __init__(self, cog: Leveling, **kwargs) -> None:
         self.cog: Leveling = cog
         self.bot: Percy = cog.bot
 
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
     def __len__(self):
         return self.messages

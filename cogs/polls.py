@@ -313,14 +313,14 @@ class PollItem(PostgresItem):
     description: str
     options: List[dict[str, Any]]
 
-    __slots__ = ('id', 'extra', 'channel_id', 'message_id', 'guild_id', 'users', 'args', 'kwargs', 'message', 'question',
-                 'votes', 'description', 'options')
+    __slots__ = ('cog', 'bot', 'id', 'extra', 'channel_id', 'message_id', 'guild_id', 'users', 'args', 'kwargs', 'message',
+                 'question', 'votes', 'description', 'options')
 
-    def __init__(self, cog: Polls, *args, **kwargs):
+    def __init__(self, cog: Polls, **kwargs):
         self.cog: Polls = cog
         self.bot: Percy = cog.bot
 
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         self.users: List = self.extra.get('users', [])
         self.args: List[Any] = self.extra.get('args', [])

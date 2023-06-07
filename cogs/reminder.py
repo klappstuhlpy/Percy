@@ -137,8 +137,8 @@ class Timer(PostgresItem):
 
     __slots__ = ('args', 'kwargs', 'extra', 'event', 'id', 'created_at', 'expires', 'timezone')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         self.args: Sequence[Any] = self.extra.get('args', [])
         self.kwargs: dict[str, Any] = self.extra.get('kwargs', {})

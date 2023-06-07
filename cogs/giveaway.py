@@ -32,9 +32,6 @@ class GiveawayItem(PostgresItem):
 
     __slots__ = ('id', 'channel_id', 'message_id', 'guild_id', 'author_id', 'prize', 'description', 'winner_count', 'entries')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     @property
     def jump_url(self) -> Optional[str]:
         if self.message_id and self.channel_id:

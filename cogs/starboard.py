@@ -66,7 +66,7 @@ class StarMessage(NamedTuple):
     stars: int
 
 
-class StarboardConfig(PostgresItem):
+class StarboardConfig(PostgresItem, ignore_record=True):
     """Represents a starboard configuration for a guild."""
 
     id: int
@@ -79,11 +79,11 @@ class StarboardConfig(PostgresItem):
 
     __slots__ = ('bot', 'id', 'channel_id', 'threshold', 'locked', 'needs_migration', 'max_age')
 
-    def __init__(self, guild_id: int, bot: Percy, *args, **kwargs):
+    def __init__(self, guild_id: int, bot: Percy, **kwargs):
         self.id: int = guild_id
         self.bot: Percy = bot
 
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         if not self.record:
             self.channel_id: Optional[int] = None

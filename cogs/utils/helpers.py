@@ -2,10 +2,11 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import TypeVar, Self, Callable, Optional, Any, overload, Dict
+from typing import TypeVar, Self, Callable, Optional, Any, overload, Dict, TYPE_CHECKING, Type
 
 import asyncpg
 import discord
+from discord.utils import MISSING
 
 T = TypeVar('T', bound='BaseFlags')
 
@@ -67,6 +68,20 @@ class flag_value:
 
 
 class PostgresItemMeta(type):
+    if TYPE_CHECKING:
+        __ignore_record: bool
+
+    def __new__(
+        cls,
+        name: str,
+        bases: tuple[Type],
+        attrs: dict[str, any],
+        *,
+        ignore_record: bool = False,
+    ) -> 'PostgresItemMeta':
+        attrs['__ignore_record'] = ignore_record
+        return super().__new__(cls, name, bases, attrs)
+
     def __call__(cls, *args, **kwargs):
         if cls is PostgresItem:
             raise TypeError("`PostgresItem` cannot be instantiated directly.")
@@ -78,18 +93,16 @@ class PostgresItem(metaclass=PostgresItemMeta):
 
     __slots__ = ('record',)
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         record: asyncpg.Record = kwargs.pop('record', None)
 
-        if record is None:
+        if record is None and not self.__class__.__ignore_record:
             raise TypeError("Subclasses of `PostgresItem` must provide a `record` keyword argument.")
 
         self.record: asyncpg.Record = record
-        for k, v in record.items():
-            setattr(self, k, v)
-
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        if record:
+            for k, v in record.items():
+                setattr(self, k, v)
 
     @classmethod
     def __subclasshook__(cls, subclass: type[Any]) -> bool:
@@ -119,9 +132,9 @@ class PostgresItem(metaclass=PostgresItemMeta):
         return hash(getattr(self, 'id', 0))
 
     @classmethod
-    def temporary(cls, *args, **kwargs) -> 'PostgresItem':
+    def temporary(cls, **kwargs) -> 'PostgresItem':
         """Creates a temporary instance of this class."""
-        return cls(*args, **kwargs)
+        return cls(**kwargs)
 
 
 class Colour(discord.Colour):
