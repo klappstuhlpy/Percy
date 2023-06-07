@@ -92,6 +92,9 @@ def executor(sync_function: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     async def sync_wrapper(*args: P.args, **kwargs: P.kwargs):
         """Asynchronous function that wraps a sync function with an executor """
 
+        sync_function.__executor__ = True
+        sync_function.__partial_async__ = True
+
         loop = asyncio.get_event_loop()
         internal_function = functools.partial(sync_function, *args, **kwargs)
         return await loop.run_in_executor(None, internal_function)

@@ -48,6 +48,23 @@ CMYK_REGEX = re.compile(r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,
 HEX_REGEX = re.compile(r"^(#|0x)(?P<hex>[a-fA-F0-9]{6})$")
 RGB_REGEX = re.compile(r"^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$")
 
+GITHUB_FULL_REGEX = re.compile(
+    r"""
+        https?://                               # http:// or https://
+        (?:www\.)?github\.com/                  # optional www. and github.com/
+        (?P<user>[^/]+)/                        # capture the user/organization name
+        (?P<repository>[^/]+)/                  # capture the repository name
+        blob/                                   # literal "blob/"
+        (?P<branch>[^/]+)/                      # capture the branch name
+        (?:
+            (?P<file_path>[^/]+(?:/[^/]+)*/)?   # capture the file path (optional)
+            (?P<filename>[^/#]+\.[^/#]+)        # capture the filename
+        )
+        (?:\#.*$|$)                             # optional fragment identifier or end of line
+    """,
+    re.VERBOSE
+)
+
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),

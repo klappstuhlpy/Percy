@@ -167,18 +167,20 @@ class Percy(commands.Bot):
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.NoPrivateMessage):
-            await ctx.author.send('This command cannot be used in private messages.')
+            await ctx.author.send(f'{ctx.tick(False)} This command cannot be used in private messages.')
         elif isinstance(error, commands.DisabledCommand):
-            await ctx.author.send('Sorry. This command is disabled and cannot be used.')
+            await ctx.author.send(f'{ctx.tick(False)} Sorry. This command is disabled and cannot be used.')
         elif isinstance(error, commands.CommandInvokeError):
             original = error.original
-            if not isinstance(original, discord.HTTPException):
-                log.exception('In %s:', ctx.command.qualified_name, exc_info=original)
+            if isinstance(original, discord.Forbidden):
+                await ctx.send(f'{ctx.tick(False)} I do not have permission to execute this action.')
+            elif isinstance(original, discord.HTTPException):
+                await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
         elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError,
                                 commands.BadArgument)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"Missing required argument: `{error.param.name}`")
+            await ctx.send(f"{ctx.tick(False)} Missing required argument: `{error.param.name}`")
         elif isinstance(error, commands.BotMissingPermissions):
             missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_permissions]
             await ctx.send(f"I don't have the permissions to perform this action.\n"
@@ -268,25 +270,6 @@ class Percy(commands.Bot):
 
         if ctx.guild is not None and ctx.guild.id in self.blacklist:
             return
-
-        if not message.channel.permissions_for(message.guild.me).send_messages:
-            if message.channel.id in self._error_message_log:
-                return
-
-            STATUS_PREF = '<:redTick:1079249771975413910> **Critical:** '
-            try:
-                await message.guild.system_channel.send(
-                    STATUS_PREF + f"While executing a Command, I wasn't be able to respond "
-                                  f"accordingly because I don't have the permissions to send "
-                                  f"messages in {message.channel.mention}.")
-            except discord.Forbidden:
-                await message.guild.owner.send(
-                    STATUS_PREF + "While executing a command in your server, I wasn't be able to respond "
-                                  "accordingly because I don't have the permissions to send messages in "
-                                  f"{message.channel.mention}.")
-            finally:
-                self._error_message_log.append(message.channel.id)
-                return
 
         bucket = self.spam_control.get_bucket(message)
         current = message.created_at.timestamp()

@@ -16,7 +16,7 @@ import yarl
 from discord.ext import commands, tasks
 
 from cogs.utils.scope import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
-    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE
+    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE, GITHUB_FULL_REGEX
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -81,27 +81,11 @@ class GitHub:
     message: discord.Message
 
     def __repr__(self):
-        return f"<GitHub url={self.base.url} lines={self.base.lines} filename={self.base.filename} path={self.base.path}>"
+        return f"<GitHub url={self.base.url} lines={self.base.lines} filename={self.base.filename}>"
 
     @classmethod
     def match_url(cls, url: str) -> Optional[ParsedGitHubCS]:
-        compiled = re.compile(
-            r"""
-                https?://                               # http:// or https://
-                (?:www\.)?github\.com/                  # optional www. and github.com/
-                (?P<user>[^/]+)/                        # capture the user/organization name
-                (?P<repository>[^/]+)/                  # capture the repository name
-                blob/                                   # literal "blob/"
-                (?P<branch>[^/]+)/                      # capture the branch name
-                (?:
-                    (?P<file_path>[^/]+(?:/[^/]+)*/)?   # capture the file path (optional)
-                    (?P<filename>[^/#]+\.[^/#]+)        # capture the filename
-                )
-                (?:\#.*$|$)                             # optional fragment identifier or end of line
-            """,
-            re.VERBOSE
-        )
-        match = compiled.match(url)
+        match = GITHUB_FULL_REGEX.match(url)
 
         if match is None:
             return None
@@ -236,11 +220,14 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         self.bot: Percy = bot
         self.bot.loop.create_task(self._prepare_invites())
         self._req_lock = asyncio.Lock()
-        self.auto_archive_old_forum_threads.start()
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='dpy', id=596577034537402378)
+
+    async def cog_load(self) -> None:
+        await self.bot.wait_until_ready()
+        self.auto_archive_old_forum_threads.start()
 
     def cog_unload(self) -> None:
         self.auto_archive_old_forum_threads.cancel()
@@ -340,10 +327,6 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
             expires = last_message + datetime.timedelta(minutes=thread.auto_archive_duration)
             if now > expires:
                 await thread.edit(archived=True, reason='Auto-archived due to inactivity.')
-
-    @auto_archive_old_forum_threads.before_loop
-    async def before_auto_archive_old_forum_threads(self):
-        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):

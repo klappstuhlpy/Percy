@@ -539,18 +539,6 @@ class Mod(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name="alumni_mod_animated", id=1076913120599080970, animated=True)
 
-    async def cog_command_error(self, ctx: GuildContext, error: commands.CommandError):
-        if isinstance(error, (commands.BotMissingPermissions, commands.UserInputError, commands.FlagError)):
-            await ctx.send(str(error))
-        elif isinstance(error, commands.CommandInvokeError):
-            original = error.original
-            if isinstance(original, discord.Forbidden):
-                await ctx.send('I do not have permission to execute this action.')
-            elif isinstance(original, discord.NotFound):
-                await ctx.send(f'This entity does not exist: {original.text}')
-            elif isinstance(original, discord.HTTPException):
-                await ctx.send('Somehow, an unexpected error occurred. Try again later?')
-
     async def bulk_insert(self):
         query = """
             UPDATE guild_mod_config
@@ -2277,7 +2265,7 @@ class Mod(commands.Cog):
             timezone=zone or 'UTC',
         )
         await ctx.send(
-            f'<:greenTick:1079249732364406854> Muted {discord.utils.escape_mentions(str(member))} for '
+            f'<:greenTick:1079249732364406854> Muted {discord.utils.escape_mentions(str(member))} until '
             f'{discord.utils.format_dt(duration.dt, "R")}.'
         )
 
