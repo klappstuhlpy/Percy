@@ -89,6 +89,14 @@ class LevelConfig(PostgresItem):
         self.messages += messages
         await self.send_patch()
 
+    async def set_level(self, level: int) -> None:
+        self.experience = self.get_experience(level)
+        await self.send_patch()
+
+    async def set_experience(self, experience: int) -> None:
+        self.experience = experience
+        await self.send_patch()
+
     async def add_voice_minutes(self, voice_minutes: int, multiplier: int) -> None:
         if voice_minutes <= 0:
             return
@@ -154,40 +162,28 @@ class Leveling(commands.Cog):
         self.message_cooldown = commands.CooldownMapping.from_cooldown(1, 60, commands.BucketType.member)
 
     async def bulk_insert(self) -> None:
-        query = """INSERT INTO levels (guild_id, user_id, messages, experience, voice_minutes)
-                   SELECT x.guild_id, x.user_id, x.messages, x.experience, x.voice_minutes
-                   FROM jsonb_to_recordset($1::jsonb) AS
-                   x(
-                        guild_id BIGINT,
-                        user_id BIGINT,
-                        messages INTEGER,
-                        experience INTEGER,
-                        voice_minutes INTEGER
-                   )
-                """
+        query = """
+                INSERT INTO levels (guild_id, user_id, messages, experience, voice_minutes)
+                SELECT x.guild_id, x.user_id, x.messages, x.experience, x.voice_minutes
+                FROM jsonb_to_recordset($1::jsonb) AS
+                x(
+                    guild_id BIGINT,
+                    user_id BIGINT,
+                    messages INTEGER,
+                    experience INTEGER,
+                    voice_minutes INTEGER
+                )
+                ON CONFLICT (guild_id, user_id) DO UPDATE
+                SET messages = excluded.messages,
+                    experience = excluded.experience,
+                    voice_minutes = excluded.voice_minutes
+            """
 
         if self._data_batch:
-            try:
-                await self.bot.pool.execute(query, self._data_batch)
-            except asyncpg.exceptions.UniqueViolationError:
-                query = """
-                    UPDATE levels AS l
-                    SET messages = x.messages, experience = x.experience, voice_minutes = x.voice_minutes
-                    FROM jsonb_to_recordset($1::jsonb) AS
-                    x(
-                        guild_id BIGINT,
-                        user_id BIGINT,
-                        messages INTEGER,
-                        experience INTEGER,
-                        voice_minutes INTEGER
-                    )
-                    WHERE l.guild_id = x.guild_id AND l.user_id = x.user_id
-                """
-                await self.bot.pool.execute(query, self._data_batch)
-
+            await self.bot.pool.execute(query, self._data_batch)
             total = len(self._data_batch)
             if total > 1:
-                log.debug('Registered %s *leveling messages to the database.', total)
+                log.debug('Registered %s leveling batches to the database.', total)
             self._data_batch.clear()
 
     def cog_unload(self):
@@ -378,11 +374,14 @@ class Leveling(commands.Cog):
         )
         await ctx.send(file=discord.File(fp=card, filename="rank.png"))
 
-    @command(level.command, description="Set a member's experience or level.")
+    @command(
+        level.command,
+        description="Set a members experience or level."
+    )
     @commands.guild_only()
     @checks.hybrid_permissions_check(administrator=True)
-    @app_commands.describe(target="The member you want to set XP to.")
-    @app_commands.describe(level="The amount of levels you want to set. Takes priority over xp if both provided.")
+    @app_commands.describe(target="The target member to modify.")
+    @app_commands.describe(level="The level you want to set.")
     @app_commands.describe(xp="The amount of XP you want to set.")
     async def set(
             self,
@@ -394,23 +393,24 @@ class Leveling(commands.Cog):
         """Set a users experience/level."""
         if target.bot:
             return await ctx.send(f"{ctx.tick(False)} You can't manage Bot's Level/Experience.")
-        if xp is None and level is None:
+
+        if (xp is None and level is None) or (xp and level):
             return await ctx.send(f"{ctx.tick(False)} You need to provide either a level or xp to set.")
-        if xp and level:
-            return await ctx.send(f"{ctx.tick(False)} You can't provide both a level and xp to set.")
 
         config = await self.get_level_config(target.id, target.guild.id)
 
-        experience = 0
         if level:
-            experience = config.get_experience(level)
+            if level > 500:
+                return await ctx.send(f"{ctx.tick(False)} You can't set more than **Level 500**.")
+
+            await config.set_level(level)
         elif xp:
-            experience = xp
+            if xp > config.get_experience(500):
+                return await ctx.send(
+                    f"{ctx.tick(False)} Sorry. You can't set more than **125,052,000 XP**. (Level 500)")
 
-        if experience > config.get_experience(500):
-            return await ctx.send(f"{ctx.tick(False)} Sorry. You can't set more than **125,052,000 XP**. (Level 500)")
+            await config.set_experience(xp)
 
-        await config.add_experience(experience)
         await ctx.send(
             f"{target.mention} is now level **{config.level}** with **{str(config)}** total XP. <:oneup:1113286994378899516>"
         )
