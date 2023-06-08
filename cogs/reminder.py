@@ -16,7 +16,7 @@ from lxml import etree
 from typing_extensions import Annotated
 
 from . import command
-from .utils import timetools, formats, cache, fuzzy
+from .utils import timetools, formats, cache, fuzzy, helpers
 from .utils.context import Context
 from .utils.formats import plural, MaybeAcquire
 from .utils.helpers import PostgresItem
@@ -552,12 +552,32 @@ class Reminder(commands.Cog):
         offset = timetools.get_timezone_offset(time)
         time = time.strftime('%Y-%m-%d %I:%M %p')
         if self_query:
-            msg = await ctx.send(
+            await ctx.send(
                 f'<:greenTick:1079249732364406854> Your timezone is *{tz!r}*. The current time is `{time} {offset}`.')
-            await asyncio.sleep(5)
-            await msg.edit(content=f'<:greenTick:1079249732364406854> Your current time is `{time} {offset}`.')
         else:
             await ctx.send(f'<:greenTick:1079249732364406854> The current time for {user} is `{time} {offset}`.')
+
+    @timezone.command(name='info')
+    @app_commands.describe(tz='The timezone to get info about.')
+    async def timezone_info(self, ctx: Context, *, tz: TimeZone):
+        """Retrieves info about a timezone."""
+
+        embed = discord.Embed(title=tz.key, colour=helpers.Colour.darker_red())
+        dt = discord.utils.utcnow().astimezone(dateutil.tz.gettz(tz.key))
+        time = dt.strftime('%Y-%m-%d %I:%M %p')
+        embed.add_field(name='Current Time', value=time)
+
+        offset = dt.utcoffset()
+        if offset is not None:
+            minutes, _ = divmod(int(offset.total_seconds()), 60)
+            hours, minutes = divmod(minutes, 60)
+            embed.add_field(name='UTC Offset', value=f'{hours:+03d}:{minutes:02d}')
+
+        embed.add_field(name='Daylight Savings', value='Yes' if dt.dst() else 'No')
+        embed.add_field(name='Abbreviation', value=dt.tzname())
+        embed.add_field(name='IANA ID', value=tz.key)
+
+        await ctx.send(embed=embed)
 
     @command(
         timezone.command,
@@ -586,6 +606,7 @@ class Reminder(commands.Cog):
             delete_after=10)
 
     @timezone_set.autocomplete('tz')
+    @timezone_info.autocomplete('tz')
     async def timezone_set_autocomplete(
             self, interaction: discord.Interaction, argument: str
     ) -> list[app_commands.Choice[str]]:
