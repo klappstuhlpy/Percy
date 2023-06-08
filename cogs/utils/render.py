@@ -268,7 +268,14 @@ class Render:
     ) -> BytesIO:
         with Image.open(PATH + "/template.png") as background:
             avatar = Image.open(BytesIO(avatar)).resize((196, 196), Image.BOX)
-            background.paste(avatar.resize((196, 196), Image.BOX), (38, 38))
+            mask = Image.new("L", (196, 196), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, 196, 196), fill=255)
+
+            avatar_rounded = Image.new("RGBA", (196, 196))
+            avatar_rounded.paste(avatar, (0, 0), mask=mask)
+
+            background.paste(avatar_rounded, (38, 38), avatar_rounded)
 
             draw = ImageDraw.Draw(background)
             draw.text((252, 62), user.nick or user.name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
