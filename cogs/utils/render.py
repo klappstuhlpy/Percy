@@ -324,12 +324,16 @@ class Render:
             draw = ImageDraw.Draw(level_bg)
 
             level_text = "Level"
-            level_text_width, _ = draw.textsize(level_text, font=GINTO_BOLD_32)
-            draw.text((10, 10), level_text, font=GINTO_BOLD_32, fill=(216, 216, 216))
-
+            level_text_width, level_text_height = draw.textsize(level_text, font=GINTO_BOLD_32)
             level_number = str(level)
-            level_number_width, _ = draw.textsize(level_number, font=GINTO_NORD_HEAVY_36)
-            draw.text((level_text_width + 8, 8), level_number, font=GINTO_NORD_HEAVY_36, fill=(235, 235, 235))
+            level_number_width, level_number_height = draw.textsize(level_number, font=GINTO_NORD_HEAVY_36)
+
+            text_offset_x = int((192 - (level_text_width + level_number_width + 8)) / 2)
+            text_offset_y = int((60 - max(level_text_height, level_number_height)) / 2)
+
+            draw.text((text_offset_x, text_offset_y), level_text, font=GINTO_BOLD_32, fill=(216, 216, 216))
+            draw.text((text_offset_x + level_text_width + 8, text_offset_y), level_number, font=GINTO_NORD_HEAVY_36,
+                      fill=(235, 235, 235))
 
             background.paste(level_bg, (38, 254), level_bg_mask)
 
@@ -356,7 +360,7 @@ class Render:
             draw = ImageDraw.Draw(messages_bg)
             msg_count = shorten_number(messages)
 
-            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY_28, GINTO_BOLD_24, 14, 18
+            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY_28, GINTO_BOLD_24, 16, 18
             if (text_size := (count_font.getlength(msg_count) + 12 + text_font.getlength("Messages"))) > 200:
                 cfont, tfont, count_offset, text_offset = GINTO_NORD_HEAVY_22, GINTO_BOLD_20, 18, 20
                 text_size = cfont.getlength(msg_count) + 12 + tfont.getlength("Messages")
