@@ -278,19 +278,32 @@ class Render:
             background.paste(avatar_rounded, (38, 38), avatar_rounded)
 
             draw = ImageDraw.Draw(background)
-            draw.text((252, 62), user.nick or user.name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
-            draw.text(
-                (252, 114), f"#{user.discriminator}", font=GINTO_BOLD_28, fill=self.get_color_alpha((216, 216, 216), 0.8)
-            )
+
+            # Text for user's name
+            user_name = user.nick or user.name
+            draw.text((252, 62), user_name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
+
+            # Text for user's discriminator
+            discriminator_text = f"#{user.discriminator}"
+            draw.text((252, 114), discriminator_text, font=GINTO_BOLD_28,
+                      fill=self.get_color_alpha((216, 216, 216), 0.8))
 
             rank_text = f"Rank #{rank}"
-            width = GINTO_NORD_HEAVY_48.getlength(rank_text)
-            draw.text((1114 - width, 62), text=rank_text, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
+            rank_text_width, _ = draw.textsize(rank_text, font=GINTO_NORD_HEAVY_48)
+            draw.text(
+                (background.width - rank_text_width - 38, 62),
+                rank_text,
+                font=GINTO_NORD_HEAVY_48,
+                fill=(235, 235, 235),
+            )
 
             members_text = f"of {shorten_number(members)}"
-            width = GINTO_BOLD_28.getlength(members_text)
+            members_text_width, _ = draw.textsize(members_text, font=GINTO_BOLD_28)
             draw.text(
-                (1114 - width, 114), members_text, font=GINTO_BOLD_28, fill=self.get_color_alpha((216, 216, 216), 0.8)
+                (background.width - members_text_width - 38, 114),
+                members_text,
+                font=GINTO_BOLD_28,
+                fill=self.get_color_alpha((216, 216, 216), 0.8),
             )
 
             color = self.get_dominant_color(avatar)
@@ -310,20 +323,19 @@ class Render:
             )
             draw = ImageDraw.Draw(level_bg)
 
-            text_width = GINTO_BOLD_32.getlength("Level")
-            number_width = GINTO_NORD_HEAVY_36.getlength(str(level))
+            level_text = "Level"
+            level_text_width, _ = draw.textsize(level_text, font=GINTO_BOLD_32)
+            draw.text((10, 10), level_text, font=GINTO_BOLD_32, fill=(216, 216, 216))
 
-            offset = int((186 - (text_width + number_width)) / 2)
-
-            draw.text((offset, 10), text="Level", font=GINTO_BOLD_32, fill=(216, 216, 216))
-            draw.text((offset + text_width + 8, 8), text=str(level), font=GINTO_NORD_HEAVY_36, fill=(235, 235, 235))
+            level_number = str(level)
+            level_number_width, _ = draw.textsize(level_number, font=GINTO_NORD_HEAVY_36)
+            draw.text((level_text_width + 8, 8), level_number, font=GINTO_NORD_HEAVY_36, fill=(235, 235, 235))
 
             background.paste(level_bg, (38, 254), level_bg_mask)
 
             experience_bg, experience_bg_mask = self.create_outlined_rounded_rectangle(
                 (260, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5)
             )
-
             draw = ImageDraw.Draw(experience_bg)
             text = f"{shorten_number(current)} XP / {shorten_number(required)}"
 
