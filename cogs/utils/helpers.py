@@ -92,7 +92,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
 
     __slots__ = ('record',)
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         record: asyncpg.Record = kwargs.pop('record', None)
 
         if record is None and not self.__class__._ignore_record:
@@ -108,12 +108,12 @@ class PostgresItem(metaclass=PostgresItemMeta):
         """Returns whether the subclass has a record attribute."""
         return hasattr(subclass, 'record')
 
-    def __iter__(self):
+    def __iter__(self) -> dict[str, Any]:
         """An iterator over the record's values."""
-        return ((k, v) for k, v in self.record.items() if not k.startswith('_'))
+        return {k: v for k, v in self.record.items() if not k.startswith('_')}
 
-    def __repr__(self):
-        args = ['%s=%r' % (k, v) for k, v in self.record.items()]
+    def __repr__(self) -> str:
+        args = ['%s=%r' % (k, v) for k, v in (self.record.items() if self.record else self.__dict__.items())]
         return '<%s.%s(%s)>' % (self.__class__.__module__, self.__class__.__name__, ', '.join(args))
 
     def __eq__(self, other: object) -> bool:
@@ -131,9 +131,20 @@ class PostgresItem(metaclass=PostgresItemMeta):
         return hash(getattr(self, 'id', 0))
 
     @classmethod
-    def temporary(cls, **kwargs) -> 'PostgresItem':
+    def temporary(cls, *args, **kwargs) -> 'PostgresItem':
         """Creates a temporary instance of this class."""
-        return cls(**kwargs)
+        self = ignore_record()(cls)(*args, **kwargs)
+        return self
+
+
+def ignore_record() -> Callable[[T], T]:
+    r"""A decorator that bypasses the `record` keyword argument check for `PostgresItem` subclasses."""
+
+    def decorator(func: T) -> T:
+        func._ignore_record = True
+        return func
+
+    return decorator
 
 
 class Colour(discord.Colour):

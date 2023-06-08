@@ -4,6 +4,7 @@ import contextlib
 import datetime
 import json
 import logging
+import traceback
 from contextlib import suppress
 from enum import Enum
 from typing import Dict, List, Optional, Union, Self, Generic, TypeVar, Type
@@ -307,15 +308,16 @@ class ComicFeed(PostgresItem):
     def next_scheduled(self, day: int = None):
         day = day or self.day
         now = discord.utils.utcnow().date()
-        soon = now + datetime.timedelta(days=(day - now.weekday()) % 7)
-        time = datetime.time(0)
-        combined = datetime.datetime.combine(soon, time, tzinfo=datetime.timezone.utc).astimezone(datetime.timezone.utc)
+        soon = now + datetime.timedelta(days=(day - now.isoweekday()) % 7)
+        combined = datetime.datetime.combine(soon, datetime.time(0), tzinfo=datetime.timezone.utc)\
+            .astimezone(datetime.timezone.utc)
 
         if combined < discord.utils.utcnow():
             if self.brand == Brand.MANGA:
-                combined += datetime.timedelta(days=32)
+                combined = combined.replace(month=combined.month + 1, day=day)
             else:
                 combined += datetime.timedelta(days=7)
+
         return combined.replace(tzinfo=None)
 
     @property
@@ -745,7 +747,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if not any([channel, _format, ping, day, pin]):
             return await interaction.followup.send(embed=config.to_embed())
         else:
-            kwargs: dict = config.__iter__()
+            kwargs: dict = dict(config.__iter__())
 
             if channel:
                 kwargs["channel_id"] = channel.id
