@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union, overload
@@ -27,6 +28,7 @@ class Config(Generic[_T]):
         self.loop = asyncio.get_running_loop()
         self.lock = asyncio.Lock()
         self._db: Dict[str, Union[_T, Any]] = {}
+
         if load_later:
             self.loop.create_task(self.load())
         else:
@@ -66,6 +68,14 @@ class Config(Generic[_T]):
     def get(self, key: Any, default: Any = None) -> Optional[Union[_T, Any]]:
         """Retrieves a config entry."""
         return self._db.get(str(key), default)
+
+    @contextlib.asynccontextmanager
+    async def aquire(self) -> None:
+        try:
+            await self.lock.acquire()
+            yield
+        finally:
+            self.lock.release()
 
     async def put(self, key: Any, value: Union[_T, Any]) -> None:
         """Inserts a new config entry or edits a persitent one."""

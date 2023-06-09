@@ -213,9 +213,8 @@ class TwitchNotifications(commands.Cog):
                 self.online_users.add(stream.user.login)
                 yield stream
 
-    @discord.utils.cached_property
     def channel(self) -> Optional[discord.TextChannel]:
-        channel_id = self.bot.media.get("twitch").get("channel_id")
+        channel_id = self.bot.media.get("twitch", {}).get("channel_id")
         if not channel_id:
             return
         return self.bot.get_channel(channel_id)
