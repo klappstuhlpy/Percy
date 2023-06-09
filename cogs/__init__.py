@@ -77,7 +77,7 @@ def command_permissions(
     """
 
     if isinstance(category, int):
-        setter = CommandCategory(category)
+        category = CommandCategory(category)
 
     if bot is not PermissionTemplate.bot:
         bot += PermissionTemplate.bot
@@ -96,17 +96,17 @@ def command_permissions(
         func.default_permissions = discord.Permissions(**user_perms)
 
         if bot_perms:
-            if setter == CommandCategory.App:
+            if category == CommandCategory.App:
                 func = app_commands.checks.bot_has_permissions(**bot_perms)(func)
-            elif setter in (CommandCategory.Core, CommandCategory.Hybrid):
+            elif category in (CommandCategory.Core, CommandCategory.Hybrid):
                 func = commands.bot_has_permissions(**bot_perms)(func)
 
         if user_perms:
-            if setter == CommandCategory.App:
+            if category == CommandCategory.App:
                 func = app_commands.checks.has_permissions(**user_perms)(func)
-            elif setter == CommandCategory.Core:
+            elif category == CommandCategory.Core:
                 func = commands.has_permissions(**user_perms)(func)
-            elif setter == CommandCategory.Hybrid:
+            elif category == CommandCategory.Hybrid:
                 func = checks.hybrid_permissions_check(**user_perms)(func)
             else:
                 func.__discord_app_commands_default_permissions__ = discord.Permissions(**user_perms)
