@@ -1,58 +1,112 @@
+from __future__ import annotations
+import enum
+import inspect
 from pkgutil import iter_modules
+from typing import List, Optional, Union, Dict, Any, Callable, TypeVar, ClassVar
 
+import discord
 from discord import app_commands
+from discord.app_commands import locale_str
 from discord.ext import commands
-from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from discord.utils import MISSING
+
+from cogs.utils import checks
+from cogs.utils.context import Context
 
 EXTENSIONS = [module.name for module in iter_modules(__path__, f'{__package__}.')]
 
 
-# Custom Command Decorator for Adding Extra **kwargs
+def perm_fmt(perm: str) -> str: return perm.replace('_', ' ').title().replace('Guild', 'Server')
+
+
+T = TypeVar('T')
 
 
 class PermissionTemplate:
-    def __init__(
-            self, bot: List[str] = [], user: List[str] = [], template=None
-    ) -> None:
-        self.bot = bot
-        self.user = user
-
-        if template:
-            self.bot += template.bot
-            self.user += template.user
+    bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
+                          "view_channel", "read_message_history"]
 
 
-class PermissionTemplates:
-    text_command: PermissionTemplate = PermissionTemplate(
-        bot=["send_messages", "read_message_history", "send_messages_in_threads"],
-        user=["send_messages", "read_message_history", "send_messages_in_threads"],
-    )
-    hybrid_command = PermissionTemplate = PermissionTemplate(
-        template=text_command, user=["use_application_commands"]
-    )
+class CMD(enum.Enum):
+    App = 1
+    Hybrid = 2
+    Core = 3
 
 
-@dataclass
-class CommandPermissions:
-    template: Optional[PermissionTemplate] = PermissionTemplates.hybrid_command
-    bot: List[str] = field(default_factory=list)
-    user: List[str] = field(default_factory=list)
+AnyCommand = Union[
+    app_commands.command,
+    commands.command,
+    commands.group,
+    commands.hybrid_command,
+    commands.hybrid_group,
+]
+
+AnyCommandSignature = {
+    "hybrid.py": CMD.Hybrid,
+    "core.py": CMD.Core,
+    "commands.py": CMD.App,
+}
+
+
+def command_permissions(
+        setter: CMD | int = CMD.Core,
+        *,
+        user: Optional[List[str]] = [],
+        bot: Optional[List[str]] = PermissionTemplate.bot
+) -> Callable[[T], T]:
+    r"""A decorator that sets permission Info for a command."""
+
+    if isinstance(setter, int):
+        setter = CMD(setter)
+
+    if bot is not PermissionTemplate.bot:
+        bot += PermissionTemplate.bot
+
+    invalid = (set(user) | set(bot)) - set(discord.Permissions.VALID_FLAGS)
+    if invalid:
+        raise TypeError(f"Invalid permission(s): {', '.join(invalid)}")
+
+    user_perms = {perm: True for perm in user}
+    bot_perms = {perm: True for perm in bot}
+
+    readable_bot_perms = [perm_fmt(perm) for perm in bot]
+    readable_user_perms = [perm_fmt(perm) for perm in user]
+
+    def decorator(func: T) -> T:
+        func.default_permissions = discord.Permissions(**user_perms)
+
+        if bot_perms:
+            if setter == CMD.App:
+                func = app_commands.checks.bot_has_permissions(**bot_perms)(func)
+            elif setter in (CMD.Core, CMD.Hybrid):
+                func = commands.bot_has_permissions(**bot_perms)(func)
+
+        if user_perms:
+            if setter == CMD.App:
+                func = app_commands.checks.has_permissions(**user_perms)(func)
+            elif setter == CMD.Core:
+                func = commands.has_permissions(**user_perms)(func)
+            elif setter == CMD.Hybrid:
+                func = checks.hybrid_permissions_check(**user_perms)(func)
+            else:
+                func.__discord_app_commands_default_permissions__ = discord.Permissions(**user_perms)
+
+        func.__readable_bot_perms__ = readable_bot_perms
+        func.__readable_user_perms__ = readable_user_perms
+
+        return func
+
+    return decorator
 
 
 def command(
-        func: Union[
-            app_commands.command,
-            commands.command,
-            commands.group,
-            commands.hybrid_command,
-            commands.hybrid_group,
-        ] = commands.hybrid_command,
+        func: AnyCommand = commands.hybrid_command,
         *,
-        name=None,
-        examples: List[str] = [],
-        permissions: CommandPermissions = CommandPermissions(None, [], []),
-        description="Command undocumented.",
+        name: Optional[str] = None,
+        description: Union[str, locale_str] = "Command undocumented.",
+        examples: List[str] = None,
+        nsfw: bool = False,
+        extras: Dict[Any, Any] = MISSING,
         **kwargs
 ):
     r"""Custom command decorator for adding extra kwargs to the command.
@@ -61,6 +115,7 @@ def command(
     ----------
     func: Union[app_commands.command, commands.command, commands.group, commands.hybrid_command, commands.hybrid_group]
         The command to be decorated.
+
     name: :class:`str`
         The name of the command.
     callback: :ref:`coroutine <coroutine>`
@@ -125,28 +180,25 @@ def command(
         .. note::
             This object may be copied by the library.
 
-
         .. versionadded:: 2.0
 
     examples: List[:class:`str`]
         A list of examples for the command.
-    permissions: :class:`CommandPermissions`
-        A dataclass containing the permissions for the command.
-
-        .. versionadded:: CUSTOM COMMAND DECORATOR by Klappstuhl
     """
 
-    perms = {"bot": permissions.bot, "user": permissions.user}
-    if permissions.template:
-        perms["bot"] += permissions.template.bot
-        perms["user"] += permissions.template.user
+    perm_category = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
+    if not extras:
+        extras = {}
 
-    return func(
+    if not extras.get("examples"):
+        extras["examples"] = examples
+
+    self = func(
         name=name,
-        extras={
-            "permissions": {"bot": permissions.bot, "user": permissions.user},
-            "examples": examples,
-        },
+        extras=extras,
         description=description,
+        nsfw=nsfw,
         **kwargs
     )
+    setattr(self, "__class_info__", f"{func.__module__}.{func.__name__}")
+    return command_permissions(perm_category)(self)
