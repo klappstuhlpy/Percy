@@ -2541,14 +2541,14 @@ class Mod(commands.Cog):
                 '<:redTick:1079249771975413910> Somehow you are already muted <:rooThink:596576798351949847>')
 
         created_at = ctx.message.created_at
-        if duration.dt > (created_at + datetime.timedelta(days=1)):
+        if duration > (created_at + datetime.timedelta(days=1)):
             return await ctx.send('<:redTick:1079249771975413910> Duration is too long. Must be at most 24 hours.')
 
-        if duration.dt < (created_at + datetime.timedelta(minutes=5)):
+        if duration < (created_at + datetime.timedelta(minutes=5)):
             return await ctx.send('<:redTick:1079249771975413910> Duration is too short. Must be at least 5 minutes.')
 
-        delta = timetools.human_timedelta(duration.dt, source=created_at)
-        warning = f'Are you sure you want to be muted till {discord.utils.format_dt(duration.dt, "f")}?\n**Do not ask the moderators to undo this!**'
+        delta = timetools.human_timedelta(duration, source=created_at)
+        warning = f'Are you sure you want to be muted for {delta}?\n**Do not ask the moderators to undo this!**'
         confirm = await ctx.prompt(warning, ephemeral=True)
         if not confirm:
             return await ctx.send('Aborting', delete_after=5.0)
