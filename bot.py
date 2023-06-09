@@ -132,7 +132,7 @@ class Percy(commands.Bot):
         self.prefixes: Config[list[str]] = Config('prefixes.json')
 
         self.discord_status: Config[Dict[str, Any]] = Config('discord_status.json', encoder=BasicJSONEncoder)
-        self.media: Config[Dict[str, Any]] = Config('media.json')
+        self.media: Config[Dict[str, Any]] = Config('media.json', encoder=BasicJSONEncoder)
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id

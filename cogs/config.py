@@ -114,7 +114,7 @@ class ResolvedCommandPermissions:
         return self._is_command_blocked(ctx.command.qualified_name, ctx.channel.id)
 
 
-class ForumConfigFlags(commands.command_permissions():
+class ForumConfigFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     help_forum: discord.ForumChannel = commands.flag(
         name='help_forum',
         description='The channel to send the help forum in.',
