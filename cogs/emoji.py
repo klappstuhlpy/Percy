@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from . import command
+from . import command, command_permissions
 from .utils import checks
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
@@ -172,7 +172,7 @@ class Emoji(commands.Cog):
         await ctx.send_help(ctx.command)
 
     @command(commands.command, aliases=['emojilist'])
-    @checks.is_admin()
+    @command_permissions(3, user=["administrator"])
     @commands.cooldown(1, 600, commands.BucketType.guild)
     async def emojipost(self, ctx: GuildContext):
         """Fancy post the emoji lists"""
@@ -200,7 +200,7 @@ class Emoji(commands.Cog):
         aliases=['add'],
         usage='<name> [file] [emoji]',
     )
-    @checks.hybrid_permissions_check(manage_emojis=True)
+    @command_permissions(3, user=["manage_emojis"], bot=["manage_emojis"])
     @commands.guild_only()
     @app_commands.rename(emoji='emoji-or-url')
     @app_commands.describe(

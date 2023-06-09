@@ -19,8 +19,8 @@ from typing_extensions import Annotated
 from bot import Percy
 from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
-from . import command
-from .utils import timetools, checks, cache, helpers
+from . import command, command_permissions
+from .utils import timetools, cache, helpers
 from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity
 from .utils.formats import plural, human_join
@@ -736,7 +736,7 @@ class Mod(commands.Cog):
         description="Show current Moderation (automatic moderation) behaviour on the server."
     )
     @commands.guild_only()
-    @checks.is_mod()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     async def moderation(self, ctx: GuildContext):
         """Show current Moderation (Automatic Moderation) behavior on the server.
         You must have Ban Members and Manage Messages permissions to use this
@@ -799,7 +799,7 @@ class Mod(commands.Cog):
         fallback="channel",
         description="Toggles audit text log on the server."
     )
-    @checks.is_mod()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @app_commands.describe(
         channel='The channel to broadcast audit log messages to. The bot must be able to create webhooks in it.'
     )
@@ -904,7 +904,7 @@ class Mod(commands.Cog):
         name="disable",
         description="Disables Moderation on the server.",
     )
-    @checks.is_mod()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @app_commands.describe(protection='The protection to disable')
     @app_commands.choices(
         protection=[
@@ -968,7 +968,7 @@ class Mod(commands.Cog):
         name="raid",
         description="Toggles raid protection on the server.",
     )
-    @checks.is_mod()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
     async def moderation_raid(self, ctx: GuildContext, enabled: Optional[bool] = None):
         """Toggles raid protection on the server.
@@ -1003,7 +1003,7 @@ class Mod(commands.Cog):
         description="Enables auto-banning accounts that spam more than \"count\" mentions.",
     )
     @commands.guild_only()
-    @checks.is_mod()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
         """Enables auto-banning accounts that spam more than "count" mentions.
@@ -1025,7 +1025,7 @@ class Mod(commands.Cog):
         await ctx.send(f'<:greenTick:1079249732364406854> Mention spam protection threshold set to `{count}`.')
 
     @moderation_mentions.error
-    async def automod_mentions_error(self, ctx: GuildContext, error: commands.CommandError):
+    async def moderation_mentions_error(self, ctx: GuildContext, error: commands.CommandError):
         if isinstance(error, commands.RangeError):
             await ctx.send(
                 '<:redTick:1079249771975413910> Mention spam protection threshold must be greater than three.')
@@ -1036,7 +1036,7 @@ class Mod(commands.Cog):
         description="Specifies what roles, members, or channels ignore Moderation Inspections.",
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True)
+    @command_permissions(2, user=["ban_members"])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
     async def moderation_ignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1069,7 +1069,7 @@ class Mod(commands.Cog):
         description="Specifies what roles, members, or channels to take off the ignore list.",
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True)
+    @command_permissions(2, user=["ban_members"])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
     async def moderation_unignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1138,7 +1138,7 @@ class Mod(commands.Cog):
         usage='[search] [flags...]'
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(manage_messages=True)
+    @command_permissions(2, user=["manage_messages"])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
             self, ctx: GuildContext, search: Optional[commands.Range[int, 1, 2000]] = None, *, flags: PurgeFlags
@@ -1409,12 +1409,14 @@ class Mod(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True, manage_roles=True)
-    @commands.bot_has_guild_permissions(manage_roles=True)
+    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space separated list of text or voice channels to lock down')
-    async def lockdown(self, ctx: GuildContext,
-                       channels: commands.Greedy[Union[discord.TextChannel, discord.VoiceChannel]]):
+    async def lockdown(
+            self,
+            ctx: GuildContext,
+            channels: commands.Greedy[Union[discord.TextChannel, discord.VoiceChannel]]
+    ):
         """Locks down specific channels.
         A lockdown is done by forbidding users from communicating with the channels.
         This is implemented by blocking certain permissions for the default everyone
@@ -1479,8 +1481,7 @@ class Mod(commands.Cog):
         description='Locks down specific channels for a specified amount of timetools.',
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True, manage_roles=True)
-    @commands.bot_has_guild_permissions(manage_roles=True)
+    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
@@ -1570,8 +1571,7 @@ class Mod(commands.Cog):
         description='Ends all lockdowns set.',
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True, manage_roles=True)
-    @commands.bot_has_guild_permissions(manage_roles=True)
+    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
@@ -1698,7 +1698,7 @@ class Mod(commands.Cog):
         description='Kicks a member from the server.',
     )
     @commands.guild_only()
-    @checks.has_permissions(kick_members=True)
+    @command_permissions(3, user=["kick_members"], bot=["kick_members"])
     async def kick(
             self,
             ctx: GuildContext,
@@ -1723,7 +1723,7 @@ class Mod(commands.Cog):
         description='Bans a member from the server.',
     )
     @commands.guild_only()
-    @checks.has_permissions(ban_members=True)
+    @command_permissions(3, user=["ban_members"], bot=["ban_members"])
     async def ban(
             self,
             ctx: GuildContext,
@@ -1750,7 +1750,7 @@ class Mod(commands.Cog):
         description='Bans multiple members from the server.',
     )
     @commands.guild_only()
-    @checks.has_permissions(ban_members=True)
+    @command_permissions(3, user=["ban_members"], bot=["ban_members"])
     async def multiban(
             self,
             ctx: GuildContext,
@@ -1793,7 +1793,7 @@ class Mod(commands.Cog):
         usage="[flags...]"
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(ban_members=True)
+    @command_permissions(2, user=["ban_members"], bot=["ban_members"])
     async def massban(self, ctx: GuildContext, *, args: MassbanFlags):
         """Mass bans multiple members from the server.
         This command uses a syntax similar to Discord's search bar. To use this command,
@@ -1942,7 +1942,7 @@ class Mod(commands.Cog):
         description='Soft bans a member from the server.',
     )
     @commands.guild_only()
-    @checks.has_permissions(kick_members=True)
+    @command_permissions(3, user=["kick_members"], bot=["kick_members"])
     async def softban(
             self,
             ctx: GuildContext,
@@ -1971,7 +1971,7 @@ class Mod(commands.Cog):
         description='Unbans a member from the server.',
     )
     @commands.guild_only()
-    @checks.has_permissions(ban_members=True)
+    @command_permissions(3, user=["ban_members"], bot=["ban_members"])
     async def unban(
             self,
             ctx: GuildContext,
@@ -1997,16 +1997,19 @@ class Mod(commands.Cog):
             await ctx.send(f'<:greenTick:1079249732364406854> Unbanned {member.user} (ID: `{member.user.id}`).')
 
     @command(
-        commands.command,
+        commands.hybrid_command,
         name='tempban',
         description='Temporarily bans a member for the specified duration.',
     )
     @commands.guild_only()
-    @checks.has_permissions(ban_members=True)
+    @command_permissions(2, user=["ban_members"], bot=["ban_members"])
+    @app_commands.describe(duration='The duration to ban the member for. Must be a future Time.',
+                           member='The member to ban.',
+                           reason='The reason for banning the member.')
     async def tempban(
             self,
             ctx: GuildContext,
-            duration: timetools.FutureTime,
+            duration: app_commands.Transform[datetime.datetime, timetools.TimeTransformer(future=True)],
             member: Annotated[discord.abc.Snowflake, MemberID],
             *,
             reason: Annotated[Optional[str], ActionReason] = None,
@@ -2042,10 +2045,11 @@ class Mod(commands.Cog):
             pass
 
         reason = safe_reason_append(reason, until)
-        zone = await reminder.get_timezone(ctx.author.id)
+        config = await self.bot.user_settings.get_user_config(ctx.author.id)
+        zone = config.timezone if config else None
         await ctx.guild.ban(member, reason=reason)
-        timer = await reminder.create_timer(
-            duration.dt,
+        await reminder.create_timer(
+            duration,
             'tempban',
             ctx.guild.id,
             ctx.author.id,
@@ -2054,7 +2058,7 @@ class Mod(commands.Cog):
             timezone=zone or 'UTC',
         )
         await ctx.send(
-            f'<:greenTick:1079249732364406854> Banned {member} for {discord.utils.format_dt(duration.dt, "R")}.')
+            f'<:greenTick:1079249732364406854> Ban for {member} ends {discord.utils.format_dt(duration, "R")}.')
 
     @commands.Cog.listener()
     async def on_tempban_timer_complete(self, timer: Timer):
@@ -2141,6 +2145,7 @@ class Mod(commands.Cog):
         invoke_without_command=True,
     )
     @can_mute()
+    @command_permissions(3, bot=["manage_roles"])
     async def _mute(
             self,
             ctx: ModGuildContext,
@@ -2180,6 +2185,7 @@ class Mod(commands.Cog):
         description='Unmutes members using the configured mute role.',
     )
     @can_mute()
+    @command_permissions(3, bot=["manage_roles"])
     async def _unmute(
             self,
             ctx: ModGuildContext,
@@ -2217,15 +2223,19 @@ class Mod(commands.Cog):
             await ctx.send(f'<:discord_info:1113421814132117545> Unmuted [`{total - failed}`/`{total}`]')
 
     @command(
-        commands.command,
+        commands.hybrid_command,
         name='tempmute',
         description='Temporarily mutes a member for the specified duration.',
     )
     @can_mute()
+    @command_permissions(2, bot=["manage_roles"])
+    @app_commands.describe(duration='The duration to mute the member for. Must be a future Time.',
+                           member='The member to mute.',
+                           reason='The reason for muting the member.')
     async def tempmute(
             self,
             ctx: ModGuildContext,
-            duration: timetools.FutureTime,
+            duration: app_commands.Transform[datetime.datetime, timetools.TimeTransformer(future=True)],
             member: discord.Member,
             *,
             reason: Annotated[Optional[str], ActionReason] = None,
@@ -2240,7 +2250,6 @@ class Mod(commands.Cog):
 
         This has the same permissions as the `mute` command.
         """
-
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -2252,10 +2261,11 @@ class Mod(commands.Cog):
         assert ctx.guild_config.mute_role_id is not None
         role_id = ctx.guild_config.mute_role_id
         await member.add_roles(discord.Object(id=role_id), reason=reason)
-        zone = await reminder.get_timezone(ctx.author.id)
-        timer = await reminder.create_timer(
-            duration.dt,
-            duration.dt,
+
+        config = await self.bot.user_settings.get_user_config(ctx.author.id)
+        zone = config.timezone if config else None
+        await reminder.create_timer(
+            duration,
             'tempmute',
             ctx.guild.id,
             ctx.author.id,
@@ -2265,8 +2275,8 @@ class Mod(commands.Cog):
             timezone=zone or 'UTC',
         )
         await ctx.send(
-            f'<:greenTick:1079249732364406854> Muted {discord.utils.escape_mentions(str(member))} until '
-            f'{discord.utils.format_dt(duration.dt, "R")}.'
+            f'<:greenTick:1079249732364406854> Mute for {discord.utils.escape_mentions(str(member))} ends '
+            f'{discord.utils.format_dt(duration, "R")}.'
         )
 
     @commands.Cog.listener()
@@ -2313,7 +2323,7 @@ class Mod(commands.Cog):
         name='role',
         description='Shows configuration of the mute role.',
     )
-    @checks.has_guild_permissions(moderate_members=True, manage_roles=True)
+    @command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
     async def _mute_role(self, ctx: GuildContext):
         """Shows configuration of the mute role.
         To use these commands, you need to have Manage Roles
@@ -2335,7 +2345,7 @@ class Mod(commands.Cog):
         name='set',
         description='Sets the mute role to a pre-existing role.',
     )
-    @checks.has_guild_permissions(moderate_members=True, manage_roles=True)
+    @command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
     @commands.cooldown(1, 60.0, commands.BucketType.guild)
     async def mute_role_set(self, ctx: GuildContext, *, role: discord.Role):
         """Sets the mute role to a pre-existing role.
@@ -2396,7 +2406,7 @@ class Mod(commands.Cog):
         description='Updates the permission overwrites of the mute role.',
         aliases=['sync']
     )
-    @checks.has_guild_permissions(moderate_members=True, manage_roles=True)
+    @command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
     async def mute_role_update(self, ctx: GuildContext):
         """Updates the permission overwrites of the mute role.
         This works by blocking the Send Messages and Adding Reactions
@@ -2425,7 +2435,7 @@ class Mod(commands.Cog):
         name='create',
         description='Creates a mute role with the given name.',
     )
-    @checks.has_guild_permissions(moderate_members=True, manage_roles=True)
+    @command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
     async def mute_role_create(self, ctx: GuildContext, *, name):
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly
@@ -2473,7 +2483,7 @@ class Mod(commands.Cog):
         aliases=['delete'],
         description='Unbinds a mute role without deleting it.',
     )
-    @checks.has_guild_permissions(moderate_members=True, manage_roles=True)
+    @command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
     async def mute_role_unbind(self, ctx: GuildContext):
         """Unbinds a mute role without deleting it.
         To use these commands, you need to have Manage Roles
@@ -2502,7 +2512,13 @@ class Mod(commands.Cog):
         description='Temporarily mutes yourself for the specified duration.',
     )
     @commands.guild_only()
-    async def selfmute(self, ctx: GuildContext, *, duration: timetools.ShortTime):
+    @command_permissions(3, bot=["manage_roles"])
+    async def selfmute(
+            self,
+            ctx: GuildContext,
+            *,
+            duration: app_commands.Transform[datetime.datetime, timetools.TimeTransformer(short=True)],
+    ):
         """Temporarily mutes yourself for the specified duration.
         The duration must be in a short time form, e.g. 4h. Can
         only mute yourself for a maximum of 24 hours and a minimum
@@ -2540,7 +2556,7 @@ class Mod(commands.Cog):
         reason = f'Self-mute for {ctx.author} (ID: {ctx.author.id}) for {delta}'
         await ctx.author.add_roles(discord.Object(id=role_id), reason=reason)
         await reminder.create_timer(
-            duration.dt,
+            duration,
             'tempmute',
             ctx.guild.id,
             ctx.author.id,
@@ -2550,7 +2566,7 @@ class Mod(commands.Cog):
         )
 
         await ctx.send(
-            f'<:greenTick:1079249732364406854> Muted till **{discord.utils.format_dt(duration.dt, "f")}**. Be sure not to bother anyone about it.')
+            f'<:greenTick:1079249732364406854> Selfmute ends **{discord.utils.format_dt(duration, "f")}**. Be sure not to bother anyone about it.')
 
 
 async def setup(bot):

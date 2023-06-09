@@ -15,7 +15,7 @@ from discord.ext import commands, tasks
 from typing_extensions import Annotated
 
 from cogs.utils.paginator import BasePaginator
-from . import command
+from . import command, command_permissions
 from .utils import checks, cache
 from .utils.formats import plural
 from .utils.helpers import PostgresItem
@@ -76,8 +76,9 @@ class StarboardConfig(PostgresItem, ignore_record=True):
     locked: bool
     needs_migration: bool
     max_age: datetime.timedelta
+    created_at: datetime.datetime
 
-    __slots__ = ('bot', 'id', 'channel_id', 'threshold', 'locked', 'needs_migration', 'max_age')
+    __slots__ = ('bot', 'id', 'channel_id', 'threshold', 'locked', 'needs_migration', 'max_age', 'created_at')
 
     def __init__(self, guild_id: int, bot: Percy, **kwargs):
         self.id: int = guild_id
@@ -185,7 +186,7 @@ class Starboard(commands.Cog):
                 return True
         return False
 
-    def get_emoji_message(self, message: discord.Message, stars: int) -> discord.Embed:
+    def get_emoji_message(self, message: discord.Message, stars: int) -> (str, discord.Embed):
         assert isinstance(message.channel, (discord.abc.GuildChannel, discord.Thread))
         emoji = self.star_emoji(stars)
 
@@ -207,32 +208,33 @@ class Starboard(commands.Cog):
 
         ref = message.reference
         if ref and isinstance(ref.resolved, discord.Message):
-            embed.add_field(name='Reply to', value=f'{ref.resolved.author}: {ref.resolved.jump_url}', inline=False)
+            embed.add_field(name='Replied to', value=f'{ref.resolved.author}: {ref.resolved.jump_url}', inline=False)
 
         if stars > 1:
-            content = f'{emoji} **{stars}**'
+            content = f'> {emoji} • **{stars}** • {message.channel.mention}'
         else:
-            content = f'{emoji}'
+            content = f'> {emoji} • {message.channel.mention}'
 
-        embed.add_field(name='​', value=f"{content} • {message.jump_url}", inline=False)
-        embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
-        embed.set_footer(text=f'[{message.id}] • #{message.channel.name}')
+        embed.add_field(name='*Jump to*', value=message.jump_url, inline=False)
+        embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+        embed.set_footer(text=f'[{message.id}]')
         embed.timestamp = message.created_at
         embed.colour = self.star_gradient_colour(stars)
-        return embed
+        return content, embed
 
     async def get_stars(self, message_id: int) -> Optional[StarMessage]:
-        query = """SELECT entry.channel_id,
-                          entry.message_id,
-                          entry.bot_message_id,
-                          COUNT(*) OVER(PARTITION BY entry_id) AS "Stars"
-                   FROM starrers
-                   INNER JOIN starboard_entries entry
-                   ON entry.id = starrers.entry_id
-                   WHERE entry.guild_id=$1
-                   AND (entry.message_id=$2 OR entry.bot_message_id=$2)
-                   LIMIT 1
-                """
+        query = """
+            SELECT entry.channel_id,
+                  entry.message_id,
+                  entry.bot_message_id,
+                  COUNT(*) OVER(PARTITION BY entry_id) AS "Stars"
+            FROM starrers
+            INNER JOIN starboard_entries entry
+            ON entry.id = starrers.entry_id
+            WHERE entry.guild_id=$1
+            AND (entry.message_id=$2 OR entry.bot_message_id=$2)
+            LIMIT 1
+        """
         record = await self.bot.pool.fetchrow(query, message_id)
         if record:
             return StarMessage(*record)
@@ -441,22 +443,23 @@ class Starboard(commands.Cog):
         if msg.created_at < oldest_allowed:
             raise StarError('<:redTick:1079249771975413910> This message is too old.')
 
-        query = """WITH to_insert AS (
-                       INSERT INTO starboard_entries AS entries (message_id, channel_id, guild_id, author_id)
-                       VALUES ($1, $2, $3, $4)
-                       ON CONFLICT (message_id) DO NOTHING
-                       RETURNING entries.id
-                   )
-                   INSERT INTO starrers (author_id, entry_id)
-                   SELECT $5, entry.id
-                   FROM (
-                       SELECT id FROM to_insert
-                       UNION ALL
-                       SELECT id FROM starboard_entries WHERE message_id=$1
-                       LIMIT 1
-                   ) AS entry
-                   RETURNING entry_id;
-                """
+        query = """
+            WITH to_insert AS (
+               INSERT INTO starboard_entries AS entries (message_id, channel_id, guild_id, author_id)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (message_id) DO NOTHING
+               RETURNING entries.id
+            )
+            INSERT INTO starrers (author_id, entry_id)
+            SELECT $5, entry.id
+            FROM (
+               SELECT id FROM to_insert
+               UNION ALL
+               SELECT id FROM starboard_entries WHERE message_id=$1
+               LIMIT 1
+            ) AS entry
+            RETURNING entry_id;
+        """
 
         try:
             record = await connection.fetchrow(
@@ -479,14 +482,14 @@ class Starboard(commands.Cog):
         if count < starboard.threshold:
             return
 
-        embed = self.get_emoji_message(msg, count)
+        content, embed = self.get_emoji_message(msg, count)
 
         query = "SELECT bot_message_id FROM starboard_entries WHERE message_id=$1;"
         record = await connection.fetchrow(query, message_id)
         bot_message_id = record[0]
 
         if bot_message_id is None:
-            new_msg = await starboard_channel.send(embed=embed)
+            new_msg = await starboard_channel.send(content, embed=embed)
             query = "UPDATE starboard_entries SET bot_message_id=$1 WHERE message_id=$2;"
             await connection.execute(query, new_msg.id, message_id)
         else:
@@ -495,7 +498,7 @@ class Starboard(commands.Cog):
                 query = "DELETE FROM starboard_entries WHERE message_id=$1;"
                 await connection.execute(query, message_id)
             else:
-                await new_msg.edit(embed=embed)
+                await new_msg.edit(content=content, embed=embed)
 
     async def unstar_message(
             self,
@@ -571,12 +574,13 @@ class Starboard(commands.Cog):
         if not starboard_channel.permissions_for(starboard_channel.guild.me).send_messages:
             raise StarError('<:redTick:1079249771975413910> Cannot edit messages in starboard channel.')
 
-        query = """DELETE FROM starrers USING starboard_entries entry
-                   WHERE entry.message_id=$1
-                   AND   entry.id=starrers.entry_id
-                   AND   starrers.author_id=$2
-                   RETURNING starrers.entry_id, entry.bot_message_id
-                """
+        query = """
+            DELETE FROM starrers USING starboard_entries entry
+            WHERE entry.message_id=$1
+            AND   entry.id=starrers.entry_id
+            AND   starrers.author_id=$2
+            RETURNING starrers.entry_id, entry.bot_message_id
+        """
 
         record = await connection.fetchrow(query, message_id, starrer_id)
         if record is None:
@@ -612,8 +616,8 @@ class Starboard(commands.Cog):
             if msg is None:
                 raise StarError('<:redTick:1079249771975413910> This message could not be found.')
 
-            embed = self.get_emoji_message(msg, count)
-            await bot_message.edit(embed=embed)
+            content, embed = self.get_emoji_message(msg, count)
+            await bot_message.edit(content=content, embed=embed)
 
     @command(
         commands.hybrid_group,
@@ -621,7 +625,7 @@ class Starboard(commands.Cog):
         fallback='create',
         description='Sets up the starboard for this server.',
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @app_commands.describe(name='The starboard channel name')
     async def starboard(self, ctx: GuildContext, *, name: str = 'starboard'):
         """Sets up the starboard for this server.
@@ -682,10 +686,10 @@ class Starboard(commands.Cog):
             return await ctx.send(
                 '<:redTick:1079249771975413910> This channel name is bad or an unknown error happened.')
 
-        query = "INSERT INTO starboard (id, channel_id) VALUES ($1, $2);"
+        query = "INSERT INTO starboard (id, channel_id, created_at) VALUES ($1, $2, $3);"
         try:
-            await ctx.db.execute(query, ctx.guild.id, channel.id)
-        except:
+            await ctx.db.execute(query, ctx.guild.id, channel.id, discord.utils.utcnow())
+        except:  # noqa
             await channel.delete(reason='Failure to commit to create the ')
             await ctx.send(
                 '<:redTick:1079249771975413910> Could not create the channel due to an internal error. Join the bot support server for help.'
@@ -705,9 +709,11 @@ class Starboard(commands.Cog):
         starboard = ctx.starboard
         channel = starboard.channel
 
-        e = discord.Embed(title=f"{ctx.guild.name}'s Starboard", color=discord.Color.gold())
+        e = discord.Embed(title=f"{ctx.guild.name}'s Starboard",
+                          timestamp=ctx.starboard.created_at,
+                          color=discord.Color.gold())
         e.set_thumbnail(url=ctx.guild.icon.url)
-        e.set_footer(text=f'Guild ID: {ctx.guild.id}')
+        e.set_footer(text=f'[{ctx.guild.id}]')
 
         if channel is None:
             e.add_field(name='Channel', value='#deleted-channel')
@@ -716,7 +722,7 @@ class Starboard(commands.Cog):
             e.add_field(name=f'Is NSFW:', value=channel.is_nsfw())
 
         e.add_field(name=f'Is Locked', value=starboard.locked)
-        e.add_field(name=f'Limit:', value=f'{plural(starboard.threshold):star}')
+        e.add_field(name=f'Limit', value=f'{plural(starboard.threshold):star}')
         e.add_field(name=f'Max Age', value=f'{plural(starboard.max_age.days):day}')
 
         await ctx.send(embed=e)
@@ -727,7 +733,7 @@ class Starboard(commands.Cog):
         description='Deletes the starboard for this server.'
     )
     @requires_starboard()
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     async def starboard_delete(self, ctx: StarboardContext):
         """Deletes the starboard for this server."""
         try:
@@ -809,7 +815,7 @@ class Starboard(commands.Cog):
         description='Cleans the starboard',
         aliases=['prune']
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(stars='Remove messages that have less than or equal to this number')
     async def star_clean(self, ctx: StarboardContext, stars: commands.Range[int, 1, None] = 1):
@@ -829,20 +835,21 @@ class Starboard(commands.Cog):
 
         last_messages = [m.id async for m in channel.history(limit=100)]
 
-        query = """WITH bad_entries AS (
-                       SELECT entry_id
-                       FROM starrers
-                       INNER JOIN starboard_entries
-                       ON starboard_entries.id = starrers.entry_id
-                       WHERE starboard_entries.guild_id=$1
-                       AND   starboard_entries.bot_message_id = ANY($2::bigint[])
-                       GROUP BY entry_id
-                       HAVING COUNT(*) <= $3
-                   )
-                   DELETE FROM starboard_entries USING bad_entries
-                   WHERE starboard_entries.id = bad_entries.entry_id
-                   RETURNING starboard_entries.bot_message_id
-                """
+        query = """
+            WITH bad_entries AS (
+               SELECT entry_id
+               FROM starrers
+               INNER JOIN starboard_entries
+               ON starboard_entries.id = starrers.entry_id
+               WHERE starboard_entries.guild_id=$1
+               AND   starboard_entries.bot_message_id = ANY($2::bigint[])
+               GROUP BY entry_id
+               HAVING COUNT(*) <= $3
+            )
+            DELETE FROM starboard_entries USING bad_entries
+            WHERE starboard_entries.id = bad_entries.entry_id
+            RETURNING starboard_entries.bot_message_id
+        """
 
         to_delete = await ctx.db.fetch(query, ctx.guild.id, last_messages, stars)
 
@@ -900,8 +907,8 @@ class Starboard(commands.Cog):
         if msg is None:
             return await ctx.send('<:greenTick:1079249732364406854> The message has been deleted.')
 
-        embed = self.get_emoji_message(msg, record.stars)
-        await ctx.send(embed=embed)
+        content, embed = self.get_emoji_message(msg, record.stars)
+        await ctx.send(content, embed=embed)
 
     @command(
         star.command,
@@ -917,12 +924,13 @@ class Starboard(commands.Cog):
         or the message ID in the starboard channel.
         """
         await ctx.defer()
-        query = """SELECT starrers.author_id
-                   FROM starrers
-                   INNER JOIN starboard_entries entry
-                   ON entry.id = starrers.entry_id
-                   WHERE entry.message_id = $1 OR entry.bot_message_id = $1
-                """
+        query = """
+            SELECT starrers.author_id
+            FROM starrers
+            INNER JOIN starboard_entries entry
+            ON entry.id = starrers.entry_id
+            WHERE entry.message_id = $1 OR entry.bot_message_id = $1
+        """
 
         records = await ctx.db.fetch(query, message_id)
         if records is None or len(records) == 0:
@@ -952,106 +960,6 @@ class Starboard(commands.Cog):
                 return embed
 
         await TextPaginator.start(ctx, entries=items, per_page=15)
-
-    '''@command(
-        star.command,
-        name='migrate',
-        with_app_command=False
-    )
-    @requires_starboard()
-    @checks.is_manager()
-    async def star_migrate(self, ctx: StarboardContext):
-        """Migrates the starboard to the newest version.
-
-        While doing this, the starboard is locked.
-
-        Note: This is an **incredibly expensive operation**.
-
-        It will take a very long time.
-
-        You must have Manage Server permissions to use this.
-        """
-
-        perms = ctx.starboard.channel.permissions_for(ctx.me)
-        if not perms.read_message_history:
-            return await ctx.send(
-                f'<:redTick:1079249771975413910> Bot does not have Read Message History in {ctx.starboard.channel.mention}.')
-
-        if ctx.starboard.locked:
-            return await ctx.send(
-                '<:redTick:1079249771975413910> Starboard must be unlocked to migrate. It will be locked during the migration.')
-
-        webhook = self.bot.stats_webhook
-
-        start = time.time()
-        guild_id = ctx.guild.id
-        query = "UPDATE starboard SET locked=TRUE WHERE id=$1;"
-        await ctx.db.execute(query, guild_id)
-        self.get_starboard.invalidate(self, guild_id)
-
-        await ctx.send('<:discord_info:1113421814132117545> Starboard is now locked and migration will now begin.')
-
-        async with ctx.typing():
-            fetched = 0
-            updated = 0
-            failed = 0
-
-            async for message in ctx.starboard.channel.history(limit=1000):
-                fetched += 1
-
-                if not ctx.starboard.verify_message(message):
-                    continue
-
-                fmt = 'https://discord.com/channels/{guild_id}/{channel_id}/{message_id}'.format(
-                    guild_id=ctx.guild.id, channel_id=ctx.starboard.channel.id, message_id=message.id)
-
-                content = None
-                if message.content:
-                    content_msg = re.compile(r'(?P<star>^:\w+:)(?:\s+)?(?P<count>\d+)?\s(?P<channel_id><#\d+>)')
-                    match = content_msg.match(message.content)
-                    if match:
-                        count = match.group("count")
-                        if count:
-                            content = f"{match.group('star')} **{count}**"
-                        else:
-                            content = match.group('star')
-
-                embed = message.embeds[0]
-                if len(embed.fields) == 0 or embed.fields[0].name == 'Attachments':
-                    if content is None:
-                        record = await self.get_stars(message.id)
-                        emoji = self.star_emoji(record.stars)
-                        content = f'{emoji} **{record.stars}**'
-
-                    embed.add_field(name='​', value=f"{content} • {fmt}", inline=False)
-                    try:
-                        await message.edit(embed=embed)
-                    except discord.HTTPException:
-                        failed += 1
-                    else:
-                        updated += 1
-
-            delta = time.time() - start
-            query = "UPDATE starboard SET locked = FALSE WHERE id=$1;"
-            await ctx.db.execute(query, guild_id)
-            self.get_starboard.invalidate(self, guild_id)
-
-            m = await ctx.send(
-                f'{ctx.author.mention}, we are done migrating!\n'
-                'The starboard has been unlocked.\n'
-                f'Updated **{updated}**/**{fetched}** entries to the new format.\n'
-                f'Took `{delta:.2f}s`.'
-            )
-
-            e = discord.Embed(title='Starboard Migration', colour=discord.Colour.gold())
-            e.add_field(name='Updated', value=updated)
-            e.add_field(name='Fetched', value=fetched)
-            e.add_field(name='Failed', value=failed)
-            e.add_field(name='Name', value=ctx.guild.name)
-            e.add_field(name='ID', value=guild_id)
-            e.set_footer(text=f'Took {delta:.2f}s to migrate')
-            e.timestamp = m.created_at
-            await webhook.send(embed=e)'''
 
     @staticmethod
     def records_to_value(
@@ -1223,7 +1131,7 @@ class Starboard(commands.Cog):
         name='lock',
         description='Locks the starboard from being processed.'
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @requires_starboard()
     async def star_lock(self, ctx: StarboardContext):
         """Locks the starboard from being processed.
@@ -1254,7 +1162,7 @@ class Starboard(commands.Cog):
         name='unlock',
         description='Unlocks the starboard for re-processing.'
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @requires_starboard()
     async def star_unlock(self, ctx: StarboardContext):
         """Unlocks the starboard for re-processing."""
@@ -1274,7 +1182,7 @@ class Starboard(commands.Cog):
         description='Sets the minimum number of stars required to show up.',
         aliases=['threshold']
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(stars='The number of stars required before it shows up on the board')
     async def star_limit(self, ctx: StarboardContext, stars: int):
@@ -1309,7 +1217,7 @@ class Starboard(commands.Cog):
         name='age',
         description='Sets the maximum age of a message valid for starring.',
     )
-    @checks.is_manager()
+    @command_permissions(2, user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(
         number='The number of units to set the maximum age to',
@@ -1365,45 +1273,6 @@ class Starboard(commands.Cog):
             age = f'{number} {units}'
 
         await ctx.send(f'<:discord_info:1113421814132117545> Messages must now be less than **{age}** old to be starred.')
-
-    @command(
-        commands.command,
-        hidden=True,
-        with_app_command=False
-    )
-    @commands.is_owner()
-    async def star_announce(self, ctx: GuildContext, *, message: str):
-        """Announce stuff to every starboard."""
-        query = "SELECT id, channel_id FROM starboard;"
-        records = await ctx.db.fetch(query)
-
-        to_send = []
-        for guild_id, channel_id in records:
-            guild = self.bot.get_guild(guild_id)
-            if guild:
-                channel = guild.get_channel(channel_id)
-                if channel and channel.permissions_for(guild.me).send_messages:
-                    to_send.append(channel)
-
-        await ctx.send(
-            f'<:discord_info:1113421814132117545> Preparing to send to **{len(to_send)}** channels (out of **{len(records)}**).')
-
-        success = 0
-        start = time.time()
-        for index, channel in enumerate(to_send):
-            if index % 5 == 0:
-                await asyncio.sleep(1)
-
-            try:
-                await channel.send(message)
-            except:
-                pass
-            else:
-                success += 1
-
-        delta = time.time() - start
-        await ctx.send(
-            f'<:greenTick:1079249732364406854> Successfully sent to **{success}** channels (out of **{len(to_send)}**) in `{delta:.2f}s`.')
 
 
 async def setup(bot: Percy):

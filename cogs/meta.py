@@ -20,10 +20,10 @@ from discord import app_commands, Interaction
 from discord.ext import commands
 from lru import LRU
 
-from . import command
-from .utils import checks, formats, fuzzy, helpers
+from . import command, command_permissions
+from .utils import fuzzy, helpers
 from .utils.converters import Prefix
-from .utils.formats import plural
+from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource
 from .utils.scope import PH_HELP_FORUM, PH_SOLVED_TAG
 from .utils.timetools import mean_stddev, RelativeDelta
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
-PartialCommandGroup = Union[commands.Group | commands.hybrid.HybridGroup | app_commands.commands.Group]
-PartialCommand = Union[commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand]
+PartialCommandGroup = Union[commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
+PartialCommand = Union[commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
 
 BADGE_DICT = {
     discord.UserFlags.bug_hunter: '<:lvl1:1072925290520653884> Bug Hunter',
@@ -50,10 +50,11 @@ BADGE_DICT = {
 COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=96&quality=lossless'
 
 
-def format_date(dt: Optional[datetime.datetime]):
-    if dt is None:
-        return 'N/A'
-    return f'{discord.utils.format_dt(dt, "f")} ({discord.utils.format_dt(dt, style="R")})'
+def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
+    if s1 is None and s2 is None:
+        return 'No help found...'
+
+    return inspect.cleandoc(f"{s1 or ''}\n\n{s2 or ''}")
 
 
 def can_close_threads(ctx: GuildContext) -> bool:
@@ -85,10 +86,10 @@ class UnsolvedFlags(commands.FlagConverter):
     )
 
 
-class GroupHelpPaginator(BasePaginator[commands.Command]):
-    group: commands.Group | commands.Cog
-    prefix: str
-    groups: Optional[Dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]]
+class GroupHelpPaginator(BasePaginator[PartialCommand]):
+    group: commands.Group | commands.Cog  # The current Group displayed
+    prefix: str  # The invoked prefix
+    groups: Optional[Dict[commands.Cog, list[PartialCommand]]]  # The list of all groups from this help menu
 
     async def format_page(self, entries: List[commands.Command]):
         emoji = getattr(self.group, 'display_emoji', None) or ''
@@ -102,11 +103,11 @@ class GroupHelpPaginator(BasePaginator[commands.Command]):
                 is_app_command_cog = True
 
         for command in entries:
+            signature = self.group.bot.help_command.get_command_signature(command)  # type: ignore
             if isinstance(command, app_commands.commands.Command):
-                embed.add_field(name=command.qualified_name, value=command.description or 'No help given...',
-                                inline=False)
+                embed.add_field(name=signature, value=command.description or 'No help given...', inline=False)
             else:
-                signature = f'{command.qualified_name} {command.signature}{" *(hidden)*" if command.hidden else ""}'
+                signature = f'{signature}{" (!hidden)" if command.hidden else ""}'
                 embed.add_field(name=signature, value=command.short_doc or 'No help given...', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
@@ -122,7 +123,7 @@ class GroupHelpPaginator(BasePaginator[commands.Command]):
             cls: Type[GroupHelpPaginator],
             context: Context | discord.Interaction,
             *,
-            entries: List,
+            entries: List[PartialCommand],
             per_page: int = 6,
             clamp_pages: bool = True,
             timeout: int = 180,
@@ -131,8 +132,8 @@ class GroupHelpPaginator(BasePaginator[commands.Command]):
             edit: bool = False,
             prefix: str = None,
             group: Union[commands.Group, commands.Cog] = None,
-            groups: Optional[Dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]] = None,
-    ) -> GroupHelpPaginator[commands.Command]:
+            groups: Optional[Dict[commands.Cog, list[PartialCommand]]] = None,
+    ) -> GroupHelpPaginator[PartialCommand]:
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
@@ -368,26 +369,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         maybe_coro = discord.utils.maybe_coroutine
 
-        keys = command.split(' ')
-        cmd = discord.utils.find(lambda c: c.name == keys[0] or c.qualified_name == keys[0], self.all_commands)
+        cmd = self.context.bot.resolve_command(command)
         if cmd is None:
             string = await maybe_coro(self.command_not_found, self.remove_mentions(keys[0]))  # type: ignore
             return await self.send_error_message(string)
-
-        for key in keys[1:]:
-            try:
-                if isinstance(cmd, PartialCommandGroup):
-                    found = discord.utils.get(cmd.commands, name=key)
-                else:
-                    found = cmd.all_commands.get(key)  # type: ignore
-            except AttributeError:
-                string = await maybe_coro(self.subcommand_not_found, cmd, self.remove_mentions(key))  # type: ignore
-                return await self.send_error_message(string)
-            else:
-                if found is None:
-                    string = await maybe_coro(self.subcommand_not_found, cmd, self.remove_mentions(key))  # type: ignore
-                    return await self.send_error_message(string)
-                cmd = found
 
         if isinstance(cmd, PartialCommandGroup):
             return await self.send_group_help(cmd)
@@ -433,6 +418,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     else:
                         resolved.append(subcmd)
                         resolved_names.add(subcmd.qualified_name)
+                resolved.append(cmd)
             else:
                 if isinstance(cmd, commands.Command):
                     if is_hidden(cmd):
@@ -455,7 +441,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             await ctx.send(f"{ctx.tick(False)} **Critical:** `{str(error.original)}`")
 
     def get_command_signature(self, command: PartialCommand) -> str:  # noqa
-        is_app_command = hasattr(command, 'parent')
+        is_app_command = isinstance(command, app_commands.commands.Command)
+
+        if is_app_command:
+            signature = []
+            for option in command.parameters:
+                signature.append(f'<{option.name}>' if option.required else f'[{option.name}]')
+            return f'{command.qualified_name} {" ".join(signature)}'
+
         parent = (command.parent.name if command.parent else None) if is_app_command else command.full_parent_name
         aliases = '|'.join(command.aliases) if not is_app_command and len(command.aliases) > 0 else None
 
@@ -509,15 +502,23 @@ class PaginatedHelpCommand(commands.HelpCommand):
         is_app_command = isinstance(command, app_commands.commands.Command)
 
         if is_app_command:
-            embed.title = self.get_command_signature(command)
-            embed.description = command.description or 'No help found...'
+            embed.description = f"```py\n{self.get_command_signature(command)}```\n"
+            embed.description += cleanup_docstring(command.description, None)
         else:
-            embed.title = f"{self.get_command_signature(command)}{' (*hidden*)' if command.hidden else ''}"
-            embed.description = (
-                f'{command.description}\n\n{command.help}'
-                if command.description and (command.description != command.help or command.help is None)
-                else command.description or command.help or 'No help found...'
-            )
+            embed.description = f"```py\n{self.get_command_signature(command)}{' (!hidden)' if command.hidden else ''}```\n"
+            embed.description += cleanup_docstring(command.description, command.help)
+
+        if getattr(command, 'aliases', None):
+            embed.add_field(name='Aliases', value=f"`{' '.join(command.aliases)}`", inline=False)
+
+        bot_perms = getattr(command.callback, '__readable_bot_perms__', None)
+        user_perms = getattr(command.callback, '__readable_user_perms__', None)
+        if bot_perms or user_perms:
+            value = f'Bot: {", ".join(bot_perms)}\n' if bot_perms else ''
+            value += f'User: {", ".join(user_perms)}' if user_perms else ''
+
+            if value:
+                embed.add_field(name='Required Permissions', value=value, inline=False)
 
         examples = command.extras.get('examples')
         if examples:
@@ -528,8 +529,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
     async def send_command_help(self, command: PartialCommand):  # noqa
         if not isinstance(command, app_commands.commands.Command):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
-                return await self.context.send(f'No Command called {command!r} found.')
+                return await self.context.send(f'<:redTick:1079249771975413910> No Command called {command!r} found.')
         embed = discord.Embed(colour=helpers.Colour.darker_red())
+        embed.set_author(name="Command Help", icon_url=self.context.bot.user.avatar.url)
         self.common_command_formatting(embed, command)
         await self.context.send(embed=embed, silent=True)
 
@@ -756,7 +758,6 @@ class Meta(commands.Cog):
         or by spaces.
         """
         source_url = 'https://github.com/klappstuhlpy/Percy'
-        branch = 'master'
         if command is None:
             return await ctx.send(source_url)
 
@@ -779,7 +780,7 @@ class Meta(commands.Cog):
         cogs_index = location_parts.index("cogs")
         location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
 
-        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+        final_url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
         await ctx.send(final_url)
 
     @solved.error
@@ -791,17 +792,16 @@ class Meta(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(module="Get help for a module.",
                            command="Get help for a command")
-    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None,
-                    command: Optional[str] = None):
+    async def _help(
+            self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None
+    ):
         """Shows help for a command or module."""
         ctx: Context = await self.bot.get_context(interaction)
         await ctx.send_help(module or command)
 
     @_help.autocomplete('command')
     async def help_command_autocomplete(
-            self,
-            interaction: discord.Interaction,
-            current: str,
+            self, interaction: discord.Interaction, current: str,
     ) -> list[app_commands.Choice[str]]:
         if not hasattr(self, '_help_autocomplete_cache'):
             await interaction.response.autocomplete([])
@@ -820,9 +820,7 @@ class Meta(commands.Cog):
 
     @_help.autocomplete('module')
     async def help_cog_autocomplete(
-            self,
-            interaction: discord.Interaction,
-            current: str,
+            self, interaction: discord.Interaction, current: str,
     ) -> list[app_commands.Choice[str]]:
         if not hasattr(self, '_help_autocomplete_cache'):
             self.bot.loop.create_task(self._fill_autocomplete())
@@ -1183,9 +1181,9 @@ class Meta(commands.Cog):
         prefix.command,
         name='add',
         description='Appends a prefix to the list of custom prefixes.',
-        ignore_extra=False
+        ignore_extra=False,
     )
-    @checks.is_manager()
+    @command_permissions(user=["manage_guild"])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Appends a prefix to the list of custom prefixes.
         Previously set prefixes are not overridden.
@@ -1217,7 +1215,7 @@ class Meta(commands.Cog):
         aliases=['delete'],
         ignore_extra=False
     )
-    @checks.is_manager()
+    @command_permissions(user=["manage_guild"])
     async def prefix_remove(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Removes a prefix from the list of custom prefixes.
         This is the inverse of the 'prefix add' command. You can
@@ -1245,7 +1243,7 @@ class Meta(commands.Cog):
         description='Removes all custom prefixes.',
         ignore_extra=False
     )
-    @checks.is_manager()
+    @command_permissions(user=["manage_guild"])
     async def prefix_reset(self, ctx: GuildContext):
         """Removes all custom prefixes.
         After this, the bot will listen to only mention prefixes.

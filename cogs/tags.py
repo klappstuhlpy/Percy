@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import datetime
 import io
-from typing import TYPE_CHECKING, Optional, List, Iterable
+from typing import TYPE_CHECKING, Optional, List, Iterable, Literal
 
 import asyncpg
 import discord
@@ -932,7 +933,8 @@ class Tags(commands.Cog):
         if rows:
             TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
             TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120, search_for=True,
+            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120,
+                                     search_for=True,
                                      per_page=20)
         else:
             await ctx.send('<:redTick:1079249771975413910> There are no tags in this server.')
@@ -994,7 +996,8 @@ class Tags(commands.Cog):
         if results:
             TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
             TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in results], timeout=120, search_for=True,
+            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in results], timeout=120,
+                                     search_for=True,
                                      per_page=20)
         else:
             await ctx.send('<:redTick:1079249771975413910> No tags found.')
@@ -1062,6 +1065,47 @@ class Tags(commands.Cog):
                 await conn.execute(query, member.id, row[0])
 
         await ctx.send(f'<:greenTick:1079249732364406854> Successfully transferred tag ownership to **{member}**.')
+
+    @command(tags.command, name='export', description="Exports all your tags/server tags to a csv file.")
+    @commands.cooldown(1, 60, commands.BucketType.member)
+    @commands.guild_only()
+    @app_commands.describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')
+    async def tags_export(
+            self,
+            ctx: GuildContext,
+            which: Optional[Literal['server', 'personal']] = 'personal',
+    ):
+        """Exports all your tags/server tags to a csv file."""
+        if which == 'server':
+            if ctx.author.id != ctx.guild.owner_id:
+                return await ctx.send('<:redTick:1079249771975413910> Only the server owner can export server tags.')
+
+            query = "SELECT name, content FROM tags WHERE location_id=$1;"
+            values = (ctx.guild.id,)
+
+        else:
+            query = "SELECT name, content FROM tags WHERE location_id=$1 AND owner_id=$2;"
+            values = (ctx.guild.id, ctx.author.id)
+
+        async with ctx.channel.typing():
+            async with ctx.db.acquire() as conn:
+                async with conn.transaction():
+                    records = await conn.fetch(query, *values)
+
+        if not records:
+            return await ctx.send('<:redTick:1079249771975413910> No tags were found.')
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for record in records:
+            writer.writerow([record[0], record[1]])
+        buffer.seek(0)
+
+        file = discord.File(
+            fp=buffer,
+            filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
+        )
+        await ctx.send(file=file)
 
     @tags.command(hidden=True, with_app_command=False)
     async def tags_config(self, ctx: Context):

@@ -4,7 +4,6 @@ import contextlib
 import datetime
 import json
 import logging
-import traceback
 from contextlib import suppress
 from enum import Enum
 from typing import Dict, List, Optional, Union, Self, Generic, TypeVar, Type
@@ -16,7 +15,7 @@ from discord.ext import commands, tasks
 from discord.utils import MISSING
 
 from bot import Percy
-from cogs import command
+from cogs import command, command_permissions
 from cogs.utils import cache
 from cogs.utils.comic.crawlers import parse_dc, marvel_crawl, parse_viz
 from cogs.utils.async_utils import AsyncPartialCache
@@ -280,9 +279,9 @@ class ComicFeed(PostgresItem):
         self.next_pull = self.next_scheduled()
 
         query = """
-            INSERT INTO comic_feed (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
+            INSERT INTO feed_config (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
             SELECT x.guild_id, x.channel_id, x.brand, x.format, x.day, x.ping, x.pin, x.next_pull
-            FROM jsonb_populate_record(null::comic_feed, $1::TEXT::jsonb) AS x
+            FROM jsonb_populate_record(null::feed_config, $1::TEXT::jsonb) AS x
         """
 
         await self.cog.bot.pool.execute(query, json.dumps(self.__dict__, cls=ComicJSONEncoder))
@@ -290,10 +289,10 @@ class ComicFeed(PostgresItem):
 
     async def edit(self, kwargs: dict) -> Self:
         query = """
-            UPDATE comic_feed SET (channel_id, format, day, ping, pin, next_pull) = (x.channel_id, x.format, x.day, x.ping, x.pin, x.next_pull)
-            FROM jsonb_populate_record(null::comic_feed, $1::TEXT::jsonb) AS x
-            WHERE comic_feed.guild_id = x.guild_id
-            AND comic_feed.brand = x.brand::TEXT;
+            UPDATE feed_config SET (channel_id, format, day, ping, pin, next_pull) = (x.channel_id, x.format, x.day, x.ping, x.pin, x.next_pull)
+            FROM jsonb_populate_record(null::feed_config, $1::TEXT::jsonb) AS x
+            WHERE feed_config.guild_id = x.guild_id
+            AND feed_config.brand = x.brand::TEXT;
         """
 
         await self.cog.bot.pool.execute(query, json.dumps(kwargs, cls=ComicJSONEncoder))
@@ -301,7 +300,7 @@ class ComicFeed(PostgresItem):
         return self
 
     async def delete(self):
-        query = "DELETE FROM comic_feed WHERE guild_id = $1 AND brand = $2;"
+        query = "DELETE FROM feed_config WHERE guild_id = $1 AND brand = $2;"
         await self.cog.bot.pool.execute(query, self.guild_id, self.brand.name)
         self.cog.get_configs.invalidate(self.cog, self.guild_id)
 
@@ -452,7 +451,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             self._cache.add_task(self._cache.fetch_comics)
 
     async def call_feed(self, comic: ComicFeed) -> None:
-        query = "UPDATE comic_feed SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
+        query = "UPDATE feed_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
         await self.bot.pool.execute(query, comic.next_scheduled(), comic.guild_id, comic.brand.name)
 
         self.bot.dispatch(f'comic_schedule', comic)
@@ -499,7 +498,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         query = """
             SELECT 
                 *
-            FROM comic_feed
+            FROM feed_config
             WHERE next_pull IS NOT NULL
             AND (next_pull AT TIME ZONE 'UTC') < (CURRENT_TIMESTAMP + $1::interval)
             ORDER BY next_pull
@@ -618,7 +617,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     @cache.cache()
     async def get_configs(self, guild_id: int) -> Optional[List[ComicFeed]]:
-        records = await self.bot.pool.fetch('SELECT * FROM comic_feed WHERE guild_id = $1', guild_id)
+        records = await self.bot.pool.fetch('SELECT * FROM feed_config WHERE guild_id = $1', guild_id)
         return [ComicFeed(self, record=record) for record in records] if records else None
 
     async def get_config(self, guild_id: int, brand: Brand) -> Optional[ComicFeed]:
@@ -631,6 +630,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     @comics.command(name="current")
     @app_commands.describe(brand="The comic brand to receive a feed from.")
     @app_commands.checks.cooldown(2, 15.0, key=lambda i: i.guild_id)
+    @command_permissions(1, user=["manage_channels"])
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
         await interaction.response.defer(ephemeral=not interaction.channel.permissions_for(interaction.user).embed_links)
@@ -639,9 +639,9 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         await interaction.followup.send(embeds=embeds)
 
     @comics.command(name="push", description="Pushes the latest comic feed to a channel.")
-    @app_commands.default_permissions(manage_guild=True)
     @app_commands.describe(brand="The comic brand to receive a feed from.")
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
+    @command_permissions(1, user=["manage_channels"])
     async def comic_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
         await interaction.response.defer()
@@ -662,13 +662,13 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
 
     @comics.command(name="subscribe", description="Subscribes to a comic brand feed.")
-    @app_commands.default_permissions(manage_guild=True)
     @app_commands.rename(_format='format')
     @app_commands.describe(
         brand="The comic brand to receive a feed from.",
         channel="Channel to set up the feed. Leave empty to set up in THIS channel.",
         _format="Feed format. Use /formats to view options. Summary is default."
     )
+    @command_permissions(1, user=["manage_channels"])
     async def comic_subscribe(
             self,
             interaction: discord.Interaction,
@@ -721,6 +721,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         pin="Whether to pin the feed message.",
         reset="Reset the configuration."
     )
+    @command_permissions(1, user=["manage_channels"])
     async def comic_config(
             self, interaction: discord.Interaction,
             brand: Brand,

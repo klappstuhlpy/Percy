@@ -8,7 +8,7 @@ from discord.ext import commands
 from discord.http import Route
 
 from bot import Percy
-from cogs import command
+from cogs import command, command_permissions
 from cogs.base import PH_GUILD_ID
 from cogs.utils.paginator import BasePaginator
 
@@ -33,6 +33,7 @@ class AutoModerationManaging(commands.Cog, name="AutoMod"):
         name="list",
         description="List all Auto Moderation Rules."
     )
+    @command_permissions(1, user=["manage_guild"])
     async def automod_list(self, interaction: discord.Interaction):
         rules = await self.bot.http.request(
             Route('GET', '/guilds/{guild_id}/auto-moderation/rules',
@@ -78,6 +79,7 @@ class AutoModerationManaging(commands.Cog, name="AutoMod"):
         exempt_roles="Roles that are exempt from the AutoMod Rule. (Use Role IDs and separate them with a space)",
         exempt_channels="Channels that are exempt from the AutoMod Rule. (Use Channel IDs and separate them with a space)"
     )
+    @command_permissions(1, user=["manage_guild"], bot=["manage_guild"])
     async def automod_create(
             self,
             interaction: discord.Interaction,
@@ -189,6 +191,7 @@ class AutoModerationManaging(commands.Cog, name="AutoMod"):
         exempt_roles="Roles that are exempt from the AutoMod Rule. (Use Role IDs and separate them with a space)",
         exempt_channels="Channels that are exempt from the AutoMod Rule. (Use Channel IDs and separate them with a space)"
     )
+    @command_permissions(1, user=["manage_guild"], bot=["manage_guild"])
     async def automod_edit(
             self,
             interaction: discord.Interaction,

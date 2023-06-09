@@ -25,11 +25,6 @@ if TYPE_CHECKING:
     from .utils.context import Context
 
 
-class TranslateFlags(commands.FlagConverter, delimiter=" ", prefix="--"):
-    to: str = commands.flag(description="The language to translate to. Default: EN", default="en")
-    from_: str = commands.flag(name="from", description="The language to translate from. Default: AUTO", default="auto")
-
-
 class ScreenshotFlags(commands.FlagConverter, delimiter=" ", prefix="--"):
     """Flags for the screenshot command."""
     wait_for: bool = commands.Flag(

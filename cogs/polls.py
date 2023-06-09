@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 from discord.utils import MISSING
 
 from cogs.utils.paginator import BasePaginator
-from . import command
+from . import command, command_permissions
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, formats, helpers
 from .utils.context import Context
@@ -696,7 +696,7 @@ class Polls(commands.Cog):
         name="create",
         description="Creates a new poll with customizable settings.",
     )
-    @app_commands.default_permissions(manage_channels=True)
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.describe(
         question="Main Poll Question to ask.",
         description="Additional notes/description about the question.",
@@ -778,7 +778,8 @@ class Polls(commands.Cog):
         )
 
         reminder = self.bot.reminder
-        zone = await reminder.get_timezone(interaction.user.id)
+        uconfig = await self.bot.user_settings.get_user_config(interaction.user.id)
+        zone = uconfig.timezone if uconfig else None
         if reminder is None:
             return await self.send(
                 interaction,
@@ -816,7 +817,7 @@ class Polls(commands.Cog):
         name="end",
         description="Ends the voting for a running question.",
     )
-    @app_commands.default_permissions(manage_channels=True)
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="5-digit ID of the poll to end.")
     async def polls_end(self, interaction: discord.Interaction, poll_id: int):
@@ -838,7 +839,7 @@ class Polls(commands.Cog):
         name="delete",
         description="Deletes a poll question.",
     )
-    @app_commands.default_permissions(manage_channels=True)
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="5-digit ID of the poll to delete.")
     async def polls_delete(self, interaction: discord.Interaction, poll_id: int):
@@ -856,7 +857,7 @@ class Polls(commands.Cog):
         name="edit",
         description="Edits a poll question. Type '-clear' to clear the current value.",
     )
-    @app_commands.default_permissions(manage_channels=True)
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(
         poll_id="5-digit ID of the poll to search for.",
@@ -1157,6 +1158,7 @@ class Polls(commands.Cog):
         name="debug",
         description="Refactor all existing Polls in this guild and reattach the views.",
     )
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="The ID of the Poll to debug.")
     @app_commands.checks.cooldown(1, 15.0, key=lambda i: i.guild_id)
@@ -1182,6 +1184,7 @@ class Polls(commands.Cog):
         name="config",
         description="Shows the current configuration for polls.",
     )
+    @command_permissions(1, user=["ban_members", "manage_messages"])
     async def polls_config(
             self, interaction: discord.Interaction,
             poll_channel: discord.TextChannel = None,

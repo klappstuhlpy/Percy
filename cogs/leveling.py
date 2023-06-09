@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from cogs import command
+from cogs import command, command_permissions
 from cogs.mod import ModConfig, AutoModFlags
 from cogs.utils import cache, checks
 from cogs.utils.context import Context, GuildContext
@@ -296,7 +296,7 @@ class Leveling(commands.Cog):
 
     @command(level.command, description="Toggle leveling on or off.")
     @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
+    @command_permissions(1, user=["administrator"])
     async def toggle(self, ctx: GuildContext) -> None:
         """Toggle leveling on or off."""
         config: ModConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
@@ -379,7 +379,7 @@ class Leveling(commands.Cog):
         description="Set a members experience or level."
     )
     @commands.guild_only()
-    @checks.hybrid_permissions_check(administrator=True)
+    @command_permissions(1, user=["administrator"])
     @app_commands.describe(target="The target member to modify.")
     @app_commands.describe(level="The level you want to set.")
     @app_commands.describe(xp="The amount of XP you want to set.")

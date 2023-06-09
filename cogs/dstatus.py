@@ -16,7 +16,6 @@ from typing import TypeVar
 
 from bot import Percy
 from cogs.utils.async_utils import executor
-from cogs.utils.helpers import config_file
 from cogs.utils.scope import DSTATUS_CHANNEL_ID, PH_HEAD_DEV_ROLE_ID
 
 DS_RSS_FEED = "https://discordstatus.com/history.rss"
@@ -65,11 +64,11 @@ class Incident:
             kwargs |= {'message_id': MISSING}
         return cls(**kwargs)
 
-    async def update(self, bot: Percy, state: State) -> None:
+    async def update(self, cog: DiscordStatus, state: State) -> None:
         self.updates.insert(0, state)
         self.last_updated_at = state.started_at
 
-        message = await bot.get_channel(DSTATUS_CHANNEL_ID).fetch_message(self.message_id)
+        message = await cog.channel.fetch_message(self.message_id)
         embed = message.embeds[0]
         embed.add_field(name=f"{STATE_EMOJI.get(state.state.lower())} {state.state} "
                              f"({discord.utils.format_dt(state.started_at, 'R')})",
@@ -105,10 +104,10 @@ class DiscordStatus(commands.Cog):
         self.bot: Percy = bot
 
         self._last_incident: Incident = MISSING
-        self.config: config_file = config_file("dstatus")
+        # self.config: config_file = config_file("dstatus")
 
     async def cog_load(self) -> None:
-        record = self.config.load.get("latest_incident")
+        record = self.bot.discord_status.get("last_incident")
         if record:
             self._last_incident = Incident(**record)
         self.check_new_incident.start()
@@ -162,9 +161,9 @@ class DiscordStatus(commands.Cog):
             if len(incidents) == len(self._last_incident.updates):
                 return
 
-            await self._last_incident.update(self.bot, incidents[0])
+            await self._last_incident.update(self, incidents[0])
 
-            self.config.set(latest_incident=self._last_incident.as_dict())
+            await self.bot.discord_status.put("last_incident", self._last_incident.as_dict())
             return
 
         incident = Incident.temporary(
@@ -182,7 +181,7 @@ class DiscordStatus(commands.Cog):
         incident.message_id = message.id
         self._last_incident = incident
 
-        self.config.set(latest_incident=self._last_incident.as_dict())
+        await self.bot.discord_status.put("last_incident", self._last_incident.as_dict())
 
 
 async def setup(bot: Percy) -> None:
