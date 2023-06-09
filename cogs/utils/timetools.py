@@ -3,18 +3,17 @@ from __future__ import annotations
 import datetime
 import math
 import random
+import re
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Optional, Union, Collection, Tuple
 
 import discord
 import parsedatetime as pdt
 from dateutil.relativedelta import relativedelta
-from dateutil.tz import gettz
+from discord import app_commands
+from discord.ext import commands
 
 from .formats import plural, human_join
-from discord.ext import commands
-from discord import app_commands
-import re
 
 # Monkey patch mins and secs into the units
 units = pdt.pdtLocales['en_US'].units
@@ -84,9 +83,9 @@ class ShortTime:
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
         tzinfo = datetime.timezone.utc
-        reminder = ctx.bot.reminder
-        if reminder is not None:
-            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+        config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
+        if config and config.timezone:
+            tzinfo = config.get_tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
@@ -127,14 +126,15 @@ class HumanTime:
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
         tzinfo = datetime.timezone.utc
-        reminder = ctx.bot.reminder
-        if reminder is not None:
-            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+        config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
+        if config and config.timezone:
+            tzinfo = config.get_tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
 class Time(HumanTime):
     """A time that is either in the past or future."""
+
     def __init__(
             self,
             argument: str,
@@ -153,6 +153,7 @@ class Time(HumanTime):
 
 class FutureTime(Time):
     """A time that is in the future."""
+
     def __init__(
             self,
             argument: str,
@@ -176,25 +177,33 @@ class TimeTransformer(app_commands.Transformer):
 
     Basically :class:`UserFriendlyTime` but with no context and just time parsing.
     """
+
+    def __init__(self, future: bool = False, short: bool = False):
+        self.future = future
+        self.short = short
+
     async def transform(self, interaction: discord.Interaction, value: str) -> datetime.datetime:
         tzinfo = datetime.timezone.utc
-        reminder = interaction.client.get_cog('Reminder')
-        if reminder is not None:
-            tzinfo = await reminder.get_tzinfo(interaction.user.id)
+        config = await interaction.client.user_settings.get_user_config(interaction.user.id)
+        if config and config.timezone:
+            tzinfo = config.get_tzinfo
 
         now = interaction.created_at.replace(tzinfo=None)
         with suppress(commands.BadArgument):
             try:
-                short = ShortTime(value, now=now, tzinfo=tzinfo)
-            except commands.BadArgument:
-                try:
-                    human = FutureTime(value, now=now, tzinfo=tzinfo)
-                except commands.BadArgument as e:
-                    raise BadTimeTransform(str(e)) from None
+                if self.future:
+                    time = FutureTime(value, now=now, tzinfo=tzinfo)
+                elif self.short:
+                    time = ShortTime(value, now=now, tzinfo=tzinfo)
                 else:
-                    return human.dt
-            else:
-                return short.dt
+                    try:
+                        time = ShortTime(value, now=now, tzinfo=tzinfo)
+                    except commands.BadArgument:
+                        time = FutureTime(value, now=now, tzinfo=tzinfo)
+            except commands.BadArgument as e:
+                raise BadTimeTransform(str(e)) from None
+
+            return time.dt
 
 
 class FriendlyTimeResult:
@@ -228,6 +237,7 @@ class FriendlyTimeResult:
 
 class RelativeDelta(app_commands.Transformer, commands.Converter):
     """A converter that parses a relative delta."""
+
     @classmethod
     def __do_conversion(cls, argument: str) -> relativedelta:
         match = ShortTime.compiled.fullmatch(argument)
@@ -279,11 +289,11 @@ class UserFriendlyTime(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:
         calendar = HumanTime.calendar
         regex = ShortTime.compiled
-        reminder = ctx.bot.reminder
 
         tzinfo = datetime.timezone.utc
-        if reminder is not None:
-            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+        config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
+        if config and config.timezone:
+            tzinfo = config.get_tzinfo
 
         now = ctx.message.created_at
 
@@ -484,15 +494,12 @@ async def future_time_from_interaction(
         argument: str, interaction: discord.Interaction
 ) -> tuple[str, datetime.datetime]:
     """Ensures that the given argument is a valid time in the future. (At least 5 minutes from now)"""
-    reminder: Optional[Reminder] = interaction.client.get_cog('Reminder')  # type: ignore
-    timezone = 'UTC'
     tzinfo = datetime.timezone.utc
-    if reminder is not None:
-        timezone = await reminder.get_timezone(interaction.user.id)
-        if timezone is not None:
-            tzinfo = gettz(timezone) or datetime.timezone.utc
-        else:
-            timezone = 'UTC'
+    config = await interaction.client.user_settings.get_user_config(interaction.user.id)
+    if config and config.timezone:
+        timezone = config.get_tzinfo
+    else:
+        timezone = 'UTC'
 
     dt = ensure_future_time(argument, interaction.created_at, tzinfo)
     return timezone, dt

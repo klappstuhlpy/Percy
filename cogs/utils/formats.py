@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
 
 import asyncpg
@@ -212,6 +213,12 @@ def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) 
     if formatting:
         text = discord.utils.escape_markdown(text)
     return text
+
+
+def format_date(dt: Optional[datetime.datetime]):
+    if dt is None:
+        return 'N/A'
+    return f'{discord.utils.format_dt(dt, "f")} ({discord.utils.format_dt(dt, style="R")})'
 
 
 def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:
