@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import datetime
+import enum
 import json
 import time
 from pathlib import Path
@@ -71,12 +74,12 @@ class PostgresItemMeta(type):
         _ignore_record: bool
 
     def __new__(
-        cls,
-        name: str,
-        bases: tuple[Type],
-        attrs: dict[str, any],
-        *,
-        ignore_record: bool = False,
+            cls,
+            name: str,
+            bases: tuple[Type],
+            attrs: dict[str, any],
+            *,
+            ignore_record: bool = False,
     ) -> 'PostgresItemMeta':
         attrs['_ignore_record'] = ignore_record
         return super().__new__(cls, name, bases, attrs)
@@ -101,6 +104,10 @@ class PostgresItem(metaclass=PostgresItemMeta):
         self.record: asyncpg.Record = record
         if record:
             for k, v in record.items():
+                setattr(self, k, v)
+
+        if kwargs:
+            for k, v in kwargs.items():
                 setattr(self, k, v)
 
     @classmethod
@@ -227,6 +234,21 @@ class NamedDict:
             else:
                 _dict[k] = v
         return named
+
+
+class BasicJSONEncoder(json.JSONEncoder):
+    """A basic JSON encoder that encodes `NamedDict` objects."""
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, NamedDict):
+            return o._to_dict()
+        elif isinstance(o, datetime.datetime):
+            return o.isoformat()
+        elif isinstance(o, datetime.timedelta):
+            return o.total_seconds()
+        elif isinstance(o, enum.Enum):
+            return o.value
+        return super().default(o)
 
 
 class config_file:

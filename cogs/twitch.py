@@ -24,22 +24,19 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import asyncio
+import datetime
 import logging
 import time
 from typing import List, Dict, Any, Optional, NamedTuple, AsyncIterator
 
 import discord
-
 import yarl
 from discord import HTTPException
 from discord.ext import commands, tasks
-import datetime
-
-from discord.utils import cached_slot_property, MISSING
+from discord.utils import cached_slot_property, MISSING  # noqa
 
 from bot import Percy
 from cogs.utils import cache
-from cogs.utils.helpers import config_file
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +88,7 @@ class TwitchNotifications(commands.Cog):
         self._refresh_lock = asyncio.Lock()
         self.online_users: set[str] = set()
 
-        self.config: config_file = config_file("twitch")
+        # self.config: config_file = config_file("twitch")
 
     async def cog_load(self) -> None:
         self.refresh_notify_check.start()
@@ -99,32 +96,33 @@ class TwitchNotifications(commands.Cog):
     async def cog_unload(self) -> None:
         self.refresh_notify_check.cancel()
 
-    def _expiry(self, *, expiry: Optional[float] = None) -> float:
+    async def _expiry(self, expiry: float = None) -> float:
         if expiry:
-            self.config.set(expiry=expiry)
-        return self.config.load.get("expiry", None)
+            await self.bot.media.deep_put("twitch.expiry", expiry)
+        return self.bot.media.get("twitch").get("expiry")
 
-    def _bearer_token(self, *, bearer_token: Optional[str] = None) -> str:
-        if not self._expiry() or (self._expiry() and self._expiry() < time.time()):
+    async def _bearer_token(self, bearer_token: str = None) -> str:
+        expiry = await self._expiry()
+        if not expiry or (expiry and expiry < time.time()):
             logger.debug("Refreshing bearer token")
-            self.bot.loop.create_task(self._get_bearer_token())
+            await self._get_bearer_token()
 
         if bearer_token:
-            self.config.set(bearer_token=bearer_token)
-        return self.config.load["bearer_token"]
+            await self.bot.media.deep_put("twitch.bearer_token", bearer_token)
+        return self.bot.media.get("twitch").get("bearer_token")
 
     @cached_slot_property(name="_cs_grant_params")
     def grant_params(self) -> dict:
-        return {'client_id': self.config.load["client_id"],
-                'client_secret': self.config.load["client_secret"],
+        return {'client_id': self.bot.media.get("twitch").get("client_id"),
+                'client_secret': self.bot.media.get("twitch").get("client_secret"),
                 'grant_type': 'client_credentials',
                 'Content-Type': 'application/x-www-form-urlencoded'}
 
     async def _get_bearer_token(self) -> None:
         async with self._refresh_lock:
             data = await self.twitch_request('POST', GRANT_URL, params=self.grant_params, headers=None)
-            self._expiry(expiry=(time.time() + (int(data['expires_in']) - 10)))
-            self._bearer_token(bearer_token=data['access_token'])
+            await self._expiry(time.time() + data['expires_in'])
+            await self._bearer_token(data['access_token'])
 
     async def twitch_request(
             self,
@@ -136,8 +134,8 @@ class TwitchNotifications(commands.Cog):
             headers: Optional[dict[str, Any]] = MISSING,
     ) -> Optional[Dict]:
         hdrs = {'Accept': 'application/json',
-                'Client-Id': self.config.load["client_id"],
-                'Authorization': f'Bearer {self._bearer_token()}'}
+                'Client-Id': self.bot.media.get("twitch").get("client_id"),
+                'Authorization': f'Bearer {await self._bearer_token()}'}
 
         if headers is not MISSING and isinstance(headers, dict):
             hdrs.update(headers)
@@ -198,7 +196,7 @@ class TwitchNotifications(commands.Cog):
         return None
 
     async def get_notifications(self) -> AsyncIterator[TwitchStream]:
-        wl = self.config.load["watchlist"]
+        wl = self.bot.media.get("twitch").get("watchlist")
         users = [await self.get_user(user_name) for user_name in wl]
         streams = [await self.get_stream(user) for user in users]
 
@@ -215,12 +213,18 @@ class TwitchNotifications(commands.Cog):
                 self.online_users.add(stream.user.login)
                 yield stream
 
+    @discord.utils.cached_property
+    def channel(self) -> Optional[discord.TextChannel]:
+        channel_id = self.bot.media.get("twitch").get("channel_id")
+        if not channel_id:
+            return
+        return self.bot.get_channel(channel_id)
+
     @tasks.loop(minutes=2)
     async def refresh_notify_check(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(self.config.load["channel_id"])
-        if not channel:
-            raise discord.NotFound(None, "Twitch Notification channel not found.")
+        if not self.channel:
+            return
 
         async for stream in self.get_notifications():
             started_at = datetime.datetime.fromisoformat(stream.started_at).astimezone(datetime.timezone.utc)
@@ -238,8 +242,8 @@ class TwitchNotifications(commands.Cog):
             embed.set_image(url=stream.thumbnail_url.format(width=1920, height=1080))
 
             try:
-                await channel.send(embed=embed)
-            except discord.HTTPException as exc:
+                await self.channel.send(embed=embed)
+            except discord.HTTPException:
                 logger.warning("Could not send twitch notification due to: %s", exc_info=True)
 
 

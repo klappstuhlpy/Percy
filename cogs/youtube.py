@@ -24,18 +24,18 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from __future__ import annotations
+
+import datetime
 import logging
 from typing import List, Dict, Any, NamedTuple, Optional
 
 import aiohttp
 import discord
-
 from dateutil.parser import parse
 from discord import DiscordException
 from discord.ext import commands, tasks
-import datetime
 
-from cogs.utils.helpers import config_file
+from bot import Percy
 
 logger = logging.getLogger(__name__)
 
@@ -84,16 +84,13 @@ class YouTubeStream(NamedTuple):
 
 
 class YouTubeNotifications(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot: commands.Bot = bot
+    def __init__(self, bot: Percy):
+        self.bot: Percy = bot
         self.session: aiohttp.ClientSession = aiohttp.ClientSession()
 
         self.running_streams: List[YouTubeStream] = []
 
-        self.config: config_file = config_file("youtube")
-
-    def cog_check(self, ctx: commands.Context) -> bool:
-        return self.config.load is not None
+        # self.config: config_file = config_file("youtube")
 
     async def cog_load(self) -> None:
         self.refresh_notify_check.start()
@@ -103,9 +100,9 @@ class YouTubeNotifications(commands.Cog):
             await self.session.close()
         self.refresh_notify_check.cancel()
 
-    @property
-    def api_key(self) -> str:
-        return self.config.load.get("api_key", None)
+    @discord.utils.cached_property
+    def api_key(self) -> Optional[str]:
+        return self.bot.media.get("youtube").get("api_key")
 
     @property
     def bearer_headers(self) -> dict:
@@ -127,7 +124,8 @@ class YouTubeNotifications(commands.Cog):
                 if resp.status != 200:
                     match data["error"]["errors"][0]["reason"]:
                         case "quotaExceeded":
-                            logger.debug("YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
+                            logger.debug(
+                                "YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
                         case _:
                             raise YouTubeRequestError(resp, await resp.json(), f'Could not get channel "{name}".')
                     return
@@ -165,7 +163,8 @@ class YouTubeNotifications(commands.Cog):
                 if resp.status != 200:
                     match data["error"]["errors"][0]["reason"]:
                         case "quotaExceeded":
-                            logger.debug("YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
+                            logger.debug(
+                                "YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
                         case _:
                             raise YouTubeRequestError(resp, data, f'Could not get stream for channel "{channel.id}".')
                     return
@@ -188,7 +187,7 @@ class YouTubeNotifications(commands.Cog):
         return cache
 
     async def get_notifications(self) -> List[YouTubeStream]:
-        wl = self.config.load["watchlist"]
+        wl = self.bot.media.get("youtube").get("watchlist")
         channels = await self.get_channels(wl)
         streams = await self.get_streams(channels)
 
@@ -209,11 +208,17 @@ class YouTubeNotifications(commands.Cog):
 
         return cache
 
+    @discord.utils.cached_property
+    def channel(self) -> Optional[discord.TextChannel]:
+        channel_id = self.bot.media.get("youtube").get("channel_id")
+        if not channel_id:
+            return
+        return self.bot.get_channel(channel_id)
+
     @tasks.loop(minutes=20)
     async def refresh_notify_check(self):
         await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(self.config.load["channel_id"])
-        if not channel:
+        if not self.channel:
             return
 
         streams = await self.get_notifications()
@@ -227,8 +232,8 @@ class YouTubeNotifications(commands.Cog):
             embed.set_image(url=stream.thumbnail_url)
 
             try:
-                await channel.send(embed=embed)
-            except discord.HTTPException as exc:
+                await self.channel.send(embed=embed)
+            except discord.HTTPException:
                 logger.warning("Could not send twitch notification due to: %s", exc_info=True)
 
 

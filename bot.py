@@ -17,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
+from cogs.user import UserSettings
 from cogs.utils import helpers
 from cogs.utils.comic.client import Marvel
 from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.async_utils import TaskInterruption
+from cogs.utils.helpers import BasicJSONEncoder
 from cogs.utils.scope import GUILD_FEATURES
 
 if TYPE_CHECKING:
@@ -128,6 +130,9 @@ class Percy(commands.Bot):
 
         self.blacklist: Config[bool] = Config('blacklist.json')
         self.prefixes: Config[list[str]] = Config('prefixes.json')
+
+        self.discord_status: Config[Dict[str, Any]] = Config('discord_status.json', encoder=BasicJSONEncoder)
+        self.media: Config[Dict[str, Any]] = Config('media.json')
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
@@ -443,3 +448,7 @@ class Percy(commands.Bot):
     @property
     def moderation(self) -> Optional[ModCog]:
         return self.get_cog('Mod')
+
+    @property
+    def user_settings(self) -> Optional[UserSettings]:
+        return self.get_cog('User Settings')
