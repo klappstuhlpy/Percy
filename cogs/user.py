@@ -184,7 +184,7 @@ class UserSettings(commands.Cog, name="User Settings"):
             return await ctx.send(f'<:redTick:1079249771975413910> {user} has not set their timezone.')
 
         time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
-        offset = timetools.get_timezone_offset(time)
+        offset = timetools.get_timezone_offset(time, with_name=True)
         time = time.strftime('%Y-%m-%d %I:%M %p')
         if self_query:
             await ctx.send(
@@ -203,14 +203,9 @@ class UserSettings(commands.Cog, name="User Settings"):
         embed = discord.Embed(title=f"ID: {tz.key}", colour=helpers.Colour.darker_red())
         dt = discord.utils.utcnow().astimezone(dateutil.tz.gettz(tz.key))
         time = dt.strftime('%Y-%m-%d %I:%M %p')
+
         embed.add_field(name='Current Time', value=time, inline=False)
-
-        offset = dt.utcoffset()
-        if offset is not None:
-            minutes, _ = divmod(int(offset.total_seconds()), 60)
-            hours, minutes = divmod(minutes, 60)
-            embed.add_field(name='UTC Offset', value=f'{hours:+03d}:{minutes:02d}')
-
+        embed.add_field(name='UTC Offset', value=timetools.get_timezone_offset(dt))
         embed.add_field(name='Daylight Savings', value='Yes' if dt.dst() else 'No')
         embed.add_field(name='Abbreviation', value=dt.tzname())
 

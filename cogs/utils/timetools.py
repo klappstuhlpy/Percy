@@ -144,7 +144,7 @@ class Time(HumanTime):
     ):
         try:
             o = ShortTime(argument, now=now, tzinfo=tzinfo)
-        except:
+        except:  # noqa
             super().__init__(argument, now=now, tzinfo=tzinfo)
         else:
             self.dt = o.dt
@@ -178,7 +178,9 @@ class TimeTransformer(app_commands.Transformer):
     Basically :class:`UserFriendlyTime` but with no context and just time parsing.
     """
 
-    def __init__(self, future: bool = False, short: bool = False):
+    def __init__(
+            self, future: bool = False, short: bool = False
+    ):
         self.future = future
         self.short = short
 
@@ -439,21 +441,24 @@ def human_timedelta(
             return ' '.join(output) + output_suffix
 
 
-def get_timezone_offset(dt: datetime.datetime) -> str:
+def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
     """Returns the Timezone offset of a datetime object as a string.
 
-    Example: UTC +01:00
+    Example: "UTC +00:00"
     """
-    offset = dt.strftime('%z')
-    offset_hours = int(offset) // 100
-    offset_minutes = int(offset) % 100
 
-    sign = '-' if offset_hours < 0 else '+'
-    offset_hours = abs(offset_hours)
-    offset_minutes = abs(offset_minutes)
-    offset_formatted = f'{dt.tzname()} {sign}{offset_hours:02d}:{offset_minutes:02d}'
+    offset = dt.utcoffset()
+    if offset is None:
+        offset_format = '+00:00'
+    else:
+        minutes, _ = divmod(int(offset.total_seconds()), 60)
+        hours, minutes = divmod(minutes, 60)
+        offset_format = f'{hours:+03d}:{minutes:02d}'
 
-    return offset_formatted
+    if not with_name:
+        return offset_format
+
+    return f'{dt.tzname()} {offset_format}'
 
 
 def mean_stddev(collection: Collection[float]) -> Tuple[float, float]:
