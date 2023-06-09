@@ -16,17 +16,6 @@ from cogs.utils.context import Context
 EXTENSIONS = [module.name for module in iter_modules(__path__, f'{__package__}.')]
 
 
-def perm_fmt(perm: str) -> str: return perm.replace('_', ' ').title().replace('Guild', 'Server')
-
-
-T = TypeVar('T')
-
-
-class PermissionTemplate:
-    bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
-                          "view_channel", "read_message_history"]
-
-
 class CMD(enum.Enum):
     App = 1
     Hybrid = 2
@@ -46,6 +35,17 @@ AnyCommandSignature = {
     "core.py": CMD.Core,
     "commands.py": CMD.App,
 }
+
+
+def perm_fmt(perm: str) -> str: return perm.replace('_', ' ').title().replace('Guild', 'Server')
+
+
+T = TypeVar('T')
+
+
+class PermissionTemplate:
+    bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
+                          "view_channel", "read_message_history"]
 
 
 def command_permissions(
@@ -115,7 +115,6 @@ def command(
     ----------
     func: Union[app_commands.command, commands.command, commands.group, commands.hybrid_command, commands.hybrid_group]
         The command to be decorated.
-
     name: :class:`str`
         The name of the command.
     callback: :ref:`coroutine <coroutine>`
@@ -180,10 +179,15 @@ def command(
         .. note::
             This object may be copied by the library.
 
+
         .. versionadded:: 2.0
 
     examples: List[:class:`str`]
         A list of examples for the command.
+    permissions: :class:`CommandPermissions`
+        A dataclass containing the permissions for the command.
+
+        .. versionadded:: CUSTOM COMMAND DECORATOR by Klappstuhl
     """
 
     perm_category = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
