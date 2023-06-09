@@ -32,8 +32,10 @@ if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
-PartialCommandGroup = Union[commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
-PartialCommand = Union[commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
+PartialCommandGroup = Union[
+    commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
+PartialCommand = Union[
+    commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
 
 BADGE_DICT = {
     discord.UserFlags.bug_hunter: '<:lvl1:1072925290520653884> Bug Hunter',
@@ -74,7 +76,7 @@ def is_help_thread():
     return commands.check(predicate)
 
 
-class UnsolvedFlags(commands.FlagConverter):
+class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     messages: int = commands.flag(
         default=5,
         description='The maximum number of messages the thread needs to be considered active. Defaults to 5.',
@@ -221,25 +223,21 @@ class FrontHelpPaginator(BasePaginator[str]):
     async def format_page(self, entries: List, /):
         embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=self.ctx.client.user.avatar.url)
-        pref = '/' if isinstance(self.ctx, discord.Interaction) else self.ctx.clean_prefix
-        embed.description = inspect.cleandoc(
-            f"""
-            ## Introduction
-            Here you can find all *Message-/Slash-Commands* for {self.ctx.client.user.name}.
-            Try using the dropdown to navigate through the categories to get a list of all Commands.
-            
-            I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
-            ## More Help
-            Alternatively you can use the following Commands to get Information about a specific Command or Category:
-            - `{pref}help` *`command`*
-            - `{pref}help` *`category`*
-            """
-        )
+        prefix = '/' if isinstance(self.ctx, discord.Interaction) else self.ctx.clean_prefix
 
         pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)
         if self._current_page == 0:
-            embed.description += '\n' + inspect.cleandoc(
+            embed.description = inspect.cleandoc(
                 f"""
+                ## Introduction
+                Here you can find all *Message-/Slash-Commands* for {self.ctx.client.user.name}.
+                Try using the dropdown to navigate through the categories to get a list of all Commands.
+
+                I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
+                ## More Help
+                Alternatively you can use the following Commands to get Information about a specific Command or Category:
+                - `{prefix}help` *`command`*
+                - `{prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -252,14 +250,26 @@ class FrontHelpPaginator(BasePaginator[str]):
             entries = (
                 ('<argument>', 'This argument is **required**.'),
                 ('[argument]', 'This argument is **optional**.'),
-                ('[A|B]', 'This means **multiple choice**, you can choose by using one.'),
-                ('[argument...]', 'There are multiple Arguments.'),
-                (
-                    '\u200b',
-                    '<:discord_info:1113421814132117545> **Important:**\n'
-                    'Do not type the arguments in brackets.\n'
-                    'Most of the Commands are **Hybrid Commands**, which means that you can use them as Slash Commands or Message Commands.'
-                ),
+                ('<A|B>', 'This means **multiple choice**, you can choose by using one. Although it must be A or B.'),
+                ('<argument...>', 'There are multiple Arguments.'),
+                ("<'argument'>", 'This argument is case-sensitive and should be typed exaclty as shown.'),
+                ('<argument=A>', 'The default value if you dont provide one of this argument is A.'),
+                ("Flags",
+                 "Flags are mostly available for commands with many arguments.\n"
+                 "They can provide a better overview and are not required to be typed in.\n"
+                 "\n"
+                 "Flags are prefixed with `--` and can be used like this:\n"
+                 f"- `{prefix}command --flag1 argument1 --flag2 argument2`\n"
+                 f"- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
+                 f"\n"
+                 f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
+                 f"- `{prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                 ),
+                ('\u200b',
+                 '<:discord_info:1113421814132117545> **Important:**\n'
+                 'Do not type the arguments in brackets.\n'
+                 'Most of the Commands are **Hybrid Commands**, which means that you can use them as Slash Commands or Message Commands.'
+                 ),
             )
             for name, value in entries:
                 embed.add_field(name=name, value=value, inline=False)

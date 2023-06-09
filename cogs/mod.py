@@ -42,11 +42,6 @@ def safe_reason_append(base: str, to_append: str) -> str:
     return appended
 
 
-class Arguments(argparse.ArgumentParser):
-    def error(self, message: str):
-        raise RuntimeError(message)
-
-
 class AutoModFlags(BaseFlags):
     @flag_value
     def audit_log(self) -> int:
@@ -197,7 +192,7 @@ class PreExistingMuteRoleView(discord.ui.View):
         await self.message.delete()
 
 
-class MassbanFlags(commands.FlagConverter):
+class MassbanFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     channel: Optional[Union[discord.TextChannel, discord.Thread, discord.VoiceChannel]] = commands.flag(
         description='The channel to search for message history', default=None
     )
@@ -240,7 +235,7 @@ class MassbanFlags(commands.FlagConverter):
     embeds: Optional[bool] = commands.flag(description='Whether the message should have embeds.', default=None)
 
 
-class PurgeFlags(commands.FlagConverter):
+class PurgeFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     user: Optional[discord.User] = commands.flag(description="Remove messages from this user", default=None)
     contains: Optional[str] = commands.flag(
         description='Remove messages that contains this string (case sensitive)', default=None
