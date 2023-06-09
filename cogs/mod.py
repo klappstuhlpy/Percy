@@ -205,10 +205,10 @@ class MassbanFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
         description='Matches users that joined less than specified minutes ago.', default=None
     )
     joined_before: Optional[discord.Member] = commands.flag(
-        description='Matches users who joined before this member', default=None, name='joined-before'
+        description='Matches users who joined before this member', default=None, name='joined_before'
     )
     joined_after: Optional[discord.Member] = commands.flag(
-        description='Matches users who joined after this member', default=None, name='joined-after'
+        description='Matches users who joined after this member', default=None, name='joined_after'
     )
     avatar: Optional[bool] = commands.flag(
         description='Matches users depending on whether they have avatars or not', default=None
