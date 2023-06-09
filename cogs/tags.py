@@ -1107,7 +1107,7 @@ class Tags(commands.Cog):
         )
         await ctx.send(file=file)
 
-    @tags.command(hidden=True, with_app_command=False)
+    @command(tags.command, hidden=True, with_app_command=False)
     async def tags_config(self, ctx: Context):
         """This is a reserved tag command. Check back later."""
         pass

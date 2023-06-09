@@ -749,7 +749,7 @@ class Meta(commands.Cog):
             else:
                 await ctx.send(f'{ctx.tick(False)} Not marking as solved.')
 
-    @commands.command()
+    @command(commands.command, description='Shows parts of the Bots Source Command.')
     async def source(self, ctx: Context, *, command: str = None):
         """Displays my full source code or for a specific command.
 
@@ -1122,7 +1122,7 @@ class Meta(commands.Cog):
         e.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=e, view=GuildUserJoinView(ctx.author))
 
-    @commands.command()
+    @command()
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):
         """Shows a user's enlarged avatar (if possible)."""
         embed = discord.Embed()

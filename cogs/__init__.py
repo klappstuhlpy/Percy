@@ -44,8 +44,13 @@ T = TypeVar('T')
 
 
 class PermissionTemplate:
+    r"""Permission Templates for the bot and user."""
+
     bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
                           "view_channel", "read_message_history"]
+    mod: ClassVar[str] = ["ban_members", "manage_messages"]
+    admin: ClassVar[str] = ["administrator"]
+    manager: ClassVar[str] = ["manage_guild"]
 
 
 def command_permissions(
@@ -54,7 +59,23 @@ def command_permissions(
         user: Optional[List[str]] = [],
         bot: Optional[List[str]] = PermissionTemplate.bot
 ) -> Callable[[T], T]:
-    r"""A decorator that sets permission Info for a command."""
+    r"""A custom decorator that allows you to assign permission for the bot and user.
+
+    Note
+    ----
+    To set permissions accordingly, the function that you are decorating must be wrapped with the :func:`command` decorator.
+    It needs to have the ``__type_info__`` attribute to handle the permission setting.
+
+    Parameters
+    ----------
+    setter: CMD | int
+        The type of command you are creating. This is used to determine which decorator to use.
+        If you are using a hybrid command, you must use the `CMD.Hybrid` enum.
+    user: Optional[List[str]]
+        A list of permissions that the user must have to run the command.
+    bot: Optional[List[str]]
+        A list of permissions that the bot must have to run the command.
+    """
 
     if isinstance(setter, int):
         setter = CMD(setter)
@@ -106,91 +127,49 @@ def command(
         description: Union[str, locale_str] = "Command undocumented.",
         examples: List[str] = None,
         nsfw: bool = False,
-        extras: Dict[Any, Any] = MISSING,
+        extras: Dict[Any, Any] = None,
+        raw: bool = False,
         **kwargs
 ):
-    r"""Custom command decorator for adding extra kwargs to the command.
+    r"""A custom decorator that assigns a function as a command.
 
-    Attributes
+    This decorator merges the functionality of :func:`commands.command`,
+    :func:`commands.group`, and :func:`commands.hybrid_command` :func:`commands.hybrid_command and
+    :func:`app_commands.command` for easier accessibility.
+
+    Note
+    ----
+    This decorator also adds a ``__type_info__`` attribute to the command that contains the
+    module and function name of the command. This is used for handling the correct permission checks for every command type.
+
+    It also adds a :class:`PermissionTemplate` that can be modified with the :func:`command_permissions` decorator.
+
+    Parameters
     ----------
-    func: Union[app_commands.command, commands.command, commands.group, commands.hybrid_command, commands.hybrid_group]
-        The command to be decorated.
-    name: :class:`str`
-        The name of the command.
-    callback: :ref:`coroutine <coroutine>`
-        The coroutine that is executed when the command is called.
-    help: Optional[:class:`str`]
-        The long help text for the command.
-    brief: Optional[:class:`str`]
-        The short help text for the command.
-    usage: Optional[:class:`str`]
-        A replacement for arguments in the default help text.
-    aliases: Union[List[:class:`str`], Tuple[:class:`str`]]
-        The list of aliases the command can be invoked under.
-    enabled: :class:`bool`
-        A boolean that indicates if the command is currently enabled.
-        If the command is invoked while it is disabled, then
-        :exc:`.DisabledCommand` is raised to the :func:`.on_command_error`
-        event. Defaults to ``True``.
-    parent: Optional[:class:`Group`]
-        The parent group that this command belongs to. ``None`` if there
-        isn't one.
-    cog: Optional[:class:`Cog`]
-        The cog that this command belongs to. ``None`` if there isn't one.
-    checks: List[Callable[[:class:`.Context`], :class:`bool`]]
-        A list of predicates that verifies if the command could be executed
-        with the given :class:`.Context` as the sole parameter. If an exception
-        is necessary to be thrown to signal failure, then one inherited from
-        :exc:`.CommandError` should be used. Note that if the checks fail then
-        :exc:`.CheckFailure` exception is raised to the :func:`.on_command_error`
-        event.
-    description: :class:`str`
-        The message prefixed into the default help command.
-    hidden: :class:`bool`
-        If ``True``\, the default help command does not show this in the
-        help output.
-    rest_is_raw: :class:`bool`
-        If ``False`` and a keyword-only argument is provided then the keyword
-        only argument is stripped and handled as if it was a regular argument
-        that handles :exc:`.MissingRequiredArgument` and default values in a
-        regular matter rather than passing the rest completely raw. If ``True``
-        then the keyword-only argument will pass in the rest of the arguments
-        in a completely raw matter. Defaults to ``False``.
-    invoked_subcommand: Optional[:class:`Command`]
-        The subcommand that was invoked, if any.
-    require_var_positional: :class:`bool`
-        If ``True`` and a variadic positional argument is specified, requires
-        the user to specify at least one argument. Defaults to ``False``.
+    func: AnyCommand
+        The command type to use. Defaults to :func:`discord.ext.commands.hybrid_command`.
+    name: Optional[str]
+        The name of the command. Defaults to ``func.__name__``.
+    description: Union[str, locale_str]
+        The description of the command. Defaults to ``"Command undocumented."``.
+    examples: List[str]
+        A list of examples for the command. Defaults to ``None``.
+    nsfw: bool
+        Whether or not the command is NSFW. Defaults to ``False``.
+    extras: Dict[Any, Any]
+        A dictionary of extra information to be stored in the command. Defaults to ``MISSING``.
+    raw: bool
+        Whether or not to return the command without an applied :class:`PermissionTemplate`.
+    **kwargs
+        Any keyword arguments to be passed to the command type.
 
-        .. versionadded:: 1.5
-
-    ignore_extra: :class:`bool`
-        If ``True``\, ignores extraneous strings passed to a command if all its
-        requirements are met (e.g. ``?foo a b c`` when only expecting ``a``
-        and ``b``). Otherwise :func:`.on_command_error` and local error handlers
-        are called with :exc:`.TooManyArguments`. Defaults to ``True``.
-    cooldown_after_parsing: :class:`bool`
-        If ``True``\, cooldown processing is done after argument parsing,
-        which calls converters. If ``False`` then cooldown processing is done
-        first and then the converters are called second. Defaults to ``False``.
-    extras: :class:`dict`
-        A dict of user provided extras to attach to the Command.
-
-        .. note::
-            This object may be copied by the library.
-
-
-        .. versionadded:: 2.0
-
-    examples: List[:class:`str`]
-        A list of examples for the command.
-    permissions: :class:`CommandPermissions`
-        A dataclass containing the permissions for the command.
-
-        .. versionadded:: CUSTOM COMMAND DECORATOR by Klappstuhl
+    Returns
+    -------
+    AnyCommand
+        The wrapped command with the optional applied :class:`PermissionTemplate`.
     """
 
-    perm_category = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
+    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
     if not extras:
         extras = {}
 
@@ -204,5 +183,8 @@ def command(
         nsfw=nsfw,
         **kwargs
     )
-    setattr(self, "__class_info__", f"{func.__module__}.{func.__name__}")
-    return command_permissions(perm_category)(self)
+    setattr(self, "__type_info__", f"{func.__module__}.{func.__name__}")
+
+    if raw:
+        return self
+    return command_permissions(signature)(self)
