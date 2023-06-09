@@ -213,6 +213,7 @@ class TwitchNotifications(commands.Cog):
                 self.online_users.add(stream.user.login)
                 yield stream
 
+    @property
     def channel(self) -> Optional[discord.TextChannel]:
         channel_id = self.bot.media.get("twitch", {}).get("channel_id")
         if not channel_id:

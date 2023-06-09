@@ -208,6 +208,7 @@ class YouTubeNotifications(commands.Cog):
 
         return cache
 
+    @property
     def channel(self) -> Optional[discord.TextChannel]:
         channel_id = self.bot.media.get("youtube", {}).get("channel_id")
         if not channel_id:
