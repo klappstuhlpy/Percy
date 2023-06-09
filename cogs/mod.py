@@ -736,7 +736,7 @@ class Mod(commands.Cog):
         description="Show current Moderation (automatic moderation) behaviour on the server."
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     async def moderation(self, ctx: GuildContext):
         """Show current Moderation (Automatic Moderation) behavior on the server.
         You must have Ban Members and Manage Messages permissions to use this
@@ -799,7 +799,7 @@ class Mod(commands.Cog):
         fallback="channel",
         description="Toggles audit text log on the server."
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @app_commands.describe(
         channel='The channel to broadcast audit log messages to. The bot must be able to create webhooks in it.'
     )
@@ -904,7 +904,7 @@ class Mod(commands.Cog):
         name="disable",
         description="Disables Moderation on the server.",
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @app_commands.describe(protection='The protection to disable')
     @app_commands.choices(
         protection=[
@@ -968,7 +968,7 @@ class Mod(commands.Cog):
         name="raid",
         description="Toggles raid protection on the server.",
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
     async def moderation_raid(self, ctx: GuildContext, enabled: Optional[bool] = None):
         """Toggles raid protection on the server.
@@ -1003,7 +1003,7 @@ class Mod(commands.Cog):
         description="Enables auto-banning accounts that spam more than \"count\" mentions.",
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
         """Enables auto-banning accounts that spam more than "count" mentions.
@@ -1036,7 +1036,7 @@ class Mod(commands.Cog):
         description="Specifies what roles, members, or channels ignore Moderation Inspections.",
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members"])
+    @command_permissions(user=["ban_members"])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
     async def moderation_ignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1069,7 +1069,7 @@ class Mod(commands.Cog):
         description="Specifies what roles, members, or channels to take off the ignore list.",
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members"])
+    @command_permissions(user=["ban_members"])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
     async def moderation_unignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1138,7 +1138,7 @@ class Mod(commands.Cog):
         usage='[search] [flags...]'
     )
     @commands.guild_only()
-    @command_permissions(2, user=["manage_messages"])
+    @command_permissions(user=["manage_messages"])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
             self, ctx: GuildContext, search: Optional[commands.Range[int, 1, 2000]] = None, *, flags: PurgeFlags
@@ -1409,7 +1409,7 @@ class Mod(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space separated list of text or voice channels to lock down')
     async def lockdown(
@@ -1481,7 +1481,7 @@ class Mod(commands.Cog):
         description='Locks down specific channels for a specified amount of timetools.',
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
@@ -1571,7 +1571,7 @@ class Mod(commands.Cog):
         description='Ends all lockdowns set.',
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
@@ -1793,7 +1793,7 @@ class Mod(commands.Cog):
         usage="[flags...]"
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members"], bot=["ban_members"])
+    @command_permissions(user=["ban_members"], bot=["ban_members"])
     async def massban(self, ctx: GuildContext, *, args: MassbanFlags):
         """Mass bans multiple members from the server.
         This command uses a syntax similar to Discord's search bar. To use this command,
@@ -2002,7 +2002,7 @@ class Mod(commands.Cog):
         description='Temporarily bans a member for the specified duration.',
     )
     @commands.guild_only()
-    @command_permissions(2, user=["ban_members"], bot=["ban_members"])
+    @command_permissions(user=["ban_members"], bot=["ban_members"])
     @app_commands.describe(duration='The duration to ban the member for. Must be a future Time.',
                            member='The member to ban.',
                            reason='The reason for banning the member.')
@@ -2228,7 +2228,7 @@ class Mod(commands.Cog):
         description='Temporarily mutes a member for the specified duration.',
     )
     @can_mute()
-    @command_permissions(2, bot=["manage_roles"])
+    @command_permissions(bot=["manage_roles"])
     @app_commands.describe(duration='The duration to mute the member for. Must be a future Time.',
                            member='The member to mute.',
                            reason='The reason for muting the member.')

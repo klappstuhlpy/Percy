@@ -625,7 +625,7 @@ class Starboard(commands.Cog):
         fallback='create',
         description='Sets up the starboard for this server.',
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @app_commands.describe(name='The starboard channel name')
     async def starboard(self, ctx: GuildContext, *, name: str = 'starboard'):
         """Sets up the starboard for this server.
@@ -733,7 +733,7 @@ class Starboard(commands.Cog):
         description='Deletes the starboard for this server.'
     )
     @requires_starboard()
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     async def starboard_delete(self, ctx: StarboardContext):
         """Deletes the starboard for this server."""
         try:
@@ -815,7 +815,7 @@ class Starboard(commands.Cog):
         description='Cleans the starboard',
         aliases=['prune']
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(stars='Remove messages that have less than or equal to this number')
     async def star_clean(self, ctx: StarboardContext, stars: commands.Range[int, 1, None] = 1):
@@ -1131,7 +1131,7 @@ class Starboard(commands.Cog):
         name='lock',
         description='Locks the starboard from being processed.'
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @requires_starboard()
     async def star_lock(self, ctx: StarboardContext):
         """Locks the starboard from being processed.
@@ -1162,7 +1162,7 @@ class Starboard(commands.Cog):
         name='unlock',
         description='Unlocks the starboard for re-processing.'
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @requires_starboard()
     async def star_unlock(self, ctx: StarboardContext):
         """Unlocks the starboard for re-processing."""
@@ -1182,7 +1182,7 @@ class Starboard(commands.Cog):
         description='Sets the minimum number of stars required to show up.',
         aliases=['threshold']
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(stars='The number of stars required before it shows up on the board')
     async def star_limit(self, ctx: StarboardContext, stars: int):
@@ -1217,7 +1217,7 @@ class Starboard(commands.Cog):
         name='age',
         description='Sets the maximum age of a message valid for starring.',
     )
-    @command_permissions(2, user=["ban_members", "manage_messages"])
+    @command_permissions(user=["ban_members", "manage_messages"])
     @requires_starboard()
     @app_commands.describe(
         number='The number of units to set the maximum age to',

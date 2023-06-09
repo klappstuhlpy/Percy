@@ -8,7 +8,6 @@ import discord
 from discord import app_commands
 from discord.app_commands import locale_str
 from discord.ext import commands
-from discord.utils import MISSING
 
 from cogs.utils import checks
 from cogs.utils.context import Context
@@ -16,7 +15,7 @@ from cogs.utils.context import Context
 EXTENSIONS = [module.name for module in iter_modules(__path__, f'{__package__}.')]
 
 
-class CMD(enum.Enum):
+class CommandCategory(enum.Enum):
     App = 1
     Hybrid = 2
     Core = 3
@@ -31,9 +30,9 @@ AnyCommand = Union[
 ]
 
 AnyCommandSignature = {
-    "hybrid.py": CMD.Hybrid,
-    "core.py": CMD.Core,
-    "commands.py": CMD.App,
+    "hybrid.py": CommandCategory.Hybrid,
+    "core.py": CommandCategory.Core,
+    "commands.py": CommandCategory.App,
 }
 
 
@@ -54,7 +53,7 @@ class PermissionTemplate:
 
 
 def command_permissions(
-        setter: CMD | int = CMD.Core,
+        category: CommandCategory | int = CommandCategory.Hybrid,
         *,
         user: Optional[List[str]] = [],
         bot: Optional[List[str]] = PermissionTemplate.bot
@@ -68,17 +67,17 @@ def command_permissions(
 
     Parameters
     ----------
-    setter: CMD | int
+    category: CommandCategory | int
         The type of command you are creating. This is used to determine which decorator to use.
-        If you are using a hybrid command, you must use the `CMD.Hybrid` enum.
+        If you are using a hybrid command, you must use the `CommandCategory.Hybrid` enum.
     user: Optional[List[str]]
         A list of permissions that the user must have to run the command.
     bot: Optional[List[str]]
         A list of permissions that the bot must have to run the command.
     """
 
-    if isinstance(setter, int):
-        setter = CMD(setter)
+    if isinstance(category, int):
+        setter = CommandCategory(category)
 
     if bot is not PermissionTemplate.bot:
         bot += PermissionTemplate.bot
@@ -97,17 +96,17 @@ def command_permissions(
         func.default_permissions = discord.Permissions(**user_perms)
 
         if bot_perms:
-            if setter == CMD.App:
+            if setter == CommandCategory.App:
                 func = app_commands.checks.bot_has_permissions(**bot_perms)(func)
-            elif setter in (CMD.Core, CMD.Hybrid):
+            elif setter in (CommandCategory.Core, CommandCategory.Hybrid):
                 func = commands.bot_has_permissions(**bot_perms)(func)
 
         if user_perms:
-            if setter == CMD.App:
+            if setter == CommandCategory.App:
                 func = app_commands.checks.has_permissions(**user_perms)(func)
-            elif setter == CMD.Core:
+            elif setter == CommandCategory.Core:
                 func = commands.has_permissions(**user_perms)(func)
-            elif setter == CMD.Hybrid:
+            elif setter == CommandCategory.Hybrid:
                 func = checks.hybrid_permissions_check(**user_perms)(func)
             else:
                 func.__discord_app_commands_default_permissions__ = discord.Permissions(**user_perms)
