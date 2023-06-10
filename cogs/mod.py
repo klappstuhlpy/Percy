@@ -1588,7 +1588,7 @@ class Mod(commands.Cog):
         else:
             moderator = f'{member} (ID: {mod_id})'
 
-        reason = f'Automatic lockdown ended from timer made on {timer.created_at} by {moderator}'
+        reason = f'Automatic lockdown ended from timer made on {timer.created} by {moderator}'
         failures = await self.end_lockdown(guild, channel_ids=channel_ids, reason=reason)
 
         query = "DELETE FROM guild_lockdowns WHERE guild_id=$1 AND channel_id = ANY($2::bigint[]);"
@@ -2038,7 +2038,7 @@ class Mod(commands.Cog):
         else:
             moderator = f'{moderator} (ID: {mod_id})'
 
-        reason = f'Automatic unban from timer made on {timer.created_at} by {moderator}.'
+        reason = f'Automatic unban from timer made on {timer.created} by {moderator}.'
         await guild.unban(discord.Object(id=member_id), reason=reason)
 
     async def update_mute_role(
@@ -2238,7 +2238,7 @@ class Mod(commands.Cog):
         )
 
     @commands.Cog.listener()
-    async def on_tempmute_timer_complete(self, timer):
+    async def on_tempmute_timer_complete(self, timer: Timer):
         guild_id, mod_id, member_id, role_id = timer.args
         await self.bot.wait_until_ready()
 
@@ -2266,9 +2266,9 @@ class Mod(commands.Cog):
             else:
                 moderator = f'{moderator} (ID: {mod_id})'
 
-            reason = f'Automatic unmute from timer made on {timer.created_at} by {moderator}.'
+            reason = f'Automatic unmute from timer made on {timer.created} by {moderator}.'
         else:
-            reason = f'Expiring self-mute made on {timer.created_at} by {member}'
+            reason = f'Expiring self-mute made on {timer.created} by {member}'
 
         try:
             await member.remove_roles(discord.Object(id=role_id), reason=reason)
