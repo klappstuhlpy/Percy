@@ -231,7 +231,7 @@ class Base(commands.Cog, name='Exclusives'):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='dpy', id=596577034537402378)
+        return discord.PartialEmoji(name='dpy', id=1079788056560795648)
 
     def cog_unload(self) -> None:
         self.auto_archive_old_forum_threads.cancel()

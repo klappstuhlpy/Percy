@@ -28,7 +28,7 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import FilePaginator
 from launcher import get_logger
 from . import command
-from .meta import COMMAND_ICON_URL
+from .meta import COMMAND_ICON_URL, INFO_ICON_URL
 from .utils import formats, timetools, helpers
 from .utils.async_utils import executor
 from .utils.render import Render
@@ -529,7 +529,8 @@ class Stats(commands.Cog):
         value = (
                 '\n'.join(
                     f'{lookup[index]}: {command} (`{uses}` uses)' for (index, (command, uses)) in enumerate(records))
-                or '*No Command Usages available.*')
+                or '*No Command Usages available.*'
+        )
 
         embed.add_field(name='Most Used Commands', value=value, inline=False)
 
@@ -558,7 +559,7 @@ class Stats(commands.Cog):
 
     async def show_command_stats(self, ctx: Context, command: str, record: Dict[str, Any]) -> None:
         embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name='Command Statistic', icon_url=ctx.bot.user.display_avatar.url)
+        embed.set_author(name='Command Statistic', icon_url=INFO_ICON_URL)
 
         resolved = self.bot.resolve_command(command)
 
