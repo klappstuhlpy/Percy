@@ -555,6 +555,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             text = '\n'.join(f'- `{self.context.clean_prefix}{alias} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
 
+        return embed
+
     async def send_command_help(self, command: PartialCommand):  # noqa
         if not isinstance(command, app_commands.commands.Command):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
