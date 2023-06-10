@@ -38,21 +38,24 @@ class ShortTime:
     - 2y
     - 2 months
     - 4 weeks
+    - 4min
+    - Unix Timestamps
     """
-    compiled = re.compile(
-        """
-           (?:(?P<years>[0-9])(?:years?|y))?                    # e.g. 2y
-           (?:(?P<months>[0-9]{1,2})(?:months?|mon?))?          # e.g. 2months
-           (?:(?P<weeks>[0-9]{1,4})(?:weeks?|w))?               # e.g. 10w
-           (?:(?P<days>[0-9]{1,5})(?:days?|d))?                 # e.g. 14d
-           (?:(?P<hours>[0-9]{1,5})(?:hours?|hr?))?             # e.g. 12h
-           (?:(?P<minutes>[0-9]{1,5})(?:minutes?|m(?:in)?))?    # e.g. 10m
-           (?:(?P<seconds>[0-9]{1,5})(?:seconds?|s(?:ec)?))?    # e.g. 15s
+
+    SHORT_TIME_COMPILED = re.compile(
+        r"""
+           (?:(?P<years>[0-9])(\s+)?(?:years?|y))?                        # e.g. 2y
+           (?:(?P<months>[0-9]{1,2})(\s+)?(?:months?|mon?))?              # e.g. 2months
+           (?:(?P<weeks>[0-9]{1,4})(\s+)?(?:weeks?|w))?                   # e.g. 10w
+           (?:(?P<days>[0-9]{1,5})(\s+)?(?:days?|d))?                     # e.g. 14 d
+           (?:(?P<hours>[0-9]{1,5})(\s+)?(?:hours?|hr?|hrs?))?            # e.g. 12h
+           (?:(?P<minutes>[0-9]{1,5})(\s+)?(?:minutes?|m(?:ins?)?))?      # e.g. 10 m
+           (?:(?P<seconds>[0-9]{1,5})(\s+)?(?:seconds?|s(?:ecs?)?))?      # e.g. 15s
         """,
         re.VERBOSE,
     )
 
-    discord_fmt = re.compile(r'<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>')
+    DISCORD_UNIX_TS = re.compile(r'<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>')
 
     dt: datetime.datetime
 
@@ -63,16 +66,16 @@ class ShortTime:
             now: Optional[datetime.datetime] = None,
             tzinfo: datetime.tzinfo = datetime.timezone.utc,
     ):
-        match = self.compiled.fullmatch(argument)
+        match = self.SHORT_TIME_COMPILED.fullmatch(argument)
         if match is None or not match.group(0):
-            match = self.discord_fmt.fullmatch(argument)
+            match = self.DISCORD_UNIX_TS.fullmatch(argument)
             if match is not None:
                 self.dt = datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.timezone.utc)
                 if tzinfo is not datetime.timezone.utc:
                     self.dt = self.dt.astimezone(tzinfo)
                 return
             else:
-                raise commands.BadArgument('invalid time provided')
+                raise commands.BadArgument('<:redTick:1079249771975413910> Invalid time passed.')
 
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         now = now or datetime.datetime.now(datetime.timezone.utc)
