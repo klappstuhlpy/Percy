@@ -24,7 +24,6 @@ from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.async_utils import TaskInterruption
 from cogs.utils.helpers import BasicJSONEncoder
-from cogs.utils.lock import LockedResourceError
 from cogs.utils.scope import GUILD_FEATURES
 
 if TYPE_CHECKING:
@@ -32,15 +31,12 @@ if TYPE_CHECKING:
     from cogs.mod import Mod as ModCog
     from cogs.config import Config as ConfigCog
     from discord.types.guild import GuildFeature
+    from launcher import get_logger
 
+    log = get_logger(__name__)
     GuildFeatureA = tuple[GuildFeature, str]
 else:
     GuildFeatureA = tuple[str, str]
-
-if TYPE_CHECKING:
-    from launcher import get_logger
-    log = get_logger(__name__)
-else:
     log = logging.getLogger(__name__)
 
 
@@ -145,14 +141,13 @@ class Percy(commands.Bot):
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch()
 
-        self.initial_extensions = ["cogs.snekbox", "cogs.jishaku", "cogs.pep", "cogs.base", "cogs.meta"]
         for extension in self.initial_extensions:
             try:
                 await self.load_extension(extension)
             except Exception as e:
                 log.error(f"Failed to load extension `{extension}`", exc_info=e)
 
-        #await self.reattach_views()
+        await self.reattach_views()
 
     async def on_shard_resumed(self, shard_id: int):
         log.info('Shard ID %s has resumed...', shard_id)
@@ -187,7 +182,7 @@ class Percy(commands.Bot):
                 await ctx.send(f'{ctx.tick(False)} I do not have permission to execute this action.')
             elif isinstance(original, discord.HTTPException):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
-            elif isinstance(original, LockedResourceError):
+            elif issubclass(type(original), RuntimeError):
                 await ctx.send(f"{original} Please wait for it to finish and try again later.")
         elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, commands.BadArgument)):
             await ctx.send(str(error))
