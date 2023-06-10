@@ -114,19 +114,6 @@ class ResolvedCommandPermissions:
         return self._is_command_blocked(ctx.command.qualified_name, ctx.channel.id)
 
 
-class ForumConfigFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
-    help_forum: discord.ForumChannel = commands.flag(
-        name='help_forum',
-        description='The channel to send the help forum in.',
-        default=None
-    )
-    low_quality_check: bool = commands.flag(
-        name='low_quality_check',
-        description='Whether to check and sort for low quality posts.',
-        default=None
-    )
-
-
 class Config(commands.Cog):
     """Handles the Command Configuration for the bot.
     Enable or disable commands for specific users, channels or guild.

@@ -61,18 +61,11 @@ class Random(commands.Cog):
         commands.command,
         name='screenshot',
         description='Takes a screenshot of a website.',
-        usage='<url> [flags...]',
+        usage='<url>',
     )
     async def screenshot(self, ctx: Context, url: str, *, flags: ScreenshotFlags):
         """Takes a screenshot of a website.
         This command uses a flag syntax to indicate what options you want to use.
-        The following flags are valid.
-        `--wait_for` (`-wf`): Wait for a specific load state to be reached before taking the screenshot.
-        `--use_proxy` (`-up`): Use a proxy.
-        `--full_page` (`-fp`): Take a full page screenshot.
-        `--use_adblock` (`-ua`): Use adblock.
-        `--bypass_captcha` (`-bc`): Bypass captcha.
-        `--ignore_nsfw_filter` (`-inf`): Ignore NSFW filter.
         """
 
         url = url.strip("<>")

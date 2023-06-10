@@ -162,7 +162,6 @@ class DiscordStatus(commands.Cog):
                 return
 
             await self._last_incident.update(self, incidents[0])
-
             await self.bot.discord_status.put("last_incident", self._last_incident.as_dict())
             return
 

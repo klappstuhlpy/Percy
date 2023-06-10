@@ -1282,7 +1282,7 @@ class Stats(commands.Cog):
         name="history",
         hidden=True,
         invoke_without_command=True,
-        description='Command history.',
+        description='Command history related commands.',
     )
     @commands.is_owner()
     async def command_history(self, ctx: Context):

@@ -9,7 +9,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal
 )
 
 import discord
@@ -105,12 +105,10 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
                 is_app_command_cog = True
 
         for command in entries:
-            signature = self.group.bot.help_command.get_command_signature(command)  # type: ignore
-            if isinstance(command, app_commands.commands.Command):
-                embed.add_field(name=signature, value=command.description or 'No help given...', inline=False)
-            else:
-                signature = f'{signature}{" (!hidden)" if command.hidden else ""}'
-                embed.add_field(name=signature, value=command.short_doc or 'No help given...', inline=False)
+            signature = self.ctx.client.help_command.get_command_signature(command)  # type: ignore
+            embed.add_field(name=signature,
+                            value=getattr(command, 'short_doc', command.description) or 'No help given...',
+                            inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
         if is_app_command_cog:
@@ -281,8 +279,6 @@ class FrontHelpPaginator(BasePaginator[str]):
                 Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
                 ## Credits
                 I was made by {self.ctx.client.owner.mention}.
-                
-                I utilize modified Code of the [R. Danny Bot by Rapptz](https://github.com/Rapptz/RoboDanny) in the form of parts in the Timer functionality and the Moderation System.
                 
                 Any questions regarding licensing and credits can be directed to {self.ctx.client.owner.mention}.
                 """
@@ -459,17 +455,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 signature.append(f'<{option.name}>' if option.required else f'[{option.name}]')
             return f'{command.qualified_name} {" ".join(signature)}'
 
-        parent = (command.parent.name if command.parent else None) if is_app_command else command.full_parent_name
-        aliases = '|'.join(command.aliases) if not is_app_command and len(command.aliases) > 0 else None
+        signature = command.signature
 
-        alias = f'[{command.name}|{aliases}]' if aliases else command.name
-        alias = f'{parent} {alias}' if parent else alias
+        flags = command.clean_params.get('flags')
+        if flags:
+            params = []
+            for flag in flags.converter.get_flags().values():
+                default = (
+                    (f" {flag.default!r}" if (flag.annotation is str or Literal or Optional[str]) else
+                     f" {flag.default}") if flag.default is not None else ""
+                )
+                params.append(f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]')
 
-        return f'{alias} {command.signature}' if not is_app_command else alias
+            signature += f' {" ".join(params)}'
+
+        parent = command.full_parent_name if command.parent else None
+        alias = f'{parent} {command.name}' if parent else command.name
+        return f'{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
-        bot = self.context.bot
-
         def key(cmd: PartialCommand) -> str:
             try:
                 if isinstance(cmd, app_commands.commands.Group):
@@ -492,7 +496,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if name == '\U0010ffff':
                 continue
 
-            cog = bot.get_cog(name)
+            cog = self.context.bot.get_cog(name)
             if cog is None:
                 continue
 
@@ -509,14 +513,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog, prefix=self.context.clean_prefix)
 
     def common_command_formatting(self, embed: discord.Embed, command: PartialCommand):  # noqa
-        is_app_command = isinstance(command, app_commands.commands.Command)
+        embed.description = f"```py\n{self.get_command_signature(command)}```\n" \
+                            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
-        if is_app_command:
-            embed.description = f"```py\n{self.get_command_signature(command)}```\n"
-            embed.description += cleanup_docstring(command.description, None)
-        else:
-            embed.description = f"```py\n{self.get_command_signature(command)}{' (!hidden)' if command.hidden else ''}```\n"
-            embed.description += cleanup_docstring(command.description, command.help)
+        flags = command.clean_params.get('flags')
+        if flags:
+            params = []
+            for flag in flags.converter.get_flags().values():
+                params.append(f'`--{flag.name}` - {flag.description}')
+
+            embed.add_field(name='Flags', value='\n'.join(params), inline=False)
 
         if getattr(command, 'aliases', None):
             embed.add_field(name='Aliases', value=f"`{' '.join(command.aliases)}`", inline=False)
@@ -532,8 +538,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         examples = command.extras.get('examples')
         if examples:
-            full_name = command.name if not command.full_parent_name else f'{command.full_parent_name} {command.name}'
-            text = '\n'.join(f'`{self.context.clean_prefix}{full_name} {example}`' for example in examples)
+            parent = command.full_parent_name if command.parent else None
+            alias = f'{parent} {command.name}' if parent else command.name
+
+            text = '\n'.join(f'- `{self.context.clean_prefix}{alias} {example}`' for example in examples)
             embed.add_field(name='Examples', value=text, inline=False)
 
     async def send_command_help(self, command: PartialCommand):  # noqa
@@ -558,7 +566,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if not entries:
             return await self.send_command_help(group)
 
-        await GroupHelpPaginator.start(self.context, entries=entries, prefix=self.context.clean_prefix, group=group)
+        await GroupHelpPaginator.start(self.context, entries=entries, group=group)
 
     @classmethod
     def temporary(cls, context: Context | discord.Interaction) -> 'PaginatedHelpCommand':

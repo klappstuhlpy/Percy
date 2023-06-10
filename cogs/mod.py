@@ -1130,10 +1130,10 @@ class Mod(commands.Cog):
         name="purge",
         description="Removes messages that meet a criteria.",
         aliases=['clear'],
-        usage='[search] [flags...]'
+        usage='[search]'
     )
     @commands.guild_only()
-    @command_permissions(user=["manage_messages"])
+    @command_permissions(user=["manage_messages"], bot=["manage_messages"])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
             self, ctx: GuildContext, search: Optional[commands.Range[int, 1, 2000]] = None, *, flags: PurgeFlags
@@ -1141,22 +1141,8 @@ class Mod(commands.Cog):
         """Removes messages that meet a criteria.
         This command uses a syntax similar to Discord's search bar.
         The messages are only deleted if all options are met unless
-        the `require:` flag is passed to override the behaviour.
-        The following flags are valid.
-        `user:` Remove messages from the given user.
-        `contains:` Remove messages that contain a substring.
-        `prefix:` Remove messages that start with a string.
-        `suffix:` Remove messages that end with a string.
-        `after:` Search for messages that come after this message ID.
-        `before:` Search for messages that come before this message ID.
-        `bot: yes` Remove messages from bots (not webhooks!)
-        `delete_pinned: yes` Whether to delete pinned messages or not.
-        `webhooks: yes` Remove messages from webhooks
-        `embeds: yes` Remove messages that have embeds
-        `files: yes` Remove messages that have attachments
-        `emoji: yes` Remove messages that have custom emoji
-        `reactions: yes` Remove messages that have reactions
-        `require: any or all` Whether any or all flags should be met before deleting messages.
+        the `--require` flag is passed to override the behaviour.
+
         In order to use this command, you must have Manage Messages permissions.
         Note that the bot needs Manage Messages as well. These commands can't
         be used in a private message.
