@@ -15,7 +15,7 @@ from . import helpers
 from .paginator import BasePaginator
 from cogs.utils.context import Context
 from cogs.utils.formats import plural
-from cogs.utils.sphinx_scraper import SphinxScraper, SearchResults, MethObject, MetaSpec
+from cogs.utils.scraper.sphinx import SphinxScraper, SearchResults, MethObject, MetaSpec
 
 
 class DocType(enum.Enum):

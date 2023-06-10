@@ -17,10 +17,10 @@ from discord.utils import MISSING
 from bot import Percy
 from cogs import command, command_permissions
 from cogs.utils import cache
-from cogs.utils.comic.crawlers import parse_dc, marvel_crawl, parse_viz
 from cogs.utils.async_utils import AsyncPartialCache
 from cogs.utils.formats import MaybeAcquire
 from cogs.utils.helpers import PostgresItem
+from cogs.utils.scraper.comics import Parser
 
 log = logging.getLogger(__name__)
 B = TypeVar('B', bound='Brand')
@@ -374,14 +374,16 @@ class ComicCache(AsyncPartialCache):
 
     async def fetch_comics(self):
         async with self.cog._batch_lock:
+            parser: Parser = Parser  # type: ignore
+
             log.debug("Fetching Marvel...")
-            self.comics[Brand.MARVEL] = await marvel_crawl(self.cog.bot.marvel_client)
+            self.comics[Brand.MARVEL] = await parser.fetch_marvel_lookup_table(self.cog.bot.marvel_client)
 
             log.debug("Fetching DC...")
-            self.comics[Brand.DC] = await parse_dc()
+            self.comics[Brand.DC] = await parser.bs4_dc()
 
             log.debug("Fetching Manga...")
-            self.comics[Brand.MANGA] = await parse_viz()
+            self.comics[Brand.MANGA] = await parser.bs4_viz()
 
             self.sorted_comics.clear()
             for brand, comics in self.comics.items():

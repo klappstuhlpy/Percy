@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
 
 import asyncpg
@@ -59,6 +60,12 @@ async def plonk_iterator(bot: Percy, guild: discord.Guild, records: list[asyncpg
         if resolved is None:
             yield f'<Not Found: {entity_id}>'
         yield str(resolved)
+
+
+def remove_html_tags(content: str) -> str:
+    clean_text = re.sub('<.*?>', '', content)  # Remove HTML tags
+    clean_text = re.sub(r'\s+', ' ', clean_text)  # Remove extra whitespace
+    return clean_text
 
 
 def readable_time(seconds: int | float, decimal: bool = False, short: bool = False) -> str:

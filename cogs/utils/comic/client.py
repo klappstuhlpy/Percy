@@ -1,229 +1,99 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
-from urllib.parse import urlencode
+import asyncio
+from typing import Any, TYPE_CHECKING, Optional
 import hashlib
 import datetime
 
-import aiohttp
+import discord.utils
+import yarl
 
 if TYPE_CHECKING:
     from bot import Percy
 
 
-DEFAULT_API_VERSION = 'v1'
-
-
 class Marvel(object):
     """An Object-Oriented wrapper for the Marvel API"""
+
+    BASE_URL = f'http://gateway.marvel.com/v1/public/'
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
         self.config = self.bot.config.marvel
 
-    @property
-    def _endpoint(self) -> str:
-        return f'http://gateway.marvel.com/{DEFAULT_API_VERSION}/public/'
+        self._req_lock: asyncio.Lock = asyncio.Lock()
 
-    @property
-    def _auth(self) -> str:
-        """Creates hash from api keys and returns all required parametsrs"""
-        ts = datetime.datetime.now().strftime("%Y-%m-%d%H:%M:%S")
-        hash_string = hashlib.md5(("%s%s%s" % (ts, self.config.private_key, self.config.public_key)).encode('utf-8')).hexdigest()
-        return "ts=%s&apikey=%s&hash=%s" % (ts, self.config.public_key, hash_string)
+    async def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            data: Optional[dict[str, Any]] = None,
+            headers: Optional[dict[str, Any]] = None,
+    ) -> Any:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d%H:%M:%S %Z")
+        params = {
+            "apikey": self.config.public_key,
+            "ts": timestamp,
+            "hash": hashlib.md5(
+                ("%s%s%s" % (timestamp, self.config.private_key, self.config.public_key)).encode('utf-8')
+            ).hexdigest()
+        }
 
-    async def _call(self, resource_url, params=None) -> dict:
-        """Calls the Marvel API endpoint"""
+        hdrs = {
+            "Accept": "application/json"
+        }
 
-        url = "%s%s" % (self._endpoint, resource_url)
-        if params:
-            url += "?%s&%s" % (params, self._auth)
-        else:
-            url += "?%s" % self._auth
+        req_url = yarl.URL(self.BASE_URL) / url
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    resp.raise_for_status()
+        if headers is not None and isinstance(headers, dict):
+            hdrs.update(headers)
 
-                urlfinal = await resp.json()
-        return urlfinal
-
-    def _params(self, params) -> str:
-        """Takes dictionary of parameters and returns urlencoded string"""
-        return urlencode(params)
+        async with self._req_lock:
+            async with self.bot.session.request(method, req_url, params=params, json=data, headers=hdrs) as r:
+                remaining = r.headers.get('X-Ratelimit-Remaining')
+                js = await r.json()
+                if r.status == 429 or remaining == '0':
+                    delta = discord.utils._parse_ratelimit_header(r)
+                    await asyncio.sleep(delta)
+                    self._req_lock.release()
+                    return await self.request(method, url, data=data, headers=headers)
+                elif 300 > r.status >= 200:
+                    return js
+                else:
+                    raise discord.HTTPException(r, js['message'])
 
     async def get_comic(self, _id: int):
-        """Fetches a single comic by id.
+        """Fetches a single comic by id."""
 
-        GET -> /v1/public/comics/{comicId}
-        """
-
-        from cogs.utils.comic.marvel.comic import Comic, ComicDataWrapper
-        url = "%s/%s" % (Comic.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return ComicDataWrapper(self, response)
+        data = await self.request('GET', 'comics', data={'id': _id})
+        return DataWrapper(self, data)
 
     async def get_comics(self, **kwargs):
-        """Fetches list of comics.
+        """Fetches list of comics."""
 
-        GET -> /v1/public/comics
-        """
-
-        from cogs.utils.comic.marvel.comic import Comic, ComicDataWrapper
-        response = await self._call(Comic.SPEC_ENDPOINT, self._params(kwargs))
-        return ComicDataWrapper(self, response)
-
-    '''async def get_character(self, _id: int):
-        """Fetches a single character by id.
-
-        GET -> /v1/public/characters
-        """
-
-        from cogs.utils.comic.container.character import Character, CharacterDataWrapper
-        url = "%s/%s" % (Character.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return CharacterDataWrapper(self, response)
-
-    async def get_characters(self, **kwargs):
-        """Fetches lists of comic characters with optional filters.
-
-        GET -> /v1/public/characters/{characterId}
-        """
-
-        from cogs.utils.comic.container.character import Character, CharacterDataWrapper
-        response = await self._call(Character.SPEC_ENDPOINT, self._params(kwargs))
-        return CharacterDataWrapper(self, response, kwargs)
-    
-    async def get_creator(self, _id: int):
-        """Fetches a single creator by id.
-
-        GET -> /v1/public/creators/{creatorId}
-        """
-
-        from cogs.utils.comic.container.creator import Creator, CreatorDataWrapper
-        url = "%s/%s" % (Creator.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return CreatorDataWrapper(self, response)
-
-    async def get_creators(self, **kwargs):
-        """Fetches lists of creators.
-
-        GET -> /v1/public/creators
-        """
-
-        from cogs.utils.comic.container.creator import Creator, CreatorDataWrapper
-        response = await self._call(Creator.SPEC_ENDPOINT, self._params(kwargs))
-        return CreatorDataWrapper(self, response)
-
-    async def get_event(self, _id: int):
-        """Fetches a single event by id.
-
-        GET -> /v1/public/event/{eventId}
-        """
-
-        from cogs.utils.comic.container.event import Event, EventDataWrapper
-        url = "%s/%s" % (Event.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return EventDataWrapper(self, response)
-
-    async def get_events(self, **kwargs):
-        """Fetches lists of events.
-
-        GET -> /v1/public/events
-        """
-
-        from cogs.utils.comic.container.event import Event, EventDataWrapper
-        response = await self._call(Event.SPEC_ENDPOINT, self._params(kwargs))
-        return EventDataWrapper(self, response)
-
-    async def get_single_series(self, _id: int):
-        """Fetches a single comic series by id.
-
-        GET -> /v1/public/series/{seriesId}
-        """
-
-        from cogs.utils.comic.container.series import Series, SeriesDataWrapper
-        url = "%s/%s" % (Series.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return SeriesDataWrapper(self, response)
-
-    async def get_series(self, **kwargs):
-        """Fetches lists of events.
-
-        GET -> /v1/public/events
-        """
-
-        from cogs.utils.comic.container.series import Series, SeriesDataWrapper
-        response = await self._call(Series.SPEC_ENDPOINT, self._params(kwargs))
-        return SeriesDataWrapper(self, response)
-
-    async def get_story(self, _id: int):
-        """Fetches a single story by id.
-
-        GET -> /v1/public/stories/{storyId}
-        """
-
-        from cogs.utils.comic.container.story import Story, StoryDataWrapper
-        url = "%s/%s" % (Story.SPEC_ENDPOINT, _id)
-        response = await self._call(url)
-        return StoryDataWrapper(self, response)
-
-    async def get_stories(self, **kwargs):
-        """Fetches lists of stories.
-
-        GET -> /v1/public/stories
-        """
-
-        from cogs.utils.comic.container.story import Story, StoryDataWrapper
-        response = await self._call(Story.SPEC_ENDPOINT, self._params(kwargs))
-        return StoryDataWrapper(self, response)'''
+        data = await self.request('GET', 'comics', data=kwargs)
+        return DataWrapper(self, data)
 
 
 class MarvelObject(object):
-    """
-    Base class for all Marvel API classes
-    """
+    """Base class for all Marvel API classes"""
 
     def __init__(self, marvel: Marvel, data: dict):
         self.marvel: Marvel = marvel
         self.data: dict = data
 
-    def __unicode__(self) -> str:
-        try:
-            return self.data['name']
-        except:
-            return self.data['title']
-
-    async def get_related_resource(self, instance: MarvelObject | Any, instace_wrapper, **kwargs):
-        """
-        Takes a related resource Class
-        and returns the related resource DataWrapper.
-        For Example, Given a Character instance, return
-        a ComicsDataWrapper related to that character.
-        /character/{characterId}/comics
-
-        :returns:  DataWrapper -- DataWrapper for requested Resource
-        """
-        url = "%s/%s/%s" % (instance.SPEC_ENDPOINT, instance.id, instance.resource_url)
-        response = await self.marvel._call(url, self.marvel._params(kwargs))
-        return instace_wrapper(self.marvel, response)
-
     @staticmethod
     def str_to_datetime(string) -> datetime:
         """Converts '2013-11-20T17:40:18-0500' format to 'datetime' object"""
-        from datetime import datetime
-        return datetime.strptime(string[:-6], '%Y-%m-%dT%H:%M:%S')
+        return datetime.datetime.strptime(string[:-6], '%Y-%m-%dT%H:%M:%S')
 
 
 class DataWrapper(MarvelObject):
-    """
-    Base DataWrapper
-    """
+    """Base DataWrapper"""
 
     def __init__(self, marvel: Marvel, data: dict, params=None):
-        self.marvel: Marvel = marvel
-        self.data: dict = data
+        super().__init__(marvel, data)
         self.params = params
 
     @property
@@ -241,13 +111,28 @@ class DataWrapper(MarvelObject):
         """ A digest value of the content returned by the call."""
         return self.data['etag']
 
+    @property
+    def type(self):
+        return self.data['type']
+
+    @property
+    def date(self):
+        return self.str_to_datetime(self.data['date'])
+
+    @property
+    def price(self):
+        return float(self.data['price'])
+
+    @property
+    def ex_data(self):
+        return DataContainer(self.marvel, self.data['data'])
+
 
 class DataContainer(MarvelObject):
     """Base DataContainer"""
 
     def __init__(self, marvel: Marvel, data: dict):
-        self.marvel: Marvel = marvel
-        self.data: data = data
+        super().__init__(marvel, data)
 
     @property
     def offset(self) -> int:
@@ -273,7 +158,11 @@ class DataContainer(MarvelObject):
     def result(self) -> MarvelObject:
         """Returns the first item in the results list.
         Useful for methods that should return only one results. """
-        return self.results[0]
+        return self.data[0]
+
+    @property
+    def results(self):
+        return [Comic(self.marvel, comic) for comic in self.data['results']]
 
 
 class List(MarvelObject):
@@ -295,6 +184,11 @@ class List(MarvelObject):
         """The path to the full list of resources in this collection."""
         return self.data['collectionURI']
 
+    @property
+    def items(self) -> list[Summary]:
+        """Returns List of ComicSummary objects"""
+        return [Summary(self.marvel, item) for item in self.data['items']]
+
 
 class Summary(MarvelObject):
     """Base Summary object"""
@@ -308,6 +202,11 @@ class Summary(MarvelObject):
     def name(self) -> str:
         """The canonical name of the resource."""
         return self.data['name']
+
+    @property
+    def role(self):
+        """The role of the creator in the parent entity."""
+        return self.data['role']
 
 
 class TextObject(MarvelObject):
@@ -344,4 +243,157 @@ class Image(MarvelObject):
 
     def __repr__(self):
         return "%s.%s" % (self.path, self.extension)
-    
+
+
+class Comic(MarvelObject):
+    """Comic object"""
+
+    ENDPOINT: str = 'comics'
+
+    @property
+    def id(self) -> int:
+        return self.data['id']
+
+    @property
+    def title(self) -> str:
+        return self.data['title']
+
+    @property
+    def issueNumber(self) -> float:
+        return float(self.data['issueNumber'])
+
+    @property
+    def variantDescription(self) -> str:
+        return self.data['description']
+
+    @property
+    def description(self) -> str:
+        return self.data['description']
+
+    @property
+    def modified(self) -> datetime:
+        return self.str_to_datetime(self.data['modified'])
+
+    @property
+    def modified_raw(self) -> str:
+        return self.data['modified']
+
+    @property
+    def isbn(self) -> str:
+        return self.data['isbn']
+
+    @property
+    def upc(self) -> str:
+        return self.data['upc']
+
+    @property
+    def diamondCode(self) -> str:
+        return self.data['diamondCode']
+
+    @property
+    def ean(self) -> str:
+        return self.data['ean']
+
+    @property
+    def issn(self) -> str:
+        return self.data['issn']
+
+    @property
+    def format(self) -> str:
+        return self.data['format']
+
+    @property
+    def pageCount(self) -> int:
+        return int(self.data['pageCount'])
+
+    @property
+    def textObjects(self) -> list[TextObject]:
+        return [TextObject(self.marvel, text_object) for text_object in self.data['textObjects']]
+
+    @property
+    def resourceURI(self) -> str:
+        return self.data['resourceURI']
+
+    @property
+    def urls(self) -> list:
+        return self.data['urls']
+
+    @property
+    def series(self) -> str:
+        return self.data['series']
+
+    @property
+    def thumbnail(self) -> Image:
+        return Image(self.marvel, self.data['thumbnail'])
+
+    @property
+    def images(self) -> list[Image]:
+        return [Image(self.marvel, image) for image in self.data['images']]
+
+    @property
+    def creators(self):
+        return List(self.marvel, self.data['creators'])
+
+    @property
+    def dates(self) -> list[DataWrapper]:
+        return [DataWrapper(self.marvel, date) for date in self.data['dates']]
+
+    @property
+    def prices(self) -> list[DataWrapper]:
+        return [DataWrapper(self.marvel, price) for price in self.data['prices']]
+
+
+class Creator(MarvelObject):
+    """Creator object
+    Takes a dict of creator attrs"""
+
+    ENDPOINT: str = 'creators'
+
+    @property
+    def id(self) -> int:
+        return int(self.data['id'])
+
+    @property
+    def firstName(self) -> str:
+        return self.data['firstName']
+
+    @property
+    def middleName(self) -> str:
+        return self.data['middleName']
+
+    @property
+    def lastName(self) -> str:
+        return self.data['lastName']
+
+    @property
+    def suffix(self) -> str:
+        return self.data['suffix']
+
+    @property
+    def fullName(self) -> str:
+        return self.data['fullName']
+
+    @property
+    def modified(self) -> datetime:
+        return self.str_to_datetime(self.data['modified'])
+
+    @property
+    def modified_raw(self) -> str:
+        return self.data['modified']
+
+    @property
+    def resourceURI(self) -> str:
+        return self.data['resourceURI']
+
+    @property
+    def urls(self) -> str:
+        return self.data['urls']
+
+    @property
+    def thumbnail(self) -> str:
+        return "%s.%s" % (self.data['thumbnail']['path'], self.data['thumbnail']['extension'])
+
+    @property
+    def comics(self):
+        """Returns ComicList object"""
+        return List(self.marvel, self.data['comics'])

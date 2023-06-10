@@ -26,7 +26,7 @@ class Minigame(commands.GroupCog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='\N{VIDEO GAME}', id=None)
+        return discord.PartialEmoji(name='\N{VIDEO GAME}')
 
     def __repr__(self) -> str:
         return '<cogs.Minigame>'
