@@ -1,32 +1,6 @@
-# -*- coding: utf-8 -*-
-
-"""
-MIT License
-
-Copyright (c) 2022-Present Klappstuhl
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
-OR OTHER DEALINGS IN THE SOFTWARE.
-"""
 from __future__ import annotations
 
 import datetime
-import logging
 from typing import List, Dict, Any, NamedTuple, Optional
 
 import aiohttp
@@ -36,8 +10,9 @@ from discord import DiscordException
 from discord.ext import commands, tasks
 
 from bot import Percy
+from launcher import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class YouTubeRequestError(DiscordException):
@@ -124,8 +99,7 @@ class YouTubeNotifications(commands.Cog):
                 if resp.status != 200:
                     match data["error"]["errors"][0]["reason"]:
                         case "quotaExceeded":
-                            logger.debug(
-                                "YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
+                            log.trace("YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
                         case _:
                             raise YouTubeRequestError(resp, await resp.json(), f'Could not get channel "{name}".')
                     return
@@ -163,7 +137,7 @@ class YouTubeNotifications(commands.Cog):
                 if resp.status != 200:
                     match data["error"]["errors"][0]["reason"]:
                         case "quotaExceeded":
-                            logger.debug(
+                            log.debug(
                                 "YouTube API quota exceeded.")  # Just debug this error. (Request Limit of YouTube API)
                         case _:
                             raise YouTubeRequestError(resp, data, f'Could not get stream for channel "{channel.id}".')
@@ -234,7 +208,7 @@ class YouTubeNotifications(commands.Cog):
             try:
                 await self.channel.send(embed=embed)
             except discord.HTTPException:
-                logger.warning("Could not send twitch notification due to: %s", exc_info=True)
+                log.warning("Could not send twitch notification due to: %s", exc_info=True)
 
 
 async def setup(bot):

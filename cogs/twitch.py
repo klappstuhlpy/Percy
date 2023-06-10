@@ -1,31 +1,5 @@
-# -*- coding: utf-8 -*-
-
-"""
-MIT License
-
-Copyright (c) 2022-Present Klappstuhl
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
-OR OTHER DEALINGS IN THE SOFTWARE.
-"""
 import asyncio
 import datetime
-import logging
 import time
 from typing import List, Dict, Any, Optional, NamedTuple, AsyncIterator
 
@@ -37,8 +11,9 @@ from discord.utils import cached_slot_property, MISSING  # noqa
 
 from bot import Percy
 from cogs.utils import cache
+from launcher import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class TwitchRequestError(HTTPException):
@@ -104,7 +79,7 @@ class TwitchNotifications(commands.Cog):
     async def _bearer_token(self, bearer_token: str = None) -> str:
         expiry = await self._expiry()
         if not expiry or (expiry and expiry < time.time()):
-            logger.debug("Refreshing bearer token")
+            log.trace("Refreshing bearer token")
             await self._get_bearer_token()
 
         if bearer_token:
@@ -244,7 +219,7 @@ class TwitchNotifications(commands.Cog):
             try:
                 await self.channel.send(embed=embed)
             except discord.HTTPException:
-                logger.warning("Could not send twitch notification due to: %s", exc_info=True)
+                log.warning("Could not send twitch notification due to: %s", exc_info=True)
 
 
 async def setup(bot):
