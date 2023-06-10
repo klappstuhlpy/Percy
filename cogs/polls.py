@@ -15,7 +15,7 @@ from discord.utils import MISSING
 from cogs.utils.paginator import BasePaginator
 from . import command, command_permissions
 from .reminder import Timer
-from .utils import timetools, converters, fuzzy, cache, formats, helpers
+from .utils import timetools, converters, fuzzy, cache, helpers
 from .utils.context import Context
 from .utils.converters import colour_autocomplete
 from .utils.formats import plural, get_shortened_string

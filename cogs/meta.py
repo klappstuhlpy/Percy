@@ -50,7 +50,9 @@ BADGE_DICT = {
     discord.UserFlags.hypesquad_bravery: '<:bravery:1079447443667689502> HypeSquad Bravery',
     discord.UserFlags.hypesquad_brilliance: '<:brilliance:1079447480569180331> HypeSquad Brilliance'
 }
+
 COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=96&quality=lossless'
+INFO_ICON_URL = 'https://cdn3.emoji.gg/emojis/4765-discord-info-white-theme.png'
 
 
 def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
@@ -515,7 +517,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
         embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name="Command Help", icon_url=self.context.bot.user.avatar.url)
+        embed.set_author(name="Command Help", icon_url=INFO_ICON_URL)
 
         signature = self.get_command_signature(command)
 
@@ -811,17 +813,17 @@ class Meta(commands.Cog):
         location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
 
         final_url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        await ctx.send(final_url)
 
-    @solved.error
-    async def on_solved_error(self, ctx: GuildContext, error: Exception):
-        if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f'This command is on cooldown. Try again in {error.retry_after:.2f}s')
+        resolved = self.bot.resolve_command(command)
+        embed = discord.Embed(description=resolved.description, colour=helpers.Colour.darker_red())
+        embed.set_author(name=f'Command: {command}', icon_url=INFO_ICON_URL)
+        embed.add_field(name="Source Code", value=f"[Jump to GitHub]({final_url})")
+        embed.set_footer(text=f"{location}:{firstlineno}")
+        await ctx.send(embed=embed)
 
     @app_commands.command(name="help", description="Get help for a command or module.")
     @app_commands.guild_only()
-    @app_commands.describe(module="Get help for a module.",
-                           command="Get help for a command")
+    @app_commands.describe(module="Get help for a module.", command="Get help for a command")
     async def _help(
             self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None
     ):
