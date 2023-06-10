@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+import random
+from typing import TYPE_CHECKING, Literal
 
 import discord
 from discord import app_commands
@@ -78,14 +79,30 @@ class Minigame(commands.GroupCog):
         name='hangman',
         description='Play a Hangman game.',
     )
-    async def hangman(self, ctx: Context):
+    @app_commands.choices(
+        language=[
+            app_commands.Choice(name='English', value='en'),
+            app_commands.Choice(name='German', value='de'),
+        ]
+    )
+    async def hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
         """Play hangman with the bot."""
 
-        async with self.bot.session.get('https://random-word-api.vercel.app/api?words=1') as resp:
+        """async with self.bot.session.get('https://random-word-api.vercel.app/api?words=1') as resp:
             if resp.status != 200:
                 return await ctx.send('Something went wrong while fetching the word.', ephemeral=True)
             data = await resp.json()
-            word = data[0]
+            word = data[0]"""
+
+        GER_WORDS_URL = 'https://raw.githubusercontent.com/enz/german-wordlist/master/words'
+        ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/hangman-words/main/words.txt'
+
+        async with self.bot.session.get(ENG_WORDS_URL if language == 'en' else GER_WORDS_URL) as resp:
+            if resp != 200:
+                return await ctx.send(f'{ctx.tick(False)} Something went wrong while fetching the word.', ephemeral=True)
+
+            data = await resp.text()
+            word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
             message = await ctx.send(embeds=[builder.build_hang_man(), builder.build_embed()])
