@@ -15,7 +15,6 @@ from discord.ext import commands
 
 from .formats import plural, human_join
 
-# Monkey patch mins and secs into the units
 units = pdt.pdtLocales['en_US'].units
 units['minutes'].append('mins')
 units['seconds'].append('secs')
@@ -51,6 +50,7 @@ class ShortTime:
            (?:(?P<hours>[0-9]{1,5})(\s+)?(?:hours?|hr?|hrs?))?            # e.g. 12h
            (?:(?P<minutes>[0-9]{1,5})(\s+)?(?:minutes?|m(?:ins?)?))?      # e.g. 10 m
            (?:(?P<seconds>[0-9]{1,5})(\s+)?(?:seconds?|s(?:ecs?)?))?      # e.g. 15s
+           (?:(?P<microseconds>[0-9]{1,7})(\s+)?(?:microseconds?|ms))?    # e.g. 15ms
         """,
         re.VERBOSE,
     )
@@ -75,7 +75,7 @@ class ShortTime:
                     self.dt = self.dt.astimezone(tzinfo)
                 return
             else:
-                raise commands.BadArgument('<:redTick:1079249771975413910> Invalid time passed.')
+                raise commands.BadArgument('<:redTick:1079249771975413910> Invalid time passed, try e.g. "30m", "2 hours".')
 
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         now = now or datetime.datetime.now(datetime.timezone.utc)
@@ -111,14 +111,13 @@ class HumanTime:
             tzinfo: datetime.tzinfo = datetime.timezone.utc,
     ):
         now = now or datetime.datetime.now(tzinfo)
-        dt, status = self.calendar.parseDT(argument, sourceTime=now, tzinfo=None)
+        dt, status = self.calendar.parseDT(argument, sourceTime=now, tzinfo=None)  # type: datetime.datetime, Any
 
-        if not status.hasDateOrTime:
+        if not status.hasDateOrTime:  # If no date or time was provided, means it could not be parsed, raise an error
             raise commands.BadArgument(
                 '<:redTick:1079249771975413910> Invalid time provided, try e.g. "tomorrow" or "3 days"')
 
-        if not status.hasTime:
-            # replace it with the current time
+        if not status.hasTime:  # If no time was provided, set it to the current time
             dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
 
         self.dt: datetime.datetime = dt.replace(tzinfo=tzinfo)
@@ -146,11 +145,11 @@ class Time(HumanTime):
             tzinfo: datetime.tzinfo = datetime.timezone.utc,
     ):
         try:
-            o = ShortTime(argument, now=now, tzinfo=tzinfo)
+            time = ShortTime(argument, now=now, tzinfo=tzinfo)
         except:  # noqa
             super().__init__(argument, now=now, tzinfo=tzinfo)
         else:
-            self.dt = o.dt
+            self.dt = time.dt
             self._past = False
 
 
@@ -220,8 +219,8 @@ class FriendlyTimeResult:
     __slots__ = ('dt', 'arg')
 
     def __init__(self, dt: datetime.datetime):
-        self.dt = dt
-        self.arg = ''
+        self.dt: datetime.datetime = dt
+        self.arg: str = ''
 
     async def ensure_constraints(
             self, ctx: Context, uft: UserFriendlyTime, now: datetime.datetime, remaining: str
@@ -245,9 +244,10 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
 
     @classmethod
     def __do_conversion(cls, argument: str) -> relativedelta:
-        match = ShortTime.compiled.fullmatch(argument)
+        """Converts a string into a :class:`relativedelta` object."""
+        match = ShortTime.SHORT_TIME_COMPILED.fullmatch(argument)
         if match is None or not match.group(0):
-            raise ValueError('Invalid time provided')
+            raise ValueError
 
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         return relativedelta(**data)
@@ -255,18 +255,18 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> relativedelta:
         try:
             return self.__do_conversion(argument)
-        except ValueError as e:
-            raise commands.BadArgument("<:redTick:1079249771975413910> " + str(e)) from None
+        except ValueError:
+            raise commands.BadArgument("<:redTick:1079249771975413910> Invalid time provided.") from None
 
     async def transform(self, interaction, value: str) -> relativedelta:
         try:
             return self.__do_conversion(value)
-        except ValueError as e:
-            raise app_commands.AppCommandError("<:redTick:1079249771975413910> " + str(e)) from None
+        except ValueError:
+            raise app_commands.AppCommandError("<:redTick:1079249771975413910> Invalid time provided.") from None
 
 
 class UserFriendlyTime(commands.Converter):
-    """Converter Class to convert a human time input into a datetime.datetime object.
+    """Converter Class to convert a human time input with optional context into a datetime.datetime object.
 
     Examples
     --------
@@ -286,14 +286,14 @@ class UserFriendlyTime(commands.Converter):
             converter = converter()
 
         if converter is not None and not isinstance(converter, commands.Converter):
-            raise TypeError('commands.Converter subclass necessary.')
+            raise TypeError('Object `converter` needs to be subclass of commands.Converter.')
 
-        self.converter: commands.Converter = converter  # type: ignore  # It doesn't understand this narrowing
+        self.converter: commands.Converter = converter
         self.default: Any = default
 
     async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:
         calendar = HumanTime.calendar
-        regex = ShortTime.compiled
+        regex = ShortTime.SHORT_TIME_COMPILED
 
         tzinfo = datetime.timezone.utc
         config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
@@ -312,7 +312,7 @@ class UserFriendlyTime(commands.Converter):
             return result
 
         if match is None or not match.group(0):
-            match = ShortTime.discord_fmt.match(argument)
+            match = ShortTime.DISCORD_UNIX_TS.match(argument)
             if match is not None:
                 result = FriendlyTimeResult(
                     datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.timezone.utc).astimezone(tzinfo)
@@ -331,14 +331,14 @@ class UserFriendlyTime(commands.Converter):
         now = now.astimezone(tzinfo)
         elements = calendar.nlp(argument, sourceTime=now)
         if elements is None or len(elements) == 0:
-            raise commands.BadArgument('<:redTick:1079249771975413910> '
-                                       'Invalid time provided, try e.g. "tomorrow" or "3 days".')
+            raise commands.BadArgument(
+                '<:redTick:1079249771975413910> Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
         dt, status, begin, end, dt_string = elements[0]
 
         if not status.hasDateOrTime:
-            raise commands.BadArgument('<:redTick:1079249771975413910> '
-                                       'Invalid time provided, try e.g. "tomorrow" or "3 days".')
+            raise commands.BadArgument(
+                '<:redTick:1079249771975413910> Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
         if begin not in (0, 1) and end != len(argument):
             raise commands.BadArgument(
