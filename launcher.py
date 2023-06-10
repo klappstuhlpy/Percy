@@ -239,7 +239,7 @@ def setup_logging():
         get_logger('discord.state').addFilter(RemoveNoise())
         get_logger('charset_normalizer').setLevel(logging.ERROR)
 
-        root_log.setLevel(logging.DEBUG)
+        root_log.setLevel(logging.INFO)
         handler = RotatingFileHandler(filename='percy.log', encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5)
         handler.setFormatter(fmt)
         root_log.addHandler(handler)
@@ -282,15 +282,15 @@ async def run_bot():
     discord.VoiceClient.warn_nacl = False
     log = get_logger()
 
-    #try:
-    #    pool = await create_pool()
-    #except Exception:
-    #    click.echo('Could not set up PostgreSQL. Exiting.', file=sys.stderr)
-    #    log.exception('Could not set up PostgreSQL. Exiting.')
-    #    return
+    try:
+        pool = await create_pool()
+    except Exception:
+        click.echo('Could not set up PostgreSQL. Exiting.', file=sys.stderr)
+        log.exception('Could not set up PostgreSQL. Exiting.')
+        return
 
     async with Percy() as bot:
-        bot.pool = None
+        bot.pool = pool
         bot.alchemy_engine = create_async_engine(bot.config.alchemy_postgresql, echo=False)  # ORM
         await bot.start()
 

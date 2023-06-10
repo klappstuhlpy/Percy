@@ -213,14 +213,13 @@ class CodeSnippet:
 
 
 class Base(commands.Cog, name='Exclusives'):
-    """Exclusive commands and functions for the Claude Music Discord server.
+    """Utility related Commands and Functions.
 
     Functions:
     -----------
     `URL to File:` Converts the Code from a GitHub File URL and sends it in the chat by passing a valid GitHub URL.
     `Member Join:` Adds some Roles to Members when they join the Server.
-    `Auto Archive Additions:` Archives the Threads in the Help Forum after a certain amount of days.
-    ---> + Manging Thread Permissions and overlooking correct Thread creation.
+    `Auto Archive Threads:` Archives the Threads in the Help Forum after a certain amount of days.
     `Automatic Token Invalidator:` Automatically invalidates Discord Tokens when they are sent in the chat.
     """
 
