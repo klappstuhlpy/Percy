@@ -517,12 +517,17 @@ class PaginatedHelpCommand(commands.HelpCommand):
                             f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
         flags = command.clean_params.get('flags')
+        fields = []
         if flags:
             params = []
             for flag in flags.converter.get_flags().values():
                 params.append(f'`--{flag.name}` - {flag.description}')
 
-            embed.add_field(name='Flags', value='\n'.join(params), inline=False)
+            for i in range(0, len(params), 15):
+                fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': '\n'.join(params[i:i+15]), 'inline': False})
+
+            for field in fields:
+                embed.add_field(**field)
 
         if getattr(command, 'aliases', None):
             embed.add_field(name='Aliases', value=f"`{' '.join(command.aliases)}`", inline=False)
