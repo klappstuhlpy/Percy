@@ -5,6 +5,7 @@ import inspect
 import io
 import itertools
 import os
+import re
 import time
 from collections import Counter
 from typing import (
@@ -513,12 +514,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog, prefix=self.context.clean_prefix)
 
     def common_command_formatting(self, embed: discord.Embed, command: PartialCommand):  # noqa
-        embed.description = f"```py\n{self.get_command_signature(command)}```\n" \
-                            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
+        signature = self.get_command_signature(command)
 
         flags = command.clean_params.get('flags')
         fields = []
         if flags:
+            signature = re.sub(r'(<flags>|\[flags])(\s+)?', r' ', signature).strip()
             params = []
             for flag in flags.converter.get_flags().values():
                 params.append(f'`--{flag.name}` - {flag.description}')
@@ -528,6 +529,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
             for field in fields:
                 embed.add_field(**field)
+
+        embed.description = f"```py\n{signature}```\n{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
         if getattr(command, 'aliases', None):
             embed.add_field(name='Aliases', value=f"`{' '.join(command.aliases)}`", inline=False)
