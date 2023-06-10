@@ -85,6 +85,7 @@ class Minigame(commands.GroupCog):
             app_commands.Choice(name='German', value='de'),
         ]
     )
+    @app_commands.describe(language='The language to play with.')
     async def hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
         """Play hangman with the bot."""
 
@@ -98,9 +99,6 @@ class Minigame(commands.GroupCog):
         ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/hangman-words/main/words.txt'
 
         async with self.bot.session.get(ENG_WORDS_URL if language == 'en' else GER_WORDS_URL) as resp:
-            if resp != 200:
-                return await ctx.send(f'{ctx.tick(False)} Something went wrong while fetching the word.', ephemeral=True)
-
             data = await resp.text()
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
