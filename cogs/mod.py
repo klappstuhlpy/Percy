@@ -1773,7 +1773,7 @@ class Mod(commands.Cog):
     )
     @commands.guild_only()
     @command_permissions(user=["ban_members"], bot=["ban_members"])
-    async def massban(self, ctx: GuildContext, *, args: MassbanFlags):
+    async def massban(self, ctx: GuildContext, *, flags: MassbanFlags):
         """Mass bans multiple members from the server.
         This command uses a syntax similar to Discord's search bar. To use this command,
         you and the bot must both have Ban Members' permission. **Every option is optional.**
@@ -1784,29 +1784,29 @@ class Mod(commands.Cog):
         author = ctx.author
         members = []
 
-        if args.channel:
-            before = discord.Object(id=args.before) if args.before else None
-            after = discord.Object(id=args.after) if args.after else None
+        if flags.channel:
+            before = discord.Object(id=flags.before) if flags.before else None
+            after = discord.Object(id=flags.after) if flags.after else None
             predicates = []
-            if args.contains:
-                predicates.append(lambda m: args.contains in m.content)
-            if args.starts:
-                predicates.append(lambda m: m.content.startswith(args.starts))
-            if args.ends:
-                predicates.append(lambda m: m.content.endswith(args.ends))
-            if args.match:
+            if flags.contains:
+                predicates.append(lambda m: flags.contains in m.content)
+            if flags.starts:
+                predicates.append(lambda m: m.content.startswith(flags.starts))
+            if flags.ends:
+                predicates.append(lambda m: m.content.endswith(flags.ends))
+            if flags.match:
                 try:
-                    _match = re.compile(args.match)
+                    _match = re.compile(flags.match)
                 except re.error as e:
                     return await ctx.send(f'Invalid regex passed to `match:` flag: {e}')
                 else:
                     predicates.append(lambda m, x=_match: x.match(m.content))
-            if args.embeds:
-                predicates.append(args.embeds)
-            if args.files:
-                predicates.append(args.files)
+            if flags.embeds:
+                predicates.append(flags.embeds)
+            if flags.files:
+                predicates.append(flags.files)
 
-            async for message in args.channel.history(limit=args.search, before=before, after=after):
+            async for message in flags.channel.history(limit=flags.search, before=before, after=after):
                 if all(p(message) for p in predicates):
                     members.append(message.author)
         else:
@@ -1823,39 +1823,39 @@ class Mod(commands.Cog):
             lambda m: m.discriminator != '0000',  # No deleted users
         ]
 
-        if args.username:
+        if flags.username:
             try:
-                _regex = re.compile(args.username)
+                _regex = re.compile(flags.username)
             except re.error as e:
                 return await ctx.send(f'Invalid regex passed to `username:` flag: {e}')
             else:
                 predicates.append(lambda m, x=_regex: x.match(m.name))
 
-        if args.avatar is False:
+        if flags.avatar is False:
             predicates.append(lambda m: m.avatar is None)
-        if args.roles is False:
+        if flags.roles is False:
             predicates.append(lambda m: len(getattr(m, 'roles', [])) <= 1)
 
         now = discord.utils.utcnow()
-        if args.created:
-            def created(_member, *, offset=now - datetime.timedelta(minutes=args.created)):
+        if flags.created:
+            def created(_member, *, offset=now - datetime.timedelta(minutes=flags.created)):
                 return _member.created_at > offset
 
             predicates.append(created)
-        if args.joined:
-            def joined(_member, *, offset=now - datetime.timedelta(minutes=args.joined)):
+        if flags.joined:
+            def joined(_member, *, offset=now - datetime.timedelta(minutes=flags.joined)):
                 if isinstance(_member, discord.User):
                     return True
                 return _member.joined_at and _member.joined_at > offset
 
             predicates.append(joined)
-        if args.joined_after:
-            def joined_after(_member, *, _other=args.joined_after):
+        if flags.joined_after:
+            def joined_after(_member, *, _other=flags.joined_after):
                 return _member.joined_at and _other.joined_at and _member.joined_at > _other.joined_at
 
             predicates.append(joined_after)
-        if args.joined_before:
-            def joined_before(_member, *, _other=args.joined_before):
+        if flags.joined_before:
+            def joined_before(_member, *, _other=flags.joined_before):
                 return _member.joined_at and _other.joined_at and _member.joined_at < _other.joined_at
 
             predicates.append(joined_before)
@@ -1867,17 +1867,17 @@ class Mod(commands.Cog):
         if len(members) == 0:
             return await ctx.send('<:redTick:1079249771975413910> No members found matching criteria.')
 
-        if args.show:
+        if flags.show:
             members = sorted(members, key=lambda m: m.joined_at or now)
             fmt = "\n".join(f'ID: {m.id}\tJoined: {m.joined_a}\tCreated: {m.created_at}\tMember: {m}' for m in members)
             content = f'- Current Time: {discord.utils.utcnow()}\n- Total members: {len(members)}\n\n{fmt}'
             file = discord.File(io.BytesIO(content.encode('utf-8')), filename='members.txt')
             return await ctx.send(file=file)
 
-        if args.reason is None:
+        if flags.reason is None:
             return await ctx.send('`reason:` flag is required.')
         else:
-            reason = await ActionReason().convert(ctx, args.reason)
+            reason = await ActionReason().convert(ctx, flags.reason)
 
         confirm = await ctx.prompt(f'This will ban **{plural(len(members)):member}**. Are you sure?')
         if not confirm:
