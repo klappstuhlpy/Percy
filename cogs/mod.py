@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import datetime
 import io
@@ -1770,8 +1769,7 @@ class Mod(commands.Cog):
     @command(
         commands.hybrid_command,
         name='massban',
-        description='Mass bans multiple members from the server.',
-        usage="[flags...]"
+        description='Mass bans multiple members from the server.'
     )
     @commands.guild_only()
     @command_permissions(user=["ban_members"], bot=["ban_members"])
@@ -1780,27 +1778,6 @@ class Mod(commands.Cog):
         This command uses a syntax similar to Discord's search bar. To use this command,
         you and the bot must both have Ban Members' permission. **Every option is optional.**
         Users are only banned **if and only if** all conditions are met.
-        The following options are valid.
-        `channel:` Channel to search for message history.
-        `reason:` The reason for the ban.
-        `regex:` Regex that the usernames must match.
-        `created:` Matches users whose accounts were created less than specified minutes ago.
-        `joined:` Matches users that joined less than specified minutes ago.
-        `joined-before:` Matches users who joined before the member ID given.
-        `joined-after:` Matches users who joined after the member ID given.
-        `avatar:` Matches users who have no avatar.
-        `roles:` Matches users that have no role.
-        `show:` Show members instead of banning them.
-        Message history filters (Requires `channel:`):
-        `contains:` A substring to search for in the message.
-        `starts:` A substring to search if the message starts with.
-        `ends:` A substring to search if the message ends with.
-        `match:` A regex to match the message content to.
-        `search:` How many messages to search. Default 100. Max 2000.
-        `after:` Messages must come after this message ID.
-        `before:` Messages must come before this message ID.
-        `files:` Checks if the message has attachments.
-        `embeds:` Checks if the message has embeds.
         """
 
         await ctx.defer()
