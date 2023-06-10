@@ -16,7 +16,7 @@ from typing_extensions import Annotated
 
 from cogs.utils.paginator import BasePaginator
 from . import command, command_permissions
-from .utils import checks, cache
+from .utils import cache
 from .utils.formats import plural
 from .utils.helpers import PostgresItem
 from .utils.scope import StarableChannel
@@ -989,12 +989,13 @@ class Starboard(commands.Cog):
         record = await ctx.db.fetchrow(query, ctx.guild.id)
         total_messages = record[0]
 
-        query = """SELECT COUNT(*)
-                   FROM starrers
-                   INNER JOIN starboard_entries entry
-                   ON entry.id = starrers.entry_id
-                   WHERE entry.guild_id=$1;
-                """
+        query = """
+            SELECT COUNT(*)
+            FROM starrers
+            INNER JOIN starboard_entries entry
+            ON entry.id = starrers.entry_id
+            WHERE entry.guild_id=$1;
+        """
 
         record = await ctx.db.fetchrow(query, ctx.guild.id)
         total_stars = record[0]
@@ -1002,42 +1003,43 @@ class Starboard(commands.Cog):
         e.description = f'**{plural(total_messages):message}** starred with a total of **{total_stars}** stars.'
         e.colour = self.bot.colour.darker_red()
 
-        query = """WITH t AS (
-                       SELECT
-                           entry.author_id AS entry_author_id,
-                           starrers.author_id,
-                           entry.bot_message_id
-                       FROM starrers
-                       INNER JOIN starboard_entries entry
-                       ON entry.id = starrers.entry_id
-                       WHERE entry.guild_id=$1
-                   )
-                   (
-                       SELECT t.entry_author_id AS "ID", 1 AS "Type", COUNT(*) AS "Stars"
-                       FROM t
-                       WHERE t.entry_author_id IS NOT NULL
-                       GROUP BY t.entry_author_id
-                       ORDER BY "Stars" DESC
-                       LIMIT 3
-                   )
-                   UNION ALL
-                   (
-                       SELECT t.author_id AS "ID", 2 AS "Type", COUNT(*) AS "Stars"
-                       FROM t
-                       GROUP BY t.author_id
-                       ORDER BY "Stars" DESC
-                       LIMIT 3
-                   )
-                   UNION ALL
-                   (
-                       SELECT t.bot_message_id AS "ID", 3 AS "Type", COUNT(*) AS "Stars"
-                       FROM t
-                       WHERE t.bot_message_id IS NOT NULL
-                       GROUP BY t.bot_message_id
-                       ORDER BY "Stars" DESC
-                       LIMIT 3
-                   );
-                """
+        query = """
+            WITH t AS (
+               SELECT
+                   entry.author_id AS entry_author_id,
+                   starrers.author_id,
+                   entry.bot_message_id
+               FROM starrers
+               INNER JOIN starboard_entries entry
+               ON entry.id = starrers.entry_id
+               WHERE entry.guild_id=$1
+            )
+            (
+               SELECT t.entry_author_id AS "ID", 1 AS "Type", COUNT(*) AS "Stars"
+               FROM t
+               WHERE t.entry_author_id IS NOT NULL
+               GROUP BY t.entry_author_id
+               ORDER BY "Stars" DESC
+               LIMIT 3
+            )
+            UNION ALL
+            (
+               SELECT t.author_id AS "ID", 2 AS "Type", COUNT(*) AS "Stars"
+               FROM t
+               GROUP BY t.author_id
+               ORDER BY "Stars" DESC
+               LIMIT 3
+            )
+            UNION ALL
+            (
+               SELECT t.bot_message_id AS "ID", 3 AS "Type", COUNT(*) AS "Stars"
+               FROM t
+               WHERE t.bot_message_id IS NOT NULL
+               GROUP BY t.bot_message_id
+               ORDER BY "Stars" DESC
+               LIMIT 3
+            );
+        """
 
         records = await ctx.db.fetch(query, ctx.guild.id)
         starred_posts = [r for r in records if r['Type'] == 3]
@@ -1061,36 +1063,37 @@ class Starboard(commands.Cog):
         e.set_thumbnail(url=member.display_avatar.url)
         e.set_author(name=member.display_name, icon_url=member.display_avatar.url)
 
-        query = """WITH t AS (
-                       SELECT entry.author_id AS entry_author_id,
-                              starrers.author_id,
-                              entry.message_id
-                       FROM starrers
-                       INNER JOIN starboard_entries entry
-                       ON entry.id=starrers.entry_id
-                       WHERE entry.guild_id=$1
-                   )
-                   (
-                       SELECT '0'::bigint AS "ID", COUNT(*) AS "Stars"
-                       FROM t
-                       WHERE t.entry_author_id=$2
-                   )
-                   UNION ALL
-                   (
-                       SELECT '0'::bigint AS "ID", COUNT(*) AS "Stars"
-                       FROM t
-                       WHERE t.author_id=$2
-                   )
-                   UNION ALL
-                   (
-                       SELECT t.message_id AS "ID", COUNT(*) AS "Stars"
-                       FROM t
-                       WHERE t.entry_author_id=$2
-                       GROUP BY t.message_id
-                       ORDER BY "Stars" DESC
-                       LIMIT 3
-                   )
-                """
+        query = """
+            WITH t AS (
+               SELECT entry.author_id AS entry_author_id,
+                      starrers.author_id,
+                      entry.message_id
+               FROM starrers
+               INNER JOIN starboard_entries entry
+               ON entry.id=starrers.entry_id
+               WHERE entry.guild_id=$1
+            )
+            (
+               SELECT '0'::bigint AS "ID", COUNT(*) AS "Stars"
+               FROM t
+               WHERE t.entry_author_id=$2
+            )
+            UNION ALL
+            (
+               SELECT '0'::bigint AS "ID", COUNT(*) AS "Stars"
+               FROM t
+               WHERE t.author_id=$2
+            )
+            UNION ALL
+            (
+               SELECT t.message_id AS "ID", COUNT(*) AS "Stars"
+               FROM t
+               WHERE t.entry_author_id=$2
+               GROUP BY t.message_id
+               ORDER BY "Stars" DESC
+               LIMIT 3
+            )
+        """
 
         records = await ctx.db.fetch(query, ctx.guild.id, member.id)
         received = records[0]['Stars']

@@ -14,7 +14,7 @@ from discord.ext import commands, tasks
 from bot import Percy
 from cogs import command, command_permissions
 from cogs.mod import ModConfig, AutoModFlags
-from cogs.utils import cache, checks
+from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.render import Render
