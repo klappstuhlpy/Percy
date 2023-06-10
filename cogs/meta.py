@@ -465,12 +465,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             params = []
             for flag in flags.converter.get_flags().values():
                 default = (
-                    (f"{flag.default!r}" if (flag.annotation is str or Literal or Optional[str]) else flag.default)
-                    if flag.default is not None else ""
+                    (f" {flag.default!r}" if (flag.annotation is str or Literal or Optional[str]) else
+                     f" {flag.default}") if flag.default is not None else ""
                 )
                 params.append(f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]')
 
             signature += f' {" ".join(params)}'
+
+        signature = re.sub(r'\s+', ' ', signature).strip()
 
         parent = command.full_parent_name if command.parent else None
         alias = f'{parent} {command.name}' if parent else command.name
