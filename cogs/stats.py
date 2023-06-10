@@ -26,6 +26,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from typing_extensions import Annotated
 
 from cogs.utils.paginator import FilePaginator
+from launcher import get_logger
 from . import command
 from .meta import COMMAND_ICON_URL
 from .utils import formats, timetools, helpers
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 BaseTable = declarative_base()
 
@@ -1599,7 +1600,7 @@ async def setup(bot: Percy):
     await bot.add_cog(cog)
 
     bot.logging_handler = handler = LoggingHandler(cog)
-    logging.getLogger().addHandler(handler)
+    get_logger().addHandler(handler)
     commands.Bot.on_error = on_error
     bot.old_tree_error = bot.tree.on_error
     bot.tree.on_error = on_app_command_error
@@ -1607,6 +1608,6 @@ async def setup(bot: Percy):
 
 async def teardown(bot: Percy):
     commands.Bot.on_error = old_on_error
-    logging.getLogger().removeHandler(bot.logging_handler)
+    get_logger().removeHandler(bot.logging_handler)
     bot.tree.on_error = bot.old_tree_error
     del bot.logging_handler

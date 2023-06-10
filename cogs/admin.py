@@ -173,9 +173,9 @@ class Admin(commands.Cog):
     @command(
         commands.command,
         hidden=True,
-        name='eval'
+        name='aeval'
     )
-    async def _eval(self, ctx: Context, *, body: str):
+    async def _aeval(self, ctx: Context, *, body: str):
         """Evaluates a code"""
 
         message = await ctx.send(

@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import logging
 import re
 import time
 import weakref
-from typing import TYPE_CHECKING, Callable, Literal, Optional, Any, Union, List, NamedTuple
+from typing import TYPE_CHECKING, Callable, Literal, Optional, Any, Union, List, NamedTuple, Annotated
 
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from typing_extensions import Annotated
 
 from cogs.utils.paginator import BasePaginator
 from . import command, command_permissions
@@ -27,9 +25,6 @@ if TYPE_CHECKING:
 
     class StarboardContext(GuildContext):
         starboard: CompleteStarboardConfig
-
-
-log = logging.getLogger(__name__)
 
 
 class StarError(commands.CheckFailure):

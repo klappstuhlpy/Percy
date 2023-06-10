@@ -6,8 +6,10 @@ import binascii
 import datetime
 import inspect
 import io
+import pprint
 import re
-from typing import TYPE_CHECKING, Optional, Any, List, NamedTuple, Self
+import textwrap
+from typing import TYPE_CHECKING, Optional, Any, List, NamedTuple, Self, Annotated, Mapping
 from urllib.parse import urlparse, urljoin
 
 import aiohttp
@@ -15,12 +17,18 @@ import discord
 import yarl
 from discord.ext import commands, tasks
 
+from cogs import command
+from cogs.utils.converters import Snowflake
+from cogs.utils.paginator import TextSource
 from cogs.utils.scope import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
     PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE, GITHUB_FULL_REGEX
+from launcher import get_logger
 
 if TYPE_CHECKING:
     from bot import Percy
     from utils.context import Context
+
+log = get_logger(__name__)
 
 
 class TrashView(discord.ui.View):
@@ -63,7 +71,7 @@ class GithubError(commands.CommandError):
     pass
 
 
-class ParsedGitHubCS(NamedTuple):
+class ParsedBase(NamedTuple):
     url: str
     raw_url: str
     lines: List[int]
@@ -75,16 +83,16 @@ class ParsedGitHubCS(NamedTuple):
     file_path: str
 
 
-class GitHub:
+class CodeSnippet:
     session: aiohttp.ClientSession
-    base: Optional[ParsedGitHubCS]
+    base: Optional[ParsedBase]
     message: discord.Message
 
     def __repr__(self):
         return f"<GitHub url={self.base.url} lines={self.base.lines} filename={self.base.filename}>"
 
     @classmethod
-    def match_url(cls, url: str) -> Optional[ParsedGitHubCS]:
+    def match_url(cls, url: str) -> Optional[ParsedBase]:
         match = GITHUB_FULL_REGEX.match(url)
 
         if match is None:
@@ -117,7 +125,7 @@ class GitHub:
         raw_url = re.sub(r'^https?://(?:www\.)?github\.com/([^/]+)/([^/]+)/blob/(.*)$',
                          r'https://raw.githubusercontent.com/\1/\2/\3', url)
 
-        return ParsedGitHubCS(
+        return ParsedBase(
             url=url,
             raw_url=raw_url,
             lines=line_numbers,
@@ -204,7 +212,7 @@ class GitHub:
                 await message.reply(embed=embed, file=file, view=TrashView(message.author), mention_author=False)
 
 
-class DPYHandlers(commands.Cog, name='Exclusives'):
+class Base(commands.Cog, name='Exclusives'):
     """Exclusive commands and functions for the Claude Music Discord server.
 
     Functions:
@@ -354,7 +362,7 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         if message.author.bot:
             return
 
-        for match in GitHub.open(self.bot.session, message):
+        for match in CodeSnippet.open(self.bot.session, message):
             if match.base is None:
                 continue
             await match.post()
@@ -397,6 +405,86 @@ class DPYHandlers(commands.Cog, name='Exclusives'):
         except discord.HTTPException:
             pass
 
+    def format_fields(self, mapping: Mapping[str, Any], field_width: int | None = None) -> str:
+        """Format a mapping to be readable to a human."""
+        fields = sorted(mapping.items(), key=lambda item: item[0])
+
+        if field_width is None:
+            field_width = len(max(mapping.keys(), key=len))
+
+        out = ""
+
+        for key, val in fields:
+            if isinstance(val, dict):
+                inner_width = int(field_width * 1.6)
+                val = "\n" + self.format_fields(val, field_width=inner_width)
+
+            elif isinstance(val, str):
+                text = textwrap.fill(val, width=100, replace_whitespace=False)
+                val = textwrap.indent(text, " " * (field_width + len(": ")))
+                val = val.lstrip()
+
+            if key == "color":
+                val = hex(val)
+
+            out += "{0:>{width}}: {1}\n".format(key, val, width=field_width)
+
+        return out.rstrip()
+
+    async def send_raw_content(self, ctx: Context, message: discord.Message, json: bool = False) -> None:
+        """Send information about the raw API response for a `discord.Message`.
+
+        If `json` is True, send the information in a copy-pasteable Python format.
+        """
+
+        if not message.channel.permissions_for(ctx.author).read_messages:
+            await ctx.send(f"{ctx.tick(False)} You do not have permissions to see the channel this message is in.")
+            return
+
+        raw_data = await ctx.bot.http.get_message(message.channel.id, message.id)
+        paginator = TextSource(prefix="```json", suffix="```")
+
+        def add_content(title: str, content: str) -> None:
+            paginator.add_line(f"== {title} ==\n")
+            paginator.add_line(content.replace("`", "`\u200b"))
+            paginator.close_page()
+
+        if message.content:
+            add_content("Raw message", message.content)
+
+        transformer = pprint.pformat if json else self.format_fields
+        for field_name in ("embeds", "attachments"):
+            data = raw_data[field_name]
+
+            if not data:
+                continue
+
+            total = len(data)
+            for current, item in enumerate(data, start=1):
+                title = f"Raw {field_name} ({current}/{total})"
+                add_content(title, transformer(item))
+
+        for page in paginator.pages:
+            await ctx.send(page)
+
+    @command(commands.command, description="Shows information about the raw API response for a message.")
+    async def raw(self, ctx: Context, message: discord.Message, to_json: bool = False) -> None:
+        """Shows information about the raw API response."""
+        await self.send_raw_content(ctx, message, json=to_json)
+
+    @command(commands.command, aliases=("snf", "snfl", "sf"))
+    async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
+        """Get Discord snowflake creation time."""
+        if not snowflakes:
+            raise commands.BadArgument(f"{ctx.tick(False)} At least one snowflake must be provided.")
+
+        lines = []
+        for snowflake in snowflakes:
+            created_at = discord.utils.snowflake_time(snowflake)
+            lines.append(f"- **{snowflake}** • Created: {created_at} ({discord.utils.format_dt(created_at, 'R')})")
+
+        await ctx.send("\n".join(lines))
+
 
 async def setup(bot: Percy):
-    await bot.add_cog(DPYHandlers(bot))
+    await bot.add_cog(Base(bot))

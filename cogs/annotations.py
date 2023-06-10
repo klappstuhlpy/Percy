@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Optional, List, Annotated
 from discord.ext import commands
 from discord import app_commands
 import discord
-import logging
 import re
 
 from . import command
@@ -14,7 +13,6 @@ from cogs.utils.paginator import BasePaginator
 from .utils.render import Render
 from .utils.scope import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
-log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .utils.context import Context

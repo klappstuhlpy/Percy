@@ -21,8 +21,9 @@ from cogs.utils.async_utils import AsyncPartialCache
 from cogs.utils.formats import MaybeAcquire
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.scraper.comics import Parser
+from launcher import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 B = TypeVar('B', bound='Brand')
 
 MARVEL_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107651622978469888/free-marvel-282124.png'

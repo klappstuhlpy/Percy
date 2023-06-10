@@ -513,7 +513,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
         )
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog, prefix=self.context.clean_prefix)
 
-    def common_command_formatting(self, embed: discord.Embed, command: PartialCommand):  # noqa
+    def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
+        embed = discord.Embed(colour=helpers.Colour.darker_red())
+        embed.set_author(name="Command Help", icon_url=self.context.bot.user.avatar.url)
+
         signature = self.get_command_signature(command)
 
         flags = command.clean_params.get('flags')
@@ -530,10 +533,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
             for field in fields:
                 embed.add_field(**field)
 
-        embed.description = f"```py\n{signature}```\n{cleanup_docstring(command.description, getattr(command, 'help', None))}"
+        embed.description = f"**```py\n{signature}```**\n{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
         if getattr(command, 'aliases', None):
-            embed.add_field(name='Aliases', value=f"`{' '.join(command.aliases)}`", inline=False)
+            embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
         bot_perms = getattr(command.callback, '__readable_bot_perms__', None)
         user_perms = getattr(command.callback, '__readable_user_perms__', None)
@@ -550,15 +553,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             alias = f'{parent} {command.name}' if parent else command.name
 
             text = '\n'.join(f'- `{self.context.clean_prefix}{alias} {example}`' for example in examples)
-            embed.add_field(name='Examples', value=text, inline=False)
+            embed.add_field(name='**Examples**', value=text, inline=False)
 
     async def send_command_help(self, command: PartialCommand):  # noqa
         if not isinstance(command, app_commands.commands.Command):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
                 return await self.context.send(f'<:redTick:1079249771975413910> No Command called {command!r} found.')
-        embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name="Command Help", icon_url=self.context.bot.user.avatar.url)
-        self.common_command_formatting(embed, command)
+
+        embed = self.command_formatting(command)
         await self.context.send(embed=embed, silent=True)
 
     async def send_group_help(self, group: PartialCommandGroup):

@@ -19,7 +19,6 @@ PH_GENERAL_VOICE_ID = 1079788410220322826
 DSTATUS_CHANNEL_ID = 1066703170409070666
 PH_HEAD_DEV_ROLE_ID = 1101538861663911986
 
-
 ObjectHook = Callable[[Dict[str, Any]], Any]
 
 COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
@@ -44,29 +43,64 @@ GITHUB_URL_REGEX = re.compile(r'https?://(?:www\.)?github\.com/[^/\s]+/[^/\s]+(?
 EMOJI_REGEX = re.compile(r'<a?:.+?:([0-9]{15,21})>')
 EMOJI_NAME_REGEX = re.compile(r'^[0-9a-zA-Z-_]{2,32}$')
 
-CMYK_REGEX = re.compile(r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$")
+CMYK_REGEX = re.compile(
+    r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$")
 HEX_REGEX = re.compile(r"^(#|0x)(?P<hex>[a-fA-F0-9]{6})$")
 RGB_REGEX = re.compile(r"^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$")
 
 REVISION_FILE = re.compile(r'(?P<kind>V|U)(?P<version>[0-9]+)__(?P<description>.+).sql')
 
+FORMATTED_CODE_REGEX = re.compile(
+    r"""
+        (?P<delim>(?P<block>```)|``?)
+        (?(block)(?:(?P<lang>[a-z]+)\n)?)
+        (?:[ \t]*\n)*
+        (?P<code>.*?)
+        \s*
+        (?P=delim)
+    """,
+    flags=re.DOTALL | re.IGNORECASE | re.VERBOSE
+)
+
+RAW_CODE_REGEX = re.compile(
+    r"""
+        ^(?:[ \t]*\n)*
+        (?P<code>.*?)
+        \s*$
+    """,
+    flags=re.DOTALL | re.VERBOSE
+)
+
 GITHUB_FULL_REGEX = re.compile(
     r"""
-        https?://                               # http:// or https://
-        (?:www\.)?github\.com/                  # optional www. and github.com/
-        (?P<user>[^/]+)/                        # capture the user/organization name
-        (?P<repository>[^/]+)/                  # capture the repository name
-        blob/                                   # literal "blob/"
-        (?P<branch>[^/]+)/                      # capture the branch name
-        (?:
-            (?P<file_path>[^/]+(?:/[^/]+)*/)?   # capture the file path (optional)
-            (?P<filename>[^/#]+\.[^/#]+)        # capture the filename
-        )
-        (?:\#.*$|$)                             # optional fragment identifier or end of line
+        https?://(?:www\.)?github\.com/
+        (?P<user>[^/]+)/
+        (?P<repository>[^/]+)/
+        blob/
+        (?P<branch>[^/]+)/
+        (?P<file_path>[^/]+(?:/[^/]+)*/)?
+        (?P<filename>[^/#]+\.[^/#]+)
+        (?:\?[^#]+)?
     """,
     re.VERBOSE
 )
 
+GITHUB_RE = re.compile(
+    r"https://github\.com/(?P<repo>[a-zA-Z0-9-]+/[\w.-]+)/blob/"
+    r"(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)"
+)
+
+GITHUB_GIST_RE = re.compile(
+    r"""
+        https://gist\.github\.com/
+        ([a-zA-Z0-9-]+)/
+        (?P<gist_id>[a-zA-Z0-9]+)/*
+        (?P<revision>[a-zA-Z0-9]*)/*
+        #file-(?P<file_path>[^#>]+?)(\?[^#>]+)?
+        (-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)
+    """,
+    flags=re.VERBOSE
+)
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
@@ -244,7 +278,6 @@ LANGUAGES = {
     'yo': 'Yoruba',
     'zu': 'Zulu',
 }
-
 
 HANG_MAN = [
     (

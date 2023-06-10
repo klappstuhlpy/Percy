@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
+from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING, Literal
 
 import asyncpg
 import discord
+from discord.utils import TimestampStyle
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -222,10 +223,10 @@ def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) 
     return text
 
 
-def format_date(dt: Optional[datetime.datetime]):
+def format_date(dt: Optional[datetime.datetime], style: TimestampStyle = 'f') -> str:
     if dt is None:
         return 'N/A'
-    return f'{discord.utils.format_dt(dt, "f")} ({discord.utils.format_dt(dt, style="R")})'
+    return f'{discord.utils.format_dt(dt, style)} ({discord.utils.format_dt(dt, style="R")})'
 
 
 def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:

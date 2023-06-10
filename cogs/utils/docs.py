@@ -11,6 +11,7 @@ from discord import SelectOption
 from discord.utils import MISSING
 
 from bot import Percy
+from launcher import get_logger
 from . import helpers
 from .paginator import BasePaginator
 from cogs.utils.context import Context
@@ -24,7 +25,7 @@ class DocType(enum.Enum):
 
 
 T = TypeVar('T')
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class DocPaginator(BasePaginator[MethObject]):

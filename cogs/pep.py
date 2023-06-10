@@ -4,20 +4,21 @@ from io import StringIO
 from typing import Optional
 
 import discord.utils
-from discord.ext import commands
+from dateutil.parser import parse
+from discord.ext import commands, tasks
 from discord.ext.commands import Cog, Context
 
 from bot import Percy
 from cogs import command
-from cogs.base import DPYHandlers
+from cogs.base import Base
 from cogs.utils import cache
+from cogs.utils.formats import format_date
 from launcher import get_logger
 
 log = get_logger(__name__)
 
 ICON_URL = "https://www.python.org/static/opengraph-icon-200x200.png"
 BASE_PEP_URL = "https://peps.python.org/pep-"
-PEPS_LISTING_API_ENDPOINT = "/repos/python/peps/contents?ref=main"
 
 
 class PythonEnhancementProposals(Cog):
@@ -30,16 +31,18 @@ class PythonEnhancementProposals(Cog):
 
     async def cog_load(self) -> None:
         """Carry out cog asynchronous initialisation."""
-        await self.refresh_peps_urls()
+        self.refresh_peps_urls.start()
 
+    @tasks.loop(hours=3)
     async def refresh_peps_urls(self) -> None:
         """Refresh PEP URLs listing in every 3 hours."""
         await self.bot.wait_until_ready()
         log.trace("Started refreshing PEP URLs.")
         self.last_refreshed_peps = datetime.now(tz=UTC)
 
-        cog: DPYHandlers = self.bot.get_cog('Exclusives')  # type: ignore
-        listing = await cog.github_request('GET', PEPS_LISTING_API_ENDPOINT)
+        cog: Base = self.bot.get_cog('Exclusives')  # type: ignore
+        listing = await cog.github_request(
+            'GET', "repos/python/peps/contents", headers={"Accept": "application/vnd.github+json"})
 
         for file in listing:
             name = file["name"]
@@ -47,18 +50,18 @@ class PythonEnhancementProposals(Cog):
                 pep_number = name.replace("pep-", "").split(".")[0]
                 self.peps[int(pep_number)] = file["download_url"]
 
-        log.info("Successfully refreshed PEP URLs listing.")
+        log.debug("Successfully refreshed PEP URLs listing.")
 
     @staticmethod
     def get_pep_zero_embed() -> dict:
         """Get information embed about PEP 0."""
         embed = discord.Embed(
-            title="**PEP 0 - Index of Python Enhancement Proposals (PEPs)**",
-            url="https://peps.python.org/"
+            title="**PEP 0 - Index of Python Enhancement Proposals**",
+            description=f"[*Jump to PEP*](https://peps.python.org/)"
         )
         embed.set_thumbnail(url=ICON_URL)
         embed.add_field(name="Status", value="Active")
-        embed.add_field(name="Created", value=discord.utils.format_dt(datetime(2000, 7, 13), "R"))
+        embed.add_field(name="Created", value=format_date(datetime(2000, 7, 13), 'd'))
         embed.add_field(name="Type", value="Informational")
 
         return {"embed": embed}
@@ -73,7 +76,7 @@ class PythonEnhancementProposals(Cog):
             await self.refresh_peps_urls()
 
         if pep_nr not in self.peps:
-            return {"content": f"<:redTick:1079249771975413910> {pep_nr} is not a valid PEP number."}
+            return {"content": f"<:redTick:1079249771975413910> `{pep_nr}` is not a valid PEP number."}
 
         return None
 
@@ -83,7 +86,7 @@ class PythonEnhancementProposals(Cog):
         title = " ".join(pep_header["Title"].split())
         embed = discord.Embed(
             title=f"**PEP {pep_nr} - {title}**",
-            description=f"[*Jump*]({BASE_PEP_URL}{pep_nr:04})",
+            description=f"[*Jump to PEP*]({BASE_PEP_URL}{pep_nr:04})",
         )
 
         embed.set_thumbnail(url=ICON_URL)
@@ -91,7 +94,10 @@ class PythonEnhancementProposals(Cog):
         fields_to_check = ("Status", "Python-Version", "Created", "Type")
         for field in fields_to_check:
             if pep_header.get(field, ""):
-                embed.add_field(name=field, value=pep_header[field])
+                if field == "Created":
+                    embed.add_field(name=field, value=format_date(parse(pep_header[field]), 'd'))
+                else:
+                    embed.add_field(name=field, value=pep_header[field])
 
         return embed
 
@@ -112,7 +118,7 @@ class PythonEnhancementProposals(Cog):
         )
         return {"content": "<:redTick:1079249771975413910> An unexpected Error has occured."}
 
-    @command(commands.command, name="pep", aliases=("get_pep", "p"), description="Fetches information about a PEP and sends it to the channel.")
+    @command(commands.command, name="pep", aliases=["p"], description="Fetches information about a PEP and sends it to the channel.")
     async def pep_command(self, ctx: Context, pep_number: int) -> None:
         """Fetches information about a PEP and sends it to the channel."""
         await ctx.typing()

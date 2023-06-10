@@ -2,7 +2,7 @@ import asyncio
 import functools
 import logging
 
-from typing import Callable, Optional, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any
+from typing import Callable, Optional, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, TYPE_CHECKING
 
 import discord
 from discord.ext import commands
@@ -110,7 +110,12 @@ class AsyncPartialCache:
         self.tasks = []
         self.running_tasks = set()
         self.completed_tasks = set()
-        self.logger = logging.getLogger(__name__)
+
+        if TYPE_CHECKING:
+            from launcher import get_logger
+            self.logger = get_logger(__name__)
+        else:
+            self.logger = logging.getLogger(__name__)
 
         self.loop = asyncio.get_running_loop()
 

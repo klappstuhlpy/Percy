@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import logging
 import random
 from typing import Optional, TypedDict, Iterable
 
@@ -18,6 +17,7 @@ from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.render import Render
+from launcher import get_logger
 
 
 class LevelConfig(PostgresItem):
@@ -119,7 +119,7 @@ class LevelConfig(PostgresItem):
             self.cog.get_level_config.refactor(self.user_id, self.guild_id, replic=self)
 
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class DataBatchEntry(TypedDict):

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import io
 import random
 import string
@@ -20,7 +21,7 @@ from discord.ui import View
 
 if TYPE_CHECKING:
     from bot import Percy
-    from cogs.base import DPYHandlers
+    from cogs.base import Base
 
 
 T = TypeVar('T')
@@ -292,7 +293,7 @@ class Context(commands.Context):
 
     async def post(self, filename: str, *, content: str) -> str | None:
         """Create a GitHub Gist from content."""
-        dpy: Optional[DPYHandlers] = self.bot.get_cog("Exclusives")
+        dpy: Optional[Base] = self.bot.get_cog("Exclusives")
         posted_gist_url = await dpy.create_gist(description=str(self.author) + " - " + filename,
                                                 content=content, public=True)
 
@@ -474,6 +475,10 @@ class GuildContext(Context):
     channel: Union[discord.VoiceChannel, discord.TextChannel, discord.Thread]
     me: discord.Member
     prefix: str
+
+
+class EvalContext(Context):
+    job_message: discord.Message
 
 
 async def setup(bot):

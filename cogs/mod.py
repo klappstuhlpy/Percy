@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import io
-import logging
 import re
 from collections import Counter, defaultdict
 from typing import Optional, Callable, Any, Union, Literal, List, TYPE_CHECKING, MutableMapping, Dict
@@ -18,6 +17,7 @@ from typing_extensions import Annotated
 from bot import Percy
 from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
+from launcher import get_logger
 from . import command, command_permissions
 from .utils import timetools, cache, helpers
 from .utils.context import GuildContext
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         cog: Mod
         guild_config: ModConfig
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def safe_reason_append(base: str, to_append: str) -> str:
@@ -1355,8 +1355,9 @@ class Mod(commands.Cog):
             return True
         return False
 
+    @staticmethod
     def is_potential_lockout(
-            self, me: discord.Member, channel: Union[discord.Thread, discord.VoiceChannel, discord.TextChannel]
+            me: discord.Member, channel: Union[discord.Thread, discord.VoiceChannel, discord.TextChannel]
     ) -> bool:
         if isinstance(channel, discord.Thread):
             parent = channel.parent

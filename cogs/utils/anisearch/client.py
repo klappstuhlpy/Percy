@@ -1,9 +1,6 @@
-import logging
 from typing import Any, Dict, List
 
 import aiohttp
-
-log = logging.getLogger(__name__)
 
 API_ENDPOINT = 'https://graphql.anilist.co'
 

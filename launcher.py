@@ -10,7 +10,7 @@ import traceback
 import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TypedDict, Any
+from typing import TypedDict, Any, TYPE_CHECKING, cast
 
 import asyncpg
 import click
@@ -147,6 +147,36 @@ class Migrations:
                 click.echo(sql)
 
 
+TRACE_LEVEL = 5
+
+
+if TYPE_CHECKING:
+    LoggerClass = logging.Logger
+else:
+    LoggerClass = logging.getLoggerClass()
+
+
+class PercyLogger(LoggerClass):
+    """Custom implementation of the `Logger` class with an added `trace` method."""
+
+    def trace(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'TRACE'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.trace("Houston, we have an %s", "interesting problem", exc_info=1)
+        """
+        if self.isEnabledFor(TRACE_LEVEL):
+            self.log(TRACE_LEVEL, msg, *args, **kwargs)
+
+
+def get_logger(name: str | None = None) -> PercyLogger:
+    """Utility to make mypy recognise that logger is of type `PercyLogger`."""
+    return cast(PercyLogger, logging.getLogger(name))
+
+
 class RemoveNoise(logging.Filter):
     def __init__(self):
         super().__init__(name='discord.state')
@@ -191,32 +221,36 @@ class _ColourFormatter(logging.Formatter):
 
 @contextlib.contextmanager
 def setup_logging():
-    log = logging.getLogger()
+    logging.TRACE = TRACE_LEVEL
+    logging.addLevelName(TRACE_LEVEL, "TRACE")
+    logging.setLoggerClass(PercyLogger)
+
+    root_log = get_logger()
 
     try:
         dt_fmt = '%Y-%m-%d %H:%M:%S'
         fmt = logging.Formatter(fmt='[{asctime}] | {levelname:<7} - {name}: {message}', datefmt=dt_fmt, style='{')
 
         discord.utils.setup_logging(formatter=_ColourFormatter())
-        # __enter__
-        max_bytes = 32 * 1024 * 1024  # 32 MiB
-        logging.getLogger('discord').setLevel(logging.INFO)
-        logging.getLogger('discord.http').setLevel(logging.WARNING)
-        logging.getLogger('discord.state').addFilter(RemoveNoise())
-        logging.getLogger('charset_normalizer').setLevel(logging.ERROR)
 
-        log.setLevel(logging.INFO)
+        max_bytes = 32 * 1024 * 1024  # 32 MiB
+        get_logger('discord').setLevel(logging.INFO)
+        get_logger('discord.http').setLevel(logging.WARNING)
+        get_logger('discord.state').addFilter(RemoveNoise())
+        get_logger('charset_normalizer').setLevel(logging.ERROR)
+
+        root_log.setLevel(logging.DEBUG)
         handler = RotatingFileHandler(filename='percy.log', encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5)
         handler.setFormatter(fmt)
-        log.addHandler(handler)
+        root_log.addHandler(handler)
 
         yield
     finally:
         # __exit__
-        handlers = log.handlers[:]
+        handlers = root_log.handlers[:]
         for hdlr in handlers:
             hdlr.close()
-            log.removeHandler(hdlr)
+            root_log.removeHandler(hdlr)
 
 
 async def create_pool() -> asyncpg.Pool:
@@ -246,17 +280,17 @@ async def create_pool() -> asyncpg.Pool:
 
 async def run_bot():
     discord.VoiceClient.warn_nacl = False
-    log = logging.getLogger()
+    log = get_logger()
 
-    try:
-        pool = await create_pool()
-    except Exception:
-        click.echo('Could not set up PostgreSQL. Exiting.', file=sys.stderr)
-        log.exception('Could not set up PostgreSQL. Exiting.')
-        return
+    #try:
+    #    pool = await create_pool()
+    #except Exception:
+    #    click.echo('Could not set up PostgreSQL. Exiting.', file=sys.stderr)
+    #    log.exception('Could not set up PostgreSQL. Exiting.')
+    #    return
 
     async with Percy() as bot:
-        bot.pool = pool
+        bot.pool = None
         bot.alchemy_engine = create_async_engine(bot.config.alchemy_postgresql, echo=False)  # ORM
         await bot.start()
 

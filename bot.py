@@ -24,6 +24,7 @@ from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.async_utils import TaskInterruption
 from cogs.utils.helpers import BasicJSONEncoder
+from cogs.utils.lock import LockedResourceError
 from cogs.utils.scope import GUILD_FEATURES
 
 if TYPE_CHECKING:
@@ -36,7 +37,11 @@ if TYPE_CHECKING:
 else:
     GuildFeatureA = tuple[str, str]
 
-log = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from launcher import get_logger
+    log = get_logger(__name__)
+else:
+    log = logging.getLogger(__name__)
 
 
 def _prefix_callable(bot: Percy, msg: discord.Message) -> Iterable[str]:
@@ -140,13 +145,14 @@ class Percy(commands.Bot):
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch()
 
+        self.initial_extensions = ["cogs.snekbox", "cogs.jishaku", "cogs.pep", "cogs.base", "cogs.meta"]
         for extension in self.initial_extensions:
             try:
                 await self.load_extension(extension)
             except Exception as e:
                 log.error(f"Failed to load extension `{extension}`", exc_info=e)
 
-        await self.reattach_views()
+        #await self.reattach_views()
 
     async def on_shard_resumed(self, shard_id: int):
         log.info('Shard ID %s has resumed...', shard_id)
@@ -181,8 +187,9 @@ class Percy(commands.Bot):
                 await ctx.send(f'{ctx.tick(False)} I do not have permission to execute this action.')
             elif isinstance(original, discord.HTTPException):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
-        elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError,
-                                commands.BadArgument)):
+            elif isinstance(original, LockedResourceError):
+                await ctx.send(f"{original} Please wait for it to finish and try again later.")
+        elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, commands.BadArgument)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(f"{ctx.tick(False)} Missing required argument: `{error.param.name}`")

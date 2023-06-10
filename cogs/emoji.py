@@ -1,6 +1,5 @@
 import asyncio
 import io
-import logging
 from typing import Optional, Annotated, Counter
 from collections import defaultdict, Counter
 
@@ -13,14 +12,11 @@ from discord.ext import commands, tasks
 
 from bot import Percy
 from . import command, command_permissions
-from .utils import checks
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
 from .utils.paginator import TextSource
 from .utils.render import Render
 from .utils.scope import EMOJI_REGEX, EMOJI_NAME_REGEX
-
-log = logging.getLogger(__name__)
 
 
 def partial_emoji(argument: str, *, regex=EMOJI_REGEX) -> int:
