@@ -26,7 +26,7 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
