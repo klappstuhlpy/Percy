@@ -509,7 +509,7 @@ class DocCog(commands.Cog):
         self.update_single(package_name, base_url, inventory_dict)
         await ctx.send(f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
-    @command(docs_group.command, name="delete", hidden=True, aliases=("removedoc", "rm", "d"),
+    @command(docs_group.command, name="delete", hidden=True, aliases=("removedoc", "rm"),
              description="Delete a documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
