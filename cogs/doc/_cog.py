@@ -107,6 +107,10 @@ class Inventory(commands.Converter):
     async def convert(self, ctx: Context, url: str) -> tuple[str, _inventory_parser.InventoryDict]:
         """Convert url to Intersphinx inventory URL."""
         await ctx.typing()
+
+        if not url.endswith("/objects.inv"):
+            url = url.rstrip("/") + "/objects.inv"
+
         try:
             inventory = await _inventory_parser.fetch_inventory(ctx.bot.session, url)
         except _inventory_parser.InvalidHeaderError:
@@ -114,7 +118,7 @@ class Inventory(commands.Converter):
         else:
             if inventory is None:
                 raise commands.BadArgument(
-                    f"Failed to fetch inventory file after {_inventory_parser.FAILED_REQUEST_ATTEMPTS} attempts."
+                    f"Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts."
                 )
             return url, inventory
 
@@ -232,12 +236,14 @@ class DocCog(commands.Cog):
         """
         Build the inventory for a single package.
 
-        Where:
-            * `package_name` is the package name to use in logs and when qualifying symbols
-            * `base_url` is the root documentation URL for the specified package, used to build
-                absolute paths that link to specific symbols
-            * `package` is the content of a intersphinx inventory.
-        """
+        Parameters
+        ----------
+        package_name: :class:`str`
+            The name of the package.
+        base_url: :class:`str`
+            The base URL of the package.
+        inventory: :class:`dict`
+            The inventory of the package."""
         self.base_urls[package_name] = base_url
 
         for group, items in inventory.items():
@@ -277,7 +283,6 @@ class DocCog(commands.Cog):
         try:
             package = await fetch_inventory(self.bot.session, inventory_url)
         except InvalidHeaderError as e:
-            # Do not reschedule if the header is invalid, as the request went through but the contents are invalid.
             log.warning(f"Invalid inventory header at {inventory_url}. Reason: {e}")
             return
 
@@ -308,12 +313,11 @@ class DocCog(commands.Cog):
         If the existing symbol was renamed or there was no conflict, the returned name is equivalent to `symbol_name`.
         """
         if (item := self.doc_symbols.get(symbol_name)) is None:
-            return symbol_name  # There's no conflict so it's fine to simply use the given symbol name.
+            return symbol_name
 
         def rename(prefix: str, *, rename_extant: bool = False) -> str:
             new_name = f"{prefix}.{symbol_name}"
             if new_name in self.doc_symbols:
-                # If there's still a conflict, qualify the name further.
                 if rename_extant:
                     new_name = f"{item.package}.{item.group}.{symbol_name}"
                 else:
@@ -322,19 +326,15 @@ class DocCog(commands.Cog):
             self.renamed_symbols[symbol_name].append(new_name)
 
             if rename_extant:
-                # Instead of renaming the current symbol, rename the symbol with which it conflicts.
                 self.doc_symbols[new_name] = self.doc_symbols[symbol_name]
                 return symbol_name
             return new_name
 
-        # When there's a conflict, and the package names of the items differ, use the package name as a prefix.
         if package_name != item.package:
             if package_name in PRIORITY_PACKAGES:
                 return rename(item.package, rename_extant=True)
             return rename(package_name)
 
-        # If the symbol's group is a non-priority group from FORCE_PREFIX_GROUPS,
-        # add it as a prefix to disambiguate the symbols.
         if group_name in FORCE_PREFIX_GROUPS:
             if item.group in FORCE_PREFIX_GROUPS:
                 needs_moving = FORCE_PREFIX_GROUPS.index(group_name) < FORCE_PREFIX_GROUPS.index(item.group)
@@ -342,8 +342,6 @@ class DocCog(commands.Cog):
                 needs_moving = False
             return rename(item.group if needs_moving else group_name, rename_extant=needs_moving)
 
-        # If the above conditions didn't pass, either the existing symbol has its group in FORCE_PREFIX_GROUPS,
-        # or deciding which item to rename would be arbitrary, so we rename the existing symbol.
         return rename(item.group, rename_extant=True)
 
     async def refresh_inventories(self) -> None:
@@ -442,16 +440,10 @@ class DocCog(commands.Cog):
             embed.set_footer(text=footer_text)
             return embed
 
-    @command(commands.hybrid_group, name="docs", aliases=("doc", "d"), invoke_without_command=True,
-             description="Look up documentation for Python symbols.")
-    async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
-        """Look up documentation for Python symbols."""
-        await self.get_command(ctx, symbol_name=symbol_name)
-
-    @command(docs_group.command, name="getdoc", aliases=("g",), description="Look up documentation for Python symbols.")
+    @command(commands.hybrid_group, name="docs", aliases=("docs", "d"), description="Look up documentation for Python symbols.")
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
-    async def get_command(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
+    async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
         """Return a documentation embed for a given symbol.
 
         If no symbol is given, return a list of all available inventories.
@@ -469,7 +461,6 @@ class DocCog(commands.Cog):
 
             if doc_embed is None:
                 await ctx.send(f"{ctx.tick(False)} The symbol `{symbol}` was not found.")
-
             else:
                 await ctx.send(embed=doc_embed)
 
@@ -478,7 +469,7 @@ class DocCog(commands.Cog):
         """Get a base url from the url to an objects inventory by removing the last path segment."""
         return inventory_url.removesuffix("/").rsplit("/", maxsplit=1)[0] + "/"
 
-    @command(docs_group.command, name="setdoc", aliases=("s",), hidden=True,
+    @command(docs_group.command, name="set", aliases=("s",), hidden=True,
              description="Set a new documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
@@ -518,17 +509,12 @@ class DocCog(commands.Cog):
         self.update_single(package_name, base_url, inventory_dict)
         await ctx.send(f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
-    @command(docs_group.command, name="deletedoc", hidden=True, aliases=("removedoc", "rm", "d"),
+    @command(docs_group.command, name="delete", hidden=True, aliases=("removedoc", "rm", "d"),
              description="Delete a documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def delete_command(self, ctx: Context, package_name: Annotated[str, PackageName]) -> None:
-        """
-        Removes the specified package from the database.
-
-        Example:
-            !docs deletedoc aiohttp
-        """
+        """Removes the specified package from the database."""
         await self.bot.data_storage.remove_from_deep(f"documentation_links.{package_name}")
 
         async with ctx.typing():
@@ -536,7 +522,7 @@ class DocCog(commands.Cog):
             await doc_cache.delete(package_name)
         await ctx.send(f"{ctx.tick(True)} Successfully deleted `{package_name}` and refreshed the inventories.")
 
-    @command(docs_group.command, name="refreshdoc", aliases=("rfsh", "r"), hidden=True,
+    @command(docs_group.command, name="refresh", aliases=("rfsh", "r"), hidden=True,
              description="Refresh the inventories.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
@@ -545,6 +531,7 @@ class DocCog(commands.Cog):
         old_inventories = set(self.base_urls)
         async with ctx.typing():
             await self.refresh_inventories()
+
         new_inventories = set(self.base_urls)
 
         if added := ", ".join(new_inventories - old_inventories):
@@ -559,7 +546,7 @@ class DocCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @command(docs_group.command, name="cleardoccache", aliases=("deletedoccache",),
+    @command(docs_group.command, name="clearcache", aliases=("deletedoccache",),
              description="Clear the cache for a package.", hidden=True, with_app_command=False)
     @commands.is_owner()
     async def clear_cache_command(

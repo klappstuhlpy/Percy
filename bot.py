@@ -133,7 +133,7 @@ class Percy(commands.Bot):
         self.prefixes: Config[list[str]] = Config('prefixes.json')
 
         self.media_config: Config[Dict[str, Any]] = Config('media_config.json', encoder=BasicJSONEncoder, load_later=True)
-        self.data_storage: Config[Dict[str, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
+        self.data_storage: Config[Dict[str | dict, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
