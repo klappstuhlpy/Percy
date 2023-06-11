@@ -440,7 +440,7 @@ class DocCog(commands.Cog):
             embed.set_footer(text=footer_text)
             return embed
 
-    @command(commands.hybrid_group, name="docs", aliases=("docs", "d"), description="Look up documentation for Python symbols.")
+    @command(commands.hybrid_group, name="docs", aliases=("d",), description="Look up documentation for Python symbols.")
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
     async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
@@ -546,7 +546,7 @@ class DocCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @command(docs_group.command, name="clearcache", aliases=("deletedoccache",),
+    @command(docs_group.command, name="clearcache", aliases=("deletecache",),
              description="Clear the cache for a package.", hidden=True, with_app_command=False)
     @commands.is_owner()
     async def clear_cache_command(
