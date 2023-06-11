@@ -15,6 +15,7 @@ from jishaku.modules import package_version
 
 from cogs.utils import error_handling
 from cogs.utils.converters import ModuleConverter
+from cogs.utils.formats import plural
 
 jishaku.Flags.NO_DM_TRACEBACK = True
 jishaku.Flags.NO_UNDERSCORE = True
@@ -34,7 +35,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
             await ctx.send("Cannot sync when application info not fetched")
             return
 
-        paginator = commands.Paginator(prefix='', suffix='')
+        before_commands = set(self.bot.tree._get_all_commands())
 
         guilds_set: set[typing.Optional[int]] = {None}
         for target in targets:
@@ -54,17 +55,14 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                 except ValueError as error:
                     raise commands.BadArgument(f"{target} is not a valid guild ID") from error
 
-        slash_commands = self.bot.tree._get_all_commands()
         translator = getattr(self.bot.tree, 'translator', None)
         if translator:
-            payload = [await command.get_translated_payload(translator) for command in slash_commands]
+            payload = [await command.get_translated_payload(translator) for command in before_commands]
         else:
-            payload = [command.to_dict() for command in slash_commands]
+            payload = [command.to_dict() for command in before_commands]
 
         for guild in guilds_set:
             try:
-                before_sync = len(slash_commands)
-
                 if guild is None:
                     data = await self.bot.http.bulk_upsert_global_commands(self.bot.application_id, payload=payload)
                 else:
@@ -75,7 +73,6 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     discord.app_commands.AppCommand(data=d, state=ctx._state)
                     for d in data
                 ]
-
             except discord.HTTPException as error:
                 error_lines = [
                     line
@@ -87,49 +84,31 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                         parts = match.group(1).split('.')
                         assert len(parts) % 2 == 0
 
-                        name = ""
-                        selected_command = None
-                        pool = slash_commands
-
-                        for part_index in range(0, len(parts), 2):
-                            index = int(parts[part_index])
-
-                            if pool:
-                                selected_command = pool[index]
-                                name += selected_command.name + " "
-
-                                if hasattr(selected_command, '_children'):
-                                    pool = list(selected_command._children.values())
-                                else:
-                                    pool = None
-                            else:
-                                param = list(selected_command._params.keys())[index]
-                                name += f"(parameter: **{param}**) "
-
+                        name = parts[-1]
                         error_lines.append(f"\N{MAGNET} This is likely caused by: `{name}`")
 
                 error_text = '\n'.join(error_lines)
 
-                if guild:
-                    paginator.add_line(f"\N{WARNING SIGN} `{guild}`: {error_text}", empty=True)
-                else:
-                    paginator.add_line(f"\N{WARNING SIGN} Global: {error_text}", empty=True)
-            else:
-                message = (
-                    "± 0" if before_sync == len(synced) else f"+ {len(synced) - before_sync}"
-                    if before_sync < len(synced) else f"- {before_sync - len(synced)}"
+                embed = discord.Embed(
+                    title="Slash command sync failed",
+                    description=error_text
                 )
+                await ctx.send(embed=embed)
+            else:
+                after_commands = set(self.bot.tree._get_all_commands())
 
-                if guild:
-                    paginator.add_line(
-                        f"\N{SATELLITE ANTENNA} `{guild}` Synced **{len(synced)}** ({message}) guild commands.",
-                        empty=True)
-                else:
-                    paginator.add_line(f"\N{SATELLITE ANTENNA} Synced **{len(synced)}** ({message}) global commands.",
-                                       empty=True)
+                if added := ", ".join(cmd.qualified_name for cmd in (after_commands - before_commands)):
+                    added = "+ " + added
 
-        for page in paginator.pages:
-            await ctx.send(page)
+                if removed := ", ".join(cmd.qualified_name for cmd in (before_commands - after_commands)):
+                    removed = "- " + removed
+
+                embed = discord.Embed(
+                    title=f"\N{SATELLITE ANTENNA} Command Tree {'Global' if guild else 'Guild'}Sync",
+                    description=f"```diff\n{added}\n{removed}```" if added or removed else ""
+                )
+                embed.set_footer(text=f"Synced total {plural(len(synced)):command}")
+                await ctx.send(embed=embed)
 
     @Feature.Command(
         parent="jsk",
