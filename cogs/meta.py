@@ -471,6 +471,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 params.append(f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]')
 
             signature += f' {" ".join(params)}'
+            signature = re.sub(r'(<flags>|\[flags])', r'', signature)
 
         signature = re.sub(r'\s+', ' ', signature).strip()
 
@@ -521,12 +522,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed = discord.Embed(colour=helpers.Colour.darker_red())
         embed.set_author(name="Command Help", icon_url=INFO_ICON_URL)
 
-        signature = self.get_command_signature(command)
-
         flags = command.clean_params.get('flags')
         fields = []
         if flags:
-            signature = re.sub(r'(<flags>|\[flags])(\s+)?', r' ', signature).strip()
             params = []
             for flag in flags.converter.get_flags().values():
                 params.append(f'`--{flag.name}` - {flag.description}')
@@ -537,7 +535,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             for field in fields:
                 embed.add_field(**field)
 
-        embed.description = f"**```py\n{signature}```**\n{cleanup_docstring(command.description, getattr(command, 'help', None))}"
+        embed.description = f"**```py\n{self.get_command_signature(command)}```**\n" \
+                            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
         if getattr(command, 'aliases', None):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
