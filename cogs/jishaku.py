@@ -104,7 +104,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     removed = "- " + removed
 
                 embed = discord.Embed(
-                    title=f"\N{SATELLITE ANTENNA} Command Tree {'Global' if guild else 'Guild'}Sync",
+                    title=f"\N{SATELLITE ANTENNA} Command Tree {'Global' if not guild else 'Guild'} Sync",
                     description=f"```diff\n{added}\n{removed}```" if added or removed else ""
                 )
                 embed.set_footer(text=f"Synced total {plural(len(synced)):command}")
