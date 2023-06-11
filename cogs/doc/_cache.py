@@ -92,7 +92,6 @@ class DocCache:
 
     def _get_cache_ttl(self, cache_key: str) -> int:
         """Return the time-to-live (TTL) of the cache key."""
-        # Replace this with your custom logic to determine the TTL of the cache key
         return WEEK_SECONDS
 
 

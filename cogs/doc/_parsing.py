@@ -14,6 +14,7 @@ from launcher import get_logger
 from . import MAX_SIGNATURE_AMOUNT
 from ._html import get_dd_description, get_general_description, get_signatures
 from ._markdown import DocMarkdownConverter
+from ..utils.async_utils import executor
 from ..utils.formats import find_nth_occurrence
 
 if TYPE_CHECKING:
@@ -222,6 +223,7 @@ def _create_markdown(signatures: list[str] | None, description: Iterable[Tag], u
     return description
 
 
+@executor
 def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None:
     """
     Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
@@ -251,6 +253,7 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
     return _create_markdown(signature, description, symbol_data.url).strip()
 
 
+@executor
 def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, Any] | None:
     """
     Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import collections
-import copy
 from collections import defaultdict, deque
 from contextlib import suppress
 from operator import attrgetter
@@ -109,8 +108,8 @@ class BatchParser:
                     continue
 
                 try:
-                    fields_mardown = await self.bot.loop.run_in_executor(None, get_field_markdown, soup, item)
-                    markdown = await self.bot.loop.run_in_executor(None, get_symbol_markdown, soup, item)
+                    fields_mardown = await get_field_markdown(soup, item)
+                    markdown = await get_symbol_markdown(soup, item)
                     if markdown is not None:
                         item.resolved_fields = fields_mardown
                         await doc_cache.set(item, markdown)
