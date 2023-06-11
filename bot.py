@@ -135,19 +135,22 @@ class Percy(commands.Bot):
         self.discord_status: Config[Dict[str, Any]] = Config('discord_status.json', encoder=BasicJSONEncoder)
         self.media: Config[Dict[str, Any]] = Config('media.json', encoder=BasicJSONEncoder, load_later=True)
 
+        self.data_storage: Config[Dict[Dict[str, Any], Any]] = Config('data_storage.json')
+
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
 
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch()
 
+        self.initial_extensions = ["cogs.doc", "cogs.jishaku"]
         for extension in self.initial_extensions:
             try:
                 await self.load_extension(extension)
             except Exception as e:
                 log.error(f"Failed to load extension `{extension}`", exc_info=e)
 
-        await self.reattach_views()
+        #await self.reattach_views()
 
     async def on_shard_resumed(self, shard_id: int):
         log.info('Shard ID %s has resumed...', shard_id)

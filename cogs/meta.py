@@ -873,7 +873,7 @@ class Meta(commands.Cog):
 
                 return embed
 
-        await EmbedPaginator.start(ctx, entries=features, per_page=12)
+        await EmbedPaginator.start(ctx, entries=features, per_page=12)  # type: ignore
 
     @info.command(name="user", description="Shows info about a user.")
     @commands.guild_only()

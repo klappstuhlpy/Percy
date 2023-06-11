@@ -103,6 +103,43 @@ class Config(Generic[_T]):
         del self._db[str(key)]
         await self.save()
 
+    async def remove_from_deep(self, key: Any) -> None:
+        """Removes a config entry."""
+        keys = str(key).split('.')
+        if len(keys) == 1:
+            await self.remove(key)
+            return
+
+        temp = self._db
+        for key in keys[:-1]:
+            if key not in temp:
+                temp[key] = {}
+            temp = temp[key]
+
+        del temp[keys[-1]]
+        await self.save()
+
+    async def add(self, key: Any, value: Union[_T, Any]) -> None:
+        """Adds a value to a config entry."""
+        self._db[str(key)] += value
+        await self.save()
+
+    async def add_to_deep(self, key: Any, value: Union[_T, Any]) -> None:
+        """Adds a value to a config entry."""
+        keys = str(key).split('.')
+        if len(keys) == 1:
+            await self.add(key, value)
+            return
+
+        temp = self._db
+        for key in keys[:-1]:
+            if key not in temp:
+                temp[key] = {}
+            temp = temp[key]
+
+        temp[keys[-1]] += value
+        await self.save()
+
     def __contains__(self, item: Any) -> bool:
         return str(item) in self._db
 
