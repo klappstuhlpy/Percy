@@ -132,10 +132,8 @@ class Percy(commands.Bot):
         self.blacklist: Config[bool] = Config('blacklist.json')
         self.prefixes: Config[list[str]] = Config('prefixes.json')
 
-        self.discord_status: Config[Dict[str, Any]] = Config('discord_status.json', encoder=BasicJSONEncoder)
-        self.media: Config[Dict[str, Any]] = Config('media.json', encoder=BasicJSONEncoder, load_later=True)
-
-        self.data_storage: Config[Dict[Dict[str, Any], Any]] = Config('data_storage.json')
+        self.media_config: Config[Dict[str, Any]] = Config('media_config.json', encoder=BasicJSONEncoder, load_later=True)
+        self.data_storage: Config[Dict[str, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id

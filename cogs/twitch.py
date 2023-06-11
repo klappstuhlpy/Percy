@@ -73,8 +73,8 @@ class TwitchNotifications(commands.Cog):
 
     async def _expiry(self, expiry: float = None) -> float:
         if expiry:
-            await self.bot.media.deep_put("twitch.expiry", expiry)
-        return self.bot.media.get("twitch").get("expiry")
+            await self.bot.media_config.deep_put("twitch.expiry", expiry)
+        return self.bot.media_config.get("twitch").get("expiry")
 
     async def _bearer_token(self, bearer_token: str = None) -> str:
         expiry = await self._expiry()
@@ -83,13 +83,13 @@ class TwitchNotifications(commands.Cog):
             await self._get_bearer_token()
 
         if bearer_token:
-            await self.bot.media.deep_put("twitch.bearer_token", bearer_token)
-        return self.bot.media.get("twitch").get("bearer_token")
+            await self.bot.media_config.deep_put("twitch.bearer_token", bearer_token)
+        return self.bot.media_config.get("twitch").get("bearer_token")
 
     @cached_slot_property(name="_cs_grant_params")
     def grant_params(self) -> dict:
-        return {'client_id': self.bot.media.get("twitch").get("client_id"),
-                'client_secret': self.bot.media.get("twitch").get("client_secret"),
+        return {'client_id': self.bot.media_config.get("twitch").get("client_id"),
+                'client_secret': self.bot.media_config.get("twitch").get("client_secret"),
                 'grant_type': 'client_credentials',
                 'Content-Type': 'application/x-www-form-urlencoded'}
 
@@ -109,7 +109,7 @@ class TwitchNotifications(commands.Cog):
             headers: Optional[dict[str, Any]] = MISSING,
     ) -> Optional[Dict]:
         hdrs = {'Accept': 'application/json',
-                'Client-Id': self.bot.media.get("twitch").get("client_id"),
+                'Client-Id': self.bot.media_config.get("twitch").get("client_id"),
                 'Authorization': f'Bearer {await self._bearer_token()}'}
 
         if headers is not MISSING and isinstance(headers, dict):
@@ -171,7 +171,7 @@ class TwitchNotifications(commands.Cog):
         return None
 
     async def get_notifications(self) -> AsyncIterator[TwitchStream]:
-        wl = self.bot.media.get("twitch").get("watchlist")
+        wl = self.bot.media_config.get("twitch").get("watchlist")
         users = [await self.get_user(user_name) for user_name in wl]
         streams = [await self.get_stream(user) for user in users]
 
@@ -190,7 +190,7 @@ class TwitchNotifications(commands.Cog):
 
     @property
     def channel(self) -> Optional[discord.TextChannel]:
-        channel_id = self.bot.media.get("twitch", {}).get("channel_id")
+        channel_id = self.bot.media_config.get("twitch", {}).get("channel_id")
         if not channel_id:
             return
         return self.bot.get_channel(channel_id)

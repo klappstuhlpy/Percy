@@ -16,6 +16,6 @@
 /prefixes.json
 /blacklist.json
 /discord_status.json
-/media.json
+/media_config.json
 /data_storage.json
 /migrations/revisions.json

@@ -107,7 +107,7 @@ class DiscordStatus(commands.Cog):
         # self.config: config_file = config_file("dstatus")
 
     async def cog_load(self) -> None:
-        record = self.bot.discord_status.get("last_incident")
+        record = self.bot.data_storage.get("last_incident")
         if record:
             self._last_incident = Incident(**record)
         self.check_new_incident.start()
@@ -162,7 +162,7 @@ class DiscordStatus(commands.Cog):
                 return
 
             await self._last_incident.update(self, incidents[0])
-            await self.bot.discord_status.put("last_incident", self._last_incident.as_dict())
+            await self.bot.data_storage.put("last_incident", self._last_incident.as_dict())
             return
 
         incident = Incident.temporary(
@@ -180,7 +180,7 @@ class DiscordStatus(commands.Cog):
         incident.message_id = message.id
         self._last_incident = incident
 
-        await self.bot.discord_status.put("last_incident", self._last_incident.as_dict())
+        await self.bot.data_storage.put("last_incident", self._last_incident.as_dict())
 
 
 async def setup(bot: Percy) -> None:

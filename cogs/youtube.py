@@ -77,7 +77,7 @@ class YouTubeNotifications(commands.Cog):
 
     @discord.utils.cached_property
     def api_key(self) -> Optional[str]:
-        return self.bot.media.get("youtube").get("api_key")
+        return self.bot.media_config.get("youtube").get("api_key")
 
     @property
     def bearer_headers(self) -> dict:
@@ -161,7 +161,7 @@ class YouTubeNotifications(commands.Cog):
         return cache
 
     async def get_notifications(self) -> List[YouTubeStream]:
-        wl = self.bot.media.get("youtube").get("watchlist")
+        wl = self.bot.media_config.get("youtube").get("watchlist")
         channels = await self.get_channels(wl)
         streams = await self.get_streams(channels)
 
@@ -184,7 +184,7 @@ class YouTubeNotifications(commands.Cog):
 
     @property
     def channel(self) -> Optional[discord.TextChannel]:
-        channel_id = self.bot.media.get("youtube", {}).get("channel_id")
+        channel_id = self.bot.media_config.get("youtube", {}).get("channel_id")
         if not channel_id:
             return
         return self.bot.get_channel(channel_id)
