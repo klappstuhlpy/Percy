@@ -2,7 +2,7 @@ import re
 from urllib.parse import urljoin
 
 import markdownify
-from bs4.element import PageElement
+from bs4.element import PageElement, Tag
 
 # See https://github.com/matthewwithanm/python-markdownify/issues/31
 markdownify.whitespace_re = re.compile(r"[\r\n\s\t ]+")
@@ -15,7 +15,7 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
         super().__init__(**options)
         self.page_url = page_url
 
-    def convert_li(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_li(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Fix markdownify's erroneous indexing in ol tags."""
         parent = el.parent
         if parent is not None and parent.name == "ol":
@@ -31,27 +31,27 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             bullet = bullets[depth % len(bullets)]
         return f"{bullet} {text}\n"
 
-    def convert_hn(self, _n: int, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_hn(self, _n: int, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Convert h tags to bold text with ** instead of adding #."""
         if convert_as_inline:
             return text
         return f"**{text}**\n\n"
 
-    def convert_code(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_code(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Undo `markdownify`s underscore escaping."""
         return f"`{text}`".replace("\\", "")
 
-    def convert_pre(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_pre(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Wrap any codeblocks in `py` for syntax highlighting."""
         code = "".join(el.strings)
         return f"```py\n{code}```"
 
-    def convert_a(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_a(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Resolve relative URLs to `self.page_url`."""
-        el["href"] = urljoin(self.page_url, el["href"])
+        el["href"] = urljoin(self.page_url, el.get("href", ""))
         return super().convert_a(el, text, convert_as_inline)
 
-    def convert_p(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_p(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Include only one newline instead of two when the parent is a li tag."""
         if convert_as_inline:
             return text
@@ -61,6 +61,6 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             return f"{text}\n"
         return super().convert_p(el, text, convert_as_inline)
 
-    def convert_hr(self, el: PageElement, text: str, convert_as_inline: bool) -> str:
+    def convert_hr(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Ignore `hr` tag."""
         return ""
