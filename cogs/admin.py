@@ -21,7 +21,7 @@ from . import command
 from .utils import converters
 from .utils.async_utils import PerformanceMocker
 from .utils.context import Context
-from .utils.scope import PLAYGROUND_GUILD_ID, PH_GUILD_ID
+from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
 
 
 class Admin(commands.Cog):

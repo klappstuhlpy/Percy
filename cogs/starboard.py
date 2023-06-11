@@ -17,7 +17,7 @@ from . import command, command_permissions
 from .utils import cache
 from .utils.formats import plural
 from .utils.helpers import PostgresItem
-from .utils.scope import StarableChannel
+from .utils.constants import StarableChannel
 
 if TYPE_CHECKING:
     from bot import Percy

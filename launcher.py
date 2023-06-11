@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import config
 
 from bot import Percy
-from cogs.utils.scope import REVISION_FILE
+from cogs.utils.constants import REVISION_FILE
 
 try:
     import uvloop  # type: ignore

@@ -6,7 +6,7 @@ import uuid
 import asyncio
 
 from cogs.utils.async_utils import executor
-from cogs.utils.scope import ObjectHook
+from cogs.utils.constants import ObjectHook
 
 _T = TypeVar('_T')
 

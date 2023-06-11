@@ -24,7 +24,7 @@ from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity
 from .utils.formats import plural, human_join
 from .utils.helpers import BaseFlags, flag_value
-from .utils.scope import IgnoreableEntity
+from .utils.constants import IgnoreableEntity
 
 if TYPE_CHECKING:
     class ModGuildContext(GuildContext):

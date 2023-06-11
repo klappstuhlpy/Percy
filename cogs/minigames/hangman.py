@@ -10,7 +10,7 @@ import discord
 from bot import Percy
 from cogs.utils import helpers
 from cogs.utils.context import Context
-from cogs.utils.scope import HANG_MAN
+from cogs.utils.constants import HANG_MAN
 
 
 class Action(enum.Enum):

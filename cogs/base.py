@@ -20,7 +20,7 @@ from discord.ext import commands, tasks
 from cogs import command
 from cogs.utils.converters import Snowflake
 from cogs.utils.paginator import TextSource
-from cogs.utils.scope import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
+from cogs.utils.constants import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
     PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE, GITHUB_FULL_REGEX
 from launcher import get_logger
 

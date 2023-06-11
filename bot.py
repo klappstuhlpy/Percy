@@ -24,7 +24,7 @@ from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.async_utils import TaskInterruption
 from cogs.utils.helpers import BasicJSONEncoder
-from cogs.utils.scope import GUILD_FEATURES
+from cogs.utils.constants import GUILD_FEATURES
 
 if TYPE_CHECKING:
     from cogs.reminder import Reminder

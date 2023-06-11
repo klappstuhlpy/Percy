@@ -11,7 +11,7 @@ from . import command
 from .base import PH_GUILD_ID
 from cogs.utils.paginator import BasePaginator
 from .utils.render import Render
-from .utils.scope import HEX_REGEX, RGB_REGEX, CMYK_REGEX
+from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
 
 if TYPE_CHECKING:

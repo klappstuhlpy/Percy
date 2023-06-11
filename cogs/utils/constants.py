@@ -3,6 +3,8 @@ from typing import Callable, Dict, Any, Union
 
 import discord
 import matplotlib
+from discord import app_commands
+from discord.ext import commands
 
 PH_GUILD_ID = 1066703165669515264
 PH_BOTS_ROLE = 1066703165669515266
@@ -22,6 +24,11 @@ PH_HEAD_DEV_ROLE_ID = 1101538861663911986
 ObjectHook = Callable[[Dict[str, Any]], Any]
 
 COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
+
+PartialCommandGroup = Union[
+    commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
+PartialCommand = Union[
+    commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
 
 PossibleTarget = Union[
     discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel, discord.StageChannel, discord.GroupChannel,
@@ -168,6 +175,19 @@ PERMISSIONS = [
     {'origin': 'add_reactions', 'name': 'Add Reactions', 'value': 0x40},
     {'origin': 'use_slash_commands', 'name': 'Use Slash Commands', 'value': 0x80000000}
 ]
+
+BADGE_DICT = {
+    discord.UserFlags.bug_hunter: '<:lvl1:1072925290520653884> Bug Hunter',
+    discord.UserFlags.bug_hunter_level_2: '<:lvl2:1072925293351800934> Bug Hunter Level 2',
+    discord.UserFlags.early_supporter: '<:earlysupporter:1072925288243146877> Early Supporter',
+    discord.UserFlags.verified_bot_developer: '<:earlydev:1072925287123259423> Verified Bot Developer',
+    discord.UserFlags.active_developer: '<:activedev:1070318990406189057> Active Developer',
+    discord.UserFlags.partner: '<:partner:1072925295688044615> Discord Partner',
+    discord.UserFlags.staff: '<:staff:1072925297365766205> Discord Staff',
+    discord.UserFlags.hypesquad_balance: '<:balance:1079447402311856178> HypeSquad Balance',
+    discord.UserFlags.hypesquad_bravery: '<:bravery:1079447443667689502> HypeSquad Bravery',
+    discord.UserFlags.hypesquad_brilliance: '<:brilliance:1079447480569180331> HypeSquad Brilliance'
+}
 
 LANGUAGES = {
     'af': 'Afrikaans',

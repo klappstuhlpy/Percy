@@ -26,30 +26,12 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource
-from .utils.scope import PH_HELP_FORUM, PH_SOLVED_TAG
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
-
-PartialCommandGroup = Union[
-    commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
-PartialCommand = Union[
-    commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
-
-BADGE_DICT = {
-    discord.UserFlags.bug_hunter: '<:lvl1:1072925290520653884> Bug Hunter',
-    discord.UserFlags.bug_hunter_level_2: '<:lvl2:1072925293351800934> Bug Hunter Level 2',
-    discord.UserFlags.early_supporter: '<:earlysupporter:1072925288243146877> Early Supporter',
-    discord.UserFlags.verified_bot_developer: '<:earlydev:1072925287123259423> Verified Bot Developer',
-    discord.UserFlags.active_developer: '<:activedev:1070318990406189057> Active Developer',
-    discord.UserFlags.partner: '<:partner:1072925295688044615> Discord Partner',
-    discord.UserFlags.staff: '<:staff:1072925297365766205> Discord Staff',
-    discord.UserFlags.hypesquad_balance: '<:balance:1079447402311856178> HypeSquad Balance',
-    discord.UserFlags.hypesquad_bravery: '<:bravery:1079447443667689502> HypeSquad Bravery',
-    discord.UserFlags.hypesquad_brilliance: '<:brilliance:1079447480569180331> HypeSquad Brilliance'
-}
 
 COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=96&quality=lossless'
 INFO_ICON_URL = 'https://cdn3.emoji.gg/emojis/4765-discord-info-white-theme.png'
@@ -93,7 +75,6 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
 
 class GroupHelpPaginator(BasePaginator[PartialCommand]):
     group: commands.Group | commands.Cog  # The current Group displayed
-    prefix: str  # The invoked prefix
     groups: Optional[Dict[commands.Cog, list[PartialCommand]]]  # The list of all groups from this help menu
 
     async def format_page(self, entries: List[commands.Command]):
@@ -109,15 +90,13 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
 
         for command in entries:
             signature = self.ctx.client.help_command.get_command_signature(command)  # type: ignore
-            embed.add_field(name=signature,
-                            value=getattr(command, 'short_doc', command.description) or 'No help given...',
-                            inline=False)
+            embed.add_field(name=signature, value=command.description or 'No help given...', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available in Slash Commands.')
         else:
-            embed.set_footer(text=f'Use "{self.prefix}help command" for more info on a command.')
+            embed.set_footer(text=f'Use "{self.ctx.clean_prefix}help command" for more info on a command.')
 
         return embed
 
@@ -133,7 +112,6 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             search_for: bool = False,
             ephemeral: bool = False,
             edit: bool = False,
-            prefix: str = None,
             group: Union[commands.Group, commands.Cog] = None,
             groups: Optional[Dict[commands.Cog, list[PartialCommand]]] = None,
     ) -> GroupHelpPaginator[PartialCommand]:
@@ -141,7 +119,9 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
-        self.prefix = getattr(context, 'prefix', None) or prefix
+        if isinstance(context, discord.Interaction):
+            setattr(context, 'clean_prefix', '/')
+
         self.group = group or entries[0].cog
         self.groups = groups
 
@@ -193,6 +173,7 @@ class HelpSelectMenu(discord.ui.Select):
         for cog, commands in self.commands.items():
             if not commands:
                 continue
+
             description = cog.description.split('\n', 1)[0] or None
             emoji = getattr(cog, 'display_emoji', None)
             self.add_option(label=cog.qualified_name, value=cog.qualified_name, description=description, emoji=emoji)
@@ -213,9 +194,7 @@ class HelpSelectMenu(discord.ui.Select):
                 await ctx.response.send_message('This category has no commands for you', ephemeral=True)
                 return
 
-            prefix = '/' if isinstance(self.view.ctx, discord.Interaction) else self.view.ctx.clean_prefix
-            await GroupHelpPaginator.start(ctx, entries=commands, edit=True, group=cog, prefix=prefix,
-                                           groups=self.view.groups)
+            await GroupHelpPaginator.start(ctx, entries=commands, edit=True, group=cog, groups=self.view.groups)
 
 
 class FrontHelpPaginator(BasePaginator[str]):
@@ -224,9 +203,8 @@ class FrontHelpPaginator(BasePaginator[str]):
     async def format_page(self, entries: List, /):
         embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=self.ctx.client.user.avatar.url)
-        prefix = '/' if isinstance(self.ctx, discord.Interaction) else self.ctx.clean_prefix
 
-        pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)
+        pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)  # type: ignore
         if self._current_page == 0:
             embed.description = inspect.cleandoc(
                 f"""
@@ -237,8 +215,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
                 ## More Help
                 Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{prefix}help` *`command`*
-                - `{prefix}help` *`category`*
+                - `{self.ctx.clean_prefix}help` *`command`*
+                - `{self.ctx.clean_prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -260,11 +238,11 @@ class FrontHelpPaginator(BasePaginator[str]):
                  "They can provide a better overview and are not required to be typed in.\n"
                  "\n"
                  "Flags are prefixed with `--` and can be used like this:\n"
-                 f"- `{prefix}command --flag1 argument1 --flag2 argument2`\n"
-                 f"- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
+                 f"- `{self.ctx.clean_prefix}command --flag1 argument1 --flag2 argument2`\n"
+                 f"- `{self.ctx.clean_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
                  f"\n"
                  f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
-                 f"- `{prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                 f"- `{self.ctx.clean_prefix}command --flag1 my first argument --flag2 'argument 2`'"
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
@@ -281,9 +259,9 @@ class FrontHelpPaginator(BasePaginator[str]):
                 ## License
                 Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
                 ## Credits
-                I was made by {self.ctx.client.owner.mention}.
+                I was made by <@991398932397703238>.
                 
-                Any questions regarding licensing and credits can be directed to {self.ctx.client.owner.mention}.
+                Any questions regarding licensing and credits can be directed to <@991398932397703238>.
                 """
             )
 
@@ -307,11 +285,14 @@ class FrontHelpPaginator(BasePaginator[str]):
     ) -> FrontHelpPaginator[str]:
         """Overwritten to add the SelectMenu"""
         self = cls(entries=['', '', ''], per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
+
         self.ctx = context
         self.groups = entries
 
-        page = await self.format_page(self.pages[0])
+        if isinstance(context, discord.Interaction):
+            setattr(self, 'clean_prefix', '/')
 
+        page = await self.format_page(self.pages[0])
         kwargs = {'view': self, 'embed' if isinstance(page, discord.Embed) else 'content': page}
         if self.total_pages <= 1:
             kwargs.pop('view')
@@ -442,13 +423,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return sorted(resolved, key=key)
         return resolved
 
-    async def on_help_command_error(self, ctx: Context, error: commands.CommandError):
-        if isinstance(error, commands.CommandInvokeError):
-            if isinstance(error.original, discord.HTTPException) and error.original.code == 50013:
-                return
-
-            await ctx.send(f"{ctx.tick(False)} **Critical:** `{str(error.original)}`")
-
     def get_command_signature(self, command: PartialCommand) -> str:  # noqa
         is_app_command = isinstance(command, app_commands.commands.Command)
 
@@ -516,7 +490,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             sort=True,
             escape_hidden=not await self.context.bot.is_owner(self.context.author)
         )
-        await GroupHelpPaginator.start(self.context, entries=entries, group=cog, prefix=self.context.clean_prefix)
+        await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
 
     def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
         embed = discord.Embed(colour=helpers.Colour.darker_red())

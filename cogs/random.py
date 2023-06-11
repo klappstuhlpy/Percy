@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Optional
 from . import command
 from .utils import fuzzy
 from .utils.helpers import TimeMesh
-from .utils.scope import LANGUAGES
+from .utils.constants import LANGUAGES
 from .utils.translation import translate
 from playwright._impl._api_types import TimeoutError as PlaywrightTimeoutError  # noqa
 

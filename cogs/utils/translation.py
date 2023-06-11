@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
-from cogs.utils.scope import LANGUAGES
+from cogs.utils.constants import LANGUAGES
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
 
 
-class TranslateError(Exception):
+class TranslateError(RuntimeError):
     def __init__(self, status_code: int, text: str) -> None:
         self.status_code: int = status_code
         self.text: str = text

@@ -17,7 +17,7 @@ from discord import app_commands, Colour
 from discord.ext import commands
 
 from . import fuzzy
-from .scope import MENTION_REGEX, IgnoreableEntity, COLOUR_DICT
+from .constants import MENTION_REGEX, IgnoreableEntity, COLOUR_DICT
 from ..utils.context import Context, GuildContext
 
 

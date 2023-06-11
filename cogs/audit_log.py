@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 
 from bot import Percy
-from cogs.utils.scope import PossibleTarget
+from cogs.utils.constants import PossibleTarget
 
 
 class AuditLog(commands.Cog):

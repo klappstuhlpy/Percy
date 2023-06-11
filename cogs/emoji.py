@@ -16,7 +16,7 @@ from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
 from .utils.paginator import TextSource
 from .utils.render import Render
-from .utils.scope import EMOJI_REGEX, EMOJI_NAME_REGEX
+from .utils.constants import EMOJI_REGEX, EMOJI_NAME_REGEX
 
 
 def partial_emoji(argument: str, *, regex=EMOJI_REGEX) -> int:
