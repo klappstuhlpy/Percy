@@ -206,9 +206,6 @@ class DocCog(commands.Cog):
 
     async def cog_load(self) -> None:
         """Refresh documentation inventory on cog initialization."""
-        if self.bot.data_storage.get("documentation_links") is None:
-            await self.bot.data_storage.put("documentation_links", [])
-
         self.bot.loop.create_task(self.refresh_inventories())
 
     async def cog_unload(self) -> None:
@@ -507,7 +504,7 @@ class DocCog(commands.Cog):
             "base_url": base_url,
             "inventory_url": inventory_url
         }
-        data: list[dict[str, Any]] = self.bot.data_storage.get("documentation_links")
+        data: list[dict[str, Any]] = self.bot.data_storage.get("documentation_links", [])
         data.append(body)
         await self.bot.data_storage.put("documentation_links", data)
 
