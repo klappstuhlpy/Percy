@@ -46,8 +46,11 @@ To configure the PostgreSQL database for use by the bot, go to the directory whe
 client_id = ''  # Your Bots Client ID
 token = ''  # Your Bots Token
 debug = False
+
+wolfram_api_key = ''  # Wolfram Alpha API Key
 github_key = ''  # GitHub Gist creation
 postgresql = ''  # Base Postgres
+
 alchemy_postgresql = ''  # For ORM work
 stat_webhook = ('', '')  # ID, Code
 
