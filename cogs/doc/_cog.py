@@ -192,7 +192,7 @@ class SphinxObjectFileReader:
                 pos = buf.find(b'\n')
 
 
-class DocCog(commands.Cog):
+class Documentation(commands.Cog):
     """A set of commands for querying & displaying documentation."""
 
     def __init__(self, bot: Percy):
@@ -216,6 +216,10 @@ class DocCog(commands.Cog):
         """Clear scheduled inventories, queued symbols and cleanup task on cog unload."""
         self.inventory_scheduler.cancel_all()
         await self.item_fetcher.clear()
+
+    @property
+    def display_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name="")
 
     async def documentation_autocomplete(
             self, interaction: discord.Interaction, current: str

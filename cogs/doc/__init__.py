@@ -17,5 +17,5 @@ doc_cache = DocCache("doc")
 
 async def setup(bot: Percy) -> None:
     """Load the Doc cog."""
-    from ._cog import DocCog
-    await bot.add_cog(DocCog(bot))
+    from ._cog import Documentation
+    await bot.add_cog(Documentation(bot))

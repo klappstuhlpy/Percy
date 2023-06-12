@@ -103,26 +103,25 @@ class Minigame(commands.GroupCog):
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
-            message = await ctx.send(embeds=[builder.build_hang_man(), builder.build_embed()])
+            message = await ctx.send(embed=builder.build_embed())
 
             async for action in builder.wait_for():
-                message = await message.edit(embeds=[builder.build_hang_man(), builder.build_embed()])
+                message = await message.edit(embed=builder.build_embed())
 
                 if isinstance(action, asyncio.TimeoutError):
                     await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', ephemeral=True)
                 elif action == hangman.Action.GUESSED_WORD or action == hangman.Action.GUESSED_ALL:
-                    pass
+                    await ctx.send('<:greenTick:1079249732364406854> You\'ve guessed the word.')
                 elif action == hangman.Action.GUESSED_ALREADY:
                     await ctx.send('<:redTick:1079249771975413910> You already guessed that letter.', ephemeral=True)
                 elif action == hangman.Action.GUESSED_INVALID:
                     await ctx.send('<:redTick:1079249771975413910> Invalid guess. Please enter a single letter.',
                                    ephemeral=True)
-
-                if builder.errors == 6:  # coalcase because we already checked for wins
+                elif action == hangman.Action.NO_REMAINING_TRIES or builder.errors == 6:
                     builder.finished = -1
                     builder._current_colour = helpers.Colour.red()
-                    builder.guessed.update(builder.word)
-                    message = await message.edit(embeds=[builder.build_hang_man(), builder.build_embed()])
+                    await message.edit(embed=builder.build_embed())
+                    await ctx.send(f"<:redTick:1079249771975413910> You've lost. The word was **`{builder.word}`**.")
 
 
 async def setup(bot: Percy):

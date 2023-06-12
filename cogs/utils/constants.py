@@ -111,7 +111,6 @@ GITHUB_GIST_RE = re.compile(
 
 PACKAGE_NAME_RE = re.compile(r"[^a-z0-9_.]")
 
-
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
     'ANIMATED_ICON': ('🌟', 'Server can upload an animated icon.'),
@@ -303,73 +302,11 @@ LANGUAGES = {
 }
 
 HANG_MAN = [
-    (
-        ""
-    ), (
-        """
-          _______
-         |/      |
-         |      
-         |      
-         |       
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      
-         |       
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |       |
-         |       |
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      \\|/
-         |       |
-         |      
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (_)
-         |      \\|/
-         |       |
-         |      / \\
-         |
-        _|___
-        """
-    ), (
-        """
-          _______
-         |/      |
-         |      (x)
-         |      \\|/
-         |       |
-         |      / \\
-         |
-        _|___
-        """
-    )
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793965626896454/hangman0.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman1.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793966241034752/hangman2.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793966560733184/hangman3.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman4.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793966241034752/hangman5.png",
+    "https://media.discordapp.net/attachments/1062074624935993427/1117793967103291495/hangman6.png"
 ]

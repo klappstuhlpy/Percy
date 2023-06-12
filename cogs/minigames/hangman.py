@@ -1,9 +1,8 @@
 import asyncio
 import contextlib
 import enum
-import inspect
 from abc import ABC
-from typing import Set, AsyncIterable
+from typing import Set, AsyncIterable, Literal
 
 import discord
 
@@ -34,11 +33,11 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         self.guessed: Set[str] = set()
         self.fail_guessed: Set[str] = set()
         self.errors: int = 0
-        self._current_colour: helpers.Colour = helpers.Colour.light_orange()
+        self._current_colour: helpers.Colour = helpers.Colour.light_grey()
 
         self._current_state_index: int = 0
-        self._current_state = HANG_MAN[self._current_state_index]
-        self.finished: 1 | 0 | -1 = 0
+        self._current_state: str = HANG_MAN[0]
+        self.finished: Literal[1, 0, -1] = 0  # 1 = won, 0 = not finished, -1 = lost
 
     async def __aenter__(self) -> 'WaitforHangman':
         return self
@@ -52,8 +51,8 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
             try:
                 message = await self.bot.wait_for('message', check=lambda m: m.author == self.ctx.user, timeout=300.0)
             except asyncio.TimeoutError as exc:
-                self._current_colour = helpers.Colour.red()
-                self.update_state(-1)
+                if self.finished not in (1, -1):
+                    self._current_colour = helpers.Colour.red()
                 yield exc
                 break
             else:
@@ -68,10 +67,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                 elif content in self.guessed or content in self.fail_guessed:
                     yield Action.GUESSED_ALREADY
 
-                elif message.content.isdigit():
-                    yield Action.GUESSED_INVALID
-
-                elif len(content) > 1:
+                elif content.isdigit() or len(content) > 1:
                     yield Action.GUESSED_INVALID
 
                 elif content in self.word:
@@ -91,60 +87,42 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                     break
 
                 if self.errors == 6:
-                    self.finished = -1
+                    yield Action.NO_REMAINING_TRIES
                     break
 
         yield None
 
-    def build_hang_man(self):
-        return (
-            discord.Embed(
-                title='Hangman',
-                description=f"```\n{inspect.cleandoc(self._current_state)}```",
-                colour=self._current_colour,
-            )
-        )
-
     def build_embed(self):
-        if self.finished == 1:
-            if self.errors > 0:
-                text = f'You guessed the word with {self.errors}/6 errors!'
-            else:
-                text = f'You guessed the word first try!'
-        elif self.finished == 0:
-            text = f'You have {self.errors}/6 errors.'
-        else:
-            text = f'You have lost with {self.errors}/6 errors.'
+        state = " guessed the word with " if self.finished == 1 else " lost with " if self.finished == -1 else " "
+        text = f'You have{state}{self.errors}/6 errors.'
 
         return (
             discord.Embed(
                 title='Hangman',
-                description='Guess the word by typing a letter. You have 5 minutes to guess the word.',
+                description=f'**You\'ve guessed `{self.hidden_word}` so far.**\n'
+                            'Guess the word by typing a letter. You have 5 minutes to guess the word.',
                 colour=self._current_colour,
             )
-            .add_field(name="Word", value=f"**{self.hidden_word}**", inline=False)
-            .add_field(name="Guessed", value=f"**{self.gussed_letters}**", inline=False)
+            .set_image(url=self._current_state)
+            .add_field(name="Tried Words", value=f"**`{self.gussed_letters}`**", inline=False)
             .set_footer(text=text)
         )
 
     @property
     def gussed_letters(self) -> str:
         """Returns the guessed letters."""
-        return ' '.join(letter if letter in self.guessed else f'~~{letter}~~' for letter in (self.guessed | self.fail_guessed)) or '/'
+        return ' '.join(
+            letter if letter in self.guessed else f'~~{letter}~~' for letter in (self.guessed | self.fail_guessed)
+        ) or '\u200b'
 
     @property
     def hidden_word(self) -> str:
         """Returns the hidden word."""
-        if self._current_colour == helpers.Colour.red() or self._current_colour == helpers.Colour.lime_green():
-            return self.word
         return discord.utils.escape_markdown(
-            ''.join(
+            ' '.join(
                 letter if letter.lower() in self.guessed else ' ' if letter.isspace() else '_' for letter in self.word)
         )
 
-    def update_state(self, index: int = None):
-        if index:
-            self._current_state_index = index
-        else:
-            self._current_state_index += 1
+    def update_state(self):
+        self._current_state_index += 1
         self._current_state = HANG_MAN[self._current_state_index]
