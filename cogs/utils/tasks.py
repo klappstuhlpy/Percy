@@ -6,13 +6,9 @@ from datetime import datetime, timezone
 
 from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable, TYPE_CHECKING
 import discord
+import logging
 
-if TYPE_CHECKING:
-    from launcher import get_logger
-    log = get_logger(__name__)
-else:
-    import logging
-    log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
@@ -138,7 +134,7 @@ class Scheduler:
         """
         self.name = name
 
-        self._log = get_logger(f"{__name__}.{name}")
+        self._log = logging.getLogger(f"{__name__}.{name}")
         self._scheduled_tasks: dict[Hashable, asyncio.Task] = {}
 
     def __contains__(self, task_id: Hashable) -> bool:
