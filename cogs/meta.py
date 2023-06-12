@@ -341,7 +341,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     async def total_commands_invoked(self) -> int:
         query = "SELECT COUNT(*) as total FROM commands;"
-        return 0#await self.context.client.pool.fetchval(query)  # type: ignore
+        return await self.context.client.pool.fetchval(query)  # type: ignore
 
     async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):  # noqa
         """|coro|
