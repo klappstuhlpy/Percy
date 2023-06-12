@@ -185,16 +185,9 @@ class Wolfram(Cog):
 
         async with self._req_lock:
             async with self.bot.session.request(method, req_url, params=prms) as r:
-                remaining = r.headers.get('X-Ratelimit-Remaining')
-                js = await r.json()
-                if r.status == 429 or remaining == '0':
-                    delta = discord.utils._parse_ratelimit_header(r)
-                    await asyncio.sleep(delta)
-                    self._req_lock.release()
-                    return await self.wolfram_request(method, url, query=query)
-                elif 300 > r.status >= 200:
+                if 300 > r.status >= 200:
                     if response_type == "json":
-                        return js
+                        return await r.json()
                     elif response_type == "bytes":
                         return await r.read()
                     else:
