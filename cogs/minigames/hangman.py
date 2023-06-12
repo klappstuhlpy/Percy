@@ -23,6 +23,8 @@ class Action(enum.Enum):
     NO_REMAINING_TRIES = 6
     GUESSED_ALL = 7
 
+    ABORTED = 8
+
 
 class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
     def __init__(self, bot: Percy, ctx: Context | discord.Interaction, word: str):
@@ -57,6 +59,10 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                 break
             else:
                 content = message.content.lower()
+
+                if content == "?abort":
+                    yield Action.ABORTED
+                    break
 
                 if content == self.word.lower():
                     self.finished = 1

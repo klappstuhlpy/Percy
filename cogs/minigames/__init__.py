@@ -103,20 +103,22 @@ class Minigame(commands.GroupCog):
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
-            message = await ctx.send(embed=builder.build_embed())
+            message = await ctx.send(f"*If you want to stop the game, type `?abort`.*", embed=builder.build_embed())
 
             async for action in builder.wait_for():
                 message = await message.edit(embed=builder.build_embed())
 
                 if isinstance(action, asyncio.TimeoutError):
-                    await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', ephemeral=True)
+                    await ctx.send('<:redTick:1079249771975413910> You took too long to guess the word.', delete_after=10)
+                elif action == hangman.Action.ABORTED:
+                    await ctx.send('<:redTick:1079249771975413910> You aborted the game.', delete_after=5)
                 elif action == hangman.Action.GUESSED_WORD or action == hangman.Action.GUESSED_ALL:
-                    await ctx.send('<:greenTick:1079249732364406854> You\'ve guessed the word.')
+                    await ctx.send('<:greenTick:1079249732364406854> You\'ve guessed the word. Congratulations!')
                 elif action == hangman.Action.GUESSED_ALREADY:
-                    await ctx.send('<:redTick:1079249771975413910> You already guessed that letter.', ephemeral=True)
+                    await ctx.send('<:redTick:1079249771975413910> You already guessed that letter.', delete_after=5)
                 elif action == hangman.Action.GUESSED_INVALID:
                     await ctx.send('<:redTick:1079249771975413910> Invalid guess. Please enter a single letter.',
-                                   ephemeral=True)
+                                   delete_after=5)
                 elif action == hangman.Action.NO_REMAINING_TRIES or builder.errors == 6:
                     builder.finished = -1
                     builder._current_colour = helpers.Colour.red()
