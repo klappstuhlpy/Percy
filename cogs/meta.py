@@ -25,7 +25,7 @@ from . import command, command_permissions
 from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
-from .utils.paginator import BasePaginator, TextSource
+from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup
 from .utils.timetools import mean_stddev, RelativeDelta
 
@@ -504,7 +504,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 params.append(f'`--{flag.name}` - {flag.description}')
 
             for i in range(0, len(params), 15):
-                fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': '\n'.join(params[i:i+15]), 'inline': False})
+                fields.append(
+                    {'name': 'Flags' if i == 0 else '\u200b', 'value': '\n'.join(params[i:i + 15]), 'inline': False})
 
             for field in fields:
                 embed.add_field(**field)
@@ -1148,19 +1149,34 @@ class Meta(commands.Cog):
     )
     @app_commands.describe(characters="A String of characters that should be introspected.")
     async def charinfo(self, ctx: Context, *, characters: str):
-        """Shows you information about a number of characters.
-        Only up to 25 characters at a time.
-        """
+        """Shows you information on up to 50 unicode characters."""
+        match = re.match(r"<(a?):(\w+):(\d+)>", characters)
+        if match:
+            await ctx.send(f"{ctx.tick(False)} Cannot introspect custom emojis.")
+            return
 
-        def to_string(c):
-            digit = f'{ord(c):x}'
-            name = unicodedata.name(c, 'N/A.')
-            return f'`\\U{digit:>08}`: {name} - {c} \N{EM DASH} <http://www.fileformat.info/info/unicode/char/{digit}>'
+        if len(characters) > 50:
+            await ctx.send(f"{ctx.tick(False)} Character limit of `50` exceeded.")
+            return
 
-        msg = '\n'.join(map(to_string, characters))
-        if len(msg) > 2000:
-            return await ctx.send('<:redTick:1079249771975413910> Output too long to display.')
-        await ctx.send(msg)
+        def char_info(char: str) -> tuple[str, str]:
+            digit = f"{ord(char):x}"
+            if len(digit) <= 4:
+                u_code = f"\\u{digit:>04}"
+            else:
+                u_code = f"\\U{digit:>08}"
+            url = f"https://www.compart.com/en/unicode/U+{digit:>04}"
+            name = f"[{unicodedata.name(char, '')}]({url})"
+            info = f"`{u_code.ljust(10)}`: {name} - {discord.utils.escape_markdown(char)}"
+            return info, u_code
+
+        char_list, raw_list = zip(*(char_info(c) for c in characters), strict=True)
+        embed = discord.Embed(title="Char Info", colour=self.bot.colour.darker_red())
+
+        if len(characters) > 1:
+            embed.add_field(name="Full Text", value=f"`{''.join(raw_list)}`", inline=False)
+
+        await LinePaginator.start(ctx, entries=char_list, per_page=10, embed=embed, location="description")
 
     @command(
         commands.group,
