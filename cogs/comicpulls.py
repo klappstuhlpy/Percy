@@ -446,7 +446,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if isinstance(error, app_commands.errors.CheckFailure):
             return
 
-    def prev_schedule(self, brand: Brand) -> datetime.datetime:
+    async def prev_schedule(self, brand: Brand) -> datetime.datetime:
         return max(i.date if i.date is not None else datetime.datetime.min for i in await self.comic_cache.get(brand))
 
     async def comic_cache_check(self, interaction: discord.Interaction) -> bool:
@@ -574,7 +574,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                     formatted_date = now.strftime("%B, %Y")
                     lead_text = f"## {config.brand.value} • {formatted_date}"
                 else:
-                    lead_text = f"## {config.brand.value} Comics • {discord.utils.format_dt(self.prev_schedule(config.brand), 'd')}"
+                    lead_text = f"## {config.brand.value} Comics • {discord.utils.format_dt(await self.prev_schedule(config.brand), 'd')}"
 
                 lead_msg = await channel.send(lead_text)
                 if config.pin:
