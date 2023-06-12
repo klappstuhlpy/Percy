@@ -74,6 +74,7 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
 
 
 class GroupHelpPaginator(BasePaginator[PartialCommand]):
+    _ctx: Context  # possible Context from Interaction
     group: commands.Group | commands.Cog  # The current Group displayed
     groups: Optional[Dict[commands.Cog, list[PartialCommand]]]  # The list of all groups from this help menu
 
@@ -96,7 +97,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available in Slash Commands.')
         else:
-            embed.set_footer(text=f'Use "{self.ctx.clean_prefix}help command" for more info on a command.')
+            embed.set_footer(text=f'Use "{self._ctx.clean_prefix}help command" for more info on a command.')
 
         return embed
 
@@ -118,11 +119,12 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
+        self._ctx = context
         if isinstance(context, discord.Interaction):
-            setattr(context, 'clean_prefix', '/')
+            self._ctx = await self.ctx.client.get_context(context.message)
 
-        self.group = kwargs.pop('group', entries[0].cog)
-        self.groups = kwargs.pop('groups', None)
+        self.groups = kwargs.pop('groups')
+        self.group = kwargs.pop('group')
 
         page: discord.Embed = await self.format_page(self.pages[0])  # type: ignore
 
@@ -197,6 +199,7 @@ class HelpSelectMenu(discord.ui.Select):
 
 
 class FrontHelpPaginator(BasePaginator[str]):
+    _ctx: Context  # possible Context from Interaction
     groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
     async def format_page(self, entries: List, /):
@@ -214,8 +217,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
                 ## More Help
                 Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{self.ctx.clean_prefix}help` *`command`*
-                - `{self.ctx.clean_prefix}help` *`category`*
+                - `{self._ctx.clean_prefix}help` *`command`*
+                - `{self._ctx.clean_prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -237,11 +240,11 @@ class FrontHelpPaginator(BasePaginator[str]):
                  "They can provide a better overview and are not required to be typed in.\n"
                  "\n"
                  "Flags are prefixed with `--` and can be used like this:\n"
-                 f"- `{self.ctx.clean_prefix}command --flag1 argument1 --flag2 argument2`\n"
-                 f"- `{self.ctx.clean_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
+                 f"- `{self._ctx.clean_prefix}command --flag1 argument1 --flag2 argument2`\n"
+                 f"- `{self._ctx.clean_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
                  f"\n"
                  f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
-                 f"- `{self.ctx.clean_prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                 f"- `{self._ctx.clean_prefix}command --flag1 my first argument --flag2 'argument 2`'"
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
@@ -289,8 +292,9 @@ class FrontHelpPaginator(BasePaginator[str]):
         self.ctx = context
         self.groups = entries
 
+        self._ctx = context
         if isinstance(context, discord.Interaction):
-            setattr(self, 'clean_prefix', '/')
+            self._ctx = await self.ctx.client.get_context(context.message)
 
         page = await self.format_page(self.pages[0])
         kwargs = {'view': self, 'embed' if isinstance(page, discord.Embed) else 'content': page}
@@ -337,7 +341,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     async def total_commands_invoked(self) -> int:
         query = "SELECT COUNT(*) as total FROM commands;"
-        return await self.context.client.pool.fetchval(query)  # type: ignore
+        return 0#await self.context.client.pool.fetchval(query)  # type: ignore
 
     async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):  # noqa
         """|coro|
