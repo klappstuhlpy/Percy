@@ -8,7 +8,7 @@ import asyncpg
 import discord
 from discord.ext import commands
 
-from cogs.utils.paginator import BasePaginator
+from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command, command_permissions
 from .utils import cache
 from .utils.converters import aenumerate
@@ -542,18 +542,10 @@ class Config(commands.Cog):
         if not disabled:
             return await ctx.send('<:redTick:1079249771975413910> There are no disabled commands for this channel.')
 
-        class EmbedPaginator(BasePaginator[str]):
-            colour = self.bot.colour.darker_red()
-
-            async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(timestamp=datetime.utcnow(),
-                                      color=self.colour)
-                embed.set_author(name=f'Disabled Commands', icon_url=ctx.guild.icon.url)
-                embed.set_footer(text=f'{plural(len(disabled)):command}')
-                embed.description = '\n'.join(entries)
-                return embed
-
-        await EmbedPaginator.start(ctx, entries=disabled, per_page=15)
+        embed = discord.Embed(timestamp=datetime.utcnow(),
+                              color=self.bot.colour.darker_red())
+        embed.set_author(name=f'Disabled Commands', icon_url=ctx.guild.icon.url)
+        await LinePaginator.start(ctx, entries=disabled, per_page=15, embed=embed, location='description')
 
     @command(
         config.group,

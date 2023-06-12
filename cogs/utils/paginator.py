@@ -395,6 +395,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
     async def start(
             cls: Type[BasePaginator],
             context: Context,
+            /,
             *,
             entries: List[T],
             per_page: int = 10,
@@ -402,7 +403,23 @@ class BasePaginator(discord.ui.View, Generic[T]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
+            **kwargs: None
+    ) -> BasePaginator[T]:
+        ...
+
+    @classmethod
+    @overload
+    async def start(
+            cls: Type[BasePaginator],
+            context: Context | discord.Interaction,
             /,
+            *,
+            entries: List[T],
+            per_page: int = 10,
+            clamp_pages: bool = True,
+            timeout: int = 180,
+            search_for: bool = False,
+            ephemeral: bool = False,
             **kwargs: None
     ) -> BasePaginator[T]:
         ...
@@ -411,6 +428,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
     async def start(
             cls: Type[BasePaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[T],
             per_page: int = 10,
@@ -418,7 +436,6 @@ class BasePaginator(discord.ui.View, Generic[T]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            /,
             **kwargs: Any
     ) -> BasePaginator[T]:
         """|coro|
@@ -480,6 +497,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
 
 
 class EmbedPaginator(BasePaginator[discord.Embed]):
+    """Sub class of :class:`BasePaginator` that is used to paginate :class:`discord.Embed`'s."""
 
     async def format_page(self, entries: List[discord.Embed], /) -> List[discord.Embed]:
         return entries
@@ -489,8 +507,9 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
 
     @classmethod
     async def start(
-            cls: Type[BasePaginator],
+            cls: Type[EmbedPaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[discord.Embed],
             per_page: int = 1,
@@ -498,9 +517,8 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            /,
             **kwargs: None
-    ) -> BasePaginator[discord.Embed]:
+    ) -> EmbedPaginator[discord.Embed]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
@@ -514,6 +532,8 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
 
 
 class LinePaginator(BasePaginator[List[Any]]):
+    """Sub class of :class:`BasePaginator` that is used to paginate lines with an template Embed."""
+
     embed: discord.Embed
     location: Literal['field', 'description']
 
@@ -530,8 +550,9 @@ class LinePaginator(BasePaginator[List[Any]]):
 
     @classmethod
     async def start(
-            cls: Type[BasePaginator],
+            cls: Type[LinePaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[Any],
             per_page: int = 1,
@@ -539,9 +560,8 @@ class LinePaginator(BasePaginator[List[Any]]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            /,
             **kwargs: Any
-    ) -> BasePaginator[Any]:
+    ) -> LinePaginator[Any]:
         """|coro|
 
         Used to start the paginator.
@@ -563,6 +583,8 @@ class LinePaginator(BasePaginator[List[Any]]):
             Whether or not to enable the search feature.
         ephemeral: :class:`bool`
             Whether or not to make the message ephemeral.
+        \*args: :class:`Any`
+            Any arguments to pass onto the paginator.
         \*\*kwargs: :class:`Any`
             Any keyword arguments to pass onto the paginator.
         embed: :class:`discord.Embed`
@@ -594,6 +616,7 @@ class LinePaginator(BasePaginator[List[Any]]):
 
 
 class TextPaginator(BasePaginator[str]):
+    """Sub class of :class:`BasePaginator` that is used to paginate text."""
 
     async def format_page(self, entries: List[str], /) -> str:
         return entries[0]
@@ -603,8 +626,9 @@ class TextPaginator(BasePaginator[str]):
 
     @classmethod
     async def start(
-            cls: Type[BasePaginator],
+            cls: Type[TextPaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[str],
             per_page: int = 1,
@@ -612,9 +636,8 @@ class TextPaginator(BasePaginator[str]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            /,
             **kwargs: None
-    ) -> BasePaginator[str]:
+    ) -> TextPaginator[str]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
@@ -628,6 +651,8 @@ class TextPaginator(BasePaginator[str]):
 
 
 class FilePaginator(BasePaginator[AnyStr]):
+    """Sub class of :class:`BasePaginator` that is used to paginate files."""
+
     async def format_page(self, entries: List[AnyStr]) -> List[discord.File]:
         files = []
         for entry in entries:
@@ -640,8 +665,9 @@ class FilePaginator(BasePaginator[AnyStr]):
 
     @classmethod
     async def start(
-            cls: Type[BasePaginator],
+            cls: Type[FilePaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[AnyStr],
             per_page: int = 1,
@@ -649,9 +675,8 @@ class FilePaginator(BasePaginator[AnyStr]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            /,
             **kwargs: None
-    ) -> BasePaginator[AnyStr]:
+    ) -> FilePaginator[AnyStr]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 

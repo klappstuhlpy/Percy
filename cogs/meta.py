@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
 )
 
 import discord
@@ -104,6 +104,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
     async def start(
             cls: Type[GroupHelpPaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: List[PartialCommand],
             per_page: int = 6,
@@ -111,9 +112,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            edit: bool = False,
-            group: Union[commands.Group, commands.Cog] = None,
-            groups: Optional[Dict[commands.Cog, list[PartialCommand]]] = None,
+            **kwargs: Any,
     ) -> GroupHelpPaginator[PartialCommand]:
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
@@ -122,8 +121,8 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if isinstance(context, discord.Interaction):
             setattr(context, 'clean_prefix', '/')
 
-        self.group = group or entries[0].cog
-        self.groups = groups
+        self.group = kwargs.pop('group', entries[0].cog)
+        self.groups = kwargs.pop('groups', None)
 
         page: discord.Embed = await self.format_page(self.pages[0])  # type: ignore
 
@@ -131,7 +130,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             self.add_item(HelpSelectMenu(self.groups, getattr(context, 'bot', context.client)))  # type: ignore
         self.update_buttons()
 
-        if edit:
+        if kwargs.pop('edit', False):
             await self._edit(context, embed=page, view=self)
         else:
             if self.total_pages <= 1:
@@ -274,6 +273,7 @@ class FrontHelpPaginator(BasePaginator[str]):
     async def start(
             cls: Type[FrontHelpPaginator],
             context: Context | discord.Interaction,
+            /,
             *,
             entries: Dict,
             per_page: int = 1,
@@ -281,7 +281,7 @@ class FrontHelpPaginator(BasePaginator[str]):
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
-            edit: bool = False
+            **kwargs: Any,
     ) -> FrontHelpPaginator[str]:
         """Overwritten to add the SelectMenu"""
         self = cls(entries=['', '', ''], per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
@@ -300,7 +300,7 @@ class FrontHelpPaginator(BasePaginator[str]):
         self.add_item(HelpSelectMenu(entries, self.ctx.client))  # type: ignore
         self.update_buttons()
 
-        if edit:
+        if kwargs.pop('edit', False):
             if isinstance(context, discord.Interaction):
                 self.msg = await context.response.edit_message(**kwargs)
             else:

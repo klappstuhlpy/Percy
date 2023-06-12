@@ -10,7 +10,7 @@ import zlib
 from collections import defaultdict
 from ssl import CertificateError
 from types import SimpleNamespace
-from typing import Literal, Any, List, Annotated, Optional, Generator
+from typing import Literal, Any, Annotated, Optional, Generator
 
 import aiohttp
 import discord
@@ -29,7 +29,7 @@ from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
 from ..utils.formats import plural
 from ..utils.lock import lock, SharedEvent
-from ..utils.paginator import BasePaginator
+from ..utils.paginator import LinePaginator
 
 log = get_logger(__name__)
 
@@ -146,17 +146,6 @@ class DocItem:
     def url(self) -> str:
         """Return the absolute url to the symbol."""
         return self.base_url + self.relative_url_path
-
-
-class LinePaginator(BasePaginator[tuple[str, str]]):
-
-    async def format_page(self, entries: List[tuple[str, str]], /) -> discord.Embed:
-        embed = discord.Embed(color=helpers.Colour.darker_red())
-        embed.set_footer(text=f'{plural(len(self.entries)):inventory|invetories} found.')
-        results = [f"• [`{entry[0]}`]({entry[1]})" for entry in entries]
-        embed.add_field(name="Results", value='\n'.join(results))
-
-        return embed
 
 
 class SphinxObjectFileReader:
@@ -454,7 +443,10 @@ class Documentation(commands.Cog):
         """
         if not symbol_name:
             if self.base_urls:
-                await LinePaginator.start(ctx, entries=[(k, v) for k, v in self.base_urls.items()])  # type: ignore
+                embed = discord.Embed(color=helpers.Colour.darker_red())
+                embed.set_footer(text=f'{plural(len(self.base_urls)):inventory|invetories} found.')
+                results = [f"• [`{entry[0]}`]({entry[1]})" for entry in [(k, v) for k, v in self.base_urls.items()]]
+                await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
             else:
                 await ctx.send(f"{ctx.tick(False)} There are no inventories available at the moment.")
 
