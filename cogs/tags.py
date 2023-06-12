@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing_extensions import Annotated
 
-from cogs.utils.paginator import BasePaginator
+from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command
 from .emoji import usage_per_day
 from .utils import formats, checks, fuzzy
@@ -32,20 +32,6 @@ class TagPageEntry(PostgresItem):
 
     def __str__(self) -> str:
         return f'{self.name} [`{self.id}`]'
-
-
-class TagPaginator(BasePaginator[TagPageEntry]):
-    author = {}
-    colour = None
-
-    async def format_page(self, entries: List[TagPageEntry], /) -> discord.Embed:
-        embed = discord.Embed(color=self.colour)
-        embed.set_author(**self.author)
-        embed.set_footer(text=f'{plural(len(self.entries)):tag}')
-        results = [f"`{index}.` {entry}" for index, entry in enumerate(entries, self.numerate_start)]
-        embed.add_field(name="Results", value='\n'.join(results))
-
-        return embed
 
 
 class TagName(commands.clean_content):
@@ -870,11 +856,13 @@ class Tags(commands.Cog):
         rows = await ctx.db.fetch(query, ctx.guild.id, member.id)
 
         if rows:
-            TagPaginator.author = {'name': f'{member}\'s Tags in {ctx.guild.name}',
-                                   'icon_url': member.display_avatar.url}
-            TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(
-                ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120, search_for=True, per_page=20
+            embed = discord.Embed(color=self.bot.colour.darker_red())
+            embed.set_author(name=f'{member}\'s Tags in {ctx.guild.name}', icon_url=member.display_avatar.url)
+            embed.set_footer(text=f'{plural(len(rows)):tag}')
+
+            results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            await LinePaginator.start(
+                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
             )
         else:
             await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
@@ -931,11 +919,14 @@ class Tags(commands.Cog):
         rows = await ctx.db.fetch(query, ctx.guild.id)
 
         if rows:
-            TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
-            TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in rows], timeout=120,
-                                     search_for=True,
-                                     per_page=20)
+            embed = discord.Embed(color=self.bot.colour.darker_red())
+            embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
+            embed.set_footer(text=f'{plural(len(rows)):tag}')
+
+            results = [f"`{index}.` {entry}" for index, entry in  enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            await LinePaginator.start(
+                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
+            )
         else:
             await ctx.send('<:redTick:1079249771975413910> There are no tags in this server.')
 
@@ -991,14 +982,17 @@ class Tags(commands.Cog):
             LIMIT 100;
         """
 
-        results = await ctx.db.fetch(sql, ctx.guild.id, query)
+        rows = await ctx.db.fetch(sql, ctx.guild.id, query)
 
-        if results:
-            TagPaginator.author = {'name': f'Tags in {ctx.guild.name}', 'icon_url': ctx.guild.icon.url}
-            TagPaginator.colour = self.bot.colour.darker_red()
-            await TagPaginator.start(ctx, entries=[TagPageEntry(record=row) for row in results], timeout=120,
-                                     search_for=True,
-                                     per_page=20)
+        if rows:
+            embed = discord.Embed(color=self.bot.colour.darker_red())
+            embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
+            embed.set_footer(text=f'{plural(len(rows)):tag}')
+
+            results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            await LinePaginator.start(
+                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
+            )
         else:
             await ctx.send('<:redTick:1079249771975413910> No tags found.')
 

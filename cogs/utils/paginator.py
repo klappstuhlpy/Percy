@@ -4,19 +4,18 @@ import asyncio
 import io
 import re
 import uuid
-from typing import List, Optional, Any, Callable, TypeVar, Generic, Type, AnyStr
+from typing import List, Optional, Any, Callable, TypeVar, Generic, Type, AnyStr, overload, Literal
 
 import discord
 from discord.ext import commands
 from discord.utils import MISSING
 
-from cogs.utils import fuzzy
+from cogs.utils import fuzzy, helpers
 from cogs.utils.context import Context
 from cogs.utils.converters import aenumerate
 from cogs.utils.formats import truncate
 
 T = TypeVar('T')
-
 
 TYPE_MAPPING = {
     discord.Embed: 'embed',
@@ -392,6 +391,23 @@ class BasePaginator(discord.ui.View, Generic[T]):
         await self.msg.edit(**self._message_kwargs(page))
 
     @classmethod
+    @overload
+    async def start(
+            cls: Type[BasePaginator],
+            context: Context,
+            *,
+            entries: List[T],
+            per_page: int = 10,
+            clamp_pages: bool = True,
+            timeout: int = 180,
+            search_for: bool = False,
+            ephemeral: bool = False,
+            /,
+            **kwargs: None
+    ) -> BasePaginator[T]:
+        ...
+
+    @classmethod
     async def start(
             cls: Type[BasePaginator],
             context: Context | discord.Interaction,
@@ -401,7 +417,9 @@ class BasePaginator(discord.ui.View, Generic[T]):
             clamp_pages: bool = True,
             timeout: int = 180,
             search_for: bool = False,
-            ephemeral: bool = False
+            ephemeral: bool = False,
+            /,
+            **kwargs: Any
     ) -> BasePaginator[T]:
         """|coro|
 
@@ -424,6 +442,8 @@ class BasePaginator(discord.ui.View, Generic[T]):
             Whether or not to enable the search feature.
         ephemeral: :class:`bool`
             Whether or not to make the message ephemeral.
+        \*\*kwargs: :class:`Any`
+            Any keyword arguments to pass onto the paginator.
 
         Returns
         -------
@@ -434,14 +454,14 @@ class BasePaginator(discord.ui.View, Generic[T]):
         self.ctx = context
 
         page = await self.format_page(self.pages[0])
-        kwargs = self._message_kwargs(page)
+        object_kwargs = self._message_kwargs(page)
         if self.total_pages <= 1:
-            kwargs.pop('view')
+            object_kwargs.pop('view')
 
         if search_for and self.total_pages > 5:
             self.add_item(SearchForButton(self))
 
-        self.msg = await cls._send(context, ephemeral, **kwargs)
+        self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
 
     @classmethod
@@ -477,17 +497,99 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
             clamp_pages: bool = True,
             timeout: int = 180,
             search_for: bool = False,
-            ephemeral: bool = False
+            ephemeral: bool = False,
+            /,
+            **kwargs: None
     ) -> BasePaginator[discord.Embed]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
         pages = await self.format_page(self.pages[0])
-        kwargs = self._message_kwargs(pages)
+        object_kwargs = self._message_kwargs(pages)
         if self.total_pages <= 1:
-            kwargs.pop('view')
+            object_kwargs.pop('view')
 
-        self.msg = await cls._send(context, ephemeral, **kwargs)
+        self.msg = await cls._send(context, ephemeral, **object_kwargs)
+        return self
+
+
+class LinePaginator(BasePaginator[List[Any]]):
+    embed: discord.Embed
+    location: Literal['field', 'description']
+
+    async def format_page(self, entries: List[Any], /) -> discord.Embed:
+        embed = self.embed.copy()
+        if self.location == 'field':
+            embed.add_field(name='Results', value='\n'.join(entries))
+        else:
+            embed.description = '\n'.join(entries)
+        return embed
+
+    def _message_kwargs(self, page: discord.Embed) -> dict:
+        return {'embed': page, 'view': self}
+
+    @classmethod
+    async def start(
+            cls: Type[BasePaginator],
+            context: Context | discord.Interaction,
+            *,
+            entries: List[Any],
+            per_page: int = 1,
+            clamp_pages: bool = True,
+            timeout: int = 180,
+            search_for: bool = False,
+            ephemeral: bool = False,
+            /,
+            **kwargs: Any
+    ) -> BasePaginator[Any]:
+        """|coro|
+
+        Used to start the paginator.
+
+        Parameters
+        ----------
+        context: :class:`commands.Context`
+            The context to send to. This could also be discord.abc.Messageable as `ctx.send` is the only method
+            used.
+        entries: List[T]
+            A list of entries to pass onto the paginator.
+        per_page: :class:`int`
+            A number of how many entries you want per page.
+        clamp_pages: :class:`bool`
+            Whether or not to clamp the pages to the amount of entries.
+        timeout: :class:`int`
+            How long to wait before the paginator closes due to inactivity.
+        search_for: :class:`bool`
+            Whether or not to enable the search feature.
+        ephemeral: :class:`bool`
+            Whether or not to make the message ephemeral.
+        \*\*kwargs: :class:`Any`
+            Any keyword arguments to pass onto the paginator.
+        embed: :class:`discord.Embed`
+             Special keyword-only argument for the embed to use for the paginator.
+        location: Literal['field', 'description']
+             Special keyword-only argument for the location to put the entries in.
+
+        Returns
+        -------
+        :class:`BaseButtonPaginator`[T]
+            The paginator that was started.
+        """
+        self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
+        self.ctx = context
+
+        if not kwargs.get('embed'):
+            kwargs['embed'] = discord.Embed(colour=helpers.Colour.darker_red())
+
+        self.embed = kwargs.pop('embed')
+        self.location = kwargs.pop('location', 'field')
+
+        pages = await self.format_page(self.pages[0])
+        object_kwargs = self._message_kwargs(pages)
+        if self.total_pages <= 1:
+            object_kwargs.pop('view')
+
+        self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
 
 
@@ -509,17 +611,19 @@ class TextPaginator(BasePaginator[str]):
             clamp_pages: bool = True,
             timeout: int = 180,
             search_for: bool = False,
-            ephemeral: bool = False
+            ephemeral: bool = False,
+            /,
+            **kwargs: None
     ) -> BasePaginator[str]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
         page = await self.format_page(self.pages[0])
-        kwargs = self._message_kwargs(page)  # type: ignore  # lying
+        object_kwargs = self._message_kwargs(page)  # type: ignore  # lying
         if self.total_pages <= 1:
-            kwargs.pop('view')
+            object_kwargs.pop('view')
 
-        self.msg = await cls._send(context, ephemeral, **kwargs)
+        self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
 
 
@@ -544,17 +648,19 @@ class FilePaginator(BasePaginator[AnyStr]):
             clamp_pages: bool = True,
             timeout: int = 180,
             search_for: bool = False,
-            ephemeral: bool = False
+            ephemeral: bool = False,
+            /,
+            **kwargs: None
     ) -> BasePaginator[AnyStr]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
         page = await self.format_page(self.pages[0])
-        kwargs = {'files': page, 'view': self}
+        object_kwargs = {'files': page, 'view': self}
         if self.total_pages <= 1:
-            kwargs.pop('view')
+            object_kwargs.pop('view')
 
-        self.msg = await cls._send(context, ephemeral, **kwargs)
+        self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
 
 
