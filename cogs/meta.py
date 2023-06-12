@@ -123,7 +123,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if isinstance(context, discord.Interaction):
             self._ctx = await self.ctx.client.get_context(context.message)
 
-        self.groups = kwargs.pop('groups')
+        self.groups = kwargs.pop('groups') if 'groups' in kwargs else None
         self.group = kwargs.pop('group')
 
         page: discord.Embed = await self.format_page(self.pages[0])  # type: ignore
