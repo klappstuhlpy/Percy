@@ -111,17 +111,13 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
     @property
     def gussed_letters(self) -> str:
         """Returns the guessed letters."""
-        return ' '.join(
-            letter if letter in self.guessed else f'~~{letter}~~' for letter in (self.guessed | self.fail_guessed)
-        ) or '\u200b'
+        return ' '.join(letter for letter in (self.guessed | self.fail_guessed)) or '\u200b'
 
     @property
     def hidden_word(self) -> str:
         """Returns the hidden word."""
-        return discord.utils.escape_markdown(
-            ' '.join(
-                letter if letter.lower() in self.guessed else ' ' if letter.isspace() else '_' for letter in self.word)
-        )
+        return ' '.join(
+            letter if letter.lower() in self.guessed else ' ' if letter.isspace() else '_' for letter in self.word)
 
     def update_state(self):
         self._current_state_index += 1
