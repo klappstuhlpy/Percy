@@ -4,11 +4,16 @@ import inspect
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable
+from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable, TYPE_CHECKING
 import discord
-from launcher import get_logger
 
-log = get_logger(__name__)
+if TYPE_CHECKING:
+    from launcher import get_logger
+    log = get_logger(__name__)
+else:
+    import logging
+    log = logging.getLogger(__name__)
+
 
 T = TypeVar('T')
 P = ParamSpec('P')
