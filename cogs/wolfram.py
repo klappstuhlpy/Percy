@@ -195,7 +195,8 @@ class Wolfram(Cog):
                 else:
                     raise WolframError(r)
 
-    @command(commands.hybrid_group, name="wolfram", aliases=("wolf", "wa"), invoke_without_command=True)
+    @command(commands.hybrid_group, name="wolfram", aliases=("wolf", "wa"), invoke_without_command=True,
+             description="Requests all answers on a single image, sends an image of all related pods.")
     async def wolfram(self, ctx: Context, *, query: str) -> None:
         """Requests all answers on a single image, sends an image of all related pods."""
         async with ctx.typing():
@@ -214,7 +215,7 @@ class Wolfram(Cog):
         embed.set_footer(text="View original for a bigger picture.")
         await ctx.send(embed=embed, file=f)
 
-    @command(wolfram.command, name="page", aliases=("pa", "p"))
+    @command(wolfram.command, name="page", aliases=("pa", "p"), description="Requests a drawn image of given query.")
     async def wolfram_page(self, ctx: Context, *, query: str) -> None:
         """Requests a drawn image of given query.
 
@@ -239,10 +240,9 @@ class Wolfram(Cog):
 
         await EmbedPaginator.start(ctx, entries=embeds)
 
-    @command(wolfram.command, name="cut", aliases=("c",))
+    @command(wolfram.command, name="cut", aliases=("c",), description="Requests a drawn image of given query.")
     async def wolfram_cut(self, ctx: Context, *, query: str) -> None:
-        """
-        Requests a drawn image of given query.
+        """Requests a drawn image of given query.
 
         Keywords worth noting are, "like curve", "curve", "graph", "pokemon", etc.
         """
@@ -262,7 +262,7 @@ class Wolfram(Cog):
         embed.set_image(url=page[1])
         await ctx.send(embed=embed)
 
-    @command(wolfram.command, name="short", aliases=("sh", "s"))
+    @command(wolfram.command, name="short", aliases=("sh", "s"), description="Requests an answer to a simple question.")
     async def wolfram_short(self, ctx: Context, *, query: str) -> None:
         """Requests an answer to a simple question."""
         async with ctx.typing():
