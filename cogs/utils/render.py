@@ -3,7 +3,7 @@ from typing import Optional
 
 import discord
 from PIL import Image, ImageDraw, ImageFont
-from cogs.utils.async_utils import executor
+from cogs.utils.tasks import executor
 from cogs.utils.formats import shorten_number
 from pathlib import Path
 
@@ -279,14 +279,11 @@ class Render:
 
             draw = ImageDraw.Draw(background)
 
-            # Text for user's name
-            user_name = user.nick or user.name
-            draw.text((252, 62), user_name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
+            # Text for user's global name
+            draw.text((252, 62), user.global_name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
 
-            # Text for user's discriminator
-            discriminator_text = f"#{user.discriminator}"
-            draw.text((252, 114), discriminator_text, font=GINTO_BOLD_28,
-                      fill=self.get_color_alpha((216, 216, 216), 0.8))
+            # Text for user's username
+            draw.text((252, 114), user.name, font=GINTO_BOLD_28, fill=self.get_color_alpha((216, 216, 216), 0.8))
 
             rank_text = f"Rank #{rank}"
             rank_text_width, _ = draw.textsize(rank_text, font=GINTO_NORD_HEAVY_48)

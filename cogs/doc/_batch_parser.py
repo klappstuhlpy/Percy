@@ -8,7 +8,6 @@ from operator import attrgetter
 from typing import NamedTuple
 
 from bs4 import BeautifulSoup
-from pydis_core.utils import scheduling
 
 from bot import Percy
 from launcher import get_logger
@@ -85,7 +84,7 @@ class BatchParser:
             log.debug(f"Added items from {doc_item.url} to the parse queue.")
 
             if self._parse_task is None:
-                self._parse_task = scheduling.create_task(self._parse_queue(), name="Queue parse")
+                self._parse_task = self.bot.loop.create_task(self._parse_queue(), name="Queue parse")
         else:
             self._item_futures[doc_item].user_requested = True
         with suppress(ValueError):

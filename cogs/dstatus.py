@@ -15,7 +15,7 @@ from discord.utils import MISSING
 from typing import TypeVar
 
 from bot import Percy
-from cogs.utils.async_utils import executor
+from cogs.utils.tasks import executor
 from cogs.utils.constants import DSTATUS_CHANNEL_ID, PH_HEAD_DEV_ROLE_ID
 
 DS_RSS_FEED = "https://discordstatus.com/history.rss"

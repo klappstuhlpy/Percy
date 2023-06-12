@@ -14,7 +14,7 @@ from launcher import get_logger
 from . import MAX_SIGNATURE_AMOUNT
 from ._html import get_dd_description, get_general_description, get_signatures
 from ._markdown import DocMarkdownConverter
-from ..utils.async_utils import executor
+from ..utils.tasks import executor
 from ..utils.formats import find_nth_occurrence
 
 if TYPE_CHECKING:

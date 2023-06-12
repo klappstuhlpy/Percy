@@ -22,7 +22,6 @@ from cogs.utils import helpers
 from cogs.utils.comic.client import Marvel
 from cogs.utils.config import Config
 from cogs.utils.context import Context
-from cogs.utils.async_utils import TaskInterruption
 from cogs.utils.helpers import BasicJSONEncoder
 from cogs.utils.constants import GUILD_FEATURES
 
@@ -192,8 +191,6 @@ class Percy(commands.Bot):
             missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_permissions]
             await ctx.send(f"I don't have the permissions to perform this action.\n"
                            f"Missing: `{', '.join(missing)}`")
-        elif isinstance(error, TaskInterruption):
-            await ctx.send(str(error), ephemeral=True)
         elif isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f"<:warning:1113421726861238363> Slow down, you're on cooldown. Retry again in **{error.retry_after:.2f}s**.")
 

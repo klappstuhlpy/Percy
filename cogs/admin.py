@@ -19,7 +19,7 @@ from bot import Percy
 from cogs.utils.paginator import TextSource, TextPaginator
 from . import command
 from .utils import converters
-from .utils.async_utils import PerformanceMocker
+from .utils.tasks import PerformanceMocker
 from .utils.context import Context
 from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
 

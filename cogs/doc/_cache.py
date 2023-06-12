@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import fnmatch
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from launcher import get_logger
 from ..utils.lock import lock
@@ -26,11 +26,11 @@ class DocCache:
     """Cache for the Doc cog."""
 
     def __init__(self, namespace: str):
-        self.namespace = namespace
-        self.cache = {}
-        self._set_expires = {}
+        self.namespace: str = namespace
+        self.cache: dict[str, Any] = {}
+        self._set_expires: dict[str, Any] = {}
 
-    @lock("DocRedisCache.set", serialize_resource_id_from_doc_item, wait=True)
+    @lock("DocCache.set", serialize_resource_id_from_doc_item, wait=True)
     async def set(self, item: DocItem, value: str) -> None:
         """
         Set the Markdown `value` for the symbol `item`.
@@ -42,20 +42,18 @@ class DocCache:
 
         set_expire = self._set_expires.get(cache_key)
         if set_expire is None:
-            # An expire is only set if the key didn't exist before.
             ttl = self._get_cache_ttl(cache_key)
             log.debug(f"Checked TTL for `{cache_key}`.")
 
             if ttl == -1:
                 log.warning(f"Key `{cache_key}` had no expire set.")
-            if ttl < 0:  # not set or didn't exist
+            if ttl < 0:
                 needs_expire = True
             else:
                 log.debug(f"Key `{cache_key}` has a {ttl} TTL.")
-                self._set_expires[cache_key] = time.monotonic() + ttl - 0.1  # we need this to expire before cache
+                self._set_expires[cache_key] = time.monotonic() + ttl - 0.1
 
         elif time.monotonic() > set_expire:
-            # If we got here, the key expired in the cache, and we can be sure it doesn't exist.
             needs_expire = True
             log.debug(f"Key `{cache_key}` expired in internal key cache.")
 
@@ -92,7 +90,7 @@ class DocCache:
 
     def _get_cache_ttl(self, cache_key: str) -> int:
         """Return the time-to-live (TTL) of the cache key."""
-        return WEEK_SECONDS
+        return self._set_expires.get(cache_key)
 
 
 def item_key(item: DocItem) -> str:

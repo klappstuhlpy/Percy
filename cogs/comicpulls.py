@@ -2,24 +2,23 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime
+import fnmatch
 import json
-import logging
 from contextlib import suppress
 from enum import Enum
-from typing import Dict, List, Optional, Union, Self, Generic, TypeVar, Type
+from typing import Dict, List, Optional, Union, Self, TypeVar
 
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord.utils import MISSING
 
 from bot import Percy
 from cogs import command, command_permissions
 from cogs.utils import cache
-from cogs.utils.async_utils import AsyncPartialCache
 from cogs.utils.formats import MaybeAcquire
 from cogs.utils.helpers import PostgresItem
+from cogs.utils.lock import lock
 from cogs.utils.scraper.comics import Parser
 from launcher import get_logger
 
@@ -31,6 +30,49 @@ DC_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/110765
 VIZ_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1113786444369104978/unnamed.png'
 
 MANGA_POSITIONS = ["Story", "Art", "Story and Art", "Original Conecept", "Written", "Drawn"]
+
+
+def serialize_resource_id_from_brand(bound_args: dict) -> str:
+    """Return the cache key of the Brand `item` from the bound args of ComicCache.set."""
+    item: Brand = bound_args["item"]
+    return f"comic:{item}"
+
+
+class ComicCache:
+    """Cache for the Comicpulls cog."""
+
+    def __init__(self, namespace: str = "comic"):
+        self.namespace: str = namespace
+        self.cache: dict[str, list[GenericComic]] = {}
+
+    @lock("ComicCache.set", serialize_resource_id_from_brand, wait=True)
+    async def set(self, item: Brand, value: list[GenericComic]) -> None:
+        """Set the Comics `value` for the brand `item`."""
+        cache_key = f"{self.namespace}:{item}"
+
+        self.cache.setdefault(cache_key, [])
+        self.cache[cache_key] = value
+
+    async def get(self, item: Brand) -> list[GenericComic] | None:
+        """Return the Markdown content of the symbol `item` if it exists."""
+        cache_key = f"{self.namespace}:{item}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        return None
+
+    async def delete(self, package: str) -> bool:
+        """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""
+        pattern = f"{self.namespace}:{package}:*"
+
+        package_keys = [
+            key for key in self.cache.keys() if fnmatch.fnmatchcase(key, pattern)
+        ]
+        if package_keys:
+            for key in package_keys:
+                del self.cache[key]
+            log.info(f"Deleted keys from cache: {package_keys}.")
+            return True
+        return False
 
 
 class Brand(Enum):
@@ -74,6 +116,16 @@ class Brand(Enum):
             return 3
         else:
             return 1  # Marvel and Manga
+
+    @property
+    def copyright(self):
+        year = datetime.datetime.now().year
+        if self == self.DC:
+            return "© & ™ DC. ALL RIGHTS RESERVED"
+        elif self == self.MARVEL:
+            return f"Data provided by Marvel. © {year} MARVEL"
+        elif self == self.MANGA:
+            return f"© {year} VIZ Media, LLC. All rights reserved."
 
 
 class Format(Enum):
@@ -309,7 +361,7 @@ class ComicFeed(PostgresItem):
         day = day or self.day
         now = discord.utils.utcnow().date()
         soon = now + datetime.timedelta(days=(day - now.isoweekday()) % 7)
-        combined = datetime.datetime.combine(soon, datetime.time(0), tzinfo=datetime.timezone.utc)\
+        combined = datetime.datetime.combine(soon, datetime.time(0), tzinfo=datetime.timezone.utc) \
             .astimezone(datetime.timezone.utc)
 
         if combined < discord.utils.utcnow():
@@ -325,7 +377,7 @@ class ComicFeed(PostgresItem):
         return self.next_scheduled() - datetime.timedelta(days=7)
 
 
-class MultipleLock:
+class MultiLock:
     def __init__(self):
         self.locks = {}
 
@@ -353,60 +405,20 @@ class MultipleLock:
                 del self.locks[lock_id]
 
 
-class Copyright(Generic[B]):
-    r"""A class to represent a comic book publisher's legal information."""
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def __getitem__(self, key: B) -> Type[B]:
-        return getattr(self, key.name.lower())
-
-
-class ComicCache(AsyncPartialCache):
-    def __init__(self, cog: ComicPulls):
-        self.cog: ComicPulls = cog
-
-        self.comics: Dict[Brand, List[GenericComic]] = {}
-        self.sorted_comics: Dict[Brand, List[GenericComic]] = {}
-        self.copyright: Copyright[Brand] = MISSING
-
-        super().__init__(input_msg="~~ Fetching comics ~~", output_msg="~~ Comics fetched ~~")
-
-    async def fetch_comics(self):
-        async with self.cog._batch_lock:
-            parser: Parser = Parser  # type: ignore
-
-            log.debug("Fetching Marvel...")
-            self.comics[Brand.MARVEL] = await parser.fetch_marvel_lookup_table(self.cog.bot.marvel_client)
-
-            log.debug("Fetching DC...")
-            self.comics[Brand.DC] = await parser.bs4_dc()
-
-            log.debug("Fetching Manga...")
-            self.comics[Brand.MANGA] = await parser.bs4_viz()
-
-            self.sorted_comics.clear()
-            for brand, comics in self.comics.items():
-                self.sorted_comics[brand] = sorted(comics, key=lambda
-                    x: x.date if x.date is not None else datetime.datetime.min)
-
-            self.copyright = Copyright(marvel=self.comics[Brand.MARVEL][0].copyright,
-                                       dc=self.comics[Brand.DC][0].copyright,
-                                       manga=self.comics[Brand.MANGA][0].copyright)
-
-
 class ComicPulls(commands.Cog, name="Comic Feeds"):
     """Subscribe to weekly comic releases from Marvel and DC!
 
     Publishes lists of new releases at `6 AM`, publish days are configurable.
     Manga releases are published in the first week of every month.
     """
+
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self._cache: ComicCache = MISSING
-        self._send_lock: MultipleLock = MultipleLock()
+        self.parser: Parser = Parser  # type: ignore
+        self.comic_cache: ComicCache = ComicCache()
+
+        self._send_lock: MultiLock = MultiLock()
         self._batch_lock: asyncio.Lock = asyncio.Lock()
 
         self._task: Optional[asyncio.Task] = bot.loop.create_task(self.dispatch_feeds())
@@ -429,29 +441,42 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if self._task:
             self._task.cancel()
 
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+    async def cog_app_command_error(self, interaction: discord.Interaction,
+                                    error: app_commands.AppCommandError) -> None:
         if isinstance(error, app_commands.errors.CheckFailure):
             return
 
     def prev_schedule(self, brand: Brand) -> datetime.datetime:
-        return max(i.date if i.date is not None else datetime.datetime.min for i in self._cache.comics[brand])
+        return max(i.date if i.date is not None else datetime.datetime.min for i in await self.comic_cache.get(brand))
 
     async def comic_cache_check(self, interaction: discord.Interaction) -> bool:
         if self._batch_lock.locked():
             with suppress(discord.NotFound):
-                await interaction.response.send_message("<:discord_info:1113421814132117545> The comic cache is currently being "
-                                                        "updated. Please try again later.")
+                await interaction.response.send_message(
+                    "<:discord_info:1113421814132117545> The comic cache is currently being "
+                    "updated. Please try again later.")
             return False
         return True
 
     @tasks.loop(hours=6)
     async def auto_fetch_comics(self):
-        if self._cache is not MISSING:
-            if 'fetch_comics' in self._cache.completed_tasks:
-                self._cache.completed_tasks.remove('fetch_comics')
+        await self.fetch_comics()
 
-        async with ComicCache(self) as self._cache:
-            self._cache.add_task(self._cache.fetch_comics)
+    async def fetch_comics(self):
+        async with self._batch_lock:
+            def sort_key(x): return x.date if x.date is not None else datetime.datetime.min
+
+            log.debug("Fetching Marvel...")
+            marvel_comics = await self.parser.fetch_marvel_lookup_table(self.bot.marvel_client)
+            await self.comic_cache.set(Brand.MARVEL, sorted(marvel_comics, key=sort_key))
+
+            log.debug("Fetching DC...")
+            dc_comics = await self.parser.bs4_dc()
+            await self.comic_cache.set(Brand.DC, sorted(dc_comics, key=sort_key))
+
+            log.debug("Fetching Manga...")
+            viz_comics = await self.parser.bs4_viz()
+            await self.comic_cache.set(Brand.MANGA, sorted(viz_comics, key=sort_key))
 
     async def call_feed(self, comic: ComicFeed) -> None:
         query = "UPDATE feed_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
@@ -541,7 +566,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         async with self._send_lock.acquire(config.channel_id):
             channel = self.bot.get_channel(config.channel_id)
 
-            comics: List[Union[GenericComic, GenericComicMessage]] = self._cache.comics[config.brand].copy()
+            comics = await self.comic_cache.get(config.brand)
 
             if comics:
                 if config.brand == Brand.MANGA:
@@ -562,7 +587,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                     embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
 
                     instances = {}
-                    for entry in self._cache.sorted_comics[config.brand]:
+                    for entry in await self.comic_cache.get(config.brand):
                         if entry in comics:
                             msg = await channel.send(embed=embeds[entry.id])
                             instances[entry.id] = entry.to_instance(msg)
@@ -586,7 +611,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     ):
         embed = discord.Embed(colour=brand.colour)
         embeds = []
-        for fi, cid in enumerate(self._cache.sorted_comics[brand]):
+        for fi, cid in enumerate(await self.comic_cache.get(brand)):
             if not fi % 25 and fi != 0:
                 embeds.append(embed)
                 embed = discord.Embed(colour=brand.colour)
@@ -606,8 +631,8 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         else:
             embeds[0].title = f"{brand.value} Comics • Summary"
 
-        if self._cache.copyright[brand]:
-            embeds[-1].set_footer(text=self._cache.copyright[brand], icon_url=brand.icon_url)
+        if brand.copyright:
+            embeds[-1].set_footer(text=brand.copyright, icon_url=brand.icon_url)
 
         if start:
             embed = discord.Embed(colour=brand.colour)
@@ -636,9 +661,10 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     @command_permissions(1, user=["manage_channels"])
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
-        await interaction.response.defer(ephemeral=not interaction.channel.permissions_for(interaction.user).embed_links)
+        await interaction.response.defer(
+            ephemeral=not interaction.channel.permissions_for(interaction.user).embed_links)
 
-        embeds = await self.summary_embed(self._cache.comics[brand], brand)
+        embeds = await self.summary_embed(await self.comic_cache.get(brand), brand)
         await interaction.followup.send(embeds=embeds)
 
     @comics.command(name="push", description="Pushes the latest comic feed to a channel.")

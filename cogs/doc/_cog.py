@@ -17,7 +17,6 @@ import discord
 from aiohttp import ClientConnectorError
 from discord import app_commands
 from discord.ext import commands
-from pydis_core.utils.scheduling import Scheduler
 
 from bot import Percy
 from launcher import get_logger
@@ -25,6 +24,7 @@ from . import PRIORITY_PACKAGES, _batch_parser, doc_cache, _inventory_parser
 from ._inventory_parser import InvalidHeaderError, InventoryDict, fetch_inventory
 from .. import command
 from ..utils import helpers, fuzzy
+from ..utils.tasks import Scheduler
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
 from ..utils.formats import plural

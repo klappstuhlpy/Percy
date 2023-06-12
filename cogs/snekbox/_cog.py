@@ -11,13 +11,13 @@ from typing import Literal, NamedTuple, Annotated, Optional
 import discord
 from discord import AllowedMentions, HTTPException, Interaction, Message, NotFound, Reaction, User, enums
 from discord.ext import commands
-from pydis_core.utils.regex import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 
 from bot import Percy
 from cogs import command
 from cogs.base import TrashView
 from cogs.snekbox._eval import EvalJob, EvalResult
 from cogs.snekbox._io import FileAttachment
+from cogs.utils.constants import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 from cogs.utils.context import EvalContext
 from cogs.utils.lock import lock_arg
 from cogs.utils.services import send_to_paste_service, PasteUploadError, PasteTooLongError
@@ -28,8 +28,7 @@ log = get_logger(__name__)
 ESCAPE_REGEX = re.compile("[`\u202E\u200B]{3,}")
 TXT_LIKE_FILES = {".txt", ".csv", ".json"}
 
-# The timeit command should only output the very last line, so all other output should be suppressed.
-# This will be used as the setup code along with any setup code provided.
+
 TIMEIT_SETUP_WRAPPER = """
 import atexit
 import sys
@@ -89,8 +88,7 @@ class FilteredFiles(NamedTuple):
 class CodeblockConverter(commands.Converter):
     """Attempts to extract code from a codeblock, if provided."""
 
-    @classmethod
-    async def convert(cls, ctx: EvalContext, code: str) -> list[str]:
+    async def convert(self, ctx: EvalContext, code: str) -> list[str]:
         """
         Extract code from the Markdown, format it, and insert it into the code template.
 

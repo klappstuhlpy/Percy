@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing_extensions import Annotated
 
-from cogs.utils.paginator import BasePaginator, LinePaginator
+from cogs.utils.paginator import LinePaginator
 from . import command
 from .emoji import usage_per_day
 from .utils import formats, checks, fuzzy

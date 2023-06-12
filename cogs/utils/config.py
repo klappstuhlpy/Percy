@@ -5,7 +5,7 @@ from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union, overload
 import uuid
 import asyncio
 
-from cogs.utils.async_utils import executor
+from cogs.utils.tasks import executor
 from cogs.utils.constants import ObjectHook
 
 _T = TypeVar('_T')

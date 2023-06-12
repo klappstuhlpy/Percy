@@ -30,7 +30,7 @@ from launcher import get_logger
 from . import command
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
 from .utils import formats, timetools, helpers
-from .utils.async_utils import executor
+from .utils.tasks import executor
 from .utils.render import Render
 
 if TYPE_CHECKING:
