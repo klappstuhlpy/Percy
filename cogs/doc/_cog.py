@@ -208,7 +208,7 @@ class Documentation(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="")
+        return discord.PartialEmoji(name="\N{OPEN BOOK}")
 
     async def documentation_autocomplete(
             self, interaction: discord.Interaction, current: str
