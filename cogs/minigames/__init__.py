@@ -89,12 +89,6 @@ class Minigame(commands.GroupCog):
     async def hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
         """Play hangman with the bot."""
 
-        """async with self.bot.session.get('https://random-word-api.vercel.app/api?words=1') as resp:
-            if resp.status != 200:
-                return await ctx.send('Something went wrong while fetching the word.', ephemeral=True)
-            data = await resp.json()
-            word = data[0]"""
-
         GER_WORDS_URL = 'https://raw.githubusercontent.com/enz/german-wordlist/master/words'
         ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/hangman-words/main/words.txt'
 
