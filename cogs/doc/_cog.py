@@ -434,8 +434,8 @@ class Documentation(commands.Cog):
             embed.set_footer(text=footer_text)
             return embed
 
-    @command(commands.hybrid_group, name="docs", aliases=["d"], description="Look up documentation for Python symbols.",
-             invoke_without_command=True)
+    @command(commands.hybrid_group, name="docs", fallback="search", aliases=["d"],
+             description="Look up documentation for Python symbols.", invoke_without_command=True)
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
     async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:

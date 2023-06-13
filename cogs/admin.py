@@ -206,8 +206,7 @@ class Admin(commands.Cog):
             exec(to_compile, env)
         except:  # noqa
             t_2 = time.time()
-            error = discord.utils.remove_markdown(traceback.format_exc())
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{error}\n```',
+            embed = discord.Embed(title="Compiler Output", description=f'```py\n{traceback.format_exc()}\n```',
                                   color=discord.Color.red())
             embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
             return await message.edit(embed=embed)
@@ -219,8 +218,7 @@ class Admin(commands.Cog):
         except:  # noqa
             value = stdout.getvalue()
             t_2 = time.time()
-            error = discord.utils.remove_markdown(traceback.format_exc())
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{value}{error}\n```',
+            embed = discord.Embed(title="Compiler Output", description=f'```py\n{value}{traceback.format_exc()}\n```',
                                   color=discord.Color.red())
             embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
             await message.edit(embed=embed)

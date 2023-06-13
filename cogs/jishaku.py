@@ -1,8 +1,8 @@
 import importlib
 import sys
-import typing
 from importlib.metadata import distribution, packages_distributions
 from types import ModuleType
+from typing import Optional, List, Any
 
 import discord
 import jishaku
@@ -16,6 +16,7 @@ from jishaku.modules import package_version
 from cogs.utils import error_handling
 from cogs.utils.converters import ModuleConverter
 from cogs.utils.formats import plural
+from cogs.utils.paginator import TextSource, EmbedPaginator
 
 jishaku.Flags.NO_DM_TRACEBACK = True
 jishaku.Flags.NO_UNDERSCORE = True
@@ -35,9 +36,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
             await ctx.send("Cannot sync when application info not fetched")
             return
 
-        before_commands = set(self.bot.tree._get_all_commands())
-
-        guilds_set: set[typing.Optional[int]] = {None}
+        guilds_set: set[Optional[int]] = {None}
         for target in targets:
             if target == '$':  # Sync commands to global
                 guilds_set.add(None)
@@ -55,13 +54,25 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                 except ValueError as error:
                     raise commands.BadArgument(f"{target} is not a valid guild ID") from error
 
-        translator = getattr(self.bot.tree, 'translator', None)
-        if translator:
-            payload = [await command.get_translated_payload(translator) for command in before_commands]
-        else:
-            payload = [command.to_dict() for command in before_commands]
+        if not targets:
+            guilds_set.add(None)
 
-        for guild in guilds_set:
+        guilds: List[Optional[int]] = list(guilds_set)
+        guilds.sort(key=lambda g: (g is not None, g))
+
+        source = TextSource(prefix=None, suffix=None, max_size=4000)
+        embeds: List[discord.Embed] = []
+
+        for guild in guilds:
+            slash_commands = self.bot.tree._get_all_commands(
+                guild=discord.Object(guild) if guild else None
+            )
+            translator = getattr(self.bot.tree, 'translator', None)
+            if translator:
+                payload = [await command.get_translated_payload(translator) for command in slash_commands]
+            else:
+                payload = [command.to_dict() for command in slash_commands]
+
             try:
                 if guild is None:
                     data = await self.bot.http.bulk_upsert_global_commands(self.bot.application_id, payload=payload)
@@ -69,46 +80,91 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     data = await self.bot.http.bulk_upsert_guild_commands(self.bot.application_id, guild,
                                                                           payload=payload)
 
-                synced = [
-                    discord.app_commands.AppCommand(data=d, state=ctx._state)
-                    for d in data
-                ]
+                synced = [discord.app_commands.AppCommand(data=d, state=ctx._state) for d in data]
             except discord.HTTPException as error:
-                error_lines = [
-                    line
-                    for line in str(error).split("\n")
-                ]
-                for line in error_lines:
-                    match = self.SLASH_COMMAND_ERROR.match(line)
-                    if match:
+                error_lines: List[str] = []
+                for line in str(error).split("\n"):
+                    error_lines.append(line)
+                    try:
+                        match = self.SLASH_COMMAND_ERROR.match(line)
+                        if not match:
+                            continue
+
+                        pool = slash_commands
+                        selected_command = None
+                        name = ""
                         parts = match.group(1).split('.')
                         assert len(parts) % 2 == 0
 
-                        name = parts[-1]
-                        error_lines.append(f"\N{MAGNET} This is likely caused by: `{name}`")
+                        for part_index in range(0, len(parts), 2):
+                            index = int(parts[part_index])
+
+                            if pool:
+                                selected_command = pool[index]
+                                name += selected_command.name + " "
+
+                                if hasattr(selected_command, '_children'):
+                                    pool = list(selected_command._children.values())
+                                else:
+                                    pool = None
+                            else:
+                                param = list(selected_command._params.keys())[index]
+                                name += f"(parameter: {param}) "
+
+                        if selected_command:
+                            to_inspect: Any = None
+
+                            if hasattr(selected_command, 'callback'):  # type: ignore
+                                to_inspect = selected_command.callback  # type: ignore
+                            elif isinstance(selected_command, commands.Cog):
+                                to_inspect = type(selected_command)
+
+                            try:
+                                error_lines.append(''.join([
+                                    "\N{MAGNET} This is likely caused by: `",
+                                    name,
+                                    "` at ",
+                                    str(inspections.file_loc_inspection(to_inspect)),  # type: ignore
+                                    ":",
+                                    str(inspections.line_span_inspection(to_inspect)),  # type: ignore
+                                ]))
+                            except Exception:
+                                error_lines.append(f"\N{MAGNET} This is likely caused by: `{name}`")
+                    except Exception as diag_error:
+                        error_lines.append(
+                            f"\N{MAGNET} Couldn't determine cause: {type(diag_error).__name__}: {diag_error}")
 
                 error_text = '\n'.join(error_lines)
 
-                embed = discord.Embed(
-                    title="Slash command sync failed",
-                    description=error_text
-                )
-                await ctx.send(embed=embed)
+                if guild:
+                    source.add_line(f"\N{WARNING SIGN} `{guild}`: {error_text}", empty=True)
+                else:
+                    source.add_line(f"\N{WARNING SIGN} Global: {error_text}", empty=True)
+
+                embed = discord.Embed(title="Slash Command Sync Failed")
+                for page in source.pages:
+                    embed.description = page
+                    embeds.append(embed)
             else:
-                after_commands = set(self.bot.tree._get_all_commands())
+                before_sync = [c.qualified_name for c in slash_commands]
+                after_sync = [c.name for c in synced]
 
-                if added := ", ".join(cmd.qualified_name for cmd in (after_commands - before_commands)):
-                    added = "+ " + added
+                if added := ', '.join(set(before_sync) - set(after_sync)):
+                    added = f"+ {added}"
 
-                if removed := ", ".join(cmd.qualified_name for cmd in (before_commands - after_commands)):
-                    removed = "- " + removed
+                if removed := ', '.join(set(after_sync) - set(before_sync)):
+                    removed = f"- {removed}"
 
                 embed = discord.Embed(
                     title=f"\N{SATELLITE ANTENNA} Command Tree {'Global' if not guild else 'Guild'} Sync",
                     description=f"```diff\n{added}\n{removed}```" if added or removed else ""
                 )
                 embed.set_footer(text=f"Synced total {plural(len(synced)):command}")
-                await ctx.send(embed=embed)
+                if guild:
+                    embed.add_field(name="Guild", value=f"[`{guild}`]", inline=False)
+                embeds.append(embed)
+
+        await EmbedPaginator.start(ctx, entries=embeds)
 
     @Feature.Command(
         parent="jsk",
@@ -182,7 +238,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         All other functionality is within its subcommands.
         """
 
-        distributions: typing.List[str] = [
+        distributions: List[str] = [
             dist
             for dist in packages_distributions()["discord"]
             if any(

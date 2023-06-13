@@ -503,7 +503,7 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
         return entries
 
     def _message_kwargs(self, page: List[discord.Embed]) -> dict:
-        return {'embeds': [page], 'view': self}
+        return {'embeds': page, 'view': self}
 
     @classmethod
     async def start(
