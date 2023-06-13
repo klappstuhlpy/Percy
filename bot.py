@@ -336,6 +336,7 @@ class Percy(commands.Bot):
         Optional[Member]
             The member matching the query or None if not found.
         """
+        # TODO: Update this when pomelo is rolled out successfully
         if len(argument) > 5 and argument[-5] == '#':
             username, _, discriminator = argument.rpartition('#')
             members = await guild.query_members(username, limit=100, cache=cache)

@@ -24,7 +24,7 @@ from . import PRIORITY_PACKAGES, _batch_parser, doc_cache, _inventory_parser
 from ._inventory_parser import InvalidHeaderError, InventoryDict, fetch_inventory
 from .. import command
 from ..utils import helpers, fuzzy
-from ..utils.tasks import Scheduler
+from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
 from ..utils.formats import plural
@@ -222,7 +222,7 @@ class Documentation(commands.Cog):
 
         assert interaction.command is not None
 
-        _, matches = self.get_symbol_item(current, 15)
+        _, matches = await self.get_symbol_item(current, 15)
         return [app_commands.Choice(name=f"{m.symbol_id} ({m.package})", value=m.symbol_id) for _, m in matches]
 
     def update_single(self, package_name: str, base_url: str, inventory: InventoryDict) -> None:
@@ -358,6 +358,7 @@ class Documentation(commands.Cog):
         log.debug("Finished inventory refresh.")
         self.refresh_event.set()
 
+    @executor
     def get_symbol_item(self, symbol_name: str, limit: int = 1) -> tuple[str, list[DocItem] | DocItem | None]:
         """
         Get the `DocItem` and the symbol name used to fetch it from the `doc_symbols` dict.
@@ -408,7 +409,7 @@ class Documentation(commands.Cog):
             await self.refresh_event.wait()
 
         with self.symbol_get_event:
-            symbol_name, doc_item = self.get_symbol_item(symbol_name)
+            symbol_name, doc_item = await self.get_symbol_item(symbol_name)
             if doc_item is None:
                 log.debug("Symbol does not exist.")
                 return None
@@ -433,7 +434,8 @@ class Documentation(commands.Cog):
             embed.set_footer(text=footer_text)
             return embed
 
-    @command(commands.hybrid_group, name="docs", aliases=("d",), description="Look up documentation for Python symbols.")
+    @command(commands.hybrid_group, name="docs", aliases=["d"], description="Look up documentation for Python symbols.",
+             invoke_without_command=True)
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
     async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
@@ -465,8 +467,8 @@ class Documentation(commands.Cog):
         """Get a base url from the url to an objects inventory by removing the last path segment."""
         return inventory_url.removesuffix("/").rsplit("/", maxsplit=1)[0] + "/"
 
-    @command(docs_group.command, name="set", aliases=("s",), hidden=True,
-             description="Set a new documentation object.", with_app_command=False)
+    @command(docs_group.command, name="set", hidden=True, description="Set a new documentation object.",
+             with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def set_command(
@@ -505,7 +507,7 @@ class Documentation(commands.Cog):
         self.update_single(package_name, base_url, inventory_dict)
         await ctx.send(f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
-    @command(docs_group.command, name="delete", hidden=True, aliases=("removedoc", "rm"),
+    @command(docs_group.command, name="delete", hidden=True, aliases=["remove", "rm"],
              description="Delete a documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
@@ -518,7 +520,7 @@ class Documentation(commands.Cog):
             await doc_cache.delete(package_name)
         await ctx.send(f"{ctx.tick(True)} Successfully deleted `{package_name}` and refreshed the inventories.")
 
-    @command(docs_group.command, name="refresh", aliases=("rfsh", "r"), hidden=True,
+    @command(docs_group.command, name="refresh", aliases=["rfsh", "r"], hidden=True,
              description="Refresh the inventories.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
@@ -542,7 +544,7 @@ class Documentation(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @command(docs_group.command, name="clearcache", aliases=("deletecache",),
+    @command(docs_group.command, name="clearcache", aliases=["deletecache"],
              description="Clear the cache for a package.", hidden=True, with_app_command=False)
     @commands.is_owner()
     async def clear_cache_command(
@@ -612,7 +614,7 @@ class Documentation(commands.Cog):
         await self.do_rtfm(ctx, entity)
 
     async def do_rtfm(self, ctx: Context, obj: str):
-        _, matches = self.get_symbol_item(obj, 8)
+        _, matches = await self.get_symbol_item(obj, 8)
 
         e = discord.Embed(colour=helpers.Colour.darker_red())
         if len(matches) == 0:

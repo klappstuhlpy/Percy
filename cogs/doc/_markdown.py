@@ -2,7 +2,7 @@ import re
 from urllib.parse import urljoin
 
 import markdownify
-from bs4.element import PageElement, Tag
+from bs4.element import Tag
 
 # See https://github.com/matthewwithanm/python-markdownify/issues/31
 markdownify.whitespace_re = re.compile(r"[\r\n\s\t ]+")
