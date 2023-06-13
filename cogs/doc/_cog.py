@@ -59,7 +59,7 @@ class PackageName(commands.Converter):
         """Checks whether the given string is a valid package name."""
         if PACKAGE_NAME_RE.search(argument):
             raise commands.BadArgument(
-                "The provided package name is not valid; please only use the ., _, 0-9, and a-z characters.")
+                "The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters.")
         return argument
 
 

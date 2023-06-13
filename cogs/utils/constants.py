@@ -109,7 +109,7 @@ GITHUB_GIST_RE = re.compile(
     flags=re.VERBOSE
 )
 
-PACKAGE_NAME_RE = re.compile(r"[^a-z0-9_.]")
+PACKAGE_NAME_RE = re.compile(r"[^a-zA-Z0-9_.]")
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
