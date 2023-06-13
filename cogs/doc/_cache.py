@@ -90,7 +90,7 @@ class DocCache:
 
     def _get_cache_ttl(self, cache_key: str) -> int:
         """Return the time-to-live (TTL) of the cache key."""
-        return self._set_expires.get(cache_key)
+        return self._set_expires.get(cache_key, WEEK_SECONDS)
 
 
 def item_key(item: DocItem) -> str:

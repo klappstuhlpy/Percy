@@ -59,6 +59,14 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
         parent = el.parent
         if parent is not None and parent.name == "li":
             return f"{text}\n"
+
+        if parent is not None and "admonition" in parent.get("class", []):
+            ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
+            match = ADMONITION_REGEX.match(text)
+            if match:
+                text = text.replace(match.group(1), f"## {match.group(1)}")
+            return f"{text}\n"
+
         return super().convert_p(el, text, convert_as_inline)
 
     def convert_hr(self, el: Tag, text: str, convert_as_inline: bool) -> str:

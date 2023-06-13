@@ -110,7 +110,6 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
         signature = signature.strip()
         if len(signature) > max_signature_length:
             if (parameters_match := _PARAMETERS_RE.search(signature)) is None:
-                # The signature has no parameters or the regex failed; perform a simple truncation of the text.
                 formatted_signatures.append(textwrap.shorten(signature, max_signature_length, placeholder="..."))
                 continue
 
@@ -118,17 +117,14 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
             parameters_string = parameters_match[1]
             running_length = len(signature) - len(parameters_string)
             for parameter in _split_parameters(parameters_string):
-                # Check if including this parameter would still be within the maximum length.
-                if (len(parameter) + running_length) <= max_signature_length - 5:  # account for comma and placeholder
+                if (len(parameter) + running_length) <= max_signature_length - 5:
                     truncated_signature.append(parameter)
                     running_length += len(parameter) + 1
                 else:
-                    # There's no more room for this parameter. Truncate the parameter list and put it in the signature.
                     truncated_signature.append(" ...")
                     formatted_signatures.append(signature.replace(parameters_string, ",".join(truncated_signature)))
                     break
         else:
-            # The current signature is under the length limit; no truncation needed.
             formatted_signatures.append(signature)
 
     return formatted_signatures
