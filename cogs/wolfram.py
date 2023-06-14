@@ -9,11 +9,11 @@ import arrow
 import discord
 import yarl
 from discord.ext import commands
-from discord.ext.commands import BucketType, Cog, Context
 
 from bot import Percy
 from cogs import command
 from cogs.utils import helpers
+from cogs.utils.context import Context
 from cogs.utils.paginator import EmbedPaginator
 
 log = logging.getLogger(__name__)
@@ -22,8 +22,8 @@ WOLF_IMAGE = "https://www.symbols.com/gi.php?type=1&id=2886&i=1"
 
 MAX_PODS = 20
 
-usercd = commands.CooldownMapping.from_cooldown(10, 60 * 60 * 24, BucketType.user)
-guildcd = commands.CooldownMapping.from_cooldown(60, 60 * 60 * 24, BucketType.guild)
+usercd = commands.CooldownMapping.from_cooldown(10, 60 * 60 * 24, commands.BucketType.user)
+guildcd = commands.CooldownMapping.from_cooldown(60, 60 * 60 * 24, commands.BucketType.guild)
 
 
 def fmt_embed(text: str) -> discord.Embed:
@@ -102,13 +102,17 @@ class WolframError(discord.HTTPException):
         super().__init__(response, message)
 
 
-class Wolfram(Cog):
+class Wolfram(commands.Cog):
     """Commands for interacting with the Wolfram|Alpha API."""
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
         self._req_lock: asyncio.Lock = asyncio.Lock()
+
+    @property
+    def display_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name="wolfram", id=1118615618418114711)
 
     async def get_pod_pages(self, ctx: Context, query: str) -> list[tuple[str, str]] | None:
         """Get the Wolfram API pod pages for the provided query."""

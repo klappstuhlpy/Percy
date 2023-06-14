@@ -365,7 +365,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         cmd = self.context.bot.resolve_command(command)
         if cmd is None:
-            string = await maybe_coro(self.command_not_found, self.remove_mentions(keys[0]))  # type: ignore
+            string = await maybe_coro(self.command_not_found, self.remove_mentions(command))  # type: ignore
             return await self.send_error_message(string)
 
         if isinstance(cmd, PartialCommandGroup):
@@ -412,16 +412,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     else:
                         resolved.append(subcmd)
                         resolved_names.add(subcmd.qualified_name)
-                resolved.append(cmd)
+                if not cmd.commands:
+                    resolved.append(cmd)
             else:
                 if isinstance(cmd, commands.Command):
                     if is_hidden(cmd):
                         continue
-                    resolved.append(cmd)
-                    resolved_names.add(cmd.name)
-                else:
-                    resolved.append(cmd)
-                    resolved_names.add(cmd.name)
+                resolved.append(cmd)
+                resolved_names.add(cmd.name)
 
         if sort:
             return sorted(resolved, key=key)
@@ -1137,11 +1135,10 @@ class Meta(commands.Cog):
     @command()
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):
         """Shows a user's enlarged avatar (if possible)."""
-        embed = discord.Embed()
         user = user or ctx.author
         avatar = user.display_avatar.with_static_format('png')
-        embed.colour = discord.Colour.from_rgb(
-            *self.bot.get_cog('Emoji').render.get_dominant_color(io.BytesIO(await avatar.read())))  # type: ignore
+        embed = discord.Embed(colour=discord.Colour.from_rgb(
+            *self.bot.get_cog('Emoji').render.get_dominant_color(io.BytesIO(await avatar.read()))))  # type: ignore
         embed.set_author(name=str(user), url=avatar)
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
