@@ -104,7 +104,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
 
         if is_app_command_cog:
-            embed.set_footer(text=f'Those Commands are only available in Slash Commands.')
+            embed.set_footer(text=f'Those Commands are only available as Slash Commands.')
         else:
             embed.set_footer(text=f'Use "{self._ctx.clean_prefix}help command" for more info on a command.')
 

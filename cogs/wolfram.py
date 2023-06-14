@@ -114,6 +114,10 @@ class Wolfram(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name="wolfram", id=1118615618418114711)
 
+    async def cog_command_error(self, ctx: Context, error: commands.CommandError) -> None:
+        if isinstance(error, WolframError):
+            await ctx.send(str(error) or error.text)
+
     async def get_pod_pages(self, ctx: Context, query: str) -> list[tuple[str, str]] | None:
         """Get the Wolfram API pod pages for the provided query."""
 
