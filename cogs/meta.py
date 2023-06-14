@@ -96,11 +96,13 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             if not list(filter(lambda c: not c.hidden, self.group.get_commands())):
                 is_app_command_cog = True
 
+        helper = PaginatedHelpCommand.temporary(self._ctx)
         for cmd in entries:
-            signature = self.ctx.client.help_command.get_command_signature(cmd)  # type: ignore
+            signature = helper.get_command_signature(cmd)  # type: ignore
             embed.add_field(name=signature, value=cmd.description or 'No help given...', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
+
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available in Slash Commands.')
         else:
