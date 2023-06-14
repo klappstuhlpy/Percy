@@ -23,8 +23,6 @@ from cogs.utils.context import GuildContext
 from cogs.utils.helpers import PostgresItem, BasicJSONEncoder
 from cogs.utils.tasks import executor
 
-# TODO: Implement multi-guild support for setting up a Incident Channel
-
 DS_RSS_FEED = "https://discordstatus.com/history.rss"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
 
