@@ -82,13 +82,11 @@ def custom_cooldown(*ignore: int) -> Callable:
     return commands.check(predicate)
 
 
-class WolframError(discord.HTTPException):
+class WolframError(commands.CommandError):
     """Base exception class for Wolfram-related errors."""
 
     def __init__(self, response: aiohttp.ClientResponse):
         self.response: aiohttp.ClientResponse = response
-
-        message = None
 
         if response.status == 501:
             message = "Failed to get response."
@@ -96,10 +94,10 @@ class WolframError(discord.HTTPException):
             message = "No input found."
         elif response.status == 403:
             message = "Wolfram API key is invalid or missing."
-        elif response.status != 200:
+        else:
             message = f"Unexpected status code from Wolfram API: {response.status}"
 
-        super().__init__(response, message)
+        super().__init__(message)
 
 
 class Wolfram(commands.Cog):
@@ -114,9 +112,9 @@ class Wolfram(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name="wolfram", id=1118615618418114711)
 
-    async def cog_command_error(self, ctx: Context, error: commands.CommandError) -> None:
+    async def cog_command_error(self, ctx: Context, error: Exception) -> None:
         if isinstance(error, WolframError):
-            await ctx.send(str(error) or error.text)
+            await ctx.send(str(error))
 
     async def get_pod_pages(self, ctx: Context, query: str) -> list[tuple[str, str]] | None:
         """Get the Wolfram API pod pages for the provided query."""
