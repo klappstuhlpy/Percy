@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import json
 import re
 from dataclasses import dataclass
 from typing import NamedTuple, Dict, Optional
@@ -19,7 +20,7 @@ from bot import Percy
 from cogs import command, command_permissions, PermissionTemplate
 from cogs.utils import cache
 from cogs.utils.context import GuildContext
-from cogs.utils.helpers import PostgresItem
+from cogs.utils.helpers import PostgresItem, BasicJSONEncoder
 from cogs.utils.tasks import executor
 
 # TODO: Implement multi-guild support for setting up a Incident Channel
@@ -71,28 +72,23 @@ class Incident:
         return cls(**kwargs)
 
     async def update_message(self, config: ShortStatusConfig):
-        state = self.updates[0]
+        new = set(config.dstatus_last_incident.updates) - set(self.updates)
+        if new:
+            for state in new:
+                self.updates.insert(0, state)
+
+        if len(self.updates) == len(config.dstatus_last_incident.updates):
+            return
 
         message = await config.get_message()
-        embed = message.embeds[0]
-        embed.add_field(name=f"{STATE_EMOJI.get(state.state.lower())} {state.state} "
-                             f"({discord.utils.format_dt(state.started_at, 'R')})",
-                        value=state.text, inline=False)
-        embed.colour = EMBED_COLOR.get(state.state.lower())
-        await message.edit(embed=embed)
-
-    def update(self, states: list[State]) -> None:
-        new_incidents = set(states) - set(self.updates)
-        if new_incidents:
-            self.updates.insert(0, *new_incidents)
-            self.last_updated_at = new_incidents[0].started_at
+        await message.edit(embed=self.build_embed())
 
     def build_embed(self) -> discord.Embed:
         updates = self.updates.copy()
         updates.reverse()
 
         embed = discord.Embed(title=self.title, timestamp=self.published_at, url=self.link,
-                              colour=EMBED_COLOR.get(updates[0].state.lower()))
+                              colour=EMBED_COLOR.get(updates[-1].state.lower()))
         embed.set_author(name="Discord Status", url="https://discordstatus.com/", icon_url=DISCORD_ICON_URL)
         embed.set_footer(text="Started at")
 
@@ -106,8 +102,8 @@ class Incident:
 
         return embed
 
-    def as_dict(self) -> Dict:
-        return dataclasses.asdict(self)
+    def as_dict(self) -> str:
+        return json.dumps(dataclasses.asdict(self), cls=BasicJSONEncoder)
 
 
 class ShortStatusConfig(PostgresItem):
@@ -164,8 +160,10 @@ class DiscordStatus(commands.Cog):
 
         if not channel:
             query = """
-                INSERT INTO guild_config (id) VALUES($1) ON CONFLICT DO 
-                UPDATE SET dstatus_notification_channel = NULL, dstatus_last_incident = DEFAULT WHERE id = $1
+                INSERT INTO guild_config (id) VALUES($1) ON CONFLICT (id) 
+                DO UPDATE SET 
+                    dstatus_notification_channel = NULL, 
+                    dstatus_last_incident = DEFAULT;
             """
             result = await ctx.db.execute(query, ctx.guild.id)
             if result == "UPDATE 0":
@@ -175,8 +173,9 @@ class DiscordStatus(commands.Cog):
             return await ctx.send(f"{ctx.tick(True)} Successfully unsubscribed from Discord Status updates.")
 
         query = """
-            INSERT INTO guild_config (id, dstatus_notification_channel) VALUES($1, $2) ON CONFLICT DO
-            UPDATE SET dstatus_notification_channel = $2 WHERE id = $1
+            INSERT INTO guild_config (id, dstatus_notification_channel) VALUES($1, $2) ON CONFLICT (id) 
+            DO UPDATE SET 
+                dstatus_notification_channel = $2;
         """
         await ctx.db.execute(query, ctx.guild.id, channel.id)
         await ctx.send(f"{ctx.tick(True)} Successfully subscribed to Discord Status updates in {channel.mention}.")
@@ -201,7 +200,7 @@ class DiscordStatus(commands.Cog):
         """Updates the last incident for the given subscribers."""
         query = """
             UPDATE guild_config
-            SET dstatus_last_incident = $1
+            SET dstatus_last_incident = $1::TEXT::JSONB
             WHERE id = $2;
         """
         for subscriber in subscribers:
@@ -252,6 +251,8 @@ class DiscordStatus(commands.Cog):
                     to_update.append(config)
                 else:
                     to_insert.append(config)
+            else:
+                to_insert.append(config)
 
         if to_update:
             await self.bulk_update_last_incident(to_update)
