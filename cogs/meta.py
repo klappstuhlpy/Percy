@@ -640,8 +640,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
         if getattr(command, 'commands', None):
-            subcommands = '\n'.join(f"* {self.get_command_signature(cmd)}" for cmd in command.commands)
-            embed.add_field(name='**Subcommands**', value=f"`{subcommands}`", inline=False)
+            subcommands = '\n'.join(f"* `{self.get_command_signature(cmd)}`" for cmd in command.commands)
+            embed.add_field(name='**Subcommands**', value=subcommands, inline=False)
 
         if permissions := self.get_command_permission_formatting(command, stringified=True):
             embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
