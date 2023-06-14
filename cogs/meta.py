@@ -572,7 +572,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 if flag.default is not None:
                     default = " " + (
                         f"{flag.default!r}" if (flag.annotation in (str, Literal, LiteralString, AnyStr, Optional[str]))
-                        else flag.default
+                        else str(flag.default)
                     )
 
                 fmt = f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]'
