@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import json
+import random
 import re
 from dataclasses import dataclass
 from typing import NamedTuple, Optional
@@ -144,6 +145,28 @@ class DiscordStatus(commands.Cog):
     async def cog_unload(self) -> None:
         self.check_new_incident.stop()
 
+    async def get_latest_incident(self) -> Optional[Incident]:
+        feed = await self.parse_feed(DS_RSS_FEED)
+        if not feed or (feed and not feed.entries):
+            return
+
+        entry = feed.entries[0]
+
+        states: list[State] = await self.incident_parser(entry.summary)
+
+        if states[0].state == "Resolved":
+            return None
+
+        incident = Incident.temporary(
+            status=states[0].state,
+            link=entry.link,
+            published_at=parse(entry.published).astimezone(datetime.timezone.utc),
+            last_updated_at=states[0].started_at,
+            title=entry.title,
+            updates=states
+        )
+        return incident
+
     @executor
     def parse_feed(self, feed: str) -> Optional[feedparser.FeedParserDict]:
         parsed = feedparser.parse(feed)
@@ -151,11 +174,45 @@ class DiscordStatus(commands.Cog):
             return parsed
         return None
 
-    @command(commands.hybrid_group, name="discord-status", fallback="subscribe",
-             aliases=["dstatus"], description="Subscribe/Unsubscribe to Discord Status updates.")
+    @executor
+    def incident_parser(self, string: str) -> list[State]:
+        soup = BeautifulSoup(string, "html.parser")
+        find = soup.find_all("p")
+
+        states = []
+        for p in find:
+            TIMESTAMP_REGEX = re.compile(
+                r"(?P<month>\w+)\s+(?P<day>\d+),\s+(?P<hour>\d+):(?P<minute>\d+)\s+(?P<tzinfo>\w{3})")
+            match = TIMESTAMP_REGEX.search(p.text).expand(
+                fr"{datetime.datetime.now().year} \g<month> \g<day> \g<hour>:\g<minute> -0700")
+            text = re.sub(TIMESTAMP_REGEX, '', p.text)
+
+            state, text = text.split(" - ", 1)
+            dt = parse(match).astimezone(datetime.timezone.utc)
+            states.append(State(started_at=dt, state=state, text=text))
+
+        return states
+
+    @command(commands.hybrid_group, name="discord-status", fallback="show",
+             description="Shows the current Discord Status.",
+             invoke_without_command=True)
+    @commands.guild_only()
+    async def dstatus(self, ctx: GuildContext):
+        """Shows the current Discord Status."""
+        latest = await self.get_latest_incident()
+        if not latest:
+            msg = f"Everything's Ok. No new Incidents found."
+            if random.randint(0, 6) == 3:
+                msg += f"\n\n*[Discord Status](https://discordstatus.com/) shows a current incident, but it's not showing up here?\n" \
+                       f"Please report this to the developer."
+            return await ctx.send(msg, ephemeral=True)
+
+        await ctx.send(embed=latest.build_embed(), ephemeral=True)
+
+    @command(dstatus.command, name="subscribe", description="Subscribe/Unsubscribe to Discord Status updates.")
     @command_permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
-    async def dstatus(self, ctx: GuildContext, channel: Optional[discord.TextChannel] = None):
+    async def dstatus_subscribe(self, ctx: GuildContext, channel: Optional[discord.TextChannel] = None):
         """Subscribes to Discord Status updates.
 
         Leave the channel empty to unsubscribe.
@@ -220,26 +277,7 @@ class DiscordStatus(commands.Cog):
 
         entry = feed.entries[0]
 
-        @executor
-        def bs4(string: str) -> list[State]:
-            soup = BeautifulSoup(string, "html.parser")
-            find = soup.find_all("p")
-
-            states = []
-            for p in find:
-                TIMESTAMP_REGEX = re.compile(
-                    r"(?P<month>\w+)\s+(?P<day>\d+),\s+(?P<hour>\d+):(?P<minute>\d+)\s+(?P<tzinfo>\w{3})")
-                match = TIMESTAMP_REGEX.search(p.text).expand(
-                    fr"{datetime.datetime.now().year} \g<month> \g<day> \g<hour>:\g<minute> -0700")
-                text = re.sub(TIMESTAMP_REGEX, '', p.text)
-
-                state, text = text.split(" - ", 1)
-                dt = parse(match).astimezone(datetime.timezone.utc)
-                states.append(State(started_at=dt, state=state, text=text))
-
-            return states
-
-        incidents: list[State] = await bs4(entry.summary)
+        incidents: list[State] = await self.incident_parser(entry.summary)
 
         to_update = []
         to_insert = []
