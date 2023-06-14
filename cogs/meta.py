@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any, LiteralString, AnyStr
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
 )
 
 import discord
@@ -571,7 +571,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 default = ""
                 if flag.default is not None:
                     default = " " + (
-                        f"{flag.default!r}" if (flag.annotation in (str, Literal, LiteralString, AnyStr, Optional[str]))
+                        f"{flag.default!r}" if (flag.annotation is str or Literal or Optional[str])
                         else str(flag.default)
                     )
 
@@ -653,8 +653,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             text = '\n'.join(f'* `{self.context.clean_prefix}{alias} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
 
-        for field in self.get_command_flag_formatting(command, descripted=True):
-            embed.add_field(**field)
+        if not isinstance(command, app_commands.commands.Command):
+            for field in self.get_command_flag_formatting(command, descripted=True):
+                embed.add_field(**field)
 
         return embed
 
@@ -665,7 +666,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         This is a modified version of the original send_command_help.
         """
-        if not isinstance(command, app_commands.commands.Command):
+        # Checking for Application Commands or Groups because they can't be hidden
+        if not isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
                 return await self.context.send(f'<:redTick:1079249771975413910> No Command called {command!r} found.')
 
