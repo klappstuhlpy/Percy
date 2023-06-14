@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any, LiteralString, AnyStr
 )
 
 import discord
@@ -472,20 +472,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         signature = command.signature
 
-        flags = command.clean_params.get('flags')
+        flags = self.get_command_flag_formatting(command)
         if flags:
-            params = []
-            for flag in flags.converter.get_flags().values():
-                default = (
-                    (f" {flag.default!r}" if (flag.annotation is str or Literal or Optional[str]) else
-                     f" {flag.default}") if flag.default is not None else ""
-                )
-                params.append(f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]')
-
-            signature += f' {" ".join(params)}'
-            signature = re.sub(r'(<flags>|\[flags])', r'', signature)
-
-        signature = re.sub(r'\s+', ' ', signature).strip()
+            signature = re.sub(r'\s+', ' ', f'{signature} {flags}')
 
         parent = command.full_parent_name if command.parent else None
         alias = f'{parent} {command.name}' if parent else command.name
@@ -579,7 +568,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return to_fields
         else:
             for flag in flags.converter.get_flags().values():
-                fmt = f'<--{flag.name}>' if flag.required else f'[--{flag.name}]'
+                default = ""
+                if flag.default is not None:
+                    default = " " + (
+                        f"{flag.default!r}" if (flag.annotation in (str, Literal, LiteralString, AnyStr, Optional[str]))
+                        else flag.default
+                    )
+
+                fmt = f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]'
                 resolved.add(fmt)
 
             return ' '.join(resolved)
@@ -644,7 +640,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
         if getattr(command, 'commands', None):
-            subcommands = '\n'.join(self.get_command_signature(cmd) for cmd in command.commands)
+            subcommands = '\n'.join(f"* {self.get_command_signature(cmd)}" for cmd in command.commands)
             embed.add_field(name='**Subcommands**', value=f"`{subcommands}`", inline=False)
 
         if permissions := self.get_command_permission_formatting(command, stringified=True):
