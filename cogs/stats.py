@@ -66,6 +66,20 @@ class DataBatchEntry(TypedDict):
     app_command: bool
 
 
+class CommandUsageCount:
+    __slots__ = ('success', 'failed', 'total')
+
+    def __init__(self):
+        self.success = 0
+        self.failed = 0
+        self.total = 0
+
+    def add(self, record: asyncpg.Record):
+        self.success += record['success']
+        self.failed += record['failed']
+        self.total += record['total']
+
+
 class LoggingHandler(logging.Handler):
     def __init__(self, cog: Stats):
         self.cog: Stats = cog
@@ -686,6 +700,9 @@ class Stats(commands.Cog):
                     LIMIT 1
                 ) AS g ON TRUE;
             """'''
+
+            # NOTE: This is experimental!
+
 
             # We use here AsyncAlchemy to improve the performance of the query because is a big one
             # This might be a bit overkill, but it works
@@ -1486,20 +1503,7 @@ class Stats(commands.Cog):
                 ) AS t;
             """
 
-            class Count:
-                __slots__ = ('success', 'failed', 'total')
-
-                def __init__(self):
-                    self.success = 0
-                    self.failed = 0
-                    self.total = 0
-
-                def add(self, record: asyncpg.Record):
-                    self.success += record['success']
-                    self.failed += record['failed']
-                    self.total += record['total']
-
-            data = defaultdict(Count)
+            data = defaultdict(CommandUsageCount)
             records = await ctx.db.fetch(query, interval)
             for record in records:
                 command = self.bot.get_command(record['command'])

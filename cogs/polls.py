@@ -1226,7 +1226,7 @@ class Polls(commands.Cog):
                 content = f"{tick(True)} Poll configuration updated."
 
             updates = ", ".join(f"{k} = ${i}" for i, k in enumerate(kwargs.keys(), start=2))
-            query = f"UPDATE guild_mod_config SET {updates} WHERE id = $1;"
+            query = f"UPDATE guild_config SET {updates} WHERE id = $1;"
             await self.bot.pool.execute(query, interaction.guild.id, *list(kwargs.values()))
             self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, interaction.guild.id)
             return await interaction.response.send_message(content)

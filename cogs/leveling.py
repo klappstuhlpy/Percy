@@ -15,6 +15,7 @@ from cogs import command, command_permissions
 from cogs.mod import GuildConfig, AutoModFlags
 from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
+from cogs.utils.formats import medal_emojize
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.render import Render
 from launcher import get_logger
@@ -301,13 +302,13 @@ class Leveling(commands.Cog):
         """Toggle leveling on or off."""
         config: GuildConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
         if config.flags.leveling:
-            update = f'flags = guild_mod_config.flags & ~{AutoModFlags.leveling.flag}'
+            update = f'flags = guild_config.flags & ~{AutoModFlags.leveling.flag}'
             content = f"Leveling is now **disabled** for {ctx.guild.name}."
         else:
-            update = f'flags = guild_mod_config.flags | {AutoModFlags.leveling.flag}'
+            update = f'flags = guild_config.flags | {AutoModFlags.leveling.flag}'
             content = f"Leveling is now **enabled** for {ctx.guild.name}."
 
-        query = f'UPDATE guild_mod_config SET {update} WHERE id=$1;'
+        query = f'UPDATE guild_config SET {update} WHERE id=$1;'
         await ctx.db.execute(query, ctx.guild.id)
         self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
         await ctx.send(ctx.tick(True, content))
@@ -323,16 +324,11 @@ class Leveling(commands.Cog):
         e.set_thumbnail(url=ctx.guild.icon.url)
         e.set_footer(text='Level Statistics for this Server.')
 
-        def emojize(seq: Iterable):
-            emoji = 129351  # ord(':first_place:')
-            for index, value in enumerate(seq):
-                yield chr(emoji + index), value
-
         if not records:
             e.description = '*There are no statistics available.*'
         else:
             value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.messages}** messages)'
-                     for emoji, record in emojize(records)]
+                     for emoji, record in medal_emojize(records)]
 
             e.add_field(name=f'**TOP 3 TEXT 💬**', value='\n'.join(value), inline=False)
 
@@ -340,7 +336,7 @@ class Leveling(commands.Cog):
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
         value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
-                 for emoji, record in emojize(records)]
+                 for emoji, record in medal_emojize(records)]
         e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='\n'.join(value), inline=False)
 
         await ctx.send(embed=e)

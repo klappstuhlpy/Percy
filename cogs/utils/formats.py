@@ -54,6 +54,19 @@ class plural:
         return f'{s} {singular}'
 
 
+def medal_emojize(seq: Iterable):
+    """Yield tuples of (emoji, value) for each item in `seq`.
+    The emojis are unicode emojis of the form :first_place:, :second_place:, etc.
+
+    Note
+    ----
+    The maximum number of emojis is 3. (Otherwise, the emojis won't be medal emojis.)
+    """
+    emoji = 129351  # ord(':first_place:') # max 3
+    for index, value in enumerate(seq):
+        yield chr(emoji + index), value
+
+
 def find_nth_occurrence(string: str, substring: str, n: int) -> int | None:
     """Return index of `n`th occurrence of `substring` in `string`, or None if not found."""
     index = 0

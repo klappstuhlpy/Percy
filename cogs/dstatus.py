@@ -5,7 +5,7 @@ import datetime
 import json
 import re
 from dataclasses import dataclass
-from typing import NamedTuple, Dict, Optional
+from typing import NamedTuple, Optional
 
 import asyncpg
 import discord

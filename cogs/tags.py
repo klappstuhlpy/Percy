@@ -4,7 +4,7 @@ import asyncio
 import csv
 import datetime
 import io
-from typing import TYPE_CHECKING, Optional, List, Iterable, Literal
+from typing import TYPE_CHECKING, Optional, List, Literal
 
 import asyncpg
 import discord
@@ -13,10 +13,10 @@ from discord.ext import commands
 from typing_extensions import Annotated
 
 from cogs.utils.paginator import LinePaginator
-from . import command
+from . import command, command_permissions
 from .emoji import usage_per_day
-from .utils import formats, checks, fuzzy
-from .utils.formats import plural
+from .utils import formats, fuzzy
+from .utils.formats import plural, medal_emojize
 from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
@@ -112,11 +112,9 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
 class Tags(commands.Cog):
     """Commands to fetch something by a tag name.
 
-    If you want to create/edit a Tag or set an alias, where the tag name is longer than 'one word', you need to wrap the name in double quotes.
-
-    **Examples:**
-    `tags alias "my new alias" my tag`
-    `tags edit "my tag" new content for the tag`
+    ## Note
+    If you want to create a Tag with not a Slash Commands, if you want to create a Tag with a name that is longer than one word,
+    you need to wrap the name in double quotes, otherwise the command will only take the first word as the name and add the rest to the content.
     """
 
     def __init__(self, bot: Percy):
@@ -227,6 +225,7 @@ class Tags(commands.Cog):
                 await ctx.send(f'<:greenTick:1079249732364406854> Tag `{name}` was successfully created.')
 
     def is_tag_being_made(self, guild_id: int, name: str) -> bool:
+        """Helper method to check if a Tag with ``name`` is currently being made."""
         try:
             being_made = self._reserved_tags_being_made[guild_id]
         except KeyError:
@@ -293,12 +292,7 @@ class Tags(commands.Cog):
     @app_commands.autocomplete(name=aliased_tag_autocomplete)  # type: ignore
     async def tags(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
         """Retrieves a tag from the server.
-        If the tag is an alias, it will redirect to the original tag.
-
-        If you want to **set an alias to/create/edit** a Tag where the Tag name is longer than one word, you need to wrap the name in double quotes.
-        `Examples:`
-        - `tags alias "my new alias" my-tag`
-        - `tags edit "my tag" new content`
+        If the tag is an alias, the original tag will be retrieved instead.
         """
 
         try:
@@ -313,38 +307,10 @@ class Tags(commands.Cog):
 
     @command(
         tags.command,
-        name="create",
-        description="Creates a new tag in the server.",
-        aliases=["add"]
-    )
-    @commands.guild_only()
-    @app_commands.describe(name='The tag name', content='The tag content')
-    async def tags_create(
-            self,
-            ctx: GuildContext,
-            name: Annotated[str, TagName],
-            *,
-            content: Annotated[str, commands.clean_content]
-    ):
-        """Creates a new Tag owned by yourself in this server.
-        The tag name must be between 1 and 100 characters long.
-        The tag content must be less than 2000 characters long.
-        `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
-        """
-
-        if self.is_tag_being_made(ctx.guild.id, name):
-            return await ctx.send(
-                '<:redTick:1079249771975413910> A tag with this name is currently being made. Please try again in a few seconds.')
-
-        if len(content) > 2000:
-            return await ctx.send('<:redTick:1079249771975413910> Tag content must be less than `2000` characters.')
-
-        await self.create_tag(ctx, name, content)
-
-    @command(
-        tags.command,
         name="alias",
-        description="Creates a new alias for an existing tag."
+        description="Creates a new alias for an existing tag.",
+        examples=["tags alias new-alias original-tag",
+                  "tags alias \"new alias\" original tag"]
     )
     @commands.guild_only()
     @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
@@ -385,9 +351,41 @@ class Tags(commands.Cog):
 
     @command(
         tags.command,
+        name="create",
+        description="Creates a new tag in the server.",
+        aliases=["add"],
+        examples=["tags create new-tag This is the content of the tag.",
+                  "tags create \"new tag\" This is the content of the tag."]
+    )
+    @commands.guild_only()
+    @app_commands.describe(name='The tag name', content='The tag content')
+    async def tags_create(
+            self,
+            ctx: GuildContext,
+            name: Annotated[str, TagName],
+            *,
+            content: Annotated[str, commands.clean_content]
+    ):
+        """Creates a new Tag owned by yourself in this server.
+        The tag name must be between 1 and 100 characters long.
+        The tag content must be less than 2000 characters long.
+        `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
+        """
+
+        if self.is_tag_being_made(ctx.guild.id, name):
+            return await ctx.send(
+                '<:redTick:1079249771975413910> A tag with this name is currently being made. Please try again in a few seconds.')
+
+        if len(content) > 2000:
+            return await ctx.send('<:redTick:1079249771975413910> Tag content must be less than `2000` characters.')
+
+        await self.create_tag(ctx, name, content)
+
+    @command(
+        tags.command,
         name="make",
         description="Interactively create a Tag owned by yourself in this server.",
-        ignore_extra=False
+        ignore_extra=True
     )
     @commands.guild_only()
     async def tags_make(self, ctx: GuildContext):
@@ -437,6 +435,7 @@ class Tags(commands.Cog):
             )
 
         self.add_in_progress_tag(ctx.guild.id, name)
+
         messages.append(await ctx.send(
             f'The new Tags name is **{name}**.\n'
             f'Please enter now a content for the tag.\n'
@@ -475,11 +474,6 @@ class Tags(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    @tags_make.error
-    async def tags_make_error(self, ctx: GuildContext, error: commands.CommandError):
-        if isinstance(error, commands.TooManyArguments):
-            await ctx.send(f'<:redTick:1079249771975413910> Please call just `{ctx.prefix}tag make`')
-
     async def guild_tag_stats(self, ctx: GuildContext):
         e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
         e.set_thumbnail(url=ctx.guild.icon.url)
@@ -508,14 +502,9 @@ class Tags(commands.Cog):
                               f'with **{usage_per_day(ctx.me.joined_at, total["total_uses"]):.2f}** tag uses per day',
                         inline=False)
 
-        def emojize(seq: Iterable):
-            emoji = 129351  # ord(':first_place:') # max 3
-            for index, value in enumerate(seq):
-                yield chr(emoji + index), value
-
         value = '\n'.join(
             f'{emoji}: {name} (**{uses}** uses)'
-            for (emoji, (name, uses, _, _)) in emojize(records)
+            for (emoji, (name, uses, _, _)) in medal_emojize(records)
         )
 
         e.add_field(name='**MOST USED TAGS**', value=value, inline=False)
@@ -535,7 +524,7 @@ class Tags(commands.Cog):
 
         value = '\n'.join(
             f'{emoji}: <@{author_id}> (**{uses}** times)'
-            for (emoji, (uses, author_id)) in emojize(records)
+            for (emoji, (uses, author_id)) in medal_emojize(records)
         )
         e.add_field(name='**TOP TAG USERS**', value=value, inline=False)
 
@@ -554,7 +543,7 @@ class Tags(commands.Cog):
 
         value = '\n'.join(
             f'{emoji}: <@{owner_id}> (**{count}** tags)'
-            for (emoji, (count, owner_id)) in emojize(records)
+            for (emoji, (count, owner_id)) in medal_emojize(records)
         )
         e.add_field(name='**TOP CREATORS**', value=value, inline=False)
 
@@ -584,7 +573,7 @@ class Tags(commands.Cog):
             owned = records[0]['count']
             uses = records[0]['total_uses']
         else:
-            owned = 'N/A *(To Claim)*'
+            owned = 'N/A ***(Tag is claimable)***'
             uses = 0
 
         query = """
@@ -599,12 +588,8 @@ class Tags(commands.Cog):
         e.add_field(name='**TAGS OWNED**', value=owned)
         e.add_field(name='**OWNED TAGS USES**', value=uses)
 
-        emoji = 129351  # ord(':first_place:')
-
-        for (offset, (name, uses, _, _)) in enumerate(records):
-            value = f'**{name}** (**{uses}** uses)'
-
-            e.add_field(name=f'**{chr(emoji + offset)} Owned Tag**', value=value, inline=False)
+        for (emoji, (name, uses, _, _)) in medal_emojize(records):
+            e.add_field(name=f'**{emoji} Owned Tag**', value=f'**{name}** (**{uses}** uses)', inline=False)
 
         await ctx.send(embed=e)
 
@@ -818,17 +803,15 @@ class Tags(commands.Cog):
 
     @command(
         tags.command,
-        name='content',
+        name='raw',
         description='This displays you the raw content of a tag.',
-        aliases=['raw']
+        aliases=['content']
     )
     @commands.guild_only()
-    @app_commands.describe(name='The name of the tag to get the raw content of.')
+    @app_commands.describe(name='The name of the tag to display the escaped markdown content.')
     @app_commands.autocomplete(name=non_aliased_tag_autocomplete)  # type: ignore
-    async def tags_content(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
-        """This displays you the raw content of a tag.
-        `Note:` Content will be sent markdown escaped.
-        """
+    async def tags_raw(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
+        """This displays you the raw content of a tag."""
 
         try:
             tag = await self.get_tag(ctx.guild.id, name, pool=ctx.pool)
@@ -860,7 +843,8 @@ class Tags(commands.Cog):
             embed.set_author(name=f'{member}\'s Tags in {ctx.guild.name}', icon_url=member.display_avatar.url)
             embed.set_footer(text=f'{plural(len(rows)):tag}')
 
-            results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            results = [f"`{index}.` {entry}" for index, entry in
+                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
             await LinePaginator.start(
                 ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
             )
@@ -897,7 +881,6 @@ class Tags(commands.Cog):
         tags.command,
         name='all',
         description='List all tags in this server.',
-        usage='[file: True|False]',
     )
     @app_commands.describe(file='Dumps output to a text file.')
     @commands.guild_only()
@@ -923,7 +906,8 @@ class Tags(commands.Cog):
             embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
             embed.set_footer(text=f'{plural(len(rows)):tag}')
 
-            results = [f"`{index}.` {entry}" for index, entry in  enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            results = [f"`{index}.` {entry}" for index, entry in
+                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
             await LinePaginator.start(
                 ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
             )
@@ -933,13 +917,13 @@ class Tags(commands.Cog):
     @command(
         tags.command,
         name='purge',
-        description='Deletes all tags and aliases that refer to the tags owned by a given member.',
+        description='Bulk remove all Tags and assigned Aliases of a given User.',
     )
     @commands.guild_only()
-    @checks.has_guild_permissions(manage_messages=True)
+    @command_permissions(user=['manage_messages'])
     @app_commands.describe(member='The member to remove all tags of')
     async def tags_purge(self, ctx: GuildContext, member: discord.User):
-        """Deletes all tags and aliases that refer to the tags owned by a given member."""
+        """Bulk remove all Tags and assigned Aliases of a given User."""
 
         query = "SELECT COUNT(*) FROM tags WHERE location_id=$1 AND owner_id=$2;"
         row: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
@@ -989,7 +973,8 @@ class Tags(commands.Cog):
             embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
             embed.set_footer(text=f'{plural(len(rows)):tag}')
 
-            results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
+            results = [f"`{index}.` {entry}" for index, entry in
+                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
             await LinePaginator.start(
                 ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
             )
@@ -1100,11 +1085,6 @@ class Tags(commands.Cog):
             filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
         )
         await ctx.send(file=file)
-
-    @command(tags.command, hidden=True, with_app_command=False)
-    async def tags_config(self, ctx: Context):
-        """This is a reserved tag command. Check back later."""
-        pass
 
 
 async def setup(bot: Percy):
