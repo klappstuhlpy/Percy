@@ -457,7 +457,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return sorted(resolved, key=key)
         return resolved
 
-    def get_command_signature(self, command: PartialCommand) -> str:  # noqa
+    def get_command_signature(self, command: PartialCommand, cut: bool = False) -> str:  # noqa
         """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
 
         This is a modified version of the original get_command_signature.
@@ -465,13 +465,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         is_app_command = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
 
         if is_app_command:
-            signature = []
+            if cut:
+                return f'/{command.qualified_name}'
+
             if isinstance(command, app_commands.commands.Group):
                 return f'/{command.qualified_name} <subcommand>'
 
-            for option in command.parameters:
-                signature.append(f'<{option.name}>' if option.required else f'[{option.name}]')
-            return f'/{command.qualified_name} {" ".join(signature)}'
+            signature = ' '.join(
+                f'<{option.name}>' if option.required else f'[{option.name}]' for option in command.parameters)
+            return f'/{command.qualified_name} {signature}'
 
         signature = command.signature
 
@@ -481,6 +483,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         parent = command.full_parent_name if command.parent else None
         alias = f'{parent} {command.name}' if parent else command.name
+
+        if cut:
+            return f'{self.context.clean_prefix}{alias}'
         return f'{self.context.clean_prefix}{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
@@ -553,11 +558,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
         str
             The command flag formatting.
         """
+        if isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
+            return [] if descripted else ""
+
         flags = command.clean_params.get('flags')
         resolved: list[str] = []
 
         if not flags:
-            return []
+            return [] if descripted else ""
 
         if descripted:
             for flag in flags.converter.get_flags().values():
@@ -599,6 +607,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
         str | dict
             The command permission formatting as a string or a dict.
         """
+        if isinstance(command, app_commands.commands.Group):
+            return "" if stringified else {}
 
         user_permissions: dict[str, bool] = getattr(command.callback, '__user_permissions__', None)
         bot_permissions: dict[str, bool] = getattr(command.callback, '__bot_permissions__', None)
@@ -650,15 +660,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
 
         if examples := command.extras.get('examples', None):
-            parent = command.full_parent_name if command.parent else None
-            alias = f'{parent} {command.name}' if parent else command.name
-
-            text = '\n'.join(f'* `{self.context.clean_prefix}{alias} {example}`' for example in examples)
+            text = '\n'.join(f'* `{self.get_command_signature(command, cut=True)} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
 
-        if not isinstance(command, app_commands.commands.Command):
-            for field in self.get_command_flag_formatting(command, descripted=True):
-                embed.add_field(**field)
+        for field in self.get_command_flag_formatting(command, descripted=True):
+            embed.add_field(**field)
 
         return embed
 
