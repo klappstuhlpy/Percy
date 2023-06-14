@@ -240,7 +240,7 @@ class Reminder(commands.Cog):
 
         filtered_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in
                            enumerate(kwargs.keys(), start=2)]
-        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(filtered_clause)} RETURNING id"
+        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(filtered_clause)} RETURNING id;"
         record: Any = await self.bot.pool.fetchrow(query, event, *kwargs.values())
 
         if record is not None and self._current_timer and self._current_timer.id == record['id']:
@@ -324,6 +324,10 @@ class Reminder(commands.Cog):
         name="reminder",
         aliases=['timer', 'remindme', 'remind'],
         description="Reminds you of something after a certain amount of timetools.",
+        examples=["next thursday at 3pm do something funny",
+                  "do the dishes tomorrow",
+                  "in 3 days do the thing",
+                  "2d unmute someone"],
         usage='<when>'
     )
     async def reminder(
@@ -337,15 +341,8 @@ class Reminder(commands.Cog):
         The input can be any direct date (e.g. YYYY-MM-DD) or a human
         readable offset.
 
-        **Examples:**
-        - "next thursday at 3pm do something funny"
-        - "do the dishes tomorrow"
-        - "in 3 days do the thing"
-        - "2d unmute someone"
-
         Times are in UTC unless a timezone is specified
         using the "timezone set" command.
-
         """
         config = await self.bot.user_settings.get_user_config(ctx.author.id)
         zone = config.timezone if config else None

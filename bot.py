@@ -302,7 +302,22 @@ class Percy(commands.Bot):
     def get_guild_features(
             features: list[GuildFeature], *, only_current: bool = False, emojize: bool = True
     ) -> GuildFeatureA:
-        """Returns a list of tuples containing all guild features if ``only_current`` is False or enabled features if True."""
+        """Returns a list of tuples containing all guild features if ``only_current`` is False or enabled features if True.
+
+        Parameters
+        ------------
+        features: list[GuildFeature]
+            The list of features to get.
+        only_current: bool
+            Whether to only get the current enabled features.
+        emojize: bool
+            Whether to emojize the feature names.
+
+        Returns
+        -----------
+        GuildFeatureA
+            The list of tuples containing the features.
+        """
         for feature in features:
             if only_current:
                 if feature in GUILD_FEATURES:
@@ -323,6 +338,7 @@ class Percy(commands.Bot):
             guild: discord.Guild, argument: str, *, cache: bool = False
     ) -> Optional[discord.Member]:
         """Queries a member by their name, name + discrim, or nickname.
+
         Parameters
         ------------
         guild: Guild
@@ -331,7 +347,8 @@ class Percy(commands.Bot):
             The name, nickname, or name + discrim combo to check.
         cache: bool
             Whether to cache the results of the query.
-        timetools.
+
+        Returns
         ---------
         Optional[Member]
             The member matching the query or None if not found.
@@ -348,12 +365,14 @@ class Percy(commands.Bot):
     @staticmethod
     async def get_or_fetch_member(guild: discord.Guild, member_id: int) -> Optional[discord.Member]:
         """Looks up a member in cache or fetches if not found.
+
         Parameters
         -----------
         guild: Guild
             The guild to look in.
         member_id: int
             The member ID to search for.
+
         Returns
         ---------
         Optional[Member]
@@ -382,6 +401,7 @@ class Percy(commands.Bot):
         Members that can't be resolved are discarded from the list.
         This is done lazily using an asynchronous iterator.
         Note that the order of the resolved members is not the same as the input.
+
         Parameters
         -----------
         guild: Guild

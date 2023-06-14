@@ -621,10 +621,11 @@ class Polls(commands.Cog):
             self, channel_id=channel_id, message_id=message_id, guild_id=guild_id, extra={'args': args, 'kwargs': kwargs, 'users': []}
         )
 
-        query = """INSERT INTO polls (id, channel_id, message_id, guild_id, extra)
-                VALUES ($1, $2, $3, $4, $5::jsonb)
-                RETURNING id;
-                """
+        query = """
+            INSERT INTO polls (id, channel_id, message_id, guild_id, extra)
+            VALUES ($1, $2, $3, $4, $5::jsonb)
+            RETURNING id;
+        """
 
         row = await self.bot.pool.fetchrow(
             query, _id, channel_id, message_id, guild_id, {'args': args, 'kwargs': kwargs, 'users': []})
@@ -633,14 +634,6 @@ class Polls(commands.Cog):
         self.get_guild_polls.invalidate(self, guild_id)
 
         return poll
-
-    async def maybe_purge_timer(self, poll_id: int) -> int | None:
-        """Deletes a poll timer if it exists."""
-        query = "SELECT * FROM reminders WHERE event = $1 AND extra #>> ARRAY['kwargs', 'poll_id'] = $2 LIMIT 1;"
-        record = await self.bot.pool.fetchrow(query, "poll", str(poll_id))
-        if record:
-            return await self.bot.pool.fetchval("DELETE FROM reminders WHERE id = $1 RETURNING id;", record.get("id"))
-        return None
 
     async def get_guild_poll(self, guild_id: int, poll_id: int) -> Optional[PollItem]:
         """Gets a poll by ID."""
@@ -660,7 +653,7 @@ class Polls(commands.Cog):
             return None
 
         await poll.edit(running=False)
-        await self.maybe_purge_timer(poll.id)
+        await self.bot.reminder.delete_timer('poll', poll_id=poll.id)
 
         if poll.message_id is not None and poll.message is MISSING:
             await poll.fetch_message()

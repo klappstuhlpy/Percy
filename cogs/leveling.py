@@ -139,7 +139,8 @@ class PointsWatch(TypedDict):
 class OverwriteList(list):
 
     def append(self, other: DataBatchEntry):
-        if existing := discord.utils.find(lambda x: x['user_id'] == other['user_id'] and x['guild_id'] == other['guild_id'], self):
+        if existing := discord.utils.find(
+                lambda x: x['user_id'] == other['user_id'] and x['guild_id'] == other['guild_id'], self):
             self[self.index(existing)] = other
         else:
             super().append(other)
@@ -281,7 +282,8 @@ class Leveling(commands.Cog):
         await config.add_messages(1)
 
         experience = random.randint(7, 13)
-        leveled_up = config.experience + experience - config.get_experience(config.level) >= config.get_required(config.level)
+        leveled_up = config.experience + experience - config.get_experience(config.level) >= config.get_required(
+            config.level)
         await config.add_experience(experience)
 
         if leveled_up:
@@ -325,24 +327,25 @@ class Leveling(commands.Cog):
         e.set_footer(text='Level Statistics for this Server.')
 
         if not records:
-            e.add_field(name=f'**TOP 3 TEXT 💬**', value='*There are no statistics for this category available.*',
-                        inline=False)
+            value = '*There are no statistics for this category available.*'
         else:
-            value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.messages}** messages)'
-                     for emoji, record in medal_emojize(records)]
+            value = '\n'.join(
+                [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.messages}** messages)'
+                 for emoji, record in medal_emojize(records)])
 
-            e.add_field(name=f'**TOP 3 TEXT 💬**', value='\n'.join(value), inline=False)
+        e.add_field(name=f'**TOP 3 TEXT 💬**', value=value, inline=False)
 
         query = "SELECT * FROM levels WHERE guild_id = $1 AND voice_minutes > 0 ORDER BY voice_minutes DESC LIMIT 3;"
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
         if not records:
-            e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='*There are no statistics for this category available.*',
-                        inline=False)
+            value = '*There are no statistics for this category available.*'
         else:
-            value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
-                     for emoji, record in medal_emojize(records)]
-            e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='\n'.join(value), inline=False)
+            value = '\n'.join(
+                [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
+                 for emoji, record in medal_emojize(records)])
+
+        e.add_field(name=f'**TOP 3 VOICE 🎙️**', value=value, inline=False)
 
         await ctx.send(embed=e)
 

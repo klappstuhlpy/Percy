@@ -309,8 +309,8 @@ class Tags(commands.Cog):
         tags.command,
         name="alias",
         description="Creates a new alias for an existing tag.",
-        examples=["tags alias new-alias original-tag",
-                  "tags alias \"new alias\" original tag"]
+        examples=["new-alias original-tag",
+                  "\"new alias\" original tag"]
     )
     @commands.guild_only()
     @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
@@ -354,8 +354,8 @@ class Tags(commands.Cog):
         name="create",
         description="Creates a new tag in the server.",
         aliases=["add"],
-        examples=["tags create new-tag This is the content of the tag.",
-                  "tags create \"new tag\" This is the content of the tag."]
+        examples=["new-tag This is the content of the tag.",
+                  "\"new tag\" This is the content of the tag."]
     )
     @commands.guild_only()
     @app_commands.describe(name='The tag name', content='The tag content')

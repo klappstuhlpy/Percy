@@ -181,9 +181,9 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         try:
             importlib.reload(module)
         except Exception as exc:
-            await ctx.send(f"{icon}\N{WARNING SIGN} ``{module.__name__}`` was not reloaded.\n")
+            await ctx.send(f"{icon}\N{WARNING SIGN} `{module.__name__}` was not reloaded.\n")
             return await error_handling.send_traceback(ctx.channel, 8, type(exc), exc, exc.__traceback__)
-        await ctx.send(f"{icon} ``{module.__name__}`` was reloaded successfully.")
+        await ctx.send(f"{icon} `{module.__name__}` was reloaded successfully.")
 
     @Feature.Command(
         parent="jsk",
@@ -202,7 +202,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         except Exception as exc:
             await ctx.send(f"{icon}\N{WARNING SIGN} `{module}` was not loaded.")
             return await error_handling.send_traceback(ctx.channel, 8, type(exc), exc, exc.__traceback__)
-        await ctx.send(f"{icon} ``{module}`` was loaded successfully.")
+        await ctx.send(f"{icon} `{module}` was loaded successfully.")
 
     @Feature.Command(
         parent="jsk",
@@ -219,11 +219,11 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         try:
             del sys.modules[module.__name__]
         except KeyError:
-            return await ctx.send(f"{icon}\N{WARNING SIGN} ``{module.__name__}`` was not found.")
+            return await ctx.send(f"{icon}\N{WARNING SIGN} `{module.__name__}` was not found.")
         except Exception as exc:
             return await error_handling.send_traceback(ctx.channel, 8, type(exc), exc, exc.__traceback__)
 
-        await ctx.send(f"{icon} ``{module.__name__}`` was unloaded successfully.")
+        await ctx.send(f"{icon} `{module.__name__}` was unloaded successfully.")
 
     @Feature.Command(
         name="jishaku",

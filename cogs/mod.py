@@ -181,19 +181,19 @@ class PreExistingMuteRoleView(discord.ui.View):
         return True
 
     @discord.ui.button(label='Merge', style=discord.ButtonStyle.blurple)
-    async def merge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def merge_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         await interaction.response.defer()
         await interaction.delete_original_response()
         self.merge = True
 
     @discord.ui.button(label='Replace', style=discord.ButtonStyle.grey)
-    async def replace_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def replace_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         await interaction.response.defer()
         await interaction.delete_original_response()
         self.merge = False
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red)
-    async def abort_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def abort_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         self.merge = None
         await self.message.delete()
 
@@ -338,13 +338,12 @@ class LockdownPermissionIssueView(discord.ui.View):
     async def on_timeout(self) -> None:
         self.abort = True
         try:
-            await self.message.reply('Aborting.')
             await self.message.delete()
-        except:
+        except discord.HTTPException:
             pass
 
     @discord.ui.button(label='Resolve Permission Issue', style=discord.ButtonStyle.green)
-    async def resolve_permissions(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def resolve_permissions(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         overwrites = self.channel.overwrites
         ow = overwrites.setdefault(self.me, discord.PermissionOverwrite())
         ow.update(send_messages=True, send_messages_in_threads=True)
@@ -364,7 +363,7 @@ class LockdownPermissionIssueView(discord.ui.View):
             self.stop()
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red)
-    async def abort_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def abort_button(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         self.abort = True
         await interaction.response.send_message(
             'Success. You can edit the permissions for the bot manually.'
@@ -379,14 +378,14 @@ class Confirm(discord.ui.View):
 
     @discord.ui.button(label='Confirm', style=discord.ButtonStyle.gray,
                        emoji=discord.PartialEmoji(name="yes", id=1066772402270371850, animated=True))
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         await interaction.message.delete()
         self.value = True
         self.stop()
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.gray,
                        emoji=discord.PartialEmoji(name="declined", id=1066183072984350770, animated=True))
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         await interaction.message.delete()
         self.value = False
         self.stop()
@@ -431,7 +430,8 @@ class SpamChecker:
             self._by_mentions_rate = mention_threshold
         return self._by_mentions
 
-    def is_new(self, member: discord.Member) -> bool:
+    @staticmethod
+    def is_new(member: discord.Member) -> bool:
         now = discord.utils.utcnow()
         seven_days_ago = now - datetime.timedelta(days=7)
         ninety_days_ago = now - datetime.timedelta(days=90)

@@ -632,7 +632,8 @@ class Starboard(commands.Cog):
         You must have Manage Server permission to use this.
         """
 
-        await ctx.defer()
+        if ctx.interaction:
+            await ctx.defer()
 
         self.get_starboard.invalidate(self, ctx.guild.id)
 
