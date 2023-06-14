@@ -466,6 +466,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if is_app_command:
             signature = []
+            if isinstance(command, app_commands.commands.Group):
+                return f'/{command.qualified_name} <subcommand>'
+
             for option in command.parameters:
                 signature.append(f'<{option.name}>' if option.required else f'[{option.name}]')
             return f'/{command.qualified_name} {" ".join(signature)}'
