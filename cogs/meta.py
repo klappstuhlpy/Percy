@@ -551,7 +551,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The command flag formatting.
         """
         flags = command.clean_params.get('flags')
-        resolved = set()
+        resolved: list[str] = []
 
         if not flags:
             return []
@@ -559,7 +559,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if descripted:
             for flag in flags.converter.get_flags().values():
                 fmt = f'`--{flag.name}` - {flag.description}'
-                resolved.add(fmt)
+                resolved.append(fmt)
 
             chunked = ['\n'.join(resolved[i:i + 15]) for i in range(0, len(resolved), 15)]
             to_fields = []
@@ -576,7 +576,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     )
 
                 fmt = f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]'
-                resolved.add(fmt)
+                resolved.append(fmt)
 
             return ' '.join(resolved)
 
