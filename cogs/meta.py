@@ -462,7 +462,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         This is a modified version of the original get_command_signature.
         """
-        is_app_command = isinstance(command, app_commands.commands.Command)
+        is_app_command = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
 
         if is_app_command:
             signature = []
