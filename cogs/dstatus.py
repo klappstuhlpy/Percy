@@ -140,7 +140,8 @@ class DiscordStatus(commands.Cog):
         return discord.PartialEmoji(name="connections", id=1118604869104840744)
 
     async def cog_load(self) -> None:
-        self.check_new_incident.start()
+        pass
+        #self.check_new_incident.start()
 
     async def cog_unload(self) -> None:
         self.check_new_incident.stop()

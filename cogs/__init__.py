@@ -36,9 +36,6 @@ AnyCommandSignature = {
 }
 
 
-def perm_fmt(perm: str) -> str: return perm.replace('_', ' ').title().replace('Guild', 'Server')
-
-
 T = TypeVar('T')
 
 
@@ -87,33 +84,34 @@ def command_permissions(
     if invalid:
         raise TypeError(f"Invalid permission(s): {', '.join(invalid)}")
 
-    user_perms = {perm: True for perm in user}
-    bot_perms = {perm: True for perm in bot}
+    # After this point, we can assume that the permissions are valid.
+    # We are now creating a mapping of permissions to a boolean value set to True.
+    # This is used to create a discord.Permissions object.
 
-    readable_bot_perms = [perm_fmt(perm) for perm in bot]
-    readable_user_perms = [perm_fmt(perm) for perm in user]
+    _user_permissions = {permission: True for permission in user}
+    _bot_permissions = {permission: True for permission in bot}
 
     def decorator(func: T) -> T:
-        func.default_permissions = discord.Permissions(**user_perms)
+        func.default_permissions = discord.Permissions(**_user_permissions)
 
-        if bot_perms:
+        if _bot_permissions:
             if category == CommandCategory.App:
-                func = app_commands.checks.bot_has_permissions(**bot_perms)(func)
+                func = app_commands.checks.bot_has_permissions(**_bot_permissions)(func)
             elif category in (CommandCategory.Core, CommandCategory.Hybrid):
-                func = commands.bot_has_permissions(**bot_perms)(func)
+                func = commands.bot_has_permissions(**_bot_permissions)(func)
 
-        if user_perms:
+        if _user_permissions:
             if category == CommandCategory.App:
-                func = app_commands.checks.has_permissions(**user_perms)(func)
+                func = app_commands.checks.has_permissions(**_user_permissions)(func)
             elif category == CommandCategory.Core:
-                func = commands.has_permissions(**user_perms)(func)
+                func = commands.has_permissions(**_user_permissions)(func)
             elif category == CommandCategory.Hybrid:
-                func = checks.hybrid_permissions_check(**user_perms)(func)
+                func = checks.hybrid_permissions_check(**_user_permissions)(func)
             else:
-                func.__discord_app_commands_default_permissions__ = discord.Permissions(**user_perms)
+                func.__discord_app_commands_default_permissions__ = discord.Permissions(**_user_permissions)
 
-        func.__readable_bot_perms__ = readable_bot_perms
-        func.__readable_user_perms__ = readable_user_perms
+        func.__bot_permissions__ = _bot_permissions
+        func.__user_permissions__ = _user_permissions
 
         return func
 

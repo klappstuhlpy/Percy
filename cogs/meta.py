@@ -33,15 +33,22 @@ if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
-COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=96&quality=lossless'
+COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=32'
 INFO_ICON_URL = 'https://cdn3.emoji.gg/emojis/4765-discord-info-white-theme.png'
 
 
 def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
-    if s1 is None and s2 is None:
-        return 'No help found...'
+    if not s1 and not s2:
+        return '*No help found.*'
 
-    return inspect.cleandoc(f"{s1 or ''}\n\n{s2 or ''}")
+    if s1 == s2:
+        return inspect.cleandoc(s1)
+
+    if s1 or s2:
+        return inspect.cleandoc(s1 or s2)
+
+    if s1 and s2:
+        return inspect.cleandoc(f"{s1}\n\n{s2}")
 
 
 def can_close_threads(ctx: GuildContext) -> bool:
@@ -129,7 +136,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         page: discord.Embed = await self.format_page(self.pages[0])  # type: ignore
 
         if self.groups is not None:
-            self.add_item(HelpSelectMenu(self.groups, getattr(context, 'bot', context.client)))  # type: ignore
+            self.add_item(CategorySelect(self.groups, getattr(context, 'bot', context.client)))  # type: ignore
         self.update_buttons()
 
         if kwargs.pop('edit', False):
@@ -301,7 +308,7 @@ class FrontHelpPaginator(BasePaginator[str]):
         if self.total_pages <= 1:
             kwargs.pop('view')
 
-        self.add_item(HelpSelectMenu(entries, self.ctx.client))  # type: ignore
+        self.add_item(CategorySelect(entries, self.ctx.client))  # type: ignore
         self.update_buttons()
 
         if kwargs.pop('edit', False):
@@ -376,7 +383,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         cmd = self.context.bot.resolve_command(command)
         if cmd is None:
             # Maybe it's a SubCommand? Let the parent class deal with it
-            return super().command_callback(ctx, command=command)
+            return await super().command_callback(ctx, command=command)
 
         if isinstance(cmd, PartialCommandGroup):
             return await self.send_group_help(cmd)
@@ -438,8 +445,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     else:
                         resolved.append(subcmd)
                         resolved_names.add(subcmd.qualified_name)
-                if not cmd.commands:
-                    resolved.append(cmd)
+                resolved.append(cmd)
             else:
                 if isinstance(cmd, commands.Command):
                     if is_hidden(cmd):
@@ -462,7 +468,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             signature = []
             for option in command.parameters:
                 signature.append(f'<{option.name}>' if option.required else f'[{option.name}]')
-            return f'{command.qualified_name} {" ".join(signature)}'
+            return f'/{command.qualified_name} {" ".join(signature)}'
 
         signature = command.signature
 
@@ -483,7 +489,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         parent = command.full_parent_name if command.parent else None
         alias = f'{parent} {command.name}' if parent else command.name
-        return f'{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
+        return f'{self.context.clean_prefix}{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
@@ -492,6 +498,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         This is a modified version of the original send_bot_help.
         """
+
         def key(cmd: PartialCommand) -> str:
             try:
                 if isinstance(cmd, app_commands.commands.Group):
@@ -536,53 +543,117 @@ class PaginatedHelpCommand(commands.HelpCommand):
         )
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
 
+    @staticmethod
+    def get_command_flag_formatting(command: PartialCommand, descripted: bool = False) -> str | list[dict]:  # noqa
+        """Returns a string with the command flag formatting.
+
+        Parameters
+        ----------
+        command: PartialCommand
+            The command to get the flag formatting from.
+        descripted: bool
+            Whether to include the flag description or not.
+        chunk: bool
+            Whether to chunk the flags or not. Works only with descripted=True.
+
+        Returns
+        -------
+        str
+            The command flag formatting.
+        """
+        flags = command.clean_params.get('flags')
+        resolved = set()
+
+        if descripted:
+            for flag in flags.converter.get_flags().values():
+                fmt = f'`--{flag.name}` - {flag.description}'
+                resolved.add(fmt)
+
+            chunked = ['\n'.join(resolved[i:i + 15]) for i in range(0, len(resolved), 15)]
+            to_fields = []
+            for i, chunk in enumerate(chunked):
+                to_fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': chunk, 'inline': False})
+            return to_fields
+        else:
+            for flag in flags.converter.get_flags().values():
+                fmt = f'<--{flag.name}>' if flag.required else f'[--{flag.name}]'
+                resolved.add(fmt)
+
+            return ' '.join(resolved)
+
+    @staticmethod
+    def get_command_permission_formatting(command: PartialCommand, stringified: bool = False) -> str | dict:  # noqa
+        """Returns a string with the command permission formatting.
+
+        Parameters
+        ----------
+        command: PartialCommand
+            The command to get the permission formatting from.
+        stringified: bool
+            Whether to stringify the permissions or not.
+
+        Returns
+        -------
+        str | dict
+            The command permission formatting as a string or a dict.
+        """
+
+        user_permissions: dict[str, bool] = getattr(command.callback, '__user_permissions__', None)
+        bot_permissions: dict[str, bool] = getattr(command.callback, '__bot_permissions__', None)
+
+        def fmt(p: str) -> str:
+            return p.replace('_', ' ').title().replace('Guild', 'Server')
+
+        resolved: dict[str, list] = {}
+
+        resolved.setdefault('user', [])
+        for perm in user_permissions:
+            resolved['user'].append(perm)
+
+        resolved.setdefault('bot', [])
+        for perm in bot_permissions:
+            resolved['bot'].append(perm)
+
+        if stringified:
+            return (
+                f"User: {', '.join(fmt(p) for p in resolved['user'])}\n"
+                f"Bot: {', '.join(fmt(p) for p in resolved['bot'])}"
+            )
+        else:
+            return resolved
+
     def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
         """Returns an Embed with the command formatting.
 
         This is a modified version of the original command_formatting.
         """
         embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name="Command Help", icon_url=INFO_ICON_URL)
+        embed.set_author(name="Command Help", icon_url=COMMAND_ICON_URL)
 
-        flags = command.clean_params.get('flags')
-        fields = []
-        if flags:
-            params = []
-            for flag in flags.converter.get_flags().values():
-                params.append(f'`--{flag.name}` - {flag.description}')
+        embed.description = (
+            f"**```py\n{self.get_command_signature(command)}```**\n"
+            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
+        )
 
-            for i in range(0, len(params), 15):
-                fields.append(
-                    {'name': 'Flags' if i == 0 else '\u200b', 'value': '\n'.join(params[i:i + 15]), 'inline': False})
-
-            for field in fields:
-                embed.add_field(**field)
-
-        embed.description = f"**```py\n{self.get_command_signature(command)}```**\n" \
-                            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
-
-        if hasattr(command, 'aliases'):
+        if getattr(command, 'aliases', None):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
-        if hasattr(command, 'commands'):
-            embed.add_field(name='**Subcommands**', value=f"`{', '.join(command.commands)}`", inline=False)
+        if getattr(command, 'commands', None):
+            subcommands = '\n'.join(self.get_command_signature(cmd) for cmd in command.commands)
+            embed.add_field(name='**Subcommands**', value=f"`{subcommands}`", inline=False)
 
-        bot_perms = getattr(command.callback, '__readable_bot_perms__', None)
-        user_perms = getattr(command.callback, '__readable_user_perms__', None)
-        if bot_perms or user_perms:
-            value = f'Bot: {", ".join(bot_perms)}\n' if bot_perms else ''
-            value += f'User: {", ".join(user_perms)}' if user_perms else ''
+        if permissions := self.get_command_permission_formatting(command, stringified=True):
+            embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
 
-            if value:
-                embed.add_field(name='Required Permissions', value=value, inline=False)
-
-        examples = command.extras.get('examples')
-        if examples:
+        if examples := command.extras.get('examples', None):
             parent = command.full_parent_name if command.parent else None
             alias = f'{parent} {command.name}' if parent else command.name
 
-            text = '\n'.join(f'- `{self.context.clean_prefix}{alias} {example}`' for example in examples)
+            text = '\n'.join(f'* `{self.context.clean_prefix}{alias} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
+
+        for field in self.get_command_flag_formatting(command, descripted=True):
+            embed.add_field(**field)
 
         return embed
 
@@ -607,19 +678,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         This is a modified version of the original send_group_help.
         """
-        subcommands = group.commands
-        if not subcommands:
-            return await self.send_command_help(group)
-
-        entries = await self.filter_commands(
-            subcommands,
-            sort=True,
-            escape_hidden=not await self.context.bot.is_owner(self.context.author)
-        )
-        if not entries:
-            return await self.send_command_help(group)
-
-        await GroupHelpPaginator.start(self.context, entries=entries, group=group)
+        # Only need to do this because send_command_help handles subcommands on its own
+        await self.send_command_help(group)
 
     @classmethod
     def temporary(cls, context: Context | discord.Interaction) -> 'PaginatedHelpCommand':
