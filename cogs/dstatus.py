@@ -131,7 +131,10 @@ class ShortStatusConfig(PostgresItem):
 
 
 class DiscordStatus(commands.Cog):
-    """[Discord Status](https://discordstatus.com/) Feed related commands."""
+    """Discord Status Feed related commands.
+
+    Visit: https://discordstatus.com/ for more information.
+    """
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
@@ -140,8 +143,7 @@ class DiscordStatus(commands.Cog):
         return discord.PartialEmoji(name="connections", id=1118604869104840744)
 
     async def cog_load(self) -> None:
-        pass
-        #self.check_new_incident.start()
+        self.check_new_incident.start()
 
     async def cog_unload(self) -> None:
         self.check_new_incident.stop()
