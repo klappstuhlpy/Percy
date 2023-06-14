@@ -89,9 +89,9 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             if not list(filter(lambda c: not c.hidden, self.group.get_commands())):
                 is_app_command_cog = True
 
-        for command in entries:
-            signature = self.ctx.client.help_command.get_command_signature(command)  # type: ignore
-            embed.add_field(name=signature, value=command.description or 'No help given...', inline=False)
+        for cmd in entries:
+            signature = self.ctx.client.help_command.get_command_signature(cmd)  # type: ignore
+            embed.add_field(name=signature, value=cmd.description or 'No help given...', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
         if is_app_command_cog:
@@ -153,7 +153,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         return msg
 
 
-class HelpSelectMenu(discord.ui.Select):
+class CategorySelect(discord.ui.Select):
     def __init__(self, entries: dict[commands.Cog, list[commands.Command]], bot: Percy):
         super().__init__(
             placeholder='Select a category to view...',
@@ -171,8 +171,8 @@ class HelpSelectMenu(discord.ui.Select):
             description='The front page of the Help Menu.',
         )
 
-        for cog, commands in self.commands.items():
-            if not commands:
+        for cog, cmds in self.commands.items():
+            if not cmds:
                 continue
 
             description = cog.description.split('\n', 1)[0] or None
@@ -190,12 +190,12 @@ class HelpSelectMenu(discord.ui.Select):
                 await ctx.response.send_message('Somehow this category does not exist?', ephemeral=True)
                 return
 
-            commands = self.commands[cog]
-            if not commands:
+            cmds = self.commands[cog]
+            if not cmds:
                 await ctx.response.send_message('This category has no commands for you', ephemeral=True)
                 return
 
-            await GroupHelpPaginator.start(ctx, entries=commands, edit=True, group=cog, groups=self.view.groups)
+            await GroupHelpPaginator.start(ctx, entries=cmds, edit=True, group=cog, groups=self.view.groups)
 
 
 class FrontHelpPaginator(BasePaginator[str]):
@@ -347,12 +347,24 @@ class PaginatedHelpCommand(commands.HelpCommand):
         """|coro|
 
         The actual implementation of the help command.
+        Responsible for getting the requested command and
+        calling the necessary helpers.
 
-        Implemention of Mine:
-        - Added Support for HybridCommands, AppCommands, AppCommand Groups/SubCommands
+        This is a modified version of the original command_callback.
+
+        Parameters
+        -----------
+        ctx: :class:`.Context`
+            The invocation context.
+        command: Optional[:class:`str`]
+            The command to show the help for. If empty, the default help
+            command implementation is executed.
+
+        Raises
+        -------
+        :exc:`.CommandNotFound`
+            If the command is not found.
         """
-        await self.prepare_help_command(ctx, command)
-
         if command is None:
             mapping = self.get_bot_mapping()
             return await self.send_bot_help(mapping)
@@ -361,12 +373,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if cog is not None:
             return await self.send_cog_help(cog)
 
-        maybe_coro = discord.utils.maybe_coroutine
-
         cmd = self.context.bot.resolve_command(command)
         if cmd is None:
-            string = await maybe_coro(self.command_not_found, self.remove_mentions(command))  # type: ignore
-            return await self.send_error_message(string)
+            # Maybe it's a SubCommand? Let the parent class deal with it
+            return super().command_callback(ctx, command=command)
 
         if isinstance(cmd, PartialCommandGroup):
             return await self.send_group_help(cmd)
@@ -384,7 +394,23 @@ class PaginatedHelpCommand(commands.HelpCommand):
     ) -> List[PartialCommand]:
         """|coro|
 
-        Overwritten to add support for HybridCommands, AppCommands, AppCommand Groups/SubCommands
+        This is a Helper Function to filter the bots Application Commands, Hybrid Commands and Core Commands.
+
+        Parameters
+        ----------
+        cmd_iter: Iterable[PartialCommand]
+            The Iterable of Commands to filter.
+        sort: bool
+            Whether to sort the Commands by their name.
+        key: Optional[Callable]
+            The Key to sort the Commands by.
+        escape_hidden: bool
+            Whether to escape hidden commands. Defaults to True.
+
+        Returns
+        -------
+        List[PartialCommand]
+            The filtered Commands.
         """
         resolved = []
         resolved_names = set()
@@ -404,7 +430,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     if subcmd.qualified_name in resolved_names:
                         continue
                     if isinstance(subcmd, PartialCommandGroup):
-                        for subsubcmd in subcmd.commands:
+                        for subsubcmd in subcmd.commands:  # type: ignore
                             if subsubcmd.qualified_name in resolved_names:
                                 continue
                             resolved.append(subsubcmd)
@@ -426,6 +452,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return resolved
 
     def get_command_signature(self, command: PartialCommand) -> str:  # noqa
+        """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
+
+        This is a modified version of the original get_command_signature.
+        """
         is_app_command = isinstance(command, app_commands.commands.Command)
 
         if is_app_command:
@@ -456,6 +486,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return f'{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
+        """|coro|
+
+        Sends the help command for the whole bot.
+
+        This is a modified version of the original send_bot_help.
+        """
         def key(cmd: PartialCommand) -> str:
             try:
                 if isinstance(cmd, app_commands.commands.Group):
@@ -487,6 +523,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         await FrontHelpPaginator.start(self.context, entries=grouped, per_page=1)
 
     async def send_cog_help(self, cog: commands.Cog):
+        """|coro|
+
+        Sends the help command for a cog.
+
+        This is a modified version of the original send_cog_help.
+        """
         entries = await self.filter_commands(
             self.get_cog_commands(cog),
             sort=True,
@@ -495,6 +537,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
 
     def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
+        """Returns an Embed with the command formatting.
+
+        This is a modified version of the original command_formatting.
+        """
         embed = discord.Embed(colour=helpers.Colour.darker_red())
         embed.set_author(name="Command Help", icon_url=INFO_ICON_URL)
 
@@ -515,8 +561,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed.description = f"**```py\n{self.get_command_signature(command)}```**\n" \
                             f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
 
-        if getattr(command, 'aliases', None):
+        if hasattr(command, 'aliases'):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
+
+        if hasattr(command, 'commands'):
+            embed.add_field(name='**Subcommands**', value=f"`{', '.join(command.commands)}`", inline=False)
 
         bot_perms = getattr(command.callback, '__readable_bot_perms__', None)
         user_perms = getattr(command.callback, '__readable_user_perms__', None)
@@ -538,6 +587,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return embed
 
     async def send_command_help(self, command: PartialCommand):  # noqa
+        """|coro|
+
+        Sends the help command for a command.
+
+        This is a modified version of the original send_command_help.
+        """
         if not isinstance(command, app_commands.commands.Command):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
                 return await self.context.send(f'<:redTick:1079249771975413910> No Command called {command!r} found.')
@@ -546,6 +601,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         await self.context.send(embed=embed, silent=True)
 
     async def send_group_help(self, group: PartialCommandGroup):
+        """|coro|
+
+        Sends the help command for a group.
+
+        This is a modified version of the original send_group_help.
+        """
         subcommands = group.commands
         if not subcommands:
             return await self.send_command_help(group)
@@ -562,6 +623,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     @classmethod
     def temporary(cls, context: Context | discord.Interaction) -> 'PaginatedHelpCommand':
+        """Returns a temporary instance of the help command.
+
+        Useful for helper functions that require a help command instance.
+        """
         self = cls()
         self.context = context
         return self
@@ -830,7 +895,7 @@ class Meta(commands.Cog):
 
     @_help.autocomplete('module')
     async def help_cog_autocomplete(
-            self, interaction: discord.Interaction, current: str,
+            self, interaction: discord.Interaction, current: str,  # noqa
     ) -> list[app_commands.Choice[str]]:
         if not hasattr(self, '_help_autocomplete_cache'):
             self.bot.loop.create_task(self._fill_autocomplete())
@@ -1057,7 +1122,7 @@ class Meta(commands.Cog):
         for key, total in totals.items():
             secrets = secret[key]
             try:
-                emoji = key_to_emoji[key]
+                emoji = key_to_emoji[key]  # noqa
             except KeyError:
                 continue
 
@@ -1319,7 +1384,7 @@ class Meta(commands.Cog):
             if _ == 5:
                 gateway_url = await self.bot.http.get_gateway()
                 start = time.monotonic()
-                async with self.bot.session.get(f'{gateway_url}/ping') as resp:
+                async with self.bot.session.get(f'{gateway_url}/ping'):
                     end = time.monotonic()
                     gateway_ping = (end - start) * 1000
 
