@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import NamedTuple, Dict, Optional
 
+import asyncpg
 import discord
 import feedparser
 from bs4 import BeautifulSoup
@@ -15,8 +16,13 @@ from discord.utils import MISSING
 from typing import TypeVar
 
 from bot import Percy
+from cogs import command, command_permissions, PermissionTemplate
+from cogs.utils import cache
+from cogs.utils.context import GuildContext
+from cogs.utils.helpers import PostgresItem
 from cogs.utils.tasks import executor
-from cogs.utils.constants import DSTATUS_CHANNEL_ID, PH_HEAD_DEV_ROLE_ID
+
+# TODO: Implement multi-guild support for setting up a Incident Channel
 
 DS_RSS_FEED = "https://discordstatus.com/history.rss"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
@@ -64,17 +70,22 @@ class Incident:
             kwargs |= {'message_id': MISSING}
         return cls(**kwargs)
 
-    async def update(self, cog: DiscordStatus, state: State) -> None:
-        self.updates.insert(0, state)
-        self.last_updated_at = state.started_at
+    async def update_message(self, config: ShortStatusConfig):
+        state = self.updates[0]
 
-        message = await cog.channel.fetch_message(self.message_id)
+        message = await config.get_message()
         embed = message.embeds[0]
         embed.add_field(name=f"{STATE_EMOJI.get(state.state.lower())} {state.state} "
                              f"({discord.utils.format_dt(state.started_at, 'R')})",
                         value=state.text, inline=False)
         embed.colour = EMBED_COLOR.get(state.state.lower())
         await message.edit(embed=embed)
+
+    def update(self, states: list[State]) -> None:
+        new_incidents = set(states) - set(self.updates)
+        if new_incidents:
+            self.updates.insert(0, *new_incidents)
+            self.last_updated_at = new_incidents[0].started_at
 
     def build_embed(self) -> discord.Embed:
         updates = self.updates.copy()
@@ -99,25 +110,40 @@ class Incident:
         return dataclasses.asdict(self)
 
 
+class ShortStatusConfig(PostgresItem):
+    bot: Percy
+
+    id: int
+    dstatus_notification_channel: Optional[int]
+    dstatus_last_incident: Optional[Incident | dict]
+
+    def __init__(self, bot: Percy, **kwargs):
+        self.bot: Percy = bot
+
+        super().__init__(**kwargs)
+        self.dstatus_last_incident = Incident(**self.dstatus_last_incident) if self.dstatus_last_incident else None
+
+    def get_channel(self) -> Optional[discord.TextChannel]:
+        if not self.dstatus_notification_channel:
+            return None
+        return self.bot.get_channel(self.dstatus_notification_channel)
+
+    async def get_message(self) -> Optional[discord.Message]:
+        channel = self.get_channel()
+        if not channel:
+            return None
+        return await channel.fetch_message(self.dstatus_last_incident.message_id)
+
+
 class DiscordStatus(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self._last_incident: Incident = MISSING
-        # self.config: config_file = config_file("dstatus")
-
     async def cog_load(self) -> None:
-        record = self.bot.data_storage.get("last_incident")
-        if record:
-            self._last_incident = Incident(**record)
         self.check_new_incident.start()
 
     async def cog_unload(self) -> None:
         self.check_new_incident.stop()
-
-    @discord.utils.cached_property
-    def channel(self) -> discord.TextChannel:
-        return self.bot.get_channel(DSTATUS_CHANNEL_ID)
 
     @executor
     def parse_feed(self, feed: str) -> Optional[feedparser.FeedParserDict]:
@@ -125,6 +151,62 @@ class DiscordStatus(commands.Cog):
         if parsed:
             return parsed
         return None
+
+    @command(commands.hybrid_group, name="discord-status", fallback="subscribe",
+             aliases=["dstatus"], description="Subscribe/Unsubscribe to Discord Status updates.")
+    @command_permissions(user=PermissionTemplate.mod)
+    @commands.guild_only()
+    async def dstatus(self, ctx: GuildContext, channel: Optional[discord.TextChannel] = None):
+        """Subscribes to Discord Status updates.
+
+        Leave the channel empty to unsubscribe.
+        """
+
+        if not channel:
+            query = """
+                INSERT INTO guild_config (id) VALUES($1) ON CONFLICT DO 
+                UPDATE SET dstatus_notification_channel = NULL, dstatus_last_incident = DEFAULT WHERE id = $1
+            """
+            result = await ctx.db.execute(query, ctx.guild.id)
+            if result == "UPDATE 0":
+                return await ctx.send(f"{ctx.tick(False)} You are not subscribed to Discord Status updates.")
+
+            self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
+            return await ctx.send(f"{ctx.tick(True)} Successfully unsubscribed from Discord Status updates.")
+
+        query = """
+            INSERT INTO guild_config (id, dstatus_notification_channel) VALUES($1, $2) ON CONFLICT DO
+            UPDATE SET dstatus_notification_channel = $2 WHERE id = $1
+        """
+        await ctx.db.execute(query, ctx.guild.id, channel.id)
+        await ctx.send(f"{ctx.tick(True)} Successfully subscribed to Discord Status updates in {channel.mention}.")
+
+        self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
+
+    @cache.cache()
+    async def get_all_subscribers(self, *, connection: Optional[asyncpg.Connection] = None) -> list[ShortStatusConfig]:
+        """Gets all channels subscribed to Discord Status updates."""
+        conn = connection or self.bot.pool
+
+        query = """
+            SELECT id, dstatus_notification_channel, dstatus_last_incident
+            FROM guild_config
+            WHERE dstatus_notification_channel IS NOT NULL;
+        """
+        records = await conn.fetch(query)
+
+        return [ShortStatusConfig(self.bot, record=record) for record in records]
+
+    async def bulk_update_last_incident(self, subscribers: list[ShortStatusConfig]) -> None:
+        """Updates the last incident for the given subscribers."""
+        query = """
+            UPDATE guild_config
+            SET dstatus_last_incident = $1
+            WHERE id = $2;
+        """
+        for subscriber in subscribers:
+            await subscriber.dstatus_last_incident.update_message(subscriber)
+            await self.bot.pool.execute(query, subscriber.dstatus_last_incident.as_dict(), subscriber.id)
 
     @tasks.loop(minutes=5)
     async def check_new_incident(self):
@@ -141,7 +223,7 @@ class DiscordStatus(commands.Cog):
             soup = BeautifulSoup(string, "html.parser")
             find = soup.find_all("p")
 
-            cache = []
+            states = []
             for p in find:
                 TIMESTAMP_REGEX = re.compile(
                     r"(?P<month>\w+)\s+(?P<day>\d+),\s+(?P<hour>\d+):(?P<minute>\d+)\s+(?P<tzinfo>\w{3})")
@@ -151,36 +233,49 @@ class DiscordStatus(commands.Cog):
 
                 state, text = text.split(" - ", 1)
                 dt = parse(match).astimezone(datetime.timezone.utc)
-                cache.append(State(started_at=dt, state=state, text=text))
+                states.append(State(started_at=dt, state=state, text=text))
 
-            return cache
+            return states
 
         incidents: list[State] = await bs4(entry.summary)
 
-        if self._last_incident is not MISSING and entry.title == self._last_incident.title:
-            if len(incidents) == len(self._last_incident.updates):
-                return
+        to_update = []
+        to_insert = []
 
-            await self._last_incident.update(self, incidents[0])
-            await self.bot.data_storage.put("last_incident", self._last_incident.as_dict())
-            return
+        for config in await self.get_all_subscribers():
+            if config.dstatus_last_incident:
+                if config.dstatus_last_incident.title == entry.title:
+                    if len(incidents) == len(config.dstatus_last_incident.updates):
+                        continue
 
-        incident = Incident.temporary(
-            status=incidents[0].state,
-            link=entry.link,
-            published_at=parse(entry.published).astimezone(datetime.timezone.utc),
-            last_updated_at=incidents[0].started_at,
-            title=entry.title,
-            updates=incidents
-        )
+                    config.dstatus_last_incident.update(incidents)
+                    to_update.append(config)
+                else:
+                    to_insert.append(config)
 
-        message = await self.channel.send(content=f"<@&{PH_HEAD_DEV_ROLE_ID}>", embed=incident.build_embed(),
-                                          allowed_mentions=discord.AllowedMentions(roles=True))
+        if to_update:
+            await self.bulk_update_last_incident(to_update)
 
-        incident.message_id = message.id
-        self._last_incident = incident
+        if to_insert:
+            incident = Incident.temporary(
+                status=incidents[0].state,
+                link=entry.link,
+                published_at=parse(entry.published).astimezone(datetime.timezone.utc),
+                last_updated_at=incidents[0].started_at,
+                title=entry.title,
+                updates=incidents
+            )
+            for config in to_insert:
+                channel = config.get_channel()
+                if channel:
+                    message = await channel.send(embed=incident.build_embed())
+                    incident.message_id = message.id
+                config.dstatus_last_incident = incident
 
-        await self.bot.data_storage.put("last_incident", self._last_incident.as_dict())
+            await self.bulk_update_last_incident(to_insert)
+
+        if to_insert or to_update:
+            self.get_all_subscribers.invalidate()
 
 
 async def setup(bot: Percy) -> None:

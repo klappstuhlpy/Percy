@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 
 from bot import Percy
 from cogs import command, command_permissions
-from cogs.mod import ModConfig, AutoModFlags
+from cogs.mod import GuildConfig, AutoModFlags
 from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
 from cogs.utils.helpers import PostgresItem
@@ -299,7 +299,7 @@ class Leveling(commands.Cog):
     @command_permissions(user=["administrator"])
     async def toggle(self, ctx: GuildContext) -> None:
         """Toggle leveling on or off."""
-        config: ModConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
         if config.flags.leveling:
             update = f'flags = guild_mod_config.flags & ~{AutoModFlags.leveling.flag}'
             content = f"Leveling is now **disabled** for {ctx.guild.name}."

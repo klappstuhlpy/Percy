@@ -18,7 +18,7 @@ from bot import Percy
 from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
 from launcher import get_logger
-from . import command, command_permissions
+from . import command, command_permissions, PermissionTemplate
 from .utils import timetools, cache, helpers
 from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity
@@ -29,7 +29,7 @@ from .utils.constants import IgnoreableEntity
 if TYPE_CHECKING:
     class ModGuildContext(GuildContext):
         cog: Mod
-        guild_config: ModConfig
+        guild_config: GuildConfig
 
 log = get_logger(__name__)
 
@@ -63,7 +63,7 @@ class LockdownTimer(Timer):
     pass
 
 
-class ModConfig:
+class GuildConfig:
     __slots__ = (
         'flags',
         'id',
@@ -74,6 +74,8 @@ class ModConfig:
         'poll_channel_id',
         'poll_ping_role_id',
         'poll_reason_channel_id',
+        'dstatus_notification_channel_id',
+        'dstatus_last_incident',
         'mention_count',
         'safe_automod_entity_ids',
         'mute_role_id',
@@ -92,6 +94,9 @@ class ModConfig:
     poll_channel_id: Optional[int]
     poll_ping_role_id: Optional[int]
     poll_reason_channel_id: Optional[int]
+
+    dstatus_notification_channel_id: Optional[int]
+    dstatus_last_incident: Optional[dict]
 
     mention_count: Optional[int]
     safe_automod_entity_ids: set[int]
@@ -112,6 +117,8 @@ class ModConfig:
         self.poll_channel_id = record['poll_channel']
         self.poll_ping_role_id = record['poll_ping_role_id']
         self.poll_reason_channel_id = record['poll_reason_channel']
+        self.dstatus_notification_channel_id = record['dstatus_notification_channel']
+        self.dstatus_last_incident = record['dstatus_last_incident']
         self.mention_count = record['mention_count']
         self.safe_automod_entity_ids = set(record['safe_automod_entity_ids'] or [])
         self.muted_members = set(record['muted_members'] or [])
@@ -413,7 +420,7 @@ class SpamChecker:
         self.fast_joiners: MutableMapping[int, bool] = cache.ExpiringCache(seconds=1800.0)
         self.hit_and_run = commands.CooldownMapping.from_cooldown(10, 12, commands.BucketType.channel)
 
-    def by_mentions(self, config: ModConfig) -> Optional[commands.CooldownMapping]:
+    def by_mentions(self, config: GuildConfig) -> Optional[commands.CooldownMapping]:
         if not config.mention_count:
             return None
 
@@ -467,7 +474,7 @@ class SpamChecker:
             self.fast_joiners[member.id] = True
         return is_fast
 
-    def is_mention_spam(self, message: discord.Message, config: ModConfig) -> bool:
+    def is_mention_spam(self, message: discord.Message, config: GuildConfig) -> bool:
         mapping = self.by_mentions(config)
         if mapping is None:
             return False
@@ -535,10 +542,10 @@ class Mod(commands.Cog):
 
     async def bulk_insert(self):
         query = """
-            UPDATE guild_mod_config
+            UPDATE guild_config
                 SET muted_members = x.result_array
             FROM jsonb_to_recordset($1::jsonb) AS x(guild_id BIGINT, result_array BIGINT[])
-            WHERE guild_mod_config.id = x.guild_id;
+            WHERE guild_config.id = x.guild_id;
         """
 
         if not self._data_batch:
@@ -589,15 +596,25 @@ class Mod(commands.Cog):
             self.message_batches.clear()
 
     @cache.cache()
-    async def get_guild_config(self, guild_id: int) -> Optional[ModConfig]:
-        query = "SELECT * FROM guild_mod_config WHERE id=$1;"
+    async def get_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+        query = "SELECT * FROM guild_config WHERE id=$1;"
         async with self.bot.pool.acquire(timeout=300.0) as con:
             record = await con.fetchrow(query, guild_id)
             if record is not None:
-                return ModConfig.from_record(record, self.bot)
+                return GuildConfig.from_record(record, self.bot)
             return None
 
-    async def check_raid(self, config: ModConfig, guild_id: int, member: discord.Member,
+    async def create_raw_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+        """Create a new guild config if there is no one in the database."""
+        query = "INSERT INTO guild_config (id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *;"
+        async with self.bot.pool.acquire(timeout=300.0) as con:
+            async with con.transaction():
+                result = await con.execute(query, guild_id)
+                if result is None:
+                    return None
+                return GuildConfig.from_record(result, self.bot)
+
+    async def check_raid(self, config: GuildConfig, guild_id: int, member: discord.Member,
                          message: discord.Message) -> None:
         if not config.flags.raid:
             return
@@ -718,7 +735,7 @@ class Mod(commands.Cog):
         if config is None or config.mute_role_id != role.id:
             return
 
-        query = "UPDATE guild_mod_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
+        query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.bot.pool.execute(query, guild_id)
         self.get_guild_config.invalidate(self, guild_id)
 
@@ -730,14 +747,14 @@ class Mod(commands.Cog):
         description="Show current Moderation (automatic moderation) behaviour on the server."
     )
     @commands.guild_only()
-    @command_permissions(user=["ban_members", "manage_messages"])
+    @command_permissions(user=PermissionTemplate.mod)
     async def moderation(self, ctx: GuildContext):
         """Show current Moderation (Automatic Moderation) behavior on the server.
         You must have Ban Members and Manage Messages permissions to use this
         command or its subcommands.
         """
 
-        config: ModConfig = await self.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if config is None:
             return await ctx.send(f'{ctx.tick(False)} This server does not have Moderation set up.')
 
@@ -793,7 +810,7 @@ class Mod(commands.Cog):
         fallback="channel",
         description="Toggles audit text log on the server."
     )
-    @command_permissions(user=["ban_members", "manage_messages"])
+    @command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(
         channel='The channel to broadcast audit log messages to. The bot must be able to create webhooks in it.'
     )
@@ -803,7 +820,7 @@ class Mod(commands.Cog):
         """
 
         await ctx.defer()
-        config: ModConfig = await self.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if config.flags.audit_log:
             await ctx.send(
                 f'<:redTick:1079249771975413910> You already have audit logging enabled. To disable, use "`{ctx.prefix}moderation disable Audit Logging`"'
@@ -824,10 +841,10 @@ class Mod(commands.Cog):
             return
 
         query = """
-            INSERT INTO guild_mod_config (id, flags, audit_log_channel, audit_log_webhook_url, audit_log_flags)
+            INSERT INTO guild_config (id, flags, audit_log_channel, audit_log_webhook_url, audit_log_flags)
                 VALUES ($1, $2, $3, $4, DEFAULT) ON CONFLICT (id)
                 DO UPDATE SET
-                   flags = guild_mod_config.flags | EXCLUDED.flags,
+                   flags = guild_config.flags | EXCLUDED.flags,
                    audit_log_channel = EXCLUDED.audit_log_channel,
                    audit_log_webhook_url = EXCLUDED.audit_log_webhook_url,
                    audit_log_flags = DEFAULT;
@@ -850,7 +867,7 @@ class Mod(commands.Cog):
         """Configures the audit log events.
         You can set the Events you want to get notified about via the Audit Log Channel.
         """
-        config: ModConfig = await self.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if not config.flags.audit_log:
             return await ctx.send(
                 "<:redTick:1079249771975413910> You do not have audit logging enabled. To enable, use `moderation auditlog`."
@@ -867,7 +884,7 @@ class Mod(commands.Cog):
             else:
                 return await ctx.send("<:redTick:1079249771975413910> That is not a valid flag.")
 
-        query = "UPDATE guild_mod_config SET audit_log_flags = $2 WHERE id = $1;"
+        query = "UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;"
         await ctx.db.execute(query, ctx.guild.id, config.audit_log_flags)
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.send(content)
@@ -876,7 +893,7 @@ class Mod(commands.Cog):
     async def moderation_auditlog_alter_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT audit_log_flags AS flags FROM guild_mod_config WHERE id = $1;"
+        query = "SELECT audit_log_flags AS flags FROM guild_config WHERE id = $1;"
         results: Record = await self.bot.pool.fetchrow(query, interaction.guild_id)
 
         flags: dict[str, bool] = results.get("flags")
@@ -898,7 +915,7 @@ class Mod(commands.Cog):
         name="disable",
         description="Disables Moderation on the server.",
     )
-    @command_permissions(user=["ban_members", "manage_messages"])
+    @command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(protection='The protection to disable')
     @app_commands.choices(
         protection=[
@@ -925,19 +942,19 @@ class Mod(commands.Cog):
             updates = 'flags = 0, mention_count = 0, broadcast_channel = NULL, audit_log_channel = NULL'
             message = 'Moderation has been disabled.'
         elif protection == 'raid':
-            updates = f'flags = guild_mod_config.flags & ~{AutoModFlags.raid.flag}'
+            updates = f'flags = guild_config.flags & ~{AutoModFlags.raid.flag}'
             message = 'Raid protection has been disabled.'
         elif protection == 'mentions':
             updates = 'mention_count = NULL'
             message = 'Mention spam protection has been disabled'
         elif protection == 'auditlog':
-            updates = f"flags = guild_mod_config.flags & ~{AutoModFlags.audit_log.flag}"
+            updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}"
             updates += ", audit_log_channel = NULL, audit_log_flags = NULL"
             message = 'Audit logging has been disabled.'
         else:
             raise commands.BadArgument(f'Unknown protection {protection}')
 
-        query = f'UPDATE guild_mod_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url'
+        query = f'UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url'
 
         guild_id = ctx.guild.id
         records = await self.bot.pool.fetchrow(query, guild_id)
@@ -962,7 +979,7 @@ class Mod(commands.Cog):
         name="raid",
         description="Toggles raid protection on the server.",
     )
-    @command_permissions(user=["ban_members", "manage_messages"])
+    @command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
     async def moderation_raid(self, ctx: GuildContext, enabled: Optional[bool] = None):
         """Toggles raid protection on the server.
@@ -974,13 +991,13 @@ class Mod(commands.Cog):
             return await ctx.send('<:redTick:1079249771975413910> I do not have permissions to ban members.')
 
         query = """
-            INSERT INTO guild_mod_config (id, flags)
+            INSERT INTO guild_config (id, flags)
             VALUES ($1, $2) ON CONFLICT (id)
             DO UPDATE SET
                 -- If we're toggling then we need to negate the previous result
-                flags = CASE COALESCE($3, NOT (guild_mod_config.flags & $2 = $2))
-                                WHEN TRUE THEN guild_mod_config.flags | $2
-                                WHEN FALSE THEN guild_mod_config.flags & ~$2
+                flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
+                                WHEN TRUE THEN guild_config.flags | $2
+                                WHEN FALSE THEN guild_config.flags & ~$2
                         END
             RETURNING COALESCE($3, (flags & $2 = $2));
         """
@@ -997,7 +1014,7 @@ class Mod(commands.Cog):
         description="Enables auto-banning accounts that spam more than \"count\" mentions.",
     )
     @commands.guild_only()
-    @command_permissions(user=["ban_members", "manage_messages"])
+    @command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
         """Enables auto-banning accounts that spam more than "count" mentions.
@@ -1009,7 +1026,7 @@ class Mod(commands.Cog):
         """
 
         query = """
-            INSERT INTO guild_mod_config (id, mention_count, safe_automod_entity_ids)
+            INSERT INTO guild_config (id, mention_count, safe_automod_entity_ids)
             VALUES ($1, $2, '{}')
             ON CONFLICT (id) DO UPDATE SET
                mention_count = $2;
@@ -1040,7 +1057,7 @@ class Mod(commands.Cog):
         """
 
         query = """
-            UPDATE guild_mod_config
+            UPDATE guild_config
             SET safe_automod_entity_ids =
                ARRAY(SELECT DISTINCT * FROM unnest(COALESCE(safe_automod_entity_ids, '{}') || $2::bigint[]))
             WHERE id = $1;
@@ -1076,7 +1093,7 @@ class Mod(commands.Cog):
             return await ctx.send('<:redTick:1079249771975413910> Missing entities to unignore.')
 
         query = """
-            UPDATE guild_mod_config
+            UPDATE guild_config
             SET safe_automod_entity_ids =
                ARRAY(SELECT element FROM unnest(safe_automod_entity_ids) AS element
                      WHERE NOT(element = ANY($2::bigint[])))
@@ -1390,7 +1407,7 @@ class Mod(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space separated list of text or voice channels to lock down')
     async def lockdown(
@@ -1462,7 +1479,7 @@ class Mod(commands.Cog):
         description='Locks down specific channels for a specified amount of timetools.',
     )
     @commands.guild_only()
-    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
@@ -1552,7 +1569,7 @@ class Mod(commands.Cog):
         description='Ends all lockdowns set.',
     )
     @commands.guild_only()
-    @command_permissions(user=["ban_members", "manage_messages"], bot=["manage_roles"])
+    @command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
@@ -2043,7 +2060,7 @@ class Mod(commands.Cog):
         await guild.unban(discord.Object(id=member_id), reason=reason)
 
     async def update_mute_role(
-            self, ctx: GuildContext, config: Optional[ModConfig], role: discord.Role, *, merge: bool = False
+            self, ctx: GuildContext, config: Optional[GuildConfig], role: discord.Role, *, merge: bool = False
     ) -> None:
         guild = ctx.guild
         if config and merge:
@@ -2059,7 +2076,7 @@ class Mod(commands.Cog):
             members = set()
 
         members.update(map(lambda m: m.id, role.members))
-        query = """INSERT INTO guild_mod_config (id, mute_role_id, muted_members)
+        query = """INSERT INTO guild_config (id, mute_role_id, muted_members)
                    VALUES ($1, $2, $3::bigint[]) ON CONFLICT (id)
                    DO UPDATE SET
                        mute_role_id = EXCLUDED.mute_role_id,
@@ -2415,7 +2432,7 @@ class Mod(commands.Cog):
             return await ctx.send(f'<:redTick:1079249771975413910> An error happened: {e}')
 
         query = """
-            INSERT INTO guild_mod_config (id, mute_role_id)
+            INSERT INTO guild_config (id, mute_role_id)
             VALUES ($1, $2) ON CONFLICT (id)
             DO UPDATE SET
                mute_role_id = EXCLUDED.mute_role_id;
@@ -2460,7 +2477,7 @@ class Mod(commands.Cog):
             if not confirm:
                 return
 
-        query = "UPDATE guild_mod_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
+        query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.bot.pool.execute(query, guild_id)
         self.get_guild_config.invalidate(self, guild_id)
         await ctx.send('<:greenTick:1079249732364406854> Successfully unbound mute role.')

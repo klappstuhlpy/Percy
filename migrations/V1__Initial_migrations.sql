@@ -2,14 +2,20 @@
 -- Creation Date: 2023-03-28 13:14:25.528617 UTC
 -- Reason: Initial migrations
 
-CREATE TABLE IF NOT EXISTS guild_mod_config (
+CREATE TABLE IF NOT EXISTS guild_config (
     id BIGINT PRIMARY KEY,
-    raid_mode SMALLINT,
-    broadcast_channel BIGINT,
     mention_count SMALLINT,
-    safe_mention_channel_ids BIGINT ARRAY,
+    safe_automod_entity_ids BIGINT ARRAY,
     mute_role_id BIGINT,
-    muted_members BIGINT ARRAY
+    muted_members BIGINT ARRAY,
+    audit_log_channel BIGINT,
+    audit_log_flags JSONB DEFAULT ('{}'::jsonb),
+    audit_log_webhook_url TEXT,
+    poll_channels BIGINT,
+    poll_ping_role_id BIGINT,
+    poll_reason_channel BIGINT,
+    dstatus_notification_channel BIGINT,
+    dstatus_last_incident JSONB DEFAULT ('{}'::jsonb)
 );
 
 CREATE TABLE IF NOT EXISTS tags (

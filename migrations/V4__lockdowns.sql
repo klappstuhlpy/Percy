@@ -2,8 +2,6 @@
 -- Creation Date: 2023-03-28 13:19:24.941121 UTC
 -- Reason: lockdowns
 
-ALTER TABLE guild_mod_config RENAME COLUMN safe_automod_channel_ids TO safe_automod_entity_ids;
-
 CREATE TABLE IF NOT EXISTS guild_lockdowns (
     guild_id BIGINT NOT NULL,
     channel_id BIGINT NOT NULL,
