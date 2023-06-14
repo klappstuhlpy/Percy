@@ -47,6 +47,7 @@ class PermissionTemplate:
 
     bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
                           "view_channel", "read_message_history"]
+    user: ClassVar[str] = []  # Placeholder
     mod: ClassVar[str] = ["ban_members", "manage_messages"]
     admin: ClassVar[str] = ["administrator"]
     manager: ClassVar[str] = ["manage_guild"]
@@ -55,8 +56,8 @@ class PermissionTemplate:
 def command_permissions(
         category: CommandCategory | int = CommandCategory.Hybrid,
         *,
-        user: Optional[List[str]] = [],
-        bot: Optional[List[str]] = PermissionTemplate.bot
+        user: Optional[List[str] | str] = PermissionTemplate.user,
+        bot: Optional[List[str] | str] = PermissionTemplate.bot
 ) -> Callable[[T], T]:
     r"""A custom decorator that allows you to assign permission for the bot and user.
 
@@ -126,15 +127,15 @@ def command(
         description: Union[str, locale_str] = "Command undocumented.",
         examples: List[str] = None,
         nsfw: bool = False,
-        extras: Dict[Any, Any] = None,
+        extras: Dict[str, Any] = None,
         raw: bool = False,
         **kwargs
 ):
     r"""A custom decorator that assigns a function as a command.
 
-    This decorator merges the functionality of :func:`commands.command`,
-    :func:`commands.group`, and :func:`commands.hybrid_command` :func:`commands.hybrid_command and
-    :func:`app_commands.command` for easier accessibility.
+    This decorator merges the functionality of ``commands.command``,
+    ``commands.group``, ``commands.hybrid_command``, ``commands.hybrid_command`` and
+    ``app_commands.command`` for easier accessibility.
 
     Note
     ----
@@ -142,13 +143,14 @@ def command(
     module and function name of the command. This is used for handling the correct permission checks for every command type.
 
     It also adds a :class:`PermissionTemplate` that can be modified with the :func:`command_permissions` decorator.
+    Default permissions are set to ``PermissionTemplate.user`` for the user and ``PermissionTemplate.bot`` for the bot.
 
     Parameters
     ----------
     func: AnyCommand
-        The command type to use. Defaults to :func:`discord.ext.commands.hybrid_command`.
+        The command type to use. Defaults to ``discord.ext.commands.hybrid_command``.
     name: Optional[str]
-        The name of the command. Defaults to ``func.__name__``.
+        The name of the command. Defaults to the name of the function ``func.__name__``.
     description: Union[str, locale_str]
         The description of the command. Defaults to ``"Command undocumented."``.
     examples: List[str]
@@ -156,19 +158,19 @@ def command(
     nsfw: bool
         Whether or not the command is NSFW. Defaults to ``False``.
     extras: Dict[Any, Any]
-        A dictionary of extra information to be stored in the command. Defaults to ``MISSING``.
+        A dictionary of extra information to be stored in the command. Defaults to ``None``.
     raw: bool
-        Whether or not to return the command without an applied :class:`PermissionTemplate`.
+        Whether to or not to return the command with an applied :class:`PermissionTemplate`.
     **kwargs
         Any keyword arguments to be passed to the command type.
 
     Returns
     -------
     AnyCommand
-        The wrapped command with the optional applied :class:`PermissionTemplate`.
+        The wrapped command with or without the applied :class:`PermissionTemplate`.
     """
 
-    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
+    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])  # Searching for filename of the position from the function
     if not extras:
         extras = {}
 
