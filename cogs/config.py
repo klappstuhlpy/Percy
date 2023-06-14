@@ -12,7 +12,7 @@ from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command, command_permissions
 from .utils import cache
 from .utils.converters import aenumerate
-from .utils.formats import plural, plonk_iterator
+from .utils.formats import plonk_iterator
 
 if TYPE_CHECKING:
     from typing_extensions import TypeAlias

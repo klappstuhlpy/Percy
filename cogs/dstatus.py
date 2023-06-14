@@ -244,8 +244,6 @@ class DiscordStatus(commands.Cog):
                 if config.dstatus_last_incident.title == entry.title:
                     if len(incidents) == len(config.dstatus_last_incident.updates):
                         continue
-
-                    config.dstatus_last_incident.update(incidents)
                     to_update.append(config)
                 else:
                     to_insert.append(config)

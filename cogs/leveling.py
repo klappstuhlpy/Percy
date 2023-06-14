@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import random
-from typing import Optional, TypedDict, Iterable
+from typing import Optional, TypedDict
 
 import asyncpg
 import discord
@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from cogs import command, command_permissions
+from cogs import command, command_permissions, PermissionTemplate
 from cogs.mod import GuildConfig, AutoModFlags
 from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
@@ -297,7 +297,7 @@ class Leveling(commands.Cog):
 
     @command(level.command, description="Toggle leveling on or off.")
     @commands.guild_only()
-    @command_permissions(user=["administrator"])
+    @command_permissions(user=PermissionTemplate.manager)
     async def toggle(self, ctx: GuildContext) -> None:
         """Toggle leveling on or off."""
         config: GuildConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
@@ -325,7 +325,8 @@ class Leveling(commands.Cog):
         e.set_footer(text='Level Statistics for this Server.')
 
         if not records:
-            e.description = '*There are no statistics available.*'
+            e.add_field(name=f'**TOP 3 TEXT 💬**', value='*There are no statistics for this category available.*',
+                        inline=False)
         else:
             value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.messages}** messages)'
                      for emoji, record in medal_emojize(records)]
@@ -335,9 +336,13 @@ class Leveling(commands.Cog):
         query = "SELECT * FROM levels WHERE guild_id = $1 AND voice_minutes > 0 ORDER BY voice_minutes DESC LIMIT 3;"
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
-        value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
-                 for emoji, record in medal_emojize(records)]
-        e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='\n'.join(value), inline=False)
+        if not records:
+            e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='*There are no statistics for this category available.*',
+                        inline=False)
+        else:
+            value = [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
+                     for emoji, record in medal_emojize(records)]
+            e.add_field(name=f'**TOP 3 VOICE 🎙️**', value='\n'.join(value), inline=False)
 
         await ctx.send(embed=e)
 
