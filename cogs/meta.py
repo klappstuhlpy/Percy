@@ -564,6 +564,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         flags = command.clean_params.get('flags')
         resolved = set()
 
+        if not flags:
+            return []
+
         if descripted:
             for flag in flags.converter.get_flags().values():
                 fmt = f'`--{flag.name}` - {flag.description}'
@@ -606,19 +609,21 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         resolved: dict[str, list] = {}
 
-        resolved.setdefault('user', [])
-        for perm in user_permissions:
-            resolved['user'].append(perm)
+        if user_permissions:
+            resolved.setdefault('user', [])
+            for perm in user_permissions:
+                resolved['user'].append(perm)
 
-        resolved.setdefault('bot', [])
-        for perm in bot_permissions:
-            resolved['bot'].append(perm)
+        if bot_permissions:
+            resolved.setdefault('bot', [])
+            for perm in bot_permissions:
+                resolved['bot'].append(perm)
 
         if stringified:
-            return (
-                f"User: {', '.join(fmt(p) for p in resolved['user'])}\n"
-                f"Bot: {', '.join(fmt(p) for p in resolved['bot'])}"
-            )
+            string: str = ''
+            for group, perms in resolved.items():
+                string += f"{group.title()}: {', '.join(fmt(p) for p in perms)}\n"
+            return string
         else:
             return resolved
 
