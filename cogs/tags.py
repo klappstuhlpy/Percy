@@ -879,14 +879,16 @@ class Tags(commands.Cog):
         rows = await ctx.db.fetch(query, ctx.guild.id, member.id)
 
         if rows:
-            embed = discord.Embed(color=self.bot.colour.darker_red())
-            embed.set_author(name=f'{member}\'s Tags in {ctx.guild.name}', icon_url=member.display_avatar.url)
-            embed.set_footer(text=f'{plural(len(rows)):tag}')
+            embed = discord.Embed(title="Tag Search",
+                                  description=f"**{member}'s** Tags in {ctx.guild.name}",
+                                  colour=helpers.Colour.darker_red(),
+                                  timestamp=discord.utils.utcnow())
+            embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
 
             results = [f"`{index}.` {entry}" for index, entry in
                        enumerate([TagPageEntry(record=row) for row in rows], 1)]
             await LinePaginator.start(
-                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
+                ctx, entries=results, search_for=True, per_page=20, embed=embed
             )
         else:
             await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
@@ -1002,7 +1004,7 @@ class Tags(commands.Cog):
 
         if rows:
             embed = discord.Embed(title="Tag Search",
-                                  description=f"Sorted by: **{flags.query}**",
+                                  description=f"Sorted by: **{flags.sort}**",
                                   colour=helpers.Colour.darker_red(),
                                   timestamp=discord.utils.utcnow())
             embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
