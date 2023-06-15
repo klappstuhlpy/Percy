@@ -767,8 +767,8 @@ class Tags(commands.Cog):
         embed.set_thumbnail(url=user.avatar.url)
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
 
-        embed.add_field(name='**OWNER** <:owner:1110273602324005025>', value=f'<@{owner_id}>')
-        embed.add_field(name='**LINKED TO** \N{LINK SYMBOL}', value=record['name'])
+        embed.add_field(name='**Owner**', value=f'<@{owner_id}>')
+        embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=record['name'])
         await ctx.send(embed=embed)
 
     async def _send_tag_info(self, ctx: GuildContext, record: asyncpg.Record):
@@ -783,7 +783,7 @@ class Tags(commands.Cog):
         embed.set_thumbnail(url=user.avatar.url)
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
 
-        embed.add_field(name='**OWNER** <:owner:1110273602324005025>', value=f'<@{owner_id}>', inline=False)
+        embed.add_field(name='**Owner**', value=f'<@{owner_id}>', inline=False)
 
         query = """
             SELECT (
@@ -799,9 +799,13 @@ class Tags(commands.Cog):
         rank = await ctx.db.fetchrow(query, record['id'])
 
         if rank is not None:
-            embed.add_field(name='**RANK** ⚜️', value=f"**#{rank['rank']}**")
+            text = '**Rank**'
+            if rank['rank'] in (1, 2, 3):
+                text += f' {chr(129351 + int(rank["rank"]))}'
 
-        embed.add_field(name='**TIMES USED**', value=record['uses'])
+            embed.add_field(name=text, value=f"**#{rank['rank']}**")
+
+        embed.add_field(name='**Tag Used**', value=record['uses'])
 
         query = """
             SELECT COUNT(*) AS count
@@ -811,7 +815,7 @@ class Tags(commands.Cog):
         """
         alias_count = await self.bot.pool.fetchrow(query, record['id'], record["name"], ctx.guild.id)
 
-        embed.add_field(name="**ALIASES**", value=alias_count['count'])
+        embed.add_field(name="**Aliases**", value=alias_count['count'])
 
         await ctx.send(embed=embed)
 
