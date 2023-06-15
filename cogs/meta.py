@@ -26,8 +26,7 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, CoreCommand, \
-    HybridCommand, AppCommand
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, App, Core
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -351,7 +350,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     async def total_commands_invoked(self) -> int:
         query = "SELECT COUNT(*) as total FROM commands;"
-        return await self.context.client.pool.fetchval(query)  # type: ignore
+        return 0#await self.context.client.pool.fetchval(query)  # type: ignore
 
     async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):  # noqa
         """|coro|
@@ -400,7 +399,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             *,
             sort: bool = False,
             key: Optional[Callable] = lambda c: c.name,
-            escape_hidden: bool = True
+            escape_hidden: bool = False
     ) -> List[PartialCommand]:
         """|coro|
 
@@ -433,32 +432,41 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 continue
 
             if isinstance(cmd, PartialCommandGroup):
-                if isinstance(cmd, commands.Group):
+                if isinstance(cmd, (Hybrid, Core)):
                     if is_hidden(cmd):
-                        continue
-                for subcmd in cmd.commands:
-                    if subcmd.qualified_name in resolved_names:
-                        continue
-                    if isinstance(subcmd, PartialCommandGroup):
-                        for subsubcmd in subcmd.commands:  # type: ignore
-                            if subsubcmd.qualified_name in resolved_names:
-                                continue
-                            resolved.append(subsubcmd)
-                            resolved_names.add(subsubcmd.qualified_name)
-                    else:
-                        resolved.append(subcmd)
-                        resolved_names.add(subcmd.qualified_name)
-                resolved.append(cmd)
-            else:
-                if isinstance(cmd, (HybridCommand, CoreCommand)):
-                    if is_hidden(cmd):
-                        continue
-                if isinstance(cmd, AppCommand):
-                    if cmd.name in resolved_names:
                         continue
 
-                resolved.append(cmd)
-                resolved_names.add(cmd.name)
+                if isinstance(cmd, PartialCommandGroup):
+                    for subcmd in cmd.commands:
+                        if (
+                            isinstance(subcmd, commands.hybrid.HybridAppCommand)
+                            or subcmd.qualified_name in resolved_names
+                            or subcmd.name in resolved_names
+                            or isinstance(subcmd, (Hybrid, Core)) and is_hidden(subcmd)
+                        ):
+                            continue
+
+                        if isinstance(subcmd, PartialCommandGroup):
+                            for subsubcmd in subcmd.commands:
+                                if isinstance(subsubcmd, (Hybrid, Core)) and is_hidden(subsubcmd):
+                                    continue
+
+                                if subsubcmd.qualified_name in resolved_names:
+                                    continue
+
+                                resolved.append(subsubcmd)
+                                resolved_names.add(subsubcmd.qualified_name)
+                        else:
+                            resolved.append(subcmd)
+                            resolved_names.add(subcmd.qualified_name)
+
+                    resolved.append(cmd)
+                else:
+                    if isinstance(cmd, commands.hybrid.HybridAppCommand):
+                        continue
+
+                    resolved.append(cmd)
+                    resolved_names.add(cmd.name)
 
         if sort:
             return sorted(resolved, key=key)

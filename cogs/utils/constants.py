@@ -30,9 +30,9 @@ PartialCommandGroup = Union[
 PartialCommand = Union[
     commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
 
-CoreCommand = Union[commands.Command, commands.Group]
-AppCommand = Union[app_commands.commands.Command, app_commands.commands.Group, commands.hybrid.HybridAppCommand]
-HybridCommand = Union[commands.hybrid.HybridCommand, commands.hybrid.Command]
+Core = Union[commands.Command, commands.Group]
+App = Union[app_commands.commands.Command, app_commands.commands.Group, commands.hybrid.HybridAppCommand]
+Hybrid = Union[commands.hybrid.HybridCommand, commands.hybrid.Command, commands.hybrid.Group, commands.hybrid.HybridGroup]
 
 PossibleTarget = Union[
     discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel, discord.StageChannel, discord.GroupChannel,
