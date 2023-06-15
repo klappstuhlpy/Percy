@@ -452,6 +452,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 if isinstance(cmd, commands.Command):
                     if is_hidden(cmd):
                         continue
+                if isinstance(cmd, commands.hybrid.HybridAppCommand):
+                    if cmd.name in resolved_names:
+                        continue
+
                 resolved.append(cmd)
                 resolved_names.add(cmd.name)
 
