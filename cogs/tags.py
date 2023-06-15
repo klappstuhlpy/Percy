@@ -801,7 +801,7 @@ class Tags(commands.Cog):
         if rank is not None:
             text = '**Rank**'
             if rank['rank'] in (1, 2, 3):
-                text += f' {chr(129351 + int(rank["rank"]))}'
+                text += f' {chr(129350 + int(rank["rank"]))}'
 
             embed.add_field(name=text, value=f"**#{rank['rank']}**")
 
