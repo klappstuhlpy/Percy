@@ -19,6 +19,7 @@ import unicodedata
 from dateutil.relativedelta import relativedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
+from discord.utils import _MissingSentinel
 from lru import LRU
 
 from . import command, command_permissions
@@ -26,7 +27,7 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, App, Core
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -392,6 +393,30 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
+    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None):  # noqa
+        """|coro|
+
+        Checks if a command is hidden for a user.
+
+        Parameters
+        ----------
+        command: :class:`.PartialCommand`
+            The command to check.
+        user: Union[:class:`.discord.Member`, :class:`.discord.User`]
+            The user to check for.
+
+        Returns
+        -------
+        bool
+            Whether the command is hidden for the user.
+        """
+        if hasattr(command, 'hidden'):
+            if user is None:
+                return command.hidden
+            is_owner: bool = await self.context.bot.is_owner(user)
+            return command.hidden and not is_owner
+        return False
+
     async def filter_commands(
             self,
             cmd_iter: Iterable[PartialCommand],
@@ -399,7 +424,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
             *,
             sort: bool = False,
             key: Optional[Callable] = lambda c: c.name,
-            escape_hidden: bool = False
     ) -> List[PartialCommand]:
         """|coro|
 
@@ -424,24 +448,24 @@ class PaginatedHelpCommand(commands.HelpCommand):
         resolved = []
         resolved_names = set()
 
-        def is_hidden(cmd: PartialCommand) -> bool:  # noqa
-            return cmd.hidden and escape_hidden
+        if not hasattr(self.context, 'author'):
+            class FakeContext:
+                author = None
+
+            self.context = FakeContext()
 
         for cmd in cmd_iter:
-            if cmd.name in resolved_names:
-                continue
-
             if isinstance(cmd, PartialCommandGroup):
                 if isinstance(cmd, (Hybrid, Core)):
-                    if is_hidden(cmd):
+                    if await self.maybe_hidden(cmd, self.context.author):
                         continue
 
                 for subcmd in cmd.commands:
                     if (
-                        isinstance(subcmd, commands.hybrid.HybridAppCommand)
-                        or subcmd.qualified_name in resolved_names
-                        or subcmd.name in resolved_names
-                        or isinstance(subcmd, (Hybrid, Core)) and is_hidden(subcmd)
+                            isinstance(subcmd, commands.hybrid.HybridAppCommand)
+                            or subcmd.qualified_name in resolved_names
+                            or subcmd.name in resolved_names
+                            or isinstance(subcmd, (Hybrid, Core)) and await self.maybe_hidden(subcmd, self.context.author)
                     ):
                         continue
 
@@ -451,7 +475,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                                     isinstance(subsubcmd, commands.hybrid.HybridAppCommand)
                                     or subsubcmd.qualified_name in resolved_names
                                     or subsubcmd.name in resolved_names
-                                    or isinstance(subsubcmd, (Hybrid, Core)) and is_hidden(subsubcmd)
+                                    or isinstance(subsubcmd, (Hybrid, Core)) and await self.maybe_hidden(subsubcmd, self.context.author)
                             ):
                                 continue
 
@@ -465,8 +489,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     resolved_names.add(cmd.qualified_name)
             else:
                 if (
-                        isinstance(cmd, (Hybrid, Core)) and is_hidden(cmd)
+                        isinstance(cmd, (Hybrid, Core)) and await self.maybe_hidden(cmd, self.context.author)
                         or isinstance(cmd, commands.hybrid.HybridAppCommand)
+                        or cmd.qualified_name in resolved_names
+                        or cmd.name in resolved_names
                 ):
                     continue
 
@@ -477,7 +503,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return sorted(resolved, key=key)
         return resolved
 
-    def get_command_signature(self, command: PartialCommand, cut: bool = False, with_prefix: bool = False) -> str:  # noqa
+    def get_command_signature(self, command: PartialCommand, cut: bool = False,
+                              with_prefix: bool = False) -> str:  # noqa
         """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
 
         This is a modified version of the original get_command_signature.
@@ -531,8 +558,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 return '\U0010ffff'
 
         entries: list[PartialCommand] = await self.filter_commands(
-            self.all_commands, sort=True, key=lambda cmd: key(cmd),
-            escape_hidden=not await self.context.bot.is_owner(self.context.author)
+            self.all_commands, sort=True, key=lambda cmd: key(cmd)
         )
 
         grouped: dict[commands.Cog, list[PartialCommand]] = {}
@@ -557,8 +583,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         """
         entries = await self.filter_commands(
             self.get_cog_commands(cog),
-            sort=True,
-            escape_hidden=not await self.context.bot.is_owner(self.context.author)
+            sort=True
         )
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
 
@@ -658,7 +683,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return resolved
 
-    def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
+    async def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
         """Returns an Embed with the command formatting.
 
         This is a modified version of the original command_formatting.
@@ -674,9 +699,32 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if getattr(command, 'aliases', None):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
+        if isinstance(command, commands.hybrid.HybridGroup):
+            if command.app_command:
+                app_command_group: app_commands.Group = command.app_command
+
+                def partial_signature(group: app_commands.Group) -> str:
+                    resolved = set()
+                    for cmd in group.commands:
+                        signature = ' '.join(
+                            f'<{option.name}>' if option.required else f'[{option.name}]' for option in
+                            cmd.parameters)
+                        resolved.add(f"* `{cmd.qualified_name} {signature}`")
+                    return '\n'.join(resolved)
+
+                embed.add_field(name='**Slash Command Fallback**',
+                                value='Can be used as a slash command.\n'
+                                      f'{partial_signature(app_command_group)}',
+                                inline=False)
+
         if getattr(command, 'commands', None):
-            subcommands = '\n'.join(f"* `{self.get_command_signature(cmd)}`" for cmd in command.commands)
-            embed.add_field(name='**Subcommands**', value=subcommands, inline=False)
+            resolved_sub_commands = [
+                f"* `{self.get_command_signature(cmd)}`" for cmd in command.commands
+                if not await self.maybe_hidden(cmd, self.context.author)
+            ]
+            if resolved_sub_commands:
+                subcommands = '\n'.join(resolved_sub_commands)
+                embed.add_field(name='**Subcommands**', value=subcommands, inline=False)
 
         if permissions := self.get_command_permission_formatting(command, stringified=True):
             embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
@@ -702,7 +750,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
                 return await self.context.send(self.command_not_found(command.name), silent=True)
 
-        embed = self.command_formatting(command)
+        embed = await self.command_formatting(command)
         await self.context.send(embed=embed, silent=True)
 
     async def send_group_help(self, group: PartialCommandGroup):
@@ -1017,7 +1065,8 @@ class Meta(commands.Cog):
         if not guild:
             raise commands.BadArgument(f'Guild with ID `{guild_id}` not found.')
 
-        features = list(map(lambda e: f"**{e[0]}** - {e[1]}", list(self.bot.get_guild_features(guild.features, only_current=True))))
+        features = list(
+            map(lambda e: f"**{e[0]}** - {e[1]}", list(self.bot.get_guild_features(guild.features, only_current=True))))
         embed = discord.Embed(title="Guild Features",
                               timestamp=discord.utils.utcnow(),
                               color=self.bot.colour.darker_red())

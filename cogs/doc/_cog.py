@@ -602,7 +602,7 @@ class Documentation(commands.Cog):
 
         return result
 
-    @command(aliases=['rtfd'])
+    @command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
     @app_commands.describe(entity='The object to search for')
     @app_commands.autocomplete(entity=documentation_autocomplete)  # type: ignore
     async def rtfm(self, ctx: Context, *, entity: str):
