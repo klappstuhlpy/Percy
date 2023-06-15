@@ -62,7 +62,7 @@ class TagName(commands.clean_content):
 
 
 class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    query: str = commands.flag(description="The query to search for", aliases=['q'])
+    query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description="The key to sort the results.", aliases=['s'], default='name')
 
