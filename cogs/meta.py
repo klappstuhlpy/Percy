@@ -26,7 +26,8 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, CoreCommand, \
+    HybridCommand, AppCommand
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -449,10 +450,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
                         resolved_names.add(subcmd.qualified_name)
                 resolved.append(cmd)
             else:
-                if isinstance(cmd, (commands.Command, commands.hybrid.Command)):
+                if isinstance(cmd, (HybridCommand, CoreCommand)):
                     if is_hidden(cmd):
                         continue
-                if isinstance(cmd, commands.hybrid.HybridAppCommand):
+                if isinstance(cmd, AppCommand):
                     if cmd.name in resolved_names:
                         continue
 
@@ -686,7 +687,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         # Checking for Application Commands or Groups because they can't be hidden
         if not isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
             if command.hidden and not await self.context.bot.is_owner(self.context.author):
-                return await self.context.send(f'<:redTick:1079249771975413910> No Command called {command!r} found.')
+                return await self.context.send(self.command_not_found(command.name), silent=True)
 
         embed = self.command_formatting(command)
         await self.context.send(embed=embed, silent=True)
