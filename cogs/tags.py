@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import LinePaginator
 from . import command, command_permissions
 from .emoji import usage_per_day
-from .utils import formats, fuzzy
+from .utils import formats, fuzzy, helpers
 from .utils.formats import plural, medal_emojize
 from .utils.helpers import PostgresItem
 
@@ -50,14 +50,21 @@ class TagName(commands.clean_content):
             raise commands.BadArgument(
                 f'<:redTick:1079249771975413910> Tag names must be 100 characters or less. (You have *{len(lower)}* characters)')
 
-        first_word, _, _ = lower.partition(' ')
+        cog: Tags = ctx.bot.get_cog('Tags')  # noqa
+        if cog is None:
+            raise commands.BadArgument('<:redTick:1079249771975413910> Tags are currently unavailable.')
 
-        root: commands.GroupMixin = ctx.bot.get_command('tags')  # type: ignore
-        if first_word in root.all_commands:
+        if cog.is_tag_reserved(ctx.guild.id, argument):
             raise commands.BadArgument(
                 '<:redTick:1079249771975413910> Hey, that\'s a reserved tag name. Choose another one.')
 
         return converted.strip() if not self.lower else lower
+
+
+class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
+    query: str = commands.flag(description="The query to search for", aliases=['q'])
+    sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
+        description="The key to sort the results.", aliases=['s'], default='name')
 
 
 class TagEditModal(discord.ui.Modal, title='Edit Tag'):
@@ -94,10 +101,6 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
         except commands.BadArgument as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
-        if self.cog.is_tag_being_made(interaction.guild_id, name):
-            await interaction.response.send_message('<:redTick:1079249771975413910> This tag name already exists.',
-                                                    ephemeral=True)
-            return
 
         self.ctx.interaction = interaction
         content = str(self.content)
@@ -120,7 +123,9 @@ class Tags(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self._reserved_tags_being_made: dict[int, set[str]] = {}
+        # We create this temporary cache to avoid Users creating two Tags with the
+        # same name at the same time to avoid conflicts
+        self._temporary_reserved_tags: dict[int, set[str]] = {}
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -133,7 +138,7 @@ class Tags(commands.Cog):
             *,
             connection: Optional[asyncpg.Connection | asyncpg.Pool] = None,
     ) -> Optional[asyncpg.Record]:
-        """Returns a possible Tag that can be executed in the Guild.   """
+        """Returns a possible Tag that can be executed in the Guild."""
 
         con = connection or self.bot.pool
 
@@ -152,23 +157,29 @@ class Tags(commands.Cog):
             query += " AND LOWER(tag_lookup.name)=$2;"
         return await con.fetchrow(query, guild.id, argument)
 
-    async def get_tag(
+    async def send_tag(
             self,
-            guild_id: Optional[int],
+            ctx: GuildContext,
             name: str,
             *,
-            pool: Optional[asyncpg.Pool] = None,
-    ) -> dict[str, str]:
-        def disambiguate(rows):
-            if rows is None or len(rows) == 0:
-                raise RuntimeError('<:redTick:1079249771975413910> No Tags with this or a similar name found.')
+            escape_markdown: bool = False
+    ) -> None:
+        """|coro|
 
-            names = '\n'.join(r['name'] for r in rows)
-            raise RuntimeError(
-                f'<:discord_info:1113421814132117545> **Tag not found.** *Found Tags with similar name:*\n{names}')
+        Look up a Tag by name in the given guild. Searching with similarity queries.
 
-        pool = pool or self.bot.pool
+        If a Tag is found, sends it with the proper formatting to the destination.
+        If no Tag with the exact (LOWERED) name is found, a disambiguation prompt is sent.
 
+        Parameters
+        ----------
+        ctx: GuildContext
+            The invocation context.
+        name: str
+            The name of the Tag to look up.
+        escape_markdown: bool
+            Whether to escape the markdown in the Tag content.
+        """
         query = """
             SELECT
                 tags.name, 
@@ -177,24 +188,60 @@ class Tags(commands.Cog):
             INNER JOIN tags ON tags.id = tag_lookup.tag_id
             WHERE tag_lookup.location_id=$1 AND LOWER(tag_lookup.name)=$2;
         """
+        row = await self.bot.pool.fetchrow(query, ctx.guild.id, name)
 
-        row = await pool.fetchrow(query, guild_id, name)
-        if row is None:
+        if row is None:  # If we didn't find a Tag with the exact name, we try to find the three most similar ones
             query = """
                 SELECT
-                    tag_lookup.name
+                    tag_lookup.name, tag_lookup.id
                 FROM tag_lookup
                 WHERE tag_lookup.location_id=$1 AND tag_lookup.name % $2
                 ORDER BY similarity(tag_lookup.name, $2) DESC
                 LIMIT 3;
             """
+            rows = await self.bot.pool.fetch(query, ctx.guild.id, name)
 
-            return disambiguate(await pool.fetch(query, guild_id, name))
+            if rows is None or len(rows) == 0:
+                await ctx.send(ctx.tick(False, 'No Tag with this name or similar name found.'))
+            else:
+                names = '\n'.join(f"* **{r['name']}** [`{r['id']}`]" for r in rows)
+                embed = discord.Embed(title="Tag not found", description=f"Found Tags with similar name.",
+                                      colour=self.bot.colour.darker_red())
+                embed.add_field(name="Similar Tags", value=names)
+                await ctx.send(embed=embed)
+            return
+
+        assert row is not None  # for mypy
+
+        if escape_markdown:
+            first_step = discord.utils.escape_markdown(row['content'])
+            await ctx.safe_send(first_step.replace('<', '\\<'), escape_mentions=False)
         else:
-            return row
+            await ctx.send(row['content'], reference=ctx.replied_reference)
+
+        # Just updated the uses of the Tag
+        query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2;"
+        await ctx.db.execute(query, row['name'], ctx.guild.id)
 
     @staticmethod
     async def create_tag(ctx: GuildContext, name: str, content: str) -> None:
+        """|coro|
+
+        Creates a new Tag in the Guild.
+        Inserts into `tag_lookup` and `tags` table, `tag_lookup` is the summary of origin tags and aliases.
+        In the `tags` table are the root tags with their original names, contents etc.
+
+        Using a `transaction` session to avoid conflicts on inserting.
+
+        Parameters
+        ----------
+        ctx: GuildContext
+            The invocation context.
+        name: str
+            The name of the Tag.
+        content: str
+            The content of the Tag.
+        """
         query = """
             WITH tag_insert AS (
                 INSERT INTO tags (name, content, owner_id, location_id)
@@ -224,28 +271,37 @@ class Tags(commands.Cog):
                 await tr.commit()
                 await ctx.send(f'<:greenTick:1079249732364406854> Tag `{name}` was successfully created.')
 
-    def is_tag_being_made(self, guild_id: int, name: str) -> bool:
+    def is_tag_reserved(self, guild_id: int, name: str) -> bool:
         """Helper method to check if a Tag with ``name`` is currently being made."""
-        try:
-            being_made = self._reserved_tags_being_made[guild_id]
-        except KeyError:
+        def in_prod_check() -> bool:
+            try:
+                being_made = self._temporary_reserved_tags[guild_id]
+            except KeyError:
+                return False
+            else:
+                return name.lower() in being_made
+
+        first_word, _, _ = name.partition(' ')
+
+        root: commands.GroupMixin = self.bot.get_command('tags')   # type: ignore
+        if first_word in root.all_commands:
             return False
         else:
-            return name.lower() in being_made
+            return in_prod_check()
 
     def add_in_progress_tag(self, guild_id: int, name: str) -> None:
-        tags = self._reserved_tags_being_made.setdefault(guild_id, set())
+        tags = self._temporary_reserved_tags.setdefault(guild_id, set())
         tags.add(name.lower())
 
     def remove_in_progress_tag(self, guild_id: int, name: str) -> None:
         try:
-            being_made = self._reserved_tags_being_made[guild_id]
+            being_made = self._temporary_reserved_tags[guild_id]
         except KeyError:
             return
 
         being_made.discard(name.lower())
         if len(being_made) == 0:
-            del self._reserved_tags_being_made[guild_id]
+            del self._temporary_reserved_tags[guild_id]
 
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
@@ -294,16 +350,7 @@ class Tags(commands.Cog):
         """Retrieves a tag from the server.
         If the tag is an alias, the original tag will be retrieved instead.
         """
-
-        try:
-            tag = await self.get_tag(ctx.guild.id, name, pool=ctx.pool)
-        except RuntimeError as e:
-            return await ctx.send(str(e))
-
-        await ctx.send(tag['content'], reference=ctx.replied_reference)
-
-        query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2;"
-        await ctx.db.execute(query, tag['name'], ctx.guild.id)
+        await self.send_tag(ctx, name)
 
     @command(
         tags.command,
@@ -372,9 +419,9 @@ class Tags(commands.Cog):
         `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
         """
 
-        if self.is_tag_being_made(ctx.guild.id, name):
+        if self.is_tag_reserved(ctx.guild.id, name):
             return await ctx.send(
-                '<:redTick:1079249771975413910> A tag with this name is currently being made. Please try again in a few seconds.')
+                '<:redTick:1079249771975413910> This tag name is reserved or currently being made.')
 
         if len(content) > 2000:
             return await ctx.send('<:redTick:1079249771975413910> Tag content must be less than `2000` characters.')
@@ -422,9 +469,9 @@ class Tags(commands.Cog):
         finally:
             ctx.message = original
 
-        if self.is_tag_being_made(ctx.guild.id, name):
+        if self.is_tag_reserved(ctx.guild.id, name):
             return await ctx.send(
-                '<:redTick:1079249771975413910> Sorry. This Tag was currently being made.'
+                '<:redTick:1079249771975413910> This tag name is reserved or currently being made..'
             )
 
         query = "SELECT 1 FROM tags WHERE location_id=$1 AND LOWER(name)=$2;"
@@ -812,14 +859,7 @@ class Tags(commands.Cog):
     @app_commands.autocomplete(name=non_aliased_tag_autocomplete)  # type: ignore
     async def tags_raw(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
         """This displays you the raw content of a tag."""
-
-        try:
-            tag = await self.get_tag(ctx.guild.id, name, pool=ctx.pool)
-        except RuntimeError as e:
-            return await ctx.send(str(e))
-
-        first_step = discord.utils.escape_markdown(tag['content'])
-        await ctx.safe_send(first_step.replace('<', '\\<'), escape_mentions=False)
+        await self.send_tag(ctx, name, escape_markdown=True)
 
     @command(
         tags.command,
@@ -879,43 +919,6 @@ class Tags(commands.Cog):
 
     @command(
         tags.command,
-        name='all',
-        description='List all tags in this server.',
-    )
-    @app_commands.describe(file='Dumps output to a text file.')
-    @commands.guild_only()
-    async def tags_all(self, ctx: GuildContext, file: bool = False):
-        """List all tags in this server.
-        The search can be narrowed down by providing valid flags:
-        `file:`: Dumps output to a text file.
-        """
-
-        if file:
-            return await self._tag_all_text_mode(ctx)
-
-        query = """
-            SELECT name, id FROM tag_lookup
-            WHERE location_id=$1
-            ORDER BY name
-        """
-
-        rows = await ctx.db.fetch(query, ctx.guild.id)
-
-        if rows:
-            embed = discord.Embed(color=self.bot.colour.darker_red())
-            embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
-            embed.set_footer(text=f'{plural(len(rows)):tag}')
-
-            results = [f"`{index}.` {entry}" for index, entry in
-                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
-            await LinePaginator.start(
-                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
-            )
-        else:
-            await ctx.send('<:redTick:1079249771975413910> There are no tags in this server.')
-
-    @command(
-        tags.command,
         name='purge',
         description='Bulk remove all Tags and assigned Aliases of a given User.',
     )
@@ -946,37 +949,66 @@ class Tags(commands.Cog):
     @command(
         tags.command,
         name='search',
-        description='Search for tags matching the given query.'
+        description='Search for tags matching the given query.',
+        with_app_command=False
     )
     @commands.guild_only()
     @app_commands.describe(query='The tag name to search for')
-    async def tags_search(self, ctx: GuildContext, *, query: Annotated[str, commands.clean_content]):
+    @app_commands.choices(
+        sort=[
+            app_commands.Choice(name='Name', value='name'),
+            app_commands.Choice(name='Newest', value='newest'),
+            app_commands.Choice(name='Oldest', value='oldest'),
+            app_commands.Choice(name='ID', value='id'),
+        ]
+    )
+    async def tags_search(
+            self,
+            ctx: GuildContext,
+            *,
+            flags: TagSearchFlags
+    ):
         """Search for tags matching the given query.
         `Note:` To use autocomplete, you have to at least provide three characters.
         """
 
-        if len(query) < 3:
-            return await ctx.send('<:redTick:1079249771975413910> The query length must be at least three characters.')
+        SORT = {
+            "id": "id",
+            "newest": "created_at DESC",
+            "oldest": "created_at ASC",
+            "name": "similarity(name, $2) DESC"
+        }.get(flags.sort, "similarity(name, $2) DESC")
 
-        sql = """
-            SELECT name, id
-            FROM tag_lookup
-            WHERE location_id=$1 AND name % $2
-            ORDER BY similarity(name, $2) DESC
-            LIMIT 100;
-        """
+        if not flags.query:
+            query = f"""
+                SELECT name, id
+                FROM tag_lookup
+                WHERE location_id=$1
+                ORDER BY {SORT};
+            """
+            values = (ctx.guild.id,)
+        else:
+            query = f"""
+                SELECT name, id
+                FROM tag_lookup
+                WHERE location_id=$1 AND name % $2
+                ORDER BY {SORT};
+            """
+            values = (ctx.guild.id, flags.query)
 
-        rows = await ctx.db.fetch(sql, ctx.guild.id, query)
+        rows = await ctx.db.fetch(query, *values)
 
         if rows:
-            embed = discord.Embed(color=self.bot.colour.darker_red())
-            embed.set_author(name=f'Tags in {ctx.guild.name}', icon_url=ctx.guild.icon.url)
-            embed.set_footer(text=f'{plural(len(rows)):tag}')
+            embed = discord.Embed(title="Tag Search",
+                                  description=f"Sorted by: **{flags.query}**",
+                                  colour=helpers.Colour.darker_red(),
+                                  timestamp=discord.utils.utcnow())
+            embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
 
             results = [f"`{index}.` {entry}" for index, entry in
                        enumerate([TagPageEntry(record=row) for row in rows], 1)]
             await LinePaginator.start(
-                ctx, entries=results, timeout=120, search_for=True, per_page=20, embed=embed
+                ctx, entries=results, search_for=True, per_page=20, embed=embed
             )
         else:
             await ctx.send('<:redTick:1079249771975413910> No tags found.')
@@ -1081,7 +1113,7 @@ class Tags(commands.Cog):
         buffer.seek(0)
 
         file = discord.File(
-            fp=buffer,
+            fp=buffer,  # type: ignore
             filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
         )
         await ctx.send(file=file)

@@ -12,7 +12,7 @@ from discord import app_commands, Interaction
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
-from cogs.utils.paginator import BasePaginator
+from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command, command_permissions
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, helpers
@@ -1092,23 +1092,16 @@ class Polls(commands.Cog):
                     ) > 70
                 ]
 
-            class PollPaginator(BasePaginator[PollItem]):
+            results = [f"`{poll.id}` (`#{poll.kwargs.get('index')}`): "
+                       f"{poll.question} (<t:{int(poll.kwargs.get('published'))}:d>)"
+                       for poll in [PollItem(self, record=r) for r in records]]
 
-                async def format_page(self, entries: List[PollItem], /) -> discord.Embed:
-                    embed = discord.Embed(title="Poll Search",
-                                          description=f"Sorted by: **{sort.lower()}**",
-                                          colour=helpers.Colour.darker_red(),
-                                          timestamp=discord.utils.utcnow())
-                    embed.set_footer(text=f"{plural(len(records)):entry|entries}")
-                    embed.add_field(name="Results",
-                                    value="\n".join(
-                                        f"`{poll.id}` (`#{poll.kwargs.get('index')}`): "
-                                        f"{poll.question} (<t:{int(poll.kwargs.get('published'))}:d>)" for poll in
-                                        entries
-                                    ))
-                    return embed
-
-            await PollPaginator.start(interaction, entries=[PollItem(self, record=r) for r in records], per_page=12)
+            embed = discord.Embed(title="Poll Search",
+                                  description=f"Sorted by: **{sort.lower()}**",
+                                  colour=helpers.Colour.darker_red(),
+                                  timestamp=discord.utils.utcnow())
+            embed.set_footer(text=f"{plural(len(records)):entry|entries}")
+            await LinePaginator.start(interaction, entries=results, per_page=12, embed=embed)
 
     @command(
         polls.command,

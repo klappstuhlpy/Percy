@@ -703,22 +703,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
 
         if isinstance(command, commands.hybrid.HybridGroup):
-            if command.app_command:
-                app_command_group: app_commands.Group = command.app_command
-
-                def partial_signature(group: app_commands.Group) -> str:
-                    resolved = set()
-                    for cmd in group.commands:
-                        signature = ' '.join(
-                            f'<{option.name}>' if option.required else f'[{option.name}]' for option in
-                            cmd.parameters)
-                        resolved.add(f"* `{cmd.qualified_name} {signature}`")
-                    return '\n'.join(resolved)
-
-                embed.add_field(name='**Slash Command Fallback**',
-                                value='Can be used as a slash command.\n'
-                                      f'{partial_signature(app_command_group)}',
-                                inline=False)
+            embed.add_field(name='**Slash Command Fallback**', value='Commands can be used as a slash commands.',
+                            inline=False)
 
         if isinstance(command, App):
             embed.add_field(name="**Slash Command**", value="Can only be used as a slash command.", inline=False)
