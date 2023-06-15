@@ -98,7 +98,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
 
         helper = PaginatedHelpCommand.temporary(self._ctx)
         for cmd in entries:
-            signature = helper.get_command_signature(cmd)  # type: ignore
+            signature = helper.get_command_signature(cmd, with_prefix=False)  # type: ignore
             embed.add_field(name=signature, value=cmd.description or 'No help given...', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
@@ -449,7 +449,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                         resolved_names.add(subcmd.qualified_name)
                 resolved.append(cmd)
             else:
-                if isinstance(cmd, commands.Command):
+                if isinstance(cmd, (commands.Command, commands.hybrid.Command)):
                     if is_hidden(cmd):
                         continue
                 if isinstance(cmd, commands.hybrid.HybridAppCommand):
@@ -463,23 +463,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return sorted(resolved, key=key)
         return resolved
 
-    def get_command_signature(self, command: PartialCommand, cut: bool = False) -> str:  # noqa
+    def get_command_signature(self, command: PartialCommand, cut: bool = False, with_prefix: bool = False) -> str:  # noqa
         """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
 
         This is a modified version of the original get_command_signature.
         """
-        is_app_command = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
+        is_app = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
 
-        if is_app_command:
+        prefix = ('/' if is_app else self.context.clean_prefix) if with_prefix else ''
+
+        if is_app:
             if cut:
-                return f'/{command.qualified_name}'
+                return f'{prefix}{command.qualified_name}'
 
             if isinstance(command, app_commands.commands.Group):
-                return f'/{command.qualified_name} <subcommand>'
+                return f'{prefix}{command.qualified_name} <subcommand>'
 
             signature = ' '.join(
                 f'<{option.name}>' if option.required else f'[{option.name}]' for option in command.parameters)
-            return f'/{command.qualified_name} {signature}'
+            return f'{prefix}{command.qualified_name} {signature}'
 
         signature = command.signature
 
@@ -491,8 +493,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
         alias = f'{parent} {command.name}' if parent else command.name
 
         if cut:
-            return f'{self.context.clean_prefix}{alias}'
-        return f'{self.context.clean_prefix}{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
+            return f'{prefix}{alias}'
+        return f'{prefix}{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
