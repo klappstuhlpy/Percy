@@ -975,8 +975,8 @@ class Tags(commands.Cog):
             "id": "id",
             "newest": "created_at DESC",
             "oldest": "created_at ASC",
-            "name": "similarity(name, $2) DESC"
-        }.get(flags.sort, "similarity(name, $2) DESC")
+            "name": "name DESC"
+        }.get(flags.sort, "name DESC")
 
         if not flags.query:
             query = f"""
@@ -987,6 +987,9 @@ class Tags(commands.Cog):
             """
             values = (ctx.guild.id,)
         else:
+            if flags.sort == "name":
+                SORT = "similarity(name, $2) DESC"
+
             query = f"""
                 SELECT name, id
                 FROM tag_lookup
