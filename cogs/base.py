@@ -37,9 +37,10 @@ class TrashView(discord.ui.View):
         self.author: discord.Member = author
 
     @discord.ui.button(
-        style=discord.ButtonStyle.red, emoji="🗑️", label="Delete", custom_id="delete"
+        style=discord.ButtonStyle.red, emoji=discord.PartialEmoji(name="trashcan", id=1118870793393291294),
+        label="Delete", custom_id="delete"
     )
-    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         if interaction.user.id != self.author.id:
             return
         await interaction.message.delete()
@@ -59,7 +60,7 @@ def validate_token(token: str) -> bool:
     """
     try:
         (user_id, _, _) = token.split('.')
-        user_id = int(base64.b64decode(user_id + '==', validate=True))
+        user_id = int(base64.b64decode(user_id + '==', validate=True))  # noqa
     except (ValueError, binascii.Error):
         return False
     else:
@@ -267,7 +268,7 @@ class Base(commands.Cog, name='Exclusives'):
                 remaining = r.headers.get('X-Ratelimit-Remaining')
                 js = await r.json()
                 if r.status == 429 or remaining == '0':
-                    delta = discord.utils._parse_ratelimit_header(r)
+                    delta = discord.utils._parse_ratelimit_header(r)  # noqa
                     await asyncio.sleep(delta)
                     self._req_lock.release()
                     return await self.github_request(method, url, params=params, data=data, headers=headers)
@@ -307,7 +308,7 @@ class Base(commands.Cog, name='Exclusives'):
 
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, GithubError):
-            await ctx.send(f'Github Error: {error}')
+            await ctx.send(ctx.tick(False, f'Github API Error: {error}'))
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):
@@ -443,7 +444,7 @@ class Base(commands.Cog, name='Exclusives'):
         raw_data = await ctx.bot.http.get_message(message.channel.id, message.id)
         paginator = TextSource(prefix="```json", suffix="```")
 
-        def add_content(title: str, content: str) -> None:
+        def add_content(title: str, content: str) -> None:  # noqa
             paginator.add_line(f"== {title} ==\n")
             paginator.add_line(content.replace("`", "`\u200b"))
             paginator.close_page()
@@ -453,7 +454,7 @@ class Base(commands.Cog, name='Exclusives'):
 
         transformer = pprint.pformat if json else self.format_fields
         for field_name in ("embeds", "attachments"):
-            data = raw_data[field_name]
+            data = raw_data[field_name]  # type: ignore
 
             if not data:
                 continue

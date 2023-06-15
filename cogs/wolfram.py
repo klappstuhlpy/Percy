@@ -114,7 +114,7 @@ class Wolfram(commands.Cog):
 
     async def cog_command_error(self, ctx: Context, error: Exception) -> None:
         if isinstance(error, WolframError):
-            await ctx.send(str(error))
+            await ctx.send(ctx.tick(False, str(error)))
 
     async def get_pod_pages(self, ctx: Context, query: str) -> list[tuple[str, str]] | None:
         """Get the Wolfram API pod pages for the provided query."""

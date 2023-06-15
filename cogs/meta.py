@@ -997,25 +997,12 @@ class Meta(commands.Cog):
         if not guild:
             raise commands.BadArgument(f'Guild with ID `{guild_id}` not found.')
 
-        features = list(self.bot.get_guild_features(guild.features, only_current=True))
-
-        class EmbedPaginator(BasePaginator[tuple[str, str]]):
-            colour = self.bot.colour.darker_red()
-
-            async def format_page(self, entries: list[tuple[str, str]], /) -> discord.Embed:
-                embed = discord.Embed(title="Guild Features",
-                                      timestamp=discord.utils.utcnow(),
-                                      color=self.colour)
-                embed.set_footer(text=f"{plural(len(self.entries)):feature|features}")
-
-                def fmt(e: tuple[str, str]) -> str:
-                    return f"**{e[0]}** - {e[1]}"
-
-                embed.description = '\n'.join(map(fmt, entries))
-
-                return embed
-
-        await EmbedPaginator.start(ctx, entries=features, per_page=12)  # type: ignore
+        features = list(map(lambda e: f"**{e[0]}** - {e[1]}", list(self.bot.get_guild_features(guild.features, only_current=True))))
+        embed = discord.Embed(title="Guild Features",
+                              timestamp=discord.utils.utcnow(),
+                              color=self.bot.colour.darker_red())
+        embed.set_footer(text=f"{plural(len(features)):feature|features}")
+        await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location='description')
 
     @info.command(name="user", description="Shows info about a user.")
     @commands.guild_only()

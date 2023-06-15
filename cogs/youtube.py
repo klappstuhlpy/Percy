@@ -6,7 +6,6 @@ from typing import List, Dict, Any, NamedTuple, Optional
 import aiohttp
 import discord
 from dateutil.parser import parse
-from discord import DiscordException
 from discord.ext import commands, tasks
 
 from bot import Percy
@@ -15,19 +14,14 @@ from launcher import get_logger
 log = get_logger(__name__)
 
 
-class YouTubeRequestError(DiscordException):
+class YouTubeRequestError(discord.HTTPException):
     """A subclass Exception for failed YouTube API requests."""
 
     def __init__(self, response: aiohttp.ClientResponse, data: Dict[str, Any], message: Optional[str]):
-        self.response: aiohttp.ClientResponse = response
-        self.message: str = message
-
         reason = data["error"]["errors"][0]["reason"]
+        message = f"Reason: {reason or 'Unknown'}: '{message}'"
 
-        self.reason: str = reason or "unknown"
-
-        fmt = '{0.status} {0.reason} (reason: {1}): {2}'
-        super().__init__(fmt.format(self.response, self.reason, self.message))
+        super().__init__(response=response, message=message)
 
 
 BASE_URL = "https://www.googleapis.com/youtube/v3/{endpoint}"
