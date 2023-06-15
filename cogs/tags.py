@@ -756,10 +756,9 @@ class Tags(commands.Cog):
             await ctx.send('<:greenTick:1079249732364406854> Tag and corresponding aliases successfully deleted.')
 
     async def _send_alias_info(self, ctx: GuildContext, record: asyncpg.Record):
-        embed = discord.Embed(color=self.bot.colour.darker_red())
+        embed = discord.Embed(title=record['lookup_name'], color=self.bot.colour.darker_red())
 
         owner_id = record['lookup_owner_id']
-        embed.title = "*<:discord_info:1113421814132117545> ALIAS:* " + record['lookup_name']
         embed.timestamp = record['lookup_created_at'].replace(tzinfo=datetime.timezone.utc)
         embed.set_footer(text=f'[{record["lookup_alias_id"]}] • Alias created at')
 
