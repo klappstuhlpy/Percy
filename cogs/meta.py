@@ -19,7 +19,6 @@ import unicodedata
 from dateutil.relativedelta import relativedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
-from discord.utils import _MissingSentinel
 from lru import LRU
 
 from . import command, command_permissions
@@ -27,7 +26,7 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -437,8 +436,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
             Whether to sort the Commands by their name.
         key: Optional[Callable]
             The Key to sort the Commands by.
-        escape_hidden: bool
-            Whether to escape hidden commands. Defaults to True.
 
         Returns
         -------
@@ -451,8 +448,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if not hasattr(self.context, 'author'):
             class FakeContext:
                 author = None
-
-            self.context = FakeContext()
+            
+            # We are doing this because on startup, the `filter_commands` method
+            # will be triggered without a context,
+            # which will result in an AttributeError because for the 
+            # `maybe_hidden` method, we need the author
+            # attribute of the context.
+            
+            self.context = FakeContext()  # noqa
 
         for cmd in cmd_iter:
             if isinstance(cmd, PartialCommandGroup):
@@ -716,6 +719,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
                                 value='Can be used as a slash command.\n'
                                       f'{partial_signature(app_command_group)}',
                                 inline=False)
+
+        if isinstance(command, App):
+            embed.add_field(name="**Slash Command**", value="Can only be used as a slash command.", inline=False)
 
         if getattr(command, 'commands', None):
             resolved_sub_commands = [
