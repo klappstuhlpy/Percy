@@ -350,7 +350,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     async def total_commands_invoked(self) -> int:
         query = "SELECT COUNT(*) as total FROM commands;"
-        return 0#await self.context.client.pool.fetchval(query)  # type: ignore
+        return await self.context.client.pool.fetchval(query)  # type: ignore
 
     async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):  # noqa
         """|coro|
@@ -436,37 +436,42 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     if is_hidden(cmd):
                         continue
 
-                if isinstance(cmd, PartialCommandGroup):
-                    for subcmd in cmd.commands:
-                        if (
-                            isinstance(subcmd, commands.hybrid.HybridAppCommand)
-                            or subcmd.qualified_name in resolved_names
-                            or subcmd.name in resolved_names
-                            or isinstance(subcmd, (Hybrid, Core)) and is_hidden(subcmd)
-                        ):
-                            continue
-
-                        if isinstance(subcmd, PartialCommandGroup):
-                            for subsubcmd in subcmd.commands:
-                                if isinstance(subsubcmd, (Hybrid, Core)) and is_hidden(subsubcmd):
-                                    continue
-
-                                if subsubcmd.qualified_name in resolved_names:
-                                    continue
-
-                                resolved.append(subsubcmd)
-                                resolved_names.add(subsubcmd.qualified_name)
-                        else:
-                            resolved.append(subcmd)
-                            resolved_names.add(subcmd.qualified_name)
-
-                    resolved.append(cmd)
-                else:
-                    if isinstance(cmd, commands.hybrid.HybridAppCommand):
+                for subcmd in cmd.commands:
+                    if (
+                        isinstance(subcmd, commands.hybrid.HybridAppCommand)
+                        or subcmd.qualified_name in resolved_names
+                        or subcmd.name in resolved_names
+                        or isinstance(subcmd, (Hybrid, Core)) and is_hidden(subcmd)
+                    ):
                         continue
 
+                    if isinstance(subcmd, PartialCommandGroup):
+                        for subsubcmd in subcmd.commands:
+                            if (
+                                    isinstance(subsubcmd, commands.hybrid.HybridAppCommand)
+                                    or subsubcmd.qualified_name in resolved_names
+                                    or subsubcmd.name in resolved_names
+                                    or isinstance(subsubcmd, (Hybrid, Core)) and is_hidden(subsubcmd)
+                            ):
+                                continue
+
+                            resolved.append(subsubcmd)
+                            resolved_names.add(subsubcmd.qualified_name)
+                    else:
+                        resolved.append(subcmd)
+                        resolved_names.add(subcmd.qualified_name)
+                else:
                     resolved.append(cmd)
-                    resolved_names.add(cmd.name)
+                    resolved_names.add(cmd.qualified_name)
+            else:
+                if (
+                        isinstance(cmd, (Hybrid, Core)) and is_hidden(cmd)
+                        or isinstance(cmd, commands.hybrid.HybridAppCommand)
+                ):
+                    continue
+
+                resolved.append(cmd)
+                resolved_names.add(cmd.name)
 
         if sort:
             return sorted(resolved, key=key)
