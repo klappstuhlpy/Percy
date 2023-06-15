@@ -950,7 +950,6 @@ class Tags(commands.Cog):
         tags.command,
         name='search',
         description='Search for tags matching the given query.',
-        with_app_command=False
     )
     @commands.guild_only()
     @app_commands.describe(query='The tag name to search for')
