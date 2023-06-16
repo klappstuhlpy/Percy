@@ -267,7 +267,7 @@ class Tags(commands.Cog):
 
         first_word, _, _ = name.partition(' ')
 
-        root: commands.GroupMixin = self.bot.get_command('tags')   # type: ignore
+        root: commands.GroupMixin = self.bot.get_command('tag')   # type: ignore
         if first_word in root.all_commands:
             return False
         else:
@@ -322,7 +322,7 @@ class Tags(commands.Cog):
     @command(
         commands.hybrid_group,
         name="tag",
-        description="Commands for managing tags.",
+        description="Shows a tag from the server.",
         invoke_without_command=True,
         fallback="show"
     )
