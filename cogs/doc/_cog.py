@@ -283,7 +283,8 @@ class DocView(discord.ui.View, Generic[T]):
         self.ctx = context
 
         self._current = await self.format_page(0)
-        self.add_item(DocSelect(self))
+        if len(self.items) > 1:
+            self.add_item(DocSelect(self))
 
         self.msg = await self.update(context, view=self, embed=self._current.embed)
         return self
