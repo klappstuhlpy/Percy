@@ -320,19 +320,14 @@ class Documentation(commands.Cog):
         return discord.PartialEmoji(name="\N{OPEN BOOK}")
 
     async def documentation_autocomplete(
-            self, interaction: discord.Interaction, current: str
+            self, interaction: discord.Interaction, current: str  # noqa
     ) -> list[app_commands.Choice[str]]:
 
         if not current:
             return []
 
-        if len(current) < 3:
-            return [app_commands.Choice(name=current, value=current)]
-
-        assert interaction.command is not None
-
         _, matches = await self.get_symbol_item(current, 15)
-        return [app_commands.Choice(name=f"{m.symbol_id} ({m.package})", value=m.symbol_id) for _, m in matches]
+        return [app_commands.Choice(name=f"{m.symbol_id} ({m.package})", value=m.symbol_id) for m in matches]
 
     def update_single(self, package_name: str, base_url: str, inventory: InventoryDict) -> None:
         """
@@ -345,7 +340,8 @@ class Documentation(commands.Cog):
         base_url: :class:`str`
             The base URL of the package.
         inventory: :class:`dict`
-            The inventory of the package."""
+            The inventory of the package.
+        """
         self.base_urls[package_name] = base_url
 
         for group, items in inventory.items():
@@ -469,8 +465,7 @@ class Documentation(commands.Cog):
 
     @executor
     def get_symbol_item(self, symbol_name: str, limit: int = 1) -> tuple[str, list[DocItem] | DocItem | None]:
-        """
-        Get the `DocItem` and the symbol name used to fetch it from the `doc_symbols` dict.
+        """Get the :class:`DocItem` and the symbol name used to fetch it from the `doc_symbols` dict.
 
         If the doc item is not found directly from the passed in name and the name contains a space,
         the first word of the name will be attempted to be used to get the item.
@@ -490,7 +485,7 @@ class Documentation(commands.Cog):
         markdown = await doc_cache.get(doc_item)
 
         if markdown is None:
-            log.debug(f"Redis cache miss with {doc_item}.")
+            log.debug(f"Doc cache miss with {doc_item}.")
             try:
                 markdown = await self.item_fetcher.get_markdown(doc_item)
             except aiohttp.ClientError as e:
@@ -502,7 +497,7 @@ class Documentation(commands.Cog):
 
             if markdown is None:
                 return "Unable to parse the requested symbol."
-        return markdown
+            return markdown
 
     async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
         """
@@ -676,14 +671,13 @@ class Documentation(commands.Cog):
         Events, objects, and functions are all supported through
         a cruddy fuzzy algorithm.
         """
-        await self.do_rtfm(ctx, entity)
-
-    async def do_rtfm(self, ctx: Context, obj: str):
-        _, matches = await self.get_symbol_item(obj, 8)
+        _, matches = await self.get_symbol_item(entity, 8)
 
         e = discord.Embed(colour=helpers.Colour.darker_red())
         if len(matches) == 0:
             return await ctx.send('Could not find anything. Sorry.')
 
-        e.description = '\n'.join(f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url}) *({doc_item.package})*' for _, doc_item in matches)
+        e.description = '\n'.join(
+            f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url}) *({doc_item.package})*'
+            for doc_item in matches)
         await ctx.send(embed=e, reference=ctx.replied_reference)
