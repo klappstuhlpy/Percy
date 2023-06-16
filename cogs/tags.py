@@ -69,7 +69,7 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
 
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'], default=commands.Author)
+    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'], default=None)
     query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description="The key to sort the results.", aliases=['s'], default='name')
@@ -857,6 +857,8 @@ class Tags(commands.Cog):
     @app_commands.describe(member='The member to list tags of, if not given then it defaults to you.')
     async def tags_list(self, ctx: GuildContext, *, flags: TagListFlags):
         """Shows a list of Tags owned by yourself or a given member."""
+        member = flags.member or ctx.author
+
         SORT = {
             "id": "id",
             "newest": "created_at DESC",
@@ -871,7 +873,7 @@ class Tags(commands.Cog):
                         WHERE location_id=$1 AND owner_id=$2
                         ORDER BY {SORT};
                     """
-            values = (ctx.guild.id, flags.member.id)
+            values = (ctx.guild.id, member.id)
         else:
             if flags.sort == "name":
                 SORT = "similarity(name, $2) DESC"
@@ -882,7 +884,7 @@ class Tags(commands.Cog):
                         WHERE location_id=$1 AND name % $2 AND owner_id=$3
                         ORDER BY {SORT};
                     """
-            values = (ctx.guild.id, flags.query, flags.member.id)
+            values = (ctx.guild.id, flags.query, member.id)
 
         rows = await ctx.db.fetch(query, *values)
 
@@ -891,7 +893,7 @@ class Tags(commands.Cog):
                 await self.send_tags_to_text(ctx, rows)
             else:
                 embed = discord.Embed(title="Tag Search",
-                                      description=f"**{flags.member}'s** Tags in {ctx.guild.name}",
+                                      description=f"**{member}'s** Tags in {ctx.guild.name}",
                                       colour=helpers.Colour.darker_red(),
                                       timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
@@ -902,7 +904,7 @@ class Tags(commands.Cog):
                     ctx, entries=results, search_for=True, per_page=20, embed=embed
                 )
         else:
-            await ctx.send(f'<:redTick:1079249771975413910> **{flags.member}** currently has no tags.')
+            await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
 
     @command(
         tags.command,
