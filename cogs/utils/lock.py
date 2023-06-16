@@ -23,9 +23,12 @@ class LockedResourceError(RuntimeError):
     """
     Exception raised when an operation is attempted on a locked resource.
 
-    Attributes:
-        `type` -- name of the locked resource's type
-        `id` -- ID of the locked resource
+    Attributes
+    ----------
+    type: :class:`str`
+        The type of the resource.
+    id: :class:`Hashable`
+        The ID of the resource.
     """
 
     def __init__(self, resource_type: str, resource_id: Hashable):
@@ -65,7 +68,6 @@ class SharedEvent:
     async def wait(self) -> None:
         """Wait for all active holders to exit."""
         await self._event.wait()
-
 
 
 def lock(
@@ -116,7 +118,7 @@ def lock(
             log.trace(f"{name}: getting the lock object for resource {namespace!r}:{id_!r}")
 
             # Get the lock for the ID. Create a lock if one doesn't exist yet.
-            locks = __lock_dicts[namespace]
+            locks = __lock_dicts[namespace]  # type: WeakValueDictionary[Hashable, asyncio.Lock]
             lock_ = locks.setdefault(id_, asyncio.Lock())
 
             # It's safe to check an asyncio.Lock is free before acquiring it because:

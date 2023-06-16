@@ -16,7 +16,7 @@ from bot import Percy
 from cogs import command
 from cogs.base import TrashView
 from cogs.snekbox._eval import EvalJob, EvalResult
-from cogs.snekbox._io import FileAttachment
+from cogs.snekbox._formatter import FileAttachment
 from cogs.utils.constants import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 from cogs.utils.context import EvalContext
 from cogs.utils.lock import lock_arg
@@ -88,7 +88,7 @@ class FilteredFiles(NamedTuple):
 class CodeblockConverter(commands.Converter):
     """Attempts to extract code from a codeblock, if provided."""
 
-    async def convert(self, ctx: EvalContext, code: str) -> list[str]:
+    async def convert(self, ctx: EvalContext, code: str) -> list[str]:  # type: ignore[override]
         """
         Extract code from the Markdown, format it, and insert it into the code template.
 
@@ -381,7 +381,7 @@ class Snekbox(commands.Cog):
 
         return None
 
-    async def get_code(self, message: Message, command: commands.Command) -> str | None:
+    async def get_code(self, message: Message, command: commands.Command) -> str | None:  # noqa: C901
         """
         Return the code from `message` to be evaluated.
 

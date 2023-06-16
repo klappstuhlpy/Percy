@@ -8,13 +8,13 @@ from uuid import uuid4
 
 from discord.utils import escape_markdown, escape_mentions
 
-from cogs.snekbox._io import FileAttachment, FILE_COUNT_LIMIT, sizeof_fmt, FILE_SIZE_LIMIT
+from cogs.snekbox._formatter import FileAttachment, FILE_COUNT_LIMIT, sizeof_fmt, FILE_SIZE_LIMIT
 from launcher import get_logger
 
 if TYPE_CHECKING:
     from cogs.snekbox._cog import SupportedPythonVersions
 else:
-    SupportedPythonVersions = Literal["3.11"]
+    SupportedPythonVersions = Literal["3.11", "3.10"]
 
 log = get_logger(__name__)
 
@@ -167,7 +167,7 @@ class EvalResult:
             returncode=data["returncode"],
         )
 
-        files = iter(data["files"])
+        files: dict = iter(data["files"])  # type: ignore
         for i, file in enumerate(files):
             if i >= FILE_COUNT_LIMIT:
                 res.failed_files.extend(file["path"] for file in files)

@@ -43,14 +43,14 @@ class ShortTime:
 
     SHORT_TIME_COMPILED = re.compile(
         r"""
-           (?:(?P<years>[0-9])(\s+)?(?:years?|y))?                        # e.g. 2y
-           (?:(?P<months>[0-9]{1,2})(\s+)?(?:months?|mon?))?              # e.g. 2months
-           (?:(?P<weeks>[0-9]{1,4})(\s+)?(?:weeks?|w))?                   # e.g. 10w
-           (?:(?P<days>[0-9]{1,5})(\s+)?(?:days?|d))?                     # e.g. 14 d
-           (?:(?P<hours>[0-9]{1,5})(\s+)?(?:hours?|hr?|hrs?))?            # e.g. 12h
-           (?:(?P<minutes>[0-9]{1,5})(\s+)?(?:minutes?|m(?:ins?)?))?      # e.g. 10 m
-           (?:(?P<seconds>[0-9]{1,5})(\s+)?(?:seconds?|s(?:ecs?)?))?      # e.g. 15s
-           (?:(?P<microseconds>[0-9]{1,7})(\s+)?(?:microseconds?|ms))?    # e.g. 15ms
+           (?:(?P<years>[0-9])(\s+)?(?:years?|y))?
+           (?:(?P<months>[0-9]{1,2})(\s+)?(?:months?|mon?))?
+           (?:(?P<weeks>[0-9]{1,4})(\s+)?(?:weeks?|w))?
+           (?:(?P<days>[0-9]{1,5})(\s+)?(?:days?|d))?
+           (?:(?P<hours>[0-9]{1,5})(\s+)?(?:hours?|hr?|hrs?))?
+           (?:(?P<minutes>[0-9]{1,5})(\s+)?(?:minutes?|m(?:ins?)?))?
+           (?:(?P<seconds>[0-9]{1,5})(\s+)?(?:seconds?|s(?:ecs?)?))?
+           (?:(?P<microseconds>[0-9]{1,7})(\s+)?(?:microseconds?|ms))?
         """,
         re.VERBOSE,
     )

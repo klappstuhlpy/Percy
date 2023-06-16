@@ -65,6 +65,16 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description="The key to sort the results.", aliases=['s'], default='name')
+    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'], default=False)
+
+
+class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
+    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'], default=commands.Author)
+    query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
+    sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
+        description="The key to sort the results.", aliases=['s'], default='name')
+    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'],
+                                  default=False)
 
 
 class TagEditModal(discord.ui.Modal, title='Edit Tag'):
@@ -130,32 +140,6 @@ class Tags(commands.Cog):
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='navigate', id=1103420880056488038)
-
-    async def get_possible_tag(
-            self,
-            guild: discord.abc.Snowflake,
-            argument: str,
-            *,
-            connection: Optional[asyncpg.Connection | asyncpg.Pool] = None,
-    ) -> Optional[asyncpg.Record]:
-        """Returns a possible Tag that can be executed in the Guild."""
-
-        con = connection or self.bot.pool
-
-        query = """
-            SELECT
-                tags.name, 
-                tags.content
-            FROM tag_lookup
-            INNER JOIN tags ON tags.id = tag_lookup.tag_id
-            WHERE tag_lookup.location_id=$1
-        """
-
-        if argument.isdigit():
-            query += " AND tag_lookup.tag_id=$2;"
-        else:
-            query += " AND LOWER(tag_lookup.name)=$2;"
-        return await con.fetchrow(query, guild.id, argument)
 
     async def send_tag(
             self,
@@ -640,6 +624,14 @@ class Tags(commands.Cog):
 
         await ctx.send(embed=e)
 
+    @staticmethod
+    async def send_tags_to_text(ctx: GuildContext, tags: list[asyncpg.Record]):
+        table = formats.TabularData()
+        table.set_columns(list(tags[0].keys()))
+        table.add_rows(list(r.values()) for r in tags)
+        fp = io.BytesIO(table.render().encode('utf-8'))
+        await ctx.send(file=discord.File(fp, 'tags.txt'))
+
     @command(
         tags.command,
         name='stats',
@@ -755,69 +747,6 @@ class Tags(commands.Cog):
         else:
             await ctx.send('<:greenTick:1079249732364406854> Tag and corresponding aliases successfully deleted.')
 
-    async def _send_alias_info(self, ctx: GuildContext, record: asyncpg.Record):
-        embed = discord.Embed(title=record['lookup_name'], color=self.bot.colour.darker_red())
-
-        owner_id = record['lookup_owner_id']
-        embed.timestamp = record['lookup_created_at'].replace(tzinfo=datetime.timezone.utc)
-        embed.set_footer(text=f'[{record["lookup_alias_id"]}] • Alias created at')
-
-        user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
-        embed.set_thumbnail(url=user.avatar.url)
-        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
-
-        embed.add_field(name='**Owner**', value=f'<@{owner_id}>')
-        embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=f"**{record['name']}** [`{record['id']}`]")
-        await ctx.send(embed=embed)
-
-    async def _send_tag_info(self, ctx: GuildContext, record: asyncpg.Record):
-        embed = discord.Embed(color=self.bot.colour.darker_red())
-
-        owner_id = record['owner_id']
-        embed.title = record['name']
-        embed.timestamp = record['created_at'].replace(tzinfo=datetime.timezone.utc)
-        embed.set_footer(text=f'[{record["id"]}] • Tag created at')
-
-        user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
-        embed.set_thumbnail(url=user.avatar.url)
-        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
-
-        embed.add_field(name='**Owner**', value=f'<@{owner_id}>', inline=False)
-
-        query = """
-            SELECT (
-                SELECT COUNT(*)
-                FROM tags second
-                WHERE (second.uses, second.id) >= (first.uses, first.id)
-                AND second.location_id = first.location_id
-                ) AS rank
-            FROM tags first
-            WHERE first.id=$1
-        """
-
-        rank = await ctx.db.fetchrow(query, record['id'])
-
-        if rank is not None:
-            text = '**Rank**'
-            if rank['rank'] in (1, 2, 3):
-                text += f' {chr(129350 + int(rank["rank"]))}'
-
-            embed.add_field(name=text, value=f"**#{rank['rank']}**")
-
-        embed.add_field(name='**Tag Used**', value=record['uses'])
-
-        query = """
-            SELECT COUNT(*) AS count
-            FROM tag_lookup
-               WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2
-                AND tag_lookup.location_id=$3
-        """
-        alias_count = await self.bot.pool.fetchrow(query, record['id'], record["name"], ctx.guild.id)
-
-        embed.add_field(name="**Aliases**", value=alias_count['count'])
-
-        await ctx.send(embed=embed)
-
     @command(
         tags.command,
         name='info',
@@ -847,9 +776,64 @@ class Tags(commands.Cog):
             return await ctx.send('<:redTick:1079249771975413910> Tag was not found.')
 
         if record['alias']:
-            await self._send_alias_info(ctx, record)
+            embed = discord.Embed(title=record['lookup_name'], color=self.bot.colour.darker_red())
+
+            owner_id = record['lookup_owner_id']
+            embed.timestamp = record['lookup_created_at'].replace(tzinfo=datetime.timezone.utc)
+            embed.set_footer(text=f'[{record["lookup_alias_id"]}] • Alias created at')
+
+            user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
+            embed.set_thumbnail(url=user.avatar.url)
+            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+
+            embed.add_field(name='**Owner**', value=f'<@{owner_id}>')
+            embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=f"**{record['name']}** [`{record['id']}`]")
+            await ctx.send(embed=embed)
         else:
-            await self._send_tag_info(ctx, record)
+            embed = discord.Embed(color=self.bot.colour.darker_red())
+            owner_id = record['owner_id']
+            embed.title = record['name']
+            embed.timestamp = record['created_at'].replace(tzinfo=datetime.timezone.utc)
+            embed.set_footer(text=f'[{record["id"]}] • Tag created at')
+
+            user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
+            embed.set_thumbnail(url=user.avatar.url)
+            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+
+            embed.add_field(name='**Owner**', value=f'<@{owner_id}>', inline=False)
+
+            query = """
+                        SELECT (
+                            SELECT COUNT(*)
+                            FROM tags second
+                            WHERE (second.uses, second.id) >= (first.uses, first.id)
+                            AND second.location_id = first.location_id
+                            ) AS rank
+                        FROM tags first
+                        WHERE first.id=$1
+                    """
+
+            rank = await ctx.db.fetchrow(query, record['id'])
+
+            if rank is not None:
+                text = '**Rank**'
+                if rank['rank'] in (1, 2, 3):
+                    text += f' {chr(129350 + int(rank["rank"]))}'
+
+                embed.add_field(name=text, value=f"**#{rank['rank']}**")
+
+            embed.add_field(name='**Tag Used**', value=record['uses'])
+
+            query = """
+                        SELECT COUNT(*) AS count
+                        FROM tag_lookup
+                           WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2
+                            AND tag_lookup.location_id=$3
+                    """
+            alias_count = await self.bot.pool.fetchrow(query, record['id'], record["name"], ctx.guild.id)
+
+            embed.add_field(name="**Aliases**", value=alias_count['count'])
+            await ctx.send(embed=embed)
 
     @command(
         tags.command,
@@ -871,56 +855,54 @@ class Tags(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.describe(member='The member to list tags of, if not given then it defaults to you.')
-    async def tags_list(self, ctx: GuildContext, *, member: discord.User = commands.Author):
+    async def tags_list(self, ctx: GuildContext, *, flags: TagListFlags):
         """Shows a list of Tags owned by yourself or a given member."""
-        query = """
-            SELECT name, id FROM tag_lookup
-            WHERE location_id=$1 AND owner_id=$2
-            ORDER BY name
-        """
+        SORT = {
+            "id": "id",
+            "newest": "created_at DESC",
+            "oldest": "created_at ASC",
+            "name": "name DESC"
+        }.get(flags.sort, "name DESC")
 
-        rows = await ctx.db.fetch(query, ctx.guild.id, member.id)
+        if not flags.query:
+            query = f"""
+                        SELECT name, id
+                        FROM tag_lookup
+                        WHERE location_id=$1 AND owner_id=$2
+                        ORDER BY {SORT};
+                    """
+            values = (ctx.guild.id, flags.member.id)
+        else:
+            if flags.sort == "name":
+                SORT = "similarity(name, $2) DESC"
+
+            query = f"""
+                        SELECT name, id
+                        FROM tag_lookup
+                        WHERE location_id=$1 AND name % $2 AND owner_id=$3
+                        ORDER BY {SORT};
+                    """
+            values = (ctx.guild.id, flags.query, flags.member.id)
+
+        rows = await ctx.db.fetch(query, *values)
 
         if rows:
-            embed = discord.Embed(title="Tag Search",
-                                  description=f"**{member}'s** Tags in {ctx.guild.name}",
-                                  colour=helpers.Colour.darker_red(),
-                                  timestamp=discord.utils.utcnow())
-            embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
+            if flags.to_text:
+                await self.send_tags_to_text(ctx, rows)
+            else:
+                embed = discord.Embed(title="Tag Search",
+                                      description=f"**{flags.member}'s** Tags in {ctx.guild.name}",
+                                      colour=helpers.Colour.darker_red(),
+                                      timestamp=discord.utils.utcnow())
+                embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
 
-            results = [f"`{index}.` {entry}" for index, entry in
-                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
-            await LinePaginator.start(
-                ctx, entries=results, search_for=True, per_page=20, embed=embed
-            )
+                results = [f"`{index}.` {entry}" for index, entry in
+                           enumerate([TagPageEntry(record=row) for row in rows], 1)]
+                await LinePaginator.start(
+                    ctx, entries=results, search_for=True, per_page=20, embed=embed
+                )
         else:
-            await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
-
-    async def _tag_all_text_mode(self, ctx: GuildContext):
-        query = """
-            SELECT
-                tag_lookup.id,
-                tag_lookup.name,
-                tag_lookup.owner_id,
-                tags.uses,
-                $2 OR $3 = tag_lookup.owner_id AS "can_delete",
-                LOWER(tag_lookup.name) <> LOWER(tags.name) AS "is_alias"
-            FROM tag_lookup
-            INNER JOIN tags ON tags.id = tag_lookup.tag_id
-            WHERE tag_lookup.location_id=$1
-            ORDER BY tags.uses DESC;
-        """
-
-        bypass_owner_check = ctx.author.id == self.bot.owner_id or ctx.author.guild_permissions.manage_messages
-        rows = await ctx.db.fetch(query, ctx.guild.id, bypass_owner_check, ctx.author.id)
-        if not rows:
-            return await ctx.send('<:redTick:1079249771975413910> There are no tags in this server.')
-
-        table = formats.TabularData()
-        table.set_columns(list(rows[0].keys()))
-        table.add_rows(list(r.values()) for r in rows)
-        fp = io.BytesIO(table.render().encode('utf-8'))
-        await ctx.send(file=discord.File(fp, 'tags.txt'))
+            await ctx.send(f'<:redTick:1079249771975413910> **{flags.member}** currently has no tags.')
 
     @command(
         tags.command,
@@ -1004,19 +986,22 @@ class Tags(commands.Cog):
             values = (ctx.guild.id, flags.query)
 
         rows = await ctx.db.fetch(query, *values)
-
+        
         if rows:
-            embed = discord.Embed(title="Tag Search",
-                                  description=f"Sorted by: **{flags.sort}**",
-                                  colour=helpers.Colour.darker_red(),
-                                  timestamp=discord.utils.utcnow())
-            embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
-
-            results = [f"`{index}.` {entry}" for index, entry in
-                       enumerate([TagPageEntry(record=row) for row in rows], 1)]
-            await LinePaginator.start(
-                ctx, entries=results, search_for=True, per_page=20, embed=embed
-            )
+            if flags.to_text:
+                await self.send_tags_to_text(ctx, rows)
+            else:
+                embed = discord.Embed(title="Tag Search",
+                                      description=f"Sorted by: **{flags.sort}**",
+                                      colour=helpers.Colour.darker_red(),
+                                      timestamp=discord.utils.utcnow())
+                embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
+    
+                results = [f"`{index}.` {entry}" for index, entry in
+                           enumerate([TagPageEntry(record=row) for row in rows], 1)]
+                await LinePaginator.start(
+                    ctx, entries=results, search_for=True, per_page=20, embed=embed
+                )
         else:
             await ctx.send('<:redTick:1079249771975413910> No tags found.')
 
