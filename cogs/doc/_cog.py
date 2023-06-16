@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import sys
 import textwrap
-import zlib
 from collections import defaultdict
 from ssl import CertificateError
 from types import SimpleNamespace
-from typing import Literal, Any, Annotated, Optional, Generator
+from typing import Literal, Any, Annotated, Optional, List, Generic, TypeVar, Type
 
 import aiohttp
 import discord
 from aiohttp import ClientConnectorError
 from discord import app_commands
 from discord.ext import commands
+from discord.utils import MISSING
 
 from bot import Percy
 from launcher import get_logger
@@ -130,13 +129,16 @@ class DocItem:
             relative_url_path: str,
             symbol_id: str,
             resolved_fields: Optional[dict[str, str]] = None,
+            embed: discord.Embed = None,
     ):
-        self.package = package
-        self.group = group
-        self.base_url = base_url
-        self.relative_url_path = relative_url_path
-        self.symbol_id = symbol_id
-        self.resolved_fields = resolved_fields or {}
+        self.package: str = package
+        self.group: str = group
+        self.base_url: str = base_url
+        self.relative_url_path: str = relative_url_path
+        self.symbol_id: str = symbol_id
+
+        self.resolved_fields: dict[str, Any] = resolved_fields or {}
+        self.embed: discord.Embed = embed
 
     @property
     def url(self) -> str:
@@ -144,37 +146,112 @@ class DocItem:
         return self.base_url + self.relative_url_path
 
 
-class SphinxObjectFileReader:
-    # Inspired by Sphinx's InventoryFileReader
-    BUFFSIZE = 16 * 1024  # 16KB
+T = TypeVar("T", bound=DocItem)
 
-    def __init__(self, buffer: bytes):
-        self.stream = io.BytesIO(buffer)
 
-    def readline(self) -> str:
-        return self.stream.readline().decode('utf-8')
+class DocSelect(discord.ui.Select):
+    def __init__(self, parent: DocView):
+        self.parent = parent
+        super().__init__(
+            placeholder='Select a similar Documentation...',
+            max_values=1,
+            row=1,
+        )
+        self.__fill_options()
 
-    def skipline(self) -> None:
-        self.stream.readline()
+    def __fill_options(self) -> None:
+        for item in self.parent.items:  # type: DocItem
+            if not item.embed:
+                continue
 
-    def read_compressed_chunks(self) -> Generator[bytes, None, None]:
-        decompressor = zlib.decompressobj()
-        while True:
-            chunk = self.stream.read(self.BUFFSIZE)
-            if len(chunk) == 0:
-                break
-            yield decompressor.decompress(chunk)
-        yield decompressor.flush()
+            self.add_option(
+                label=item.symbol_id,
+                description=item.group,
+                value=str(self.parent.items.index(item)),
+            )
 
-    def read_compressed_lines(self) -> Generator[str, None, None]:
-        buf = b''
-        for chunk in self.read_compressed_chunks():
-            buf += chunk
-            pos = buf.find(b'\n')
-            while pos != -1:
-                yield buf[:pos].decode('utf-8')
-                buf = buf[pos + 1:]
-                pos = buf.find(b'\n')
+    async def callback(self, interaction: discord.Interaction):
+        assert self.parent is not None
+        self.parent._current = self.parent.items[int(self.values[0])]
+        await self.parent.update(interaction, embed=self.parent._current.embed)  # noqa
+
+
+class DocView(discord.ui.View, Generic[T]):
+    """A View that represents a documentation page for a specific object.
+
+    Parameters
+    ----------
+    items: list[DocItem]
+        The list of items to display.
+    timeout: int
+        The timeout for the view.
+    """
+
+    def __init__(
+            self,
+            *,
+            items: list[DocItem],
+            timeout: int = 450,
+    ):
+        super().__init__(timeout=timeout)
+
+        self.items: list[DocItem] = items
+
+        self.ctx: Context | discord.Interaction = MISSING
+        self.msg: discord.Message = MISSING
+
+        self._current: DocItem = MISSING
+
+    async def on_timeout(self) -> None:
+        if self.msg is not MISSING:
+            try:
+                await self.msg.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message(
+                "This message is not for you!", ephemeral=True
+            )
+            return False
+        return True
+
+    async def update(self, interaction: discord.Interaction | Context, *args, **kwargs) -> Optional[discord.Message]:
+        if getattr(interaction, "_message", None) is not None:
+            return await interaction._message.edit(content=None, **kwargs)  # noqa
+        elif getattr(interaction, "response", None) is not None:
+            if interaction.response.is_done():
+                return await interaction.edit_original_response(content=None, **kwargs)
+            return await interaction.response.edit_message(content=None, **kwargs)  # noqa
+        else:
+            if isinstance(interaction, Context):
+                self.msg = await interaction.send(*args, **kwargs)
+            elif isinstance(interaction, discord.Interaction):
+                if interaction.response.is_done():
+                    await interaction.edit_original_response(*args, **kwargs)
+                else:
+                    await interaction.response.send_message(*args, **kwargs)
+
+                self.msg = await interaction.original_response()
+        return self.msg
+
+    @classmethod
+    async def start(
+            cls: Type[DocView],
+            context: Context | discord.Interaction,
+            *,
+            items: list[DocItem],
+            timeout: int = 450,
+    ) -> DocView[T]:
+        self = cls(items=items, timeout=timeout)
+        self.ctx = context
+
+        self._current = items[0]
+        self.add_item(DocSelect(self))
+
+        self.msg = await self.update(context, view=self, embed=self._current.embed)
+        return self
 
 
 class Documentation(commands.Cog):
@@ -365,7 +442,7 @@ class Documentation(commands.Cog):
         result = fuzzy.finder(symbol_name, self.doc_symbols.items(), key=lambda x: x[0])[:limit]
         if limit == 1:
             result = result[0][1] if result else None
-        return symbol_name, result if result else None
+        return symbol_name, [r[1] for r in result] if result else None
 
     async def get_symbol_markdown(self, doc_item: DocItem) -> str:
         """
@@ -383,7 +460,7 @@ class Documentation(commands.Cog):
             except aiohttp.ClientError as e:
                 log.warning(f"A network error has occurred when requesting parsing of {doc_item}.", exc_info=e)
                 return "Unable to parse the requested symbol due to a network error."
-            except Exception:
+            except Exception:  # noqa
                 log.exception(f"An unexpected error has occurred when requesting parsing of {doc_item}.")
                 return "Unable to parse the requested symbol due to an error."
 
@@ -391,7 +468,7 @@ class Documentation(commands.Cog):
                 return "Unable to parse the requested symbol."
         return markdown
 
-    async def create_symbol_embed(self, symbol_name: str) -> discord.Embed | None:
+    async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
         """
         Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
 
@@ -399,32 +476,31 @@ class Documentation(commands.Cog):
 
         First check the DocRedisCache before querying the cog's `BatchParser`.
         """
-        log.trace(f"Building embed for symbol `{symbol_name}`")
+        log.trace(f"Building embed for symbol `{item.symbol_id}`.")
         if not self.refresh_event.is_set():
             log.debug("Waiting for inventories to be refreshed before processing item.")
             await self.refresh_event.wait()
 
         with self.symbol_get_event:
-            symbol_name, doc_item = await self.get_symbol_item(symbol_name)
-            if doc_item is None:
+            if item is None:
                 log.debug("Symbol does not exist.")
                 return None
 
-            if symbol_name in self.renamed_symbols:
-                renamed_symbols = ", ".join(self.renamed_symbols[symbol_name])
+            if item.symbol_id in self.renamed_symbols:
+                renamed_symbols = ", ".join(self.renamed_symbols[item.symbol_id])
                 footer_text = textwrap.shorten(f"Similar names: {renamed_symbols}", 200, placeholder="...")
             else:
                 footer_text = ""
 
             embed = discord.Embed(
-                title=discord.utils.escape_markdown(doc_item.symbol_id),
-                url=f"{doc_item.url}#{doc_item.symbol_id}",
-                description=await self.get_symbol_markdown(doc_item)
+                title=discord.utils.escape_markdown(item.symbol_id),
+                url=f"{item.url}#{item.symbol_id}",
+                description=await self.get_symbol_markdown(item)
             )
-            embed.set_author(name=f"{doc_item.package} Documentation",
+            embed.set_author(name=f"{item.package} Documentation",
                              icon_url="https://cdn.discordapp.com/emojis/1070680561854709840.webp?size=96&quality=lossless")
 
-            for name, value in doc_item.resolved_fields.items():
+            for name, value in item.resolved_fields.items():
                 embed.add_field(name=name, value=value, inline=False)
 
             embed.set_footer(text=footer_text)
@@ -434,7 +510,7 @@ class Documentation(commands.Cog):
              description="Look up documentation for Python symbols.", invoke_without_command=True)
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
-    async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None) -> None:
+    async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None):
         """Return a documentation embed for a given symbol.
 
         If no symbol is given, return a list of all available inventories.
@@ -451,12 +527,15 @@ class Documentation(commands.Cog):
         else:
             symbol = symbol_name.strip("`")
             async with ctx.typing():
-                doc_embed = await self.create_symbol_embed(symbol)
+                _, doc_items = await self.get_symbol_item(symbol, limit=12)  # type: str, List[DocItem]
 
-            if doc_embed is None:
-                await ctx.send(f"{ctx.tick(False)} The symbol `{symbol}` was not found.")
-            else:
-                await ctx.send(embed=doc_embed)
+                if not doc_items:
+                    return await ctx.send(f"{ctx.tick(False)} The symbol `{symbol_name}` was not found.")
+
+                for doc_item in doc_items:
+                    doc_item.embed = await self.create_symbol_embed(doc_item)
+
+            await DocView.start(ctx, items=doc_items)
 
     @staticmethod
     def base_url_from_inventory_url(inventory_url: str) -> str:
