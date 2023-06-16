@@ -172,7 +172,7 @@ class DocSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         assert self.parent is not None
-        self.parent._current = self.parent.items[int(self.values[0])]
+        self.parent._current = await self.parent.format_page(int(self.values[0]))
         await self.parent.update(interaction, embed=self.parent._current.embed)  # noqa
 
 
@@ -181,6 +181,8 @@ class DocView(discord.ui.View, Generic[T]):
 
     Parameters
     ----------
+    cog: Documentation
+        The cog that created this view.
     items: list[DocItem]
         The list of items to display.
     timeout: int
@@ -190,12 +192,14 @@ class DocView(discord.ui.View, Generic[T]):
     def __init__(
             self,
             *,
+            cog: Documentation,
             items: list[DocItem],
             timeout: int = 450,
     ):
         super().__init__(timeout=timeout)
 
         self.items: list[DocItem] = items
+        self.cog: Documentation = cog
 
         self.ctx: Context | discord.Interaction = MISSING
         self.msg: discord.Message = MISSING
@@ -236,18 +240,52 @@ class DocView(discord.ui.View, Generic[T]):
                 self.msg = await interaction.original_response()
         return self.msg
 
+    async def format_page(self, index: int) -> DocItem:
+        """Format the page for the given item."""
+        try:
+            item = self.items[index]
+        except IndexError:
+            raise RuntimeError("Critical, Invalid index passed to `format_page`.")
+
+        if item.embed is not None:
+            # already formatted?
+            return item
+
+        embed = await self.cog.create_symbol_embed(item)
+        item.embed = embed
+        return item
+
     @classmethod
     async def start(
             cls: Type[DocView],
             context: Context | discord.Interaction,
             *,
+            cog: Documentation,
             items: list[DocItem],
             timeout: int = 450,
     ) -> DocView[T]:
-        self = cls(items=items, timeout=timeout)
+        """Initialize a new DocView.
+
+        Parameters
+        ----------
+        context: Context | discord.Interaction
+            The context or interaction that triggered this view.
+        cog: Documentation
+            The cog that created this view.
+        items: list[DocItem]
+            The list of items to display.
+        timeout: int
+            The timeout for the view.
+
+        Returns
+        -------
+        DocView
+            The initialized view.
+        """
+        self = cls(items=items, cog=cog, timeout=timeout)
         self.ctx = context
 
-        self._current = items[0]
+        self._current = await self.format_page(0)
         self.add_item(DocSelect(self))
 
         self.msg = await self.update(context, view=self, embed=self._current.embed)
@@ -532,10 +570,7 @@ class Documentation(commands.Cog):
                 if not doc_items:
                     return await ctx.send(f"{ctx.tick(False)} The symbol `{symbol_name}` was not found.")
 
-                for doc_item in doc_items:
-                    doc_item.embed = await self.create_symbol_embed(doc_item)
-
-            await DocView.start(ctx, items=doc_items)
+            await DocView.start(ctx, cog=self, items=doc_items)
 
     @staticmethod
     def base_url_from_inventory_url(inventory_url: str) -> str:

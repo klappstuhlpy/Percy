@@ -12,6 +12,7 @@
 /cogs/utils/scraping/__pycache__/
 /cogs/snekbox/__pycache__/
 /cogs/minigames/__pycache__/
+/cogs/docs/__pycache__/
 /.idea/
 /prefixes.json
 /blacklist.json
