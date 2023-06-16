@@ -269,7 +269,7 @@ class Tags(commands.Cog):
 
         root: commands.GroupMixin = self.bot.get_command('tag')   # type: ignore
         if first_word in root.all_commands:
-            return False
+            return True
         else:
             return in_prod_check()
 
