@@ -161,9 +161,6 @@ class DocSelect(discord.ui.Select):
 
     def __fill_options(self) -> None:
         for item in self.parent.items:  # type: DocItem
-            if not item.embed:
-                continue
-
             self.add_option(
                 label=item.symbol_id,
                 description=item.group,
