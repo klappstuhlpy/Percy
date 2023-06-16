@@ -19,7 +19,7 @@ from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
 from cogs.user import UserSettings
 from cogs.utils import helpers
-from cogs.utils.comic.client import Marvel
+from cogs.utils.comic._client import Marvel
 from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.helpers import BasicJSONEncoder

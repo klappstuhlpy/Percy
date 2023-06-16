@@ -767,7 +767,7 @@ class Tags(commands.Cog):
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
 
         embed.add_field(name='**Owner**', value=f'<@{owner_id}>')
-        embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=f"**{record['name']}** [`{record['id']}`")
+        embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=f"**{record['name']}** [`{record['id']}`]")
         await ctx.send(embed=embed)
 
     async def _send_tag_info(self, ctx: GuildContext, record: asyncpg.Record):

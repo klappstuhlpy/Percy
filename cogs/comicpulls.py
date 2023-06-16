@@ -19,7 +19,7 @@ from cogs.utils import cache
 from cogs.utils.formats import MaybeAcquire
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.lock import lock
-from cogs.utils.scraper.comics import Parser
+from cogs.utils.comic._parser import Parser
 from launcher import get_logger
 
 log = get_logger(__name__)

@@ -60,11 +60,9 @@ def _split_parameters(parameters_string: str) -> Iterator[str]:
     enumerated_string = enumerate(parameters_string)
     for index, character in enumerated_string:
         if character in {"'", '"'}:
-            # Skip everything inside of strings, regardless of the depth.
-            quote_character = character  # The closing quote must equal the opening quote.
+            quote_character = character
             preceding_backslashes = 0
             for _, character in enumerated_string:
-                # If an odd number of backslashes precedes the quote, it was escaped.
                 if character == quote_character and not preceding_backslashes % 2:
                     break
                 if character == "\\":
@@ -101,7 +99,6 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
     A maximum of `_MAX_SIGNATURE_AMOUNT` signatures is assumed to be passed.
     """
     if sum(len(signature) for signature in signatures) <= _MAX_SIGNATURES_LENGTH:
-        # Total length of signatures is under the length limit; no truncation needed.
         return signatures
 
     max_signature_length = _EMBED_CODE_BLOCK_LINE_LENGTH * (MAX_SIGNATURE_AMOUNT + 1 - len(signatures))
@@ -143,7 +140,7 @@ def _get_truncated_description(
     with the real string length limited to `_MAX_DESCRIPTION_LENGTH` to accommodate discord length limits.
     """
     result = ""
-    markdown_element_ends = []  # Stores indices into `result` which point to the end boundary of each Markdown element.
+    markdown_element_ends = []
     rendered_length = 0
 
     tag_end_index = 0
@@ -278,19 +275,5 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
 
         if items:
             fields["**Supported Operations**"] = "\n".join([f"`{name}` - {description}" for name, description in items])
-
-    """description_tag = symbol_heading.find_next("dd")
-    parameters = description_tag.find("dl", class_="field-list")
-    if parameters:
-        for field in parameters.find_all("ul", class_="simple", recursive=False):
-            key = parameters.find_next("dt", _class="field-odd").text
-            values: list[Tag] = [x for x in field.next_siblings if isinstance(x, Tag)][0].find_all("p")
-
-            elements: list[list[str]] = []
-            for value in values:
-                texts = [get_text(element) for element in value.contents]
-                elements.append(texts)
-
-            fields[key] = "\n".join("".join(element) for element in elements)"""
 
     return fields

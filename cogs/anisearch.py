@@ -14,10 +14,10 @@ from lru import LRU
 from bot import Percy
 from cogs import command
 from cogs.utils import fuzzy
-from cogs.utils.anisearch import formatter
+from cogs.utils.anisearch import _formatter
 from cogs.utils.context import Context
-from cogs.utils.anisearch.client import AniListClient
-from cogs.utils.anisearch.formatter import month_to_season, ANILIST_ICON, ANILIST_LOGO
+from cogs.utils.anisearch._client import AniListClient
+from cogs.utils.anisearch._formatter import month_to_season, ANILIST_ICON, ANILIST_LOGO
 from cogs.utils.paginator import EmbedPaginator
 
 GRANT_URL = "https://anilist.co/api/v2/oauth/"

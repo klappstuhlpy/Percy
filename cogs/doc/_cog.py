@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
-import re
 import sys
 import textwrap
 import zlib
@@ -33,7 +31,6 @@ from ..utils.paginator import LinePaginator
 
 log = get_logger(__name__)
 
-# symbols with a group contained here will get the group prefixed on duplicates
 FORCE_PREFIX_GROUPS = (
     "term",
     "label",
@@ -44,7 +41,6 @@ FORCE_PREFIX_GROUPS = (
 )
 
 FETCH_RESCHEDULE_DELAY = SimpleNamespace(first=2, repeated=5)
-
 COMMAND_LOCK_SINGLETON = "inventory refresh"
 
 
@@ -558,49 +554,6 @@ class Documentation(commands.Cog):
             await ctx.send(f"{ctx.tick(True)} Successfully cleared the cache for `{package_name}`.")
         else:
             await ctx.send(f"{ctx.tick(False)} No keys matching the package found.")
-
-    @staticmethod
-    def parse_object_inv(stream: SphinxObjectFileReader, url: str) -> dict[str, str]:
-        result: dict[str, str] = {}
-
-        inv_version = stream.readline().rstrip()
-
-        if inv_version != '# Sphinx inventory version 2':
-            raise RuntimeError('Invalid objects.inv file version.')
-
-        projname = stream.readline().rstrip()[11:]
-        version = stream.readline().rstrip()[11:]  # noqa
-
-        line = stream.readline()
-        if 'zlib' not in line:
-            raise RuntimeError('Invalid objects.inv file, not z-lib compatible.')
-
-        entry_regex = re.compile(r'(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+(\S+)\s+(.*)')
-        for line in stream.read_compressed_lines():
-            match = entry_regex.match(line.rstrip())
-            if not match:
-                continue
-
-            name, directive, prio, location, dispname = match.groups()
-            domain, _, subdirective = directive.partition(':')
-            if directive == 'py:module' and name in result:
-                continue
-
-            if directive == 'std:doc':
-                subdirective = 'label'
-
-            if location.endswith('$'):
-                location = location[:-1] + name
-
-            key = name if dispname == '-' else dispname
-            prefix = f'{subdirective}:' if domain == 'std' else ''
-
-            if projname == 'discord.py':
-                key = key.replace('discord.ext.commands.', '').replace('discord.', '')
-
-            result[f'{prefix}{key}'] = os.path.join(url, location)
-
-        return result
 
     @command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
     @app_commands.describe(entity='The object to search for')

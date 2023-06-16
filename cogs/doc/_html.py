@@ -38,7 +38,6 @@ class Strainer(SoupStrainer):
     def search(self, markup: Markup) -> Optional[PageElement | str]:
         """Extend default SoupStrainer behaviour to allow matching both `Tag`s` and `NavigableString`s."""
         if isinstance(markup, str):
-            # Let everything through the text filter if we're including strings and tags.
             if not self.name and not self.attrs and self.include_strings:
                 return markup
             return None

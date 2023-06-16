@@ -7,9 +7,9 @@ import aiohttp
 from bs4 import BeautifulSoup, Tag, NavigableString, PageElement
 from dateutil.parser import parse
 
-from ..tasks import executor
-from ..comic.client import Marvel, Comic as MarvelComic
-from ..formats import remove_html_tags
+from cogs.utils.tasks import executor
+from cogs.utils.comic._client import Marvel, Comic as MarvelComic
+from cogs.utils.formats import remove_html_tags
 
 
 # DC
