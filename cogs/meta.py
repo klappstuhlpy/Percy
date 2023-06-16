@@ -531,6 +531,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         flags = self.get_command_flag_formatting(command)
         if flags:
+            # If we have flags, we need to remove the flags from the signature
+            # because this might be confusing for the user
+            signature = re.sub(r'(.)flags(.)', '', signature)
+            # Also sub the multiple spaces with one space
             signature = re.sub(r'\s+', ' ', f'{signature} {flags}')
 
         parent = command.full_parent_name if command.parent else None
