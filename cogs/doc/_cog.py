@@ -140,6 +140,9 @@ class DocItem:
         self.resolved_fields: dict[str, Any] = resolved_fields or {}
         self.embed: discord.Embed = embed
 
+    def __str__(self):
+        return f"{self.package}.{self.symbol_id}"
+
     @property
     def url(self) -> str:
         """Return the absolute url to the symbol."""

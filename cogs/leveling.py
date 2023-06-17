@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 
 from bot import Percy
 from cogs import command, command_permissions, PermissionTemplate
-from cogs.mod import GuildConfig, AutoModFlags
+from cogs.mod import AutoModFlags
 from cogs.utils import cache
 from cogs.utils.context import Context, GuildContext
 from cogs.utils.formats import medal_emojize
@@ -219,6 +219,10 @@ class Leveling(commands.Cog):
             return
 
         mod_config = await self.bot.moderation.get_guild_config(member.guild.id)
+
+        if not mod_config:
+            return
+
         if not mod_config.flags.leveling:
             return
 
@@ -298,22 +302,27 @@ class Leveling(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @command(level.command, description="Toggle leveling on or off.")
+    @app_commands.describe(enabled="Boolean to enable or disable leveling. If not provided, it will toggle.")
     @commands.guild_only()
     @command_permissions(user=PermissionTemplate.manager)
-    async def toggle(self, ctx: GuildContext) -> None:
+    async def toggle(self, ctx: GuildContext, enabled: Optional[bool] = None) -> None:
         """Toggle leveling on or off."""
-        config: GuildConfig = await self.bot.moderation.get_guild_config(ctx.guild.id)
-        if config.flags.leveling:
-            update = f'flags = guild_config.flags & ~{AutoModFlags.leveling.flag}'
-            content = f"Leveling is now **disabled** for {ctx.guild.name}."
-        else:
-            update = f'flags = guild_config.flags | {AutoModFlags.leveling.flag}'
-            content = f"Leveling is now **enabled** for {ctx.guild.name}."
-
-        query = f'UPDATE guild_config SET {update} WHERE id=$1;'
-        await ctx.db.execute(query, ctx.guild.id)
-        self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
-        await ctx.send(ctx.tick(True, content))
+        query = """
+            INSERT INTO guild_config (id, flags)
+            VALUES ($1, $2) ON CONFLICT (id)
+            DO UPDATE SET
+                -- If we're toggling then we need to negate the previous result
+                flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
+                                WHEN TRUE THEN guild_config.flags | $2
+                                WHEN FALSE THEN guild_config.flags & ~$2
+                        END
+            RETURNING COALESCE($3, (flags & $2 = $2));
+        """
+        row: Optional[tuple[bool]] = await ctx.db.fetchrow(query, ctx.guild.id, AutoModFlags.leveling.flag, enabled)
+        enabled = row and row[0]
+        self.bot.moderation.get_guild_config.invalidate(self, ctx.guild.id)
+        fmt = '*enabled*' if enabled else '*disabled*'
+        await ctx.send(ctx.tick(True, f'Leveling {fmt}.'))
 
     @command(level.command, aliases=['top'], description="View the server leaderboard.")
     @commands.guild_only()
