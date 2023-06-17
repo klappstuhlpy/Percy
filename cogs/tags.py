@@ -256,7 +256,11 @@ class Tags(commands.Cog):
                 await ctx.send(f'<:greenTick:1079249732364406854> Tag `{name}` was successfully created.')
 
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
-        """Helper method to check if a Tag with ``name`` is currently being made."""
+        """Helper method to check if a Tag with ``name`` is currently being made or reserved.
+
+        Note: This doesn't check if the Tag actually exists.
+        This needs to be handled by the caller.
+        """
         def in_prod_check() -> bool:
             try:
                 being_made = self._temporary_reserved_tags[guild_id]
