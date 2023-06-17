@@ -292,6 +292,10 @@ class Tags(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         query = "SELECT name, id FROM tags WHERE location_id=$1 LIMIT 20;"
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
+
+        if not results:
+            return []
+
         results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
         return [app_commands.Choice(name=f"[{a['id']}] {a['name']}", value=a['name']) for a in results]
 
@@ -300,6 +304,10 @@ class Tags(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         query = "SELECT name FROM tag_lookup WHERE location_id=$1 LIMIT 20;"
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
+
+        if not results:
+            return []
+
         results = fuzzy.finder(current, results, key=lambda a: a['name'])
         return [app_commands.Choice(name=a['name'], value=a['name']) for a in results]
 
@@ -308,6 +316,10 @@ class Tags(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         query = "SELECT name, id FROM tags WHERE location_id=$1 AND owner_id=$2 LIMIT 20;"
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
+
+        if not results:
+            return []
+
         results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
         return [app_commands.Choice(name=f"[{a['id']}] {a['name']}", value=a['name']) for a in results]
 
@@ -316,6 +328,10 @@ class Tags(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         query = "SELECT name FROM tag_lookup WHERE location_id=$1 AND owner_id=$2 LIMIT 20;"
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
+
+        if not results:
+            return []
+
         results = fuzzy.finder(current, results, key=lambda a: a['name'])
         return [app_commands.Choice(name=a['name'], value=a['name']) for a in results]
 
@@ -403,10 +419,6 @@ class Tags(commands.Cog):
         `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
         """
 
-        if self.is_tag_reserved(ctx.guild.id, name):
-            return await ctx.send(
-                '<:redTick:1079249771975413910> This tag name is reserved or currently being made.')
-
         if len(content) > 2000:
             return await ctx.send('<:redTick:1079249771975413910> Tag content must be less than `2000` characters.')
 
@@ -447,16 +459,10 @@ class Tags(commands.Cog):
         try:
             ctx.message = name
             name = await converter.convert(ctx, name.content)
-        except commands.BadArgument as e:
-            return await ctx.send(
-                f'<:redTick:1079249771975413910> {e}.\nRedo the command "`{ctx.prefix}tag make`" to retry.')
+        except commands.BadArgument:
+            raise
         finally:
             ctx.message = original
-
-        if self.is_tag_reserved(ctx.guild.id, name):
-            return await ctx.send(
-                '<:redTick:1079249771975413910> This tag name is reserved or currently being made..'
-            )
 
         query = "SELECT 1 FROM tags WHERE location_id=$1 AND LOWER(name)=$2;"
         row = await ctx.db.fetchrow(query, ctx.guild.id, name.lower())
@@ -470,12 +476,11 @@ class Tags(commands.Cog):
         messages.append(await ctx.send(
             f'The new Tags name is **{name}**.\n'
             f'Please enter now a content for the tag.\n'
-            f'You can type "`{ctx.prefix}abort`" to abort the tag make process.\n'
-            f'**Timeout ETA:** {discord.utils.format_dt(datetime.datetime.utcnow() + datetime.timedelta(seconds=60), "R")}.'
+            f'You can type "`{ctx.prefix}abort`" to abort the tag make process.'
         ))
 
         try:
-            msg = await self.bot.wait_for('message', check=check, timeout=300.0)
+            msg = await self.bot.wait_for('message', check=check, timeout=100.0)
         except asyncio.TimeoutError:
             self.remove_in_progress_tag(ctx.guild.id, name)
             return
@@ -527,10 +532,10 @@ class Tags(commands.Cog):
             e.description = '*There are no statistics available.*'
         else:
             total = records[0]
-            e.add_field(name='**STATS**',
+            e.add_field(name='**Guild Stats**',
                         value=f'Total Tags: **{total["count"]}**\n'
                               f'Total Uses: **{total["total_uses"]}**\n\n'
-                              f'with **{usage_per_day(ctx.me.joined_at, total["total_uses"]):.2f}** tag uses per day',
+                              f'*with **{usage_per_day(ctx.me.joined_at, total["total_uses"]):.2f}** tag uses per day*',
                         inline=False)
 
         value = '\n'.join(
@@ -538,7 +543,7 @@ class Tags(commands.Cog):
             for (emoji, (name, uses, _, _)) in medal_emojize(records)
         )
 
-        e.add_field(name='**MOST USED TAGS**', value=value, inline=False)
+        e.add_field(name='**Most Used Tags**', value=value, inline=False)
 
         query = """
             SELECT
@@ -557,7 +562,7 @@ class Tags(commands.Cog):
             f'{emoji}: <@{author_id}> (**{uses}** times)'
             for (emoji, (uses, author_id)) in medal_emojize(records)
         )
-        e.add_field(name='**TOP TAG USERS**', value=value, inline=False)
+        e.add_field(name='**Top Tag Users**', value=value, inline=False)
 
         query = """
             SELECT
@@ -576,7 +581,7 @@ class Tags(commands.Cog):
             f'{emoji}: <@{owner_id}> (**{count}** tags)'
             for (emoji, (count, owner_id)) in medal_emojize(records)
         )
-        e.add_field(name='**TOP CREATORS**', value=value, inline=False)
+        e.add_field(name='**Top Creators**', value=value, inline=False)
 
         await ctx.send(embed=e)
 
@@ -615,12 +620,12 @@ class Tags(commands.Cog):
 
         count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
 
-        e.add_field(name='**TAG COMMAND USAGE**', value=f"**{count[0]}** times", inline=False)
-        e.add_field(name='**TAGS OWNED**', value=owned)
-        e.add_field(name='**OWNED TAGS USES**', value=uses)
+        e.add_field(name='**Tag Command Uses**', value=f"**{count[0]}** times", inline=False)
+        e.add_field(name='**Owned Tags**', value=owned)
+        e.add_field(name='**Owned Tags Used**', value=uses)
 
-        for (emoji, (name, uses, _, _)) in medal_emojize(records):
-            e.add_field(name=f'**{emoji} Owned Tag**', value=f'**{name}** (**{uses}** uses)', inline=False)
+        for index, (emoji, (name, uses, _, _)) in enumerate(medal_emojize(records), 1):
+            e.add_field(name=f'**#{index} {emoji}**', value=f'**{name}** (**{uses}** uses)', inline=False)
 
         await ctx.send(embed=e)
 
