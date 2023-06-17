@@ -13,7 +13,7 @@ import textwrap
 import traceback
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, TypedDict, Dict
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import asyncpg
 import discord
@@ -30,6 +30,7 @@ from launcher import get_logger
 from . import command
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
 from .utils import formats, timetools, helpers
+from .utils.formats import censor_object
 from .utils.tasks import executor
 from .utils.render import Render
 
@@ -90,13 +91,6 @@ class LoggingHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.cog.add_record(record)
-
-
-_INVITE_REGEX = re.compile(r'(?:https?:)?discord(?:\.gg|\.com|app\.com(/invite)?)?[A-Za-z0-9]+')
-
-
-def censor_invite(obj: Any, *, _regex=_INVITE_REGEX) -> str:
-    return _regex.sub('[censored-invite]', str(obj))
 
 
 def hex_value(arg: str) -> int:
@@ -390,12 +384,8 @@ class Stats(commands.Cog):
     async def about_invoke(self, ctx: Context):
         await ctx.typing()
 
-    def censor_object(self, obj: str | discord.abc.Snowflake) -> str:
-        if not isinstance(obj, str) and obj.id in self.bot.blacklist:
-            return '[censored]'
-        return censor_invite(obj)
-
-    async def show_guild_stats(self, ctx: GuildContext) -> None:
+    @staticmethod
+    async def show_guild_stats(ctx: GuildContext) -> None:
         lookup = (
             '\N{FIRST PLACE MEDAL}',
             '\N{SECOND PLACE MEDAL}',
@@ -504,7 +494,8 @@ class Stats(commands.Cog):
         embed.add_field(name='Top Command Users Today', value=value, inline=True)
         await ctx.send(embed=embed)
 
-    async def show_member_stats(self, ctx: GuildContext, member: discord.Member) -> None:
+    @staticmethod
+    async def show_member_stats(ctx: GuildContext, member: discord.Member) -> None:
         lookup = (
             '\N{FIRST PLACE MEDAL}',
             '\N{SECOND PLACE MEDAL}',
@@ -570,50 +561,6 @@ class Stats(commands.Cog):
         embed.add_field(name='Most Used Commands Today', value=value, inline=False)
         await ctx.send(embed=embed)
 
-    async def show_command_stats(self, ctx: Context, command: str, record: Dict[str, Any]) -> None:
-        embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name='Command Statistic', icon_url=INFO_ICON_URL)
-
-        resolved = self.bot.resolve_command(command)
-
-        if resolved:
-            embed.description = resolved.description or '*No help available.*'
-
-            cog = getattr(resolved, 'cog', getattr(resolved, 'binding', None))
-            if cog:
-                dp_emoji = getattr(cog, 'display_emoji', None)
-                embed.title = f'{dp_emoji} • {command}'
-            else:
-                embed.title = command
-        else:
-            embed.title = command
-
-        prefix = record['most_invoked_with']
-
-        author_id = record['most_invoked_by']
-        most_invoked_by = self.censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
-
-        embed.add_field(name='Most Invoked By',
-                        value=f'{most_invoked_by} (**{record["most_invoked_by_count"]}** times)', inline=False)
-        embed.add_field(name='Most Invoked with', value=f'`{prefix}` (**{record["most_invoked_with_count"]}** times)',
-                        inline=False)
-        embed.add_field(name='**USES**',
-                        value=f'Total: **{record["total"]}**\n'
-                              f'Failed: **{record["failed"]}**\n'
-                              f'Success: **{record["success"]}**\n\n'
-                              f'Invoked in this Guild: **{record["guild_total"]}** times',
-                        inline=False)
-
-        first_used = record['first_used']
-        if first_used:
-            first_used = first_used.replace(tzinfo=datetime.timezone.utc)
-        else:
-            first_used = discord.utils.utcnow()
-
-        embed.set_footer(text='First command used at', icon_url=COMMAND_ICON_URL).timestamp = first_used
-        embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
-        await ctx.send(embed=embed)
-
     @command(
         commands.group,
         name='stats',
@@ -641,67 +588,7 @@ class Stats(commands.Cog):
         """Tells you the global stats for a command."""
 
         async with ctx.channel.typing():
-            '''query = """
-                WITH prefix_counts AS (
-                    SELECT
-                        prefix,
-                        COUNT(*) AS "most_invoked_with_count"
-                    FROM commands
-                    WHERE command = $1
-                    GROUP BY prefix
-                    ORDER BY most_invoked_with_count DESC
-                    LIMIT 1
-                ), invoke_counts AS (
-                    SELECT
-                        COUNT(*) AS "total",
-                        SUM(CASE WHEN failed THEN 1 ELSE 0 END) AS "failed",
-                        SUM(CASE WHEN failed THEN 0 ELSE 1 END) AS "success"
-                    FROM commands
-                    WHERE command = $1
-                ), user_counts AS (
-                    SELECT
-                        author_id,
-                        COUNT(*) AS "most_invoked_by_count"
-                    FROM commands
-                    WHERE command = $1
-                    GROUP BY author_id
-                    ORDER BY most_invoked_by_count DESC
-                    LIMIT 1
-                )
-                SELECT
-                    x.prefix AS "most_invoked_with",
-                    x.author_id AS "most_invoked_by",
-                    x.first_used,
-                    g.guild_total,
-                    i.failed,
-                    i.success,
-                    i.total,
-                    u.most_invoked_by_count,
-                    p.most_invoked_with_count
-                FROM (
-                    SELECT 
-                        prefix,
-                        author_id,
-                        MIN(used) AS "first_used"
-                    FROM commands
-                    WHERE command = $1
-                    GROUP BY prefix, author_id
-                ) AS x
-                CROSS JOIN invoke_counts AS i
-                CROSS JOIN user_counts AS u
-                INNER JOIN prefix_counts AS p ON x.prefix = p.prefix
-                LEFT JOIN (
-                    SELECT
-                        COUNT(*) AS "guild_total"
-                    FROM commands
-                    WHERE command = $1
-                    AND guild_id = $2
-                    LIMIT 1
-                ) AS g ON TRUE;
-            """'''
-
             # NOTE: This is experimental!
-
 
             # We use here AsyncAlchemy to improve the performance of the query because is a big one
             # This might be a bit overkill, but it works
@@ -808,15 +695,57 @@ class Stats(commands.Cog):
 
                 assert rows is not None  # can't be None
 
-                mapped = {}
+                record = {}  # Our new "asyncpg.Record"-like object
                 for row in rows:
-                    mapped |= row._mapping  # noqa
+                    record |= row._mapping  # noqa
 
                 # didn't find a better way to do this because rows returns only the values,
                 # what's a bit heavy to deal with on changes so we use a mapping,
                 # so I just did it like this
 
-            await self.show_command_stats(ctx, command, mapped)
+            embed = discord.Embed(colour=helpers.Colour.darker_red())
+            embed.set_author(name='Command Statistic', icon_url=INFO_ICON_URL)
+
+            resolved = self.bot.resolve_command(command)
+
+            if resolved:
+                embed.description = resolved.description or '*No help available.*'
+
+                cog = getattr(resolved, 'cog', getattr(resolved, 'binding', None))
+                if cog:
+                    dp_emoji = getattr(cog, 'display_emoji', None)
+                    embed.title = f'{dp_emoji} • {command}'
+                else:
+                    embed.title = command
+            else:
+                embed.title = command
+
+            prefix = record['most_invoked_with']
+
+            author_id = record['most_invoked_by']
+            most_invoked_by = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+
+            embed.add_field(name='Most Invoked By',
+                            value=f'{most_invoked_by} (**{record["most_invoked_by_count"]}** times)', inline=False)
+            embed.add_field(name='Most Invoked with',
+                            value=f'`{prefix}` (**{record["most_invoked_with_count"]}** times)',
+                            inline=False)
+            embed.add_field(name='**USES**',
+                            value=f'Total: **{record["total"]}**\n'
+                                  f'Failed: **{record["failed"]}**\n'
+                                  f'Success: **{record["success"]}**\n\n'
+                                  f'Invoked in this Guild: **{record["guild_total"]}** times',
+                            inline=False)
+
+            first_used = record['first_used']
+            if first_used:
+                first_used = first_used.replace(tzinfo=datetime.timezone.utc)
+            else:
+                first_used = discord.utils.utcnow()
+
+            embed.set_footer(text='First command used at', icon_url=COMMAND_ICON_URL).timestamp = first_used
+            embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
+            await ctx.send(embed=embed)
 
     @command(
         stats.command,
@@ -868,7 +797,7 @@ class Stats(commands.Cog):
             if guild_id is None:
                 guild = 'Private Message'
             else:
-                guild = self.censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
+                guild = censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
 
             emoji = lookup[index]
             value.append(f'{emoji}: {guild} (`{uses}` uses)')
@@ -886,7 +815,7 @@ class Stats(commands.Cog):
         records = await ctx.db.fetch(query)
         value = []
         for (index, (author_id, uses)) in enumerate(records):
-            user = self.censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            user = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {user} (`{uses}` uses)')
 
@@ -958,7 +887,7 @@ class Stats(commands.Cog):
             if guild_id is None:
                 guild = 'Private Message'
             else:
-                guild = self.censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
+                guild = censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {guild} (`{uses}` uses)')
 
@@ -976,7 +905,7 @@ class Stats(commands.Cog):
         records = await ctx.db.fetch(query)
         value = []
         for (index, (author_id, uses)) in enumerate(records):
-            user = self.censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            user = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {user} ({uses} uses)')
 
@@ -1560,7 +1489,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     e = discord.Embed(title='<:warning:1113421726861238363> App Command Error', colour=0x99002b)
 
     if command is not None:
-        if command._has_any_error_handlers():
+        if command._has_any_error_handlers():  # noqa
             return
 
         e.add_field(name='Name', value=command.qualified_name)
