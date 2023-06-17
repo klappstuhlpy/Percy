@@ -205,6 +205,7 @@ class Context(commands.Context):
 
     @classmethod
     def tick(cls, opt: Optional[bool], label: Optional[str] = None) -> str:
+        """Returns a tick or cross emoji based on the value of `opt`."""
         lookup = {
             True: '<:greenTick:1079249732364406854>',
             False: '<:redTick:1079249771975413910>',
@@ -318,12 +319,80 @@ class Context(commands.Context):
             suppress_embeds: bool = False,
             ephemeral: bool = False,
             post: bool = False,
-            no_edit: bool = False,
             no_reply: bool = False,
             silent: bool = False,
     ) -> discord.Message:
-        """A custom send method that allows us to edit the previous message."""
+        """A custom send method that allows us to edit the previous message.
+
+        Parameters
+        -----------
+        content: Optional[str]
+            The content of the message to send.
+        tts: bool
+            Indicates if the message should be sent using text-to-speech.
+        embed: Optional[Embed]
+            The rich embed for the content.
+        embeds: Optional[Sequence[Embed]]
+            A list of embeds to send with the message. Must be a maximum of 10.
+        file: Optional[File]
+            The file to upload.
+        files: Optional[Sequence[File]]
+            A list of files to upload. Must be a maximum of 10.
+        stickers: Optional[Sequence[Union[GuildSticker, StickerItem]]]
+            A list of stickers to send with the message. Must be a maximum of 3.
+        delete_after: Optional[float]
+            If provided, the number of seconds to wait in the background
+            before deleting the message we just sent.
+        nonce: Optional[Union[str, int]]
+            The nonce to use for sending this message. If the message was successfully sent,
+            then the message will have a nonce with this value.
+        allowed_mentions: Optional[AllowedMentions]
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`.allowed_mentions`.
+        reference: Optional[Union[Message, MessageReference, PartialMessage]]
+            A reference to the :class:`Message` to which you are replying, this can be created
+            with :meth:`Message.to_reference` or passed directly as a :class:`Message`, :class:`PartialMessage`,
+            or :class:`MessageReference`. This allows for providing replies to messages.
+        mention_author: Optional[bool]
+            If set, overrides the :attr:`.allowed_mentions` attribute to mention the
+            author of the message being replied to. If this is set to ``True`` then the
+            message reference *must* be set.
+        view: Optional[View]
+            The view to send with the message.
+        suppress_embeds: bool
+            Indicates if embeds should be suppressed for this message. If set to ``True``, all
+            :class:`Embed` in :attr:`embeds` will be set to :class:`Embed.Empty` and all
+            :class:`MessageEmbed` in :attr:`embeds` will be set to ``None``.
+        ephemeral: bool
+            Indicates if the message should only be visible to the user who started the interaction.
+        post: bool
+            Indicates if the message should be posted to GitHub Gist.
+        no_reply: bool
+            Indicates if the message should not be replied to.
+        silent: bool
+            Indicates if the message should be sent silently.
+
+        Raises
+        --------
+        ~discord.HTTPException
+            Sending the message failed.
+        ~discord.Forbidden
+            You do not have the proper permissions to send the message.
+        ValueError
+            The ``files`` list is not of the appropriate size.
+        TypeError
+            You specified both ``file`` and ``files``,
+            or you specified both ``embed`` and ``embeds``,
+            or the ``reference`` object is not a :class:`~discord.Message`,
+            :class:`~discord.MessageReference` or :class:`~discord.PartialMessage`.
+
+        Returns
+        ---------
+        :class:`~discord.Message`
+            The message that was sent.
+        """
         if self.interaction is None or self.interaction.is_expired():
+            # noinspection PyArgumentList
             return await super().send(
                 content=content,
                 tts=tts,
@@ -339,7 +408,7 @@ class Context(commands.Context):
                 mention_author=mention_author,
                 view=view,
                 suppress_embeds=suppress_embeds,
-                silent=silent,
+                ephemeral=ephemeral,
             )
 
         if content:

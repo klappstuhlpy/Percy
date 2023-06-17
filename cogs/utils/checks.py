@@ -16,12 +16,7 @@ PY3 = sys.version_info[0] == 3
 # Fuzzy matching
 
 def validate_string(s: str) -> bool:
-    """
-    Check input has length and that length > 0
-
-    :param s:
-    :return: True if len(s) > 0 else False
-    """
+    """Check input has length and that length > 0."""
     try:
         return len(s) > 0
     except TypeError:
@@ -29,6 +24,7 @@ def validate_string(s: str) -> bool:
 
 
 def check_for_equivalence(func: Callable[[str, str], T]) -> Callable[[str], T]:
+    """Check if two strings are equivalent. If so, return 100."""
     @functools.wraps(func)
     def decorator(*args, **kwargs):
         if args[0] == args[1]:
@@ -38,6 +34,7 @@ def check_for_equivalence(func: Callable[[str, str], T]) -> Callable[[str], T]:
 
 
 def check_for_none(func: Callable[[str, str], T]) -> Callable[[str], T]:
+    """Check if either string is None. If so, return 0."""
     @functools.wraps(func)
     def decorator(*args, **kwargs):
         if args[0] is None or args[1] is None:
@@ -47,6 +44,7 @@ def check_for_none(func: Callable[[str, str], T]) -> Callable[[str], T]:
 
 
 def check_empty_string(func: Callable[[str, str], T]) -> Callable[[str], T]:
+    """Check if either string is empty. If so, return 0."""
     @functools.wraps(func)
     def decorator(*args, **kwargs):
         if len(args[0]) == 0 or len(args[1]) == 0:
@@ -62,6 +60,7 @@ if PY3:
 
 
 def asciionly(s: str | bytes) -> str:
+    """Return an ASCII-only representation of a string"""
     if PY3:
         return s.translate(translation_table)
     else:
@@ -69,6 +68,7 @@ def asciionly(s: str | bytes) -> str:
 
 
 def asciidammit(s: str) -> str | bytes:
+    """Return an ASCII-only representation of a string"""
     if type(s) is str:
         return asciionly(s)
     elif type(s) is unicode:
@@ -109,27 +109,11 @@ def intr(n: float) -> int:
     return int(round(n))
 
 
-# +++
-
-
-async def check_permissions(ctx: GuildContext, perms: dict[str, bool], *, check=all):
-    is_owner = await ctx.bot.is_owner(ctx.author._user)
-    if is_owner:
-        return True
-
-    resolved = ctx.channel.permissions_for(ctx.author)
-    return check(getattr(resolved, name, None) == value for name, value in perms.items())
-
-
-def has_permissions(*, check=all, **perms: bool):
-    async def pred(ctx: GuildContext):
-        return await check_permissions(ctx, perms, check=check)
-
-    return commands.check(pred)
+# Discord Permission Checks
 
 
 async def check_guild_permissions(ctx: GuildContext, perms: dict[str, bool], *, check=all):
-    is_owner = await ctx.bot.is_owner(ctx.author._user)
+    is_owner = await ctx.bot.is_owner(ctx.author._user)  # noqa
     if is_owner:
         return True
 
@@ -138,16 +122,6 @@ async def check_guild_permissions(ctx: GuildContext, perms: dict[str, bool], *, 
 
     resolved = ctx.author.guild_permissions
     return check(getattr(resolved, name, None) == value for name, value in perms.items())
-
-
-def has_guild_permissions(*, check=all, **perms: bool):
-    async def pred(ctx: GuildContext):
-        return await check_guild_permissions(ctx, perms, check=check)
-
-    return commands.check(pred)
-
-
-# These do not take channel overrides into account
 
 
 def hybrid_permissions_check(**perms: bool) -> Callable[[T], T]:
@@ -160,29 +134,3 @@ def hybrid_permissions_check(**perms: bool) -> Callable[[T], T]:
         return func
 
     return decorator
-
-
-def is_manager():
-    return hybrid_permissions_check(manage_guild=True)
-
-
-def is_mod():
-    return hybrid_permissions_check(ban_members=True, manage_messages=True)
-
-
-def is_admin():
-    return hybrid_permissions_check(administrator=True)
-
-
-def is_in_guilds(*guild_ids: int):
-    def predicate(ctx: GuildContext) -> bool:
-        guild = ctx.guild
-        if guild is None:
-            return False
-        return guild.id in guild_ids
-
-    return commands.check(predicate)
-
-
-def is_lounge_cpp():
-    return is_in_guilds(145079846832308224)

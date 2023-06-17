@@ -186,98 +186,17 @@ class Colour(discord.Colour):
         return cls(0x133549)
 
 
-class NamedDict:
-    def __init__(self, name: str = 'NamedDict', layer: dict = {}) -> None:  # noqa
-        self.__name__ = name
-        self.__dict__.update(layer)
-        self.__dict__['__shape_set__'] = 'shape' in layer
-
-    def __len__(self):
-        return len(self.__dict__)
-
-    def __repr__(self):
-        return f'{self.__name__}(%s)' % ', '.join(
-            ('%s=%r' % (k, v) for k, v in self.__dict__.items() if not k.startswith('_')))
-
-    def __getattr__(self, attr):
-        if attr == 'shape':
-            if not self.__dict__['__shape_set__']:
-                return None
-        try:
-            return self.__dict__[attr]
-        except KeyError:
-            setattr(self, attr, NamedDict())
-            return self.__dict__[attr]
-
-    def __setattr__(self, key, value):
-        self.__dict__[key] = value
-
-    def _to_dict(self, include_names: bool = False) -> dict:
-        data = {}
-        for k, v in self.__dict__.items():
-            if isinstance(v, NamedDict):
-                data[k] = v._to_dict(include_names=include_names)
-            else:
-                if k != '__shape_set__':
-                    if k == '__name__' and not include_names:
-                        continue
-                    data[k] = v
-        return data
-
-    @classmethod
-    def _from_dict(cls, data: dict) -> 'NamedDict':
-        named = cls(name=data.pop('__name__', 'NamedDict'))
-        _dict = named.__dict__
-        for k, v in data.items():
-            if isinstance(v, dict):
-                _dict[k] = cls._from_dict(v)
-            else:
-                _dict[k] = v
-        return named
-
-
 class BasicJSONEncoder(json.JSONEncoder):
     """A basic JSON encoder that encodes `NamedDict` objects."""
 
     def default(self, o: Any) -> Any:
-        if isinstance(o, NamedDict):
-            return o._to_dict()
-        elif isinstance(o, datetime.datetime):
+        if isinstance(o, datetime.datetime):
             return o.isoformat()
         elif isinstance(o, datetime.timedelta):
             return o.total_seconds()
         elif isinstance(o, enum.Enum):
             return o.value
         return super().default(o)
-
-
-class config_file:
-    """A class for getting and setting the config.json file."""
-
-    def __init__(self, column: str) -> None:
-        self.column = column
-
-    path = Path(__file__).parent.parent.parent / "config.json"
-
-    def set(self, **params: dict | Any) -> None:
-        """Sets the paremeters in the column of the config.json file."""
-        payload = self.load
-
-        if self.column not in payload:
-            payload[self.column] = {}
-
-        with open(self.path, "w") as file:
-            payload[self.column].update(params)
-            json.dump(payload, file, indent=4)
-
-    @property
-    def load(self) -> Dict[str, Any]:
-        """Loads the column of the config.json file."""
-        with open(self.path, 'r', encoding='utf8') as f:
-            data = json.load(f)
-        if self.column not in data:
-            data[self.column] = {}
-        return data[self.column]
 
 
 class TimeMesh:

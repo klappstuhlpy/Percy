@@ -372,8 +372,7 @@ class Documentation(commands.Cog):
             base_url: str,
             inventory_url: str,
     ) -> None:
-        """
-        Update the cog's inventories, or reschedule this method to execute again if the remote inventory is unreachable.
+        """Update the cog's inventories, or reschedule this method to execute again if the remote inventory is unreachable.
 
         The first attempt is rescheduled to execute in `FETCH_RESCHEDULE_DELAY.first` minutes, the subsequent attempts
         in `FETCH_RESCHEDULE_DELAY.repeated` minutes.
@@ -402,8 +401,7 @@ class Documentation(commands.Cog):
             self.update_single(api_package_name, base_url, package)
 
     def ensure_unique_symbol_name(self, package_name: str, group_name: str, symbol_name: str) -> str:
-        """
-        Ensure `symbol_name` doesn't overwrite an another symbol in `doc_symbols`.
+        """Ensure `symbol_name` doesn't overwrite an another symbol in `doc_symbols`.
 
         For conflicts, rename either the current symbol or the existing symbol with which it conflicts.
         Store the new name in `renamed_symbols` and return the name to use for the symbol.

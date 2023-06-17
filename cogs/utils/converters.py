@@ -1,13 +1,11 @@
-import calendar
 import datetime
 import inspect
 import os
 import re
 import sys
-import time
 from io import BufferedIOBase, BytesIO
 from types import ModuleType
-from typing import Any, List, Iterable, Sequence, overload, Union, BinaryIO
+from typing import Any, List, Iterable, Sequence, overload, BinaryIO
 from urllib.parse import urlparse
 
 import aiohttp
@@ -17,32 +15,8 @@ from discord import app_commands, Colour
 from discord.ext import commands
 
 from . import fuzzy
-from .constants import MENTION_REGEX, IgnoreableEntity, COLOUR_DICT
+from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
 from ..utils.context import Context, GuildContext
-
-
-def next_path(path: str | os.PathLike, pattern: str) -> str:
-    """
-    Usage:
-    -------
-    Finds the next free path in an sequentially named list of files
-    e.g. path_pattern = `file-%s.txt`
-
-    Examples:
-    --------
-    - `file-1.txt`
-    - `file-2.txt`
-    - `file-3.txt`
-    """
-    while os.path.exists(path + pattern % i):
-        i = i * 2
-
-    a, b = (i // 2, i)
-    while a + 1 < b:
-        c = (a + b) // 2
-        a, b = (c, b) if os.path.exists(path + pattern % c) else (a, c)
-
-    return path + pattern % b
 
 
 async def aenumerate(asequence, start=0):
@@ -70,16 +44,13 @@ def tail(f: BinaryIO, n: int = 10) -> List[bytes]:
     assert n >= 0
     pos, lines = n + 1, []
 
-    # set file pointer to end
-
     f.seek(0, os.SEEK_END)
-
     isFileSmall = False
 
     while len(lines) <= n:
         try:
             f.seek(f.tell() - pos, os.SEEK_SET)
-        except ValueError as e:
+        except ValueError:
             # lines greater than file seeking size
             # seek to start
             f.seek(0, os.SEEK_SET)
@@ -117,31 +88,13 @@ def group_by(items: Sequence[str], max_len: int = 3000) -> Iterable[str]:
         yield '\n'.join(items[start:])
 
 
-def format_list(items: Iterable, seperator: str = "or", brackets: str = ""):
-    new_items = []
-    for i in items:
-        if not re.match(MENTION_REGEX, i):
-            new_items.append(f"{brackets}{i}{brackets}")
-        else:
-            new_items.append(str(i))
+def usage_per_day(dt: datetime.datetime, usages: int) -> float:
+    now = discord.utils.utcnow()
 
-    msg = ", ".join(list(new_items)[:-1]) + f" {seperator} " + list(new_items)[-1]
-    return msg
-
-
-def ascii_list(items: List[str]) -> Iterable[str]:
-    texts = []
-    for item in items:
-        if item == items[-1]:
-            text = f"└─ {item}"
-        else:
-            text = f"├─ {item}"
-        texts.append(text)
-
-    return texts
-
-
-URL_REGEX = re.compile(r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
+    days = (now - dt).total_seconds() / 86400
+    if int(days) == 0:
+        return usages
+    return usages / days
 
 
 class Snowflake:
@@ -155,9 +108,6 @@ class Snowflake:
                 raise commands.BadArgument(f'<:redTick:1079249771975413910> '
                                            f'{param.name} argument expected a Discord ID not {argument!r}')
             raise commands.BadArgument(f'<:redTick:1079249771975413910> expected a Discord ID not {argument!r}')
-
-
-_TContext = Union[Context, GuildContext]
 
 
 class Prefix(commands.Converter):
@@ -198,18 +148,11 @@ class ColorTransformer(app_commands.Transformer):
         return color
 
 
-async def colour_autocomplete(interaction: discord.Interaction, current: str) -> list[
-    app_commands.Choice[discord.Colour]]:
+async def colour_autocomplete(
+        interaction: discord.Interaction, current: str  # noqa
+) -> list[app_commands.Choice[discord.Colour]]:
     results = fuzzy.extract(current, COLOUR_DICT, limit=20)
     return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
-
-
-def convert_time(seconds: float):
-    return datetime.timedelta(seconds=round(seconds))
-
-
-def month_name_to_int(month: str) -> int:
-    return {'name': num for num, name in enumerate(calendar.month_abbr) if num}.get(month[:3].title())
 
 
 class URLObject:
@@ -369,16 +312,3 @@ class ChannelOrMember(commands.Converter):
             return await commands.TextChannelConverter().convert(ctx, argument)
         except commands.BadArgument:
             return await commands.MemberConverter().convert(ctx, argument)
-
-
-def convert_duration(seconds) -> time.time:
-    return time.strftime("%H:%M:%S", time.gmtime(seconds))
-
-
-def usage_per_day(dt: datetime.datetime, usages: int) -> float:
-    now = discord.utils.utcnow()
-
-    days = (now - dt).total_seconds() / 86400
-    if int(days) == 0:
-        return usages
-    return usages / days

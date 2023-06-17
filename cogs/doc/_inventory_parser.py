@@ -22,7 +22,7 @@ class InvalidHeaderError(Exception):
 class ZlibStreamReader:
     """Class used for decoding zlib data of a stream line by line."""
 
-    READ_CHUNK_SIZE = 16 * 1024
+    READ_CHUNK_SIZE = 16 * 1024  # 16 KiB
 
     def __init__(self, stream: aiohttp.StreamReader) -> None:
         self.stream = stream
@@ -48,6 +48,7 @@ class ZlibStreamReader:
 
 
 async def _load_v1(stream: aiohttp.StreamReader) -> InventoryDict:
+    """Load a v1 intersphinx inventory file."""
     invdata = defaultdict(list)
 
     async for line in stream:
@@ -63,6 +64,7 @@ async def _load_v1(stream: aiohttp.StreamReader) -> InventoryDict:
 
 
 async def _load_v2(stream: aiohttp.StreamReader) -> InventoryDict:
+    """Load a v2 intersphinx inventory file."""
     invdata = defaultdict(list)
 
     async for line in ZlibStreamReader(stream):
@@ -100,24 +102,30 @@ async def _fetch_inventory(session: aiohttp.ClientSession, url: str) -> Inventor
                 raise InvalidHeaderError("'zlib' not found in header of compressed inventory.")
             return await _load_v2(stream)
 
-        raise InvalidHeaderError("Incompatible inventory version.")
+        raise InvalidHeaderError(f"Incompatible inventory version. Expected v1 or v2, got v{inventory_version}")
 
 
 async def fetch_inventory(session: aiohttp.ClientSession, url: str) -> InventoryDict | None:
-    """
-    Get an inventory dict from `url`, retrying `FAILED_REQUEST_ATTEMPTS` times on errors.
+    """Get an inventory dict from `url`, retrying `FAILED_REQUEST_ATTEMPTS` times on errors.
 
     `url` should point at a valid sphinx objects.inv inventory file, which will be parsed into the
     inventory dict in the format of {"domain:role": [("symbol_name", "relative_url_to_symbol"), ...], ...}
     """
+    # TODO: Implement check if website is unreachable, for example down for maintenance or because of server site
+    # issues, don't raise an error, only log it and return None
+
     for attempt in range(1, FAILED_REQUEST_ATTEMPTS+1):
         try:
             inventory = await _fetch_inventory(session, url)
-        except aiohttp.ClientConnectorError:
-            log.warning(
-                f"Failed to connect to inventory url at {url}; "
-                f"trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS})."
-            )
+        except aiohttp.ClientResponseError as e:
+            if e.status == 404:
+                log.warning(f"Inventory not found at {url}; trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).")
+            else:
+                # Somehow reachable, but not a valid inventory file?
+                log.error(
+                    f"Failed to get inventory from {url} with status {e.status}; "
+                    f"trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS})."
+                )
         except aiohttp.ClientError:
             log.error(
                 f"Failed to get inventory from {url}; "

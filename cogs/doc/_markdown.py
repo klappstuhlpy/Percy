@@ -4,7 +4,10 @@ from urllib.parse import urljoin
 import markdownify
 from bs4.element import Tag
 
-# See https://github.com/matthewwithanm/python-markdownify/issues/31
+from cogs.doc._html import _class_filter_factory
+
+# Because markdownify is outdated, we need to update the whitespace regex
+# Also See https://github.com/matthewwithanm/python-markdownify/issues/31
 markdownify.whitespace_re = re.compile(r"[\r\n\s\t ]+")
 
 
@@ -57,14 +60,28 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             return text
 
         parent = el.parent
-        if parent is not None and parent.name == "li":
+        if parent and parent.name == "li":
             return f"{text}\n"
 
-        if parent is not None and "admonition" in parent.get("class", []):
-            ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
-            match = ADMONITION_REGEX.match(text)
-            if match:
-                text = text.replace(match.group(1), f"## {match.group(1)}")
+        if parent:
+            if _class_filter_factory(["admonition"])(parent):
+                # Now we search for possible admonition titles and convert them to h2s
+                # (In Discord's markdown, it's ##)
+
+                ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
+                # Also ensure that the Title is at the start of the paragraph
+
+                # Because admonition paragraphs also include the raw text of the admonition as a child,
+                # We need to find the admonition titles and replace them with h2s,
+                # so that the text is not duplicated in the final output and displayed normaly, because
+                # only the headers should be h2s, not the text
+
+                match = ADMONITION_REGEX.match(text)
+                if match:
+                    # If the text matches the regex, we replace it with a h2
+                    text = text.replace(match.group(1), f"## {match.group(1)}")
+
+            # If the parent is a blockquote, we add a newline to the end of the paragraph
             return f"{text}\n"
 
         return super().convert_p(el, text, convert_as_inline)

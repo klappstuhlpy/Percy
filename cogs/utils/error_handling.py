@@ -12,46 +12,6 @@ T = TypeVar('T')
 P = ParamSpec('P')
 
 
-async def do_after_sleep(delay: float, coro: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T:
-    """Performs an action after a set amount of time.
-
-    This function only calls the coroutine after the delay,
-    preventing asyncio complaints about destroyed coros.
-
-    Parameters
-    ----------
-    delay: float
-        The amount of time to wait before calling the coroutine.
-    coro: Callable[P, Awaitable[T]]
-        The coroutine to call.
-    args: P.args
-        The arguments to pass to the coroutine.
-    kwargs: P.kwargs
-        The keyword arguments to pass to the coroutine.
-    """
-    await asyncio.sleep(delay)
-    return await coro(*args, **kwargs)
-
-
-async def attempt_add_reaction(
-    msg: discord.Message,
-    reaction: Union[str, discord.Emoji]
-) -> Optional[discord.Reaction]:
-    """Try to add a reaction to a message, ignoring it if it fails for any reason.
-
-    Parameters
-    ----------
-    msg: discord.Message
-        The message to add the reaction to.
-    reaction: Union[str, discord.Emoji]
-        The reaction to add.
-    """
-    try:
-        return await msg.add_reaction(reaction)
-    except discord.HTTPException:
-        pass
-
-
 async def send_traceback(
     destination: Union[discord.abc.Messageable, discord.Message],
     verbosity: int,

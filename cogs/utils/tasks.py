@@ -4,11 +4,8 @@ import inspect
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable, TYPE_CHECKING
+from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable, Generator
 import discord
-import logging
-
-log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
@@ -40,7 +37,7 @@ class PerformanceMocker:
     def __repr__(self) -> str:
         return '<PerformanceMocker>'
 
-    def __await__(self):
+    def __await__(self) -> Generator[Any, None, Self]:
         future: asyncio.Future[Self] = self.loop.create_future()
         future.set_result(self)  # type: ignore
         return future.__await__()
@@ -134,7 +131,9 @@ class Scheduler:
         """
         self.name = name
 
-        self._log = logging.getLogger(f"{__name__}.{name}")
+        from launcher import get_logger
+        self._log = get_logger(f"{__name__}.{name}")
+
         self._scheduled_tasks: dict[Hashable, asyncio.Task] = {}
 
     def __contains__(self, task_id: Hashable) -> bool:
@@ -304,83 +303,3 @@ class Scheduler:
             # Log the exception if one exists.
             if exception:
                 self._log.error(f"Error in task #{task_id} {id(done_task)}!", exc_info=exception)
-
-
-TASK_RETURN = TypeVar("TASK_RETURN")
-
-
-def create_task(
-    coro: Coroutine[Any, Any, TASK_RETURN],
-    *,
-    suppressed_exceptions: tuple[type[Exception], ...] = (),
-    event_loop: asyncio.AbstractEventLoop | None = None,
-    **kwargs,
-) -> asyncio.Task[TASK_RETURN]:
-    """
-    Wrapper for creating an :obj:`asyncio.Task` which logs exceptions raised in the task.
-
-    If the ``event_loop`` kwarg is provided, the task is created from that event loop,
-    otherwise the running loop is used.
-
-    Args:
-        coro: The function to call.
-        suppressed_exceptions: Exceptions to be handled by the task.
-        event_loop (:obj:`asyncio.AbstractEventLoop`): The loop to create the task from.
-        kwargs: Passed to :py:func:`asyncio.create_task`.
-
-    Returns:
-        asyncio.Task: The wrapped task.
-    """
-    if event_loop is not None:
-        task = event_loop.create_task(_coro_wrapper(coro), **kwargs)
-    else:
-        task = asyncio.create_task(_coro_wrapper(coro), **kwargs)
-
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    task.add_done_callback(functools.partial(_log_task_exception, suppressed_exceptions=suppressed_exceptions))
-    return task
-
-
-async def _coro_wrapper(coro: Coroutine[Any, Any, TASK_RETURN]) -> None:
-    """Wraps `coro` in a try/except block that will handle 90001 discord.Forbidden errors."""
-    try:
-        await coro
-    except discord.Forbidden as e:
-        await handle_forbidden_from_block(e)
-
-
-async def handle_forbidden_from_block(error: discord.Forbidden, message: discord.Message | None = None) -> None:
-    """
-    Handles ``discord.discord.Forbidden`` 90001 errors, or re-raises if ``error`` isn't a 90001 error.
-
-    Args:
-        error: The raised ``discord.discord.Forbidden`` to check.
-        message: The message to reply to and include in logs, if error is 90001 and message is provided.
-    """
-    if error.code != 90001:
-        raise error
-
-    if not message:
-        log.info("Failed to add reaction(s) to a message since the message author has blocked the bot")
-        return
-
-    if message:
-        log.info(
-            "Failed to add reaction(s) to message %d-%d since the message author (%d) has blocked the bot",
-            message.channel.id,
-            message.id,
-            message.author.id,
-        )
-        await message.channel.send(
-            f":x: {message.author.mention} failed to add reaction(s) to your message as you've blocked me.",
-            delete_after=30
-        )
-
-
-def _log_task_exception(task: asyncio.Task, *, suppressed_exceptions: tuple[type[Exception], ...]) -> None:
-    """Retrieve and log the exception raised in ``task``, if one exists and it's not suppressed."""
-    with suppress(asyncio.CancelledError):
-        exception = task.exception()
-        if exception and not isinstance(exception, suppressed_exceptions):
-            log.error(f"Error in task {task.get_name()} {id(task)}!", exc_info=exception)

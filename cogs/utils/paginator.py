@@ -4,7 +4,7 @@ import asyncio
 import io
 import re
 import uuid
-from typing import List, Optional, Any, Callable, TypeVar, Generic, Type, AnyStr, overload, Literal
+from typing import List, Optional, Any, TypeVar, Generic, Type, AnyStr, overload, Literal
 
 import discord
 from discord.ext import commands
@@ -13,7 +13,6 @@ from discord.utils import MISSING
 from cogs.utils import fuzzy, helpers
 from cogs.utils.context import Context
 from cogs.utils.converters import aenumerate
-from cogs.utils.formats import truncate
 
 T = TypeVar('T')
 
@@ -22,66 +21,6 @@ TYPE_MAPPING = {
     discord.File: 'file',
     str: 'content'
 }
-
-
-class DisambiguatorView(discord.ui.View, Generic[T]):
-    message: discord.Message
-    selected: T
-
-    def __init__(self, interaction: discord.Interaction, data: list[T], entry: Callable[[T], Any]):
-        super().__init__()
-        self.interaction: discord.Interaction = interaction
-        self.data: list[T] = data
-
-        options = []
-        for i, x in enumerate(data):
-            opt = entry(x)
-            if not isinstance(opt, discord.SelectOption):
-                opt = discord.SelectOption(label=str(opt))
-            opt.value = str(i)
-            options.append(opt)
-
-        select = discord.ui.Select(options=options)
-
-        select.callback = self.on_select_submit
-        self.select = select
-        self.add_item(select)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.interaction.user.id:
-            await interaction.response.send_message('This select menu is not meant for you, sorry.', ephemeral=True)
-            return False
-        return True
-
-    async def on_select_submit(self, interaction: discord.Interaction):
-        index = int(self.select.values[0])
-        self.selected = self.data[index]
-        self.interaction = interaction
-        self.stop()
-
-
-async def disambiguate(
-        interaction: discord.Interaction, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False
-) -> (T, discord.Interaction):
-    if len(matches) == 0:
-        raise ValueError('No results found.')
-
-    if len(matches) == 1:
-        return matches[0]
-
-    if len(matches) > 25:
-        raise ValueError('Too many results... sorry.')
-
-    func = interaction.response.send_message if not interaction.response.is_done() else interaction.followup.send
-
-    view = DisambiguatorView(interaction, matches, entry)
-    view.message = await func(
-        '<<:warning:1113421726861238363>:1085665313984626740> There are too many matches... Please specify your choice by selecting a result.',
-        view=view, ephemeral=ephemeral
-    )
-    await view.wait()
-    await view.message.delete()
-    return view.selected, view.interaction
 
 
 class TextSource:
@@ -199,6 +138,7 @@ class JumpToModal(discord.ui.Modal, title="Jump to"):
         self.page_number.min_length = 1
         self.page_number.max_length = len(str(self.paginator.total_pages))
 
+    # noinspection PyProtectedMember
     async def on_submit(self, interaction: discord.Interaction, /):
         if not self.page_number.value.isdigit():
             return await interaction.response.send_message("Please enter a number.", ephemeral=True)
@@ -336,17 +276,17 @@ class BasePaginator(discord.ui.View, Generic[T]):
         return self.pages[self._current_page]
 
     @discord.ui.button(label='<==', style=discord.ButtonStyle.green)
-    async def on_arrow_backward(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_arrow_backward(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         entries = self._switch_page(-1)
         page = await self.format_page(entries)
         return await interaction.response.edit_message(**self._message_kwargs(page))
 
     @discord.ui.button(label='1/-', style=discord.ButtonStyle.grey)
-    async def on_middle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_middle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         await interaction.response.send_modal(JumpToModal(self))
 
     @discord.ui.button(label='==>', style=discord.ButtonStyle.green)
-    async def on_arrow_forward(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_arrow_forward(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         entries = self._switch_page(1)
         page = await self.format_page(entries)
         return await interaction.response.edit_message(**self._message_kwargs(page))
@@ -375,8 +315,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
                 for entry in current_results:
                     results.append(f"[{index}] {discord.utils.remove_markdown(entry)}")
         try:
-            results = [truncate(text, 100) for text in results[:20]]
-            result = await disambiguate(interaction, results, lambda x: x, ephemeral=True)
+            result = results[0]
         except ValueError:
             return await self._send(
                 interaction, content=f'<:redTick:1079249771975413910> Could not find match for {query!r}',
@@ -715,6 +654,7 @@ class PaginatorInterface(BasePaginator[AnyStr]):
     async def format_page(self, entries: List[AnyStr], /) -> str:
         return entries[0]
 
+    # noinspection PyProtectedMember
     @property
     def pages(self):
         """Returns the paginator's pages without prematurely closing the active page."""

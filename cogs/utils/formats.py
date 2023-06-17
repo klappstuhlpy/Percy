@@ -8,6 +8,8 @@ import asyncpg
 import discord
 from discord.utils import TimestampStyle
 
+from cogs.utils.constants import INVITE_REGEX
+
 if TYPE_CHECKING:
     from bot import Percy
 
@@ -52,6 +54,16 @@ class plural:
         if abs(s) != 1:
             return f'{s} {plural}'
         return f'{s} {singular}'
+
+
+def censor_invite(obj: Any, *, _regex=INVITE_REGEX) -> str:
+    return _regex.sub('[censored-invite]', str(obj))
+
+
+def censor_object(self, obj: str | discord.abc.Snowflake) -> str:
+    if not isinstance(obj, str) and obj.id in self.bot.blacklist:
+        return '[censored]'
+    return censor_invite(obj)
 
 
 def medal_emojize(seq: Iterable):

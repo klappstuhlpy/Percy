@@ -88,7 +88,7 @@ def _class_filter_factory(class_names: Iterable[str]) -> Callable[[Tag], bool]:
     """Create callable that returns True when the passed in tag's class is in `class_names` or when it's a table."""
     def match_tag(tag: Tag) -> bool:
         for attr in class_names:
-            if attr in tag.get("class", ()):
+            if attr in tag.get("class", []):
                 return True
         return tag.name == "table"
 
@@ -96,8 +96,7 @@ def _class_filter_factory(class_names: Iterable[str]) -> Callable[[Tag], bool]:
 
 
 def get_general_description(start_element: Tag) -> list[Tag | NavigableString]:
-    """
-    Get page content to a table or a tag with its class in `SEARCH_END_TAG_ATTRS`.
+    """Get page content to a table or a tag with its class in `SEARCH_END_TAG_ATTRS`.
 
     A headerlink tag is attempted to be found to skip repeating the symbol information in the description.
     If it's found it's used as the tag to start the search from instead of the `start_element`.

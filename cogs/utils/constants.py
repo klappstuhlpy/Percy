@@ -6,6 +6,8 @@ import matplotlib
 from discord import app_commands
 from discord.ext import commands
 
+from cogs.utils.context import Context, GuildContext
+
 PH_GUILD_ID = 1066703165669515264
 PH_BOTS_ROLE = 1066703165669515266
 PH_HELP_FORUM = 1079786704862445668
@@ -43,7 +45,13 @@ PossibleTarget = Union[
 StarableChannel = Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
 IgnoreableEntity = Union[discord.TextChannel, discord.VoiceChannel, discord.Thread, discord.User, discord.Role]
 
+_TContext = Union[Context, GuildContext]
+
 # REGEX
+
+INVITE_REGEX = re.compile(r'(?:https?:)?discord(?:\.gg|\.com|app\.com(/invite)?)?[A-Za-z0-9]+')
+
+WORD_REGEX = re.compile(r'\W', re.IGNORECASE)
 
 MENTION_REGEX = re.compile(r"<@(!?)([0-9]*)>")
 URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
