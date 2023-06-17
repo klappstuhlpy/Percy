@@ -303,3 +303,15 @@ class Scheduler:
             # Log the exception if one exists.
             if exception:
                 self._log.error(f"Error in task #{task_id} {id(done_task)}!", exc_info=exception)
+
+
+TASK_RETURN = TypeVar("TASK_RETURN")
+
+
+async def _coro_wrapper(coro: Coroutine[Any, Any, TASK_RETURN]) -> None:
+    """Wraps `coro` in a try/except block that will handle 90001 Forbidden errors."""
+    try:
+        await coro
+    except discord.Forbidden as e:
+        if e.code != 90001:
+            raise e

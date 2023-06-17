@@ -109,7 +109,7 @@ class AniListSearch(commands.Cog, name="Media"):
 
         self.anilistcls: AniListClient = AniListClient(self.bot.session)
         self.config = self.bot.config.anilist
-        self._embed_builder = formatter.AniListEmbedBuilder(self.bot)
+        self._embed_builder = _formatter.AniListEmbedBuilder(self.bot)
 
         self.access_tokens: MutableMapping[int, (str, int)] = LRU(1000)  # type: ignore
 
