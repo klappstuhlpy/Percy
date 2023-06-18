@@ -222,22 +222,15 @@ class DocView(discord.ui.View, Generic[T]):
         return True
 
     async def update(self, interaction: discord.Interaction | Context, *args, **kwargs) -> Optional[discord.Message]:
-        if getattr(interaction, "_message", None) is not None:
-            return await interaction._message.edit(content=None, **kwargs)  # noqa
-        elif getattr(interaction, "response", None) is not None:
+        if isinstance(interaction, Context):
+            self.msg = await interaction.send(*args, **kwargs)
+        elif isinstance(interaction, discord.Interaction):
             if interaction.response.is_done():
-                return await interaction.edit_original_response(content=None, **kwargs)
-            return await interaction.response.edit_message(content=None, **kwargs)  # noqa
-        else:
-            if isinstance(interaction, Context):
-                self.msg = await interaction.send(*args, **kwargs)
-            elif isinstance(interaction, discord.Interaction):
-                if interaction.response.is_done():
-                    await interaction.edit_original_response(*args, **kwargs)
-                else:
-                    await interaction.response.send_message(*args, **kwargs)
+                await interaction.edit_original_response(*args, **kwargs)
+            else:
+                await interaction.response.send_message(*args, **kwargs)
 
-                self.msg = await interaction.original_response()
+            self.msg = await interaction.original_response()
         return self.msg
 
     async def format_page(self, index: int) -> DocItem:
@@ -518,12 +511,6 @@ class Documentation(commands.Cog):
                 log.debug("Symbol does not exist.")
                 return None
 
-            if item.symbol_id in self.renamed_symbols:
-                renamed_symbols = ", ".join(self.renamed_symbols[item.symbol_id])
-                footer_text = textwrap.shorten(f"Similar names: {renamed_symbols}", 200, placeholder="...")
-            else:
-                footer_text = ""
-
             embed = discord.Embed(
                 title=discord.utils.escape_markdown(item.symbol_id),
                 url=f"{item.url}#{item.symbol_id}",
@@ -534,8 +521,6 @@ class Documentation(commands.Cog):
 
             for name, value in item.resolved_fields.items():
                 embed.add_field(name=name, value=value, inline=False)
-
-            embed.set_footer(text=footer_text)
             return embed
 
     @command(commands.hybrid_group, name="docs", fallback="search", aliases=["d"],
