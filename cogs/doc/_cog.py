@@ -221,16 +221,25 @@ class DocView(discord.ui.View, Generic[T]):
             return False
         return True
 
-    async def update(self, interaction: discord.Interaction | Context, *args, **kwargs) -> Optional[discord.Message]:
+    async def update(self, interaction: discord.Interaction | Context, **kwargs) -> None:
         if isinstance(interaction, Context):
-            self.msg = await interaction.send(*args, **kwargs)
+            await self.msg.edit(**kwargs)
         elif isinstance(interaction, discord.Interaction):
             if interaction.response.is_done():
-                await interaction.edit_original_response(*args, **kwargs)
+                await interaction.edit_original_response(**kwargs)
             else:
-                await interaction.response.send_message(*args, **kwargs)
+                await interaction.response.edit_message(**kwargs)
 
-            self.msg = await interaction.original_response()
+    async def send(self, ctx: discord.Interaction | Context, *args, **kwargs) -> Optional[discord.Message]:
+        if isinstance(ctx, Context):
+            self.msg = await ctx.send(*args, **kwargs)
+        elif isinstance(ctx, discord.Interaction):
+            if ctx.response.is_done():
+                await ctx.edit_original_response(*args, **kwargs)
+            else:
+                await ctx.response.send_message(*args, **kwargs)
+
+            self.msg = await ctx.original_response()
         return self.msg
 
     async def format_page(self, index: int) -> DocItem:
@@ -282,7 +291,7 @@ class DocView(discord.ui.View, Generic[T]):
         if len(self.items) > 1:
             self.add_item(DocSelect(self))
 
-        self.msg = await self.update(context, view=self, embed=self._current.embed)
+        self.msg = await self.send(context, view=self, embed=self._current.embed)
         return self
 
 
