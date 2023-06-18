@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any, ClassVar
 )
 
 import discord
@@ -105,7 +105,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available as Slash Commands.')
         else:
-            embed.set_footer(text=f'Use "{self.ctx.prefix}help command" for more info on a command.')
+            embed.set_footer(text=f'Use "{getattr(self.ctx, "prefix", "/")}help command" for more info on a command.')
 
         return embed
 
@@ -206,6 +206,8 @@ class FrontHelpPaginator(BasePaginator[str]):
     groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
     async def format_page(self, entries: List, /):
+        prefix: str = getattr(self.ctx, "prefix", "/")
+
         embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=self.ctx.client.user.avatar.url)
 
@@ -220,8 +222,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
                 ## More Help
                 Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{self.ctx.prefix}help` *`command`*
-                - `{self.ctx.prefix}help` *`category`*
+                - `{prefix}help` *`command`*
+                - `{prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -243,11 +245,11 @@ class FrontHelpPaginator(BasePaginator[str]):
                  "They can provide a better overview and are not required to be typed in.\n"
                  "\n"
                  "Flags are prefixed with `--` and can be used like this:\n"
-                 f"- `{self.ctx.prefix}command --flag1 argument1 --flag2 argument2`\n"
-                 f"- `{self.ctx.prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
+                 f"- `{prefix}command --flag1 argument1 --flag2 argument2`\n"
+                 f"- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
                  f"\n"
                  f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
-                 f"- `{self.ctx.prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                 f"- `{prefix}command --flag1 my first argument --flag2 'argument 2`'"
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
