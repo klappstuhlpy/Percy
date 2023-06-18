@@ -140,14 +140,13 @@ class Percy(commands.Bot):
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch()
 
-        self.initial_extensions = ["cogs.tags"]
         for extension in self.initial_extensions:
             try:
                 await self.load_extension(extension)
             except Exception as e:
                 log.error(f"Failed to load extension `{extension}`", exc_info=e)
 
-        #await self.reattach_views()
+        await self.reattach_views()
 
     async def on_shard_resumed(self, shard_id: int):
         log.info('Shard ID %s has resumed...', shard_id)
