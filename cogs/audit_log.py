@@ -81,6 +81,10 @@ class AuditLog(commands.Cog):
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
         config = await self.bot.moderation.get_guild_config(entry.guild.id)
+
+        if not config:
+            return
+
         if not config.flags.audit_log:
             return
 
