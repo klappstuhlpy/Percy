@@ -61,6 +61,25 @@ class TagName(commands.clean_content):
         return converted.strip() if not self.lower else lower
 
 
+class TagContent(commands.clean_content):
+
+    def __init__(self, *, required: bool = True):
+        self.required = required
+        super().__init__()
+
+    async def convert(self, ctx: Context, argument: str) -> str:
+        if not argument and not self.required:
+            return argument
+
+        converted = await super().convert(ctx, argument)
+
+        if len(converted) > 2000:
+            raise commands.BadArgument(
+                f'<:redTick:1079249771975413910> Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
+
+        return converted
+
+
 class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
@@ -189,7 +208,7 @@ class Tags(commands.Cog):
                 await ctx.send(ctx.tick(False, 'No Tag with this name or similar name found.'))
             else:
                 names = '\n'.join(f"* **{r['name']}** [`{r['id']}`]" for r in rows)
-                embed = discord.Embed(title="Tag not found", description=f"Found Tags with similar name.",
+                embed = discord.Embed(title="Did you mean ...", description=f"Found Tags with similar name.",
                                       colour=self.bot.colour.darker_red())
                 embed.add_field(name="Similar Tags", value=names)
                 await ctx.send(embed=embed)
@@ -294,7 +313,13 @@ class Tags(commands.Cog):
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT name, id FROM tags WHERE location_id=$1 LIMIT 20;"
+        query = """
+            SELECT name, id 
+            FROM tags 
+            WHERE location_id=$1 
+            ORDER BY uses 
+            LIMIT 20;
+        """
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
 
         if not results:
@@ -306,7 +331,14 @@ class Tags(commands.Cog):
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT name FROM tag_lookup WHERE location_id=$1 LIMIT 20;"
+        query = """
+            SELECT tag_lookup.name
+            FROM tag_lookup
+            INNER JOIN tags ON tags.id = tag_lookup.tag_id
+            WHERE tag_lookup.location_id=$1
+            ORDER BY uses DESC 
+            LIMIT 20;
+        """
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
 
         if not results:
@@ -318,7 +350,13 @@ class Tags(commands.Cog):
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT name, id FROM tags WHERE location_id=$1 AND owner_id=$2 LIMIT 20;"
+        query = """
+            SELECT name, id 
+            FROM tags 
+            WHERE location_id=$1 AND owner_id=$2
+            ORDER BY uses
+            LIMIT 20;
+        """
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
 
         if not results:
@@ -330,7 +368,14 @@ class Tags(commands.Cog):
     async def owned_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT name FROM tag_lookup WHERE location_id=$1 AND owner_id=$2 LIMIT 20;"
+        query = """
+            SELECT tag_lookup.name
+            FROM tag_lookup
+            INNER JOIN tags ON tags.id = tag_lookup.tag_id
+            WHERE tag_lookup.location_id=$1 AND tag_lookup.owner_id=$2
+            ORDER BY uses DESC 
+            LIMIT 20;
+        """
         results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
 
         if not results:
@@ -415,17 +460,13 @@ class Tags(commands.Cog):
             ctx: GuildContext,
             name: Annotated[str, TagName],
             *,
-            content: Annotated[str, commands.clean_content]
+            content: Annotated[str, TagContent]
     ):
         """Creates a new Tag owned by yourself in this server.
         The tag name must be between 1 and 100 characters long.
         The tag content must be less than 2000 characters long.
         `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
         """
-
-        if len(content) > 2000:
-            return await ctx.send('<:redTick:1079249771975413910> Tag content must be less than `2000` characters.')
-
         await self.create_tag(ctx, name, content)
 
     @command(
@@ -492,16 +533,11 @@ class Tags(commands.Cog):
         if msg.content == f'{ctx.prefix}abort':
             self.remove_in_progress_tag(ctx.guild.id, name)
             return
-        elif msg.content:
-            clean_content = await commands.clean_content().convert(ctx, msg.content)
         else:
-            clean_content = msg.content
+            clean_content = await TagContent().convert(ctx, msg.content)
 
         if msg.attachments:
             clean_content = f'{clean_content}\n{msg.attachments[0].url}'
-
-        if len(clean_content) > 2000:
-            return await ctx.send(f'{ctx.tick(None)} Tag content is a maximum of **2000** characters.')
 
         try:
             await self.create_tag(ctx, name, clean_content)
@@ -672,7 +708,7 @@ class Tags(commands.Cog):
             ctx: GuildContext,
             name: Annotated[str, TagName(lower=True)],  # type: ignore
             *,
-            content: Annotated[Optional[str], commands.clean_content] = None,
+            content: Annotated[Optional[str], TagContent(required=False)] = None,  # type: ignore
     ):
         """Edit the content or name of a Tag.
         `Note:` If you don't pass a content, you will be prompted to edit the tag in a modal.
@@ -812,15 +848,15 @@ class Tags(commands.Cog):
             embed.add_field(name='**Owner**', value=f'<@{owner_id}>', inline=False)
 
             query = """
-                        SELECT (
-                            SELECT COUNT(*)
-                            FROM tags second
-                            WHERE (second.uses, second.id) >= (first.uses, first.id)
-                            AND second.location_id = first.location_id
-                            ) AS rank
-                        FROM tags first
-                        WHERE first.id=$1
-                    """
+                SELECT (
+                    SELECT COUNT(*)
+                    FROM tags second
+                    WHERE (second.uses, second.id) >= (first.uses, first.id)
+                    AND second.location_id = first.location_id
+                    ) AS rank
+                FROM tags first
+                WHERE first.id=$1
+            """
 
             rank = await ctx.db.fetchrow(query, record['id'])
 
@@ -834,11 +870,11 @@ class Tags(commands.Cog):
             embed.add_field(name='**Tag Used**', value=record['uses'])
 
             query = """
-                        SELECT COUNT(*) AS count
-                        FROM tag_lookup
-                           WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2
-                            AND tag_lookup.location_id=$3
-                    """
+                SELECT COUNT(*) AS count
+                FROM tag_lookup
+                   WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2
+                    AND tag_lookup.location_id=$3
+            """
             alias_count = await self.bot.pool.fetchrow(query, record['id'], record["name"], ctx.guild.id)
 
             embed.add_field(name="**Aliases**", value=alias_count['count'])
@@ -877,22 +913,22 @@ class Tags(commands.Cog):
 
         if not flags.query:
             query = f"""
-                        SELECT name, id
-                        FROM tag_lookup
-                        WHERE location_id=$1 AND owner_id=$2
-                        ORDER BY {SORT};
-                    """
+                SELECT name, id
+                FROM tag_lookup
+                WHERE location_id=$1 AND owner_id=$2
+                ORDER BY {SORT};
+            """
             values = (ctx.guild.id, member.id)
         else:
             if flags.sort == "name":
                 SORT = "similarity(name, $2) DESC"
 
             query = f"""
-                        SELECT name, id
-                        FROM tag_lookup
-                        WHERE location_id=$1 AND name % $2 AND owner_id=$3
-                        ORDER BY {SORT};
-                    """
+                SELECT name, id
+                FROM tag_lookup
+                WHERE location_id=$1 AND name % $2 AND owner_id=$3
+                ORDER BY {SORT};
+            """
             values = (ctx.guild.id, flags.query, member.id)
 
         rows = await ctx.db.fetch(query, *values)
