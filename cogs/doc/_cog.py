@@ -565,7 +565,8 @@ class Documentation(commands.Cog):
 
     @command(commands.hybrid_group, name="docs", fallback="search", aliases=["d"],
              description="Look up documentation for Python symbols.", invoke_without_command=True)
-    @app_commands.describe(symbol_name="The symbol to look up documentation for.")
+    @app_commands.describe(symbol_name="The symbol to look up documentation for.",
+                           package="The package to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
     async def docs_group(
             self,
