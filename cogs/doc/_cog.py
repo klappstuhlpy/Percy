@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-import textwrap
-from collections import defaultdict
 from ssl import CertificateError
 from types import SimpleNamespace
 from typing import Literal, Any, Annotated, Optional, List, Generic, TypeVar, Type
@@ -50,8 +48,24 @@ class PackageName(commands.Converter):
     Package names are used for stats and are restricted to the a-z and _ characters.
     """
 
+    def __init__(self, available: bool = False):
+        self.available = available
+
     async def convert(self, ctx: Context, argument: str) -> str:
         """Checks whether the given string is a valid package name."""
+
+        if self.available:
+            cog: Documentation = ctx.bot.get_cog("Documentation")  # type: ignore
+            if argument not in cog.doc_symbols:
+                if cog.base_urls:
+                    embed = discord.Embed(color=helpers.Colour.darker_red())
+                    embed.set_footer(text=f'{plural(len(cog.base_urls)):inventory|invetories} found.')
+                    results = [f"• [`{entry[0]}`]({entry[1]})" for entry in [(k, v) for k, v in cog.base_urls.items()]]
+                    await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
+                    raise commands.BadArgument(f"{ctx.tick(False)} The package `{argument}` is not available.")
+                else:
+                    raise commands.BadArgument(f"{ctx.tick(False)} There are no inventories available at the moment.")
+
         if PACKAGE_NAME_RE.search(argument):
             raise commands.BadArgument(
                 "The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters.")
@@ -90,8 +104,7 @@ class ValidURL(commands.Converter):
 
 
 class Inventory(commands.Converter):
-    """
-    Represents an Intersphinx inventory URL.
+    """Represents an Intersphinx inventory URL.
 
     This converter checks whether intersphinx accepts the given inventory URL, and raises
     `BadArgument` if that is not the case or if the url is unreachable.
@@ -109,7 +122,8 @@ class Inventory(commands.Converter):
         try:
             inventory = await _inventory_parser.fetch_inventory(ctx.bot.session, url)
         except _inventory_parser.InvalidHeaderError:
-            raise commands.BadArgument(f"{ctx.tick(False)} Unable to parse inventory because of invalid header, check if URL is correct.")
+            raise commands.BadArgument(
+                f"{ctx.tick(False)} Unable to parse inventory because of invalid header, check if URL is correct.")
         else:
             if inventory is None:
                 raise commands.BadArgument(
@@ -299,11 +313,11 @@ class Documentation(commands.Cog):
     """A set of commands for querying & displaying documentation."""
 
     def __init__(self, bot: Percy):
-        self.base_urls: dict[str, Any] = {}
         self.bot: Percy = bot
-        self.doc_symbols: dict[str, DocItem] = {}
+
+        self.base_urls: dict[str, Any] = {}
+        self.doc_symbols: dict[str, dict[str, DocItem]] = {}
         self.item_fetcher = _batch_parser.BatchParser(bot)
-        self.renamed_symbols = defaultdict(list)
 
         self.inventory_scheduler = Scheduler(self.__class__.__name__)
         self.symbol_get_event: SharedEvent = SharedEvent()
@@ -331,12 +345,23 @@ class Documentation(commands.Cog):
         if not current:
             return []
 
-        _, matches = await self.get_symbol_item(current, 15)
+        package_name = interaction.namespace.package or interaction.namespace.package_name
+        if not package_name:
+            package_name = "python"
+
+        _, matches = await self.get_symbol_item(package_name, current, 15)
         return [app_commands.Choice(name=f"{m.symbol_id} ({m.package})", value=m.symbol_id) for m in matches]
 
+    async def package_autocomplete(
+            self, interaction: discord.Interaction, current: str  # noqa
+    ):
+        return [
+                   app_commands.Choice(name=package, value=package)
+                   for package in fuzzy.finder(current, self.base_urls.keys())
+               ][:25]
+
     def update_single(self, package_name: str, base_url: str, inventory: InventoryDict) -> None:
-        """
-        Build the inventory for a single package.
+        """Build the inventory for a single package.
 
         Parameters
         ----------
@@ -346,8 +371,13 @@ class Documentation(commands.Cog):
             The base URL of the package.
         inventory: :class:`dict`
             The inventory of the package.
+
+        Notes
+        -----
+        This method is not thread-safe.
         """
         self.base_urls[package_name] = base_url
+        self.doc_symbols.setdefault(package_name, {})
 
         for group, items in inventory.items():
             for symbol_name, relative_doc_url in items:
@@ -366,7 +396,7 @@ class Documentation(commands.Cog):
                     sys.intern(relative_url_path),
                     symbol_id,
                 )
-                self.doc_symbols[symbol_name] = doc_item
+                self.doc_symbols[package_name] |= {symbol_name: doc_item}
                 self.item_fetcher.add_item(doc_item)
 
         log.trace(f"Fetched inventory for {package_name}.")
@@ -413,21 +443,22 @@ class Documentation(commands.Cog):
 
         If the existing symbol was renamed or there was no conflict, the returned name is equivalent to `symbol_name`.
         """
-        if (item := self.doc_symbols.get(symbol_name)) is None:
+        if self.doc_symbols.get(package_name) is None:
+            raise ValueError(f"Package `{package_name}` is somehow not supported.")
+
+        if (item := self.doc_symbols[package_name].get(symbol_name)) is None:
             return symbol_name
 
         def rename(prefix: str, *, rename_extant: bool = False) -> str:
             new_name = f"{prefix}.{symbol_name}"
-            if new_name in self.doc_symbols:
+            if new_name in self.doc_symbols[package_name]:
                 if rename_extant:
                     new_name = f"{item.package}.{item.group}.{symbol_name}"
                 else:
                     new_name = f"{package_name}.{group_name}.{symbol_name}"
 
-            self.renamed_symbols[symbol_name].append(new_name)
-
             if rename_extant:
-                self.doc_symbols[new_name] = self.doc_symbols[symbol_name]
+                self.doc_symbols[package_name][new_name] = self.doc_symbols[package_name][symbol_name]
                 return symbol_name
             return new_name
 
@@ -454,7 +485,6 @@ class Documentation(commands.Cog):
 
         self.base_urls.clear()
         self.doc_symbols.clear()
-        self.renamed_symbols.clear()
         await self.item_fetcher.clear()
 
         coros = [
@@ -467,20 +497,24 @@ class Documentation(commands.Cog):
         self.refresh_event.set()
 
     @executor
-    def get_symbol_item(self, symbol_name: str, limit: int = 1) -> tuple[str, list[DocItem] | DocItem | None]:
+    def get_symbol_item(
+            self, package_name: str, symbol_name: str, limit: int = 1
+    ) -> tuple[str, list[DocItem] | DocItem | None]:
         """Get the :class:`DocItem` and the symbol name used to fetch it from the `doc_symbols` dict.
 
         If the doc item is not found directly from the passed in name and the name contains a space,
         the first word of the name will be attempted to be used to get the item.
         """
-        result = fuzzy.finder(symbol_name, self.doc_symbols.items(), key=lambda x: x[0])[:limit]
+        result = fuzzy.finder(
+            symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0]
+        )[:limit]
+
         if limit == 1:
             result = result[0][1] if result else None
         return symbol_name, [r[1] for r in result] if result else None
 
     async def get_symbol_markdown(self, doc_item: DocItem) -> str:
-        """
-        Get the Markdown from the symbol `doc_item` refers to.
+        """Get the Markdown from the symbol `doc_item` refers to.
 
         First a redis lookup is attempted, if that fails the `item_fetcher`
         is used to fetch the page and parse the HTML from it into Markdown.
@@ -503,8 +537,7 @@ class Documentation(commands.Cog):
             return markdown
 
     async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
-        """
-        Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
+        """Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
 
         If the symbol is known, an Embed with documentation about it is returned.
 
@@ -535,30 +568,27 @@ class Documentation(commands.Cog):
     @command(commands.hybrid_group, name="docs", fallback="search", aliases=["d"],
              description="Look up documentation for Python symbols.", invoke_without_command=True)
     @app_commands.describe(symbol_name="The symbol to look up documentation for.")
-    @app_commands.autocomplete(symbol_name=documentation_autocomplete)  # type: ignore
-    async def docs_group(self, ctx: Context, *, symbol_name: Optional[str] = None):
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
+    async def docs_group(
+            self,
+            ctx: Context,
+            package: Annotated[str, PackageName(available=True)],  # type: ignore
+            *,
+            symbol_name: str
+    ):
         """Return a documentation embed for a given symbol.
 
         If no symbol is given, return a list of all available inventories.
         """
-        if not symbol_name:
-            if self.base_urls:
-                embed = discord.Embed(color=helpers.Colour.darker_red())
-                embed.set_footer(text=f'{plural(len(self.base_urls)):inventory|invetories} found.')
-                results = [f"• [`{entry[0]}`]({entry[1]})" for entry in [(k, v) for k, v in self.base_urls.items()]]
-                await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
-            else:
-                await ctx.send(f"{ctx.tick(False)} There are no inventories available at the moment.")
 
-        else:
-            symbol = symbol_name.strip("`")
-            async with ctx.typing():
-                _, doc_items = await self.get_symbol_item(symbol, limit=12)  # type: str, List[DocItem]
+        symbol = symbol_name.strip("`")
+        async with ctx.typing():
+            _, doc_items = await self.get_symbol_item(package, symbol, limit=12)  # type: str, List[DocItem]
 
-                if not doc_items:
-                    return await ctx.send(f"{ctx.tick(False)} The symbol `{symbol_name}` was not found.")
+            if not doc_items:
+                return await ctx.send(f"{ctx.tick(False)} The symbol `{symbol_name}` was not found.")
 
-            await DocView.start(ctx, cog=self, items=doc_items)
+        await DocView.start(ctx, cog=self, items=doc_items)
 
     @staticmethod
     def base_url_from_inventory_url(inventory_url: str) -> str:
@@ -584,7 +614,7 @@ class Documentation(commands.Cog):
         """
         if base_url and not base_url.endswith("/"):
             raise commands.BadArgument(f"{ctx.tick(False)} The base url must end with a slash.")
-        
+
         inventory_url, inventory_dict = inventory
         body = {
             "package": package_name,
@@ -603,13 +633,16 @@ class Documentation(commands.Cog):
         if not base_url:
             base_url = self.base_url_from_inventory_url(inventory_url)
         self.update_single(package_name, base_url, inventory_dict)
-        await ctx.send(f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
+        await ctx.send(
+            f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
     @command(docs_group.command, name="delete", hidden=True, aliases=["remove", "rm"],
              description="Delete a documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
-    async def delete_command(self, ctx: Context, package_name: Annotated[str, PackageName]) -> None:
+    async def delete_command(
+            self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]  # type: ignore
+    ) -> None:
         """Removes the specified package from the database."""
         await self.bot.data_storage.remove_from_deep(f"documentation_links.{package_name}")
 
@@ -658,15 +691,22 @@ class Documentation(commands.Cog):
             await ctx.send(f"{ctx.tick(False)} No keys matching the package found.")
 
     @command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
-    @app_commands.describe(entity='The object to search for')
-    @app_commands.autocomplete(entity=documentation_autocomplete)  # type: ignore
-    async def rtfm(self, ctx: Context, *, entity: str):
+    @app_commands.describe(symbol_name='The object to search for',
+                           package='The package to search in.')
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
+    async def rtfm(
+            self,
+            ctx: Context,
+            package: Annotated[str, PackageName(available=True)],  # type: ignore
+            *,
+            symbol_name: str
+    ):
         """Gives you a documentation link for a discord.py entity.
 
         Events, objects, and functions are all supported through
         a cruddy fuzzy algorithm.
         """
-        _, matches = await self.get_symbol_item(entity, 8)
+        _, matches = await self.get_symbol_item(package, symbol_name, 8)
 
         e = discord.Embed(colour=helpers.Colour.darker_red())
         if len(matches) == 0:
