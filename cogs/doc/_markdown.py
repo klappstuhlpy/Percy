@@ -51,8 +51,27 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
 
     def convert_a(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Resolve relative URLs to `self.page_url`."""
+        prefix, suffix, text = markdownify.chomp(text)
+        if not text:
+            return ''
+
         el["href"] = urljoin(self.page_url, el.get("href", ""))
-        return super().convert_a(el, text, convert_as_inline)
+
+        href = el.get('href')
+        title = el.get('title')
+
+        if (
+                self.options['autolinks']
+                and text.replace(r'\_', '_') == href
+                and not title
+                and not self.options['default_title']
+        ):
+            # We have a link that matches the text, and we're allowed to use
+            # autolinks, and we don't have a title, and we don't want to use
+            # the default title, so we just return the URL.
+            return '<%s>' % href
+
+        return '%s[%s](%s)%s' % (prefix, text, href, suffix) if href else text
 
     def convert_p(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Include only one newline instead of two when the parent is a li tag."""
