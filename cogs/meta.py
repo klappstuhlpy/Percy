@@ -95,7 +95,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             if not list(filter(lambda c: not c.hidden, self.group.get_commands())):
                 is_app_command_cog = True
 
-        helper = PaginatedHelpCommand.temporary(self._ctx)
+        helper = PaginatedHelpCommand.temporary(self.ctx)
         for cmd in entries:
             signature = helper.get_command_signature(cmd, with_prefix=False)  # type: ignore
             embed.add_field(name=signature, value=cmd.description or 'No help given...', inline=False)
