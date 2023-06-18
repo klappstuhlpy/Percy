@@ -177,7 +177,7 @@ class Annotations(commands.Cog):
         e.set_footer(text=f'Author ID: {user.id}')
         return e
 
-    @command(commands.command)
+    @command(commands.command, description='Sends feedback about the bot to the owner.')
     @commands.cooldown(rate=1, per=60.0, type=commands.BucketType.user)
     async def feedback(self, ctx: Context, *, content: str):
         """Sends feedback about the bot to the owner.
@@ -196,13 +196,13 @@ class Annotations(commands.Cog):
         await channel.send(embed=e)
         await ctx.send(f'{ctx.tick(True)} Successfully sent feedback')
 
-    @command(app_commands.command, name='feedback')
+    @command(app_commands.command, name='feedback', description='Sends feedback about the bot to the owner.')
     async def feedback_slash(self, interaction: discord.Interaction):
         """Sends feedback about the bot to the owner."""
 
         await interaction.response.send_modal(FeedbackModal(self))
 
-    @command(commands.command)
+    @command(commands.command, hidden=True)
     @commands.is_owner()
     async def pm(self, ctx: Context, user_id: int, *, content: str):
         """Sends a DM to a user by ID."""
@@ -217,7 +217,7 @@ class Annotations(commands.Cog):
         else:
             await ctx.send(f'{ctx.tick(True)} PM successfully sent.')
 
-    @command(commands.command, name='urban')
+    @command(commands.command, name='urban', description="Searches the urban dictionary.")
     async def _urban(self, ctx: Context, *, word: str):
         """Searches urban dictionary."""
 
