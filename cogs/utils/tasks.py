@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+from abc import ABC
 from contextlib import suppress
 from datetime import datetime, timezone
 
@@ -104,9 +105,8 @@ def executor(sync_function: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     return sync_wrapper
 
 
-class Scheduler:
-    """
-    Schedule the execution of coroutines and keep track of them.
+class Scheduler(ABC):
+    """Schedule the execution of coroutines and keep track of them.
 
     When instantiating a :obj:`Scheduler`, a name must be provided. This name is used to distinguish the
     instance's log messages from other instances. Using the name of the class or module containing
@@ -120,14 +120,34 @@ class Scheduler:
     The ``in`` operator is supported for checking if a task with a given ID is currently scheduled.
 
     Any exception raised in a scheduled task is logged when the task is done.
+
+    Examples
+    --------
+    .. code-block:: python3
+
+        from cogs.utils.tasks import Scheduler
+
+        scheduler = Scheduler(__name__)
+
+        async def test():
+            print('test')
+
+        scheduler.schedule(task_id='test', coroutine=test())
+
+        >> test
+
+        scheduler.cancel(task_id='test')
+
+        # Nothing happens
     """
 
     def __init__(self, name: str):
-        """
-        Initialize a new :obj:`Scheduler` instance.
+        """Initialize a new :obj:`Scheduler` instance.
 
-        Args:
-            name: The name of the :obj:`Scheduler`. Used in logging, and namespacing.
+        Parameters
+        ----------
+        name: :class:`str`
+            The name of the scheduler. Used to distinguish the instance's log messages from other
         """
         self.name = name
 
@@ -137,27 +157,55 @@ class Scheduler:
         self._scheduled_tasks: dict[Hashable, asyncio.Task] = {}
 
     def __contains__(self, task_id: Hashable) -> bool:
-        """
-        Return :obj:`True` if a task with the given ``task_id`` is currently scheduled.
+        """Return :obj:`True` if a task with the given ``task_id`` is currently scheduled.
 
-        Args:
-            task_id: The task to look for.
+        Parameters
+        ----------
+        task_id: :class:`Hashable`
+            The ID of the task to check.
 
-        Returns:
-            :obj:`True` if the task was found.
+        Returns
+        -------
+        :class:`bool`
+            :obj:`True` if a task with the given ``task_id`` is currently scheduled.
+
+        Notes
+        -----
+        This method is called when using the ``in`` operator on a :obj:`Scheduler` instance.
         """
         return task_id in self._scheduled_tasks
 
     def schedule(self, task_id: Hashable, coroutine: Coroutine) -> None:
-        """
-        Schedule the execution of a ``coroutine``.
+        """Schedule the execution of a ``coroutine``.
 
         If a task with ``task_id`` already exists, close ``coroutine`` instead of scheduling it. This
         prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
 
-        Args:
-            task_id: A unique ID to create the task with.
-            coroutine: The function to be called.
+        Parameters
+        ----------
+        task_id: :class:`Hashable`
+            A unique identifier for the task.
+        coroutine: :class:`Coroutine`
+            The coroutine to schedule.
+
+        Raises
+        ------
+        ValueError
+            If ``coroutine`` is already running.
+
+        Notes
+        -----
+        The coroutine is scheduled with :func:`asyncio.create_task` and named with the scheduler's name
+        and the task's ID. This allows the task to be identified in the logs.
+
+        The task is added to the scheduler's internal dictionary of scheduled tasks. This allows the
+        task to be cancelled prematurely with :obj:`cancel`.
+
+        If a task with ``task_id`` already exists, close ``coroutine`` instead of scheduling it. This
+        prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
+
+        The task is added to the scheduler's internal dictionary of scheduled tasks. This allows the
+        task to be cancelled prematurely with :obj:`cancel`.
         """
         self._log.trace(f"Scheduling task #{task_id}...")
 
@@ -170,16 +218,31 @@ class Scheduler:
             coroutine.close()
             return
 
-        task = asyncio.create_task(_coro_wrapper(coroutine), name=f"{self.name}_{task_id}")
+        task = asyncio.create_task(coroutine, name=f"{self.name}_{task_id}")
         task.add_done_callback(functools.partial(self._task_done_callback, task_id))
 
         self._scheduled_tasks[task_id] = task
         self._log.debug(f"Scheduled task #{task_id} {id(task)}.")
 
     def schedule_at(self, time: datetime, task_id: Hashable, coroutine: Coroutine) -> None:
-        """
-        Schedule ``coroutine`` to be executed at the given ``time``.
+        """Schedule ``coroutine`` to be executed at the given ``time``.
 
+        Parameters
+        ----------
+        time: :class:`datetime.datetime`
+            The time to schedule the coroutine at.
+        task_id: :class:`Hashable`
+            A unique ID to create the task with.
+        coroutine: :class:`Coroutine`
+            The function to be called.
+
+        Raises
+        ------
+        ValueError
+            If ``time`` is not a timezone aware datetime object.
+
+        Notes
+        -----
         If ``time`` is timezone aware, then use that timezone to calculate now() when subtracting.
         If ``time`` is naïve, then use UTC.
 
@@ -187,11 +250,6 @@ class Scheduler:
 
         If a task with ``task_id`` already exists, close ``coroutine`` instead of scheduling it. This
         prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
-
-        Args:
-            time: The time to start the task.
-            task_id: A unique ID to create the task with.
-            coroutine: The function to be called.
         """
         now_datetime = datetime.now(time.tzinfo) if time.tzinfo else datetime.now(tz=timezone.utc)
         delay = (time - now_datetime).total_seconds()
@@ -206,25 +264,42 @@ class Scheduler:
         task_id: Hashable,
         coroutine: Coroutine
     ) -> None:
-        """
-        Schedule ``coroutine`` to be executed after ``delay`` seconds.
+        """Schedule ``coroutine`` to be executed after ``delay`` seconds.
+
+        Parameters
+        ----------
+        delay: :class:`int` | :class:`float`
+            The number of seconds to wait before executing ``coroutine``.
+        task_id: :class:`Hashable`
+            A unique ID to create the task with.
+        coroutine: :class:`Coroutine`
+            The function to be called.
+
+        Raises
+        ------
+        ValueError
+            If ``delay`` is negative.
+
+        Notes
+        -----
+        If ``delay`` is negative, schedule ``coroutine`` immediately.
 
         If a task with ``task_id`` already exists, close ``coroutine`` instead of scheduling it. This
         prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
-
-        Args:
-            delay: How long to wait before starting the task.
-            task_id: A unique ID to create the task with.
-            coroutine: The function to be called.
         """
         self.schedule(task_id, self._await_later(delay, task_id, coroutine))
 
     def cancel(self, task_id: Hashable) -> None:
-        """
-        Unschedule the task identified by ``task_id``. Log a warning if the task doesn't exist.
+        """Unschedule the task identified by ``task_id``. Log a warning if the task doesn't exist.
 
-        Args:
-            task_id: The task's unique ID.
+        Parameters
+        ----------
+        task_id: :class:`Hashable`
+            The ID of the task to unschedule.
+
+        Notes
+        -----
+        If the task identified by ``task_id`` is already done, then this method does nothing.
         """
         self._log.trace(f"Cancelling task #{task_id}...")
 
@@ -250,7 +325,31 @@ class Scheduler:
         task_id: Hashable,
         coroutine: Coroutine
     ) -> None:
-        """Await ``coroutine`` after ``delay`` seconds."""
+        """|coro|
+
+        Await ``coroutine`` after ``delay`` seconds.
+
+        Parameters
+        ----------
+        delay: :class:`int` | :class:`float`
+            The number of seconds to wait before executing ``coroutine``.
+        task_id: :class:`Hashable`
+            A unique ID to create the task with.
+        coroutine: :class:`Coroutine`
+            The function to be called.
+
+        Raises
+        ------
+        ValueError
+            If ``delay`` is negative.
+
+        Notes
+        -----
+        If ``delay`` is negative, await ``coroutine`` immediately.
+
+        If a task with ``task_id`` already exists, close ``coroutine`` instead of scheduling it. This
+        prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
+        """
         try:
             self._log.trace(f"Waiting {delay} seconds before awaiting coroutine for #{task_id}.")
             await asyncio.sleep(delay)
@@ -271,8 +370,18 @@ class Scheduler:
                 self._log.debug(f"Finally block reached for #{task_id}; {state=}")
 
     def _task_done_callback(self, task_id: Hashable, done_task: asyncio.Task) -> None:
-        """
-        Delete the task and raise its exception if one exists.
+        """Delete the task and raise its exception if one exists.
+
+        Parameters
+        ----------
+        task_id: :class:`Hashable`
+            The ID of the task that's done.
+        done_task: :class:`asyncio.Task`
+            The task that's done.
+
+        Notes
+        -----
+        If the task identified by ``task_id`` is not the same as ``done_task``, then log a warning.
 
         If ``done_task`` and the task associated with ``task_id`` are different, then the latter
         will not be deleted. In this case, a new task was likely rescheduled with the same ID.
@@ -303,15 +412,3 @@ class Scheduler:
             # Log the exception if one exists.
             if exception:
                 self._log.error(f"Error in task #{task_id} {id(done_task)}!", exc_info=exception)
-
-
-TASK_RETURN = TypeVar("TASK_RETURN")
-
-
-async def _coro_wrapper(coro: Coroutine[Any, Any, TASK_RETURN]) -> None:
-    """Wraps `coro` in a try/except block that will handle 90001 Forbidden errors."""
-    try:
-        await coro
-    except discord.Forbidden as e:
-        if e.code != 90001:
-            raise e

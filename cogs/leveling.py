@@ -267,6 +267,10 @@ class Leveling(commands.Cog):
             return
 
         mod_config = await self.bot.moderation.get_guild_config(message.guild.id)
+
+        if not mod_config:
+            return
+
         if not mod_config.flags.leveling:
             return
 

@@ -133,8 +133,7 @@ def _get_truncated_description(
     max_length: int,
     max_lines: int,
 ) -> str:
-    """
-    Truncate the Markdown from `elements` to be at most `max_length` characters when rendered or `max_lines` newlines.
+    """Truncate the Markdown from `elements` to be at most `max_length` characters when rendered or `max_lines` newlines.
 
     `max_length` limits the length of the rendered characters in the string,
     with the real string length limited to `_MAX_DESCRIPTION_LENGTH` to accommodate discord length limits.
@@ -197,8 +196,7 @@ def _get_truncated_description(
 
 
 def _create_markdown(signatures: list[str] | None, description: Iterable[Tag], url: str) -> str:
-    """
-    Create a Markdown string with the signatures at the top, and the converted html description below them.
+    """Create a Markdown string with the signatures at the top, and the converted html description below them.
 
     The signatures are wrapped in python codeblocks, separated from the description by a newline.
     The result Markdown string is max 750 rendered characters for the description with signatures at the start.
@@ -218,7 +216,9 @@ def _create_markdown(signatures: list[str] | None, description: Iterable[Tag], u
 
 @executor
 def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None:
-    """Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
+    """|executor|
+
+    Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
 
     The method of parsing and what information gets included depends on the symbol's group.
     """
@@ -247,7 +247,9 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
 
 @executor
 def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, Any] | None:
-    """Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
+    """|executor|
+
+    Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
 
     This is for special fields of the items description, like `Supported Operations` for classes.
     """

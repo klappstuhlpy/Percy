@@ -81,7 +81,6 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
 
 
 class GroupHelpPaginator(BasePaginator[PartialCommand]):
-    _ctx: Context  # possible Context from Interaction
     group: commands.Group | commands.Cog  # The current Group displayed
     groups: Optional[Dict[commands.Cog, list[PartialCommand]]]  # The list of all groups from this help menu
 
@@ -106,7 +105,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available as Slash Commands.')
         else:
-            embed.set_footer(text=f'Use "{self._ctx.clean_prefix}help command" for more info on a command.')
+            embed.set_footer(text=f'Use "{self.ctx.prefix}help command" for more info on a command.')
 
         return embed
 
@@ -127,10 +126,6 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
-
-        self._ctx = context
-        if isinstance(context, discord.Interaction):
-            self._ctx = await self.ctx.client.get_context(context.message)
 
         self.groups = kwargs.pop('groups') if 'groups' in kwargs else None
         self.group = kwargs.pop('group')
@@ -208,7 +203,6 @@ class CategorySelect(discord.ui.Select):
 
 
 class FrontHelpPaginator(BasePaginator[str]):
-    _ctx: Context  # possible Context from Interaction
     groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
     async def format_page(self, entries: List, /):
@@ -226,8 +220,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
                 ## More Help
                 Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{self._ctx.clean_prefix}help` *`command`*
-                - `{self._ctx.clean_prefix}help` *`category`*
+                - `{self.ctx.prefix}help` *`command`*
+                - `{self.ctx.prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -249,11 +243,11 @@ class FrontHelpPaginator(BasePaginator[str]):
                  "They can provide a better overview and are not required to be typed in.\n"
                  "\n"
                  "Flags are prefixed with `--` and can be used like this:\n"
-                 f"- `{self._ctx.clean_prefix}command --flag1 argument1 --flag2 argument2`\n"
-                 f"- `{self._ctx.clean_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
+                 f"- `{self.ctx.prefix}command --flag1 argument1 --flag2 argument2`\n"
+                 f"- `{self.ctx.prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
                  f"\n"
                  f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
-                 f"- `{self._ctx.clean_prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                 f"- `{self.ctx.prefix}command --flag1 my first argument --flag2 'argument 2`'"
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
@@ -300,10 +294,6 @@ class FrontHelpPaginator(BasePaginator[str]):
 
         self.ctx = context
         self.groups = entries
-
-        self._ctx = context
-        if isinstance(context, discord.Interaction):
-            self._ctx = await self.ctx.client.get_context(context.message)
 
         page = await self.format_page(self.pages[0])
         kwargs = {'view': self, 'embed' if isinstance(page, discord.Embed) else 'content': page}
@@ -604,8 +594,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The command to get the flag formatting from.
         descripted: bool
             Whether to include the flag description or not.
-        chunk: bool
-            Whether to chunk the flags or not. Works only with descripted=True.
 
         Returns
         -------
