@@ -388,7 +388,6 @@ class Tags(commands.Cog):
         commands.hybrid_group,
         name="tag",
         description="Shows a tag from the server.",
-        invoke_without_command=True,
         fallback="show"
     )
     @commands.guild_only()

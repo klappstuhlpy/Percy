@@ -196,9 +196,7 @@ class DiscordStatus(commands.Cog):
 
         return states
 
-    @command(commands.hybrid_group, name="discord-status", fallback="show",
-             description="Shows the current Discord Status.",
-             invoke_without_command=True)
+    @command(commands.hybrid_group, name="discord-status", fallback="show", description="Shows the current Discord Status.")
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
         """Shows the current Discord Status."""
