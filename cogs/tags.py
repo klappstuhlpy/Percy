@@ -208,9 +208,8 @@ class Tags(commands.Cog):
                 await ctx.send(ctx.tick(False, 'No Tag with this name or similar name found.'))
             else:
                 names = '\n'.join(f"* **{r['name']}** [`{r['id']}`]" for r in rows)
-                embed = discord.Embed(title="Did you mean ...", description=f"Found Tags with similar name.",
+                embed = discord.Embed(title="Did you mean ...", description=names,
                                       colour=self.bot.colour.darker_red())
-                embed.add_field(name="Similar Tags", value=names)
                 await ctx.send(embed=embed)
             return
 
