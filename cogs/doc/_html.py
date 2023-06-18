@@ -1,7 +1,6 @@
-import copy
 from collections.abc import Callable, Container, Iterable
 from functools import partial
-from typing import Optional, Union
+from typing import Optional
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PageElement, SoupStrainer, Tag
@@ -111,6 +110,7 @@ def get_dd_description(symbol: PageElement, operations: bool = None) -> list[Tag
     """Get the contents of the next dd tag, up to a dt or a dl tag."""
     description_tag = symbol.find_next("dd")
 
+    # For Supported Operations Category
     if operations is False:
         operations_div = description_tag.find("div", class_="operations")
         if operations_div:
@@ -124,6 +124,7 @@ def get_dd_description(symbol: PageElement, operations: bool = None) -> list[Tag
 
 
 def _create_markdown_for_element(elem: Tag, template: str = "[{}]({})"):
+    """Create a markdown string for a tag."""
     def is_valid(item, name):
         return item.name == name
 
@@ -161,8 +162,7 @@ def get_text(element: PageElement | Tag) -> str:
 
 
 def get_signatures(start_signature: PageElement) -> list[str]:
-    """
-    Collect up to `_MAX_SIGNATURE_AMOUNT` signatures from dt tags around the `start_signature` dt tag.
+    """Collect up to `_MAX_SIGNATURE_AMOUNT` signatures from dt tags around the `start_signature` dt tag.
 
     First the signatures under the `start_signature` are included;
     if less than 2 are found, tags above the start signature are added to the result if any are present.
@@ -186,7 +186,7 @@ def get_signatures(start_signature: PageElement) -> list[str]:
 def _filter_signature_links(tag: Tag) -> bool:
     """Return True if `tag` is a headerlink, or a link to source code; False otherwise."""
     if tag.name == "a":
-        if "headerlink" in tag.get("class", ()):
+        if "headerlink" in tag.get("class", []):
             return True
 
         if tag.find(class_="viewcode-link"):

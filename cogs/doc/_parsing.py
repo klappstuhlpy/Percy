@@ -226,6 +226,7 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
 
     if symbol_heading is None:
         return None
+
     signature = None
     if symbol_heading.name != "dt":
         description = get_general_description(symbol_heading)
