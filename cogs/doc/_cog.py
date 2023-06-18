@@ -350,15 +350,13 @@ class Documentation(commands.Cog):
             package_name = "python"
 
         _, matches = await self.get_symbol_item(package_name, current, 15)
-        return [app_commands.Choice(name=f"{m.symbol_id} ({m.package})", value=m.symbol_id) for m in matches]
+        return [app_commands.Choice(name=m.symbol_id, value=m.symbol_id) for m in matches]
 
     async def package_autocomplete(
             self, interaction: discord.Interaction, current: str  # noqa
     ):
-        return [
-                   app_commands.Choice(name=package, value=package)
-                   for package in fuzzy.finder(current, self.base_urls.keys())
-               ][:25]
+        return [app_commands.Choice(name=package, value=package)
+                for package in fuzzy.finder(current, self.base_urls.keys())][:25]
 
     def update_single(self, package_name: str, base_url: str, inventory: InventoryDict) -> None:
         """Build the inventory for a single package.
@@ -708,11 +706,11 @@ class Documentation(commands.Cog):
         """
         _, matches = await self.get_symbol_item(package, symbol_name, 8)
 
-        e = discord.Embed(colour=helpers.Colour.darker_red())
+        e = discord.Embed(title=f"{package} Search", colour=helpers.Colour.darker_red())
         if len(matches) == 0:
-            return await ctx.send('Could not find anything. Sorry.')
+            return await ctx.send(f'{ctx.tick(False)} The symbol `{symbol_name}` was not found.')
 
         e.description = '\n'.join(
-            f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url}) *({doc_item.package})*'
+            f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url})'
             for doc_item in matches)
         await ctx.send(embed=e, reference=ctx.replied_reference)
