@@ -216,8 +216,8 @@ class Tags(commands.Cog):
         assert row is not None  # for mypy
 
         if escape_markdown:
-            first_step = discord.utils.escape_markdown(row['content'])
-            await ctx.safe_send(first_step.replace('<', '\\<'), escape_mentions=False)
+            raw_content = discord.utils.escape_markdown(row['content'])
+            await ctx.safe_send(raw_content.replace('<', '\\<'), escape_mentions=False)
         else:
             await ctx.send(row['content'], reference=ctx.replied_reference)
 

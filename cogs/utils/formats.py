@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING, Literal
+from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
 
 import asyncpg
 import discord
@@ -218,7 +218,7 @@ def pagify(
             closest_delim = max(closest_delim)
         stop = closest_delim if closest_delim != -1 else stop
         if escape_mass_mentions:
-            to_send = escape(text[start:stop], mass_mentions=True)
+            to_send = discord.utils.escape_mentions(text[start:stop])
         else:
             to_send = text[start:stop]
         if len(to_send.strip()) > 0:
@@ -227,35 +227,9 @@ def pagify(
 
     if len(text[start:end].strip()) > 0:
         if escape_mass_mentions:
-            yield escape(text[start:end], mass_mentions=True)
+            yield discord.utils.escape_mentions(text[start:end])
         else:
             yield text[start:end]
-
-
-def escape(text: str, *, mass_mentions: bool = False, formatting: bool = False) -> str:
-    """Get text with all mass mentions or markdown escaped.
-
-    Parameters
-    ----------
-    text : str
-        The text to be escaped.
-    mass_mentions : `bool`, optional
-        Set to :code:`True` to escape mass mentions in the text.
-    formatting : `bool`, optional
-        Set to :code:`True` to escape any markdown formatting in the text.
-
-    Returns
-    -------
-    str
-        The escaped text.
-
-    """
-    if mass_mentions:
-        text = text.replace("@everyone", "@\u200beveryone")
-        text = text.replace("@here", "@\u200bhere")
-    if formatting:
-        text = discord.utils.escape_markdown(text)
-    return text
 
 
 def format_date(dt: Optional[datetime.datetime], style: TimestampStyle = 'f') -> str:
