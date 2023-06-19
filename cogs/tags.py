@@ -86,11 +86,13 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description="The key to sort the results.", aliases=['s'], default='name')
-    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'], default=False)
+    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'],
+                                  default=False)
 
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'], default=None)
+    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'],
+                                                     default=None)
     query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description="The key to sort the results.", aliases=['s'], default='name')
@@ -293,8 +295,13 @@ class Tags(commands.Cog):
         if owner_id:
             search_kwargs['owner_id'] = owner_id
 
-        query = "SELECT * FROM tags WHERE " + ' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+        query = "SELECT * FROM tags WHERE " + ' AND '.join(
+            f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
+
+        if not parent and name:
+            query = "SELECT * FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE t.name = $1 LIMIT 1;"
+            parent = await self.bot.pool.fetchrow(query, name.lower())
 
         if not parent:
             return None
@@ -311,7 +318,8 @@ class Tags(commands.Cog):
             search_kwargs.pop('name')
 
         search_kwargs['tag_id'] = parent['id']
-        query = f"SELECT * FROM tag_lookup WHERE name <> '{parent['name']}' AND " + ' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
+        query = f"SELECT * FROM tag_lookup WHERE name <> '{parent['name']}' AND " + ' AND '.join(
+            f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
         aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
         if aliases:
@@ -418,9 +426,11 @@ class Tags(commands.Cog):
 
                 match e:
                     case asyncpg.UniqueViolationError():
-                        raise commands.BadArgument('<:redTick:1079249771975413910> A Tag with this name already exists.')
+                        raise commands.BadArgument(
+                            '<:redTick:1079249771975413910> A Tag with this name already exists.')
                     case asyncpg.StringDataRightTruncationError():
-                        raise commands.BadArgument("<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.")
+                        raise commands.BadArgument(
+                            "<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.")
                     case asyncpg.CheckViolationError():
                         raise commands.BadArgument("<:redTick:1079249771975413910> Tag Content is missing.")
                     case _:
@@ -436,6 +446,7 @@ class Tags(commands.Cog):
         Note: This doesn't check if the Tag actually exists.
         This needs to be handled by the caller.
         """
+
         def in_prod_check() -> bool:
             try:
                 being_made = self._temporary_reserved_tags[guild_id]
@@ -446,7 +457,7 @@ class Tags(commands.Cog):
 
         first_word, _, _ = name.partition(' ')
 
-        root: commands.GroupMixin = self.bot.get_command('tag')   # type: ignore
+        root: commands.GroupMixin = self.bot.get_command('tag')  # type: ignore
         if first_word in root.all_commands:
             return True
         else:
@@ -1189,7 +1200,7 @@ class Tags(commands.Cog):
             values = (ctx.guild.id, flags.query)
 
         rows = await ctx.db.fetch(query, *values)
-        
+
         if rows:
             if flags.to_text:
                 await self.send_tags_to_text(ctx, rows)
@@ -1199,7 +1210,7 @@ class Tags(commands.Cog):
                                       colour=helpers.Colour.darker_red(),
                                       timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
-    
+
                 results = [f"`{index}.` {entry}" for index, entry in
                            enumerate([TagPageEntry(record=row) for row in rows], 1)]
                 await LinePaginator.start(
