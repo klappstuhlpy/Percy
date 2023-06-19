@@ -1072,7 +1072,7 @@ class Tags(commands.Cog):
         query = """
             SELECT 
                 COUNT(*) AS count, 
-                array_agg(tag_lookup.name) AS aliase_names, 
+                array_agg(tag_lookup.name) AS alias_names, 
                 array_agg(tag_lookup.id) AS alias_ids,
                 array_agg(tag_lookup.created_at) AS alias_created_at
             FROM tag_lookup
