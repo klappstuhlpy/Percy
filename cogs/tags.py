@@ -1089,7 +1089,7 @@ class Tags(commands.Cog):
         """
         aliases = await self.bot.pool.fetchrow(query, tag.id, tag.name, ctx.guild.id)
 
-        if aliases:
+        if aliases and aliases['count'] > 0:
             value = []
             for alias_name, alias_id, alias_created in zip(aliases['alias_names'], aliases['alias_ids'], aliases['alias_created_at']):
                 value.append(f'**{alias_name}** [`{alias_id}`] ({discord.utils.format_dt(alias_created, style="D")})')
