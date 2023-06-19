@@ -510,13 +510,21 @@ class Documentation(commands.Cog):
             results.append(
                 (symbol_name, self.doc_symbols[package_name][symbol_name])
             )
-            key = lambda x: x[0] and x[0] != symbol_name  # noqa
+            exact_match = True
         except KeyError:
-            key = lambda x: x[0]  # noqa
+            exact_match = False
 
-        results.extend(
-            fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=key)[:limit]
-        )
+        if exact_match:
+            results.extend(
+                filter(
+                    lambda x: x[0] != symbol_name,
+                    fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
+                )
+            )
+        else:
+            results.extend(
+                fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
+            )
 
         if not results:
             return symbol_name, None
