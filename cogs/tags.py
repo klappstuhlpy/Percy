@@ -312,7 +312,7 @@ class Tags(commands.Cog):
 
         search_kwargs['tag_id'] = parent['id']
         query = f"SELECT * FROM tag_lookup WHERE name <> '{parent['name']}' AND " + ' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
-        aliases = await self.bot.pool.fetch(query, location_id, name)
+        aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
         if aliases:
             to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
