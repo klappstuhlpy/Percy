@@ -218,7 +218,7 @@ class Tag(PostgresItem):
             *,
             content: Optional[str] = None,
             use_embed: Optional[bool] = None,
-    ) -> str:
+    ) -> Optional[str]:
         """|coro|
 
         Edits the tag.
@@ -247,6 +247,9 @@ class Tag(PostgresItem):
 
         if use_embed is not None:
             kwargs['use_embed'] = use_embed
+
+        if not kwargs:
+            return None
 
         query = "UPDATE tags SET " + ', '.join(f'{k}=${i}' for i, k in enumerate(kwargs, start=2)) + " WHERE id=$1;"
         try:
@@ -986,7 +989,7 @@ class Tags(commands.Cog):
 
         status = await tag.edit(use_embed=use_embed, content=content)
 
-        if status[-1] == '0':
+        if not status:
             await ctx.send(
                 '<:redTick:1079249771975413910> Could not edit that tag. Are you sure it exists and you own it?')
         else:
