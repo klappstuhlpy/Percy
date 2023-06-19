@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 import string
 import textwrap
@@ -12,10 +13,10 @@ from bs4.element import NavigableString, Tag
 
 from launcher import get_logger
 from . import MAX_SIGNATURE_AMOUNT
-from ._html import get_dd_description, get_general_description, get_signatures
+from ._html import get_dd_description, get_general_description, get_signatures, _class_filter_factory
 from ._markdown import DocMarkdownConverter
 from ..utils.tasks import executor
-from ..utils.formats import find_nth_occurrence
+from ..utils.formats import find_nth_occurrence, pagify
 
 if TYPE_CHECKING:
     from ._cog import DocItem
@@ -26,12 +27,14 @@ _WHITESPACE_AFTER_NEWLINES_RE = re.compile(r"(?<=\n\n)(\s+)")
 _PARAMETERS_RE = re.compile(r"\((.+)\)")
 
 _NO_SIGNATURE_GROUPS = {
-    "attribute",
     "envvar",
     "setting",
     "tempaltefilter",
     "templatetag",
     "term",
+}
+_NO_FIELD_GROUPS = {
+    "Parameters"
 }
 _EMBED_CODE_BLOCK_LINE_LENGTH = 61
 _MAX_SIGNATURES_LENGTH = (_EMBED_CODE_BLOCK_LINE_LENGTH + 8) * MAX_SIGNATURE_AMOUNT
@@ -195,6 +198,14 @@ def _get_truncated_description(
     return truncated_result.strip(_TRUNCATE_STRIP_CHARACTERS) + "..."
 
 
+_pagify_description = functools.partial(
+    pagify,
+    page_length=1024,
+    priority=True,
+    delims=["\n", " "]
+)
+
+
 def _create_markdown(signatures: list[str] | None, description: Iterable[Tag], url: str) -> str:
     """Create a Markdown string with the signatures at the top, and the converted html description below them.
 
@@ -232,11 +243,11 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
         description = get_general_description(symbol_heading)
 
     elif symbol_data.group in _NO_SIGNATURE_GROUPS:
-        description = get_dd_description(symbol_heading, False)
+        description = get_dd_description(symbol_heading, class_action='div.operations.ignore')
 
     else:
         signature = get_signatures(symbol_heading)
-        description = get_dd_description(symbol_heading, False)
+        description = get_dd_description(symbol_heading, class_action='div.operations.ignore')
 
     for description_element in description:
         if isinstance(description_element, Tag):
@@ -260,7 +271,7 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
         return None
 
     fields = {}
-    operations = get_dd_description(symbol_heading, True)
+    operations = get_dd_description(symbol_heading, class_action='div.operations.return')
 
     if operations:
         items: list[tuple[str, str]] = []
@@ -276,5 +287,21 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
 
         if items:
             fields["**Supported Operations**"] = "\n".join([f"`{name}` - {description}" for name, description in items])
+
+    field_list = get_dd_description(symbol_heading, class_action='dl.field-list.return')
+    if field_list:
+        if isinstance(field_list, Tag):
+            for field in field_list.find_all("dt", recursive=False):
+                if field.text in _NO_FIELD_GROUPS:
+                    continue
+
+                values: list[Tag] = [x for x in field.next_siblings if isinstance(x, Tag)][0].find_all("p")
+                description = _create_markdown(None, values, symbol_data.url)
+
+                if len(description) > 1024:
+                    for i, chunk in enumerate(_pagify_description(description)):
+                        fields[field.text if i == 0 else '\u200b'] = chunk
+                else:
+                    fields[field.text] = description
 
     return fields
