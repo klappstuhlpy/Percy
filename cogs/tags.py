@@ -293,7 +293,7 @@ class Tags(commands.Cog):
         if owner_id:
             search_kwargs['owner_id'] = owner_id
 
-        query = "SELECT * FROM tags WHERE " + ' AND '.join(f'{k}=${i}' + " LIMIT 1;" for i, k in enumerate(search_kwargs, 1))
+        query = "SELECT * FROM tags WHERE " + ' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
         if not parent:
@@ -304,10 +304,10 @@ class Tags(commands.Cog):
         if only_parent:
             return to_return
 
-        query = "SELECT * FROM tags WHERE " + ' AND '.join(
-            f'{k}=${i}' + " LIMIT 1;" for i, k in enumerate(search_kwargs, 1))
-        parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
+        if 'id' in search_kwargs:
+            search_kwargs.pop('id')
 
+        search_kwargs['tag_id'] = parent['id']
         query = f"SELECT * FROM tag_lookup WHERE name <> {parent['name']}" + ' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
         aliases = await self.bot.pool.fetch(query, location_id, name)
 
@@ -315,6 +315,9 @@ class Tags(commands.Cog):
             to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
 
         if similarites and not to_return:
+            if name is None:
+                raise ValueError('You need to specify a Tag Name to get similar Tags.')
+
             query = """
                 SELECT
                     tag_lookup.name, tag_lookup.id,
