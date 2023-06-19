@@ -959,7 +959,7 @@ class Tags(commands.Cog):
 
         tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id)
 
-        if content is None:
+        if content is None and use_embed is None:
             if ctx.interaction is None:
                 raise commands.BadArgument('<:redTick:1079249771975413910> Missing content to edit tag with')
             else:
@@ -975,8 +975,9 @@ class Tags(commands.Cog):
                 ctx.interaction = modal.interaction
                 content = modal.text
 
-        if len(content) > 2000:
-            return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
+        if content:
+            if len(content) > 2000:
+                return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
 
         status = await tag.edit(use_embed=use_embed, content=content)
 
@@ -985,7 +986,7 @@ class Tags(commands.Cog):
                 '<:redTick:1079249771975413910> Could not edit that tag. Are you sure it exists and you own it?')
         else:
             await ctx.send('<:greenTick:1079249732364406854> Successfully edited tag.')
-            await ctx.send(content, ephemeral=True)
+            await self.send_tag(ctx, tag.name)
 
     @command(
         tag.command,
