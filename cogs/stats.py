@@ -1232,11 +1232,11 @@ class Stats(commands.Cog):
         description='Command history related commands.',
     )
     @commands.is_owner()
-    async def command_history(self, ctx: Context):
+    async def command_history(self, ctx: Context, limit: int = 15):
         """Command history."""
 
         async with ctx.channel.typing():
-            query = """
+            query = f"""
                 SELECT
                     CASE failed
                         WHEN TRUE THEN command || ' [!]'
@@ -1247,7 +1247,7 @@ class Stats(commands.Cog):
                     guild_id
                 FROM commands
                 ORDER BY used DESC
-                LIMIT 15;
+                LIMIT {limit};
             """
             await self.tabulate_query(ctx, query)
 
