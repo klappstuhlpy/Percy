@@ -156,11 +156,13 @@ class Tag(PostgresItem):
     uses: int
     location_id: int
     created_at: datetime.datetime
+    use_embed: bool
 
-    __slots__ = ('_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at')
+    __slots__ = ('bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
 
-    def __init__(self, **kwargs):
+    def __init__(self, bot: Percy, **kwargs):
         super().__init__(**kwargs)
+        self.bot: Percy = bot
         self._aliases: list[AliasTag] = []
 
     @property
@@ -180,6 +182,94 @@ class Tag(PostgresItem):
             raise TypeError('Aliases must be a list of AliasTag objects.')
 
         self._aliases = value
+
+    @property
+    def to_embed(self) -> discord.Embed:
+        embed = discord.Embed(title=self.name, description=self.content)
+        embed.timestamp = self.created_at.replace(tzinfo=datetime.timezone.utc)
+        embed.set_footer(text=f'[{self.id}] • Created at')
+        return embed
+
+    async def get_rank(self) -> int:
+        """|coro|
+
+        Gets the rank of the tag.
+
+        Returns
+        -------
+        int
+            The rank of the tag.
+        """
+        query = """
+            SELECT (
+                SELECT COUNT(*)
+                FROM tags second
+                WHERE (second.uses, second.id) >= (first.uses, first.id)
+                AND second.location_id = first.location_id
+            ) AS rank
+            FROM tags first
+            WHERE first.id=$1
+        """
+
+        return await self.bot.pool.fetchval(query, self.id)
+
+    async def edit(
+            self,
+            *,
+            content: Optional[str] = None,
+            use_embed: Optional[bool] = None,
+    ) -> str:
+        """|coro|
+
+        Edits the tag.
+
+        Parameters
+        ----------
+        content: Optional[str]
+            The new content of the tag.
+        use_embed: Optional[bool]
+            Whether to use embeds or not.
+
+        Raises
+        ------
+        commands.BadArgument
+            A Tag with this name already exists, or the Tag Name length is out of range or the Tag Name is not valid.
+
+        Returns
+        -------
+        str
+            The update status of the query.
+        """
+        kwargs = {}
+
+        if content is not None:
+            kwargs['content'] = content
+
+        if use_embed is not None:
+            kwargs['use_embed'] = use_embed
+
+        query = "UPDATE tags SET " + ', '.join(f'{k}=${i}' for i, k in enumerate(kwargs, start=2)) + " WHERE id=$1;"
+        try:
+            updated = await self.bot.pool.fetchrow(query, self.id, *kwargs.values())
+        except Exception as e:
+            match e:
+                case asyncpg.UniqueViolationError():
+                    raise commands.BadArgument(
+                        '<:redTick:1079249771975413910> A Tag with this name already exists.')
+                case asyncpg.StringDataRightTruncationError():
+                    raise commands.BadArgument(
+                        "<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.")
+                case asyncpg.CheckViolationError():
+                    raise commands.BadArgument("<:redTick:1079249771975413910> Tag Content is missing.")
+                case _:
+                    raise e
+
+        if content is not None:
+            self.content = content
+        if use_embed is not None:
+            self.use_embed = use_embed
+
+        return updated
 
 
 class AliasTag(PostgresItem):
@@ -252,7 +342,9 @@ class Tags(commands.Cog):
             only_parent: bool = False,
             similarites: bool = False
     ) -> Optional[Union[list[AliasTag] | Tag]]:
-        """Gets a Tag or AliasTag from the database.
+        """|coro|
+
+        Gets a Tag or AliasTag from the database.
 
         Note
         ----
@@ -306,7 +398,7 @@ class Tags(commands.Cog):
         if not parent:
             return None
 
-        to_return = Tag(record=parent)
+        to_return = Tag(self.bot, record=parent)
 
         if only_parent:
             return to_return
@@ -318,7 +410,7 @@ class Tags(commands.Cog):
             search_kwargs.pop('name')
 
         search_kwargs['tag_id'] = parent['id']
-        query = f"SELECT * FROM tag_lookup WHERE name <> '{parent['name']}' AND " + ' AND '.join(
+        query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + ' AND '.join(
             f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
         aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
@@ -332,7 +424,7 @@ class Tags(commands.Cog):
             query = """
                 SELECT
                     tag_lookup.name, tag_lookup.id,
-                    tag_lookup.name == t.name AS is_alias
+                    tag_lookup.name <> t.name AS is_alias
                 FROM tag_lookup
                 INNER JOIN tags t on t.id = tag_lookup.tag_id
                 WHERE tag_lookup.location_id=$1 AND tag_lookup.name % $2
@@ -340,7 +432,7 @@ class Tags(commands.Cog):
                 LIMIT 3;
             """
             rows = await self.bot.pool.fetch(query, location_id, name)
-            to_return = [AliasTag(parent, record=row) if row['is_alias'] else Tag(record=row) for row in rows]
+            to_return = [AliasTag(parent, record=row) if row['is_alias'] else Tag(self.bot, record=row) for row in rows]
 
         return to_return
 
@@ -379,7 +471,10 @@ class Tags(commands.Cog):
                 await ctx.send(embed=embed)
             return
 
-        await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
+        if tag.use_embed and not escape_markdown:
+            await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
+        else:
+            await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
 
         # Just updated the uses of the Tag
         query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2;"
@@ -626,26 +721,6 @@ class Tags(commands.Cog):
 
     @command(
         tag.command,
-        name="embed",
-        description="Format a tag's content as an embed.",
-        examples=["tag-name true", "\"tag name\" no"]
-    )
-    @commands.guild_only()
-    @app_commands.describe(name='The tag to retrieve', embed='Whether to format the tag as an embed')
-    @app_commands.autocomplete(name=owned_non_aliased_tag_autocomplete)  # type: ignore
-    async def tag_embed(
-            self,
-            ctx: GuildContext,
-            name: Annotated[str, TagName],
-            embed: bool
-    ):
-        """Retrieves a tag from the server.
-        If the tag is an alias, the original tag will be retrieved instead.
-        """
-        pass
-
-    @command(
-        tag.command,
         name="make",
         description="Interactively create a Tag owned by yourself in this server.",
         ignore_extra=True
@@ -712,11 +787,10 @@ class Tags(commands.Cog):
 
             await self.create_tag(ctx, name, clean_content)
 
-        for message in messages:
-            try:
-                await message.delete()
-            except discord.HTTPException:
-                pass
+        try:
+            await ctx.channel.delete_messages(messages)
+        except discord.HTTPException:
+            pass
 
     async def guild_tag_stats(self, ctx: GuildContext):
         e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
@@ -875,6 +949,7 @@ class Tags(commands.Cog):
             self,
             ctx: GuildContext,
             name: Annotated[str, TagName(lower=True)],  # type: ignore
+            use_embed: Optional[bool] = None,
             *,
             content: Annotated[Optional[str], TagContent(required=False)] = None,  # type: ignore
     ):
@@ -882,11 +957,12 @@ class Tags(commands.Cog):
         `Note:` If you don't pass a content, you will be prompted to edit the tag in a modal.
         This may be useful for larger contents."""
 
+        tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id)
+
         if content is None:
             if ctx.interaction is None:
                 raise commands.BadArgument('<:redTick:1079249771975413910> Missing content to edit tag with')
             else:
-                tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id)
                 if tag is None:
                     await ctx.send(
                         '<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?',
@@ -902,8 +978,7 @@ class Tags(commands.Cog):
         if len(content) > 2000:
             return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
 
-        query = "UPDATE tags SET content=$1 WHERE LOWER(name)=$2 AND location_id=$3 AND owner_id=$4;"
-        status = await ctx.db.execute(query, content, name, ctx.guild.id, ctx.author.id)
+        status = await tag.edit(use_embed=use_embed, content=content)
 
         if status[-1] == '0':
             await ctx.send(
@@ -970,82 +1045,49 @@ class Tags(commands.Cog):
     async def tag_info(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
         """Shows you Information about a Tag."""
 
-        query = """
-            SELECT
-               tag_lookup.name <> tags.name AS "alias",
-               tag_lookup.id AS lookup_alias_id,
-               tag_lookup.name AS lookup_name,
-               tag_lookup.created_at AS lookup_created_at,
-               tag_lookup.owner_id AS lookup_owner_id,
-               tags.*
-            FROM tag_lookup
-            INNER JOIN tags ON tag_lookup.tag_id = tags.id
-            WHERE LOWER(tag_lookup.name)=$1 AND tag_lookup.location_id=$2
-        """
+        tag = await self.get_tag(name=name, location_id=ctx.guild.id, only_parent=True)
 
-        record = await ctx.db.fetchrow(query, name, ctx.guild.id)
-        if record is None:
+        if tag is None:
             return await ctx.send('<:redTick:1079249771975413910> Tag was not found.')
 
-        if record['alias']:
-            embed = discord.Embed(title=record['lookup_name'], color=self.bot.colour.darker_red())
+        embed = discord.Embed(title="Tag Info", description=f"**```{tag.name}```**\n")
+        embed.add_field(name="**Owner**", value=f"<@{tag.owner_id}>")
 
-            owner_id = record['lookup_owner_id']
-            embed.timestamp = record['lookup_created_at'].replace(tzinfo=datetime.timezone.utc)
-            embed.set_footer(text=f'[{record["lookup_alias_id"]}] • Alias created at')
+        user = self.bot.get_user(tag.owner_id) or (await self.bot.fetch_user(tag.owner_id))
+        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
 
-            user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
-            embed.set_thumbnail(url=user.avatar.url)
-            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        embed.timestamp = tag.created_at.replace(tzinfo=datetime.timezone.utc)
+        embed.set_footer(text=f'[{tag.id}] • Tag created at')
 
-            embed.add_field(name='**Owner**', value=f'<@{owner_id}>')
-            embed.add_field(name='**Linked To** \N{LINK SYMBOL}', value=f"**{record['name']}** [`{record['id']}`]")
-            await ctx.send(embed=embed)
-        else:
-            embed = discord.Embed(color=self.bot.colour.darker_red())
-            owner_id = record['owner_id']
-            embed.title = record['name']
-            embed.timestamp = record['created_at'].replace(tzinfo=datetime.timezone.utc)
-            embed.set_footer(text=f'[{record["id"]}] • Tag created at')
+        rank = await tag.get_rank()
+        if rank:
+            text = '**Rank**'
+            if rank in (1, 2, 3):
+                text += f' {chr(129350 + int(rank))}'
 
-            user = self.bot.get_user(owner_id) or (await self.bot.fetch_user(owner_id))
-            embed.set_thumbnail(url=user.avatar.url)
-            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+            embed.add_field(name=text, value=f"**#{rank}**")
 
-            embed.add_field(name='**Owner**', value=f'<@{owner_id}>', inline=False)
+        embed.add_field(name='**Tag Used**', value=tag.uses)
 
-            query = """
-                SELECT (
-                    SELECT COUNT(*)
-                    FROM tags second
-                    WHERE (second.uses, second.id) >= (first.uses, first.id)
-                    AND second.location_id = first.location_id
-                    ) AS rank
-                FROM tags first
-                WHERE first.id=$1
-            """
+        query = """
+            SELECT 
+                COUNT(*) AS count, 
+                array_agg(tag_lookup.name) AS aliase_names, 
+                array_agg(tag_lookup.id) AS alias_ids,
+                array_agg(tag_lookup.created_at) AS alias_created_at
+            FROM tag_lookup
+            WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2 AND tag_lookup.location_id=$3;
+        """
+        aliases = await self.bot.pool.fetchrow(query, tag.id, tag.name, ctx.guild.id)
 
-            rank = await ctx.db.fetchrow(query, record['id'])
+        if aliases:
+            value = []
+            for alias_name, alias_id, alias_created in zip(aliases['alias_names'], aliases['alias_ids'], aliases['alias_created_at']):
+                value.append(f'**{alias_name}** [`{alias_id}`] ({discord.utils.format_dt(alias_created, style="D")})')
 
-            if rank is not None:
-                text = '**Rank**'
-                if rank['rank'] in (1, 2, 3):
-                    text += f' {chr(129350 + int(rank["rank"]))}'
+            embed.add_field(name=f"**Aliases ({aliases['count']})**", value='\n'.join(value), inline=False)
 
-                embed.add_field(name=text, value=f"**#{rank['rank']}**")
-
-            embed.add_field(name='**Tag Used**', value=record['uses'])
-
-            query = """
-                SELECT COUNT(*) AS count
-                FROM tag_lookup
-                   WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2
-                    AND tag_lookup.location_id=$3
-            """
-            alias_count = await self.bot.pool.fetchrow(query, record['id'], record["name"], ctx.guild.id)
-
-            embed.add_field(name="**Aliases**", value=alias_count['count'])
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
 
     @command(
         tag.command,
