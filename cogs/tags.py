@@ -957,6 +957,11 @@ class Tags(commands.Cog):
         `Note:` If you don't pass a content, you will be prompted to edit the tag in a modal.
         This may be useful for larger contents."""
 
+        if ctx.interaction:
+            await ctx.defer()
+        else:
+            await ctx.channel.typing()
+
         tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id)
 
         if content is None and use_embed is None:
