@@ -504,24 +504,27 @@ class Documentation(commands.Cog):
         the first word of the name will be attempted to be used to get the item.
         """
 
+        results: list[tuple[str, DocItem]] = []
+
         try:
-            result = self.doc_symbols[package_name][symbol_name]
-
-            return symbol_name, result
+            results.append(
+                (symbol_name, self.doc_symbols[package_name][symbol_name])
+            )
+            key = lambda x: x[0] and x[0] != symbol_name  # noqa
         except KeyError:
-            results = fuzzy.finder(
-                symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0]
-            )[:limit]
+            key = lambda x: x[0]  # noqa
 
-            if not results:
-                return symbol_name, None
+        results.extend(
+            fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=key)[:limit]
+        )
 
-            results = [r[1] for r in results]
+        if not results:
+            return symbol_name, None
 
-            if len(results) == 1:
-                return symbol_name, results[0]
+        if len(results) == 1:
+            return symbol_name, results[0][1]
 
-            return symbol_name, results
+        return symbol_name, [result[1] for result in results]
 
     async def get_symbol_markdown(self, doc_item: DocItem) -> str:
         """Get the Markdown from the symbol `doc_item` refers to.
