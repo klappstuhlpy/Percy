@@ -300,7 +300,7 @@ class Tags(commands.Cog):
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
         if not parent and name:
-            query = "SELECT * FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE t.name = $1 LIMIT 1;"
+            query = "SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE t.name = $1 LIMIT 1;"
             parent = await self.bot.pool.fetchrow(query, name.lower())
 
         if not parent:
