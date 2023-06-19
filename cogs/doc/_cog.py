@@ -503,13 +503,25 @@ class Documentation(commands.Cog):
         If the doc item is not found directly from the passed in name and the name contains a space,
         the first word of the name will be attempted to be used to get the item.
         """
-        result = fuzzy.finder(
-            symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0]
-        )[:limit]
 
-        if limit == 1:
-            result = result[0][1] if result else None
-        return symbol_name, [r[1] for r in result] if result else None
+        try:
+            result = self.doc_symbols[package_name][symbol_name]
+
+            return symbol_name, result
+        except KeyError:
+            results = fuzzy.finder(
+                symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0]
+            )[:limit]
+
+            if not results:
+                return symbol_name, None
+
+            results = [r[1] for r in results]
+
+            if len(results) == 1:
+                return symbol_name, results[0]
+
+            return symbol_name, results
 
     async def get_symbol_markdown(self, doc_item: DocItem) -> str:
         """Get the Markdown from the symbol `doc_item` refers to.
