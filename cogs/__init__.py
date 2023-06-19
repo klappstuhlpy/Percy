@@ -16,6 +16,12 @@ EXTENSIONS = [module.name for module in iter_modules(__path__, f'{__package__}.'
 
 
 class CommandCategory(enum.Enum):
+    """The category of the command.
+
+    Note
+    ----
+    App = 1; Hybrid = 2; Core = 3;
+    """
     App = 1
     Hybrid = 2
     Core = 3
@@ -57,6 +63,7 @@ def command_permissions(
         bot: Optional[List[str] | str] = PermissionTemplate.bot
 ) -> Callable[[T], T]:
     r"""A custom decorator that allows you to assign permission for the bot and user.
+    Assign a :class:`CommandCategory` to the ``category`` parameter to determine which decorator to use.
 
     Note
     ----
@@ -92,6 +99,7 @@ def command_permissions(
     _bot_permissions = {permission: True for permission in bot}
 
     def decorator(func: T) -> T:
+        # Mainly App/Hybrid Commands
         func.default_permissions = discord.Permissions(**_user_permissions)
 
         if _bot_permissions:
@@ -110,6 +118,9 @@ def command_permissions(
             else:
                 func.__discord_app_commands_default_permissions__ = discord.Permissions(**_user_permissions)
 
+        # This is used to determine the bot and user
+        # permissions wherever you like,
+        # for example, in the help command.
         func.__bot_permissions__ = _bot_permissions
         func.__user_permissions__ = _user_permissions
 
@@ -168,7 +179,8 @@ def command(
         The wrapped command with or without the applied :class:`PermissionTemplate`.
     """
 
-    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])  # Searching for filename of the position from the function
+    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
+    # Searching for filename of the position from the function
     if not extras:
         extras = {}
 

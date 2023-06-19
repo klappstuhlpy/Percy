@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any, ClassVar
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
 )
 
 import discord
@@ -525,7 +525,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if flags:
             # If we have flags, we need to remove the flags from the signature
             # because this might be confusing for the user
-            signature = re.sub(r'(.)flags(.)', '', signature)
+            signature = re.sub(r'(.)flags(.)', '', signature).strip()
             # Also sub the multiple spaces with one space
             signature = re.sub(r'\s+', ' ', f'{signature} {flags}')
 
