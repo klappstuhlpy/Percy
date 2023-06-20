@@ -17,7 +17,7 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import LinePaginator
 from . import command, command_permissions
 from .emoji import usage_per_day
-from .utils import formats, fuzzy, helpers
+from .utils import formats, fuzzy, helpers, cache
 from .utils.formats import plural, medal_emojize
 from .utils.helpers import PostgresItem
 
@@ -36,17 +36,18 @@ class TagPageEntry(PostgresItem):
         return f'{self.name} [`{self.id}`]'
 
 
-class TagName(commands.clean_content):
-    def __init__(self, *, lower: bool = False):
+class TagNameOrID(commands.clean_content):
+    def __init__(self, *, lower: bool = False, with_id: bool = False):
         self.lower: bool = lower
+        self.with_id: bool = with_id
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str:
+    async def convert(self, ctx: Context, argument: str) -> str | int:
         converted = await super().convert(ctx, argument)
         lower = converted.lower().strip()
 
         if not lower:
-            raise commands.BadArgument('<:redTick:1079249771975413910> Please enter a valid tag name.')
+            raise commands.BadArgument('<:redTick:1079249771975413910> Please enter a valid tag name' + " or id." if self.with_id else '.')
 
         if len(lower) > 100:
             raise commands.BadArgument(
@@ -59,6 +60,10 @@ class TagName(commands.clean_content):
         if cog.is_tag_reserved(ctx.guild.id, argument):
             raise commands.BadArgument(
                 '<:redTick:1079249771975413910> Hey, that\'s a reserved tag name. Choose another one.')
+
+        if self.with_id:
+            if converted and converted.isdigit():
+                return int(converted)
 
         return converted.strip() if not self.lower else lower
 
@@ -130,7 +135,7 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
         assert interaction.guild_id is not None
         name = str(self.name)
         try:
-            name = await TagName().convert(self.ctx, name)
+            name = await TagNameOrID().convert(self.ctx, name)
         except commands.BadArgument as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
@@ -274,6 +279,38 @@ class Tag(PostgresItem):
 
         return updated
 
+    async def delete(self) -> None:
+        """|coro|
+
+        Deletes the tag and all corresponding aliases.
+        """
+        query = "DELETE FROM tags WHERE id=$1;"
+        await self.bot.pool.execute(query, self.id)
+
+        query = "DELETE FROM tag_lookup WHERE tag_id=$1;"
+        await self.bot.pool.execute(query, self.id)
+
+    async def transfer(self, member: discord.Member, only_parent: bool = False):
+        """|coro|
+
+        Transfers the tag to another user.
+
+        Parameters
+        ----------
+        member: discord.Member
+            The member to transfer the tag to.
+        only_parent: bool
+            Whether to only transfer the parent tag or all aliases as well.
+
+        """
+        async with self.bot.pool.acquire() as conn:
+            async with conn.transaction():
+                query = "UPDATE tags SET owner_id=$1 WHERE id=$2;"
+                await conn.execute(query, member.id, self.id)
+                if not only_parent:
+                    query = "UPDATE tag_lookup SET owner_id=$1 WHERE tag_id=$2;"
+                    await conn.execute(query, member.id, self.id)
+
 
 class AliasTag(PostgresItem):
     """Represents an Alias for a Tag."""
@@ -287,9 +324,41 @@ class AliasTag(PostgresItem):
 
     __slots__ = ('parent', 'id', 'name', 'tag_id', 'owner_id', 'location_id', 'created_at')
 
-    def __init__(self, parent: Tag, **kwargs):
+    def __init__(self, parent: Optional[Tag] = None, **kwargs):
         super().__init__(**kwargs)
-        self.parent: Tag = parent
+        self.parent: Optional[Tag] = parent
+
+    async def transfer(self, member: discord.Member, /, *, connection: Optional[asyncpg.Connection] = None):
+        """|coro|
+
+        Transfers the alias to another user.
+
+        Parameters
+        ----------
+        member: discord.Member
+            The member to transfer the alias to.
+        connection: Optional[asyncpg.Connection]
+            The connection to use. Defaults to the bot's pool.
+            Needs to be used if there is no :attr:`parent` attribute.
+
+        """
+        if self.parent:
+            con = self.parent.bot.pool
+        else:
+            con = connection
+
+        async with con.acquire() as conn:
+            async with conn.transaction():
+                query = "UPDATE tag_lookup SET owner_id=$1 WHERE id=$2;"
+                await conn.execute(query, member.id, self.id)
+
+    async def delete(self) -> None:
+        """|coro|
+
+        Deletes the alias.
+        """
+        query = "DELETE FROM tag_lookup WHERE id=$1;"
+        await self.parent.bot.pool.execute(query, self.id)
 
 
 class Tags(commands.Cog):
@@ -335,30 +404,30 @@ class Tags(commands.Cog):
             if len(self._temporary_reserved_tags[guild_id]) == 0:
                 del self._temporary_reserved_tags[guild_id]
 
+    @cache.cache(strategy=cache.Strategy.ADDITIVE, maxsize=300)
     async def get_tag(
             self,
+            name_or_id: Union[str, int],
             *,
-            tag_id: Optional[int] = None,
-            name: Optional[str] = None,
             owner_id: Optional[int] = None,
             location_id: Optional[int] = None,
             only_parent: bool = False,
-            similarites: bool = False
-    ) -> Optional[Union[list[AliasTag] | Tag]]:
+            similarites: bool = False,
+            actual: bool = False,
+    ) -> Optional[Union[list[AliasTag] | Tag | AliasTag]]:
         """|coro|
 
-        Gets a Tag or AliasTag from the database.
+        Gets the Original :class:`Tag` with Optional all :class:`AliasTag` s of it.
+        If no exact match is found, it will return a list of :class:`AliasTag`s that are similar to the name.
 
         Note
         ----
-        If the result is only one Tag, it will return the Tag, else it will return a list of Tags.
+        Returning a list with smiliar Tags is only possible if :attr:`name_or_id` is a string and :attr:`similarites` is True.
 
         Parameters
         ----------
-        tag_id: Optional[int]
-            The ID of the Tag to get.
-        name: Optional[str]
-            The name of the Tag to get.
+        name_or_id: Union[str, int]
+            The name or ID of the Tag to get.
         owner_id: Optional[int]
             The ID of the User to get the Tag from.
         location_id: Optional[int]
@@ -367,22 +436,21 @@ class Tags(commands.Cog):
             Whether to only get the parent Tag.
         similarites: bool
             Whether to get similar Tags.
+        actual: bool
+            Whether to get only the Tag that meets the requirements.
 
         Returns
         -------
         Optional[Union[Tag, AliasTag] | List[Union[Tag, AliasTag]]]
             The Tag or AliasTag if found, else None.
         """
-        if tag_id is None and name is None:
-            raise ValueError('You need to specify either a Tag ID or a Tag Name.')
-
         search_kwargs = {}
 
-        if tag_id:
-            search_kwargs['id'] = tag_id
+        if isinstance(name_or_id, int):
+            search_kwargs['id'] = name_or_id
 
-        if name:
-            search_kwargs['LOWER(name)'] = name.lower()
+        if isinstance(name_or_id, str):
+            search_kwargs['LOWER(name)'] = name_or_id.lower()
 
         if location_id:
             search_kwargs['location_id'] = location_id
@@ -394,9 +462,20 @@ class Tags(commands.Cog):
             f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
-        if not parent and name:
+        if not parent and isinstance(name_or_id, str):
             query = "SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE t.name = $1 LIMIT 1;"
-            parent = await self.bot.pool.fetchrow(query, name.lower())
+            parent = await self.bot.pool.fetchrow(query, name_or_id.lower())
+
+        if actual:
+            if parent:
+                return Tag(self.bot, record=parent)
+            else:
+                query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
+                    f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+                alias = await self.bot.pool.fetchrow(query, name_or_id)
+                if alias:
+                    return AliasTag(record=alias)
+                return None
 
         if not parent:
             return None
@@ -421,7 +500,7 @@ class Tags(commands.Cog):
             to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
 
         if similarites and not to_return:
-            if name is None:
+            if not isinstance(name_or_id, str):
                 raise ValueError('You need to specify a Tag Name to get similar Tags.')
 
             query = """
@@ -434,7 +513,7 @@ class Tags(commands.Cog):
                 ORDER BY similarity(tag_lookup.name, $2) DESC
                 LIMIT 3;
             """
-            rows = await self.bot.pool.fetch(query, location_id, name)
+            rows = await self.bot.pool.fetch(query, location_id, name_or_id)
             to_return = [AliasTag(parent, record=row) if row['is_alias'] else Tag(self.bot, record=row) for row in rows]
 
         return to_return
@@ -442,7 +521,7 @@ class Tags(commands.Cog):
     async def send_tag(
             self,
             ctx: GuildContext,
-            name: str,
+            name_or_id: str | int,
             *,
             escape_markdown: bool = False
     ) -> None:
@@ -457,12 +536,12 @@ class Tags(commands.Cog):
         ----------
         ctx: GuildContext
             The invocation context.
-        name: str
-            The name of the Tag to look up.
+        name_or_id: str | int
+            The name or ID of the Tag to get.
         escape_markdown: bool
             Whether to escape the markdown in the Tag content.
         """
-        tag: Union[list[AliasTag] | Tag] = await self.get_tag(name=name, location_id=ctx.guild.id, similarites=True)
+        tag: Union[list[AliasTag] | Tag] = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, similarites=True)
 
         if isinstance(tag, list):
             if tag is None or len(tag) == 0:
@@ -480,8 +559,11 @@ class Tags(commands.Cog):
             await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
 
         # Just updated the uses of the Tag
-        query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2;"
-        await ctx.db.execute(query, tag.name, ctx.guild.id)
+        query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2 RETURNING *;"
+        updated = await ctx.db.execute(query, tag.name, ctx.guild.id)
+
+        self.get_tag.refactor_containing(str(tag.id), Tag(self.bot, record=updated))
+        self.get_tag.refactor_containing(f'{tag.name!r}', Tag(self.bot, record=updated))
 
     @staticmethod
     async def create_tag(ctx: GuildContext, name: str, content: str) -> None:
@@ -563,7 +645,7 @@ class Tags(commands.Cog):
 
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[int]]:
         query = """
             SELECT name, id 
             FROM tags 
@@ -578,13 +660,13 @@ class Tags(commands.Cog):
 
         results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
         return [app_commands.Choice(name=f"[{a['id']}] {textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 2))}",
-                                    value=a['name']) for a in results]
+                                    value=a['id']) for a in results]
 
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[int]]:
         query = """
-            SELECT tag_lookup.name
+            SELECT tag_lookup.name, tag_lookup.id
             FROM tag_lookup
             INNER JOIN tags ON tags.id = tag_lookup.tag_id
             WHERE tag_lookup.location_id=$1
@@ -597,11 +679,11 @@ class Tags(commands.Cog):
             return []
 
         results = fuzzy.finder(current, results, key=lambda a: a['name'])
-        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['name']) for a in results]
+        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['id']) for a in results]
 
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[int]]:
         query = """
             SELECT name, id 
             FROM tags 
@@ -616,13 +698,13 @@ class Tags(commands.Cog):
 
         results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
         return [app_commands.Choice(name=f"[{a['id']}] {textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 2))}",
-                                    value=a['name']) for a in results]
+                                    value=a['id']) for a in results]
 
     async def owned_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[int]]:
         query = """
-            SELECT tag_lookup.name
+            SELECT tag_lookup.name, tag_lookup.id
             FROM tag_lookup
             INNER JOIN tags ON tags.id = tag_lookup.tag_id
             WHERE tag_lookup.location_id=$1 AND tag_lookup.owner_id=$2
@@ -635,7 +717,7 @@ class Tags(commands.Cog):
             return []
 
         results = fuzzy.finder(current, results, key=lambda a: a['name'])
-        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['name']) for a in results]
+        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['id']) for a in results]
 
     @command(
         commands.hybrid_group,
@@ -645,13 +727,19 @@ class Tags(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @app_commands.describe(name='The tag to retrieve')
-    @app_commands.autocomplete(name=aliased_tag_autocomplete)  # type: ignore
-    async def tag(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
+    @app_commands.describe(name_or_id='The tag to retrieve')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    async def tag(
+            self,
+            ctx: GuildContext,
+            *,
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)]  # type: ignore
+    ):
         """Retrieves a tag from the server.
         If the tag is an alias, the original tag will be retrieved instead.
         """
-        await self.send_tag(ctx, name)
+        await self.send_tag(ctx, name_or_id)
 
     @command(
         tag.command,
@@ -667,9 +755,9 @@ class Tags(commands.Cog):
     async def tag_alias(
             self,
             ctx: GuildContext,
-            new_alias: Annotated[str, TagName],
+            new_alias: Annotated[str, TagNameOrID],
             *,
-            original_tag: Annotated[str, TagName]
+            original_tag: Annotated[str, TagNameOrID]
     ):
         """Assign an alias to an existing tag of yours.
         `Note:` You have to be the owner of the Tag.
@@ -710,7 +798,7 @@ class Tags(commands.Cog):
     async def tag_create(
             self,
             ctx: GuildContext,
-            name: Annotated[str, TagName],
+            name: Annotated[str, TagNameOrID],
             *,
             content: Annotated[str, TagContent]
     ):
@@ -741,7 +829,7 @@ class Tags(commands.Cog):
 
         messages: List[discord.Message] = [ctx.message]
 
-        converter = TagName()
+        converter = TagNameOrID()
         original = ctx.message
 
         messages.append(await ctx.send("What would you like the tag's **name** to be?"))
@@ -762,7 +850,7 @@ class Tags(commands.Cog):
         finally:
             ctx.message = original
 
-        tag = self.get_tag(name=name, location_id=ctx.guild.id, only_parent=True)
+        tag = self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True)
         if tag is not None:
             return await ctx.send(
                 '<:redTick:1079249771975413910> Sorry. This name is already taken. Please choose another one.'
@@ -944,14 +1032,15 @@ class Tags(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.describe(
-        name='The Tag you want to edit. (Must be yours)',
+        name_or_id='The Tag you want to edit. (Must be yours)',
         content='The new content of the tag. (If not given, you will be prompted to edit the tag in a modal.)',
     )
-    @app_commands.autocomplete(name=owned_non_aliased_tag_autocomplete)  # type: ignore
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
     async def tag_edit(
             self,
             ctx: GuildContext,
-            name: Annotated[str, TagName(lower=True)],  # type: ignore
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
             use_embed: Optional[bool] = None,
             *,
             content: Annotated[Optional[str], TagContent(required=False)] = None,  # type: ignore
@@ -965,7 +1054,7 @@ class Tags(commands.Cog):
         else:
             await ctx.channel.typing()
 
-        tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id)
+        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id)
 
         if content is None and use_embed is None:
             if ctx.interaction is None:
@@ -994,54 +1083,44 @@ class Tags(commands.Cog):
                 '<:redTick:1079249771975413910> Could not edit that tag. Are you sure it exists and you own it?')
         else:
             await ctx.send('<:greenTick:1079249732364406854> Successfully edited tag.')
-            await self.send_tag(ctx, tag.name)
+            # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
+            await self.send_tag(ctx, name_or_id)
 
     @command(
         tag.command,
         name='delete',
-        description='Removes a Tag by Name. (Must be yours, or you must have the `MANAGE MESSAGES` permission.)',
+        description='Removes a Tag by Name or ID.',
         aliases=['remove']
     )
     @commands.guild_only()
-    @app_commands.describe(name='The assigned Tag Name to delete.')
-    @app_commands.autocomplete(name=owned_non_aliased_tag_autocomplete)  # type: ignore
-    async def tag_delete(self, ctx: GuildContext, name: Annotated[str, TagName(lower=True)]):  # type: ignore
+    @app_commands.describe(name_or_id='The assigned Tag to delete.')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
+    async def tag_delete(
+            self,
+            ctx: GuildContext,
+            *,
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
+    ):
         """Removes a Tag by ID owned by yourself.
         Your Tags can also be removed by Moderators if they have the `MANAGE MESSAGES` permission.
         `Note:` This will also remove all aliases of the tag.
         """
 
         bypass_owner_check = ctx.author.id == self.bot.owner_id or ctx.author.guild_permissions.manage_messages
-        clause = 'LOWER(name)=$1 AND location_id=$2'
 
         if bypass_owner_check:
-            args = [name.lower(), ctx.guild.id]
+            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, only_parent=True)
         else:
-            args = [name.lower(), ctx.guild.id, ctx.author.id]
-            clause = f'{clause} AND owner_id=$3'
+            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
-        query = f'DELETE FROM tag_lookup WHERE {clause} RETURNING tag_id;'
-        deleted = await ctx.db.fetchrow(query, *args)
+        if not tag:
+            raise commands.BadArgument('<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?')
 
-        if deleted is None:
-            await ctx.send(
-                '<:redTick:1079249771975413910> Could not delete tag. Either it does not exist or you do not have permissions to do so.')
-            return
+        await tag.delete()
 
-        if bypass_owner_check:
-            clause = 'id=$1 AND location_id=$2'
-            args = [deleted[0], ctx.guild.id]
-        else:
-            clause = 'id=$1 AND location_id=$2 AND owner_id=$3'
-            args = [deleted[0], ctx.guild.id, ctx.author.id]
-
-        query = f'DELETE FROM tags WHERE {clause};'
-        status = await ctx.db.execute(query, *args)
-
-        if status[-1] == '0':
-            await ctx.send('<:greenTick:1079249732364406854> Tag alias successfully deleted.')
-        else:
-            await ctx.send('<:greenTick:1079249732364406854> Tag and corresponding aliases successfully deleted.')
+        self.get_tag.invalidate_containing(f'{tag.name!r}')
+        self.get_tag.invalidate_containing(str(tag.id))
 
     @command(
         tag.command,
@@ -1049,12 +1128,18 @@ class Tags(commands.Cog):
         description='Shows you Information about a Tag.',
     )
     @commands.guild_only()
-    @app_commands.describe(name='The name of the tag to get info about.')
-    @app_commands.autocomplete(name=aliased_tag_autocomplete)  # type: ignore
-    async def tag_info(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
+    @app_commands.describe(name_or_id='The name or id of the tag to get info about.')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    async def tag_info(
+            self,
+            ctx: GuildContext,
+            *,
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
+    ):
         """Shows you Information about a Tag."""
 
-        tag = await self.get_tag(name=name, location_id=ctx.guild.id, only_parent=True)
+        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id)
 
         if tag is None:
             return await ctx.send('<:redTick:1079249771975413910> Tag was not found.')
@@ -1078,23 +1163,12 @@ class Tags(commands.Cog):
 
         embed.add_field(name='**Tag Used**', value=tag.uses)
 
-        query = """
-            SELECT 
-                COUNT(*) AS count, 
-                array_agg(tag_lookup.name) AS alias_names, 
-                array_agg(tag_lookup.id) AS alias_ids,
-                array_agg(tag_lookup.created_at) AS alias_created_at
-            FROM tag_lookup
-            WHERE tag_lookup.tag_id=$1 AND tag_lookup.name != $2 AND tag_lookup.location_id=$3;
-        """
-        aliases = await self.bot.pool.fetchrow(query, tag.id, tag.name, ctx.guild.id)
-
-        if aliases and aliases['count'] > 0:
+        if tag.aliases:
             value = []
-            for alias_name, alias_id, alias_created in zip(aliases['alias_names'], aliases['alias_ids'], aliases['alias_created_at']):
-                value.append(f'**{alias_name}** [`{alias_id}`] ({discord.utils.format_dt(alias_created, style="D")})')
+            for alias in tag.aliases:
+                value.append(f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})')
 
-            embed.add_field(name=f"**Aliases ({aliases['count']})**", value='\n'.join(value), inline=False)
+            embed.add_field(name=f"**Aliases ({len(tag.aliases)})**", value='\n'.join(value), inline=False)
 
         await ctx.send(embed=embed)
 
@@ -1105,11 +1179,17 @@ class Tags(commands.Cog):
         aliases=['content']
     )
     @commands.guild_only()
-    @app_commands.describe(name='The name of the tag to display the escaped markdown content.')
-    @app_commands.autocomplete(name=non_aliased_tag_autocomplete)  # type: ignore
-    async def tag_raw(self, ctx: GuildContext, *, name: Annotated[str, TagName(lower=True)]):  # type: ignore
+    @app_commands.describe(name_or_id='The name or id of the tag to display the escaped markdown content.')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=non_aliased_tag_autocomplete)  # type: ignore
+    async def tag_raw(
+            self,
+            ctx: GuildContext,
+            *,
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
+    ):
         """This displays you the raw content of a tag."""
-        await self.send_tag(ctx, name, escape_markdown=True)
+        await self.send_tag(ctx, name_or_id, escape_markdown=True)
 
     @command(
         tag.command,
@@ -1276,34 +1356,28 @@ class Tags(commands.Cog):
         description='Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.',
     )
     @commands.guild_only()
-    @app_commands.describe(tag='The tag to claim')
-    @app_commands.autocomplete(tag=aliased_tag_autocomplete)  # type: ignore
-    async def tag_claim(self, ctx: GuildContext, *, tag: Annotated[str, TagName]):
+    @app_commands.describe(name_or_id='The tag to claim')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    async def tag_claim(
+            self,
+            ctx: GuildContext,
+            *,
+            name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
+    ):
         """Claim a tag by yourself if the User is not in this server anymore or the tag has no owner."""
-        alias = False
-        query = "SELECT id, owner_id FROM tags WHERE location_id=$1 AND LOWER(name)=$2;"
-        row = await ctx.db.fetchrow(query, ctx.guild.id, tag.lower())
-        if row is None:
-            alias_query = "SELECT tag_id, owner_id FROM tag_lookup WHERE location_id = $1 and LOWER(name) = $2;"
-            row = await ctx.db.fetchrow(alias_query, ctx.guild.id, tag.lower())
-            if row is None:
-                return await ctx.send(
-                    f'<:redTick:1079249771975413910> A tag with the name of "**{tag}**" does not exist.')
-            alias = True
+        tag = await self.get_tag(ctx, name_or_id, location_id=ctx.guild.id, actual=True)
 
-        member = await self.bot.get_or_fetch_member(ctx.guild, row[1])
+        member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
         if member is not None:
             return await ctx.send('<:redTick:1079249771975413910> Tag owner is still in server.')
 
-        async with ctx.db.acquire() as conn:
-            async with conn.transaction():
-                if not alias:
-                    query = "UPDATE tags SET owner_id=$1 WHERE id=$2;"
-                    await conn.execute(query, ctx.author.id, row[0])
-                query = "UPDATE tag_lookup SET owner_id=$1 WHERE tag_id=$2;"
-                await conn.execute(query, ctx.author.id, row[0])
+        if isinstance(tag, AliasTag):
+            await tag.transfer(ctx.author, connection=self.bot.pool)  # type: ignore
+        else:
+            await tag.transfer(ctx.author, only_parent=True)
 
-            await ctx.send('<:greenTick:1079249732364406854> Successfully transferred tag ownership to you.')
+        await ctx.send('<:greenTick:1079249732364406854> Successfully transferred tag ownership to you.')
 
     @command(
         tag.command,
@@ -1311,25 +1385,26 @@ class Tags(commands.Cog):
         description='Transfer a tag owned by you to another member.',
     )
     @commands.guild_only()
-    @app_commands.describe(member='The member to transfer the tag to', name='The tag to transfer')
-    @app_commands.autocomplete(name=aliased_tag_autocomplete)  # type: ignore
-    async def tag_transfer(self, ctx: GuildContext, member: discord.Member, *, name: Annotated[str, TagName]):
+    @app_commands.describe(member='The member to transfer the tag to', name_or_id='The tag to transfer')
+    @app_commands.rename(name_or_id='name-or-id')
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    async def tag_transfer(
+            self,
+            ctx: GuildContext,
+            member: discord.Member,
+            *,
+            name_or_id: Annotated[str, TagNameOrID(with_id=True)]  # type: ignore
+    ):
         """Transfer a tag owned by you to another member."""
         if member.bot:
             return await ctx.send('<:redTick:1079249771975413910> You cannot transfer a tag to a bot.')
 
-        tag = await self.get_tag(name=name, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
         if tag is None:
             return await ctx.send(
-                f'<:redTick:1079249771975413910> A tag with the name of "**{name}**" does not exist or is not owned by you.')
+                f'<:redTick:1079249771975413910> A tag "**{name_or_id}**" does not exist or is not owned by you.')
 
-        async with ctx.db.acquire() as conn:
-            async with conn.transaction():
-                query = "UPDATE tags SET owner_id=$1 WHERE id=$2;"
-                await conn.execute(query, member.id, tag.id)
-                query = "UPDATE tag_lookup SET owner_id=$1 WHERE tag_id=$2;"
-                await conn.execute(query, member.id, tag.id)
-
+        await tag.transfer(member)
         await ctx.send(f'<:greenTick:1079249732364406854> Successfully transferred tag ownership to **{member}**.')
 
     @command(tag.command, name='export', description="Exports all your tags/server tags to a csv file.")
@@ -1348,7 +1423,6 @@ class Tags(commands.Cog):
 
             query = "SELECT name, content FROM tags WHERE location_id=$1;"
             values = (ctx.guild.id,)
-
         else:
             query = "SELECT name, content FROM tags WHERE location_id=$1 AND owner_id=$2;"
             values = (ctx.guild.id, ctx.author.id)
