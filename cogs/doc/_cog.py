@@ -529,9 +529,6 @@ class Documentation(commands.Cog):
         if not results:
             return symbol_name, None
 
-        if len(results) == 1:
-            return symbol_name, results[0][1]
-
         return symbol_name, [result[1] for result in results]
 
     async def get_symbol_markdown(self, doc_item: DocItem) -> str:

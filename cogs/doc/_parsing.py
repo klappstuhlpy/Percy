@@ -13,7 +13,7 @@ from bs4.element import NavigableString, Tag
 
 from launcher import get_logger
 from . import MAX_SIGNATURE_AMOUNT
-from ._html import get_dd_description, get_general_description, get_signatures, _class_filter_factory
+from ._html import get_dd_description, get_general_description, get_signatures
 from ._markdown import DocMarkdownConverter
 from ..utils.tasks import executor
 from ..utils.formats import find_nth_occurrence, pagify
@@ -291,7 +291,9 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
     field_list = get_dd_description(symbol_heading, class_action='dl.field-list.return')
     if field_list:
         if isinstance(field_list, Tag):
-            for field in field_list.find_all("dt", recursive=False):
+            for field in field_list.find_all("dt", class_="field-odd", recursive=False):
+                if symbol_data in field.parents:
+                    continue
                 if field.text in _NO_FIELD_GROUPS:
                     continue
 
