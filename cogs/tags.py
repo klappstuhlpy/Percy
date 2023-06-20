@@ -563,7 +563,7 @@ class Tags(commands.Cog):
 
         # Just updated the uses of the Tag
         query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2 RETURNING *;"
-        updated = await ctx.db.execute(query, tag.name, ctx.guild.id)
+        updated = await ctx.db.fetchrow(query, tag.name, ctx.guild.id)
 
         self.get_tag.refactor_containing(str(tag.id), Tag(self.bot, record=updated))
         self.get_tag.refactor_containing(f'{tag.name!r}', Tag(self.bot, record=updated))
