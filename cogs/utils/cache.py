@@ -34,6 +34,9 @@ class CacheProtocol(Protocol[R]):
     def refactor(self, *args: Any, **kwargs: Any) -> None:
         ...
 
+    def refactor_containing(self, key: str, replace: Any) -> None:
+        ...
+
 
 class ExpiringCache(dict):
     def __init__(self, seconds: float):
@@ -143,16 +146,22 @@ def cache(
                 except KeyError:
                     continue
 
-        def _refactor(*args: Any, **kwargs: Any) -> None:
-            replic = kwargs.pop('replic', None)
-            if replic is None:
-                return
-
+        def _refactor(replace: str, /, *args: Any, **kwargs: Any) -> None:
             key = _make_key(args, kwargs)
             try:
-                _internal_cache[key] = replic
+                _internal_cache[key] = replace
             except KeyError:
                 pass
+
+        def _refactor_containing(key: str, replace: str) -> None:
+            keys_to_refactor = [
+                k for k in _internal_cache.keys() if key in k
+            ]
+            for k in keys_to_refactor:
+                try:
+                    _internal_cache[k] = replace
+                except KeyError:
+                    continue
 
         wrapper.cache = _internal_cache
         wrapper.get_key = lambda *args, **kwargs: _make_key(args, kwargs)
@@ -162,6 +171,7 @@ def cache(
 
         if strategy == Strategy.ADDITIVE:
             wrapper.refactor = _refactor
+            wrapper.refactor_containing = _refactor_containing
         return wrapper
 
     return decorator
