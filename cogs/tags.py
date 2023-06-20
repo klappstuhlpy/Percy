@@ -553,6 +553,9 @@ class Tags(commands.Cog):
                 await ctx.send(embed=embed)
             return
 
+        if not tag:
+            raise commands.BadArgument(f'{ctx.tick(False)} No Tag with the name or ID `{name_or_id}` found.')
+
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
         else:
