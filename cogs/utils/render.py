@@ -280,7 +280,7 @@ class Render:
             draw = ImageDraw.Draw(background)
 
             # Text for user's global name
-            draw.text((252, 62), user.global_name, font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
+            draw.text((252, 62), str(user), font=GINTO_NORD_HEAVY_48, fill=(235, 235, 235))
 
             # Text for user's username
             draw.text((252, 114), user.name, font=GINTO_BOLD_28, fill=self.get_color_alpha((216, 216, 216), 0.8))
