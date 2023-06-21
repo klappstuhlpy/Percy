@@ -5,7 +5,6 @@ import contextlib
 import csv
 import datetime
 import io
-import textwrap
 from typing import TYPE_CHECKING, Optional, List, Literal, Union
 
 import asyncpg
@@ -18,16 +17,12 @@ from cogs.utils.paginator import LinePaginator
 from . import command, command_permissions
 from .emoji import usage_per_day
 from .utils import formats, fuzzy, helpers, cache
-from .utils.formats import plural, medal_emojize
+from .utils.formats import plural, medal_emojize, get_shortened_string
 from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
-
-
-def truncate_tag_choice_name(a: asyncpg.Record) -> str:
-    return textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 3))
 
 
 class TagPageEntry(PostgresItem):
@@ -168,13 +163,16 @@ class Tag(PostgresItem):
     created_at: datetime.datetime
     use_embed: bool
 
-    __slots__ = (
-    'bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
+    __slots__ = ('bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
 
     def __init__(self, bot: Percy, **kwargs):
         super().__init__(**kwargs)
         self.bot: Percy = bot
         self._aliases: list[AliasTag] = []
+
+    @property
+    def choice_text(self) -> str:
+        return f'[{self.id}] {self.name}'
 
     @property
     def raw_content(self) -> str:
@@ -333,6 +331,10 @@ class AliasTag(PostgresItem):
     def __init__(self, parent: Optional[Tag] = None, **kwargs):
         super().__init__(**kwargs)
         self.parent: Optional[Tag] = parent
+
+    @property
+    def choice_text(self) -> str:
+        return f'[{self.id}] {self.name}'
 
     async def transfer(self, member: discord.Member, /, *, connection: Optional[asyncpg.Connection] = None):
         """|coro|
@@ -659,72 +661,46 @@ class Tags(commands.Cog):
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
-        query = """
-            SELECT name, id 
-            FROM tags 
-            WHERE location_id=$1 
-            ORDER BY uses 
-            LIMIT 20;
-        """
-        results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
+        query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses LIMIT 20;"
+        tags: list[Tag] = [Tag(self.bot, record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
-        if not results:
-            return []
-
-        if current.isdigit():
-            key = lambda a: a['id']
-        else:
-            key = lambda a: a['name']
-
-        results = fuzzy.finder(current, results, key=key)
-        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
+        results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
+        return [
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            for length, start, tag in results[:20]
+        ]
 
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
         query = """
-            SELECT tag_lookup.name, tag_lookup.id
+            SELECT tag_lookup.*
             FROM tag_lookup
             INNER JOIN tags ON tags.id = tag_lookup.tag_id
             WHERE tag_lookup.location_id=$1
             ORDER BY uses DESC 
             LIMIT 20;
         """
-        results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id)
+        tags: list[AliasTag] = [AliasTag(record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
-        if not results:
-            return []
-
-        if current.isdigit():
-            key = lambda a: a['id']
-        else:
-            key = lambda a: a['name']
-
-        results = fuzzy.finder(current, results, key=key)
-        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
+        results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
+        return [
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            for length, start, tag in results[:20]
+        ]
 
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
-        query = """
-            SELECT name, id 
-            FROM tags 
-            WHERE location_id=$1 AND owner_id=$2
-            ORDER BY uses
-            LIMIT 20;
-        """
-        results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
+        query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses LIMIT 20;"
+        tags: list[Tag] = [Tag(self.bot, record=record) for record in
+                           await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)]
 
-        if not results:
-            return []
-
-        if current.isdigit():
-            key = lambda a: a['id']
-        else:
-            key = lambda a: a['name']
-
-        results = fuzzy.finder(current, results, key=key)
-        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
+        results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
+        return [
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            for length, start, tag in results[:20]
+        ]
 
     @command(
         commands.hybrid_group,
