@@ -4,8 +4,7 @@ import datetime
 import enum
 import json
 import time
-from pathlib import Path
-from typing import TypeVar, Self, Callable, Optional, Any, overload, Dict, TYPE_CHECKING, Type
+from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type
 
 import asyncpg
 import discord
@@ -129,6 +128,18 @@ class PostgresItem(metaclass=PostgresItemMeta):
             return getattr(self, 'id', None) == getattr(other, 'id', None)
         return False
 
+    def __getitem__(self, item: str):
+        """Returns the value of the item's record."""
+        if not self.record:
+            raise TypeError("Cannot get item from an item without a record.")
+        return self.record[item]
+
+    def __setitem__(self, item: str, value: Any):
+        """Sets the value of the item's record."""
+        if not self.record:
+            self.record = {}  # setting a "fake" record
+        self.record[item] = value
+
     def __bool__(self) -> bool:
         """Returns whether the item has a record."""
         return bool(getattr(self, 'record', None))
@@ -142,6 +153,10 @@ class PostgresItem(metaclass=PostgresItemMeta):
         """Creates a temporary instance of this class."""
         self = ignore_record()(cls)(*args, **kwargs)
         return self
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Returns the value of the item's record."""
+        return self.record.get(key, default)
 
 
 def ignore_record() -> Callable[[T], T]:
