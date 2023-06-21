@@ -565,8 +565,11 @@ class Tags(commands.Cog):
         query = "UPDATE tags SET uses = uses + 1 WHERE name = $1 AND location_id=$2 RETURNING *;"
         updated = await ctx.db.fetchrow(query, tag.name, ctx.guild.id)
 
-        self.get_tag.refactor_containing(str(tag.id), Tag(self.bot, record=updated))
-        self.get_tag.refactor_containing(tag.name, Tag(self.bot, record=updated))
+        tag = Tag(self.bot, record=updated)
+        tag.aliases = [AliasTag(parent=tag, record=alias) for alias in tag.aliases]
+
+        self.get_tag.refactor_containing(str(tag.id), tag)
+        self.get_tag.refactor_containing(tag.name, tag)
 
     @staticmethod
     async def create_tag(ctx: GuildContext, name: str, content: str) -> None:
@@ -1122,7 +1125,7 @@ class Tags(commands.Cog):
 
         await tag.delete()
 
-        self.get_tag.invalidate_containing(f'{tag.name!r}')
+        self.get_tag.invalidate_containing(tag.name)
         self.get_tag.invalidate_containing(str(tag.id))
 
     @command(
