@@ -454,6 +454,9 @@ class Tags(commands.Cog):
         """
         search_kwargs = {}
 
+        if name_or_id.isdigit():
+            name_or_id = int(name_or_id)
+
         if isinstance(name_or_id, int):
             search_kwargs['id'] = name_or_id
 
@@ -661,12 +664,12 @@ class Tags(commands.Cog):
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
-        query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses LIMIT 20;"
+        query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses;"
         tags: list[Tag] = [Tag(self.bot, record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
-            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=str(tag.id))
             for length, start, tag in results[:20]
         ]
 
@@ -678,27 +681,26 @@ class Tags(commands.Cog):
             FROM tag_lookup
             INNER JOIN tags ON tags.id = tag_lookup.tag_id
             WHERE tag_lookup.location_id=$1
-            ORDER BY uses DESC 
-            LIMIT 20;
+            ORDER BY uses DESC;
         """
         tags: list[AliasTag] = [AliasTag(record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
-            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=str(tag.id))
             for length, start, tag in results[:20]
         ]
 
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
-        query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses LIMIT 20;"
+        query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses;"
         tags: list[Tag] = [Tag(self.bot, record=record) for record in
                            await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
-            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=tag.id)
+            app_commands.Choice(name=get_shortened_string(length, start, tag.choice_text), value=str(tag.id))
             for length, start, tag in results[:20]
         ]
 
@@ -709,7 +711,6 @@ class Tags(commands.Cog):
         fallback="show"
     )
     @commands.guild_only()
-    @app_commands.guild_only()
     @app_commands.describe(name_or_id='The tag to retrieve')
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
