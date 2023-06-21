@@ -5,12 +5,23 @@ import enum
 import functools
 import time
 
-from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol
+from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol, Generic, Generator
 from lru import LRU
 
 R = TypeVar('R')
 
 # Can't use ParamSpec due to https://github.com/python/typing/discussions/946
+
+
+T = TypeVar('T')
+
+
+class AwaitableObj(Generic[T]):
+    def __init__(self, value: T):
+        self.value: T = value
+
+    def __await__(self) -> Generator[Any, None, T]:
+        return asyncio.sleep(0, result=self.value).__await__()
 
 
 class CacheProtocol(Protocol[R]):
@@ -90,7 +101,7 @@ def cache(
         if strategy is Strategy.LRU:
             _internal_cache = LRU(maxsize)
             _stats = _internal_cache.get_stats
-        elif strategy is Strategy.RAW or strategy is Strategy.ADDITIVE:
+        elif strategy in (Strategy.RAW, Strategy.ADDITIVE):
             _internal_cache = {}
             def _stats(): return len(_internal_cache), maxsize
         elif strategy is Strategy.TIMED:
@@ -148,6 +159,10 @@ def cache(
 
         def _refactor(replace: str, /, *args: Any, **kwargs: Any) -> None:
             key = _make_key(args, kwargs)
+
+            if not hasattr(replace, '__await__'):
+                replace = AwaitableObj(replace)
+
             try:
                 _internal_cache[key] = replace
             except KeyError:
@@ -157,14 +172,24 @@ def cache(
             keys_to_refactor = [
                 k for k in _internal_cache.keys() if key in k
             ]
+
+            if not keys_to_refactor:
+                return
+
+            if not hasattr(replace, '__await__'):
+                replace = AwaitableObj(replace)
+
             for k in keys_to_refactor:
                 try:
                     _internal_cache[k] = replace
                 except KeyError:
                     continue
 
+        def _get_key(*args: Any, **kwargs: Any) -> str:
+            return _make_key(args, kwargs)
+
         wrapper.cache = _internal_cache
-        wrapper.get_key = lambda *args, **kwargs: _make_key(args, kwargs)
+        wrapper.get_key = _get_key
         wrapper.invalidate = _invalidate
         wrapper.get_stats = _stats
         wrapper.invalidate_containing = _invalidate_containing
