@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from .utils.context import GuildContext, Context
 
 
+def truncate_tag_choice_name(a: asyncpg.Record) -> str:
+    return textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 3))
+
+
 class TagPageEntry(PostgresItem):
     id: int
     name: str
@@ -47,7 +51,8 @@ class TagNameOrID(commands.clean_content):
         lower = converted.lower().strip()
 
         if not lower:
-            raise commands.BadArgument('<:redTick:1079249771975413910> Please enter a valid tag name' + " or id." if self.with_id else '.')
+            raise commands.BadArgument(
+                '<:redTick:1079249771975413910> Please enter a valid tag name' + " or id." if self.with_id else '.')
 
         if len(lower) > 100:
             raise commands.BadArgument(
@@ -163,7 +168,8 @@ class Tag(PostgresItem):
     created_at: datetime.datetime
     use_embed: bool
 
-    __slots__ = ('bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
+    __slots__ = (
+    'bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
 
     def __init__(self, bot: Percy, **kwargs):
         super().__init__(**kwargs)
@@ -541,7 +547,8 @@ class Tags(commands.Cog):
         escape_markdown: bool
             Whether to escape the markdown in the Tag content.
         """
-        tag: Union[list[AliasTag] | Tag] = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, similarites=True)
+        tag: Union[list[AliasTag] | Tag] = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id,
+                                                              similarites=True)
 
         if isinstance(tag, list):
             if tag is None or len(tag) == 0:
@@ -664,9 +671,13 @@ class Tags(commands.Cog):
         if not results:
             return []
 
-        results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
-        return [app_commands.Choice(name=f"[{a['id']}] {textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 2))}",
-                                    value=a['id']) for a in results]
+        if current.isdigit():
+            key = lambda a: a['id']
+        else:
+            key = lambda a: a['name']
+
+        results = fuzzy.finder(current, results, key=key)
+        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
 
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
@@ -684,8 +695,13 @@ class Tags(commands.Cog):
         if not results:
             return []
 
-        results = fuzzy.finder(current, results, key=lambda a: a['name'])
-        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['id']) for a in results]
+        if current.isdigit():
+            key = lambda a: a['id']
+        else:
+            key = lambda a: a['name']
+
+        results = fuzzy.finder(current, results, key=key)
+        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
 
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
@@ -702,28 +718,13 @@ class Tags(commands.Cog):
         if not results:
             return []
 
-        results = fuzzy.finder(current, results, key=lambda a: a['id'] if current.isdigit() else a['name'])
-        return [app_commands.Choice(name=f"[{a['id']}] {textwrap.shorten(a['name'], 100 - (len(str(a['id'])) + 2))}",
-                                    value=a['id']) for a in results]
+        if current.isdigit():
+            key = lambda a: a['id']
+        else:
+            key = lambda a: a['name']
 
-    async def owned_aliased_tag_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
-        query = """
-            SELECT tag_lookup.name, tag_lookup.id
-            FROM tag_lookup
-            INNER JOIN tags ON tags.id = tag_lookup.tag_id
-            WHERE tag_lookup.location_id=$1 AND tag_lookup.owner_id=$2
-            ORDER BY uses DESC 
-            LIMIT 20;
-        """
-        results: list[asyncpg.Record] = await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)
-
-        if not results:
-            return []
-
-        results = fuzzy.finder(current, results, key=lambda a: a['name'])
-        return [app_commands.Choice(name=textwrap.shorten(a['name'], 100), value=a['id']) for a in results]
+        results = fuzzy.finder(current, results, key=key)
+        return [app_commands.Choice(name=f"[{a['id']}] {truncate_tag_choice_name(a)}", value=a['id']) for a in results]
 
     @command(
         commands.hybrid_group,
@@ -1118,10 +1119,12 @@ class Tags(commands.Cog):
         if bypass_owner_check:
             tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, only_parent=True)
         else:
-            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
+                                     only_parent=True)
 
         if not tag:
-            raise commands.BadArgument('<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?')
+            raise commands.BadArgument(
+                '<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?')
 
         await tag.delete()
 
@@ -1172,7 +1175,8 @@ class Tags(commands.Cog):
         if tag.aliases:
             value = []
             for alias in tag.aliases:
-                value.append(f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})')
+                value.append(
+                    f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})')
 
             embed.add_field(name=f"**Aliases ({len(tag.aliases)})**", value='\n'.join(value), inline=False)
 
@@ -1405,7 +1409,8 @@ class Tags(commands.Cog):
         if member.bot:
             return await ctx.send('<:redTick:1079249771975413910> You cannot transfer a tag to a bot.')
 
-        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
+                                 only_parent=True)
         if tag is None:
             return await ctx.send(
                 f'<:redTick:1079249771975413910> A tag "**{name_or_id}**" does not exist or is not owned by you.')
