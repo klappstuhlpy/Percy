@@ -107,8 +107,8 @@ class LevelConfig(PostgresItem):
         await self.send_patch()
 
     async def send_patch(self):
-        async with self.cog._batch_lock:
-            self.cog._data_batch.append(
+        async with self.cog.batch_lock:
+            self.cog.batch_data.append(
                 {
                     'guild_id': self.guild_id,
                     'user_id': self.user_id,
@@ -117,7 +117,7 @@ class LevelConfig(PostgresItem):
                     'voice_minutes': self.voice_minutes
                 }
             )
-            self.cog.get_level_config.refactor(self.user_id, self.guild_id, replic=self)
+            self.cog.get_level_config.refactor(self.user_id, self.guild_id, replace=self)
 
 
 log = get_logger(__name__)
@@ -153,10 +153,12 @@ class Leveling(commands.Cog):
         self.bot: Percy = bot
         self.render: Render = Render()
 
-        self._batch_lock = asyncio.Lock()
-        self._data_batch: OverwriteList[DataBatchEntry] = OverwriteList()
+        # Better for those two variables to be global, not private to
+        # access them from the :class:`LevelConfig` class.
+        self.batch_lock = asyncio.Lock()
+        self.batch_data: OverwriteList[DataBatchEntry] = OverwriteList()
 
-        self._voice_data_batch: dict[int, PointsWatch] = {}
+        self._voicebatch_data: dict[int, PointsWatch] = {}
 
         self.bulk_insert_loop.add_exception_type(asyncpg.PostgresConnectionError)
         self.bulk_insert_loop.start()
@@ -181,19 +183,19 @@ class Leveling(commands.Cog):
                     voice_minutes = excluded.voice_minutes
             """
 
-        if self._data_batch:
-            await self.bot.pool.execute(query, self._data_batch)
-            total = len(self._data_batch)
+        if self.batch_data:
+            await self.bot.pool.execute(query, self.batch_data)
+            total = len(self.batch_data)
             if total > 1:
                 log.debug('Registered %s leveling batches to the database.', total)
-            self._data_batch.clear()
+            self.batch_data.clear()
 
     def cog_unload(self):
         self.bulk_insert_loop.stop()
 
     @tasks.loop(seconds=15.0)
     async def bulk_insert_loop(self):
-        async with self._batch_lock:
+        async with self.batch_lock:
             await self.bulk_insert()
 
     @property
@@ -229,32 +231,32 @@ class Leveling(commands.Cog):
         config = await self.get_level_config(member.id, member.guild.id)
 
         if before.mute != after.mute:
-            if member.id in self._voice_data_batch:
-                total_time = discord.utils.utcnow() - self._voice_data_batch[member.id]['started']
+            if member.id in self._voicebatch_data:
+                total_time = discord.utils.utcnow() - self._voicebatch_data[member.id]['started']
                 total_minutes = total_time.total_seconds() // 60
                 await config.add_voice_minutes(
-                    total_minutes, 2 if self._voice_data_batch[member.id]['muted'] else 7)
+                    total_minutes, 2 if self._voicebatch_data[member.id]['muted'] else 7)
 
-                self._voice_data_batch[member.id]['started'] = discord.utils.utcnow()
-                self._voice_data_batch[member.id]['muted'] = after.self_mute
+                self._voicebatch_data[member.id]['started'] = discord.utils.utcnow()
+                self._voicebatch_data[member.id]['muted'] = after.self_mute
 
             return
 
         if before.channel:
-            if member.id in self._voice_data_batch:
-                total_time = discord.utils.utcnow() - self._voice_data_batch[member.id]['started']
+            if member.id in self._voicebatch_data:
+                total_time = discord.utils.utcnow() - self._voicebatch_data[member.id]['started']
                 total_minutes = total_time.total_seconds() // 60
                 await config.add_voice_minutes(
-                    total_minutes, 2 if self._voice_data_batch[member.id]['muted'] else 7)
+                    total_minutes, 2 if self._voicebatch_data[member.id]['muted'] else 7)
 
         if after.channel:
-            self._voice_data_batch[member.id] = {
+            self._voicebatch_data[member.id] = {
                 'started': discord.utils.utcnow(),
                 'muted': after.self_mute
             }
         else:
             try:
-                del self._voice_data_batch[member.id]
+                del self._voicebatch_data[member.id]
             except KeyError:
                 pass
 
