@@ -566,7 +566,7 @@ class Tags(commands.Cog):
         updated = await ctx.db.fetchrow(query, tag.name, ctx.guild.id)
 
         self.get_tag.refactor_containing(str(tag.id), Tag(self.bot, record=updated))
-        self.get_tag.refactor_containing(f'{tag.name!r}', Tag(self.bot, record=updated))
+        self.get_tag.refactor_containing(tag.name, Tag(self.bot, record=updated))
 
     @staticmethod
     async def create_tag(ctx: GuildContext, name: str, content: str) -> None:
