@@ -149,6 +149,8 @@ class Parser:
 
                 soup = BeautifulSoup(page, 'html.parser')
                 txt = soup.find_all(class_="sc-g8nqnn-0 dXApWk")
+                if len(txt) == 0:
+                    continue
 
                 c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
                 if c_type != "COMIC BOOK":
