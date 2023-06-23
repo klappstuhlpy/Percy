@@ -22,7 +22,10 @@ class Config(Generic[_T]):
         encoder: Optional[Type[json.JSONEncoder]] = None,
         load_later: bool = False,
     ):
-        self.name = name
+        # Ensure file to be in the root folder of the bots directory
+        _PATH = os.path.join(os.getcwd())
+        self.name = os.path.join(_PATH, name)
+
         self.object_hook = object_hook
         self.encoder = encoder
         self.loop = asyncio.get_running_loop()
