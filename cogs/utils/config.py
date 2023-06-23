@@ -58,7 +58,7 @@ class Config(Generic[_T]):
         with open(self.real_path(temp), 'w', encoding='utf-8') as tmp:
             json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(',', ':'))
 
-        os.replace(temp, self.name)
+        os.replace(self.real_path(temp), self.name)
 
     async def save(self) -> None:
         async with self.lock:
