@@ -4,47 +4,20 @@ import random
 import re
 from datetime import datetime
 
-import yarl
-from playwright.async_api import Page
 from typing_extensions import Annotated
 from typing import TYPE_CHECKING, Optional
 
 from . import command
 from .utils import fuzzy
-from .utils.helpers import TimeMesh
 from .utils.constants import LANGUAGES
 from .utils.translation import translate
-from playwright._impl._api_types import TimeoutError as PlaywrightTimeoutError  # noqa
 
 from discord.ext import commands
 import discord
-import io
 
 if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import Context
-
-
-class ScreenshotFlags(commands.FlagConverter, delimiter=" ", prefix="--"):
-    """Flags for the screenshot command."""
-    wait_for: bool = commands.Flag(
-        default=False, aliases=["wf"], description="Wait for a specific amount of seconds before taking the screenshot"
-    )
-    use_proxy: bool = commands.Flag(
-        default=False, aliases=["up"], description="Use a proxy"
-    )
-    full_page: bool = commands.Flag(
-        default=False, aliases=["fp"], description="Take a full page screenshot"
-    )
-    use_adblock: bool = commands.Flag(
-        default=False, aliases=["ua"], description="Use adblock"
-    )
-    bypass_captcha: bool = commands.Flag(
-        default=False, aliases=["bc"], description="Bypass captcha"
-    )
-    ignore_nsfw_filter: bool = commands.Flag(
-        default=False, aliases=["inf"], description="Ignore NSFW filter"
-    )
 
 
 class Random(commands.Cog):
@@ -56,76 +29,6 @@ class Random(commands.Cog):
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='newbie', id=1103422874171232319)
-
-    @command(
-        commands.command,
-        name='screenshot',
-        description='Takes a screenshot of a website.',
-        usage='<url>',
-    )
-    async def screenshot(self, ctx: Context, url: str, *, flags: ScreenshotFlags):
-        """Takes a screenshot of a website.
-        This command uses a flag syntax to indicate what options you want to use.
-        """
-
-        url = url.strip("<>")
-        if not yarl.URL(url):
-            raise commands.BadArgument(f'{ctx.tick(False)} Invalid URL provided.')
-
-        async with ctx.channel.typing():
-            applied_flags = []
-            with TimeMesh() as timer:
-                try:
-                    if flags.use_proxy:
-                        applied_flags.append('`--use_proxy`')
-
-                        browser = await self.bot.playwright.chromium.launch(
-                            proxy={'server': 'socks5://184.178.172.17:4145'}
-                        )
-                    else:
-                        browser = self.bot.browser
-                    bcontext = await browser.new_context()
-                    page: Page = await bcontext.new_page()
-
-                    await page.goto(url)
-
-                    if flags.wait_for:
-                        applied_flags.append('`--wait_for`')
-                        try:
-                            await page.wait_for_load_state("networkidle", timeout=0)
-                        except PlaywrightTimeoutError:
-                            pass
-
-                    if flags.use_adblock:
-                        applied_flags.append('`--use_adblock`')
-                        await page.route('**/*', lambda route, request: route.abort())
-
-                    if flags.ignore_nsfw_filter:
-                        applied_flags.append('`--ignore_nsfw_filter`')
-                        await page.set_content(await page.content() + '<meta name="robots" content="noindex">')
-
-                    if flags.bypass_captcha:
-                        applied_flags.append('`--bypass_captcha`')
-                        await page.evaluate(
-                            '() => { Object.defineProperties(navigator,{ webdriver:{ get: () => false } }) }')
-
-                    if flags.full_page:
-                        applied_flags.append('`--full_page`')
-                        screenshot_bytes = await page.screenshot(full_page=True)
-                    else:
-                        screenshot_bytes = await page.screenshot()
-
-                    await page.close()
-                except Exception as exc:
-                    return await ctx.send(f'{ctx.tick(False)} Failed to take screenshot:\n```py\n{exc}```')
-
-        embed = discord.Embed(title=url, url=url, color=discord.Color.blurple())
-        embed.set_image(url='attachment://screenshot.png')
-        if applied_flags:
-            embed.add_field(name='Flags', value=', '.join(applied_flags), inline=False)
-        embed.set_footer(text=f'Took {timer.time:.2f}ms', icon_url=ctx.author.avatar.url)
-
-        await ctx.send(embed=embed, file=discord.File(io.BytesIO(screenshot_bytes), filename='screenshot.png'))
 
     @staticmethod
     def extract_translation_info(content: str) -> tuple[Optional[str], Optional[str]]:

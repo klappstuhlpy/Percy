@@ -11,7 +11,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from expiringdict import ExpiringDict
-from playwright.async_api import async_playwright, Playwright, Browser
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cogs import EXTENSIONS
@@ -65,8 +64,6 @@ class Percy(commands.Bot):
     pool: asyncpg.Pool
     alchemy_engine: AsyncEngine
     session: aiohttp.ClientSession
-    playwright: Playwright
-    browser: Browser
     config: Config
     old_tree_error = Callable[[discord.Interaction, discord.app_commands.AppCommandError], Coroutine[Any, Any, None]]
 
@@ -136,9 +133,6 @@ class Percy(commands.Bot):
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
-
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch()
 
         for extension in self.initial_extensions:
             try:
