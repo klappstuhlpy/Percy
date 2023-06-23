@@ -1,22 +1,21 @@
 aiohttp
 asyncpg>=0.27.0
 click
-discord.py[speed]>=2.2.2
-expiringdict
-parsedatetime
+discord.py[speed]>=2.3.0
 psutil
 pygit2
 feedparser
 python-dateutil
-requests
-spotipy
 python-Levenshtein
 lru_dict
 playwright
 beautifulsoup4
 matplotlib
 fuzzywuzzy
-sphobjinv
 humanfriendly
+sqlalchemy
+expiringdict
+parsedatetime
+lxml
 
 git+https://github.com/Gorialis/jishaku.git
