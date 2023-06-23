@@ -17,5 +17,8 @@ sqlalchemy
 expiringdict
 parsedatetime
 lxml
+arrow
+regex
+markdownify
 
 git+https://github.com/Gorialis/jishaku.git
