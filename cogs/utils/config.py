@@ -1,6 +1,7 @@
 import contextlib
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union, overload
 import uuid
 import asyncio
@@ -23,8 +24,8 @@ class Config(Generic[_T]):
         load_later: bool = False,
     ):
         # Ensure file to be in the root folder of the bots directory
-        _PATH = os.path.join(os.getcwd())
-        self.name = os.path.join(_PATH, name)
+        self._PATH = Path(__file__).parent.parent.parent.absolute()
+        self.name = name
 
         self.object_hook = object_hook
         self.encoder = encoder
@@ -37,9 +38,12 @@ class Config(Generic[_T]):
         else:
             self.load_from_file()
 
+    def real_path(self, dest: str) -> str:
+        return os.path.join(self._PATH, dest)
+
     def load_from_file(self):
         try:
-            with open(self.name, 'r', encoding='utf-8') as f:
+            with open(self.real_path(self.name), 'r', encoding='utf-8') as f:
                 self._db = json.load(f, object_hook=self.object_hook)
         except FileNotFoundError:
             self._db = {}
@@ -51,7 +55,7 @@ class Config(Generic[_T]):
     @executor
     def _dump(self):
         temp = f'{uuid.uuid4()}-{self.name}.tmp'
-        with open(temp, 'w', encoding='utf-8') as tmp:
+        with open(self.real_path(temp), 'w', encoding='utf-8') as tmp:
             json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(',', ':'))
 
         os.replace(temp, self.name)
