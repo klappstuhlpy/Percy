@@ -136,6 +136,29 @@ class Config(commands.Cog):
             connection: Optional[Connection | Pool] = None,
             check_bypass: bool = True,
     ) -> bool:
+        """|coro| @cached
+
+        Checks if a member is plonked in a guild or channel.
+
+        Parameters
+        ----------
+        guild_id: :class:`int`
+            The guild ID to check.
+        member_id: :class:`int`
+            The member ID to check.
+        channel: Optional[Union[:class:`discord.VoiceChannel`, :class:`discord.TextChannel`, :class:`discord.Thread`]]
+            The channel to check.
+        connection: Optional[Union[:class:`asyncpg.Connection`, :class:`asyncpg.Pool`]]
+            The connection to use. Defaults to ``None``.
+        check_bypass: :class:`bool`
+            Whether to check if the member has the ``manage_guild`` permission.
+            Defaults to ``True``.
+
+        Returns
+        -------
+        :class:`bool`
+            Whether the member is plonked.
+        """
         if member_id in self.bot.blacklist or guild_id in self.bot.blacklist:
             return True
 
@@ -184,6 +207,22 @@ class Config(commands.Cog):
     async def get_command_permissions(
             self, guild_id: int, *, connection: Optional[Connection | Pool] = None
     ) -> ResolvedCommandPermissions:
+        """|coro| @cached
+
+        Returns the resolved command permissions for the given guild.
+
+        Parameters
+        ----------
+        guild_id: :class:`int`
+            The guild ID to get the command permissions for.
+        connection: Optional[Connection | Pool]
+            The connection to use for the query.
+
+        Returns
+        -------
+        :class:`ResolvedCommandPermissions`
+            The resolved command permissions for the given guild.
+        """
         connection = connection or self.bot.pool
         query = "SELECT name, channel_id, whitelist FROM command_config WHERE guild_id=$1;"
 

@@ -595,6 +595,20 @@ class Mod(commands.Cog):
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+        """|coro| @cached
+
+        Get the guild config from the database.
+
+        Parameters
+        ----------
+        guild_id: :class:`int`
+            The guild ID to get the config from.
+
+        Returns
+        -------
+        Optional[:class:`GuildConfig`]
+            The guild config if it exists, else ``None``.
+        """
         query = "SELECT * FROM guild_config WHERE id=$1;"
         async with self.bot.pool.acquire(timeout=300.0) as con:
             record = await con.fetchrow(query, guild_id)

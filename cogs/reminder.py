@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import textwrap
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Callable, Union
 
 import asyncpg
 import discord
@@ -198,8 +198,7 @@ class Reminder(commands.Cog):
         except asyncio.CancelledError:
             raise
         except (OSError, discord.ConnectionClosed, asyncpg.PostgresConnectionError):
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_timers())
+            self.MaybeSkipTask(True)
 
     async def short_timer_optimisation(self, seconds: float, timer: Timer) -> None:
         await asyncio.sleep(seconds)
@@ -243,9 +242,14 @@ class Reminder(commands.Cog):
         query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(filtered_clause)} RETURNING id;"
         record: Any = await self.bot.pool.fetchrow(query, event, *kwargs.values())
 
-        if record is not None and self._current_timer and self._current_timer.id == record['id']:
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_timers())
+        self.MaybeSkipTask(record is not None and self._current_timer and self._current_timer.id == record['id'])
+
+    def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
+        if not key:
+            return False
+
+        self._task.cancel()
+        self._task = self.bot.loop.create_task(self.dispatch_timers())
 
     async def create_timer(self, when: datetime.datetime, event: str, /, *args: Any, **kwargs: Any) -> Timer:
         r"""Creates a timer.
@@ -260,9 +264,6 @@ class Reminder(commands.Cog):
             Arguments to pass to the event
         \*\*kwargs
             Keyword arguments to pass to the event
-        connection: asyncpg.Connection
-            Special keyword-only argument to use a specific connection
-            for the DB request.
         created: datetime.datetime
             Special keyword-only argument to use as the creation timetools.
             Should make the timedeltas a bit more consistent.
@@ -277,7 +278,6 @@ class Reminder(commands.Cog):
         --------
         :class:`Timer`
         """
-        pool = self.bot.pool
 
         try:
             now = kwargs.pop('created')
@@ -307,15 +307,13 @@ class Reminder(commands.Cog):
             RETURNING id;
         """
 
-        row = await pool.fetchrow(query, event, {'args': args, 'kwargs': kwargs}, when, now, timezone_name)
+        row = await self.bot.pool.fetchrow(query, event, {'args': args, 'kwargs': kwargs}, when, now, timezone_name)
         timer.id = row[0]
 
         if delta <= (86400 * 40):  # 40 days
             self._have_data.set()
 
-        if self._current_timer and when < self._current_timer.expires:
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_timers())
+        self.MaybeSkipTask(self._current_timer and when < self._current_timer.expires)
 
         return timer
 
@@ -328,7 +326,7 @@ class Reminder(commands.Cog):
                   "do the dishes tomorrow",
                   "in 3 days do the thing",
                   "2d unmute someone"],
-        usage='<when>'
+        usage='<when...>'
     )
     async def reminder(
             self,
@@ -450,9 +448,7 @@ class Reminder(commands.Cog):
         if status == 'DELETE 0':
             return await ctx.send('<:redTick:1079249771975413910> Could not delete any reminders with that ID.')
 
-        if self._current_timer and self._current_timer.id == reminder_id:
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_timers())
+        self.MaybeSkipTask(self._current_timer and self._current_timer.id == reminder_id)
 
         await ctx.send('<:greenTick:1079249732364406854> Successfully deleted reminder.', ephemeral=True)
 
@@ -483,9 +479,7 @@ class Reminder(commands.Cog):
         query = "DELETE FROM reminders WHERE event = 'reminder' AND extra #>> '{args,0}' = $1;"
         await ctx.db.execute(query, author_id)
 
-        if self._current_timer and self._current_timer.author_id == ctx.author.id:
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_timers())
+        self.MaybeSkipTask(self._current_timer and self._current_timer.author_id == ctx.author.id)
 
         await ctx.send(f'<:greenTick:1079249732364406854> Successfully deleted {formats.plural(total):reminder}.',
                        ephemeral=True)

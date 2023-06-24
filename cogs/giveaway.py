@@ -40,10 +40,8 @@ class GiveawayItem(PostgresItem):
         return None
 
     @property
-    def entry_count(self) -> Optional[int]:
-        if self.entries:
-            return len(self.entries)
-        return None
+    def entry_count(self) -> int:
+        return len(self.entries) or 0
 
     async def message(self, guild: discord.Guild) -> Optional[discord.Message]:
         if self.message_id and self.channel_id:
@@ -274,10 +272,11 @@ class Giveaway(commands.Cog):
             entries=[]
         )
 
-        query = """INSERT INTO giveaways (channel_id, message_id, guild_id, author_id, prize, description, winner_count)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                RETURNING id;
-                """
+        query = """
+            INSERT INTO giveaways (channel_id, message_id, guild_id, author_id, prize, description, winner_count)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id;
+        """
 
         row = await self.bot.pool.fetchrow(query, channel_id, message_id, guild_id, author_id, prize, description,
                                            winner_count)

@@ -13,6 +13,19 @@ R = TypeVar('R')
 # Can't use ParamSpec due to https://github.com/python/typing/discussions/946
 
 
+DEFAULT_DOCSTRING = """|coro| @cached
+
+A cached version of the original function.
+
+Parameters
+----------
+*args: Any
+    The arguments to pass to the original function.
+**kwargs: Any
+    The keyword arguments to pass to the original function.
+"""
+
+
 T = TypeVar('T')
 
 
@@ -95,9 +108,15 @@ def cache(
         The strategy to use for the cache. Defaults to :class:`Strategy.LRU`.
     ignore_kwargs: bool
         Whether to ignore keyword arguments when generating the cache key. Defaults to ``False``.
+
+    Returns
+    -------
+    Callable[[Callable[..., Coroutine[Any, Any, R]]], CacheProtocol[R]]
+        The actual decorator.
     """
 
     def decorator(func: Callable[..., Coroutine[Any, Any, R]]) -> CacheProtocol[R]:
+        """The actual decorator."""
         if strategy is Strategy.LRU:
             _internal_cache = LRU(maxsize)
             _stats = _internal_cache.get_stats
@@ -110,7 +129,12 @@ def cache(
         else:
             raise ValueError(f'Invalid cache strategy {strategy!r}.')
 
+        if not func.__doc__:
+            # *Add a default docstring if none is present*
+            func.__doc__ = DEFAULT_DOCSTRING
+
         def _make_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+            """Generate a cache key from the given arguments."""
             def _true_repr(o):
                 if o.__class__.__repr__ is object.__repr__:
                     return f'<{o.__class__.__module__}.{o.__class__.__name__}>'
@@ -130,6 +154,7 @@ def cache(
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
+            """The actual wrapper for the cache to be assigned to the corresponding function."""
             key = _make_key(args, kwargs)
             try:
                 task = _internal_cache[key]
@@ -140,6 +165,7 @@ def cache(
                 return task
 
         def _invalidate(*args: Any, **kwargs: Any) -> bool:
+            """Invalidate a cache entry."""
             try:
                 del _internal_cache[_make_key(args, kwargs)]
             except KeyError:
@@ -148,6 +174,7 @@ def cache(
                 return True
 
         def _invalidate_containing(key: str) -> None:
+            """Invalidate all cache entries containing the given key."""
             keys_to_delete = [
                 k for k in _internal_cache.keys() if key in k
             ]
@@ -158,9 +185,12 @@ def cache(
                     continue
 
         def _refactor(replace: str, /, *args: Any, **kwargs: Any) -> None:
+            """Replace a cache entry with the given value."""
             key = _make_key(args, kwargs)
 
             if not hasattr(replace, '__await__'):
+                # Turn the obj into an awaitable in order to resolve TypeErrors
+                # when calling the assigned cache function without a Task wrapper.
                 replace = AwaitableObj(replace)
 
             try:
@@ -169,6 +199,7 @@ def cache(
                 pass
 
         def _refactor_containing(key: str, replace: str) -> None:
+            """Replace all cache entries containing the given key with the given value."""
             keys_to_refactor = [
                 k for k in _internal_cache.keys() if key in k
             ]
@@ -186,6 +217,7 @@ def cache(
                     continue
 
         def _get_key(*args: Any, **kwargs: Any) -> str:
+            """Get the cache key for the given arguments."""
             return _make_key(args, kwargs)
 
         wrapper.cache = _internal_cache
@@ -195,6 +227,8 @@ def cache(
         wrapper.invalidate_containing = _invalidate_containing
 
         if strategy == Strategy.ADDITIVE:
+            # Adds the ability to replace a cache entry with the given value.
+            # TODO: overwork strategy to be more efficient
             wrapper.refactor = _refactor
             wrapper.refactor_containing = _refactor_containing
         return wrapper

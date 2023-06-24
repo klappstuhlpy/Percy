@@ -6,7 +6,7 @@ import fnmatch
 import json
 from contextlib import suppress
 from enum import Enum
-from typing import Dict, List, Optional, Union, Self, TypeVar
+from typing import Dict, List, Optional, Union, Self, TypeVar, Callable
 
 import asyncpg
 import discord
@@ -441,8 +441,9 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if self._task:
             self._task.cancel()
 
-    async def cog_app_command_error(self, interaction: discord.Interaction,
-                                    error: app_commands.AppCommandError) -> None:
+    async def cog_app_command_error(
+            self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
         if isinstance(error, app_commands.errors.CheckFailure):
             return
 
@@ -464,7 +465,8 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     async def fetch_comics(self):
         async with self._batch_lock:
-            def sort_key(x): return x.date if x.date is not None else datetime.datetime.min
+            def sort_key(x):
+                return x.date if x.date is not None else datetime.datetime.min
 
             log.debug("Fetching Marvel...")
             marvel_comics = await self.parser.fetch_marvel_lookup_table(self.bot.marvel_client)
@@ -524,8 +526,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7
     ) -> Optional[ComicFeed]:
         query = """
-            SELECT 
-                *
+            SELECT *
             FROM feed_config
             WHERE next_pull IS NOT NULL
             AND (next_pull AT TIME ZONE 'UTC') < (CURRENT_TIMESTAMP + $1::interval)
@@ -537,12 +538,10 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         record = await con.fetchrow(query, datetime.timedelta(days=days))
         return ComicFeed(self, record=record) if record else None
 
-    def cancel_feed(self, feed: ComicFeed):
-        if feed is not None and self._current_feed and self._current_feed.id == feed.id:
-            self._task.cancel()
-            self._task = self.bot.loop.create_task(self.dispatch_feeds())
+    def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
+        if not key:
+            return False
 
-    def rerun_dispatch(self):
         self._task.cancel()
         self._task = self.bot.loop.create_task(self.dispatch_feeds())
 
@@ -645,6 +644,20 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     @cache.cache()
     async def get_configs(self, guild_id: int) -> Optional[List[ComicFeed]]:
+        """|coro| @cached
+
+        Gets all the comic feed configs for a guild.
+
+        Parameters
+        ----------
+        guild_id: :class:`int`
+            The guild ID to get the configs for.
+
+        Returns
+        -------
+        Optional[List[ComicFeed]]
+            The list of comic feed configs for the guild.
+        """
         records = await self.bot.pool.fetch('SELECT * FROM feed_config WHERE guild_id = $1', guild_id)
         return [ComicFeed(self, record=record) for record in records] if records else None
 
@@ -685,7 +698,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                 f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
 
         await self.call_feed(config)
-        self.rerun_dispatch()
+        self.MaybeSkipTask(True)
 
         await interaction.followup.send(
             f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
@@ -729,7 +742,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
         await new_config.create()
         self.get_configs.invalidate(self, interaction.guild.id)
-        self.rerun_dispatch()
+        self.MaybeSkipTask(True)
 
         await interaction.followup.send(
             f"<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.",
@@ -769,7 +782,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
         if reset:
             await config.delete()
-            self.cancel_feed(config)
+            self.MaybeSkipTask(config is not None and self._current_feed and self._current_feed.id == config.id)
             self.get_configs.invalidate(self, interaction.guild_id)
             return await interaction.followup.send(
                 f"<:greenTick:1079249732364406854> Reset the **{brand.name}** feed configuration.", ephemeral=True)
@@ -793,7 +806,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
             await config.edit(kwargs)
             self.get_configs.invalidate(self, interaction.guild.id)
-            self.rerun_dispatch()
+            self.MaybeSkipTask(True)
 
             await interaction.followup.send(
                 f'<:greenTick:1079249732364406854> Successfully modified **{brand.name}** feed configuration.')

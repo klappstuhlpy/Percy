@@ -133,6 +133,20 @@ class TwitchNotifications(commands.Cog):
 
     @cache.cache()
     async def get_user(self, login: str) -> Optional[TwitchUser]:
+        """|coro| @cached
+
+        Gets a user from Twitch by their login name.
+
+        Parameters
+        ----------
+        login: :class:`str`
+            The login name of the user to get.
+
+        Returns
+        -------
+        Optional[:class:`TwitchUser`]
+            The user object of the user, if found.
+        """
         data = await self.twitch_request('GET', yarl.URL(END_URL) / 'users', params={"login": login})
         user_data = data.get("data", [])
         if user_data:

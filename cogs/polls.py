@@ -5,7 +5,7 @@ import enum
 import random
 import traceback
 import warnings
-from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple, Union
 
 import discord
 from discord import app_commands, Interaction
@@ -39,8 +39,7 @@ def to_emoji(index: int) -> str:
     return str(EMOJIS.get(index))
 
 
-tick = Context.tick  # tick link because we have only app commands here
-
+tick = Context.tick  # `tick` method link because we have only app commands here
 
 LINE_EMOJIS = ['<:lf:1103076956645363712>', '<:le:1103076791666610197>', '<:lfc:1103076698687295568>',
                '<:red_info:1113513200319733790>', '<:ld:1103077171158859796>']
@@ -313,8 +312,10 @@ class PollItem(PostgresItem):
     description: str
     options: List[dict[str, Any]]
 
-    __slots__ = ('cog', 'bot', 'id', 'extra', 'channel_id', 'message_id', 'guild_id', 'users', 'args', 'kwargs', 'message',
-                 'question', 'votes', 'description', 'options')
+    __slots__ = (
+        'cog', 'bot', 'id', 'extra', 'channel_id', 'message_id', 'guild_id', 'users', 'args', 'kwargs', 'message',
+        'question', 'votes', 'description', 'options'
+    )
 
     def __init__(self, cog: Polls, **kwargs):
         self.cog: Polls = cog
@@ -591,13 +592,14 @@ class Polls(commands.Cog):
         ]
 
     async def create_poll(
-            self, _id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
+            self, id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
     ) -> PollItem:
         r"""Creates a poll.
+
         Parameters
         -----------
-        _id
-            The ID of the poll.
+        id
+            The unqiue ID of the poll to manage it.
         channel_id
             The channel ID of the poll.
         message_id
@@ -618,7 +620,8 @@ class Polls(commands.Cog):
             The created Poll if creation succeeded, otherwise ``None``.
         """
         poll = PollItem.temporary(
-            self, channel_id=channel_id, message_id=message_id, guild_id=guild_id, extra={'args': args, 'kwargs': kwargs, 'users': []}
+            self, channel_id=channel_id, message_id=message_id, guild_id=guild_id,
+            extra={'args': args, 'kwargs': kwargs, 'users': []}
         )
 
         query = """
@@ -628,7 +631,7 @@ class Polls(commands.Cog):
         """
 
         row = await self.bot.pool.fetchrow(
-            query, _id, channel_id, message_id, guild_id, {'args': args, 'kwargs': kwargs, 'users': []})
+            query, id, channel_id, message_id, guild_id, {'args': args, 'kwargs': kwargs, 'users': []})
         poll.id = row[0]
 
         self.get_guild_polls.invalidate(self, guild_id)
@@ -636,19 +639,57 @@ class Polls(commands.Cog):
         return poll
 
     async def get_guild_poll(self, guild_id: int, poll_id: int) -> Optional[PollItem]:
-        """Gets a poll by ID."""
+        """|coro|
+
+        Parameters
+        ----------
+        guild_id: int
+            The Guild ID to search in for the poll.
+        poll_id: int
+            The Poll ID to search for.
+
+        Returns
+        -------
+        PollItem
+            The :class:`PollItem` object from the fetched record.
+        """
         query = "SELECT * FROM polls WHERE id = $1 AND guild_id = $2 LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, poll_id, guild_id)
         return PollItem(self, record=record) if record else None
 
     @cache.cache()
     async def get_guild_polls(self, guild_id: int) -> List[PollItem]:
-        """Gets all polls for a guild."""
+        """|coro| @cached
+
+        Parameters
+        ----------
+        guild_id: int
+            The Guild ID to search in for the polls.
+
+        Returns
+        -------
+        List[PollItem]
+            A list of :class:`PollItem` objects from the fetched records.
+        """
         query = "SELECT * FROM polls WHERE guild_id = $1;"
         return [PollItem(self, record=record) for record in await self.bot.pool.fetch(query, guild_id)]
 
     async def end_poll(self, poll: PollItem) -> int | None:
-        """Ends a poll if running and archives a thread if it exists."""
+        """|coro|
+
+        Ends a poll and maybe removes the corresponding timer from the reminder system.
+        This includes closing possible Threads and finishing up the poll message.
+
+        Parameters
+        ----------
+        poll: PollItem
+            The poll to end.
+
+        Returns
+        -------
+        int
+            The ID of the poll that was ended.
+        """
         if poll.kwargs.get("running") is False:
             return None
 
@@ -875,7 +916,16 @@ class Polls(commands.Cog):
             opt_1: str = None, opt_2: str = None, opt_3: str = None, opt_4: str = None,
             opt_5: str = None, opt_6: str = None, opt_7: str = None, opt_8: str = None
     ):
-        """Edits a poll question. Type '-clear' to clear the current value."""
+        """Edits a poll question.
+
+        You can also remove the following fields by typing `-clear` as the value to change.
+
+        Possible Parameters to remove:
+        - Question
+        - Description
+        - Any not None Field
+        - Thread
+        """
         poll = await self.get_guild_poll(interaction.guild.id, poll_id)
         if not poll:
             return await interaction.response.send_message(f"{tick(False)} Poll not found.", ephemeral=True)
@@ -887,7 +937,7 @@ class Polls(commands.Cog):
             await poll.fetch_message()
 
         open_thread = poll.kwargs.get("thread")
-        kwargs = {}
+        kwargs: dict[str, Optional[Union[str, list]]] = {}
 
         if all(value is None for value in [
             question, description, thread_question, image, image_url,
@@ -1132,7 +1182,7 @@ class Polls(commands.Cog):
                     vote = next(i[1] for i in poll.users if i[0] == member.id)
                     embed.add_field(name=f"{poll.id} (#{poll.kwargs.get('index')}): {poll.question}",
                                     value=f"You've voted: {to_emoji(poll.options[vote]['index'])} - "
-                                         f"*{poll.options[vote]['content']}*",
+                                          f"*{poll.options[vote]['content']}*",
                                     inline=False)
 
                 return embed
@@ -1219,6 +1269,12 @@ class Polls(commands.Cog):
 
     @commands.Cog.listener()
     async def on_poll_timer_complete(self, timer: Timer):
+        """Called when a Poll timer completes.
+
+        Args:
+            timer (Timer): The Timer instance that completed.
+        """
+
         await self.bot.wait_until_ready()
         poll_id = timer.kwargs.get("poll_id")
 

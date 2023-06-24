@@ -152,8 +152,10 @@ class UserSettings(commands.Cog, name="User Settings"):
                     preferred=node.get('preferred'),
                 )
                 for node in tree.iter('type')
-                if not node.attrib['name'].startswith(('utcw', 'utce', 'unk'))
-                   and not node.attrib['description'].startswith('POSIX')
+                if (
+                        not node.attrib['name'].startswith(('utcw', 'utce', 'unk'))
+                        and not node.attrib['description'].startswith('POSIX')
+                )
             }
 
             for entry in entries.values():
@@ -264,6 +266,20 @@ class UserSettings(commands.Cog, name="User Settings"):
 
     @cache.cache()
     async def get_user_config(self, user_id: int, /) -> Optional[UserConfig]:
+        """|coro| @cached
+
+        Retrieves the user config for a user.
+
+        Parameters
+        ----------
+        user_id: :class:`int`
+            The user ID to retrieve the config for.
+
+        Returns
+        -------
+        Optional[:class:`UserConfig`]
+            The user config for the user, if it exists.
+        """
         query = "SELECT * from user_settings WHERE id = $1;"
         record = await self.bot.pool.fetchrow(query, user_id)
         return UserConfig(self, record=record) if record else None

@@ -245,7 +245,15 @@ class DiscordStatus(commands.Cog):
 
     @cache.cache()
     async def get_all_subscribers(self, *, connection: Optional[asyncpg.Connection] = None) -> list[ShortStatusConfig]:
-        """Gets all channels subscribed to Discord Status updates."""
+        """|coro| @cached
+
+        Returns all subscribers for the Discord Status updates.
+
+        Returns
+        --------
+        list[ShortStatusConfig]
+            A list of all subscribers.
+        """
         conn = connection or self.bot.pool
 
         query = """

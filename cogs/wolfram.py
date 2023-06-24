@@ -117,8 +117,22 @@ class Wolfram(commands.Cog):
             await ctx.send(ctx.tick(False, str(error)))
 
     async def get_pod_pages(self, ctx: Context, query: str) -> list[tuple[str, str]] | None:
-        """Get the Wolfram API pod pages for the provided query."""
+        """|coro|
 
+        Get the pod pages for a given query.
+
+        Parameters
+        ----------
+        ctx: :class:`Context`
+            The invocation context.
+        query: :class:`str`
+            The query to search for.
+
+        Returns
+        -------
+        :class:`list`
+            A list of tuples containing the title and image URL for each pod.
+        """
         async with ctx.typing():
             json = await self.wolfram_request(
                 "GET",
@@ -176,6 +190,28 @@ class Wolfram(commands.Cog):
             response_type: Literal["json", "bytes", "text"] = "text",
             params: dict[str, Any] = None
     ) -> Any:
+        """|coro|
+
+        Make a request to the Wolfram|Alpha API.
+
+        Parameters
+        ----------
+        method: :class:`str`
+            The HTTP method to use.
+        url: :class:`str`
+            The URL to make the request to.
+        query: :class:`str`
+            The query to search for.
+        response_type: :class:`str`
+            The type of response to return.
+        params: :class:`dict`
+            The parameters to pass to the request.
+
+        Returns
+        -------
+        :class:`Any`
+            The response from the API.
+        """
         prms = {
             "input": query,
             "appid": self.bot.config.wolfram_api_key,

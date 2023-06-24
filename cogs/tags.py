@@ -423,7 +423,7 @@ class Tags(commands.Cog):
             similarites: bool = False,
             actual: bool = False,
     ) -> Optional[Union[list[AliasTag] | Tag | AliasTag]]:
-        """|coro|
+        """|coro| @cached
 
         Gets the Original :class:`Tag` with Optional all :class:`AliasTag` s of it.
         If no exact match is found, it will return a list of :class:`AliasTag`s that are similar to the name.

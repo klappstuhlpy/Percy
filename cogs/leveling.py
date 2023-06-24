@@ -204,6 +204,22 @@ class Leveling(commands.Cog):
 
     @cache.cache(strategy=cache.Strategy.ADDITIVE)
     async def get_level_config(self, user_id: int, guild_id: int) -> Optional[LevelConfig]:
+        """|coro| @cached
+
+        Returns the :class:`LevelConfig` for the given user and guild.
+
+        Parameters
+        ----------
+        user_id: :class:`int`
+            The user ID to get the level config for.
+        guild_id: :class:`int`
+            The guild ID to get the level config for.
+
+        Returns
+        -------
+        Optional[:class:`LevelConfig`]
+            The level config for the given user and guild.
+        """
         query = "SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2;"
         record: asyncpg.Record = await self.bot.pool.fetchrow(query, user_id, guild_id)
 
