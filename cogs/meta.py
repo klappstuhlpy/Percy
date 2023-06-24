@@ -19,7 +19,6 @@ import unicodedata
 from dateutil.relativedelta import relativedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
-from discord.utils import MISSING
 from lru import LRU
 
 from . import command, command_permissions
