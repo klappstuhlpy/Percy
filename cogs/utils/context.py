@@ -27,6 +27,19 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
+def tick(opt: Optional[bool], label: Optional[str] = None) -> str:
+    """Returns a tick or cross emoji based on the value of `opt`."""
+    lookup = {
+        True: '<:greenTick:1079249732364406854>',
+        False: '<:redTick:1079249771975413910>',
+        None: '<:greyTick:1079250082819477634>',
+    }
+    emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
+    if label is not None:
+        return f'{emoji} {label}'
+    return emoji
+
+
 class EditTyping(Typing):
     """Custom Typing subclass to support cancelling typing when the message content changed"""
 
@@ -160,6 +173,8 @@ class Context(commands.Context):
         super().__init__(**kwargs)
         self.pool: Pool = self.bot.pool
 
+        self.tick = staticmethod(tick)
+
     async def entry_to_code(self, entries: Iterable[tuple[str, str]]) -> None:
         width = max(len(a) for a, b in entries)
         output = ['```']
@@ -202,19 +217,6 @@ class Context(commands.Context):
     def client(self) -> 'commands.Bot':
         """Returns the client."""
         return self.bot
-
-    @classmethod
-    def tick(cls, opt: Optional[bool], label: Optional[str] = None) -> str:
-        """Returns a tick or cross emoji based on the value of `opt`."""
-        lookup = {
-            True: '<:greenTick:1079249732364406854>',
-            False: '<:redTick:1079249771975413910>',
-            None: '<:greyTick:1079250082819477634>',
-        }
-        emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
-        if label is not None:
-            return f'{emoji} {label}'
-        return emoji
 
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:

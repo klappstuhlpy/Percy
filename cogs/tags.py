@@ -556,6 +556,7 @@ class Tags(commands.Cog):
                                                               similarites=True)
 
         if isinstance(tag, list):
+            # Assuming no tags were found and similarites are returned instead
             if tag is None or len(tag) == 0:
                 await ctx.send_tick(False, 'No Tag with this name or similar name found.')
             else:

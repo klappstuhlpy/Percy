@@ -14,7 +14,7 @@ from typing_extensions import Annotated
 
 from . import command
 from .utils import timetools, formats
-from .utils.context import Context
+from .utils.context import Context, tick
 from .utils.formats import plural, MaybeAcquire
 from .utils.helpers import PostgresItem
 
@@ -354,8 +354,8 @@ class Reminder(commands.Cog):
             message_id=ctx.message.id,
             timezone=zone or 'UTC',
         )
-        await ctx.send(
-            f"<:greenTick:1079249732364406854> Okay {ctx.author.mention}, "
+        await ctx.send_tick(
+            True, f"Okay {ctx.author.mention}, "
             f"I'll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*"
         )
 
@@ -385,7 +385,7 @@ class Reminder(commands.Cog):
             timezone=zone or 'UTC',
         )
         await interaction.response.send_message(
-            f"<:greenTick:1079249732364406854> Okay {interaction.user.mention}, "
+            f"{tick(True)} Okay {interaction.user.mention}, "
             f"I'll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*"
         )
 

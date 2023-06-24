@@ -505,8 +505,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return sorted(resolved, key=key)
         return resolved
 
-    def get_command_signature(self, command: PartialCommand, cut: bool = False,
-                              with_prefix: bool = False) -> str:  # noqa
+    def get_command_signature(
+            self, command: PartialCommand, cut: bool = False, with_prefix: bool = False  # noqa
+    ) -> str:
         """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
 
         This is a modified version of the original get_command_signature.
@@ -782,10 +783,10 @@ class UserJoinView(discord.ui.View):
 
     @discord.ui.button(label="Join Position", style=discord.ButtonStyle.blurple,
                        emoji=discord.PartialEmoji(name="join", id=1096930367522472037))
-    async def join_position(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def join_position(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         chunked_users = sorted(await interaction.guild.chunk(), key=lambda m: m.joined_at)
 
-        def fmt(p, u, j):
+        def fmt(p, u, j):  # noqa
             if u == interaction.user:
                 return f"<a:arrow_right:1113018784651956334> `{p}.` **{u}** <a:arrow_left:1113018813244518451>"
             return f"`{p}.` **{u}** ({discord.utils.format_dt(j, style='f')})"
@@ -829,7 +830,7 @@ class GuildUserJoinView(discord.ui.View):
 
     @discord.ui.button(label="Join List", style=discord.ButtonStyle.blurple,
                        emoji=discord.PartialEmoji(name="join", id=1096930367522472037))
-    async def join_list(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def join_list(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         chunked_users = sorted(await interaction.guild.chunk(), key=lambda m: m.joined_at)
         chunked = [[position, user, user.joined_at]
                    for position, user in enumerate(chunked_users, start=1)]
@@ -1529,8 +1530,9 @@ class Meta(commands.Cog):
             if self.bot.latency > 0.0:
                 websocket_readings.append(self.bot.latency)
 
+    @staticmethod
     async def say_permissions(
-            self, ctx: Context, member: discord.Member, channel: Union[discord.abc.GuildChannel, discord.Thread]
+            ctx: Context, member: discord.Member, channel: Union[discord.abc.GuildChannel, discord.Thread]
     ):
         permissions = channel.permissions_for(member)
         e = discord.Embed(colour=member.colour)

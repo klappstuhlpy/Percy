@@ -111,10 +111,13 @@ class Stats(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
         self.process = psutil.Process()
+
         self._batch_lock = asyncio.Lock()
         self._data_batch: list[DataBatchEntry] = []
+
         self.bulk_insert_loop.add_exception_type(asyncpg.PostgresConnectionError)
         self.bulk_insert_loop.start()
+
         self._logging_queue = asyncio.Queue()
         self.logging_worker.start()
 
@@ -724,7 +727,7 @@ class Stats(commands.Cog):
             prefix = record['most_invoked_with']
 
             author_id = record['most_invoked_by']
-            most_invoked_by = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            most_invoked_by = censor_object(self.bot.blacklist, self.bot.get_user(author_id) or f'<Unknown {author_id}>')
 
             embed.add_field(name='Most Invoked By',
                             value=f'{most_invoked_by} (**{record["most_invoked_by_count"]}** times)', inline=False)
@@ -798,7 +801,7 @@ class Stats(commands.Cog):
             if guild_id is None:
                 guild = 'Private Message'
             else:
-                guild = censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
+                guild = censor_object(self.bot.blacklist, self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
 
             emoji = lookup[index]
             value.append(f'{emoji}: {guild} (`{uses}` uses)')
@@ -816,7 +819,7 @@ class Stats(commands.Cog):
         records = await ctx.db.fetch(query)
         value = []
         for (index, (author_id, uses)) in enumerate(records):
-            user = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            user = censor_object(self.bot.blacklist, self.bot.get_user(author_id) or f'<Unknown {author_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {user} (`{uses}` uses)')
 
@@ -888,7 +891,7 @@ class Stats(commands.Cog):
             if guild_id is None:
                 guild = 'Private Message'
             else:
-                guild = censor_object(self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
+                guild = censor_object(self.bot.blacklist, self.bot.get_guild(guild_id) or f'<Unknown {guild_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {guild} (`{uses}` uses)')
 
@@ -906,7 +909,7 @@ class Stats(commands.Cog):
         records = await ctx.db.fetch(query)
         value = []
         for (index, (author_id, uses)) in enumerate(records):
-            user = censor_object(self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            user = censor_object(self.bot.blacklist, self.bot.get_user(author_id) or f'<Unknown {author_id}>')
             emoji = lookup[index]
             value.append(f'{emoji}: {user} ({uses} uses)')
 

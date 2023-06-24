@@ -16,7 +16,7 @@ from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command, command_permissions
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, helpers
-from .utils.context import Context
+from .utils.context import Context, tick
 from .utils.converters import colour_autocomplete
 from .utils.formats import plural, get_shortened_string
 from .utils.helpers import PostgresItem
@@ -38,8 +38,6 @@ def to_emoji(index: int) -> str:
     }
     return str(EMOJIS.get(index))
 
-
-tick = Context.tick  # `tick` method link because we have only app commands here
 
 LINE_EMOJIS = ['<:lf:1103076956645363712>', '<:le:1103076791666610197>', '<:lfc:1103076698687295568>',
                '<:red_info:1113513200319733790>', '<:ld:1103077171158859796>']
