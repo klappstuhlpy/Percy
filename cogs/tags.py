@@ -1060,15 +1060,10 @@ class Tags(commands.Cog):
             if len(content) > 2000:
                 return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
 
-        status = await tag.edit(use_embed=use_embed, content=content)
-
-        if not status:
-            await ctx.send(
-                '<:redTick:1079249771975413910> Could not edit that tag. Are you sure it exists and you own it?')
-        else:
-            await ctx.send('<:greenTick:1079249732364406854> Successfully edited tag.')
-            # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
-            await self.send_tag(ctx, name_or_id)
+        await tag.edit(use_embed=use_embed, content=content)
+        await ctx.send('<:greenTick:1079249732364406854> Successfully edited tag.')
+        # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
+        await self.send_tag(ctx, name_or_id)
 
     @command(
         tag.command,
