@@ -19,6 +19,7 @@ import unicodedata
 from dateutil.relativedelta import relativedelta
 from discord import app_commands, Interaction
 from discord.ext import commands
+from discord.utils import MISSING
 from lru import LRU
 
 from . import command, command_permissions
@@ -309,9 +310,12 @@ class FrontHelpPaginator(BasePaginator[str]):
             if isinstance(context, discord.Interaction):
                 self.msg = await context.response.edit_message(**kwargs)
             else:
-                self.msg = await context.message.edit(embed=page, view=self)
+                if self.msg is not MISSING:
+                    await self.msg.edit(**kwargs)
+                else:
+                    self.msg = await context.message.edit(embed=page, view=self)
         else:
-            self.msg = await context.message.edit(**kwargs)
+            self.msg = await cls._send(context, **kwargs)
         return self
 
 
