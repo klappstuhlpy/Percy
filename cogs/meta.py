@@ -299,24 +299,28 @@ class FrontHelpPaginator(BasePaginator[str]):
         self.groups = entries
 
         page = await self.format_page(self.pages[0])
-        kwargs = {'view': self, 'embed' if isinstance(page, discord.Embed) else 'content': page}
-        if self.total_pages <= 1:
-            kwargs.pop('view')
-
         self.add_item(CategorySelect(entries, self.ctx.client))  # type: ignore
         self.update_buttons()
 
         if kwargs.pop('edit', False):
-            if isinstance(context, discord.Interaction):
-                self.msg = await context.response.edit_message(**kwargs)
-            else:
-                if self.msg is not MISSING:
-                    await self.msg.edit(**kwargs)
-                else:
-                    self.msg = await context.message.edit(embed=page, view=self)
+            await self._edit(context, embed=page, view=self)
         else:
-            self.msg = await cls._send(context, ephemeral, **kwargs)
+            if self.total_pages <= 1:
+                await self._send(context, embed=page, ephemeral=ephemeral)
+            else:
+                await self._send(context, embed=page, view=self, ephemeral=ephemeral)
         return self
+
+    @classmethod
+    async def _edit(cls, context, **kwargs) -> discord.Message:
+        if isinstance(context, discord.Interaction):
+            if context.response.is_done():
+                msg = await context.edit_original_response(**kwargs)
+            else:
+                msg = await context.response.edit_message(**kwargs)
+        else:
+            msg = await context.message.edit(**kwargs)
+        return msg
 
 
 class PaginatedHelpCommand(commands.HelpCommand):
