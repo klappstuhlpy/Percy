@@ -70,14 +70,13 @@ class Incident:
             kwargs |= {'message_id': MISSING}
         return cls(**kwargs)
 
-    async def update_message(self, config: ShortStatusConfig):
+    async def update_message(self, config: StatusConfig):
         new = set(config.dstatus_last_incident.updates) - set(self.updates)
-        if new:
-            for state in new:
-                self.updates.insert(0, state)
-
-        if len(self.updates) == len(config.dstatus_last_incident.updates):
+        if not new:
             return
+
+        for state in new:
+            self.updates.insert(0, state)
 
         message = await config.get_message()
         await message.edit(embed=self.build_embed())
@@ -105,12 +104,13 @@ class Incident:
         return json.dumps(dataclasses.asdict(self), cls=BasicJSONEncoder)
 
 
-class ShortStatusConfig(PostgresItem):
-    bot: Percy
+class StatusConfig(PostgresItem):
 
     id: int
     dstatus_notification_channel: Optional[int]
     dstatus_last_incident: Optional[Incident | dict]
+
+    __slots__ = ('bot', 'id', 'dstatus_notification_channel', 'dstatus_last_incident')
 
     def __init__(self, bot: Percy, **kwargs):
         self.bot: Percy = bot
@@ -244,14 +244,14 @@ class DiscordStatus(commands.Cog):
         self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
 
     @cache.cache()
-    async def get_all_subscribers(self, *, connection: Optional[asyncpg.Connection] = None) -> list[ShortStatusConfig]:
+    async def get_all_subscribers(self, *, connection: Optional[asyncpg.Connection] = None) -> list[StatusConfig]:
         """|coro| @cached
 
         Returns all subscribers for the Discord Status updates.
 
         Returns
         --------
-        list[ShortStatusConfig]
+        list[StatusConfig]
             A list of all subscribers.
         """
         conn = connection or self.bot.pool
@@ -263,10 +263,18 @@ class DiscordStatus(commands.Cog):
         """
         records = await conn.fetch(query)
 
-        return [ShortStatusConfig(self.bot, record=record) for record in records]
+        return [StatusConfig(self.bot, record=record) for record in records]
 
-    async def bulk_update_last_incident(self, subscribers: list[ShortStatusConfig]) -> None:
-        """Updates the last incident for the given subscribers."""
+    async def bulk_update_last_incident(self, subscribers: list[StatusConfig]) -> None:
+        """|coro|
+
+        Bulk updates the last incident for all subscribers.
+
+        Parameters
+        -----------
+        subscribers: list[StatusConfig]
+            A list of all subscribers.
+        """
         query = """
             UPDATE guild_config
             SET dstatus_last_incident = $1::TEXT::JSONB
@@ -276,8 +284,23 @@ class DiscordStatus(commands.Cog):
             await subscriber.dstatus_last_incident.update_message(subscriber)
             await self.bot.pool.execute(query, subscriber.dstatus_last_incident.as_dict(), subscriber.id)
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(minutes=3)
     async def check_new_incident(self):
+        """|coro|
+
+        Checks for new incidents and updates the subscribers.
+        This is a loop that runs every 3 minutes.
+        This is called automatically by the bot.
+
+        Raises
+        -------
+        discord.HTTPException
+            Something went wrong while sending the message.
+        discord.Forbidden
+            The bot doesn't have permissions to send the message.
+        discord.NotFound
+            The channel was deleted.
+        """
         await self.bot.wait_until_ready()
 
         feed = await self.parse_feed(DS_RSS_FEED)
@@ -300,10 +323,11 @@ class DiscordStatus(commands.Cog):
                 else:
                     to_insert.append(config)
             else:
-                to_insert.append(config)
+                if incidents[0].state != "Resolved":
+                    # Ensure not to post and already Resolved Incident
+                    to_insert.append(config)
 
-        if to_update:
-            await self.bulk_update_last_incident(to_update)
+        await self.bulk_update_last_incident(to_update)
 
         if to_insert:
             incident = Incident.temporary(
