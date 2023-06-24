@@ -344,7 +344,7 @@ class Leveling(commands.Cog):
         enabled = row and row[0]
         self.bot.moderation.get_guild_config.invalidate(self, ctx.guild.id)
         fmt = '*enabled*' if enabled else '*disabled*'
-        await ctx.send(ctx.tick(True, f'Leveling {fmt}.'))
+        await ctx.send_tick(True, f'Leveling {fmt}.')
 
     @command(level.command, aliases=['top'], description="View the server leaderboard.")
     @commands.guild_only()

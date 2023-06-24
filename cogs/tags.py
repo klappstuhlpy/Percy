@@ -557,7 +557,7 @@ class Tags(commands.Cog):
 
         if isinstance(tag, list):
             if tag is None or len(tag) == 0:
-                await ctx.send(ctx.tick(False, 'No Tag with this name or similar name found.'))
+                await ctx.send_tick(False, 'No Tag with this name or similar name found.')
             else:
                 names = '\n'.join(f"* **{r.name}** [`{r.id}`]" for r in tag)
                 embed = discord.Embed(title="Did you mean ...", description=names,

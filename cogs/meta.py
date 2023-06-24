@@ -1414,7 +1414,7 @@ class Meta(commands.Cog):
         except Exception as e:
             await ctx.send(f'{ctx.tick(False)} {e}')
         else:
-            await ctx.send(ctx.tick(True) + ' Prefix added.')
+            await ctx.send_tick(True, 'Prefix added.')
 
     @prefix_add.error
     async def prefix_add_error(self, ctx: GuildContext, error: commands.CommandError):
@@ -1447,7 +1447,7 @@ class Meta(commands.Cog):
         except Exception as e:
             await ctx.send(f'{ctx.tick(False)} {e}')
         else:
-            await ctx.send(ctx.tick(True) + ' Prefix removed.')
+            await ctx.send_tick(True, 'Prefix removed.')
 
     @command(
         prefix.command,
@@ -1463,7 +1463,7 @@ class Meta(commands.Cog):
         """
 
         await self.bot.set_guild_prefixes(ctx.guild, [])
-        await ctx.send(ctx.tick(True) + ' Cleared all prefixes.')
+        await ctx.send_tick(True, 'Cleared all prefixes.')
 
     @command(
         commands.hybrid_command,

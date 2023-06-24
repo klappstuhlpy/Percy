@@ -350,7 +350,7 @@ class Base(commands.Cog, name='Exclusives'):
 
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, GithubError):
-            await ctx.send(ctx.tick(False, f'Github API Error: {error}'))
+            await ctx.send_tick(False, f'Github API Error: {error}')
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):

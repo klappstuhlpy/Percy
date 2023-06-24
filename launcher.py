@@ -318,7 +318,7 @@ async def ensure_uri_can_run() -> bool:
 
 @db.command()
 @click.option('--reason', '-r', help='The reason for this revision.', default='Initial migrations')
-def init(reason):
+def init(reason: str):
     """Initializes the database and creates the initial revision."""
 
     asyncio.run(ensure_uri_can_run())
@@ -327,17 +327,17 @@ def init(reason):
     migrations.database_uri = config.postgresql
     revision = migrations.create_revision(reason)
     click.echo(f'created revision V{revision.version!r}')
-    click.secho(f'hint: use the `upgrade` command to apply', fg='yellow')
+    click.secho(f'Hint: Use the `upgrade` command to apply.', fg='yellow')
 
 
 @db.command()
 @click.option('--reason', '-r', help='The reason for this revision.', required=True)
-def migrate(reason):
+def migrate(reason: str):
     """Creates a new revision for you to edit."""
     migrations = Migrations()
     if migrations.is_next_revision_taken():
-        click.echo('an unapplied migrations already exists for the next version, exiting')
-        click.secho('hint: apply pending migrations with the `upgrade` command', bold=True)
+        click.echo('An unapplied migration already exists for the next version, exiting.')
+        click.secho('Hint: Apply pending migrations with the `upgrade` command.', bold=True)
         return
 
     revision = migrations.create_revision(reason)
@@ -351,7 +351,7 @@ async def run_upgrade(migrations: Migrations) -> int:
 
 @db.command()
 @click.option('--sql', help='Print the SQL instead of executing it', is_flag=True)
-def upgrade(sql):
+def upgrade(sql: bool):
     """Upgrades the database at the given revision (if any)."""
     migrations = Migrations()
 
@@ -363,9 +363,9 @@ def upgrade(sql):
         applied = asyncio.run(run_upgrade(migrations))
     except Exception:
         traceback.print_exc()
-        click.secho('Failed to apply migrations due to error', fg='red')
+        click.secho('Failed to apply migrations due to an unexpected error.', fg='red')
     else:
-        click.secho(f'Applied {applied} revisions(s)', fg='green')
+        click.secho(f'Successfully applied {applied} revisions(s).', fg='green')
 
 
 @db.command()
@@ -377,7 +377,7 @@ def current():
 
 @db.command()
 @click.option('--reverse', help='Print in reverse order (oldest first).', is_flag=True)
-def log(reverse):
+def log(reverse: bool):
     """Displays the revision history"""
     migrations = Migrations()
     # Revisions is oldest first already

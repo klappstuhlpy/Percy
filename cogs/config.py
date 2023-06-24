@@ -296,7 +296,7 @@ class Config(commands.Cog):
         else:
             await self._bulk_ignore_entries(ctx, entities)
 
-        await ctx.send(ctx.tick(True))
+        await ctx.send_tick(True, f"Successfully ingored **{len(entities)}** entities.")
 
     @command(
         ignore.command,
@@ -390,7 +390,7 @@ class Config(commands.Cog):
             await ctx.db.execute(query, ctx.guild.id, entity_ids)
 
         self.is_plonked.invalidate_containing(f'{ctx.guild.id!r}:')
-        await ctx.send(ctx.tick(True))
+        await ctx.send_tick(True, f"Successfully unignored **{len(entities)}** entities.")
 
     @command(
         unignore.command,
@@ -605,7 +605,7 @@ class Config(commands.Cog):
     async def global_block(self, ctx: GuildContext, object_id: int):
         """Blocks a user or guild globally."""
         await self.bot.add_to_blacklist(object_id)
-        await ctx.send(ctx.tick(True))
+        await ctx.send_tick(True, 'User or guild blocked globally.')
 
     @command(
         _global.command,
@@ -615,7 +615,7 @@ class Config(commands.Cog):
     async def global_unblock(self, ctx: GuildContext, object_id: int):
         """Unblocks a user or guild globally."""
         await self.bot.remove_from_blacklist(object_id)
-        await ctx.send(ctx.tick(True))
+        await ctx.send_tick(True, 'User or guild unblocked globally.')
 
 
 async def setup(bot):
