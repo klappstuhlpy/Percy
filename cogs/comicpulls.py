@@ -407,18 +407,6 @@ class MultiLock:
                 del self.locks[lock_id]
 
 
-class ComicConfigs:
-    marvel: ComicFeed[Brand.MARVEL]
-    dc: ComicFeed[Brand.DC]
-    manga: ComicFeed[Brand.MANGA]
-
-    __slots__ = ('marvel', 'dc', 'manga')
-
-    def __init__(self, configs: List[ComicFeed]):
-        for config in configs:
-            setattr(self, config.brand.name.lower(), config)
-
-
 class ComicPulls(commands.Cog, name="Comic Feeds"):
     """Subscribe to weekly comic releases from Marvel and DC!
 
@@ -657,31 +645,27 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True)
 
     @cache.cache()
-    async def get_comic_config(self, guild_id: int, brand: Optional[str] = None) -> Optional[ComicConfigs]:
+    async def get_comic_config(self, guild_id: int, brand: str) -> Optional[ComicFeed]:
         """|coro| @cached
 
-        Gets either all the comic feed configs for a guild, or the configs for a specific brand.
+        Gets the comic feed config for a guild.
 
         Parameters
         ----------
         guild_id: :class:`int`
             The guild ID to get the configs for.
-        brand: Optional[:class:`str`]
-            The brand to filter the configs by.
+        brand: :class:`str`
+            The brand to get the config for.
 
         Returns
         -------
-        Optional[:class:`ComicConfigs`]
-            The comic feed configs for the guild.
+        Optional[:class:`ComicFeed`]
+            The comic feed config, if found.
         """
-        if brand:
-            record = await self.bot.pool.fetchrow(
-                'SELECT * FROM feed_config WHERE guild_id = $1 AND brand = $2', guild_id, brand
-            )
-            return ComicFeed(self, record=record) if record else None
-
-        records = await self.bot.pool.fetch('SELECT * FROM feed_config WHERE guild_id = $1', guild_id)
-        return ComicConfigs([ComicFeed(self, record=record) for record in records]) if records else None
+        record = await self.bot.pool.fetchrow(
+            'SELECT * FROM feed_config WHERE guild_id = $1 AND brand = $2', guild_id, brand
+        )
+        return ComicFeed(self, record=record) if record else None
 
     @comics.command(name="current")
     @app_commands.describe(brand="The comic brand to receive a feed from.")
