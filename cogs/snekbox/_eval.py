@@ -3,8 +3,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass, field
 from signal import Signals
-from typing import Literal, TYPE_CHECKING, ClassVar
-from uuid import uuid4
+from typing import Literal, TYPE_CHECKING
 
 from discord.utils import escape_markdown, escape_mentions
 
@@ -24,8 +23,6 @@ SIGKILL = 9
 @dataclass(frozen=True)
 class EvalJob:
     """Job to be evaluated by snekbox."""
-
-    id: ClassVar[str] = uuid4().hex
 
     args: list[str]
     files: list[FileAttachment] = field(default_factory=list)
@@ -143,7 +140,7 @@ class EvalResult:
 
     def get_message(self, job: EvalJob) -> str:
         """Return a user-friendly message corresponding to the process's return code."""
-        msg = f"Your **{job.name}** job [`{job.id}`] for Python `{job.version}` "
+        msg = f"Your **{job.name}** job for Python `{job.version}` "
 
         if self.returncode is None:
             msg += "has failed."

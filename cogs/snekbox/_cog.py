@@ -381,7 +381,7 @@ class Snekbox(commands.Cog):
 
         return None
 
-    async def get_code(self, message: Message, command: commands.Command) -> str | None:  # noqa: C901
+    async def get_code(self, message: Message, command: commands.Command) -> str | None:  # noqa
         """
         Return the code from `message` to be evaluated.
 
@@ -405,7 +405,7 @@ class Snekbox(commands.Cog):
         """Handles checks, stats and re-evaluation of a snekbox job."""
         log.info(f"Received code from {ctx.author} for evaluation:\n{job}")
 
-        ctx.job_message = await ctx.send(f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing job `{job.id}`...*")
+        ctx.job_message = await ctx.send(f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
 
         while True:
             try:
@@ -423,7 +423,7 @@ class Snekbox(commands.Cog):
                 break
             log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
 
-    @command(name="eval", aliases=("e",), usage="[python_version] <code, ...>")
+    @command(name="eval", aliases=["e"], usage="[python_version] <code...>")
     @commands.guild_only()
     async def eval_command(
         self,
@@ -454,7 +454,7 @@ class Snekbox(commands.Cog):
         job = EvalJob.from_code("\n".join(code)).as_version(python_version)
         await self.run_job(ctx, job)
 
-    @command(name="timeit", aliases=("ti",), usage="[python_version] [setup_code] <code, ...>")
+    @command(name="timeit", aliases=["ti"], usage="[python_version] [setup_code] <code...>")
     @commands.guild_only()
     async def timeit_command(
         self,
