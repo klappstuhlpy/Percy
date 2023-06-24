@@ -6,7 +6,7 @@ import fnmatch
 import json
 from contextlib import suppress
 from enum import Enum
-from typing import Dict, List, Optional, Union, Self, TypeVar, Callable
+from typing import Dict, List, Optional, Union, Self, TypeVar, Callable, Generic
 
 import asyncpg
 import discord
@@ -23,7 +23,6 @@ from cogs.utils.comic._parser import Parser  # noqa
 from launcher import get_logger
 
 log = get_logger(__name__)
-B = TypeVar('B', bound='Brand')
 
 MARVEL_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107651622978469888/free-marvel-282124.png'
 DC_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107657136013586543/Screenshot_2023-05-15_151251.png'
@@ -293,7 +292,10 @@ class GenericComicMessage(GenericComic):
         return self.message.jump_url
 
 
-class ComicFeed(PostgresItem):
+B = TypeVar('B', bound=Brand)
+
+
+class ComicFeed(PostgresItem, Generic[B]):
     id: int
     guild_id: int
     channel_id: int
@@ -310,7 +312,7 @@ class ComicFeed(PostgresItem):
         super().__init__(**kwargs)
         self.cog: ComicPulls = cog
 
-        self.brand = Brand[str(self.brand)]
+        self.brand: B = Brand[str(self.brand)]
         self.format = Format[str(self.format)]
 
     def to_embed(self):
@@ -349,13 +351,13 @@ class ComicFeed(PostgresItem):
         """
 
         await self.cog.bot.pool.execute(query, json.dumps(kwargs, cls=ComicJSONEncoder))
-        self.cog.get_configs.invalidate(self.cog, self.guild_id)
+        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
         return self
 
     async def delete(self):
         query = "DELETE FROM feed_config WHERE guild_id = $1 AND brand = $2;"
         await self.cog.bot.pool.execute(query, self.guild_id, self.brand.name)
-        self.cog.get_configs.invalidate(self.cog, self.guild_id)
+        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
 
     def next_scheduled(self, day: int = None):
         day = day or self.day
@@ -403,6 +405,18 @@ class MultiLock:
             lock.release()
             if not lock.locked():
                 del self.locks[lock_id]
+
+
+class ComicConfigs:
+    marvel: ComicFeed[Brand.MARVEL]
+    dc: ComicFeed[Brand.DC]
+    manga: ComicFeed[Brand.MANGA]
+
+    __slots__ = ('marvel', 'dc', 'manga')
+
+    def __init__(self, configs: List[ComicFeed]):
+        for config in configs:
+            setattr(self, config.brand.name.lower(), config)
 
 
 class ComicPulls(commands.Cog, name="Comic Feeds"):
@@ -643,30 +657,31 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True)
 
     @cache.cache()
-    async def get_configs(self, guild_id: int) -> Optional[List[ComicFeed]]:
+    async def get_comic_config(self, guild_id: int, brand: Optional[str] = None) -> Optional[ComicConfigs]:
         """|coro| @cached
 
-        Gets all the comic feed configs for a guild.
+        Gets either all the comic feed configs for a guild, or the configs for a specific brand.
 
         Parameters
         ----------
         guild_id: :class:`int`
             The guild ID to get the configs for.
+        brand: Optional[:class:`str`]
+            The brand to filter the configs by.
 
         Returns
         -------
-        Optional[List[ComicFeed]]
-            The list of comic feed configs for the guild.
+        Optional[:class:`ComicConfigs`]
+            The comic feed configs for the guild.
         """
+        if brand:
+            record = await self.bot.pool.fetchrow(
+                'SELECT * FROM feed_config WHERE guild_id = $1 AND brand = $2', guild_id, brand
+            )
+            return ComicFeed(self, record=record) if record else None
+
         records = await self.bot.pool.fetch('SELECT * FROM feed_config WHERE guild_id = $1', guild_id)
-        return [ComicFeed(self, record=record) for record in records] if records else None
-
-    async def get_config(self, guild_id: int, brand: Brand) -> Optional[ComicFeed]:
-        entries = await self.get_configs(guild_id)
-        if entries is None:
-            return None
-
-        return next((entry for entry in entries if entry.brand == brand), None)
+        return ComicConfigs([ComicFeed(self, record=record) for record in records]) if records else None
 
     @comics.command(name="current")
     @app_commands.describe(brand="The comic brand to receive a feed from.")
@@ -688,7 +703,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         """Triggers your current feed configuration."""
         await interaction.response.defer()
 
-        config: ComicFeed = await self.get_config(interaction.guild.id, brand)
+        config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
             return await interaction.followup.send(
                 f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
@@ -720,7 +735,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     ):
         """Sets up a comic pulls feed."""
         await interaction.response.defer()
-        config = await self.get_config(interaction.guild.id, brand)
+        config = await self.get_comic_config(interaction.guild.id, brand)
 
         if config:
             return await interaction.followup.send(
@@ -741,7 +756,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         )
 
         await new_config.create()
-        self.get_configs.invalidate(self, interaction.guild.id)
+        self.get_comic_config.invalidate_containing(str(interaction.guild.id))
         self.MaybeSkipTask(True)
 
         await interaction.followup.send(
@@ -775,7 +790,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             reset: bool = False
     ):
         await interaction.response.defer(ephemeral=True)
-        config: ComicFeed = await self.get_config(interaction.guild_id, brand)
+        config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
             return await interaction.followup.send(
                 f"<:redTick:1079249771975413910> You have not set up a feed for **{brand.name}** yet in this server!")
@@ -783,7 +798,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if reset:
             await config.delete()
             self.MaybeSkipTask(config is not None and self._current_feed and self._current_feed.id == config.id)
-            self.get_configs.invalidate(self, interaction.guild_id)
+            self.get_comic_config.invalidate_containing(str(interaction.guild_id))
             return await interaction.followup.send(
                 f"<:greenTick:1079249732364406854> Reset the **{brand.name}** feed configuration.", ephemeral=True)
 
@@ -805,7 +820,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                 kwargs["format"] = _format.name
 
             await config.edit(kwargs)
-            self.get_configs.invalidate(self, interaction.guild.id)
+            self.get_comic_config.invalidate_containing(str(interaction.guild_id))
             self.MaybeSkipTask(True)
 
             await interaction.followup.send(

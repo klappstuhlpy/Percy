@@ -254,6 +254,28 @@ class Base(commands.Cog, name='Exclusives'):
             data: Optional[dict[str, Any]] = None,
             headers: Optional[dict[str, Any]] = None,
     ) -> Any:
+        """|coro|
+
+        Sends a request to the GitHub API.
+
+        Parameters
+        ----------
+        method: :class:`str`
+            The HTTP method to use.
+        url: :class:`str`
+            The URL to send the request to.
+        params: Optional[:class:`dict`]
+            The parameters to pass to the request.
+        data: Optional[:class:`dict`]
+            The data to pass to the request.
+        headers: Optional[:class:`dict`]
+            The headers to pass to the request.
+
+        Returns
+        -------
+        Any
+            The JSON response from the API.
+        """
         hdrs = {'Accept': 'application/vnd.github.inertia-preview+json',
                 'User-Agent': 'Percy DPY-Exclusives',
                 'Authorization': f'Bearer {self.bot.config.github_key}'}
@@ -285,6 +307,26 @@ class Base(commands.Cog, name='Exclusives'):
             filename: Optional[str] = None,
             public: bool = True,
     ) -> str:
+        """|coro|
+
+        Creates a gist on GitHub.
+
+        Parameters
+        ----------
+        content: :class:`str`
+            The content of the gist.
+        description: Optional[:class:`str`]
+            The description of the gist.
+        filename: Optional[:class:`str`]
+            The filename of the gist.
+        public: :class:`bool`
+            Whether the gist should be public or not.
+
+        Returns
+        -------
+        :class:`str`
+            The URL of the gist.
+        """
         headers = {'Accept': 'application/vnd.github.v3+json'}
 
         filename = filename or 'output.txt'
@@ -312,6 +354,12 @@ class Base(commands.Cog, name='Exclusives'):
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):
+        """|coro|
+
+        Automatically archives old threads in the Help Forum.
+        This is done to prevent the Help Forum from being cluttered with old threads.
+        This task runs every hour.
+        """
         guild = self.bot.get_guild(PH_GUILD_ID)
         if guild is None:
             return

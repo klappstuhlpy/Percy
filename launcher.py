@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import config
 
 from bot import Percy
-from cogs.utils.constants import REVISION_FILE
+from cogs.utils.constants import REVISION_FILE, BOT_BASE_FOLDER
 
 try:
     import uvloop  # type: ignore
@@ -240,7 +240,8 @@ def setup_logging():
         get_logger('charset_normalizer').setLevel(logging.ERROR)
 
         root_log.setLevel(logging.INFO)
-        handler = RotatingFileHandler(filename='percy.log', encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5)
+        handler = RotatingFileHandler(filename=os.path.join(BOT_BASE_FOLDER, 'percy.log'),
+                                      encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5)
         handler.setFormatter(fmt)
         root_log.addHandler(handler)
 

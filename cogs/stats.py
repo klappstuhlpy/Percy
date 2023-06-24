@@ -30,6 +30,7 @@ from launcher import get_logger
 from . import command
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
 from .utils import formats, timetools, helpers
+from .utils.constants import BOT_BASE_FOLDER
 from .utils.formats import censor_object
 from .utils.tasks import executor
 from .utils.render import Render
@@ -318,8 +319,8 @@ class Stats(commands.Cog):
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.timezone.utc), 'R')
         return f'[`{short_sha2}`](https://github.com/klappstuhlpy/Percy/commit/{commit.hex}) {short} ({offset})'
 
-    def get_last_commits(self, count=4, repo_path: str = str(Path(__file__).parent.parent.absolute())) -> str:
-        repo = pygit2.Repository(repo_path + "/.git")
+    def get_last_commits(self, count=4, repo_path: str = BOT_BASE_FOLDER) -> str:
+        repo = pygit2.Repository(os.path.join(repo_path, '.git'))
         commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
         return '\n'.join(self.format_commit(c) for c in commits)
 

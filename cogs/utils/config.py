@@ -7,13 +7,13 @@ import uuid
 import asyncio
 
 from cogs.utils.tasks import executor
-from cogs.utils.constants import ObjectHook
+from cogs.utils.constants import ObjectHook, BOT_BASE_FOLDER
 
 _T = TypeVar('_T')
 
 
 class Config(Generic[_T]):
-    """A config-like "database" object. Internally based on ``json``."""
+    """A database-like config object. Internally based on ``json``."""
 
     def __init__(
         self,
@@ -24,7 +24,6 @@ class Config(Generic[_T]):
         load_later: bool = False,
     ):
         # Ensure file to be in the root folder of the bots directory
-        self._PATH = Path(__file__).parent.parent.parent.absolute()
         self.name = name
 
         self.object_hook = object_hook
@@ -38,8 +37,9 @@ class Config(Generic[_T]):
         else:
             self.load_from_file()
 
-    def real_path(self, dest: str) -> str:
-        return os.path.join(self._PATH, dest)
+    @staticmethod
+    def real_path(dest: str) -> str:
+        return os.path.join(BOT_BASE_FOLDER, dest)
 
     def load_from_file(self):
         try:

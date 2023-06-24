@@ -90,7 +90,7 @@ class EvalResult:
         if self.returncode is None:
             error = self.stdout.strip()
         elif self.returncode == 255:
-            error = "A fatal NsJail error occurred"
+            error = "Returned with `255`. A fatal NsJail error occurred."
         return error
 
     @property

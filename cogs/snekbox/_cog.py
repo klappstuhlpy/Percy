@@ -29,6 +29,8 @@ ESCAPE_REGEX = re.compile("[`\u202E\u200B]{3,}")
 TXT_LIKE_FILES = {".txt", ".csv", ".json"}
 
 
+# The following code is used to capture the output of timeit.timeit() and print it when the process exits.
+# This is needed because timeit.timeit() prints the output to stdout, which is redirected to a Writer() instance.
 TIMEIT_SETUP_WRAPPER = """
 import atexit
 import sys
@@ -164,14 +166,35 @@ class Snekbox(commands.Cog):
         return discord.PartialEmoji(name="sandbox", id=1117191504973275257)
 
     async def post_job(self, job: EvalJob) -> EvalResult:
-        """Send a POST request to the Snekbox API to evaluate code and return the results."""
+        """|coro|
+
+        Send a POST request to the Snekbox API to evaluate code and return the results.
+
+        Parameters
+        ----------
+        job: :class:`EvalJob`
+            The job to evaluate.
+
+        Returns
+        -------
+        :class:`EvalResult`
+            The result of the evaluation.
+        """
         data = job.to_dict()
 
         async with self.bot.session.post('http://localhost:8060/eval', json=data, raise_for_status=True) as resp:
             return EvalResult.from_dict(await resp.json())
 
-    async def upload_output(self, output: str) -> str | None:
-        """Upload the job's output to a paste service and return a URL to it if successful."""
+    async def upload_output(self, output: str) -> Optional[str]:
+        """|coro|
+
+        Upload the job's output to a paste service and return a URL to it if successful.
+
+        Return None if the output is empty.
+
+        Raise a :exc:`PasteTooLongError` if the output is too long to upload.
+        Raise a :exc:`PasteUploadError` if the upload fails.
+        """
         log.trace("Uploading full output to paste service...")
 
         try:
@@ -183,8 +206,7 @@ class Snekbox(commands.Cog):
 
     @staticmethod
     def prepare_timeit_input(codeblocks: list[str]) -> list[str]:
-        """
-        Join the codeblocks into a single string, then return the arguments in a list.
+        """Join the codeblocks into a single string, then return the arguments in a list.
 
         If there are multiple codeblocks, insert the first one into the wrapped setup code.
         """
@@ -202,12 +224,30 @@ class Snekbox(commands.Cog):
         max_chars: int = MAX_OUTPUT_BLOCK_CHARS,
         line_nums: bool = True,
         output_default: str = "[No output]",
-    ) -> tuple[str, str | None]:
-        """
+    ) -> tuple[str, Optional[str]]:
+        """|coro|
         Format the output and return a tuple of the formatted output and a URL to the full output.
 
         Prepend each line with a line number. Truncate if there are over 10 lines or 1000 characters
         and upload the full output to a paste service.
+
+        Parameters
+        ----------
+        output: :class:`str`
+            The output to format.
+        max_lines: :class:`int`
+            The maximum number of lines to output.
+        max_chars: :class:`int`
+            The maximum number of characters to output.
+        line_nums: :class:`bool`
+            Whether to prepend each line with a line number.
+        output_default: :class:`str`
+            The default output if there is no output.
+
+        Returns
+        -------
+        :class:`tuple`[:class:`str`, Optional[:class:`str`]]
+            The formatted output and a URL to the full output if it was uploaded to a paste service.
         """
         output = output.rstrip("\n")
         original_output = output  # To be uploaded to a pasting service if needed
@@ -272,10 +312,21 @@ class Snekbox(commands.Cog):
 
     @lock_arg("snekbox.send_job", "ctx", attrgetter("author.id"), raise_error=True)
     async def send_job(self, ctx: EvalContext, job: EvalJob) -> Message:
-        """
+        """|coro| @locked(func, ctx)
+
         Evaluate code, format it, and send the output to the corresponding channel.
 
-        Return the bot response.
+        Parameters
+        ----------
+        ctx: EvalContext
+            The context of the eval command.
+        job: EvalJob
+            The job to evaluate.
+
+        Returns
+        -------
+        discord.Message
+            The message sent to the channel.
         """
         async with ctx.typing():
             result = await self.post_job(job)
@@ -334,11 +385,26 @@ class Snekbox(commands.Cog):
         return ctx.job_message
 
     async def continue_job(self, ctx: EvalContext, response: Message, job_name: str) -> Optional[EvalJob]:
-        """
+        """|coro|
+        
         Check if the job's session should continue.
 
         If the code is to be re-evaluated, return the new EvalJob.
         Otherwise, return None if the job's session should be terminated.
+        
+        Parameters
+        ----------
+        ctx: EvalContext
+            The context of the eval command.
+        response: discord.Message
+            The message to check for reactions.
+        job_name: str
+            The name of the job.
+        
+        Returns
+        -------
+        Optional[EvalJob]
+            The new EvalJob if the code is to be re-evaluated, else None.
         """
         _predicate_message_edit = partial(predicate_message_edit, ctx)
         _predicate_emoji_reaction = partial(predicate_emoji_reaction, ctx)
@@ -381,12 +447,20 @@ class Snekbox(commands.Cog):
 
         return None
 
-    async def get_code(self, message: Message, command: commands.Command) -> str | None:  # noqa
-        """
+    async def get_code(self, message: Message, command: commands.Command) -> Optional[str]:  # noqa
+        """|coro|
+        
         Return the code from `message` to be evaluated.
 
         If the message is an invocation of the command, return the first argument or None if it
         doesn't exist. Otherwise, return the full content of the message.
+        
+        Parameters
+        ----------
+        message: discord.Message
+            The message to get the code from.
+        command: commands.Command
+            The command to check for invocation.
         """
         log.trace(f"Getting context for message {message.id}.")
         new_ctx = await self.bot.get_context(message)
@@ -402,7 +476,17 @@ class Snekbox(commands.Cog):
         return code
 
     async def run_job(self, ctx: EvalContext, job: EvalJob):
-        """Handles checks, stats and re-evaluation of a snekbox job."""
+        """|coro|
+
+        Handles checks, stats and re-evaluation of a snekbox job.
+
+        Parameters
+        ----------
+        ctx: EvalContext
+            The context of the eval command.
+        job: EvalJob
+            The job to run.
+        """
         log.info(f"Received code from {ctx.author} for evaluation:\n{job}")
 
         ctx.job_message = await ctx.send(f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
@@ -428,12 +512,11 @@ class Snekbox(commands.Cog):
     async def eval_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions | None,
+        python_version: SupportedPythonVersions = "3.11",
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
-        """
-        Run Python code and get the results.
+        """Run Python code and get the results.
 
         This command supports multiple lines of code, including formatted code blocks.
         Code can be re-evaluated by editing the original message within 10 seconds and
@@ -450,7 +533,6 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or "3.11"
         job = EvalJob.from_code("\n".join(code)).as_version(python_version)
         await self.run_job(ctx, job)
 
@@ -459,12 +541,11 @@ class Snekbox(commands.Cog):
     async def timeit_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions | None,
+        python_version: SupportedPythonVersions = "3.11",
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
-        """
-        Profile Python Code to find execution time.
+        """Profile Python Code to find execution time.
 
         This command supports multiple lines of code, including code wrapped inside a formatted code
         block. Code can be re-evaluated by editing the original message within 10 seconds and
@@ -478,7 +559,6 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or "3.11"
         args = self.prepare_timeit_input(code)
         job = EvalJob(args, version=python_version, name="timeit")
         await self.run_job(ctx, job)

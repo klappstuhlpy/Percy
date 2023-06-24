@@ -129,7 +129,7 @@ class Percy(commands.Bot):
         self.prefixes: Config[list[str]] = Config('prefixes.json')
 
         self.media_config: Config[Dict[str, Any]] = Config('media_config.json', encoder=BasicJSONEncoder, load_later=True)
-        self.data_storage: Config[Dict[str | dict, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
+        self.data_storage: Config[Dict[dict, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
@@ -358,7 +358,9 @@ class Percy(commands.Bot):
 
     @staticmethod
     async def get_or_fetch_member(guild: discord.Guild, member_id: int) -> Optional[discord.Member]:
-        """Looks up a member in cache or fetches if not found.
+        """|coro|
+
+        Looks up a member in cache or fetches if not found.
 
         Parameters
         -----------
@@ -391,7 +393,9 @@ class Percy(commands.Bot):
 
     @staticmethod
     async def resolve_member_ids(guild: discord.Guild, member_ids: Iterable[int]) -> AsyncIterator[discord.Member]:
-        """Bulk resolves member IDs to member instances, if possible.
+        """|coro|
+
+        Bulk resolves member IDs to member instances, if possible.
         Members that can't be resolved are discarded from the list.
         This is done lazily using an asynchronous iterator.
         Note that the order of the resolved members is not the same as the input.
