@@ -891,10 +891,6 @@ class Meta(commands.Cog):
     def cog_unload(self):
         self.bot.help_command = self.old_help_command
 
-    async def cog_command_error(self, ctx: Context, error: commands.CommandError):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(str(error))
-
     async def _fill_autocomplete(self) -> None:
         def key(command: PartialCommand) -> str:  # noqa
             cog = command.cog
@@ -951,14 +947,14 @@ class Meta(commands.Cog):
                 return
 
             if confirm:
-                await ctx.send(
-                    f'{ctx.tick(True)} Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
+                await ctx.send_tick(
+                    True, f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
                 )
                 await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)
             elif confirm is None:
-                await ctx.send(f'{ctx.tick(False)} Timed out waiting for a response. Not marking as solved.')
+                await ctx.send_tick(False, f'Timed out waiting for a response. Not marking as solved.')
             else:
-                await ctx.send(f'{ctx.tick(False)} Not marking as solved.')
+                await ctx.send_tick(False, f'Not marking as solved.')
 
     @command(commands.command, description='Shows parts of the Bots Source Command.')
     async def source(self, ctx: Context, *, command: str = None):
@@ -978,7 +974,7 @@ class Meta(commands.Cog):
         else:
             obj = self.bot.remove_command(command)
             if obj is None:
-                return await ctx.send(f'{ctx.tick(False)} Could not find command.')
+                return await ctx.send_tick(False, f'Could not find command.')
 
             src = obj.callback.__code__
             filename = src.co_filename
@@ -1052,12 +1048,12 @@ class Meta(commands.Cog):
         """Shows the features of a guild."""
 
         if guild_id and not guild_id.isdigit():
-            raise commands.BadArgument("<:redTick:1079249771975413910> Guild ID must be a number.")
+            return await ctx.send_tick(False, "Guild ID must be an int.")
 
         guild_id = guild_id or ctx.guild.id
         guild = self.bot.get_guild(guild_id)
         if not guild:
-            raise commands.BadArgument(f'Guild with ID `{guild_id}` not found.')
+            return await ctx.send_tick(False, f'Guild with ID `{guild_id}` not found.')
 
         features = list(
             map(lambda e: f"**{e[0]}** - {e[1]}", list(self.bot.get_guild_features(guild.features, only_current=True))))
@@ -1077,13 +1073,13 @@ class Meta(commands.Cog):
             await ctx.defer()
 
         if user_id and not user_id.isdigit():
-            raise commands.BadArgument("<:redTick:1079249771975413910> User ID must be a number.")
+            return await ctx.send_tick(False, "User ID must be a number.")
 
         user_id = user_id or ctx.author.id
         user = await self.bot.get_or_fetch_member(ctx.guild, user_id)
 
         if not user:
-            raise commands.BadArgument("<:redTick:1079249771975413910> User not found.")
+            return await ctx.send_tick(False, "User not found.")
 
         e = discord.Embed()
         roles = [role.name.replace('@', '@\u200b') for role in getattr(user, 'roles', [])]
@@ -1203,15 +1199,15 @@ class Meta(commands.Cog):
 
         if not guild_id or (guild_id and not await self.bot.is_owner(ctx.author)):
             if not ctx.guild:
-                raise commands.BadArgument("<:redTick:1079249771975413910> You must specify a guild ID.")
+                return await ctx.send_tick(False, "You must specify a guild ID.")
             guild = ctx.guild
         else:
             if not guild_id.isdigit():
-                raise commands.BadArgument("<:redTick:1079249771975413910> Guild ID must be a number.")
+                return await ctx.send_tick(False, "Guild ID must be a number.")
             guild = self.bot.get_guild(int(guild_id))
 
         if not guild:
-            raise commands.BadArgument("<:redTick:1079249771975413910> Guild not found.")
+            return await ctx.send_tick(False, "Guild not found.")
 
         roles = [role.name.replace('@', '@\u200b') for role in guild.roles]
 
@@ -1413,7 +1409,7 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.send(f'{ctx.tick(False)} {e}')
+            await ctx.send_tick(False, f'{e}')
         else:
             await ctx.send_tick(True, 'Prefix added.')
 
@@ -1446,7 +1442,7 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.send(f'{ctx.tick(False)} {e}')
+            await ctx.send_tick(False, f'{e}')
         else:
             await ctx.send_tick(True, 'Prefix removed.')
 
