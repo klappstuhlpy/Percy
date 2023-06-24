@@ -311,7 +311,7 @@ class FrontHelpPaginator(BasePaginator[str]):
             else:
                 self.msg = await context.message.edit(embed=page, view=self)
         else:
-            self.msg = await cls._send(context, ephemeral, **kwargs)
+            self.msg = await context.message.edit(**kwargs)
         return self
 
 
