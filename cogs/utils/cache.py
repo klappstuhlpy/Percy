@@ -8,6 +8,8 @@ import time
 from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol, Generic, Generator
 from lru import LRU
 
+from cogs.utils.constants import Coro
+
 R = TypeVar('R')
 
 # Can't use ParamSpec due to https://github.com/python/typing/discussions/946
@@ -115,7 +117,7 @@ def cache(
         The actual decorator.
     """
 
-    def decorator(func: Callable[..., Coroutine[Any, Any, R]]) -> CacheProtocol[R]:
+    def decorator(func: Coro) -> CacheProtocol[R]:
         """The actual decorator."""
         if strategy is Strategy.LRU:
             _internal_cache = LRU(maxsize)

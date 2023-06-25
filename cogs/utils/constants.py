@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Callable, Dict, Any, Union, TypeVar, Coroutine
+from typing import Callable, Dict, Any, Union, TypeVar, Coroutine, Generic
 
 import discord
 import matplotlib
@@ -51,6 +51,7 @@ IgnoreableEntity = Union[discord.TextChannel, discord.VoiceChannel, discord.Thre
 _TContext = Union[Context, GuildContext]
 
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
+
 
 # REGEX
 
