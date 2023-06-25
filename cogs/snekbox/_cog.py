@@ -512,7 +512,7 @@ class Snekbox(commands.Cog):
     async def eval_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions,
+        python_version: Optional[SupportedPythonVersions],
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
@@ -542,7 +542,7 @@ class Snekbox(commands.Cog):
     async def timeit_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions,
+        python_version: Optional[SupportedPythonVersions],
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
