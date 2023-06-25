@@ -329,7 +329,7 @@ class Snekbox(commands.Cog):
         discord.Message
             The message sent to the channel.
         """
-        async with ctx.typing():
+        async with ctx.channel.typing():
             result = await self.post_job(job)
             msg = result.get_message(job)
             error = result.error_message
