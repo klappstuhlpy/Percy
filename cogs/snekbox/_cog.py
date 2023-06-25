@@ -90,7 +90,8 @@ class FilteredFiles(NamedTuple):
 class CodeblockConverter(commands.Converter):
     """Attempts to extract code from a codeblock, if provided."""
 
-    async def convert(self, ctx: EvalContext, code: str) -> list[str]:  # type: ignore[override]
+    @classmethod
+    async def convert(cls, ctx: EvalContext, code: str) -> list[str]:  # type: ignore[override]
         """
         Extract code from the Markdown, format it, and insert it into the code template.
 
