@@ -90,7 +90,7 @@ class Minigame(commands.GroupCog):
         """Play hangman with the bot."""
 
         GER_WORDS_URL = 'https://raw.githubusercontent.com/enz/german-wordlist/master/words'
-        ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/_hangman-words/main/words.txt'
+        ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/hangman-words/main/words.txt'
 
         async with self.bot.session.get(ENG_WORDS_URL if language == 'en' else GER_WORDS_URL) as resp:
             data = await resp.text()
