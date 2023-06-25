@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Callable, Dict, Any, Union, TypeVar, Coroutine, Generic
+from typing import Callable, Dict, Any, Union, TypeVar, Coroutine
 
 import discord
 import matplotlib
@@ -322,9 +322,9 @@ LANGUAGES = {
 HANG_MAN = [
     "https://media.discordapp.net/attachments/1062074624935993427/1117793965626896454/hangman0.png",
     "https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman1.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793966241034752/hangman2.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793966560733184/hangman3.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman4.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793966241034752/hangman5.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793967103291495/hangman6.png"
+    "https://media.discordapp.net/attachments/1062082492628222103/1122640374075244544/hangman2.png",
+    "https://media.discordapp.net/attachments/1062082492628222103/1122640373790015569/hangman3.png",
+    "https://media.discordapp.net/attachments/1062082492628222103/1122640373529972736/hangman4.png",
+    "https://media.discordapp.net/attachments/1062082492628222103/1122640373286715442/hangman5.png",
+    "https://media.discordapp.net/attachments/1062082492628222103/1122640373039235112/hangman6.png"
 ]
