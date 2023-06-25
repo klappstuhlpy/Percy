@@ -512,7 +512,7 @@ class Snekbox(commands.Cog):
     async def eval_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions = "3.11",
+        python_version: SupportedPythonVersions,
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
@@ -533,6 +533,7 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
+        python_version = python_version or "3.11"
         job = EvalJob.from_code("\n".join(code)).as_version(python_version)
         await self.run_job(ctx, job)
 
@@ -541,7 +542,7 @@ class Snekbox(commands.Cog):
     async def timeit_command(
         self,
         ctx: EvalContext,
-        python_version: SupportedPythonVersions = "3.11",
+        python_version: SupportedPythonVersions,
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
@@ -559,6 +560,7 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
+        python_version = python_version or "3.11"
         args = self.prepare_timeit_input(code)
         job = EvalJob(args, version=python_version, name="timeit")
         await self.run_job(ctx, job)

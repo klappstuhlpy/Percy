@@ -180,7 +180,7 @@ class Percy(commands.Bot):
         elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, commands.BadArgument)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"{ctx.tick(False)} Missing required argument: `{error.param.name}`")
+            await ctx.send_tick(False, f"Missing required argument: `{error.param.name}`")
         elif isinstance(error, commands.BotMissingPermissions):
             missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_permissions]
             await ctx.send(f"I don't have the permissions to perform this action.\n"
