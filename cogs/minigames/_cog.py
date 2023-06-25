@@ -93,6 +93,8 @@ class Minigame(commands.GroupCog):
         ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/hangman-words/main/words.txt'
 
         async with self.bot.session.get(ENG_WORDS_URL if language == 'en' else GER_WORDS_URL) as resp:
+            if resp.status != 200:
+                return await ctx.send(f'Failed to fetch words from word List (**{language}**).')
             data = await resp.text()
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
