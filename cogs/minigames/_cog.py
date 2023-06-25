@@ -121,6 +121,8 @@ class Minigame(commands.GroupCog):
                     await message.edit(embed=builder.build_embed())
                     await ctx.send(f"<:redTick:1079249771975413910> You've lost. The word was **`{builder.word}`**.")
 
+                    break  # Break out to prevent the bot from sending multiple messages
+
 
 async def setup(bot: Percy):
     await bot.add_cog(Minigame(bot))
