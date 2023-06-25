@@ -76,7 +76,7 @@ class Minigame(commands.GroupCog):
 
     @command(
         commands.hybrid_command,
-        name='_hangman',
+        name='hangman',
         description='Play a Hangman game.',
     )
     @app_commands.choices(
@@ -86,8 +86,8 @@ class Minigame(commands.GroupCog):
         ]
     )
     @app_commands.describe(language='The language to play with.')
-    async def _hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
-        """Play _hangman with the bot."""
+    async def hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
+        """Play hangman with the bot."""
 
         GER_WORDS_URL = 'https://raw.githubusercontent.com/enz/german-wordlist/master/words'
         ENG_WORDS_URL = 'https://raw.githubusercontent.com/mjmcloughlin10/_hangman-words/main/words.txt'
