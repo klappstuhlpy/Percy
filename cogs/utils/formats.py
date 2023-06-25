@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING
+from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING, Union
 
 import asyncpg
 import discord
@@ -64,6 +64,28 @@ def censor_object(blacklist: list[int] | Any, obj: str | discord.abc.Snowflake) 
     if not isinstance(obj, str) and obj.id in blacklist:
         return '[censored]'
     return censor_invite(obj)
+
+
+def betterget(obj: Any, attr: Union[str, Any], default: Any = None):
+    """Gets a nested attribute from an dictionary/object and formats the output accordingly.
+
+    Resolves for example isoformatted datetimes etc.
+    """
+
+    if isinstance(obj, dict):
+        obj = obj.get(attr, default)
+    else:
+        obj = getattr(obj, attr, default)
+
+    if isinstance(obj, str):
+        try:
+            dt_obj = datetime.datetime.fromisoformat(obj)
+        except (TypeError, ValueError):
+            pass
+        else:
+            return dt_obj.astimezone(datetime.timezone.utc)
+
+    return obj
 
 
 def medal_emojize(seq: Iterable):
@@ -326,6 +348,8 @@ def WrapList(list_: list, length: int):
 
 def get_shortened_string(length: int, start: int, string: str) -> str:
     """Shorten a string to a certain length, adding an ellipsis if it was shortened.
+
+    Needs to be compined with the :func:`fuzzy.finder` function.
 
     Parameters
     ----------
