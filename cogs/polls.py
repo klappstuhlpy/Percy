@@ -16,9 +16,9 @@ from cogs.utils.paginator import BasePaginator, LinePaginator
 from . import command, command_permissions
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, helpers
-from .utils.context import Context, tick
+from .utils.context import tick
 from .utils.converters import colour_autocomplete
-from .utils.formats import plural, get_shortened_string
+from .utils.formats import plural, get_shortened_string, betterget
 from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
@@ -296,6 +296,8 @@ class PollView(discord.ui.View):
 
 
 class PollItem(PostgresItem):
+    """Represents a poll item."""
+
     id: int
     extra: Dict[str, Any]
     channel_id: int
@@ -339,20 +341,6 @@ class PollItem(PostgresItem):
         return None
 
     @property
-    def published(self) -> Optional[datetime.datetime]:
-        if self.kwargs:
-            stamp = datetime.datetime.fromtimestamp(self.kwargs.get('published'))
-            return stamp.astimezone(datetime.timezone.utc)
-        return None
-
-    @property
-    def expires(self) -> Optional[datetime.datetime]:
-        if self.kwargs:
-            stamp = datetime.datetime.fromtimestamp(self.kwargs.get('expires'))
-            return stamp.astimezone(datetime.timezone.utc)
-        return None
-
-    @property
     def channel(self) -> Optional[discord.TextChannel]:
         if self.channel_id is not None:
             return self.bot.get_channel(self.channel_id)
@@ -387,16 +375,16 @@ class PollItem(PostgresItem):
 
         if extras:
             fields.append({"name": "Voting", "value": f"Total Votes: **{self.votes}**", "inline": True})
-            if self.expires:
+            if expires := betterget(self.kwargs, "expires"):
                 fields.append(
-                    {"name": "Poll ends", "value": discord.utils.format_dt(self.expires, 'R'), "inline": True})
+                    {"name": "Poll ends", "value": discord.utils.format_dt(expires, 'R'), "inline": True})
             if thread := self.kwargs.get("thread"):
                 fields.append({"name": "Discussion in Thread:", "value": thread[1], "inline": True})
 
         return fields
 
     def to_embed(self) -> discord.Embed:
-        embed = discord.Embed(title=self.question, description=self.description, timestamp=self.published)
+        embed = discord.Embed(title=self.question, description=self.description, timestamp=betterget(self.kwargs, "published"))
         embed.set_image(url=self.kwargs.get('image'))
         embed.colour = discord.Colour.from_str(self.kwargs.get('color'))
 
@@ -590,13 +578,13 @@ class Polls(commands.Cog):
         ]
 
     async def create_poll(
-            self, id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
+            self, poll_id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
     ) -> PollItem:
         r"""Creates a poll.
 
         Parameters
         -----------
-        id
+        poll_id
             The unqiue ID of the poll to manage it.
         channel_id
             The channel ID of the poll.
@@ -629,7 +617,7 @@ class Polls(commands.Cog):
         """
 
         row = await self.bot.pool.fetchrow(
-            query, id, channel_id, message_id, guild_id, {'args': args, 'kwargs': kwargs, 'users': []})
+            query, poll_id, channel_id, message_id, guild_id, {'args': args, 'kwargs': kwargs, 'users': []})
         poll.id = row[0]
 
         self.get_guild_polls.invalidate(self, guild_id)
@@ -805,8 +793,8 @@ class Polls(commands.Cog):
             votes=0,
             index=new_index,
             running=True,
-            published=discord.utils.utcnow().timestamp(),  # TODO: Don't use timestamps for this
-            expires=when.timestamp(),  # TODO: Don't use timestamps for this
+            published=discord.utils.utcnow().isoformat(),
+            expires=when.isoformat(),
         )
 
         reminder = self.bot.reminder
@@ -1089,9 +1077,9 @@ class Polls(commands.Cog):
                 running = poll.kwargs.get('running')
                 embed.add_field(name="Active?", value=running)
 
-                embed.add_field(name="Poll published", value=discord.utils.format_dt(poll.published, 'f'))
+                embed.add_field(name="Poll published", value=discord.utils.format_dt(betterget(poll.kwargs, 'published'), 'f'))
                 embed.add_field(name="Poll ends" if running else "Poll finished",
-                                value=discord.utils.format_dt(poll.expires, 'R'))
+                                value=discord.utils.format_dt(betterget(poll.kwargs, 'expires'), 'R'))
 
                 embed.add_field(name="Poll Message", value=poll.jump_url or f"Can't locate message `{poll.message_id}`")
                 embed.add_field(name="User Reason", value=poll.kwargs.get('user_reason'))

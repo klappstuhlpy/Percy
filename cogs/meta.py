@@ -624,7 +624,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 fmt = f'`--{flag.name}` - {flag.description}'
                 resolved.append(fmt)
 
-            chunked = ['\n'.join(resolved[i:i + 15]) for i in range(0, len(resolved), 15)]
+            chunked = list(discord.utils.as_chunks(resolved, 15))
             to_fields = []
             for i, chunk in enumerate(chunked):
                 to_fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': chunk, 'inline': False})

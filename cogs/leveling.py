@@ -414,7 +414,7 @@ class Leveling(commands.Cog):
         description="Set a members experience or level."
     )
     @commands.guild_only()
-    @command_permissions(user=["administrator"])
+    @command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(target="The target member to modify.")
     @app_commands.describe(level="The level you want to set.")
     @app_commands.describe(xp="The amount of XP you want to set.")
