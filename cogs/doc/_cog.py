@@ -269,6 +269,17 @@ class DocView(discord.ui.View, Generic[T]):
 
         embed = await self.cog.create_symbol_embed(item)
         item.embed = embed
+
+        try:
+            # update the embed in the doc_symbols cache
+            # we set the embed permanently so we don't have to re-create it next time
+            origin = self.cog.doc_symbols[item.package][item.symbol_id]
+        except KeyError:
+            pass
+        else:
+            origin.embed = embed
+            self.cog.doc_symbols[item.package][item.symbol_id] = origin
+
         return item
 
     @classmethod
