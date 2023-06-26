@@ -876,12 +876,25 @@ class Tags(commands.Cog):
         e.set_thumbnail(url=ctx.guild.icon.url)
         e.set_footer(text='Tag Statistics for this Server.')
 
+        query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
+
+        total_tags = await self.bot.pool.fetchval(query, ctx.guild.id)
+        if not total_tags:
+            e.description = '*There are no statistics available.*'
+        else:
+            query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag';"
+            total_uses = await self.bot.pool.fetchval(query, ctx.guild.id)
+
+            e.add_field(name='**Guild Stats**',
+                        value=f'Total Tags: **{total_tags}**\n'
+                              f'Total Uses: **{total_uses}**\n\n'
+                              f'*with **{usage_per_day(ctx.me.joined_at, total_uses):.2f}** tag uses per day*',
+                        inline=False)
+
         query = """
             SELECT
                 name,
-                uses,
-                COUNT(*) OVER () AS "count",
-                SUM(uses) OVER () AS "total_uses"
+                uses
             FROM tags
             WHERE location_id=$1
             ORDER BY uses DESC
@@ -889,15 +902,6 @@ class Tags(commands.Cog):
         """
 
         records = await ctx.db.fetch(query, ctx.guild.id)
-        if not records:
-            e.description = '*There are no statistics available.*'
-        else:
-            total = records[0]
-            e.add_field(name='**Guild Stats**',
-                        value=f'Total Tags: **{total["count"]}**\n'
-                              f'Total Uses: **{total["total_uses"]}**\n\n'
-                              f'*with **{usage_per_day(ctx.me.joined_at, total["total_uses"]):.2f}** tag uses per day*',
-                        inline=False)
 
         value = '\n'.join(
             f'{emoji}: {name} (**{uses}** uses)'
