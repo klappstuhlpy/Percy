@@ -956,8 +956,12 @@ class Meta(commands.Cog):
             else:
                 await ctx.send_tick(False, f'Not marking as solved.')
 
-    @command(commands.command, description='Shows parts of the Bots Source Command.')
-    async def source(self, ctx: Context, *, command: str = None):
+    @command(
+        commands.command,
+        aliases=["src"],
+        description='Shows parts of the Bots Source Command.'
+    )
+    async def source(self, ctx: Context, *, command: Optional[str] = None):  # noqa
         """Displays my full source code or for a specific command.
 
         To display the source code of a subcommand you can separate it by
@@ -989,8 +993,7 @@ class Meta(commands.Cog):
 
         final_url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
 
-        embed = discord.Embed(description=obj.description, colour=helpers.Colour.darker_red())
-        embed.set_author(name=f'Command: {command}', icon_url=INFO_ICON_URL)
+        embed = discord.Embed(title=f'Command: {command}', description=obj.description)
         embed.add_field(name="Source Code", value=f"[Jump to GitHub]({final_url})")
         embed.set_footer(text=f"{location}:{firstlineno}")
         await ctx.send(embed=embed)
