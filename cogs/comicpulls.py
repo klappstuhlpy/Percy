@@ -684,8 +684,8 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     @app_commands.describe(brand="The comic brand to receive a feed from.")
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
     @command_permissions(1, user=["manage_channels"])
-    @lock_arg("cogs.comic_push", "interaction", attrgetter("guild.id"), raise_error=True)
-    async def comic_push(self, interaction: discord.Interaction, brand: Brand):
+    @lock_arg("cogs.comics_push", "interaction", attrgetter("guild.id"), raise_error=True)
+    async def comics_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
         await interaction.response.defer()
 

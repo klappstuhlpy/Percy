@@ -974,18 +974,19 @@ class Meta(commands.Cog):
 
         obj = self.bot.resolve_command(command)
         if obj is None:
-            return await ctx.send('Could not find command.')
+            return await ctx.send_tick(False, 'Could not find command.')
 
         if command == 'help':
             src = type(self.bot.help_command)
             filename = inspect.getsourcefile(src)
         else:
-            src = obj.callback.__code__
+            item = inspect.unwrap(obj.callback)
+            src = item.__code__
             filename = src.co_filename
 
         lines, firstlineno = inspect.getsourcelines(src)
         if filename is None:
-            return await ctx.send('Could not find source for command.')
+            return await ctx.send_tick(False, 'Could not find source for command.')
 
         location_parts = filename.split(os.path.sep)
         cogs_index = location_parts.index("cogs")
