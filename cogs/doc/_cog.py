@@ -23,7 +23,7 @@ from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
 from ..utils.formats import plural
-from ..utils.lock import lock, SharedEvent
+from ..utils.lock import lock, SharedEvent, watch_func, lock_func
 from ..utils.paginator import LinePaginator
 
 log = get_logger(__name__)
@@ -369,10 +369,6 @@ class Documentation(commands.Cog):
             The base URL of the package.
         inventory: :class:`dict`
             The inventory of the package.
-
-        Notes
-        -----
-        This method is not thread-safe.
         """
         self.base_urls[package_name] = base_url
         self.doc_symbols.setdefault(package_name, {})
@@ -405,10 +401,23 @@ class Documentation(commands.Cog):
             base_url: str,
             inventory_url: str,
     ) -> None:
-        """Update the cog's inventories, or reschedule this method to execute again if the remote inventory is unreachable.
+        """|coro|
 
+        Update the cog's inventories, or reschedule this method to execute again if the remote inventory is unreachable.
+
+        Note
+        ----
         The first attempt is rescheduled to execute in `FETCH_RESCHEDULE_DELAY.first` minutes, the subsequent attempts
         in `FETCH_RESCHEDULE_DELAY.repeated` minutes.
+
+        Parameters
+        ----------
+        api_package_name: :class:`str`
+            The name of the package.
+        base_url: :class:`str`
+            The base URL of the package.
+        inventory_url: :class:`str`
+            The URL of the package's inventory.
         """
         try:
             package = await fetch_inventory(self.bot.session, inventory_url)
@@ -474,6 +483,7 @@ class Documentation(commands.Cog):
 
         return rename(item.group, rename_extant=True)
 
+    @watch_func
     async def refresh_inventories(self) -> None:
         """Refresh internal documentation inventories."""
         self.refresh_event.clear()
@@ -507,23 +517,19 @@ class Documentation(commands.Cog):
         results: list[tuple[str, DocItem]] = []
 
         try:
-            results.append(
-                (symbol_name, self.doc_symbols[package_name][symbol_name])
-            )
-            exact_match = True
+            # do this for faster lookup
+            match = (symbol_name, self.doc_symbols[package_name][symbol_name])
         except KeyError:
-            exact_match = False
-
-        if exact_match:
+            results.extend(
+                fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
+            )
+        else:
+            results.append(match)
             results.extend(
                 filter(
                     lambda x: x[0] != symbol_name,
                     fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
                 )
-            )
-        else:
-            results.extend(
-                fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
             )
 
         if not results:
@@ -549,10 +555,10 @@ class Documentation(commands.Cog):
             except Exception:  # noqa
                 log.exception(f"An unexpected error has occurred when requesting parsing of {doc_item}.")
                 return "Unable to parse the requested symbol due to an error."
-
-            if markdown is None:
-                return "Unable to parse the requested symbol."
-            return markdown
+            else:
+                if markdown is None:
+                    return "Unable to parse the requested symbol."
+                return markdown
 
     async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
         """Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
@@ -588,6 +594,7 @@ class Documentation(commands.Cog):
     @app_commands.describe(symbol_name="The symbol to look up documentation for.",
                            package="The package to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
+    @lock_func(refresh_inventories, raise_error=True, wait=True)
     async def docs_group(
             self,
             ctx: Context,
@@ -623,21 +630,16 @@ class Documentation(commands.Cog):
             ctx: Context,
             package_name: Annotated[str, PackageName],
             inventory: Annotated[str, Inventory],
-            base_url: Annotated[str, ValidURL] = "",
     ) -> None:
-        """
-        Adds a new documentation metadata object to the site's database.
+        """Adds a new documentation metadata object to the site's database.
 
         The database will update the object, should an existing item with the specified `package_name` already exist.
         If the base url is not specified, a default created by removing the last segment of the inventory url is used.
         """
-        if base_url and not base_url.endswith("/"):
-            raise commands.BadArgument(f"{ctx.tick(False)} The base url must end with a slash.")
-
         inventory_url, inventory_dict = inventory
         body = {
             "package": package_name,
-            "base_url": base_url,
+            "base_url": self.base_url_from_inventory_url(inventory_url),
             "inventory_url": inventory_url
         }
         data: list[dict[str, Any]] = self.bot.data_storage.get("documentation_links", [])
@@ -649,9 +651,7 @@ class Documentation(commands.Cog):
             + "\n".join(f"{key}: {value}" for key, value in body.items())
         )
 
-        if not base_url:
-            base_url = self.base_url_from_inventory_url(inventory_url)
-        self.update_single(package_name, base_url, inventory_dict)
+        self.update_single(package_name, body["base_url"], inventory_dict)
         await ctx.send(
             f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
@@ -713,6 +713,7 @@ class Documentation(commands.Cog):
     @app_commands.describe(symbol_name='The object to search for',
                            package='The package to search in.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
+    @lock_func(refresh_inventories, raise_error=True, wait=True)
     async def rtfm(
             self,
             ctx: Context,
@@ -727,10 +728,10 @@ class Documentation(commands.Cog):
         """
         _, matches = await self.get_symbol_item(package, symbol_name, 8)
 
-        e = discord.Embed(title=f"{package} Search", colour=helpers.Colour.darker_red())
         if len(matches) == 0:
             return await ctx.send(f'{ctx.tick(False)} The symbol `{symbol_name}` was not found.')
 
+        e = discord.Embed(title=f"{package} Search", colour=helpers.Colour.darker_red())
         e.description = '\n'.join(
             f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url})'
             for doc_item in matches)

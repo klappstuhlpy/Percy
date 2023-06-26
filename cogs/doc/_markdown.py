@@ -79,30 +79,29 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             return text
 
         parent = el.parent
-        if parent and parent.name == "li":
+
+        if parent is not None and parent.name == "li":
             return f"{text}\n"
 
-        if parent:
-            if _class_filter_factory(["admonition"])(parent):
-                # Now we search for possible admonition titles and convert them to h2s
-                # (In Discord's markdown, it's ##)
+        if parent is not None and _class_filter_factory(["admonition"])(parent):
+            # Now we search for possible admonition titles and convert them to h2s
+            # (In Discord's markdown, it's ##)
 
-                ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
-                # Also ensure that the Title is at the start of the paragraph
+            ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
+            # Also ensure that the Title is at the start of the paragraph
 
-                # Because admonition paragraphs also include the raw text of the admonition as a child,
-                # We need to find the admonition titles and replace them with h2s,
-                # so that the text is not duplicated in the final output and displayed normaly, because
-                # only the headers should be h2s, not the text
+            # Because admonition paragraphs also include the raw text of the admonition as a child,
+            # We need to find the admonition titles and replace them with h2s,
+            # so that the text is not duplicated in the final output and displayed normaly, because
+            # only the headers should be h2s, not the text
 
-                match = ADMONITION_REGEX.match(text)
-                if match:
-                    # If the text matches the regex, we replace it with a h2
-                    text = text.replace(match.group(1), f"## {match.group(1)}")
+            match = ADMONITION_REGEX.match(text)
+            if match:
+                # If the text matches the regex, we replace it with a h2
+                text = text.replace(match.group(1), f"## {match.group(1)}")
 
             # If the parent is a blockquote, we add a newline to the end of the paragraph
             return f"{text}\n"
-
         return super().convert_p(el, text, convert_as_inline)
 
     def convert_hr(self, el: Tag, text: str, convert_as_inline: bool) -> str:

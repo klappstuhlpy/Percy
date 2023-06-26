@@ -6,7 +6,7 @@ import string
 import textwrap
 from collections import namedtuple
 from collections.abc import Collection, Iterable, Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
@@ -226,7 +226,7 @@ def _create_markdown(signatures: list[str] | None, description: Iterable[Tag], u
 
 
 @executor
-def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None:
+def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> Optional[str]:
     """|executor|
 
     Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
@@ -239,7 +239,8 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
         return None
 
     signature = None
-    if symbol_heading.name != "dt":
+    if symbol_heading.name not in ["dt", "dl"]:
+        # No signature, no text description
         description = get_general_description(symbol_heading)
 
     elif symbol_data.group in _NO_SIGNATURE_GROUPS:
@@ -288,12 +289,10 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
         if items:
             fields["**Supported Operations**"] = "\n".join([f"`{name}` - {description}" for name, description in items])
 
-    field_list = get_dd_description(symbol_heading, class_action='dl.field-list.return')
+    field_list = get_dd_description(symbol_heading.parent, class_action='dl.field-list.return')
     if field_list:
         if isinstance(field_list, Tag):
             for field in field_list.find_all("dt", class_="field-odd", recursive=False):
-                if symbol_data in field.parents:
-                    continue
                 if field.text in _NO_FIELD_GROUPS:
                     continue
 

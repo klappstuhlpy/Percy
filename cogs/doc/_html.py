@@ -107,7 +107,7 @@ def get_general_description(start_element: Tag) -> list[Tag | NavigableString]:
     return _find_next_siblings_until_tag(start_tag, _class_filter_factory(_SEARCH_END_TAG_ATTRS), include_strings=True)
 
 
-def get_dd_description(symbol: PageElement, *, class_action: str = None) -> list[Tag | NavigableString] | Tag:
+def get_dd_description(symbol: PageElement, *, class_action: str = None) -> Optional[list[Tag | NavigableString] | Tag]:
     """Get the contents of the next dd tag, up to a dt or a dl tag.
 
     Parameters
@@ -143,6 +143,10 @@ def get_dd_description(symbol: PageElement, *, class_action: str = None) -> list
             if dvmop:
                 dvmop.decompose()
         elif action == "return":
+            # Only use if you want to return the tag without removing it from the document
+            if not description_tag:
+                return None
+
             # Escape the function early and return the tag
             # This is used for the `__init__` method of the `Symbol` class
             # We only want to get the corresponding tag and not the rest of the description
