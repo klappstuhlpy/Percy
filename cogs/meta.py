@@ -968,14 +968,14 @@ class Meta(commands.Cog):
         if command is None:
             return await ctx.send(source_url)
 
+        obj = self.bot.resolve_command(command)
+        if obj is None:
+            return await ctx.send('Could not find command.')
+
         if command == 'help':
             src = type(self.bot.help_command)
             filename = inspect.getsourcefile(src)
         else:
-            obj = self.bot.remove_command(command)
-            if obj is None:
-                return await ctx.send_tick(False, f'Could not find command.')
-
             src = obj.callback.__code__
             filename = src.co_filename
 
@@ -989,8 +989,7 @@ class Meta(commands.Cog):
 
         final_url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
 
-        resolved = self.bot.resolve_command(command)
-        embed = discord.Embed(description=resolved.description, colour=helpers.Colour.darker_red())
+        embed = discord.Embed(description=obj.description, colour=helpers.Colour.darker_red())
         embed.set_author(name=f'Command: {command}', icon_url=INFO_ICON_URL)
         embed.add_field(name="Source Code", value=f"[Jump to GitHub]({final_url})")
         embed.set_footer(text=f"{location}:{firstlineno}")
