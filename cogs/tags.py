@@ -905,7 +905,7 @@ class Tags(commands.Cog):
 
         value = '\n'.join(
             f'{emoji}: {name} (**{uses}** uses)'
-            for (emoji, (name, uses, _, _)) in medal_emojize(records)
+            for (emoji, (name, uses)) in medal_emojize(records)
         )
 
         e.add_field(name='**Most Used Tags**', value=value, inline=False)
