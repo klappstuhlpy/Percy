@@ -70,6 +70,9 @@ class Parser:
                         if price.endswith('*'):
                             price = price[:-1]
 
+                        if isinstance(price, str):
+                            price = 0.0
+
                         base_obj = soup.find('div', class_='o_geo-block')
                         price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
 
