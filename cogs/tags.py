@@ -454,14 +454,17 @@ class Tags(commands.Cog):
         """
         search_kwargs = {}
 
-        if name_or_id.isdigit():
-            name_or_id = int(name_or_id)
+        assert isinstance(
+            name_or_id, (str, int)
+        ), f'`name_or_id` must be a `str` or `int`, not {name_or_id.__class__.__name__}'
 
         if isinstance(name_or_id, int):
             search_kwargs['id'] = name_or_id
-
-        if isinstance(name_or_id, str):
-            search_kwargs['LOWER(name)'] = name_or_id.lower()
+        else:
+            if name_or_id.isdigit():
+                search_kwargs['id'] = int(name_or_id)
+            else:
+                search_kwargs['LOWER(name)'] = name_or_id.lower()
 
         if location_id:
             search_kwargs['location_id'] = location_id
