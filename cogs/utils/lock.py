@@ -181,12 +181,8 @@ def watch_func(func: types.FunctionType) -> Coro:
 
         bound_args = function.get_bound_args(func, args, kwargs)
         log.trace(f"{name}: calling the given callable to get the resource ID")
-        id_ = await func(bound_args)
 
-        if inspect.isawaitable(id_):
-            log.trace(f"{name}: awaiting to get resource ID")
-            id_ = await id_
-
+        id_ = f"{name}." + ".".join(['%s=%r' % (k, v) for k, v in bound_args.items()])
         log.trace(f"{name}: getting the lock object for resource {func.__name__!r}:{id_!r}")
 
         _inter_lock = __lock_dicts.setdefault(id_, asyncio.Lock())
@@ -212,6 +208,10 @@ def lock_func(
     This is generally used to lock a decorated function if another function assigned by `watched` is currently running
     or in use.
 
+    Note
+    ----
+    The `watched` function must be a coroutine function and must be decorated with `watch_func`.
+
     Parameters
     ----------
     watched: :class:`Coro`
@@ -229,15 +229,10 @@ def lock_func(
         async def wrapper(*args, **kwargs) -> Any:
             log.trace(f"{name}: mutually exclusive decorator called")
 
-            log.trace(f"{name}: binding args to signature")
             bound_args = function.get_bound_args(func, args, kwargs)
-
             log.trace(f"{name}: calling the given callable to get the resource ID")
-            id_ = await watched(bound_args)
 
-            if inspect.isawaitable(id_):
-                log.trace(f"{name}: awaiting to get resource ID")
-                id_ = await id_
+            id_ = f"{name}." + ".".join(['%s=%r' % (k, v) for k, v in bound_args.items()])
 
             log.trace(f"{name}: getting the lock object for resource {watched.__name__!r}:{id_!r}")
 
