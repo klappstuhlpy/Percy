@@ -79,7 +79,7 @@ class AniListLinkView(discord.ui.View):
         self.add_item(discord.ui.Button(label="Link AniList", style=discord.ButtonStyle.link, url=url))
 
     @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.green)
-    async def enter_code(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def enter_code(self, button: discord.ui.Button, interaction: discord.Interaction):  # noqa
         await interaction.response.send_modal(EnterCodeModal(self.ctx.bot))
 
 

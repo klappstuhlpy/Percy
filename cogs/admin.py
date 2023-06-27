@@ -2,6 +2,7 @@ import asyncio
 import copy
 import io
 import subprocess
+import sys
 import textwrap
 import time
 import traceback
@@ -65,6 +66,24 @@ class Admin(commands.Cog):
     async def cog_check(self, ctx: Context) -> bool:
         return await self.bot.is_owner(ctx.author)
 
+    @staticmethod
+    def build_eval_embed(
+            user: discord.Member, time_taken: float, result: Optional[str] = None, trc: Optional[str] = None
+    ) -> discord.Embed:
+        py_ver = ".".join(sys.version_info[:3])
+
+        if trc:
+            if result:
+                description = f'```py\n{result}{trc}\n```'
+            else:
+                description = f'```py\n{trc}\n```'
+            embed = discord.Embed(title="Compiler Output", description=description, color=discord.Color.red())
+        else:
+            description = f'```py\n{result or "[No output]"}\n```'
+            embed = discord.Embed(title="Program Output", description=description, color=discord.Color.green())
+        embed.set_footer(text=f"{user} • {time_taken}ms • python{py_ver}")
+        return embed
+
     @default_permissions(administrator=True)
     async def compile_callback(self, interaction: discord.Interaction, message: discord.Message):
         """Compiles a code from a message."""
@@ -83,7 +102,7 @@ class Admin(commands.Cog):
 
         env = {
             'bot': self.bot,
-            'self': self,
+            'self': self,  # type: Admin
             'ctx': await self.bot.get_context(message),
             'channel': interaction.channel,
             'author': interaction.user,
@@ -104,24 +123,19 @@ class Admin(commands.Cog):
             exec(to_compile, env)
         except:  # noqa
             t_2 = time.time()
-            error = discord.utils.remove_markdown(traceback.format_exc())
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{error}\n```',
-                                  color=discord.Color.red())
-            embed.set_footer(text=f"{interaction.user} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-            return await interaction.message.edit(embed=embed)
+            return await interaction.message.edit(embed=self.build_eval_embed(
+                interaction.user, round((t_2 - t_1) * 1000, 2), trc=traceback.format_exc())
+            )
 
         func = env['func']
         try:
             with redirect_stdout(stdout):
                 ret = await func()
         except:  # noqa
-            value = stdout.getvalue()
             t_2 = time.time()
-            error = discord.utils.remove_markdown(traceback.format_exc())
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{value}{error}\n```',
-                                  color=discord.Color.red())
-            embed.set_footer(text=f"{interaction.user} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-            await interaction.message.edit(embed=embed)
+            return await interaction.message.edit(embed=self.build_eval_embed(
+                interaction.user, round((t_2 - t_1) * 1000, 2), result=stdout.getvalue(), trc=traceback.format_exc())
+            )
         else:
             value = stdout.getvalue()
             try:
@@ -129,39 +143,14 @@ class Admin(commands.Cog):
             except:  # noqa
                 pass
 
-            if ret is None:
-                if value:
-                    t_2 = time.time()
-                    embed = discord.Embed(title="Program Output",
-                                          description=self.truncate_to_code(value),
-                                          color=discord.Color.green())
-                    embed.set_footer(text=f"{interaction.user} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-                    await interaction.message.edit(embed=embed)
-            else:
-                self._last_result = ret
+            if ret:
+                value = self._last_result = ret
+
+            if value:
                 t_2 = time.time()
-                embed = discord.Embed(title="Program Output • [RETURNED VALUE]",
-                                      description=self.truncate_to_code(value),
-                                      color=discord.Color.green())
-                embed.set_footer(text=f"{interaction.user} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-                await interaction.message.edit(embed=embed)
-
-    @command(
-        commands.command,
-        hidden=True,
-    )
-    async def make_request(self, ctx: Context, *, query: str):
-        async with ctx.channel.typing():
-            params = {'query': query}
-
-            headers = {
-                "X-API-Key": '6f6cf1bdfeecaf84851b12523e2a37b0578c9d11454a2b6beb0e870a2ab895d5',
-                "Content-Type": "application/json"
-            }
-
-            async with self.bot.session.get('http://127.0.0.1:5000/emojis/search', json=params,
-                                            headers=headers) as resp:
-                await ctx.send(await resp.json())
+                return await interaction.message.edit(embed=self.build_eval_embed(
+                    interaction.user, round((t_2 - t_1) * 1000, 2), result=self.truncate_to_code(value))
+                )
 
     @staticmethod
     def truncate_to_code(text: str) -> str:
@@ -180,12 +169,12 @@ class Admin(commands.Cog):
 
         message = await ctx.send(
             embed=discord.Embed(description="*Processing request...*",
-                                color=discord.Color.orange()),
-            ephemeral=True)
+                                color=discord.Color.orange())
+        )
 
         env = {
             'bot': self.bot,
-            'self': self,  # here, this Cog
+            'self': self,  # type: Admin
             'ctx': ctx,
             'channel': ctx.channel,
             'author': ctx.author,
@@ -206,22 +195,19 @@ class Admin(commands.Cog):
             exec(to_compile, env)
         except:  # noqa
             t_2 = time.time()
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{traceback.format_exc()}\n```',
-                                  color=discord.Color.red())
-            embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-            return await message.edit(embed=embed)
+            return await message.edit(embed=self.build_eval_embed(
+                ctx.author, round((t_2 - t_1) * 1000, 2), trc=traceback.format_exc())
+            )
 
         func = env['func']
         try:
             with redirect_stdout(stdout):
                 ret = await func()
         except:  # noqa
-            value = stdout.getvalue()
             t_2 = time.time()
-            embed = discord.Embed(title="Compiler Output", description=f'```py\n{value}{traceback.format_exc()}\n```',
-                                  color=discord.Color.red())
-            embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-            await message.edit(embed=embed)
+            return await message.edit(embed=self.build_eval_embed(
+                ctx.author, round((t_2 - t_1) * 1000, 2), trc=stdout.getvalue())
+            )
         else:
             value = stdout.getvalue()
             try:
@@ -229,22 +215,14 @@ class Admin(commands.Cog):
             except:  # noqa
                 pass
 
-            if ret is None:
-                if value:
-                    t_2 = time.time()
-                    embed = discord.Embed(title="Program Output",
-                                          description=self.truncate_to_code(value),
-                                          color=discord.Color.green())
-                    embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-                    await message.edit(embed=embed)
-            else:
-                self._last_result = ret
+            if ret:
+                value = self._last_result = ret
+
+            if value:
                 t_2 = time.time()
-                embed = discord.Embed(title="Program Output • [RETURNED VALUE]",
-                                      description=self.truncate_to_code(value),
-                                      color=discord.Color.green())
-                embed.set_footer(text=f"{ctx.author} • {round((t_2 - t_1) * 1000, 2)}ms • python3.11")
-                await message.edit(embed=embed)
+                return await message.edit(embed=self.build_eval_embed(
+                    ctx.author, round((t_2 - t_1) * 1000, 2), result=self.truncate_to_code(value))
+                )
 
     @command(
         commands.command,
@@ -296,9 +274,8 @@ class Admin(commands.Cog):
         table.add_rows(list(r.values()) for r in records)
         render = table.render()
 
-        fmt = render
-        if len(fmt) > 2000:
-            fp = io.BytesIO(fmt.encode('utf-8'))
+        if len(render) > 2000:
+            fp = io.BytesIO(render.encode('utf-8'))
             await ctx.send('Too many results...', file=discord.File(fp, 'results.sql'))
         else:
             fmt = f'```sql\n{render}\n```'
