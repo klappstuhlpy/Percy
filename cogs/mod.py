@@ -75,7 +75,6 @@ class GuildConfig:
         'poll_ping_role_id',
         'poll_reason_channel_id',
         'dstatus_notification_channel_id',
-        'dstatus_last_incident',
         'mention_count',
         'safe_automod_entity_ids',
         'mute_role_id',
@@ -94,9 +93,6 @@ class GuildConfig:
     poll_channel_id: Optional[int]
     poll_ping_role_id: Optional[int]
     poll_reason_channel_id: Optional[int]
-
-    dstatus_notification_channel_id: Optional[int]
-    dstatus_last_incident: Optional[dict]
 
     mention_count: Optional[int]
     safe_automod_entity_ids: set[int]
@@ -117,8 +113,6 @@ class GuildConfig:
         self.poll_channel_id = record['poll_channel']
         self.poll_ping_role_id = record['poll_ping_role_id']
         self.poll_reason_channel_id = record['poll_reason_channel']
-        self.dstatus_notification_channel_id = record['dstatus_notification_channel']
-        self.dstatus_last_incident = record['dstatus_last_incident']
         self.mention_count = record['mention_count']
         self.safe_automod_entity_ids = set(record['safe_automod_entity_ids'] or [])
         self.muted_members = set(record['muted_members'] or [])

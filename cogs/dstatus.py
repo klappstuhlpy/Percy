@@ -1,30 +1,23 @@
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime
-import json
-import random
-import re
 from dataclasses import dataclass
-from typing import NamedTuple, Optional
+from typing import Optional
 
-import asyncpg
 import discord
-import feedparser
-from bs4 import BeautifulSoup
 from dateutil.parser import parse
 from discord.ext import commands, tasks
-from discord.utils import MISSING
 from typing import TypeVar
 
 from bot import Percy
 from cogs import command, command_permissions, PermissionTemplate
 from cogs.utils import cache
 from cogs.utils.context import GuildContext
-from cogs.utils.helpers import PostgresItem, BasicJSONEncoder
-from cogs.utils.tasks import executor
+from cogs.utils.helpers import PostgresItem
 
-DS_RSS_FEED = "https://discordstatus.com/history.rss"
+DS_ENDPOINT = "https://discordstatus.com/api/v2/incidents.json"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
 
 STATE_EMOJI = {
@@ -43,91 +36,158 @@ EMBED_COLOR = {
     "update": 0xFCC25E
 }
 
-
 T = TypeVar('T')
 
 
-class State(NamedTuple):
-    started_at: datetime
-    state: str
-    text: str
-
-
-@dataclass()
-class Incident:
+class IncidentItem(PostgresItem):
+    id: str
+    name: str
     status: str
-    link: str
-    published_at: datetime.datetime
-    last_updated_at: datetime.datetime
-    title: str
-    updates: list[State]
+    started_at: datetime
+
+    guild_id: int
+    channel_id: int
     message_id: Optional[int]
 
-    @classmethod
-    def temporary(cls, **kwargs) -> 'Incident':
-        """Creates a temporary instance of this class."""
-        if not kwargs.get('message_id'):
-            kwargs |= {'message_id': MISSING}
-        return cls(**kwargs)
+    __slots__ = ('bot', 'id', 'name', 'status', 'started_at', 'guild_id', 'channel_id', 'message_id')
 
-    async def update_message(self, config: StatusConfig):
-        new = set(config.dstatus_last_incident.updates) - set(self.updates)
-        if not new:
-            return
+    def __init__(self, bot: Percy, **kwargs):
+        self.bot: Percy = bot
+        super().__init__(**kwargs)
 
-        for state in new:
-            self.updates.insert(0, state)
+    def get_channel(self) -> Optional[discord.TextChannel]:
+        guild = self.bot.get_guild(self.guild_id)
+        if self.channel_id:
+            return guild.get_channel(self.channel_id)
+        return None
 
-        message = await config.get_message()
-        await message.edit(embed=self.build_embed())
+    async def get_message(self) -> Optional[discord.Message]:
+        if self.message_id:
+            channel = self.get_channel()
+            if channel:
+                return await channel.fetch_message(self.message_id)
+        return None
+
+
+@dataclass
+class ShortComponent:
+    code: str
+    name: str
+    old_status: str
+    new_status: str
+
+
+@dataclass(init=False)
+class Component:
+    id: str
+    name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    position: int
+    description: str
+    showcase: bool
+    start_date: str
+    group_id: str
+    page_id: str
+    group: bool
+    only_show_if_degraded: bool
+
+    def __init__(self, **data):
+        for key, value in data.items():
+            if key.endswith("_at") and value:
+                value = parse(value).astimezone(datetime.timezone.utc)
+
+            setattr(self, key, value)
+
+
+@dataclass(init=False)
+class Update:
+    id: str
+    status: str
+    body: str
+    incident_id: str
+    created_at: datetime
+    updated_at: datetime
+    display_at: datetime
+    affected_components: list[ShortComponent]
+    deliver_notifications: bool
+    custom_tweet: str
+    tweet_id: str
+
+    def __init__(self, **data):
+        for key, value in data.items():
+            if key.endswith("_at") and value:
+                value = parse(value).astimezone(datetime.timezone.utc)
+
+            setattr(self, key, value)
+
+
+@dataclass(init=False)
+class Incident:
+    id: str
+    name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    monitoring_at: datetime
+    resolved_at: datetime
+    impact: str
+    shortlink: str
+    started_at: datetime
+    page_id: str
+    incident_updates: list[Update]
+    components: list[Component]
+
+    def __init__(self, **data):
+        incident_updates = data.pop('incident_updates', [])
+        components = data.pop('components', [])
+
+        updates = []
+        for update_data in incident_updates:
+            affected_components_data = update_data.pop('affected_components', []) or []
+
+            affected_components = [
+                ShortComponent(**component_data) for component_data in affected_components_data
+            ]
+            updates.append(Update(affected_components=affected_components, **update_data))
+
+        formatted_components = [
+            Component(**component_data) for component_data in components
+        ]
+
+        data.update({
+            'incident_updates': updates,
+            'components': formatted_components
+        })
+
+        for key, value in data.items():
+            if key.endswith("_at") and value:
+                value = parse(value).astimezone(datetime.timezone.utc)
+
+            setattr(self, key, value)
 
     def build_embed(self) -> discord.Embed:
-        updates = self.updates.copy()
+        updates = self.incident_updates.copy()
         updates.reverse()
 
-        embed = discord.Embed(title=self.title, timestamp=self.published_at, url=self.link,
-                              colour=EMBED_COLOR.get(updates[-1].state.lower()))
+        embed = discord.Embed(title=self.name, timestamp=self.started_at, url=self.shortlink,
+                              colour=EMBED_COLOR.get(updates[-1].status, 0x000000))
         embed.set_author(name="Discord Status", url="https://discordstatus.com/", icon_url=DISCORD_ICON_URL)
         embed.set_footer(text="Started at")
 
         for update in updates:
             embed.add_field(
-                name=f"{STATE_EMOJI.get(update.state.lower())} {update.state} "
-                     f"({discord.utils.format_dt(update.started_at, 'R')})",
-                value=update.text,
+                name=f"{STATE_EMOJI.get(update.status)} {update.status.title()} "
+                     f"({discord.utils.format_dt(update.created_at, 'R')})",
+                value=update.body,
                 inline=False
             )
 
         return embed
 
-    def as_dict(self) -> str:
-        return json.dumps(dataclasses.asdict(self), cls=BasicJSONEncoder)
-
-
-class StatusConfig(PostgresItem):
-
-    id: int
-    dstatus_notification_channel: Optional[int]
-    dstatus_last_incident: Optional[Incident | dict]
-
-    __slots__ = ('bot', 'id', 'dstatus_notification_channel', 'dstatus_last_incident')
-
-    def __init__(self, bot: Percy, **kwargs):
-        self.bot: Percy = bot
-
-        super().__init__(**kwargs)
-        self.dstatus_last_incident = Incident(**self.dstatus_last_incident) if self.dstatus_last_incident else None
-
-    def get_channel(self) -> Optional[discord.TextChannel]:
-        if not self.dstatus_notification_channel:
-            return None
-        return self.bot.get_channel(self.dstatus_notification_channel)
-
-    async def get_message(self) -> Optional[discord.Message]:
-        channel = self.get_channel()
-        if not channel:
-            return None
-        return await channel.fetch_message(self.dstatus_last_incident.message_id)
+    def as_dict(self):
+        return dataclasses.asdict(self)
 
 
 class DiscordStatus(commands.Cog):
@@ -135,6 +195,7 @@ class DiscordStatus(commands.Cog):
 
     Visit: https://discordstatus.com/ for more information.
     """
+
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
@@ -148,67 +209,122 @@ class DiscordStatus(commands.Cog):
     async def cog_unload(self) -> None:
         self.check_new_incident.stop()
 
-    async def get_latest_incident(self) -> Optional[Incident]:
-        feed = await self.parse_feed(DS_RSS_FEED)
-        if not feed or (feed and not feed.entries):
-            return
+    @cache.cache()
+    async def get_subscribers(self) -> Optional[list[IncidentItem]]:
+        """|coro|
 
-        entry = feed.entries[0]
+        Gets the open incidents from the database.
 
-        states: list[State] = await self.incident_parser(entry.summary)
+        Returns
+        -------
+        Optional[IncidentItem]
+            The open incident item.
+        """
 
-        if states[0].state == "Resolved":
+        query = "SELECT * FROM discord_incidents;"
+        async with self.bot.pool.acquire() as conn:
+            async with conn.transaction():
+                records = await conn.fetch(query)
+
+        if not records:
             return None
 
-        incident = Incident.temporary(
-            status=states[0].state,
-            link=entry.link,
-            published_at=parse(entry.published).astimezone(datetime.timezone.utc),
-            last_updated_at=states[0].started_at,
-            title=entry.title,
-            updates=states
-        )
-        return incident
+        return [IncidentItem(self.bot, record=record) for record in records]
 
-    @executor
-    def parse_feed(self, feed: str) -> Optional[feedparser.FeedParserDict]:
-        parsed = feedparser.parse(feed)
-        if parsed:
-            return parsed
-        return None
+    async def fetch_unresolved_incidents(self) -> Optional[list[Incident]]:
+        """|coro|
 
-    @executor
-    def incident_parser(self, string: str) -> list[State]:
-        soup = BeautifulSoup(string, "html.parser")
-        find = soup.find_all("p")
+        Fetches the latest incident from the Discord Status Feed.
 
-        states = []
-        for p in find:
-            TIMESTAMP_REGEX = re.compile(
-                r"(?P<month>\w+)\s+(?P<day>\d+),\s+(?P<hour>\d+):(?P<minute>\d+)\s+(?P<tzinfo>\w{3})")
-            match = TIMESTAMP_REGEX.search(p.text).expand(
-                fr"{datetime.datetime.now().year} \g<month> \g<day> \g<hour>:\g<minute> -0700")
-            text = re.sub(TIMESTAMP_REGEX, '', p.text)
+        Returns
+        -------
+        Optional[list[Incident]]
+            The latest not 'resolved' incidents.
+        """
 
-            state, text = text.split(" - ", 1)
-            dt = parse(match).astimezone(datetime.timezone.utc)
-            states.append(State(started_at=dt, state=state, text=text))
+        async with self.bot.session.get(DS_ENDPOINT) as resp:
+            if resp.status != 200:
+                return None
 
-        return states
+            data = await resp.json()
 
-    @command(commands.hybrid_group, name="discord-status", fallback="show", description="Shows the current Discord Status.")
+        if not data:
+            return None
+
+        # We are looking here now for the incidents that got updated in the last 10 minutes because if we
+        # would check for incidents with the "resolved" status,
+        # we would miss the "resolved" state update to add it to the embeds.
+
+        # 10 minutes should be alright because we are checking every 3 minutes.
+
+        # x[0] is the newest incident
+        return [Incident(**data) for data in data["incidents"]
+                if parse(data["updated_at"]).astimezone(datetime.timezone.utc).replace(tzinfo=None) >
+                datetime.datetime.utcnow() - datetime.timedelta(minutes=10)]
+
+    async def _compare_changes_and_update(self, incident: Incident, saved: IncidentItem) -> Optional[discord.Message]:
+        """|coro|
+
+        Compares the changes of the incident with the latest incident in the database.
+        If there are changes, it will update the database and send a message to the channel.
+
+        Parameters
+        ----------
+        incident: Incident
+            The incident to compare with.
+        saved: IncidentItem
+            The latest incident in the database.
+        """
+
+        if saved.id is None:
+            query = "UPDATE discord_incidents SET id = $1 WHERE guild_id = $3 RETURNING *;"
+            saved = IncidentItem(
+                self.bot, record=await self.bot.pool.fetchrow(query, incident.id, saved.guild_id)
+            )
+
+        if incident.id == saved.id:
+            if incident.status == saved.status:
+                return
+
+            query = "UPDATE discord_incidents SET status = $3 WHERE id = $1 AND guild_id = $2;"
+            await self.bot.pool.execute(query, saved.id, saved.guild_id, incident.status)
+        else:
+            query = "UPDATE discord_incidents SET status = 'resolved' WHERE id = $1 AND guild_id = $2;"
+            await self.bot.pool.execute(query, saved.id, saved.guild_id)
+
+            query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
+            saved = IncidentItem(
+                self.bot, record=await self.bot.pool.fetchrow(
+                    query, incident.id, incident.status, saved.guild_id, saved.channel_id)
+            )
+
+        channel = saved.get_channel()
+        message = await saved.get_message()
+        if not message:
+            with contextlib.suppress(discord.HTTPException):
+                message = await channel.send(embed=incident.build_embed())
+
+            if message:
+                query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
+                await self.bot.pool.execute(query, message.id, saved.id, saved.guild_id)
+        else:
+            await message.edit(embed=incident.build_embed())
+
+        self.get_subscribers.invalidate(self)
+
+    @command(commands.hybrid_group, name="discord-status", fallback="show",
+             description="Shows the current Discord Status.")
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
         """Shows the current Discord Status."""
-        latest = await self.get_latest_incident()
+        latest = await self.fetch_unresolved_incidents()
         if not latest:
-            msg = f"Everything's Ok. No new Incidents found."
-            if random.randint(0, 6) == 3:
-                msg += f"\n\n*[Discord Status](https://discordstatus.com/) shows a current incident, but it's not showing up here?\n" \
-                       f"Please report this to the developer."
-            return await ctx.send(msg, ephemeral=True)
+            await ctx.send_tick(None, "No active incidents found. *There should be though? Contact the developer!*")
 
-        await ctx.send(embed=latest.build_embed(), ephemeral=True)
+        embeds = [incident.build_embed() for incident in latest]
+        await ctx.send(content=f"Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*"
+                               if len(embeds) > 10 else None,
+                       embeds=embeds[:10], ephemeral=True)
 
     @command(dstatus.command, name="subscribe", description="Subscribe/Unsubscribe to Discord Status updates.")
     @command_permissions(user=PermissionTemplate.mod)
@@ -219,70 +335,30 @@ class DiscordStatus(commands.Cog):
         Leave the channel empty to unsubscribe.
         """
 
-        if not channel:
-            query = """
-                INSERT INTO guild_config (id) VALUES($1) ON CONFLICT (id) 
-                DO UPDATE SET 
-                    dstatus_notification_channel = NULL, 
-                    dstatus_last_incident = DEFAULT;
-            """
-            result = await ctx.db.execute(query, ctx.guild.id)
-            if result == "UPDATE 0":
-                return await ctx.send(f"{ctx.tick(False)} You are not subscribed to Discord Status updates.")
+        query = "SELECT * FROM discord_incidents WHERE guild_id = $1;"
+        result = await ctx.db.execute(query, ctx.guild.id)
 
-            self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
-            return await ctx.send(f"{ctx.tick(True)} Successfully unsubscribed from Discord Status updates.")
+        is_registered = not result.endswith("0")
 
-        query = """
-            INSERT INTO guild_config (id, dstatus_notification_channel) VALUES($1, $2) ON CONFLICT (id) 
-            DO UPDATE SET 
-                dstatus_notification_channel = $2;
-        """
-        await ctx.db.execute(query, ctx.guild.id, channel.id)
-        await ctx.send(f"{ctx.tick(True)} Successfully subscribed to Discord Status updates in {channel.mention}.")
+        if channel and is_registered:
+            query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
+            await ctx.db.execute(query, ctx.guild.id, channel.id)
+            await ctx.send_tick(True, "Successfully subscribed to Discord Status updates in {channel.mention}.")
 
-        self.bot.moderation.get_guild_config.invalidate(self.bot.moderation, ctx.guild.id)
+        elif channel and not is_registered:
+            query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2);"
+            await ctx.db.execute(query, ctx.guild.id, channel.id)
+            await ctx.send_tick(True, "Successfully subscribed to Discord Status updates in {channel.mention}.")
 
-    @cache.cache()
-    async def get_all_subscribers(self, *, connection: Optional[asyncpg.Connection] = None) -> list[StatusConfig]:
-        """|coro| @cached
+        elif not channel and is_registered:
+            query = "DELETE FROM discord_incidents WHERE guild_id = $1;"
+            await ctx.db.execute(query, ctx.guild.id)
+            await ctx.send_tick(True, "Successfully unsubscribed from Discord Status updates.")
 
-        Returns all subscribers for the Discord Status updates.
+        else:
+            return await ctx.send_tick(False, "You're not subscribed to Discord Status updates.")
 
-        Returns
-        --------
-        list[StatusConfig]
-            A list of all subscribers.
-        """
-        conn = connection or self.bot.pool
-
-        query = """
-            SELECT id, dstatus_notification_channel, dstatus_last_incident
-            FROM guild_config
-            WHERE dstatus_notification_channel IS NOT NULL;
-        """
-        records = await conn.fetch(query)
-
-        return [StatusConfig(self.bot, record=record) for record in records]
-
-    async def bulk_update_last_incident(self, subscribers: list[StatusConfig]) -> None:
-        """|coro|
-
-        Bulk updates the last incident for all subscribers.
-
-        Parameters
-        -----------
-        subscribers: list[StatusConfig]
-            A list of all subscribers.
-        """
-        query = """
-            UPDATE guild_config
-            SET dstatus_last_incident = $1::TEXT::JSONB
-            WHERE id = $2;
-        """
-        for subscriber in subscribers:
-            await subscriber.dstatus_last_incident.update_message(subscriber)
-            await self.bot.pool.execute(query, subscriber.dstatus_last_incident.as_dict(), subscriber.id)
+        self.get_subscribers.invalidate(self)
 
     @tasks.loop(minutes=3)
     async def check_new_incident(self):
@@ -291,64 +367,22 @@ class DiscordStatus(commands.Cog):
         Checks for new incidents and updates the subscribers.
         This is a loop that runs every 3 minutes.
         This is called automatically by the bot.
-
-        Raises
-        -------
-        discord.HTTPException
-            Something went wrong while sending the message.
-        discord.Forbidden
-            The bot doesn't have permissions to send the message.
-        discord.NotFound
-            The channel was deleted.
         """
         await self.bot.wait_until_ready()
 
-        feed = await self.parse_feed(DS_RSS_FEED)
-        if not feed or (feed and not feed.entries):
+        incidents = await self.fetch_unresolved_incidents()
+
+        if not incidents:
             return
 
-        entry = feed.entries[0]
+        subscribers = await self.get_subscribers()
 
-        incidents: list[State] = await self.incident_parser(entry.summary)
+        if not subscribers:
+            return
 
-        to_update = []
-        to_insert = []
-
-        for config in await self.get_all_subscribers():
-            if config.dstatus_last_incident:
-                if config.dstatus_last_incident.title == entry.title:
-                    if len(incidents) == len(config.dstatus_last_incident.updates):
-                        continue
-                    to_update.append(config)
-                else:
-                    to_insert.append(config)
-            else:
-                if incidents[0].state != "Resolved":
-                    # Ensure not to post and already Resolved Incident
-                    to_insert.append(config)
-
-        await self.bulk_update_last_incident(to_update)
-
-        if to_insert:
-            incident = Incident.temporary(
-                status=incidents[0].state,
-                link=entry.link,
-                published_at=parse(entry.published).astimezone(datetime.timezone.utc),
-                last_updated_at=incidents[0].started_at,
-                title=entry.title,
-                updates=incidents
-            )
-            for config in to_insert:
-                channel = config.get_channel()
-                if channel:
-                    message = await channel.send(embed=incident.build_embed())
-                    incident.message_id = message.id
-                config.dstatus_last_incident = incident
-
-            await self.bulk_update_last_incident(to_insert)
-
-        if to_insert or to_update:
-            self.get_all_subscribers.invalidate()
+        for incident in incidents:
+            for subscriber in subscribers:
+                await self._compare_changes_and_update(incident, subscriber)
 
 
 async def setup(bot: Percy) -> None:
