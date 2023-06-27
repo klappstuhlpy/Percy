@@ -69,6 +69,10 @@ class IncidentItem(PostgresItem):
         return None
 
 
+def utcparse(s: str) -> datetime:
+    return parse(s).astimezone(datetime.timezone.utc)
+
+
 @dataclass
 class ShortComponent:
     code: str
@@ -77,7 +81,7 @@ class ShortComponent:
     new_status: str
 
 
-@dataclass(init=False)
+@dataclass
 class Component:
     id: str
     name: str
@@ -93,15 +97,12 @@ class Component:
     group: bool
     only_show_if_degraded: bool
 
-    def __init__(self, **data):
-        for key, value in data.items():
-            if key.endswith("_at") and value:
-                value = parse(value).astimezone(datetime.timezone.utc)
-
-            setattr(self, key, value)
+    def __post_init__(self):
+        self.created_at = utcparse(self.created_at)
+        self.updated_at = utcparse(self.updated_at)
 
 
-@dataclass(init=False)
+@dataclass
 class Update:
     id: str
     status: str
@@ -115,15 +116,17 @@ class Update:
     custom_tweet: str
     tweet_id: str
 
-    def __init__(self, **data):
-        for key, value in data.items():
-            if key.endswith("_at") and value:
-                value = parse(value).astimezone(datetime.timezone.utc)
+    def __post_init__(self):
+        self.created_at = utcparse(self.created_at)
+        self.updated_at = utcparse(self.updated_at)
+        self.display_at = utcparse(self.display_at)
 
-            setattr(self, key, value)
+        self.affected_components = [
+            ShortComponent(**component_data) for component_data in self.affected_components  # type: ignore
+        ]
 
 
-@dataclass(init=False)
+@dataclass
 class Incident:
     id: str
     name: str
@@ -139,33 +142,18 @@ class Incident:
     incident_updates: list[Update]
     components: list[Component]
 
-    def __init__(self, **data):
-        incident_updates = data.pop('incident_updates', [])
-        components = data.pop('components', [])
+    def __post_init__(self):
+        self.created_at = utcparse(self.created_at)
+        self.updated_at = utcparse(self.updated_at)
+        self.monitoring_at = utcparse(self.monitoring_at)
+        self.resolved_at = utcparse(self.resolved_at)
+        self.started_at = utcparse(self.started_at)
 
-        updates = []
-        for update_data in incident_updates:
-            affected_components_data = update_data.pop('affected_components', []) or []
+        self.components = [Component(**component_data) for component_data in self.components]  # type: ignore
 
-            affected_components = [
-                ShortComponent(**component_data) for component_data in affected_components_data
-            ]
-            updates.append(Update(affected_components=affected_components, **update_data))
-
-        formatted_components = [
-            Component(**component_data) for component_data in components
+        self.incident_updates = [
+            Update(**update_data) for update_data in self.incident_updates  # type: ignore
         ]
-
-        data.update({
-            'incident_updates': updates,
-            'components': formatted_components
-        })
-
-        for key, value in data.items():
-            if key.endswith("_at") and value:
-                value = parse(value).astimezone(datetime.timezone.utc)
-
-            setattr(self, key, value)
 
     def build_embed(self) -> discord.Embed:
         updates = self.incident_updates.copy()
