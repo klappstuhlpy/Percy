@@ -124,11 +124,11 @@ class EvalResult:
         names = []
         for file in self.failed_files:
             if char_max < 3:
-                names.append("...")
+                names.append("…")
                 break
 
             if len(file) > char_max:
-                names.append(file[:char_max] + "...")
+                names.append(file[:char_max] + "…")
                 break
             char_max -= len(file)
             names.append(file)

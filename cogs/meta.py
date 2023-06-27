@@ -98,7 +98,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         helper = PaginatedHelpCommand.temporary(self.ctx)
         for cmd in entries:
             signature = helper.get_command_signature(cmd, with_prefix=False)  # type: ignore
-            embed.add_field(name=signature, value=cmd.description or 'No help given...', inline=False)
+            embed.add_field(name=signature, value=cmd.description or '…', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
 
