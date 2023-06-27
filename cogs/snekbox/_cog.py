@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
+import traceback
 from functools import partial
 from operator import attrgetter
 from textwrap import dedent
@@ -329,60 +330,59 @@ class Snekbox(commands.Cog):
         discord.Message
             The message sent to the channel.
         """
-        async with ctx.channel.typing():
-            result = await self.post_job(job)
-            msg = result.get_message(job)
-            error = result.error_message
+        result = await self.post_job(job)
+        msg = result.get_message(job)
+        error = result.error_message
 
-            if error:
-                output, paste_link = error, None
+        if error:
+            output, paste_link = error, None
+        else:
+            log.trace("Formatting output...")
+            output, paste_link = await self.format_output(result.stdout)
+
+        msg = f"{ctx.author.mention}, {result.status_emoji} {msg}\n"
+
+        if result.stdout.rstrip().endswith("EOFError: EOF when reading a line") and result.returncode == 1:
+            msg += "\n:warning: Note: `input` is not supported by the bot :warning:\n"
+
+        if result.stdout or not result.has_files:
+            msg += f"\n```py\n{output}\n```"
+
+        if paste_link:
+            msg += f"\nFull output pasted here: <{paste_link}>"
+
+        if files_error := result.files_error_message:
+            msg += f"\n{files_error}"
+
+        text_files = [f for f in result.files if f.suffix in TXT_LIKE_FILES]
+        budget_lines = MAX_OUTPUT_BLOCK_LINES - (output.count("\n") + 1)
+        budget_chars = MAX_OUTPUT_BLOCK_CHARS - len(output)
+        for file in text_files:
+            file_text = file.content.decode("utf-8", errors="replace") or "[Empty]"
+            if len(file_text) <= 50 and not file_text.count("\n"):
+                msg += f"\n`{file.name}`\n```\n{file_text}\n```"
             else:
-                log.trace("Formatting output...")
-                output, paste_link = await self.format_output(result.stdout)
-
-            msg = f"{ctx.author.mention}, {result.status_emoji} {msg}\n"
-
-            if result.stdout.rstrip().endswith("EOFError: EOF when reading a line") and result.returncode == 1:
-                msg += "\n:warning: Note: `input` is not supported by the bot :warning:\n"
-
-            if result.stdout or not result.has_files:
-                msg += f"\n```py\n{output}\n```"
-
-            if paste_link:
-                msg += f"\nFull output pasted here: <{paste_link}>"
-
-            if files_error := result.files_error_message:
-                msg += f"\n{files_error}"
-
-            text_files = [f for f in result.files if f.suffix in TXT_LIKE_FILES]
-            budget_lines = MAX_OUTPUT_BLOCK_LINES - (output.count("\n") + 1)
-            budget_chars = MAX_OUTPUT_BLOCK_CHARS - len(output)
-            for file in text_files:
-                file_text = file.content.decode("utf-8", errors="replace") or "[Empty]"
-                if len(file_text) <= 50 and not file_text.count("\n"):
-                    msg += f"\n`{file.name}`\n```\n{file_text}\n```"
+                format_text, link_text = await self.format_output(
+                    file_text,
+                    budget_lines,
+                    budget_chars,
+                    line_nums=False,
+                    output_default="[Empty]"
+                )
+                if link_text:
+                    msg += f"\n`{file.name}`\n{link_text}"
                 else:
-                    format_text, link_text = await self.format_output(
-                        file_text,
-                        budget_lines,
-                        budget_chars,
-                        line_nums=False,
-                        output_default="[Empty]"
-                    )
-                    if link_text:
-                        msg += f"\n`{file.name}`\n{link_text}"
-                    else:
-                        msg += f"\n`{file.name}`\n```\n{format_text}\n```"
-                        budget_lines -= format_text.count("\n") + 1
-                        budget_chars -= len(file_text)
+                    msg += f"\n`{file.name}`\n```\n{format_text}\n```"
+                    budget_lines -= format_text.count("\n") + 1
+                    budget_chars -= len(file_text)
 
-            files = [f.to_file() for f in result.files if f not in text_files]
-            allowed_mentions = AllowedMentions(everyone=False, roles=False, users=[ctx.author])
-            await ctx.job_message.edit(
-                content=msg, allowed_mentions=allowed_mentions, view=TrashView(ctx.author), attachments=files
-            )
+        files = [f.to_file() for f in result.files if f not in text_files]
+        allowed_mentions = AllowedMentions(everyone=False, roles=False, users=[ctx.author])
+        await ctx.job_message.edit(
+            content=msg, allowed_mentions=allowed_mentions, view=TrashView(ctx.author), attachments=files
+        )
 
-            log.info(f"{ctx.author}'s {job.name} job had a return code of {result.returncode}")
+        log.info(f"{ctx.author}'s {job.name} job had a return code of {result.returncode}")
         return ctx.job_message
 
     async def continue_job(self, ctx: EvalContext, response: Message, job_name: str) -> Optional[EvalJob]:
@@ -490,23 +490,27 @@ class Snekbox(commands.Cog):
         """
         log.info(f"Received code from {ctx.author} for evaluation:\n{job}")
 
-        ctx.job_message = await ctx.send(f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
+        try:
+            while True:
+                ctx.job_message = await ctx.send(
+                    f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
 
-        while True:
-            try:
-                response = await self.send_job(ctx, job)
-            except ValueError:
-                return await ctx.send(
-                    f"{ctx.author.mention}, <:warning:1113421726861238363> You've already got a job running - "
-                    "please wait for it to finish!"
-                )
+                try:
+                    response = await self.send_job(ctx, job)
+                except ValueError:
+                    return await ctx.send(
+                        f"{ctx.author.mention}, <:warning:1113421726861238363> You've already got a job running - "
+                        "please wait for it to finish!"
+                    )
 
-            self.jobs[ctx.message.id] = response.id
+                self.jobs[ctx.message.id] = response.id
 
-            job = await self.continue_job(ctx, response, job.name)
-            if not job:
-                break
-            log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
+                job = await self.continue_job(ctx, response, job.name)
+                if not job:
+                    break
+                log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
+        except:
+            traceback.print_exc()
 
     @command(name="eval", aliases=["e"], usage="[python_version] <code...>")
     @commands.guild_only()
