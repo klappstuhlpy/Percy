@@ -6,22 +6,22 @@ import binascii
 import datetime
 import inspect
 import io
+import logging
 import pprint
-import re
 import textwrap
-from typing import TYPE_CHECKING, Optional, Any, List, NamedTuple, Self, Annotated, Mapping
-from urllib.parse import urlparse, urljoin
+from typing import TYPE_CHECKING, Optional, Any, Annotated, Mapping, Literal
+from urllib.parse import urljoin
 
 import aiohttp
 import discord
-import yarl
+from discord import File
 from discord.ext import commands, tasks
 
 from cogs import command
 from cogs.utils.converters import Snowflake
 from cogs.utils.paginator import TextSource
-from cogs.utils.constants import GITHUB_URL_REGEX, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
-    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE, GITHUB_FULL_REGEX
+from cogs.utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
+    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE
 from launcher import get_logger
 
 if TYPE_CHECKING:
@@ -72,147 +72,6 @@ class GithubError(commands.CommandError):
     pass
 
 
-class ParsedBase(NamedTuple):
-    url: str
-    raw_url: str
-    lines: List[int]
-    user: str
-    filename: str
-    extension: str
-    branch: str
-    repository: str
-    file_path: str
-
-
-class CodeSnippet:
-    session: aiohttp.ClientSession
-    base: Optional[ParsedBase]
-    message: discord.Message
-
-    def __repr__(self):
-        return f"<GitHub url={self.base.url} lines={self.base.lines} filename={self.base.filename}>"
-
-    @classmethod
-    def match_url(cls, url: str) -> Optional[ParsedBase]:
-        match = GITHUB_FULL_REGEX.match(url)
-
-        if match is None:
-            return None
-
-        user = match.group('user')
-        repository = match.group('repository')
-        branch = match.group('branch')
-        file_path = (match.group('file_path') or '....')[:-1]
-        (filename, _, file_extension) = match.group('filename').partition('.')
-
-        parsed = urlparse(url)
-        line_compiled = re.compile(r'L(?:(?P<start>\d+)(?:-L(?P<end>\d+))?)?$')
-
-        line_numbers = None
-        match = line_compiled.match(parsed.fragment)
-
-        if match:
-            start_line = match.group('start')
-            end_line = match.group('end')
-
-            if start_line is not None:
-                line_numbers = [int(start_line)]
-
-                if end_line is not None:
-                    line_numbers.append(int(end_line))
-                else:
-                    line_numbers.append(int(start_line))
-
-        raw_url = re.sub(r'^https?://(?:www\.)?github\.com/([^/]+)/([^/]+)/blob/(.*)$',
-                         r'https://raw.githubusercontent.com/\1/\2/\3', url)
-
-        return ParsedBase(
-            url=url,
-            raw_url=raw_url,
-            lines=line_numbers,
-            user=user,
-            filename=filename,
-            extension=file_extension,
-            branch=branch,
-            repository=repository,
-            file_path=file_path,
-        )
-
-    @classmethod
-    def open(cls, session: aiohttp.ClientSession, message: discord.Message | str) -> List[Self]:
-        """Open a GitHub URL.
-        Returns
-        -------
-        Optional[Self]
-            The GitHub object."""
-
-        temporay = [
-            cls.match_url(x) for x in GITHUB_URL_REGEX.findall(
-                message.content if isinstance(message, discord.Message) else message
-            )
-        ]
-
-        for base in temporay:
-            if base is None:
-                continue
-
-            new = cls()
-            new.session = session
-            new.base = base
-            new.message = message
-            yield new
-
-    async def format(self) -> tuple[str, discord.Embed] | tuple[None, None]:
-        """Format the GitHub URL into a string.
-        Returns
-        -------
-        tuple[str, str]
-            A tuple of the formatted string and the info string."""
-
-        async with self.session.get(self.base.raw_url) as resp:
-            if resp.status != 200:
-                return None, None
-
-            text = await resp.text()
-
-            embed = discord.Embed(color=0x171515)
-            embed.set_author(
-                name=f"{self.base.user} / {self.base.repository}",
-                url=urljoin("https://github.com", f"{self.base.user}/{self.base.repository}"),
-                icon_url="https://cdn.discordapp.com/attachments/1066703171243745377/1108088021586284544/Octicons-mark-github.svg.png"
-            )
-            embed.add_field(name="File", value=f"[`{self.base.filename}.{self.base.extension}`]({self.base.url})")
-            embed.add_field(name="Path", value=f"`{self.base.file_path}`")
-            embed.add_field(name="Branch", value=f"`{self.base.branch}`")
-
-            if self.base.lines:
-                text = "\n".join(text.split("\n")[self.base.lines[0] - 1:self.base.lines[1]])
-                embed.set_footer(text=f"Lines {self.base.lines[0]}-{self.base.lines[1]}")
-            else:
-                text = text.strip()
-
-            return text, embed
-
-    async def post(self) -> None:
-        """Post the formatted GitHub URL to the chat."""
-
-        message = self.message
-        text, embed = await self.format()
-        if any([text is None, embed is None]):
-            return
-
-        async with message.channel.typing():
-            await message.edit(suppress=True)
-
-            if len(text) < 2000:
-                await message.reply(embed=embed, content=f"```{self.base.extension}\n{text}```",
-                                    view=TrashView(message.author),
-                                    mention_author=False)
-            else:
-                file = discord.File(io.BytesIO(text.encode()), filename=f"{self.base.filename}.{self.base.extension}")
-                await message.reply(embed=embed, file=file, view=TrashView(message.author), mention_author=False)
-
-
 class Base(commands.Cog, name='Exclusives'):
     """Utility related Commands and Functions.
 
@@ -230,6 +89,11 @@ class Base(commands.Cog, name='Exclusives'):
         self._req_lock = asyncio.Lock()
         self.auto_archive_old_forum_threads.start()
 
+        self.pattern_handlers = [
+            (GITHUB_RE, self._fetch_github_snippet),
+            (GITHUB_GIST_RE, self._fetch_github_gist_snippet),
+        ]
+
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='dpy', id=1079788056560795648)
@@ -245,6 +109,136 @@ class Base(commands.Cog, name='Exclusives'):
             invites = await guild.invites()
             self._invite_cache = {invite.code: invite.uses or 0 for invite in invites}
 
+    @staticmethod
+    def _find_ref(path: str, refs: tuple) -> tuple:
+        """Loops through all branches and tags to find the required ref."""
+        # Base case: there is no slash in the branch name
+        ref, file_path = path.split("/", 1)
+        # In case there are slashes in the branch name, we loop through all branches and tags
+        for possible_ref in refs:
+            if path.startswith(possible_ref["name"] + "/"):
+                ref = possible_ref["name"]
+                file_path = path[len(ref) + 1:]
+                break
+        return ref, file_path
+
+    async def _fetch_github_snippet(
+            self, repo: str, path: str, start_line: str, end_line: str
+    ) -> tuple[str, str | File]:
+        """Fetches a snippet from a GitHub repo."""
+        branches = await self.github_request('GET', f'repos/{repo}/branches')
+        tags = await self.github_request('GET', f'repos/{repo}/tags')
+        refs = branches + tags
+        ref, file_path = self._find_ref(path, refs)
+
+        rep = await self.github_request('GET', f'repos/{repo}/contents/{file_path}?ref={ref}',
+                                        headers={'Accept': 'application/vnd.github+json'})
+
+        dbytes = base64.b64decode(rep["content"])
+        file_contents = dbytes.decode('utf-8')
+
+        return self._snippet_to_codeblock(file_contents, file_path, repo, start_line, end_line)  # rep["html_url"]
+
+    async def _fetch_github_gist_snippet(
+            self,
+            gist_id: str,
+            revision: str,
+            file_path: str,
+            start_line: str,
+            end_line: str
+    ) -> tuple[str, str | File]:
+        """Fetches a snippet from a GitHub gist."""
+        gist_json = await self.github_request('GET', f'gists/{gist_id}{f"/{revision}" if len(revision) > 0 else ""}',
+                                              headers={'Accept': 'application/vnd.github+json'})
+
+        for gist_file in gist_json["files"]:
+            if file_path == gist_file.lower().replace(".", "-"):
+                url = gist_json["files"][gist_file]["raw_url"]
+                async with self.bot.session.request('GET', url) as resp:
+                    if resp.status != 200:
+                        raise GithubError(
+                            f"Fetching snippet from GitHub gist returned Status Code `{resp.status}` with {resp.reason!r}.")
+
+                    file_contents = await resp.text()
+                title = gist_json["files"][gist_file]["title"]
+                return self._snippet_to_codeblock(file_contents, gist_file, title, start_line, end_line)
+        return "", "File not found in gist."
+
+    @staticmethod
+    def _snippet_to_codeblock(
+            file_contents: str, file_path: str, full_url: str, start_line: str, end_line: str
+    ) -> tuple[str, str | File]:
+        """Given the entire file contents and target lines, creates a code block.
+
+        First, we split the file contents into a list of lines and then keep and join only the required
+        ones together.
+
+        We then dedent the lines to look nice, and replace all ` characters with `\u200b to prevent
+        markdown injection.
+
+        Finally, we surround the code with ``` characters.
+        """
+        # Parse start_line and end_line into integers
+
+        split_file_contents = file_contents.splitlines()
+
+        if end_line is None:
+            if start_line is None:
+                end_line = len(split_file_contents)
+            else:
+                end_line = int(start_line)
+
+        if start_line is None:
+            start_line = 1
+
+        start_line = max(1, start_line)
+        end_line = min(len(split_file_contents), end_line)
+
+        required = "\n".join(split_file_contents[start_line - 1:end_line])
+        required = textwrap.dedent(required).rstrip().replace("`", "`\u200b")
+
+        # Extracts the code language and checks whether it's a "valid" language
+        language = file_path.split("/")[-1].split(".")[-1]
+        trimmed_language = language.replace("-", "").replace("+", "").replace("_", "")
+        is_valid_language = trimmed_language.isalnum()
+        if not is_valid_language:
+            language = ""
+
+        # Adds a label showing the file path to the snippet
+        if start_line == end_line:
+            ret = f"`{file_path}` from `{full_url}` line `{start_line}`\n"
+        else:
+            ret = f"`{file_path}` from `{full_url}` lines `{start_line}` to `{end_line}`\n"
+
+        if len(required) != 0:
+            fmt = f"{ret}```{language}\n{required}```"
+            if len(fmt) <= 2000:
+                return ret, fmt
+            else:
+                return ret, discord.File(io.BytesIO(required.encode()), filename=file_path)
+        # Returns an empty codeblock if the snippet is empty
+        return ret, f"{ret}``` ```"
+
+    async def _parse_snippets(self, content: str) -> list[tuple[str, str | File]]:
+        """Parse message content and return a string with a code block for each URL found."""
+        all_snippets = []
+
+        for pattern, handler in self.pattern_handlers:
+            for match in pattern.finditer(content):
+                try:
+                    snippet = await handler(**match.groupdict())
+                    all_snippets.append((match.start(), snippet))
+                except aiohttp.ClientResponseError as error:
+                    error_message = error.message
+                    log.log(
+                        logging.DEBUG if error.status == 404 else logging.ERROR,
+                        f"Failed to fetch code snippet from {match[0]!r}: {error.status} "
+                        f"{error_message} for GET {error.request_info.real_url.human_repr()}"
+                    )
+
+        # Sorts the list of snippets by their match index and joins them into a single message
+        return [x[1] for x in sorted(all_snippets)]
+
     async def github_request(
             self,
             method: str,
@@ -253,6 +247,7 @@ class Base(commands.Cog, name='Exclusives'):
             params: Optional[dict[str, Any]] = None,
             data: Optional[dict[str, Any]] = None,
             headers: Optional[dict[str, Any]] = None,
+            return_type: Literal['json', 'text'] = 'json'
     ) -> Any:
         """|coro|
 
@@ -270,6 +265,8 @@ class Base(commands.Cog, name='Exclusives'):
             The data to pass to the request.
         headers: Optional[:class:`dict`]
             The headers to pass to the request.
+        return_type: Literal[:class:`str`, :class:`str`]
+            The type of response to return.
 
         Returns
         -------
@@ -280,7 +277,7 @@ class Base(commands.Cog, name='Exclusives'):
                 'User-Agent': 'Percy DPY-Exclusives',
                 'Authorization': f'Bearer {self.bot.config.github_key}'}
 
-        req_url = yarl.URL('https://api.github.com') / url
+        req_url = urljoin('https://api.github.com', url)
 
         if headers is not None and isinstance(headers, dict):
             hdrs.update(headers)
@@ -295,7 +292,10 @@ class Base(commands.Cog, name='Exclusives'):
                     self._req_lock.release()
                     return await self.github_request(method, url, params=params, data=data, headers=headers)
                 elif 300 > r.status >= 200:
-                    return js
+                    if return_type == 'json':
+                        return js
+                    else:
+                        return await r.text()
                 else:
                     raise GithubError(js['message'])
 
@@ -410,10 +410,18 @@ class Base(commands.Cog, name='Exclusives'):
         if message.author.bot:
             return
 
-        for match in CodeSnippet.open(self.bot.session, message):
-            if match.base is None:
-                continue
-            await match.post()
+        snippets = await self._parse_snippets(message.content)
+
+        for ret, snippet in snippets:
+            try:
+                await message.edit(suppress=True)
+            except discord.NotFound:
+                return
+
+            if isinstance(snippet, discord.File):
+                await message.channel.send(ret, file=snippet, view=TrashView(message.author))
+            else:
+                await message.channel.send(snippet, view=TrashView(message.author))
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:

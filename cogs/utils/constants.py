@@ -112,19 +112,13 @@ GITHUB_FULL_REGEX = re.compile(
 
 GITHUB_RE = re.compile(
     r"https://github\.com/(?P<repo>[a-zA-Z0-9-]+/[\w.-]+)/blob/"
-    r"(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)"
+    r"(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)?"
 )
 
 GITHUB_GIST_RE = re.compile(
-    r"""
-        https://gist\.github\.com/
-        ([a-zA-Z0-9-]+)/
-        (?P<gist_id>[a-zA-Z0-9]+)/*
-        (?P<revision>[a-zA-Z0-9]*)/*
-        #file-(?P<file_path>[^#>]+?)(\?[^#>]+)?
-        (-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)
-    """,
-    flags=re.VERBOSE
+    r"https://gist\.github\.com/([a-zA-Z0-9-]+)/(?P<gist_id>[a-zA-Z0-9]+)/*"
+    r"(?P<revision>[a-zA-Z0-9]*)/*#file-(?P<file_path>[^#>]+?)(\?[^#>]+)?"
+    r"(-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)"
 )
 
 PACKAGE_NAME_RE = re.compile(r"[^a-zA-Z0-9_.]")
