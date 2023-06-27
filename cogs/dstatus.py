@@ -307,7 +307,7 @@ class DiscordStatus(commands.Cog):
         """Shows the current Discord Status."""
         latest = await self.fetch_unresolved_incidents()
         if not latest:
-            await ctx.send_tick(None, "No active incidents found. *There should be though? Contact the developer!*")
+            return await ctx.send_tick(None, "No active incidents found. *There should be though? Contact the developer!*")
 
         embeds = [incident.build_embed() for incident in latest]
         await ctx.send(content=f"Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*"
