@@ -191,6 +191,9 @@ class Base(commands.Cog, name='Exclusives'):
         if start_line is None:
             start_line = 1
 
+        start_line = int(start_line)
+        end_line = int(end_line)
+
         start_line = max(1, start_line)
         end_line = min(len(split_file_contents), end_line)
 
