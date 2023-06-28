@@ -150,7 +150,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     embeds.append(embed)
             else:
                 if guild:
-                    embeds[0].description += f"\n- `{guild}`"
+                    embeds[0].description += f"\n- `{guild}` (*{len(synced)} commands*)"
                 else:
                     embeds[1].description = f"Synced total global {plural(len(synced)):command}"
 
