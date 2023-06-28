@@ -62,7 +62,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
 
         source = TextSource(prefix=None, suffix=None, max_size=4000)
         embeds: List[discord.Embed] = [
-            discord.Embed(title=f"\N{SATELLITE ANTENNA} Command Tree Guild Sync"),
+            discord.Embed(title=f"\N{SATELLITE ANTENNA} Command Tree Guild Sync", description=""),
             discord.Embed(title=f"\N{GLOBE WITH MERIDIANS} Command Tree Global Sync",)
         ]
 
@@ -155,7 +155,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     embeds[1].description = f"Synced total global {plural(len(synced)):command}"
 
         await EmbedPaginator.start(ctx, entries=[
-            embed for embed in embeds if embed.description
+            embed for embed in embeds if embed.description or embed.description != ""
         ])
 
     @Feature.Command(
