@@ -7,7 +7,7 @@ import time
 from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type
 
 import asyncpg
-import commands_ext
+import discord
 
 T = TypeVar('T', bound='BaseFlags')
 
@@ -169,7 +169,7 @@ def ignore_record() -> Callable[[T], T]:
     return decorator
 
 
-class Colour(commands_ext.Colour):
+class Colour(discord.Colour):
     """A subclass of `discord.Colour` with some extra colours."""
 
     @classmethod
