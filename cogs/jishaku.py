@@ -61,7 +61,10 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         guilds.sort(key=lambda g: (g is not None, g))
 
         source = TextSource(prefix=None, suffix=None, max_size=4000)
-        embeds: List[discord.Embed] = []
+        embeds: List[discord.Embed] = [
+            discord.Embed(title=f"\N{SATELLITE ANTENNA} Command Tree Guild Sync"),
+            discord.Embed(title=f"\N{GLOBE WITH MERIDIANS} Command Tree Global Sync",)
+        ]
 
         for guild in guilds:
             slash_commands = self.bot.tree._get_all_commands(
@@ -146,25 +149,14 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                     embed.description = page
                     embeds.append(embed)
             else:
-                before_sync = [c.qualified_name for c in slash_commands]
-                after_sync = [c.name for c in synced]
-
-                if added := ', '.join(set(before_sync) - set(after_sync)):
-                    added = f"+ {added}"
-
-                if removed := ', '.join(set(after_sync) - set(before_sync)):
-                    removed = f"- {removed}"
-
-                embed = discord.Embed(
-                    title=f"\N{SATELLITE ANTENNA} Command Tree {'Global' if not guild else 'Guild'} Sync",
-                    description=f"```diff\n{added}\n{removed}```" if added or removed else ""
-                )
-                embed.set_footer(text=f"Synced total {plural(len(synced)):command}")
                 if guild:
-                    embed.add_field(name="Guild", value=f"[`{guild}`]", inline=False)
-                embeds.append(embed)
+                    embeds[0].description += f"\n- `{guild}`"
+                else:
+                    embeds[1].description = f"Synced total global {plural(len(synced)):command}"
 
-        await EmbedPaginator.start(ctx, entries=embeds)
+        await EmbedPaginator.start(ctx, entries=[
+            embed for embed in embeds if embed.description
+        ])
 
     @Feature.Command(
         parent="jsk",
