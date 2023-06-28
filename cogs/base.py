@@ -348,9 +348,6 @@ class Base(commands.Cog, name='Exclusives'):
         js = await self.github_request('POST', 'gists', data=data, headers=headers)
         return js['html_url']
 
-    def cog_check(self, ctx: Context):
-        return ctx.guild and ctx.guild.id == PH_GUILD_ID
-
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, GithubError):
             await ctx.send_tick(False, f'Github API Error: {error}')
