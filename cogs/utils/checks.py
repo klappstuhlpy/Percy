@@ -134,3 +134,14 @@ def hybrid_permissions_check(**perms: bool) -> Callable[[T], T]:
         return func
 
     return decorator
+
+
+def guilds_check(*guild_ids: int) -> Callable[[T], T]:
+    async def pred(ctx: GuildContext):
+        return ctx.guild.id in guild_ids
+
+    def decorator(func: T) -> T:
+        commands.check(pred)(func)
+        return func
+
+    return decorator

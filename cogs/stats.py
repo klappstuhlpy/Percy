@@ -27,9 +27,8 @@ from typing_extensions import Annotated
 
 from cogs.utils.paginator import FilePaginator
 from launcher import get_logger
-from . import command
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
-from .utils import formats, timetools, helpers
+from .utils import formats, timetools, helpers, commands_ext
 from .utils.constants import BOT_BASE_FOLDER
 from .utils.formats import censor_object
 from .utils.tasks import executor
@@ -221,7 +220,7 @@ class Stats(commands.Cog):
     async def on_socket_event_type(self, event_type: str):
         self.bot.socket_stats[event_type] += 1
 
-    @command(
+    @commands_ext.command(
         commands.group,
         name="command",
         invoke_without_command=True,
@@ -260,7 +259,7 @@ class Stats(commands.Cog):
         await ctx.send(f"## {title}")
         await FilePaginator.start(ctx, entries=images, per_page=1)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         hidden=True,
         description="Shows the current socket event statistics.",
@@ -278,7 +277,7 @@ class Stats(commands.Cog):
     def get_bot_uptime(self, *, brief: bool = False) -> str:
         return timetools.human_timedelta(self.bot.launched_at, accuracy=None, brief=brief, suffix=False)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         description="Tells you how long the bot has been up for."
     )
@@ -327,7 +326,7 @@ class Stats(commands.Cog):
         commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
         return '\n'.join(self.format_commit(c) for c in commits)
 
-    @command()
+    @commands_ext.command()
     async def about(self, ctx: Context):
         """Tells you information about the bot itself."""
 
@@ -380,7 +379,7 @@ class Stats(commands.Cog):
                   f"Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```"
         )
 
-        embed.set_footer(text=f'Made with discord.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
+        embed.set_footer(text=f'Made with commands_ext.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
@@ -565,7 +564,7 @@ class Stats(commands.Cog):
         embed.add_field(name='Most Used Commands Today', value=value, inline=False)
         await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         commands.group,
         name='stats',
         description='Tells you command usage stats for the server or a member.',
@@ -582,7 +581,7 @@ class Stats(commands.Cog):
                 await self.show_member_stats(ctx, member)
 
     # noinspection PyTypeChecker
-    @command(
+    @commands_ext.command(
         stats.command,
         name='for',
         description='Tells you the global stats for a command.',
@@ -751,7 +750,7 @@ class Stats(commands.Cog):
             embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
             await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         stats.command,
         name='global',
         description='Global all time command statistics.',
@@ -826,7 +825,7 @@ class Stats(commands.Cog):
         e.add_field(name='Top Users', value='\n'.join(value), inline=False)
         await ctx.send(embed=e)
 
-    @command(
+    @commands_ext.command(
         stats.command,
         name='today',
         description='Global command statistics for the day.',
@@ -1000,7 +999,7 @@ class Stats(commands.Cog):
 
         await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         hidden=True,
     )
@@ -1083,7 +1082,7 @@ class Stats(commands.Cog):
         embed.description = '\n'.join(description)
         await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         hidden=True,
     )
@@ -1158,7 +1157,7 @@ class Stats(commands.Cog):
         embed.set_footer(text=f'None warnings')
         await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         hidden=True,
     )
@@ -1185,7 +1184,7 @@ class Stats(commands.Cog):
         for page in pages.pages:
             await ctx.send(page)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         hidden=True,
         aliases=['cancel_task'],
@@ -1228,7 +1227,7 @@ class Stats(commands.Cog):
         fp = io.BytesIO(render.strip().encode('utf-8'))
         await ctx.send('Too many results...', file=discord.File(fp, 'results.sql'))
 
-    @command(
+    @commands_ext.command(
         _command.group,
         name="history",
         hidden=True,
@@ -1255,7 +1254,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query)
 
-    @command(
+    @commands_ext.command(
         command_history.command,
         name='for',
         hidden=True,
@@ -1284,7 +1283,7 @@ class Stats(commands.Cog):
 
             await self.tabulate_query(ctx, query, command, datetime.timedelta(days=days))
 
-    @command(
+    @commands_ext.command(
         command_history.command,
         name='guild',
         hidden=True,
@@ -1311,7 +1310,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query, guild_id)
 
-    @command(
+    @commands_ext.command(
         command_history.command,
         name='user',
         hidden=True,
@@ -1337,7 +1336,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query, user_id)
 
-    @command(
+    @commands_ext.command(
         command_history.command,
         name='log',
         hidden=True,
@@ -1387,7 +1386,7 @@ class Stats(commands.Cog):
             await ctx.send(embed=embed,
                            file=discord.File(io.BytesIO(render.encode()), filename='full_results.accesslog'))
 
-    @command(
+    @commands_ext.command(
         command_history.command,
         name='cog',
         hidden=True,

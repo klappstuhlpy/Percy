@@ -17,7 +17,6 @@ from discord.context_managers import Typing
 from discord.ext import commands
 from discord.utils import MISSING
 from discord.ext.commands.context import DeferTyping
-from discord.ui import View
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -274,8 +273,8 @@ class Context(commands.Context):
             author_id=author_id,
         )
         view.message = await self.send(embed=discord.Embed(title="Are you sure?",
-                                                           description=message,
-                                                           colour=discord.Colour(0xF8DB5E)),
+                                                                description=message,
+                                                                colour=discord.Colour(0xF8DB5E)),
                                        view=view, ephemeral=ephemeral)
         await view.wait()
         return view.value
@@ -320,7 +319,7 @@ class Context(commands.Context):
             allowed_mentions: Optional[AllowedMentions] = None,
             reference: Optional[Union[Message, MessageReference, PartialMessage]] = None,
             mention_author: Optional[bool] = None,
-            view: Optional[View] = None,
+            view: Optional[discord.ui.View] = None,
             suppress_embeds: bool = False,
             ephemeral: bool = False,
             post: bool = False,

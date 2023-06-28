@@ -12,10 +12,9 @@ from discord import app_commands, Interaction
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
-from cogs.utils.paginator import BasePaginator, LinePaginator
-from . import command, command_permissions
+from .utils.paginator import BasePaginator, LinePaginator
 from .reminder import Timer
-from .utils import timetools, converters, fuzzy, cache, helpers
+from .utils import timetools, converters, fuzzy, cache, helpers, commands_ext
 from .utils.context import tick
 from .utils.converters import colour_autocomplete
 from .utils.formats import plural, get_shortened_string, betterget
@@ -711,12 +710,12 @@ class Polls(commands.Cog):
 
     polls = app_commands.Group(name="polls", description="Commands for managing polls.", guild_only=True)
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="create",
         description="Creates a new poll with customizable settings.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.describe(
         question="Main Poll Question to ask.",
         description="Additional notes/description about the question.",
@@ -832,12 +831,12 @@ class Polls(commands.Cog):
                 allowed_mentions=discord.AllowedMentions(roles=True)
             )
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="end",
         description="Ends the voting for a running question.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="5-digit ID of the poll to end.")
     async def polls_end(self, interaction: discord.Interaction, poll_id: int):
@@ -854,12 +853,12 @@ class Polls(commands.Cog):
 
         await self.send(interaction, f"{tick(True)} Poll [`{check}`] has been ended.")
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="delete",
         description="Deletes a poll question.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="5-digit ID of the poll to delete.")
     async def polls_delete(self, interaction: discord.Interaction, poll_id: int):
@@ -872,12 +871,12 @@ class Polls(commands.Cog):
 
         await interaction.response.send_message(f"{tick(True)} Poll [`{poll_id}`] has been deleted.")
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="edit",
         description="Edits a poll question. Type '-clear' to clear the current value.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(
         poll_id="5-digit ID of the poll to search for.",
@@ -1038,7 +1037,7 @@ class Polls(commands.Cog):
 
         await self.send(interaction, f"{tick(True)} Poll [`{poll.id}`] edited successfully.", ephemeral=True)
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="search",
         description="Searches poll questions. Search by ID, keyword or flags.",
@@ -1139,7 +1138,7 @@ class Polls(commands.Cog):
             embed.set_footer(text=f"{plural(len(records)):entry|entries}")
             await LinePaginator.start(interaction, entries=results, per_page=12, embed=embed)
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="history",
         description="Shows the vote history of a user for polls.",
@@ -1175,12 +1174,12 @@ class Polls(commands.Cog):
 
         await FieldPaginator.start(interaction, entries=user_polls, per_page=12)
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="debug",
         description="Refactor all existing Polls in this guild and reattach the views.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id="The ID of the Poll to debug.")
     @app_commands.checks.cooldown(1, 15.0, key=lambda i: i.guild_id)
@@ -1201,12 +1200,12 @@ class Polls(commands.Cog):
             await poll.message.edit(embed=embed, view=view)
         await interaction.response.send_message(f"{tick(True)} Poll [`{poll.id}`] debugged.", ephemeral=True)
 
-    @command(
+    @commands_ext.command(
         polls.command,
         name="config",
         description="Shows the current configuration for polls.",
     )
-    @command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
     async def polls_config(
             self, interaction: discord.Interaction,
             poll_channel: discord.TextChannel = None,

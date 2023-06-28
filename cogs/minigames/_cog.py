@@ -8,10 +8,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from . import _tictactoe, _minesweeper, _hangman
+from cogs.minigames import _tictactoe, _minesweeper, _hangman
 from ._hangman import WaitforHangman
-from .. import command
-from ..utils import helpers
+from ..utils import helpers, commands_ext
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -31,7 +30,7 @@ class Minigame(commands.GroupCog):
     def __repr__(self) -> str:
         return '<cogs.Minigame>'
 
-    @command(
+    @commands_ext.command(
         commands.hybrid_command,
         name='tictactoe',
         description='Play a TicTacToe party with another user.',
@@ -58,7 +57,7 @@ class Minigame(commands.GroupCog):
         await prompt.wait()
         await msg.delete(delay=1)
 
-    @command(
+    @commands_ext.command(
         commands.hybrid_command,
         name='minesweeper',
         aliases=['ms'],
@@ -74,7 +73,7 @@ class Minigame(commands.GroupCog):
         ms = _minesweeper.Minesweeper(ctx, mines=mines)
         await ctx.send(embed=ms.build_embed(), view=ms)
 
-    @command(
+    @commands_ext.command(
         commands.hybrid_command,
         name='hangman',
         description='Play a Hangman game.',

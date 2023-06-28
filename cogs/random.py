@@ -7,8 +7,7 @@ from datetime import datetime
 from typing_extensions import Annotated
 from typing import TYPE_CHECKING, Optional
 
-from . import command
-from .utils import fuzzy
+from .utils import fuzzy, commands_ext
 from .utils.constants import LANGUAGES
 from .utils.translation import translate
 
@@ -58,7 +57,7 @@ class Random(commands.Cog):
 
         return "en", content
 
-    @command(
+    @commands_ext.command(
         commands.command,
         name='translate',
         description='Translates a message to English using Google Translate.',
@@ -100,7 +99,7 @@ class Random(commands.Cog):
         embed.add_field(name=f'Translated: {result.target_language}', value=result.translated, inline=False)
         await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         commands.command,
         name='meme',
         description='Shows you a random reddit meme.',

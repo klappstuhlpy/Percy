@@ -6,8 +6,8 @@ from contextlib import suppress
 from datetime import datetime, timezone
 
 from typing import Callable, Coroutine, Awaitable, ParamSpec, TypeVar, Self, Any, Hashable, Generator
-import discord
 
+import discord
 
 T = TypeVar('T')
 P = ParamSpec('P')

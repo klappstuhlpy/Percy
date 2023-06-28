@@ -14,7 +14,7 @@ import matplotlib as matplotlib
 from discord import app_commands, Colour
 from discord.ext import commands
 
-from . import fuzzy
+from cogs.utils import fuzzy
 from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
 from ..utils.context import Context, GuildContext
 

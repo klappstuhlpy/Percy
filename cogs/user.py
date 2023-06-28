@@ -9,10 +9,9 @@ from discord import app_commands
 from discord.ext import commands
 from lxml import etree
 
-from cogs import command
-from cogs.utils import cache, timetools, fuzzy, helpers
-from cogs.utils.context import Context
-from cogs.utils.helpers import PostgresItem
+from .utils import cache, timetools, fuzzy, helpers, commands_ext
+from .utils.context import Context
+from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -171,7 +170,7 @@ class UserSettings(commands.Cog, name="User Settings"):
                 if entry is not None:
                     self._default_timezones.append(app_commands.Choice(name=entry.description, value=entry.aliases[0]))
 
-    @command(
+    @commands_ext.command(
         commands.hybrid_group,
         name='timezone',
         fallback='show',
@@ -194,7 +193,7 @@ class UserSettings(commands.Cog, name="User Settings"):
         else:
             await ctx.send(f'<:greenTick:1079249732364406854> The current time for {user} is `{time} {offset}`.')
 
-    @command(
+    @commands_ext.command(
         timezone.command,
         name='info'
     )
@@ -213,7 +212,7 @@ class UserSettings(commands.Cog, name="User Settings"):
 
         await ctx.send(embed=embed)
 
-    @command(
+    @commands_ext.command(
         timezone.command,
         name='set',
         description='Sets the timezone of a user.',
@@ -249,7 +248,7 @@ class UserSettings(commands.Cog, name="User Settings"):
         matches = self.find_timezones(argument)
         return [tz.to_choice() for tz in matches[:25]]
 
-    @command(
+    @commands_ext.command(
         timezone.command,
         name='purge',
         description='Clears the timezone of a user.',

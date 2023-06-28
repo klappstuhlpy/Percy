@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from bot import Percy
 from launcher import get_logger
 
-from . import _cog, doc_cache
+from cogs.doc import _cog, doc_cache
 from ._parsing import get_symbol_markdown, get_field_markdown
 
 log = get_logger(__name__)

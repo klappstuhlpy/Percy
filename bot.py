@@ -123,7 +123,7 @@ class Percy(commands.Bot):
         return self.bot_app_info.owner
 
     async def setup_hook(self) -> None:
-        self.session: aiohttp.ClientSession = aiohttp.ClientSession()
+        self.session = aiohttp.ClientSession()
 
         self.blacklist: Config[bool] = Config('blacklist.json')
         self.prefixes: Config[list[str]] = Config('prefixes.json')
@@ -347,7 +347,6 @@ class Percy(commands.Bot):
         Optional[Member]
             The member matching the query or None if not found.
         """
-        # TODO: Update this when pomelo is rolled out successfully
         if len(argument) > 5 and argument[-5] == '#':
             username, _, discriminator = argument.rpartition('#')
             members = await guild.query_members(username, limit=100, cache=cache)

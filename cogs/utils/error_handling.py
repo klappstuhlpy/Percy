@@ -1,11 +1,9 @@
-import asyncio
 import traceback
 from types import TracebackType
-from typing import Union, Type, Optional, ParamSpec, TypeVar, Awaitable, Callable
+from typing import Union, Type, ParamSpec, TypeVar
 
 import discord
-
-from cogs.utils.paginator import TextSource
+from ..utils.paginator import TextSource
 
 
 T = TypeVar('T')

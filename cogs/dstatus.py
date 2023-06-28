@@ -12,10 +12,10 @@ from discord.ext import commands, tasks
 from typing import TypeVar
 
 from bot import Percy
-from cogs import command, command_permissions, PermissionTemplate
-from cogs.utils import cache
-from cogs.utils.context import GuildContext
-from cogs.utils.helpers import PostgresItem
+from .utils.commands_ext import PermissionTemplate
+from .utils import commands_ext, cache
+from .utils.context import GuildContext
+from .utils.helpers import PostgresItem
 
 DS_ENDPOINT = "https://discordstatus.com/api/v2/incidents.json"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
@@ -300,7 +300,7 @@ class DiscordStatus(commands.Cog):
 
         self.get_subscribers.invalidate(self)
 
-    @command(commands.hybrid_group, name="discord-status", fallback="show",
+    @commands_ext.command(commands.hybrid_group, name="discord-status", fallback="show",
              description="Shows the current Discord Status.")
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
@@ -314,8 +314,8 @@ class DiscordStatus(commands.Cog):
                                if len(embeds) > 10 else None,
                        embeds=embeds[:10], ephemeral=True)
 
-    @command(dstatus.command, name="subscribe", description="Subscribe/Unsubscribe to Discord Status updates.")
-    @command_permissions(user=PermissionTemplate.mod)
+    @commands_ext.command(dstatus.command, name="subscribe", description="Subscribe/Unsubscribe to Discord Status updates.")
+    @commands_ext.command_permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_subscribe(self, ctx: GuildContext, channel: Optional[discord.TextChannel] = None):
         """Subscribes to Discord Status updates.

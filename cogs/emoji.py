@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from . import command, command_permissions
+from .utils import commands_ext
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
 from .utils.paginator import TextSource
@@ -155,7 +155,7 @@ class Emoji(commands.Cog):
 
         return await guild.fetch_emoji(emoji_id)
 
-    @command(
+    @commands_ext.command(
         commands.hybrid_group,
         name='emoji',
         aliases=['emotes', 'emote'],
@@ -167,8 +167,8 @@ class Emoji(commands.Cog):
         """Emoji management commands."""
         await ctx.send_help(ctx.command)
 
-    @command(commands.command, aliases=['emojilist'])
-    @command_permissions(3, user=["administrator"])
+    @commands_ext.command(commands.command, aliases=['emojilist'])
+    @commands_ext.command_permissions(3, user=["administrator"])
     @commands.cooldown(1, 600, commands.BucketType.guild)
     async def emojipost(self, ctx: GuildContext):
         """Fancy post the emoji lists"""
@@ -182,21 +182,21 @@ class Emoji(commands.Cog):
         for page in source.pages:
             await ctx.send(page)
 
-    @command(commands.command, name="randomemoji", aliases=["randemoji", "randemote", "randomemote"])
+    @commands_ext.command(commands.command, name="randomemoji", aliases=["randemoji", "randemote", "randomemote"])
     @commands.cooldown(1, 90, commands.BucketType.user)
     async def random_emoji(self, ctx: Context):
         """Sends a random emoji from the database."""
         emoji = self.bot.get_emoji(await self.get_random_emoji())
         await ctx.send(f"<{'a' if emoji.animated else ''}:{emoji.name}:{emoji.id}>")
 
-    @command(
+    @commands_ext.command(
         _emoji.command,
         name='create',
         description='Create an emoji for the server under the given name.',
         aliases=['add'],
         usage='<name> [file] [emoji]',
     )
-    @command_permissions(3, user=["manage_emojis"], bot=["manage_emojis"])
+    @commands_ext.command_permissions(3, user=["manage_emojis"], bot=["manage_emojis"])
     @commands.guild_only()
     @app_commands.rename(emoji='emoji-or-url')
     @app_commands.describe(

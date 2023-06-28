@@ -4,9 +4,8 @@ from typing import Optional, Literal
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PageElement, SoupStrainer, Tag
-
+from cogs.doc import MAX_SIGNATURE_AMOUNT
 from launcher import get_logger
-from . import MAX_SIGNATURE_AMOUNT
 
 log = get_logger(__name__)
 
