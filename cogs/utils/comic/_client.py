@@ -7,13 +7,25 @@ import datetime
 
 import discord.utils
 import yarl
+from dateutil.parser import parse
 
 if TYPE_CHECKING:
     from bot import Percy
 
 
-class Marvel(object):
-    """An Object-Oriented wrapper for the Marvel API"""
+class MarvelError(discord.HTTPException):
+    """Base exception class for all Marvel errors."""
+    pass
+
+
+class Marvel:
+    """A client for the Marvel API.
+
+    Attributes
+    ----------
+    BASE_URL: str
+        The base URL for the Marvel API.
+    """
 
     BASE_URL = f'http://gateway.marvel.com/v1/public/'
 
@@ -61,7 +73,7 @@ class Marvel(object):
                 elif 300 > r.status >= 200:
                     return js
                 else:
-                    raise discord.HTTPException(r, js['message'])
+                    raise MarvelError(r, js['message'])
 
     async def get_comic(self, _id: int):
         """Fetches a single comic by id."""
@@ -76,7 +88,7 @@ class Marvel(object):
         return DataWrapper(self, data)
 
 
-class MarvelObject(object):
+class MarvelObject:
     """Base class for all Marvel API classes"""
 
     def __init__(self, marvel: Marvel, data: dict):
@@ -84,9 +96,9 @@ class MarvelObject(object):
         self.data: dict = data
 
     @staticmethod
-    def str_to_datetime(string) -> datetime:
-        """Converts '2013-11-20T17:40:18-0500' format to 'datetime' object"""
-        return datetime.datetime.strptime(string[:-6], '%Y-%m-%dT%H:%M:%S')
+    def str_to_datetime(text: str) -> datetime:
+        """Converts string to datetime object"""
+        return parse(text).astimezone(datetime.timezone.utc)
 
 
 class DataWrapper(MarvelObject):

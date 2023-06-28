@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
-import traceback
 from functools import partial
 from operator import attrgetter
 from textwrap import dedent
@@ -490,27 +489,24 @@ class Snekbox(commands.Cog):
         """
         log.info(f"Received code from {ctx.author} for evaluation:\n{job}")
 
-        try:
-            while True:
-                ctx.job_message = await ctx.send(
-                    f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
+        while True:
+            ctx.job_message = await ctx.send(
+                f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
 
-                try:
-                    response = await self.send_job(ctx, job)
-                except ValueError:
-                    return await ctx.send(
-                        f"{ctx.author.mention}, <:warning:1113421726861238363> You've already got a job running - "
-                        "please wait for it to finish!"
-                    )
+            try:
+                response = await self.send_job(ctx, job)
+            except ValueError:
+                return await ctx.send(
+                    f"{ctx.author.mention}, <:warning:1113421726861238363> You've already got a job running - "
+                    "please wait for it to finish!"
+                )
 
-                self.jobs[ctx.message.id] = response.id
+            self.jobs[ctx.message.id] = response.id
 
-                job = await self.continue_job(ctx, response, job.name)
-                if not job:
-                    break
-                log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
-        except:
-            traceback.print_exc()
+            job = await self.continue_job(ctx, response, job.name)
+            if not job:
+                break
+            log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
 
     @commands_ext.command(name="eval", aliases=["e"], usage="[python_version] <code...>")
     @commands.guild_only()

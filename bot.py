@@ -172,10 +172,10 @@ class Percy(commands.Bot):
         elif isinstance(error, commands.CommandInvokeError):
             original = error.original
             if isinstance(original, discord.Forbidden):
-                await ctx.send(f'{ctx.tick(False)} I do not have permission to execute this action.')
+                await ctx.send_tick(False, 'I do not have permission to execute this action.')
             elif isinstance(original, discord.HTTPException):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
-            elif issubclass(type(original), RuntimeError):
+            elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
                 await ctx.send(f"{original} Please wait for it to finish and try again later.")
         elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, commands.BadArgument)):
             await ctx.send(str(error))

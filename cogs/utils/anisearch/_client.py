@@ -1,21 +1,14 @@
 from typing import Any, Dict, List
 
 import aiohttp
+import discord
 
 API_ENDPOINT = 'https://graphql.anilist.co'
 
 
-class AniListRequestError(Exception):
-    def __init__(self, status: int, message: str, locations: List[Dict[str, Any]]) -> None:
-        self.status = status
-        self.message = message
-        self.locations = locations
-
-        msg = f'status={self.status}, message="{self.message}"'
-        if self.locations:
-            msg += f', locations={self.locations}'
-
-        super().__init__(msg)
+class AniListError(discord.HTTPException):
+    """Base exception class for AniList API errors."""
+    pass
 
 
 class AniListClient:
@@ -29,8 +22,7 @@ class AniListClient:
             data = await resp.json()
 
             if resp.status != 200:
-                error = data.get('errors')[0]
-                raise AniListRequestError(error.get('status'), error.get('message'), error.get('locations'))
+                raise AniListError(resp, data.get('errors')[0])
         return data
 
     async def media(self, **variables) -> List[Dict[str, Any]]:

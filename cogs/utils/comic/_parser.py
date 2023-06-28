@@ -1,6 +1,6 @@
 import datetime
 import re
-from typing import Union, Optional
+from typing import Union, Optional, ClassVar
 from urllib.parse import urljoin
 
 import aiohttp
@@ -10,12 +10,6 @@ from dateutil.parser import parse
 from cogs.utils.tasks import executor
 from cogs.utils.comic._client import Marvel, Comic as MarvelComic
 from cogs.utils.formats import remove_html_tags
-
-
-# DC
-DC_ENDPOINT = 'https://www.dc.com'
-VIZ_ENDPOINT = 'https://www.viz.com/calendar/{year}/{month}'
-RAW_VIZ_ENDPOINT = 'https://www.viz.com'
 
 
 def extract_authors(text: str) -> dict[str, list[str]]:
@@ -36,11 +30,15 @@ def from_destination(c: str, details: dict[str, list]) -> str: return str(detail
 class Parser:
     """Parser object for comic fetching."""
 
+    DC_ENDPOINT: ClassVar[str] = 'https://www.dc.com'
+    VIZ_ENDPOINT: ClassVar[str] = 'https://www.viz.com/calendar/{year}/{month}'
+    RAW_VIZ_ENDPOINT: ClassVar[str] = 'https://www.viz.com'
+
     @classmethod
     async def bs4_viz(cls):
         from ...comicpulls import GenericComic, Brand
 
-        ref = VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
+        ref = cls.VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
 
         elements = []
         async with aiohttp.ClientSession() as session:
@@ -48,7 +46,7 @@ class Parser:
                 soup = BeautifulSoup(await resp.text(), 'html.parser')
                 for i in soup.find_all('a', class_='product-thumb ar-inner type-center'):
                     href = i.get('href')
-                    elements.append(urljoin(RAW_VIZ_ENDPOINT, href))
+                    elements.append(urljoin(cls.RAW_VIZ_ENDPOINT, href))
 
         mangas = []
         async with aiohttp.ClientSession() as session:
@@ -127,7 +125,7 @@ class Parser:
         from ...comicpulls import GenericComic, Brand
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(DC_ENDPOINT + "/comics") as resp:
+            async with session.get(cls.DC_ENDPOINT + "/comics") as resp:
                 if resp.status != 200:
                     resp.raise_for_status()
 
@@ -139,7 +137,7 @@ class Parser:
 
             for item in links.contents:
                 branch = item.findNext(class_="card-button usePointer").get("href")
-                link = DC_ENDPOINT + branch
+                link = cls.DC_ENDPOINT + branch
 
                 async with session.get(link) as resp:
                     if resp.status != 200:
@@ -158,12 +156,13 @@ class Parser:
                 c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
                 if c_type != "COMIC BOOK":
                     continue
+
                 title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()
 
                 desc = None
                 if len(txt) > 1:
                     if txt[1].find('p'):
-                        desc_list = cls.get_description(txt[1])
+                        desc_list = cls._get_desc(txt[1])
                         desc = '\n'.join(i.strip() for i in ''.join(desc_list).split('\n') if i.strip())
 
                 details_list = [i.contents for i in soup.find_all('div', class_="sc-b3fnpg-3 eRdwCd")]
@@ -213,7 +212,6 @@ class Parser:
                     copyright=copyright,
                     date=date
                 )
-
                 comics.append(_cs_comic)
 
         return comics
@@ -266,14 +264,14 @@ class Parser:
         raw = await client.get_comics(format='comic', noVariants='true', dateDescriptor='thisWeek', limit=100)
         m_copyright = raw.data['attributionText']
 
-        comics = [cls.to_comic(c) for c in raw.ex_data.results]
+        comics = [cls._to_comic(c) for c in raw.ex_data.results]
         for c in comics:
             c.brand = Brand.MARVEL
             c.copyright = m_copyright
         return comics
 
     @classmethod
-    def to_comic(cls, data: MarvelComic):
+    def _to_comic(cls, data: MarvelComic):
         from ...comicpulls import GenericComic
 
         _cs_comic = GenericComic(
@@ -300,12 +298,12 @@ class Parser:
         return _cs_comic
 
     @classmethod
-    def get_description(cls, tag: Union[Tag, PageElement]) -> list[str]:
+    def _get_desc(cls, tag: Union[Tag, PageElement]) -> list[str]:
         strings = []
         for i in tag.contents:
             if isinstance(i, Tag):
                 if i.name in ['p', 'em']:
-                    strings += cls.get_description(i)
+                    strings += cls._get_desc(i)
             elif isinstance(i, NavigableString):
                 s = str(i)
                 if tag.name == 'em':
