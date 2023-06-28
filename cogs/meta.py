@@ -26,7 +26,8 @@ from .utils import fuzzy, helpers
 from .utils.converters import Prefix
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App
+from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App, \
+    PH_GUILD_ID
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -927,6 +928,7 @@ class Meta(commands.Cog):
         commands.hybrid_command,
         name='solved',
         description='Marks a thread as solved.',
+        guild_ids=[PH_GUILD_ID]
     )
     @commands.guild_only()
     @commands.cooldown(1, 20, commands.BucketType.channel)
