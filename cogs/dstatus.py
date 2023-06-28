@@ -116,9 +116,10 @@ class Update:
         self.updated_at = converters.utcparse(self.updated_at)
         self.display_at = converters.utcparse(self.display_at)
 
-        self.affected_components = [
-            ShortComponent(**component_data) for component_data in self.affected_components  # type: ignore
-        ]
+        if self.affected_components:
+            self.affected_components = [
+                ShortComponent(**component_data) for component_data in self.affected_components  # type: ignore
+            ]
 
 
 @dataclass
@@ -146,9 +147,10 @@ class Incident:
 
         self.components = [Component(**component_data) for component_data in self.components]  # type: ignore
 
-        self.incident_updates = [
-            Update(**update_data) for update_data in self.incident_updates  # type: ignore
-        ]
+        if self.incident_updates:
+            self.incident_updates = [
+                Update(**update_data) for update_data in self.incident_updates  # type: ignore
+            ]
 
     def build_embed(self) -> discord.Embed:
         updates = self.incident_updates.copy()
@@ -214,7 +216,7 @@ class DiscordStatus(commands.Cog):
 
         return [IncidentItem(self.bot, record=record) for record in records]
 
-    async def fetch_unresolved_incidents(self) -> Optional[list[Incident]]:
+    async def fetch_unresolved_incidents(self, bypass: bool = False) -> Optional[list[Incident]]:
         """|coro|
 
         Fetches the latest incident from the Discord Status Feed.
@@ -241,6 +243,9 @@ class DiscordStatus(commands.Cog):
         # 10 minutes should be alright because we are checking every 3 minutes.
 
         # x[0] is the newest incident
+        if bypass:
+            return [Incident(**data) for data in data["incidents"]]
+
         return [Incident(**data) for data in data["incidents"]
                 if converters.utcparse(data["updated_at"]) >
                 discord.utils.utcnow() - datetime.timedelta(minutes=10)]
@@ -260,7 +265,7 @@ class DiscordStatus(commands.Cog):
         """
 
         if saved.id is None:
-            query = "UPDATE discord_incidents SET id = $1 WHERE guild_id = $3 RETURNING *;"
+            query = "UPDATE discord_incidents SET id = $1 WHERE guild_id = $2 RETURNING *;"
             saved = IncidentItem(
                 self.bot, record=await self.bot.pool.fetchrow(query, incident.id, saved.guild_id)
             )
@@ -272,9 +277,6 @@ class DiscordStatus(commands.Cog):
             query = "UPDATE discord_incidents SET status = $3 WHERE id = $1 AND guild_id = $2;"
             await self.bot.pool.execute(query, saved.id, saved.guild_id, incident.status)
         else:
-            query = "UPDATE discord_incidents SET status = 'resolved' WHERE id = $1 AND guild_id = $2;"
-            await self.bot.pool.execute(query, saved.id, saved.guild_id)
-
             query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
             saved = IncidentItem(
                 self.bot, record=await self.bot.pool.fetchrow(
@@ -295,6 +297,32 @@ class DiscordStatus(commands.Cog):
 
         self.get_subscribers.invalidate(self)
 
+    @cache.cache()
+    async def get_subscriber(self, guild_id: int) -> Optional[IncidentItem]:
+        """|coro|
+
+        Checks if the guild is subscribed to the Discord Status Feed.
+
+        Parameters
+        ----------
+        guild_id: int
+            The guild to check.
+
+        Returns
+        -------
+        bool
+            Whether the guild is subscribed or not.
+        """
+
+        query = "SELECT * FROM discord_incidents WHERE guild_id = $1;"
+        async with self.bot.pool.acquire() as conn:
+            async with conn.transaction():
+                record = await conn.fetchrow(query, guild_id)
+
+        if not record:
+            return None
+        return IncidentItem(self.bot, record=record)
+
     @commands_ext.command(commands.hybrid_group, name="discord-status", aliases=["dstatus"],
                           fallback="show", description="Shows the current Discord Status.")
     @commands.guild_only()
@@ -308,6 +336,43 @@ class DiscordStatus(commands.Cog):
         await ctx.send(content=f"Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*"
                                if len(embeds) > 10 else None,
                        embeds=embeds[:10], ephemeral=True)
+
+    @commands_ext.command(dstatus.command, name="release", description="Releases the last incident if not posted.",
+                          with_app_command=False)
+    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @commands.guild_only()
+    async def dstatus_release(self, ctx: GuildContext):
+        """Releases the last incident again."""
+
+        latest = (await self.fetch_unresolved_incidents(bypass=True))[0]
+        if not latest:
+            return await ctx.send_tick(None, "No incidents found. *There should be though? Contact the developer!*")
+
+        subscriber = await self.get_subscriber(ctx.guild.id)
+        if not subscriber:
+            return await ctx.send_tick(False, "This guild is not subscribed to the Discord Status Feed.")
+
+        check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;", latest.id, ctx.guild.id)
+        if check.endswith("0"):
+            query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
+            values = (latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)
+        else:
+            query = "UPDATE discord_incidents SET status = $2 WHERE id = $1 AND guild_id = $3 RETURNING *;"
+            values = (latest.id, latest.status, subscriber.guild_id)
+
+        incident = IncidentItem(self.bot, record=await self.bot.pool.fetchrow(query, *values))
+
+        if incident.id == latest.id and incident.status == latest.status:
+            return await ctx.send_tick(False, "There is no newer indient than the last one released.")
+
+        message = await incident.get_channel().send(embed=latest.build_embed())
+
+        if message:
+            query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
+            await self.bot.pool.execute(query, message.id, incident.id, ctx.guild.id)
+
+        self.get_subscribers.invalidate(self)
+        self.get_subscriber.invalidate(self, ctx.guild.id)
 
     @commands_ext.command(dstatus.command, name="subscribe", description="Subscribe/Unsubscribe to Discord Status updates.")
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
@@ -342,6 +407,7 @@ class DiscordStatus(commands.Cog):
             return await ctx.send_tick(False, "You're not subscribed to Discord Status updates.")
 
         self.get_subscribers.invalidate(self)
+        self.get_subscriber.invalidate(self, ctx.guild.id)
 
     @tasks.loop(minutes=3)
     async def check_new_incident(self):

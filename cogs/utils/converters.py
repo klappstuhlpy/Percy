@@ -5,7 +5,7 @@ import re
 import sys
 from io import BufferedIOBase, BytesIO
 from types import ModuleType
-from typing import Any, List, Iterable, Sequence, overload, BinaryIO
+from typing import Any, List, Iterable, Sequence, overload, BinaryIO, Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -98,8 +98,11 @@ def usage_per_day(dt: datetime.datetime, usages: int) -> float:
     return usages / days
 
 
-def utcparse(timestring: str) -> datetime:
-    """Parse a timestring into a timezone aware datetime object."""
+def utcparse(timestring: Optional[str]) -> Optional[datetime]:
+    """Parse a timestring into a timezone aware utc datetime object."""
+    if not timestring:
+        return None
+
     parsed = parse(timestring)
 
     if not parsed:
