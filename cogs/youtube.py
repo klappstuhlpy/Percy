@@ -5,10 +5,10 @@ from typing import List, Dict, Any, NamedTuple, Optional
 
 import aiohttp
 import discord
-from dateutil.parser import parse
 from discord.ext import commands, tasks
 
 from bot import Percy
+from cogs.utils.converters import utcparse
 from launcher import get_logger
 
 log = get_logger(__name__)
@@ -145,7 +145,7 @@ class YouTubeNotifications(commands.Cog):
                     YouTubeStream(
                         channel=channel,
                         video_id=stream["id"]["videoId"],
-                        started_at=parse(stream["snippet"]["publishedAt"]).astimezone(datetime.timezone.utc),
+                        started_at=utcparse(stream["snippet"]["publishedAt"]),
                         title=stream["snippet"]["title"],
                         description=stream["snippet"]["description"],
                         thumbnail_url=stream["snippet"]["thumbnails"]["high"]["url"]

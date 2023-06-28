@@ -7,7 +7,8 @@ import datetime
 
 import discord.utils
 import yarl
-from dateutil.parser import parse
+
+from cogs.utils.converters import utcparse
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -98,7 +99,7 @@ class MarvelObject:
     @staticmethod
     def str_to_datetime(text: str) -> datetime:
         """Converts string to datetime object"""
-        return parse(text).astimezone(datetime.timezone.utc)
+        return utcparse(text)
 
 
 class DataWrapper(MarvelObject):

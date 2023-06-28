@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import aiohttp
 import discord
 import matplotlib as matplotlib
+from dateutil.parser import parse
 from discord import app_commands, Colour
 from discord.ext import commands
 
@@ -95,6 +96,16 @@ def usage_per_day(dt: datetime.datetime, usages: int) -> float:
     if int(days) == 0:
         return usages
     return usages / days
+
+
+def utcparse(timestring: str) -> datetime:
+    """Parse a timestring into a timezone aware datetime object."""
+    parsed = parse(timestring)
+
+    if not parsed:
+        raise ValueError(f"Could not parse `{timestring}` as a datetime object.")
+
+    return parsed.astimezone(datetime.timezone.utc)
 
 
 class Snowflake:

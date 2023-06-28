@@ -7,13 +7,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 import discord
-from dateutil.parser import parse
 from discord.ext import commands, tasks
 from typing import TypeVar
 
 from bot import Percy
 from .utils.commands_ext import PermissionTemplate
-from .utils import commands_ext, cache
+from .utils import commands_ext, cache, converters
 from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
@@ -69,10 +68,6 @@ class IncidentItem(PostgresItem):
         return None
 
 
-def utcparse(s: str) -> datetime:
-    return parse(s).astimezone(datetime.timezone.utc)
-
-
 @dataclass
 class ShortComponent:
     code: str
@@ -98,8 +93,8 @@ class Component:
     only_show_if_degraded: bool
 
     def __post_init__(self):
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
+        self.created_at = converters.utcparse(self.created_at)
+        self.updated_at = converters.utcparse(self.updated_at)
 
 
 @dataclass
@@ -117,9 +112,9 @@ class Update:
     tweet_id: str
 
     def __post_init__(self):
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
-        self.display_at = utcparse(self.display_at)
+        self.created_at = converters.utcparse(self.created_at)
+        self.updated_at = converters.utcparse(self.updated_at)
+        self.display_at = converters.utcparse(self.display_at)
 
         self.affected_components = [
             ShortComponent(**component_data) for component_data in self.affected_components  # type: ignore
@@ -143,11 +138,11 @@ class Incident:
     components: list[Component]
 
     def __post_init__(self):
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
-        self.monitoring_at = utcparse(self.monitoring_at)
-        self.resolved_at = utcparse(self.resolved_at)
-        self.started_at = utcparse(self.started_at)
+        self.created_at = converters.utcparse(self.created_at)
+        self.updated_at = converters.utcparse(self.updated_at)
+        self.monitoring_at = converters.utcparse(self.monitoring_at)
+        self.resolved_at = converters.utcparse(self.resolved_at)
+        self.started_at = converters.utcparse(self.started_at)
 
         self.components = [Component(**component_data) for component_data in self.components]  # type: ignore
 
@@ -247,8 +242,8 @@ class DiscordStatus(commands.Cog):
 
         # x[0] is the newest incident
         return [Incident(**data) for data in data["incidents"]
-                if parse(data["updated_at"]).astimezone(datetime.timezone.utc).replace(tzinfo=None) >
-                datetime.datetime.utcnow() - datetime.timedelta(minutes=10)]
+                if converters.utcparse(data["updated_at"]) >
+                discord.utils.utcnow() - datetime.timedelta(minutes=10)]
 
     async def _compare_changes_and_update(self, incident: Incident, saved: IncidentItem) -> Optional[discord.Message]:
         """|coro|

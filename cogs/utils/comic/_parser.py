@@ -5,8 +5,8 @@ from urllib.parse import urljoin
 
 import aiohttp
 from bs4 import BeautifulSoup, Tag, NavigableString, PageElement
-from dateutil.parser import parse
 
+from cogs.utils.converters import utcparse
 from cogs.utils.tasks import executor
 from cogs.utils.comic._client import Marvel, Comic as MarvelComic
 from cogs.utils.formats import remove_html_tags
@@ -105,7 +105,7 @@ class Parser:
                             page_count=int(result.get("Length", 'N/A Pages')[0]),
                             price=float(price),
                             copyright=f"© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.",
-                            date=parse(release_date),
+                            date=utcparse(release_date),
                             # kwargs
                             isbn=isbn,
                             trim_size=trim_size,
@@ -189,7 +189,7 @@ class Parser:
                 price = 0.0 if price == "FREE" else float(price) if price else None
 
                 date = from_destination('36', details)
-                date = parse(date) if date else None
+                date = utcparse(date) if date else None
 
                 page_count = from_destination('48', details)
 
@@ -197,7 +197,9 @@ class Parser:
                 image = img['src'].split('?')[0]
                 image = image if image else None
 
-                copyright = str(soup.find('div', class_="small legal d-inline-block").contents[0].contents[0])
+                copyright = str(
+                    soup.find('div', class_="small legal d-inline-block").contents[0].contents[0]  # type: ignore
+                )
 
                 _cs_comic = GenericComic(
                     brand=Brand.DC,
