@@ -44,13 +44,15 @@ class AuditLog(commands.Cog):
         if change_type in ["overwrites", "permissions", "allow", "deny"]:
             return self.get_permissions_changes(entry, change_type)
         elif change_type == "roles":
-            message = ["### Roles:"]
+            message = ["### Updated Roles"]
             role_removals = set(entry.before.roles) - set(entry.after.roles)
             role_additions = set(entry.after.roles) - set(entry.before.roles)
             for role in role_removals | role_additions:
-                sign = "Removed" if role in role_removals else "Added"
+                sign = "-" if role in role_removals else "+"
                 message.append(f"{sign} {role.mention}")
-            return "\n".join(message)
+
+            message = '\n'.join(message)
+            return f"```diff\n{message}```"
         elif hasattr(entry.before, change_type) and hasattr(entry.after, change_type):
             return f"**{change_type.replace('_', ' ').title()}:** {getattr(entry.before, change_type)} -> {getattr(entry.after, change_type)}"
         return None
