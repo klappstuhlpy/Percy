@@ -295,8 +295,8 @@ class DiscordStatus(commands.Cog):
 
         self.get_subscribers.invalidate(self)
 
-    @commands_ext.command(commands.hybrid_group, name="discord-status", fallback="show",
-             description="Shows the current Discord Status.")
+    @commands_ext.command(commands.hybrid_group, name="discord-status", aliases=["dstatus"],
+                          fallback="show", description="Shows the current Discord Status.")
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
         """Shows the current Discord Status."""
