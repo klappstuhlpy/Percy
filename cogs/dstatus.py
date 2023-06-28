@@ -326,12 +326,12 @@ class DiscordStatus(commands.Cog):
         if channel and is_registered:
             query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
             await ctx.db.execute(query, ctx.guild.id, channel.id)
-            await ctx.send_tick(True, "Successfully subscribed to Discord Status updates in {channel.mention}.")
+            await ctx.send_tick(True, f"Successfully subscribed to Discord Status updates in {channel.mention}.")
 
         elif channel and not is_registered:
             query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2);"
             await ctx.db.execute(query, ctx.guild.id, channel.id)
-            await ctx.send_tick(True, "Successfully subscribed to Discord Status updates in {channel.mention}.")
+            await ctx.send_tick(True, f"Successfully subscribed to Discord Status updates in {channel.mention}.")
 
         elif not channel and is_registered:
             query = "DELETE FROM discord_incidents WHERE guild_id = $1;"
