@@ -250,7 +250,7 @@ class BasicJSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-class TimeMesh(Protocol[int]):
+class TimeMesh(Protocol):
     """A context manager that measures the time it takes to execute a block of code."""
 
     A = TypeVar('A', bound='TimeMesh')
