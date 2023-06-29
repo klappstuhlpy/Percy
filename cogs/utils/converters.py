@@ -1,23 +1,21 @@
 import datetime
 import inspect
 import os
-import re
 import sys
 from io import BufferedIOBase, BytesIO
 from types import ModuleType
-from typing import Any, List, Iterable, Sequence, overload, BinaryIO, Optional
+from typing import Any, List, Iterable, Sequence, overload, BinaryIO, Optional, Union
 from urllib.parse import urlparse
 
 import aiohttp
 import discord
-import matplotlib as matplotlib
 from dateutil.parser import parse
 from discord import app_commands, Colour
 from discord.ext import commands
 
 from cogs.utils import fuzzy
 from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
-from ..utils.context import Context, GuildContext
+from ..utils.context import GuildContext
 
 
 async def aenumerate(asequence, start=0):
@@ -26,18 +24,6 @@ async def aenumerate(asequence, start=0):
     async for elem in asequence:
         yield n, elem
         n += 1
-
-
-def tail_last_line(f: BinaryIO):
-    """Reads the last line of a file"""
-    try:  # catch OSError in case of a one line file
-        f.seek(-2, os.SEEK_END)
-        while f.read(1) != b'\n':
-            f.seek(-2, os.SEEK_CUR)
-    except OSError:
-        f.seek(0)
-    last_line = f.readline().decode()
-    return last_line
 
 
 def tail(f: BinaryIO, n: int = 10) -> List[bytes]:
@@ -52,8 +38,6 @@ def tail(f: BinaryIO, n: int = 10) -> List[bytes]:
         try:
             f.seek(f.tell() - pos, os.SEEK_SET)
         except ValueError:
-            # lines greater than file seeking size
-            # seek to start
             f.seek(0, os.SEEK_SET)
             isFileSmall = True
         except IOError:
@@ -111,9 +95,10 @@ def utcparse(timestring: Optional[str]) -> Optional[datetime]:
     return parsed.astimezone(datetime.timezone.utc)
 
 
-class Snowflake:
-    @classmethod
-    async def convert(cls, ctx: Context, argument: str) -> int:
+class Snowflake(commands.Converter[int]):
+    """Basically a :class:`int` converter but with an argument type error."""
+
+    async def convert(self, ctx: _TContext, argument: str) -> int:
         try:
             return int(argument)
         except ValueError:
@@ -125,6 +110,8 @@ class Snowflake:
 
 
 class Prefix(commands.Converter):
+    """A converter that validates bot prefixes for set."""
+
     async def convert(self, ctx: _TContext, argument: str) -> str:
         user_id = ctx.bot.user.id
         if argument.startswith((f'<@{user_id}>', f'<@!{user_id}>')):
@@ -134,39 +121,64 @@ class Prefix(commands.Converter):
         return argument
 
 
-class ColorTransformer(app_commands.Transformer):
-    async def transform(self, interaction, value: str) -> Colour | str:
+class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Transformer):
+    """A color converter that will try to match a color HEX or name to a :class:``discord.Color``."""
+
+    async def transform(self, interaction: discord.Interaction, value: str) -> Union[Colour, str]:
         """Transform a color HEX to the matching :class:``discord.Color` if possible else return None."""
 
         try:
             value = value.strip()
 
             if value.startswith("#"):
-                color = value[1:]
+                value = value[1:]
             elif value.startswith("0x"):
-                color = value[2:]
+                value = value[2:]
             else:
-                color = value
+                value = value
 
-            color = discord.Colour.from_rgb(*bytes.fromhex(color))
+            result = discord.Colour.from_rgb(*bytes.fromhex(value))
         except ValueError:
-            try:
-                color = matplotlib.colors.cnames[value.lower().replace(" ", "").replace("_", "")]
-                color = discord.Colour.from_rgb(*bytes.fromhex(color[1:]))
-            except KeyError:
+            results: list[tuple[str, str]] = fuzzy.finder(value, COLOUR_DICT.items(), key=lambda x: x[0], limit=1)
+            if results:
                 try:
-                    color = matplotlib.XKCD_COLORS[value.lower().replace("_", "")]
-                    color = discord.Colour.from_rgb(*bytes.fromhex(color[1:]))
-                except KeyError:
-                    color = discord.Colour.blurple()
-        return color
+                    result = discord.Colour.from_rgb(*bytes.fromhex(results[0][1]))
+                except (ValueError, IndexError):
+                    return discord.Colour.blurple()
+                else:
+                    return result
+        else:
+            return result
 
+    async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[Colour]]:
+        results = fuzzy.extract(current, COLOUR_DICT, limit=20)
+        return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
 
-async def colour_autocomplete(
-        interaction: discord.Interaction, current: str  # noqa
-) -> list[app_commands.Choice[discord.Colour]]:
-    results = fuzzy.extract(current, COLOUR_DICT, limit=20)
-    return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
+    async def convert(self, ctx: _TContext, argument: str) -> Union[str, Colour]:
+        """Converts a color HEX to the matching :class:``discord.Color` if possible else return None."""
+
+        try:
+            argument = argument.strip()
+
+            if argument.startswith("#"):
+                argument = argument[1:]
+            elif argument.startswith("0x"):
+                argument = argument[2:]
+            else:
+                argument = argument
+
+            result = discord.Colour.from_rgb(*bytes.fromhex(argument))
+        except ValueError:
+            results: list[tuple[str, str]] = fuzzy.finder(argument, COLOUR_DICT.items(), key=lambda x: x[0], limit=1)
+            if results:
+                try:
+                    result = discord.Colour.from_rgb(*bytes.fromhex(results[0][1]))
+                except (ValueError, IndexError):
+                    return discord.Colour.blurple()
+                else:
+                    return result
+        else:
+            return result
 
 
 class URLObject:
@@ -234,8 +246,20 @@ class URLObject:
         )
 
 
-class URLConverter(app_commands.Transformer):
+class URLConverter(commands.Converter[str], app_commands.Transformer):
     """Converts a URL to a URLObject"""
+
+    async def convert(self, ctx: _TContext, argument: str) -> str:
+        parsed_url = urlparse(argument)
+
+        if str(parsed_url.netloc).split(":")[0] in (
+                "127.0.0.1",
+                "localhost",
+                "0.0.0.0",
+        ) and not await ctx.bot.is_owner(ctx.author):
+            raise commands.BadArgument("<:redTick:1079249771975413910> Invalid URL")
+
+        return argument
 
     async def transform(self, interaction: discord.Interaction, value: str) -> str:
         parsed_url = urlparse(value)
@@ -250,35 +274,12 @@ class URLConverter(app_commands.Transformer):
         return value
 
 
-class SpecificUserConverter(commands.Converter):
-    """User Converter class that only supports IDs and mentions"""
-
-    async def _get_user(self, bot: commands.Bot, argument: int):
-        user = bot.get_user(argument)
-        if user:
-            return user
-        return await bot.fetch_user(argument)
-
-    async def convert(self, ctx: commands.Context, argument: str):
-        is_digits = all(char.isdigit() for char in argument)
-
-        if is_digits:
-            if user := await self._get_user(ctx.bot, int(argument)):
-                return user
-
-        if match := re.match(r"<@!?([0-9]+)>", argument):
-            if user := await self._get_user(ctx.bot, int(match.group(1))):
-                return user
-
-        raise commands.BadArgument("<:redTick:1079249771975413910> Failed to convert argument to user")
-
-
-class FileConverter(commands.Converter):
+class FileConverter(commands.Converter[Union[URLObject, discord.Attachment]]):
     """Converts a file to a discord.Attachment or URLObject"""
 
     async def convert(
             self, ctx: commands.Context | discord.Interaction, file: str = None
-    ) -> discord.Attachment | URLObject:
+    ) -> Union[URLObject, discord.Attachment]:
         if file is None:
             if ctx.message.attachments:
                 attachment = ctx.message.attachments[0]
@@ -299,7 +300,7 @@ class FileConverter(commands.Converter):
         return attachment
 
 
-class IgnoreEntity(commands.Converter):
+class IgnoreEntity(commands.Converter[str]):
     async def convert(self, ctx: GuildContext, argument: str):  # noqa
         assert ctx.current_parameter is not None
         return await commands.run_converters(ctx, IgnoreableEntity, argument, ctx.current_parameter)
@@ -318,11 +319,3 @@ class ModuleConverter(commands.Converter[ModuleType]):
         if not module:
             raise commands.BadArgument(f"{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.")
         return module
-
-
-class ChannelOrMember(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str):
-        try:
-            return await commands.TextChannelConverter().convert(ctx, argument)
-        except commands.BadArgument:
-            return await commands.MemberConverter().convert(ctx, argument)

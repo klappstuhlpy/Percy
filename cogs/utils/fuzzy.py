@@ -329,6 +329,7 @@ def finder(
         *,
         key: Optional[Callable[[T], str]] = ...,
         raw: Literal[True],
+        limit: Optional[int] = ...,
 ) -> list[tuple[int, int, T]]:
     ...
 
@@ -340,6 +341,7 @@ def finder(
         *,
         key: Optional[Callable[[T], str]] = ...,
         raw: Literal[False],
+        limit: Optional[int] = ...,
 ) -> list[T]:
     ...
 
@@ -351,7 +353,8 @@ def finder(
         *,
         key: Optional[Callable[[T], str]] = ...,
         raw: bool = ...,
-) -> list[T]:
+        limit: Optional[int] = ...,
+) -> T:
     ...
 
 
@@ -361,12 +364,16 @@ def finder(
         *,
         key: Optional[Callable[[T], str]] = None,
         raw: bool = False,
-) -> list[tuple[int, int, T]] | list[T]:
+        limit: Optional[int] = None,
+) -> list[tuple[int, int, T]] | list[T] | T:
     suggestions: list[tuple[int, int, T]] = []
     text = str(text)
     pat = '.*?'.join(map(re.escape, text))
     regex = re.compile(pat, flags=re.IGNORECASE)
     for item in collection:
+        if limit is not None and len(suggestions) >= limit:
+            break
+
         to_search = key(item) if key else str(item)
         r = regex.search(to_search)
         if r:
@@ -378,9 +385,11 @@ def finder(
         return tup
 
     if raw:
-        return sorted(suggestions, key=sort_key)
+        result = sorted(suggestions, key=sort_key)
     else:
-        return [z for _, _, z in sorted(suggestions, key=sort_key)]
+        result = [z for _, _, z in sorted(suggestions, key=sort_key)]
+
+    return result
 
 
 def find(text: str, collection: Iterable[str], *, key: Optional[Callable[[str], str]] = None) -> Optional[str]:

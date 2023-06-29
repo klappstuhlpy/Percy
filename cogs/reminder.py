@@ -14,8 +14,8 @@ from typing_extensions import Annotated
 
 from .utils import timetools, formats, commands_ext
 from .utils.context import Context, tick
-from .utils.formats import plural, MaybeAcquire
-from .utils.helpers import PostgresItem
+from .utils.formats import plural
+from .utils.helpers import PostgresItem, MaybeAcquire
 
 if TYPE_CHECKING:
     from bot import Percy

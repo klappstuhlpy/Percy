@@ -16,24 +16,6 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
-class MaybeAcquire:
-    def __init__(self, connection: Optional[asyncpg.Connection], *, pool: asyncpg.Pool) -> None:
-        self.connection: Optional[asyncpg.Connection] = connection
-        self.pool: asyncpg.Pool = pool
-        self._cleanup: bool = False
-
-    async def __aenter__(self) -> asyncpg.Connection:
-        if self.connection is None:
-            self._cleanup = True
-            self._connection = c = await self.pool.acquire()
-            return c
-        return self.connection
-
-    async def __aexit__(self, *args) -> None:
-        if self._cleanup:
-            await self.pool.release(self._connection)
-
-
 class plural:
     """A format spec which handles making words plural or singular based off of its value.
 

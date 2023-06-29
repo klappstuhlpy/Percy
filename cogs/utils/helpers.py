@@ -4,7 +4,7 @@ import datetime
 import enum
 import json
 import time
-from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type
+from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type, Protocol
 
 import asyncpg
 import discord
@@ -31,10 +31,10 @@ class BaseFlags:
         """Returns true if the flags are empty (i.e. a zero value)"""
         return self.value == 0
 
-    def _has_flag(self, o: int) -> bool:
+    def has_flag(self, o: int) -> bool:
         return (self.value & o) == o
 
-    def _set_flag(self, o: int, toggle: bool) -> None:
+    def set_flag(self, o: int, toggle: bool) -> None:
         if toggle is True:
             self.value |= o
         elif toggle is False:
@@ -43,7 +43,7 @@ class BaseFlags:
             raise TypeError(f'Value to set for {self.__class__.__name__} must be a bool.')
 
 
-class flag_value:
+class flag_value(Protocol[T]):
     def __init__(self, func: Callable[[Any], int]):
         self.flag: int = func(None)
         self.__doc__: Optional[str] = func.__doc__
@@ -59,10 +59,10 @@ class flag_value:
     def __get__(self, instance: Optional[T], owner: type[T]) -> Any:
         if instance is None:
             return self
-        return instance._has_flag(self.flag)
+        return instance.has_flag(self.flag)
 
     def __set__(self, instance: BaseFlags, value: bool) -> None:
-        instance._set_flag(self.flag, value)
+        instance.set_flag(self.flag, value)
 
     def __repr__(self) -> str:
         return f'<flag_value flag={self.flag!r}>'
@@ -135,10 +135,24 @@ class PostgresItem(metaclass=PostgresItemMeta):
         return self.record[item]
 
     def __setitem__(self, item: str, value: Any):
-        """Sets the value of the item's record."""
+        """Sets the value of the item's record and the internal attributes."""
         if not self.record:
             self.record = {}  # setting a "fake" record
         self.record[item] = value
+        setattr(self, item, value)
+
+    def __delitem__(self, item: str):
+        """Deletes an item from the item's record and internal attributes."""
+        del self.record[item]
+        delattr(self, item)
+
+    def __contains__(self, item: str) -> bool:
+        """Returns whether the item's record contains the given item."""
+        return item in self.record
+
+    def __len__(self) -> int:
+        """Returns the length of the item's record."""
+        return len(self.record)
 
     def __bool__(self) -> bool:
         """Returns whether the item has a record."""
@@ -151,7 +165,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
     @classmethod
     def temporary(cls, *args, **kwargs) -> 'PostgresItem':
         """Creates a temporary instance of this class."""
-        self = ignore_record()(cls)(*args, **kwargs)
+        self = ignore_record()(cls)(*args, **kwargs)  # type: ignore
         return self
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -167,6 +181,28 @@ def ignore_record() -> Callable[[T], T]:
         return func
 
     return decorator
+
+
+_TC = TypeVar('_TC', asyncpg.Connection, asyncpg.Pool)
+
+
+class MaybeAcquire(Protocol[_TC]):
+    """A protocol for objects that can be used in a `maybe_acquire` context manager."""
+    def __init__(self, connection: Optional[asyncpg.Connection], *, pool: asyncpg.Pool) -> None:
+        self.connection: Optional[asyncpg.Connection] = connection
+        self.pool: asyncpg.Pool = pool
+        self._cleanup: bool = False
+
+    async def __aenter__(self) -> _TC:
+        if self.connection is None:
+            self._cleanup = True
+            self._connection = c = await self.pool.acquire()
+            return c
+        return self.connection
+
+    async def __aexit__(self, *args) -> None:
+        if self._cleanup:
+            await self.pool.release(self._connection)
 
 
 class Colour(discord.Colour):
@@ -214,29 +250,36 @@ class BasicJSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-class TimeMesh:
+class TimeMesh(Protocol[int]):
+    """A context manager that measures the time it takes to execute a block of code."""
+
+    A = TypeVar('A', bound='TimeMesh')
+
     def __init__(self):
         self._start = None
         self._end = None
 
-    def __enter__(self):
+    def __enter__(self) -> A:
         self._start = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._end = time.perf_counter()
 
-    def __int__(self):
+    def __int__(self) -> int:
         return round(self.time)
 
-    def __float__(self):
+    def __float__(self) -> float:
         return self.time
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.time)
 
-    def __repr__(self):
-        return f"<TimeMesh time={self.time}>"
+    def __hash__(self) -> int:
+        return hash(self.time)
+
+    def __repr__(self) -> str:
+        return f"<TimeMesh time={self.time} start={self._start} end={self._end}>"
 
     @property
     def time(self) -> int:

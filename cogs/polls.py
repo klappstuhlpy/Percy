@@ -16,7 +16,6 @@ from .utils.paginator import BasePaginator, LinePaginator
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, helpers, commands_ext
 from .utils.context import tick
-from .utils.converters import colour_autocomplete
 from .utils.formats import plural, get_shortened_string, betterget
 from .utils.helpers import PostgresItem
 
@@ -729,7 +728,6 @@ class Polls(commands.Cog):
         ping="Whether to ping the role.",
         user_reason="Whether to ask for a reason on vote.",
     )
-    @app_commands.autocomplete(color=colour_autocomplete)
     async def polls_create(
             self, interaction: discord.Interaction,
             question: str,

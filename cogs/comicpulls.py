@@ -16,8 +16,7 @@ from discord.ext import commands, tasks
 
 from bot import Percy
 from .utils import cache, commands_ext
-from .utils.formats import MaybeAcquire
-from .utils.helpers import PostgresItem
+from .utils.helpers import PostgresItem, MaybeAcquire
 from .utils.lock import lock, lock_arg
 from .utils.comic._parser import Parser  # noqa
 from launcher import get_logger
