@@ -12,6 +12,7 @@ from .utils.paginator import BasePaginator, LinePaginator
 from .utils import cache, commands_ext
 from .utils.converters import aenumerate
 from .utils.formats import plonk_iterator
+from itertools import accumulate
 
 if TYPE_CHECKING:
     from typing_extensions import TypeAlias
@@ -59,8 +60,6 @@ class ResolvedCommandPermissions:
                 entry.deny.add(name)
 
     def _split(self, obj: str) -> list[str]:
-        from itertools import accumulate
-
         return list(accumulate(obj.split(), lambda x, y: f'{x} {y}'))
 
     def get_blocked_commands(self, channel_id: int) -> set[str]:

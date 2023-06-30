@@ -4,7 +4,6 @@ import contextlib
 import datetime
 import fnmatch
 import json
-from contextlib import suppress
 from enum import Enum
 from operator import attrgetter
 from typing import Dict, List, Optional, Union, Self, TypeVar, Callable, Generic
@@ -378,34 +377,6 @@ class ComicFeed(PostgresItem, Generic[B]):
         return self.next_scheduled() - datetime.timedelta(days=7)
 
 
-class MultiLock:
-    def __init__(self):
-        self.locks = {}
-
-    def is_locked(self, lock_id: int):
-        lock = self.locks.get(lock_id)
-        return lock and (lock.locked() if lock else False)
-
-    @contextlib.asynccontextmanager
-    async def acquire(self, lock_id: int):
-        try:
-            lock = self.locks.get(lock_id)
-            if not lock:
-                self.locks[lock_id] = asyncio.Lock()
-                lock = self.locks[lock_id]
-
-            yield await lock.acquire()
-        finally:
-            self.release(lock_id)
-
-    def release(self, lock_id: int):
-        lock = self.locks.get(lock_id)
-        if lock and lock.locked():
-            lock.release()
-            if not lock.locked():
-                del self.locks[lock_id]
-
-
 class ComicPulls(commands.Cog, name="Comic Feeds"):
     """Subscribe to weekly comic releases from Marvel and DC!
 
@@ -419,7 +390,6 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         self.parser: Parser = Parser  # type: ignore
         self.comic_cache: ComicCache = ComicCache()
 
-        self._send_lock: MultiLock = MultiLock()
         self._batch_lock: asyncio.Lock = asyncio.Lock()
 
         self._task: Optional[asyncio.Task] = bot.loop.create_task(self.dispatch_feeds())
@@ -453,7 +423,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
     async def comic_cache_check(self, interaction: discord.Interaction) -> bool:
         if self._batch_lock.locked():
-            with suppress(discord.NotFound):
+            with contextlib.suppress(discord.NotFound):
                 await interaction.response.send_message(
                     "<:discord_info:1113421814132117545> The comic cache is currently being "
                     "updated. Please try again later.")
@@ -562,49 +532,49 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         except discord.Forbidden:
             pass
 
+    @lock_arg("comic", "config", attrgetter("channel_id"), raise_error=True)
     async def publish_to_feed(self, config: ComicFeed):
-        async with self._send_lock.acquire(config.channel_id):
-            channel = self.bot.get_channel(config.channel_id)
+        channel = self.bot.get_channel(config.channel_id)
 
-            comics = await self.comic_cache.get(config.brand)
+        comics = await self.comic_cache.get(config.brand)
 
-            if comics:
-                if config.brand == Brand.MANGA:
-                    now = datetime.datetime.now()
-                    formatted_date = now.strftime("%B, %Y")
-                    lead_text = f"## {config.brand.value} • {formatted_date}"
-                else:
-                    lead_text = f"## {config.brand.value} Comics • {discord.utils.format_dt(await self.prev_schedule(config.brand), 'd')}"
-
-                lead_msg = await channel.send(lead_text)
-                if config.pin:
-                    await self.pin(lead_msg)
-
-                if config.ping:
-                    await channel.send(f"<@&{config.ping}>")
-
-                if config.format in [Format.FULL, Format.COMPACT]:
-                    embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
-
-                    instances = {}
-                    for entry in await self.comic_cache.get(config.brand):
-                        if entry in comics:
-                            msg = await channel.send(embed=embeds[entry.id])
-                            instances[entry.id] = entry.to_instance(msg)
-
-                summary_embeds = await self.summary_embed(comics, config.brand, lead_msg)
-                summ_msg = await channel.send(embeds=summary_embeds,
-                                              allowed_mentions=discord.AllowedMentions(roles=True))
-                if config.pin and config.format == Format.SUMMARY:
-                    await self.pin(summ_msg)
+        if comics:
+            if config.brand == Brand.MANGA:
+                now = datetime.datetime.now()
+                formatted_date = now.strftime("%B, %Y")
+                lead_text = f"## {config.brand.value} • {formatted_date}"
             else:
-                await channel.send(
-                    embed=discord.Embed(
-                        description=f"*<:discord_info:1113421814132117545> There are no new **{config.brand.name}** comics for this week.*",
-                        timestamp=discord.utils.utcnow(),
-                        colour=config.brand.colour
-                    ).set_thumbnail(url=config.brand.icon_url)
-                )
+                lead_text = f"## {config.brand.value} Comics • {discord.utils.format_dt(await self.prev_schedule(config.brand), 'd')}"
+
+            lead_msg = await channel.send(lead_text)
+            if config.pin:
+                await self.pin(lead_msg)
+
+            if config.ping:
+                await channel.send(f"<@&{config.ping}>")
+
+            if config.format in [Format.FULL, Format.COMPACT]:
+                embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
+
+                instances = {}
+                for entry in await self.comic_cache.get(config.brand):
+                    if entry in comics:
+                        msg = await channel.send(embed=embeds[entry.id])
+                        instances[entry.id] = entry.to_instance(msg)
+
+            summary_embeds = await self.summary_embed(comics, config.brand, lead_msg)
+            summ_msg = await channel.send(embeds=summary_embeds,
+                                          allowed_mentions=discord.AllowedMentions(roles=True))
+            if config.pin and config.format == Format.SUMMARY:
+                await self.pin(summ_msg)
+        else:
+            await channel.send(
+                embed=discord.Embed(
+                    description=f"*<:discord_info:1113421814132117545> There are no new **{config.brand.name}** comics for this week.*",
+                    timestamp=discord.utils.utcnow(),
+                    colour=config.brand.colour
+                ).set_thumbnail(url=config.brand.icon_url)
+            )
 
     async def summary_embed(
             self, comics: List[Union[GenericComic, GenericComicMessage]], brand: Brand, start: discord.Message = None
