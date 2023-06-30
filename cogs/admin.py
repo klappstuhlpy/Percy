@@ -72,13 +72,10 @@ class Admin(commands.Cog):
         py_ver = ".".join(map(str, sys.version_info[:3]))
 
         if trc:
-            if result:
-                description = f'```py\n{result}{trc}\n```'
-            else:
-                description = f'```py\n{trc}\n```'
+            description = f'```py\n{result or ""}{trc}\n```'
             embed = discord.Embed(title="Compiler Output", description=description, color=discord.Color.red())
         else:
-            description = f'```py\n{result or "[No output]"}\n```'
+            description = result or f'```py\n<No output>\n```'
             embed = discord.Embed(title="Program Output", description=description, color=discord.Color.green())
         embed.set_footer(text=f"{user} • {time_taken}ms • python{py_ver}")
         return embed
