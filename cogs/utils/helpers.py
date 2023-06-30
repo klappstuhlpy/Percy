@@ -103,10 +103,14 @@ class PostgresItem(metaclass=PostgresItemMeta):
         self.record: asyncpg.Record = record
         if record:
             for k, v in record.items():
+                if k not in self.__slots__:
+                    continue
                 setattr(self, k, v)
 
         if kwargs:
             for k, v in kwargs.items():
+                if k not in self.__slots__:
+                    continue
                 setattr(self, k, v)
 
     @classmethod
@@ -139,16 +143,20 @@ class PostgresItem(metaclass=PostgresItemMeta):
         if not self.record:
             self.record = {}  # setting a "fake" record
         self.record[item] = value
-        setattr(self, item, value)
+
+        if item in self.__slots__:
+            setattr(self, item, value)
 
     def __delitem__(self, item: str):
         """Deletes an item from the item's record and internal attributes."""
         del self.record[item]
-        delattr(self, item)
+
+        if item in self.__slots__:
+            delattr(self, item)
 
     def __contains__(self, item: str) -> bool:
         """Returns whether the item's record contains the given item."""
-        return item in self.record
+        return item in self.record or item in self.__slots__
 
     def __len__(self) -> int:
         """Returns the length of the item's record."""
