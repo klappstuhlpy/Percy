@@ -420,12 +420,12 @@ class Tags(commands.Cog):
             location_id: Optional[int] = None,
             only_parent: bool = False,
             similarites: bool = False,
-            actual: bool = False,
+            exact_match: bool = False,
     ) -> Optional[Union[list[AliasTag], Tag, AliasTag]]:
         """|coro| @cached
 
         Gets the Original :class:`Tag` with Optional all :class:`AliasTag` s of it.
-        If no exact match is found, it will return a list of :class:`AliasTag`s that are similar to the name.
+        If no exact_match match is found, it will return a list of :class:`AliasTag`s that are similar to the name.
 
         Note
         ----
@@ -443,7 +443,7 @@ class Tags(commands.Cog):
             Whether to only get the parent Tag.
         similarites: bool
             Whether to get similar Tags.
-        actual: bool
+        exact_match: bool
             Whether to get only the Tag that meets the requirements.
 
         Returns
@@ -453,11 +453,12 @@ class Tags(commands.Cog):
         """
         search_kwargs = {}
 
-        assert isinstance(
-            name_or_id, (str, int)
-        ), f'`name_or_id` must be a `str` or `int`, not {name_or_id.__class__.__name__}'
+        if not isinstance(name_or_id, (str, int)):
+            raise TypeError(f'expected str or int for `name_or_id`, got {name_or_id.__class__.__name__!r}')
 
-        if isinstance(name_or_id, int):
+        identifier_is_int: bool = isinstance(name_or_id, int)
+
+        if identifier_is_int:
             search_kwargs['id'] = name_or_id
         else:
             if name_or_id.isdigit():
@@ -477,28 +478,18 @@ class Tags(commands.Cog):
             f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
-        if not parent and isinstance(name_or_id, str):
-            query = "SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE t.name = $1 LIMIT 1;"
-            parent = await self.bot.pool.fetchrow(query, name_or_id.lower())
+        if not parent:
+            joined = 't.id' if identifier_is_int else 'LOWER(t.name)'
+            query = f"SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE {joined} = $1 LIMIT 1;"
+            parent = await self.bot.pool.fetchrow(
+                query, search_kwargs['id'] if identifier_is_int else search_kwargs['LOWER(name)'])
 
-        if actual:
-            if parent:
+        if parent:
+            if only_parent or exact_match:
                 return Tag(self.bot, record=parent)
 
-            query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
-                f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
-            alias = await self.bot.pool.fetchrow(query, name_or_id)
-            if alias:
-                return AliasTag(record=alias)
-            return None
-
-        if parent:
             to_return = Tag(self.bot, record=parent)
 
-        if only_parent and to_return:
-            return to_return
-
-        if parent:
             if 'id' in search_kwargs:
                 search_kwargs.pop('id')
 
@@ -512,6 +503,14 @@ class Tags(commands.Cog):
 
             if aliases:
                 to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
+        else:
+            if exact_match:
+                query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
+                    f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+                alias = await self.bot.pool.fetchrow(query, name_or_id)
+                if alias:
+                    return AliasTag(record=alias)
+                return None
 
         if (
             similarites
@@ -520,8 +519,9 @@ class Tags(commands.Cog):
         ):
             query = """
                 SELECT
-                    tag_lookup.name, tag_lookup.id,
-                    tag_lookup.name <> t.name AS is_alias
+                    tag_lookup.name,
+                    tag_lookup.name <> t.name AS is_alias,
+                    CASE tag_lookup.name <> t.name WHEN TRUE THEN tag_lookup.id ELSE t.id END AS id
                 FROM tag_lookup
                 INNER JOIN tags t on t.id = tag_lookup.tag_id
                 WHERE tag_lookup.location_id=$1 AND tag_lookup.name % $2
@@ -545,7 +545,7 @@ class Tags(commands.Cog):
         Look up a Tag by name in the given guild. Searching with similarity queries.
 
         If a Tag is found, sends it with the proper formatting to the destination.
-        If no Tag with the exact (LOWERED) name is found, a disambiguation prompt is sent.
+        If no Tag with the exact_match (LOWERED) name is found, a disambiguation prompt is sent.
 
         Parameters
         ----------
@@ -646,7 +646,7 @@ class Tags(commands.Cog):
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
         """Helper method to check if a Tag with ``name`` is currently being made or reserved.
 
-        Note: This doesn't check if the Tag actually exists.
+        Note: This doesn't check if the Tag exact_matchly exists.
         This needs to be handled by the caller.
         """
 
@@ -1049,16 +1049,13 @@ class Tags(commands.Cog):
 
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id)
 
+        if not tag:
+            return await ctx.send_tick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
+
         if content is None and use_embed is None:
             if ctx.interaction is None:
-                raise commands.BadArgument('<:redTick:1079249771975413910> Missing content to edit tag with')
+                return await ctx.send_tick(False, 'Missing content to edit tag with')
             else:
-                if tag is None:
-                    await ctx.send(
-                        '<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?',
-                        ephemeral=True
-                    )
-                    return
                 modal = TagEditModal(tag)
                 await ctx.interaction.response.send_modal(modal)
                 await modal.wait()
@@ -1070,7 +1067,7 @@ class Tags(commands.Cog):
                 return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
 
         await tag.edit(use_embed=use_embed, content=content)
-        await ctx.send('<:greenTick:1079249732364406854> Successfully edited tag.')
+        await ctx.send_tick(True, 'Successfully edited tag.')
         # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
         await self.send_tag(ctx, name_or_id)
 
@@ -1104,8 +1101,7 @@ class Tags(commands.Cog):
                                      only_parent=True)
 
         if not tag:
-            raise commands.BadArgument(
-                '<:redTick:1079249771975413910> Could not find a tag with that name, are you sure it exists or you own it?')
+            return await ctx.send_tick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
 
         await tag.delete()
 
@@ -1357,7 +1353,7 @@ class Tags(commands.Cog):
             name_or_id: Annotated[Union[str, int], TagNameOrID(lower=True, with_id=True)],  # type: ignore
     ):
         """Claim a tag by yourself if the User is not in this server anymore or the tag has no owner."""
-        tag = await self.get_tag(ctx, name_or_id, location_id=ctx.guild.id, actual=True)
+        tag = await self.get_tag(ctx, name_or_id, location_id=ctx.guild.id, exact_match=True)
 
         member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
         if member is not None:
