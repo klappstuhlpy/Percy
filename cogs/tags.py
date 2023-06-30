@@ -421,7 +421,7 @@ class Tags(commands.Cog):
             only_parent: bool = False,
             similarites: bool = False,
             actual: bool = False,
-    ) -> Optional[Union[list[AliasTag] | Tag | AliasTag]]:
+    ) -> Optional[Union[list[AliasTag], Tag, AliasTag]]:
         """|coro| @cached
 
         Gets the Original :class:`Tag` with Optional all :class:`AliasTag` s of it.
@@ -471,6 +471,8 @@ class Tags(commands.Cog):
         if owner_id:
             search_kwargs['owner_id'] = owner_id
 
+        to_return = None
+
         query = "SELECT * FROM tags WHERE " + ' AND '.join(
             f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
@@ -482,35 +484,34 @@ class Tags(commands.Cog):
         if actual:
             if parent:
                 return Tag(self.bot, record=parent)
-            else:
-                query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
-                    f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
-                alias = await self.bot.pool.fetchrow(query, name_or_id)
-                if alias:
-                    return AliasTag(record=alias)
-                return None
 
-        if not parent:
+            query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
+                f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+            alias = await self.bot.pool.fetchrow(query, name_or_id)
+            if alias:
+                return AliasTag(record=alias)
             return None
 
-        to_return = Tag(self.bot, record=parent)
+        if parent:
+            to_return = Tag(self.bot, record=parent)
 
-        if only_parent:
+        if only_parent and to_return:
             return to_return
 
-        if 'id' in search_kwargs:
-            search_kwargs.pop('id')
+        if parent:
+            if 'id' in search_kwargs:
+                search_kwargs.pop('id')
 
-        if 'name' in search_kwargs:
-            search_kwargs.pop('name')
+            if 'name' in search_kwargs:
+                search_kwargs.pop('name')
 
-        search_kwargs['tag_id'] = parent['id']
-        query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + ' AND '.join(
-            f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
-        aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
+            search_kwargs['tag_id'] = parent['id']
+            query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + ' AND '.join(
+                f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
+            aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
-        if aliases:
-            to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
+            if aliases:
+                to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
 
         if similarites and not to_return:
             if not isinstance(name_or_id, str):
