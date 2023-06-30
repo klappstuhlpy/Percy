@@ -69,7 +69,7 @@ class Admin(commands.Cog):
     def build_eval_embed(
             user: discord.Member, time_taken: float, result: Optional[str] = None, trc: Optional[str] = None
     ) -> discord.Embed:
-        py_ver = ".".join(sys.version_info[:3])
+        py_ver = ".".join(map(str, sys.version_info[:3]))
 
         if trc:
             if result:
