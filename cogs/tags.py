@@ -563,14 +563,14 @@ class Tags(commands.Cog):
             if tag is None or len(tag) == 0:
                 await ctx.send_tick(False, 'No Tag with this name or similar name found.')
             else:
-                names = '\n'.join(f"* **{r.name}** [`{r.id}`]" for r in tag)
-                embed = discord.Embed(title="Did you mean ...", description=names,
-                                      colour=self.bot.colour.darker_red())
-                await ctx.send(embed=embed)
+                embed = discord.Embed(title="*Did you mean ...*", colour=self.bot.colour.darker_red())
+                await LinePaginator.start(
+                    ctx, entries=[f"* **{r.name}** [`{r.id}`]" for r in tag], embed=embed, per_page=20
+                )
             return
 
         if not tag:
-            raise commands.BadArgument(f'{ctx.tick(False)} No Tag with the name or ID `{name_or_id}` found.')
+            return await ctx.send_tick(False, f'No Tag with the name or ID `{name_or_id}` found.')
 
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
