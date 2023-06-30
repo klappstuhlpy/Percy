@@ -253,10 +253,6 @@ class Config(commands.Cog):
 
                 self.is_plonked.invalidate_containing(f'{ctx.guild.id!r}:')
 
-    async def cog_command_error(self, ctx: Context, error: commands.CommandError):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(str(error))
-
     @commands_ext.command(
         commands.group,
         name='config',

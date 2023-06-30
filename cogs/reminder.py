@@ -140,13 +140,6 @@ class Reminder(commands.Cog):
     def cog_unload(self) -> None:
         self._task.cancel()
 
-    async def cog_command_error(self, ctx: Context, error: commands.CommandError):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(str(error))
-        if isinstance(error, commands.TooManyArguments):
-            await ctx.send(
-                f'<:redTick:1079249771975413910> You called the {ctx.command.name} command with too many arguments.')
-
     async def get_active_timer(
             self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7
     ) -> Optional[Timer]:
