@@ -1179,6 +1179,9 @@ class Meta(commands.Cog):
                 inline=False,
             )
 
+        perms = user.guild_permissions.value
+        e.add_field(name='Permissions', value=f'[{perms}](https://discordapi.com/permissions.html#{perms})', inline=False)
+
         colour = user.colour
         if colour.value:
             e.colour = colour
