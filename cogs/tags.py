@@ -513,10 +513,11 @@ class Tags(commands.Cog):
             if aliases:
                 to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
 
-        if similarites and not to_return:
-            if not isinstance(name_or_id, str):
-                raise ValueError('You need to specify a Tag Name to get similar Tags.')
-
+        if (
+            similarites
+            and isinstance(name_or_id, str)
+            and not to_return
+        ):
             query = """
                 SELECT
                     tag_lookup.name, tag_lookup.id,
@@ -525,7 +526,7 @@ class Tags(commands.Cog):
                 INNER JOIN tags t on t.id = tag_lookup.tag_id
                 WHERE tag_lookup.location_id=$1 AND tag_lookup.name % $2
                 ORDER BY similarity(tag_lookup.name, $2) DESC
-                LIMIT 3;
+                LIMIT 25;
             """
             rows = await self.bot.pool.fetch(query, location_id, name_or_id)
             to_return = [AliasTag(parent, record=row) if row['is_alias'] else Tag(self.bot, record=row) for row in rows]
