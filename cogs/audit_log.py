@@ -50,7 +50,7 @@ class AuditLog(commands.Cog):
             role_additions = set(entry.after.roles) - set(entry.before.roles)
             for role in role_removals | role_additions:
                 sign = "-" if role in role_removals else "+"
-                message.append(f"{sign} {role.mention}")
+                message.append(f"{sign} {role.name} ({role.id})")
 
             message = '\n'.join(message)
             return f"```diff\n{message}```"
