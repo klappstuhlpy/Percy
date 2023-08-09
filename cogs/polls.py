@@ -12,6 +12,7 @@ from discord import app_commands, Interaction
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
+from .utils.converters import get_asset_url
 from .utils.paginator import BasePaginator, LinePaginator
 from .reminder import Timer
 from .utils import timetools, converters, fuzzy, cache, helpers, commands_ext
@@ -99,8 +100,8 @@ class PollReasonModal(discord.ui.Modal, title="The Reason for you choice."):
 
     async def on_submit(self, interaction: Interaction) -> None:
         embed = discord.Embed(title="New Poll Reason", color=self.bot.colour.darker_red())
-        embed.set_thumbnail(url=interaction.guild.icon.url)
-        embed.set_author(name=interaction.user, icon_url=interaction.user.avatar.url)
+        embed.set_thumbnail(url=get_asset_url(interaction.guild))
+        embed.set_author(name=interaction.user, icon_url=get_asset_url(interaction.user))
         embed.add_field(name="Poll", value=f"{self.poll.question}\n{self.poll.jump_url}", inline=False)
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
         embed.add_field(name="Selected Option",

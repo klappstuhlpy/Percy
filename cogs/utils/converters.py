@@ -18,6 +18,18 @@ from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
 from ..utils.context import GuildContext
 
 
+def get_asset_url(obj: Union[discord.Guild, discord.User, discord.Member, discord.ClientUser]) -> str:
+    if isinstance(obj, discord.Guild):
+        if not obj.icon:
+            return ''
+        return obj.icon.url
+    if obj.avatar:
+        return obj.avatar.url
+    if isinstance(obj, (discord.Member, discord.ClientUser)):
+        if obj.display_avatar:
+            return obj.display_avatar.url
+
+
 async def aenumerate(asequence, start=0):
     """Asynchronously enumerate an async iterator from a given start value"""
     n = start

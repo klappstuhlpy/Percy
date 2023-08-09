@@ -15,6 +15,7 @@ from .utils.commands_ext import PermissionTemplate
 from .mod import AutoModFlags
 from .utils import cache, commands_ext
 from .utils.context import Context, GuildContext
+from .utils.converters import get_asset_url
 from .utils.formats import medal_emojize
 from .utils.helpers import PostgresItem
 from .utils.render import Render
@@ -354,7 +355,7 @@ class Leveling(commands.Cog):
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
         e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Level Statistics for {ctx.guild.name}')
-        e.set_thumbnail(url=ctx.guild.icon.url)
+        e.set_thumbnail(url=get_asset_url(ctx.guild))
         e.set_footer(text='Level Statistics for this Server.')
 
         if not records:

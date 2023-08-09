@@ -16,6 +16,7 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import LinePaginator
 from .emoji import usage_per_day
 from .utils import formats, fuzzy, helpers, cache, commands_ext
+from .utils.converters import get_asset_url
 from .utils.formats import plural, medal_emojize, get_shortened_string
 from .utils.helpers import PostgresItem
 
@@ -290,17 +291,17 @@ class Tag(PostgresItem):
         query = "DELETE FROM tags WHERE id=$1;"
         await self.bot.pool.execute(query, self.id)
 
-        query = "DELETE FROM tag_lookup WHERE tag_id=$1;"
+        query = "DELETE FROM tag_lookup WHERE parent_id=$1;"
         await self.bot.pool.execute(query, self.id)
 
-    async def transfer(self, member: discord.Member, only_parent: bool = False):
+    async def transfer(self, to: discord.Member, only_parent: bool = False):
         """|coro|
 
         Transfers the tag to another user.
 
         Parameters
         ----------
-        member: discord.Member
+        to: discord.Member
             The member to transfer the tag to.
         only_parent: bool
             Whether to only transfer the parent tag or all aliases as well.
@@ -309,10 +310,10 @@ class Tag(PostgresItem):
         async with self.bot.pool.acquire() as conn:
             async with conn.transaction():
                 query = "UPDATE tags SET owner_id=$1 WHERE id=$2;"
-                await conn.execute(query, member.id, self.id)
+                await conn.execute(query, to.id, self.id)
                 if not only_parent:
-                    query = "UPDATE tag_lookup SET owner_id=$1 WHERE tag_id=$2;"
-                    await conn.execute(query, member.id, self.id)
+                    query = "UPDATE tag_lookup SET owner_id=$1 WHERE parent_id=$2;"
+                    await conn.execute(query, to.id, self.id)
 
 
 class AliasTag(PostgresItem):
@@ -320,12 +321,12 @@ class AliasTag(PostgresItem):
 
     id: int
     name: str
-    tag_id: int
+    parent_id: int
     owner_id: int
     location_id: int
     created_at: datetime.datetime
 
-    __slots__ = ('parent', 'id', 'name', 'tag_id', 'owner_id', 'location_id', 'created_at')
+    __slots__ = ('parent', 'id', 'name', 'parent_id', 'owner_id', 'location_id', 'created_at')
 
     def __init__(self, parent: Optional[Tag] = None, **kwargs):
         super().__init__(**kwargs)
@@ -335,14 +336,14 @@ class AliasTag(PostgresItem):
     def choice_text(self) -> str:
         return f'[{self.id}] {self.name}'
 
-    async def transfer(self, member: discord.Member, /, *, connection: Optional[asyncpg.Connection] = None):
+    async def transfer(self, to: discord.Member, /, *, connection: Optional[asyncpg.Connection] = None):
         """|coro|
 
         Transfers the alias to another user.
 
         Parameters
         ----------
-        member: discord.Member
+        to: discord.Member
             The member to transfer the alias to.
         connection: Optional[asyncpg.Connection]
             The connection to use. Defaults to the bot's pool.
@@ -357,7 +358,7 @@ class AliasTag(PostgresItem):
         async with con.acquire() as conn:
             async with conn.transaction():
                 query = "UPDATE tag_lookup SET owner_id=$1 WHERE id=$2;"
-                await conn.execute(query, member.id, self.id)
+                await conn.execute(query, to.id, self.id)
 
     async def delete(self) -> None:
         """|coro|
@@ -480,7 +481,7 @@ class Tags(commands.Cog):
 
         if not parent:
             joined = 't.id' if identifier_is_int else 'LOWER(t.name)'
-            query = f"SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.tag_id = tags.id WHERE {joined} = $1 LIMIT 1;"
+            query = f"SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.parent_id = tags.id WHERE {joined} = $1 LIMIT 1;"
             parent = await self.bot.pool.fetchrow(
                 query, search_kwargs['id'] if identifier_is_int else search_kwargs['LOWER(name)'])
 
@@ -496,7 +497,7 @@ class Tags(commands.Cog):
             if 'name' in search_kwargs:
                 search_kwargs.pop('name')
 
-            search_kwargs['tag_id'] = parent['id']
+            search_kwargs['parent_id'] = parent['id']
             query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + ' AND '.join(
                 f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
             aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
@@ -523,7 +524,7 @@ class Tags(commands.Cog):
                     tag_lookup.name <> t.name AS is_alias,
                     CASE tag_lookup.name <> t.name WHEN TRUE THEN tag_lookup.id ELSE t.id END AS id
                 FROM tag_lookup
-                INNER JOIN tags t on t.id = tag_lookup.tag_id
+                INNER JOIN tags t on t.id = tag_lookup.parent_id
                 WHERE tag_lookup.location_id=$1 AND tag_lookup.name % $2
                 ORDER BY similarity(tag_lookup.name, $2) DESC
                 LIMIT 25;
@@ -556,8 +557,8 @@ class Tags(commands.Cog):
         escape_markdown: bool
             Whether to escape the markdown in the Tag content.
         """
-        tag: Union[list[AliasTag] | Tag] = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id,
-                                                              similarites=True)
+        tag: Union[list[AliasTag] | Tag] = await self.get_tag(
+            name_or_id=name_or_id, location_id=ctx.guild.id, similarites=True)
 
         if isinstance(tag, list):
             # Assuming no tags were found and similarites are returned instead
@@ -613,7 +614,7 @@ class Tags(commands.Cog):
                 VALUES ($1, $2, $3, $4)
                 RETURNING id
             )
-            INSERT INTO tag_lookup (name, owner_id, location_id, tag_id)
+            INSERT INTO tag_lookup (name, owner_id, location_id, parent_id)
             VALUES ($1, $3, $4, (SELECT id FROM tag_insert));
         """
 
@@ -684,7 +685,7 @@ class Tags(commands.Cog):
         query = """
             SELECT tag_lookup.*
             FROM tag_lookup
-            INNER JOIN tags ON tags.id = tag_lookup.tag_id
+            INNER JOIN tags ON tags.id = tag_lookup.parent_id
             WHERE tag_lookup.location_id=$1
             ORDER BY uses DESC;
         """
@@ -756,8 +757,8 @@ class Tags(commands.Cog):
         """
 
         query = """
-            INSERT INTO tag_lookup (name, owner_id, location_id, tag_id)
-            SELECT $1, $4, tag_lookup.location_id, tag_lookup.tag_id
+            INSERT INTO tag_lookup (name, owner_id, location_id, parent_id)
+            SELECT $1, $4, tag_lookup.location_id, tag_lookup.parent_id
             FROM tag_lookup
             WHERE tag_lookup.location_id=$3 AND LOWER(tag_lookup.name)=$2;
         """
@@ -874,7 +875,7 @@ class Tags(commands.Cog):
 
     async def guild_tag_stats(self, ctx: GuildContext):
         e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
-        e.set_thumbnail(url=ctx.guild.icon.url)
+        e.set_thumbnail(url=get_asset_url(ctx.guild))
         e.set_footer(text='Tag Statistics for this Server.')
 
         query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
@@ -954,7 +955,7 @@ class Tags(commands.Cog):
     async def member_tag_stats(self, ctx: GuildContext, member: discord.Member | discord.User):
         e = discord.Embed(color=self.bot.colour.darker_red())
         e.set_author(name=str(member), icon_url=member.display_avatar.url)
-        e.set_thumbnail(url=member.avatar.url)
+        e.set_thumbnail(url=get_asset_url(member))
         e.set_footer(text='Tag Stats for this Member.')
 
         query = """

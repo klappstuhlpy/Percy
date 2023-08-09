@@ -14,6 +14,7 @@ from typing_extensions import Annotated
 
 from .utils import timetools, formats, commands_ext
 from .utils.context import Context, tick
+from .utils.converters import get_asset_url
 from .utils.formats import plural
 from .utils.helpers import PostgresItem, MaybeAcquire
 
@@ -407,7 +408,7 @@ class Reminder(commands.Cog):
 
         e = discord.Embed(color=self.bot.colour.darker_red(), title="Your Reminders",
                           description="Here is a list of the last **Reminders** you've set.")
-        e.set_author(name=str(ctx.author), icon_url=ctx.author.avatar.url)
+        e.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
         e.set_footer(text=f'Showing {plural(len(records)):Reminder}')
 
         for index, (reminder_id, expires, message) in enumerate(records, 1):

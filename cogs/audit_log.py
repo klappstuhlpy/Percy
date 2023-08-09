@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from bot import Percy
 from .utils.constants import PossibleTarget
+from .utils.converters import get_asset_url
 
 
 class AuditLog(commands.Cog):
@@ -127,8 +128,8 @@ class AuditLog(commands.Cog):
         embed.add_field(name="Reason", value=entry.reason, inline=False)
         embed.add_field(name="Category", value=f"{action_name} (Type: {target_type})", inline=False)
 
-        embed.set_thumbnail(url=entry.guild.icon.url)
-        embed.set_footer(text=f"Log: [{entry.id}]", icon_url=entry.user.avatar.url)
+        embed.set_thumbnail(url=get_asset_url(entry.guild))
+        embed.set_footer(text=f"Log: [{entry.id}]", icon_url=get_asset_url(entry.user))
         embed.timestamp = entry.created_at
 
         if config.requires_migration:

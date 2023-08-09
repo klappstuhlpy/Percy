@@ -14,7 +14,7 @@ from jishaku.math import natural_size
 from jishaku.modules import package_version
 
 from cogs.utils import error_handling
-from cogs.utils.converters import ModuleConverter
+from cogs.utils.converters import ModuleConverter, get_asset_url
 from cogs.utils.formats import plural
 from cogs.utils.paginator import TextSource, EmbedPaginator
 
@@ -328,7 +328,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         )
 
         embed = discord.Embed(description="\n".join(summary), color=0x2b2d31)
-        embed.set_author(name=ctx.bot.user.name, icon_url=ctx.bot.user.avatar.url)
+        embed.set_author(name=ctx.bot.user.name, icon_url=get_asset_url(ctx.bot.user))
 
         await ctx.send(embed=embed)
 

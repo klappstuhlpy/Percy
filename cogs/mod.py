@@ -21,7 +21,7 @@ from launcher import get_logger
 from cogs.utils.commands_ext import PermissionTemplate
 from .utils import timetools, cache, helpers, commands_ext
 from .utils.context import GuildContext
-from .utils.converters import Snowflake, IgnoreEntity
+from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
 from .utils.helpers import BaseFlags, flag_value
 from .utils.constants import IgnoreableEntity
@@ -757,7 +757,7 @@ class Mod(commands.Cog):
         e = discord.Embed(title=f'{ctx.guild.name} Moderation',
                           timestamp=datetime.datetime.utcnow(),
                           color=helpers.Colour.darker_red())
-        e.set_thumbnail(url=ctx.guild.icon.url)
+        e.set_thumbnail(url=get_asset_url(ctx.guild))
 
         if config.flags.audit_log:
             channel = f'<#{config.audit_log_channel_id}>'
@@ -1123,7 +1123,7 @@ class Mod(commands.Cog):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
                 embed = discord.Embed(timestamp=datetime.datetime.utcnow(), color=self.colour)
-                embed.set_author(name=f'Ignored Entities', icon_url=ctx.guild.icon.url)
+                embed.set_author(name=f'Ignored Entities', icon_url=get_asset_url(ctx.guild))
                 embed.set_footer(text=f"{plural(len(entities)):entity|entities}")
                 embed.description = '\n'.join(entries)
                 return embed

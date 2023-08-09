@@ -30,6 +30,7 @@ from launcher import get_logger
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
 from .utils import formats, timetools, helpers, commands_ext
 from .utils.constants import BOT_BASE_FOLDER
+from .utils.converters import get_asset_url
 from .utils.formats import censor_object
 from .utils.tasks import executor
 from .utils.render import Render
@@ -925,9 +926,7 @@ class Stats(commands.Cog):
         total = guild.member_count or 1
         e.add_field(name='Members', value=str(total))
         e.add_field(name='Bots', value=f'{bots} ({bots / total:.2%})')
-
-        if guild.icon:
-            e.set_thumbnail(url=guild.icon.url)
+        e.set_thumbnail(url=get_asset_url(guild))
 
         if guild.me:
             e.timestamp = guild.me.joined_at

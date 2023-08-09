@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from .utils.paginator import BasePaginator, LinePaginator
 from .utils import cache, commands_ext
-from .utils.converters import aenumerate
+from .utils.converters import aenumerate, get_asset_url
 from .utils.formats import plonk_iterator
 from itertools import accumulate
 
@@ -317,8 +317,8 @@ class Config(commands.Cog):
             async def format_page(self, entries: List[asyncpg.Record], /) -> discord.Embed:
                 entries = plonk_iterator(ctx.bot, ctx.guild, entries)
                 embed = discord.Embed(timestamp=datetime.utcnow(), colour=0x2b2d31)
-                embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url)
-                embed.set_author(name=f"Ignored Channels/Members", icon_url=ctx.guild.icon.url)
+                embed.set_footer(text=f"Requested by {ctx.author}", icon_url=get_asset_url(ctx.author))
+                embed.set_author(name=f"Ignored Channels/Members", icon_url=get_asset_url(ctx.guild))
                 pages = []
                 async for index, entry in aenumerate(entries, start=self.numerate_start):
                     pages.append(f'{index + 1}. {entry}')
@@ -577,7 +577,7 @@ class Config(commands.Cog):
 
         embed = discord.Embed(timestamp=datetime.utcnow(),
                               color=self.bot.colour.darker_red())
-        embed.set_author(name=f'Disabled Commands', icon_url=ctx.guild.icon.url)
+        embed.set_author(name=f'Disabled Commands', icon_url=get_asset_url(ctx.guild))
         await LinePaginator.start(ctx, entries=disabled, per_page=15, embed=embed, location='description')
 
     @commands_ext.command(

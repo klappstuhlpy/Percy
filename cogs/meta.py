@@ -22,7 +22,7 @@ from discord.ext import commands
 from lru import LRU
 
 from .utils import fuzzy, helpers, commands_ext
-from .utils.converters import Prefix
+from .utils.converters import Prefix, get_asset_url
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App, \
@@ -209,7 +209,7 @@ class FrontHelpPaginator(BasePaginator[str]):
         prefix: str = getattr(self.ctx, "prefix", "/")
 
         embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
-        embed.set_thumbnail(url=self.ctx.client.user.avatar.url)
+        embed.set_thumbnail(url=get_asset_url(self.ctx.client.user))
 
         pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)  # type: ignore
         if self._current_page == 0:
@@ -806,7 +806,7 @@ class UserJoinView(discord.ui.View):
                                              f"╰ **Join Position:** {author_index + 1}",
                         inline=False)
         embed.add_field(name='Position', value=source.pages[0], inline=False)
-        embed.set_author(name=self.user, icon_url=self.user.avatar.url)
+        embed.set_author(name=self.user, icon_url=get_asset_url(self.user))
 
         for child in self.children:
             child.disabled = True
@@ -846,7 +846,7 @@ class GuildUserJoinView(discord.ui.View):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
                 embed = discord.Embed(title=f"Join List in {interaction.guild}", color=helpers.Colour.darker_red())
-                embed.set_author(name=interaction.guild, icon_url=interaction.guild.icon.url)
+                embed.set_author(name=interaction.guild, icon_url=get_asset_url(interaction.guild))
                 embed.set_footer(text=f"{plural(len(chunked_users)):entry|entries}")
 
                 embed.description = '\n'.join(entries)
@@ -1238,8 +1238,7 @@ class Meta(commands.Cog):
                 secret[channel_type] += 1
 
         e = discord.Embed(title=guild.name, description=f'**ID**: {guild.id}\n**Owner**: {guild.owner}')
-        if guild.icon:
-            e.set_thumbnail(url=guild.icon.url)
+        e.set_thumbnail(url=get_asset_url(guild))
 
         channel_info = []
         key_to_emoji = {
@@ -1386,8 +1385,8 @@ class Meta(commands.Cog):
         del prefixes[1]
 
         e = discord.Embed(title='Prefix List', colour=self.bot.colour.darker_red())
-        e.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
-        e.set_thumbnail(url=self.bot.user.avatar.url)
+        e.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
+        e.set_thumbnail(url=get_asset_url(ctx.guild))
         e.set_footer(text=f'{len(prefixes)} prefixes')
         e.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
         await ctx.send(embed=e)
