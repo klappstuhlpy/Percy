@@ -25,6 +25,7 @@ from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
 from .utils.helpers import BaseFlags, flag_value
 from .utils.constants import IgnoreableEntity
+from .utils.timetools import ShortTime
 
 if TYPE_CHECKING:
     class ModGuildContext(GuildContext):
@@ -415,9 +416,9 @@ class SpamChecker:
         if not config.mention_count:
             return None
 
-        mention_threshold = config.mention_count * 2
+        mention_threshold = config.mention_count
         if self._by_mentions_rate != mention_threshold:
-            self._by_mentions = commands.CooldownMapping.from_cooldown(mention_threshold, 12,
+            self._by_mentions = commands.CooldownMapping.from_cooldown(mention_threshold, 15,
                                                                        commands.BucketType.member)
             self._by_mentions_rate = mention_threshold
         return self._by_mentions
@@ -734,6 +735,25 @@ class Mod(commands.Cog):
         query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.bot.pool.execute(query, guild_id)
         self.get_guild_config.invalidate(self, guild_id)
+
+    @commands.hybrid_command()
+    @commands.has_permissions(manage_messages=True)
+    @app_commands.describe(duration="The slowmode duration or 0s to disable")
+    @app_commands.guild_only()
+    async def slowmode(self, ctx: GuildContext, duration: ShortTime):
+        """Applies slowmode to this channel"""
+
+        delta = duration.dt - ctx.message.created_at
+        slowmode_delay = int(delta.total_seconds())
+
+        if slowmode_delay > 21600:
+            await ctx.send('Provided slowmode duration is too long!', ephemeral=True)
+        else:
+            await ctx.channel.edit(slowmode_delay=slowmode_delay, reason=f'Responsible moderator: {ctx.author.name}')
+            if slowmode_delay > 0:
+                await ctx.send(f'Configured slowmode to {slowmode_delay} seconds', ephemeral=True)
+            else:
+                await ctx.send(f'Disabled slowmode', ephemeral=True)
 
     @commands_ext.command(
         commands.hybrid_group,

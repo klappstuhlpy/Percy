@@ -48,7 +48,7 @@ class AuditLog(commands.Cog):
             message = ["### Updated Roles"]
             role_removals = set(entry.before.roles) - set(entry.after.roles)
             role_additions = set(entry.after.roles) - set(entry.before.roles)
-            for role in role_removals | role_additions:
+            for role in role_removals | role_additions:  # type: discord.Role
                 sign = "-" if role in role_removals else "+"
                 message.append(f"{sign} {role.name} ({role.id})")
 

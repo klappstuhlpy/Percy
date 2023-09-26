@@ -94,6 +94,9 @@ class Parser:
                         if result.get('Category') in ["TV Series", "Movie"]:
                             return None
 
+                        page_info = result.get("Length", 'N/A Pages')[0]
+                        page_count = int(page_info) if not isinstance(page_info, str) else None
+
                         return GenericComic(
                             brand=Brand.MANGA,
                             id=index,
@@ -102,7 +105,7 @@ class Parser:
                             creators=authors,
                             image_url=image_url,
                             url=element,
-                            page_count=int(result.get("Length", 'N/A Pages')[0]),
+                            page_count=page_count,
                             price=float(price),
                             copyright=f"© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.",
                             date=utcparse(release_date),
@@ -189,7 +192,10 @@ class Parser:
                 price = 0.0 if price == "FREE" else float(price) if price else None
 
                 date = from_destination('36', details)
-                date = utcparse(date) if date else None
+                date = utcparse(
+                    date.replace('st', 'th').replace('nd,', 'th,')
+                    .replace('rd', 'th').replace('Auguth', 'August')
+                ) if date else None
 
                 page_count = from_destination('48', details)
 
@@ -270,6 +276,10 @@ class Parser:
         for c in comics:
             c.brand = Brand.MARVEL
             c.copyright = m_copyright
+
+            if c.title.startswith("Marvel Previews"):
+                comics.remove(c)
+
         return comics
 
     @classmethod

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from bot import Percy
     from cogs.base import Base
 
-
 T = TypeVar('T')
 
 
@@ -273,8 +272,8 @@ class Context(commands.Context):
             author_id=author_id,
         )
         view.message = await self.send(embed=discord.Embed(title="Are you sure?",
-                                                                description=message,
-                                                                colour=discord.Colour(0xF8DB5E)),
+                                                           description=message,
+                                                           colour=discord.Colour(0xF8DB5E)),
                                        view=view, ephemeral=ephemeral)
         await view.wait()
         return view.value

@@ -335,6 +335,10 @@ class Reminder(commands.Cog):
         Times are in UTC unless a timezone is specified
         using the "timezone set" command.
         """
+
+        if len(when.arg) > 1000:
+            return await ctx.send('<:redTick:1079249771975413910> That\'s too long, sorry.')
+
         config = await self.bot.user_settings.get_user_config(ctx.author.id)
         zone = config.timezone if config else None
         await self.create_timer(
@@ -362,7 +366,7 @@ class Reminder(commands.Cog):
             self,
             interaction: discord.Interaction,
             when: app_commands.Transform[datetime.datetime, timetools.TimeTransformer],
-            prompt: str = '…',
+            prompt: app_commands.Range[str, 1, 1500] = '…',
     ):
         """Sets a reminder to remind you of something at a specific timetools."""
         config = await self.bot.user_settings.get_user_config(interaction.user.id)

@@ -50,14 +50,14 @@ class ComicCache:
         self.cache.setdefault(cache_key, [])
         self.cache[cache_key] = value
 
-    async def get(self, item: Brand) -> list[GenericComic] | None:
+    def get(self, item: Brand) -> list[GenericComic] | None:
         """Return the Markdown content of the symbol `item` if it exists."""
         cache_key = f"{self.namespace}:{item}"
         if cache_key in self.cache:
             return self.cache[cache_key]
         return None
 
-    async def delete(self, package: str) -> bool:
+    def delete(self, package: str) -> bool:
         """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""
         pattern = f"{self.namespace}:{package}:*"
 
@@ -419,7 +419,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             return
 
     async def prev_schedule(self, brand: Brand) -> datetime.datetime:
-        return max(i.date if i.date is not None else datetime.datetime.min for i in await self.comic_cache.get(brand))
+        return max(i.date if i.date is not None else datetime.datetime.min for i in self.comic_cache.get(brand))
 
     async def comic_cache_check(self, interaction: discord.Interaction) -> bool:
         if self._batch_lock.locked():
@@ -536,7 +536,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     async def publish_to_feed(self, config: ComicFeed):
         channel = self.bot.get_channel(config.channel_id)
 
-        comics = await self.comic_cache.get(config.brand)
+        comics = self.comic_cache.get(config.brand)
 
         if comics:
             if config.brand == Brand.MANGA:
@@ -557,7 +557,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
                 embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
 
                 instances = {}
-                for entry in await self.comic_cache.get(config.brand):
+                for entry in self.comic_cache.get(config.brand):
                     if entry in comics:
                         msg = await channel.send(embed=embeds[entry.id])
                         instances[entry.id] = entry.to_instance(msg)
@@ -581,7 +581,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
     ):
         embed = discord.Embed(colour=brand.colour)
         embeds = []
-        for fi, cid in enumerate(await self.comic_cache.get(brand)):
+        for fi, cid in enumerate(self.comic_cache.get(brand)):
             if not fi % 25 and fi != 0:
                 embeds.append(embed)
                 embed = discord.Embed(colour=brand.colour)
@@ -645,7 +645,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         await interaction.response.defer(
             ephemeral=not interaction.channel.permissions_for(interaction.user).embed_links)
 
-        embeds = await self.summary_embed(await self.comic_cache.get(brand), brand)
+        embeds = await self.summary_embed(self.comic_cache.get(brand), brand)
         await interaction.followup.send(embeds=embeds)
 
     @comics.command(name="push", description="Pushes the latest comic feed to a channel.")

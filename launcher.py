@@ -317,17 +317,21 @@ async def ensure_uri_can_run() -> bool:
 
 
 @db.command()
-@click.option('--reason', '-r', help='The reason for this revision.', default='Initial migrations')
-def init(reason: str):
+def init():
     """Initializes the database and creates the initial revision."""
 
     asyncio.run(ensure_uri_can_run())
 
     migrations = Migrations()
     migrations.database_uri = config.postgresql
-    revision = migrations.create_revision(reason)
-    click.echo(f'created revision V{revision.version!r}')
-    click.secho(f'Hint: Use the `upgrade` command to apply.', fg='yellow')
+
+    try:
+        applied = asyncio.run(run_upgrade(migrations))
+    except Exception:
+        traceback.print_exc()
+        click.secho('failed to initialize and apply migrations due to error', fg='red')
+    else:
+        click.secho(f'Successfully initialized and applied {applied} revisions(s)', fg='green')
 
 
 @db.command()
