@@ -64,7 +64,10 @@ class Parser:
                         image_url = soup.find('div', class_='product-image mar-x-auto mar-b-lg pad-x-md').find('img').get('src')
 
                         store_table = soup.find('table', class_='purchase-table')
-                        price = store_table.find('span').text[1:]
+                        try:
+                            price = store_table.find('span').text[1:]
+                        except:
+                            price = "N/A"
                         if price.endswith('*'):
                             price = price[:-1]
 
@@ -72,7 +75,9 @@ class Parser:
                             price = 0.0
 
                         base_obj = soup.find('div', class_='o_geo-block')
-                        price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
+                        price_note = "N/A"
+                        if base_obj:
+                            price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
 
                         info_table = soup.find('div', class_='row pad-b-xl')
                         desc = remove_html_tags(info_table.find('p').text.strip())
@@ -152,8 +157,8 @@ class Parser:
                     continue
 
                 soup = BeautifulSoup(page, 'html.parser')
-                txt = soup.find_all(class_="sc-g8nqnn-0 dXApWk")
-                if len(txt) == 0:
+                txt = soup.find_all(class_="sc-g8nqnn-0")
+                if not txt:
                     continue
 
                 c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
@@ -168,7 +173,7 @@ class Parser:
                         desc_list = cls._get_desc(txt[1])
                         desc = '\n'.join(i.strip() for i in ''.join(desc_list).split('\n') if i.strip())
 
-                details_list = [i.contents for i in soup.find_all('div', class_="sc-b3fnpg-3 eRdwCd")]
+                details_list = [i.contents for i in soup.find_all('div', class_="sc-b3fnpg-3")]
                 details = {}
                 for d in details_list:
                     for dd in d:
@@ -192,10 +197,9 @@ class Parser:
                 price = 0.0 if price == "FREE" else float(price) if price else None
 
                 date = from_destination('36', details)
-                date = utcparse(
+                date = datetime.datetime.strptime(
                     date.replace('st', 'th').replace('nd,', 'th,')
-                    .replace('rd', 'th').replace('Auguth', 'August')
-                ) if date else None
+                    .replace('rd', 'th'), '%A, %B %dth, %Y') if date else None
 
                 page_count = from_destination('48', details)
 
@@ -277,9 +281,6 @@ class Parser:
             c.brand = Brand.MARVEL
             c.copyright = m_copyright
 
-            if c.title.startswith("Marvel Previews"):
-                comics.remove(c)
-
         return comics
 
     @classmethod
@@ -333,6 +334,7 @@ class Parser:
         descs: dict[int, str] = await cls.bs4_marvel()
 
         for c in comics:
-            c.description = descs.get(c.id, None)
+            if description := descs.get(c.id, None):
+                c.description = description
 
         return comics

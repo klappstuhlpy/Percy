@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
+import traceback
 from typing import Any, TYPE_CHECKING, Optional
 import hashlib
 import datetime
@@ -62,8 +64,10 @@ class Marvel:
         if headers is not None and isinstance(headers, dict):
             hdrs.update(headers)
 
+        params.update(data)
+
         async with self._req_lock:
-            async with self.bot.session.request(method, req_url, params=params, json=data, headers=hdrs) as r:
+            async with self.bot.session.request(method, req_url, params=params, headers=headers) as r:
                 remaining = r.headers.get('X-Ratelimit-Remaining')
                 js = await r.json()
                 if r.status == 429 or remaining == '0':

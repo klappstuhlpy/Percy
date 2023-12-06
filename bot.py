@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import ssl
 from collections import defaultdict
 from typing import Optional, TYPE_CHECKING, Union, Dict, Iterable, AsyncIterator, Any, Counter, Callable, Coroutine, Type
 

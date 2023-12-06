@@ -76,6 +76,7 @@ class Brand(Enum):
     MARVEL = "Marvel"
     DC = "DC"
     MANGA = "Manga"
+    UNKNOWN = "Unknown"
 
     def __str__(self):
         return self.name
@@ -88,6 +89,8 @@ class Brand(Enum):
             return DC_ICON_URL
         elif self == self.MANGA:
             return VIZ_ICON_URL
+        else:
+            return ""
 
     @property
     def link(self) -> str:
@@ -97,6 +100,8 @@ class Brand(Enum):
             return "DC.com"
         elif self == self.MANGA:
             return "Viz.com"
+        else:
+            return "Unknown"
 
     @property
     def colour(self) -> int:
@@ -106,6 +111,8 @@ class Brand(Enum):
             return 0x0074E8
         elif self == self.MANGA:
             return 0xFFFFFF
+        else:
+            return 0x000000
 
     @property
     def default_day(self):
@@ -123,6 +130,8 @@ class Brand(Enum):
             return f"Data provided by Marvel. © {year} MARVEL"
         elif self == self.MANGA:
             return f"© {year} VIZ Media, LLC. All rights reserved."
+        else:
+            return ""
 
 
 class Format(Enum):
@@ -181,7 +190,7 @@ class GenericComic:
     def __init__(
             self,
             *,
-            brand: Brand = None,
+            brand: Brand = Brand.UNKNOWN,
             id: int | str = None,
             title: str = None,
             description: str = None,
