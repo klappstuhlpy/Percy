@@ -173,6 +173,8 @@ class Percy(commands.Bot):
         elif isinstance(error, commands.CommandInvokeError):
             original = error.original
             if isinstance(original, discord.Forbidden):
+                if original.code == 50013:
+                    return
                 await ctx.send_tick(False, 'I do not have permission to execute this action.')
             elif isinstance(original, discord.HTTPException):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
@@ -190,8 +192,6 @@ class Percy(commands.Bot):
             await ctx.send(f"<:warning:1113421726861238363> Slow down, you're on cooldown. Retry again in **{error.retry_after:.2f}s**.")
         elif isinstance(error, commands.TooManyArguments):
             await ctx.send_tick(False, f'You called {ctx.command.name!r} command with too many arguments.')
-        elif isinstance(error, discord.Forbidden):
-            pass
 
     async def reattach_views(self) -> None:
         records = await self.pool.fetch("SELECT * FROM polls")
