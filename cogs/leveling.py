@@ -29,9 +29,9 @@ class LevelConfig(PostgresItem):
     guild_id: int
     messages: int
     experience: int
-    voice_minutes: int
+    voice_seconds: int
 
-    __slots__ = ('cog', 'bot', 'user_id', 'guild_id', 'messages', 'experience', 'voice_minutes')
+    __slots__ = ('cog', 'bot', 'user_id', 'guild_id', 'messages', 'experience', 'voice_seconds')
 
     def __init__(self, cog: Leveling, **kwargs) -> None:
         self.cog: Leveling = cog
@@ -44,6 +44,9 @@ class LevelConfig(PostgresItem):
 
     def __int__(self):
         return self.experience
+
+    def __float__(self):
+        return self.voice_seconds
 
     def __str__(self):
         return f"{self.experience:,}"
@@ -99,12 +102,12 @@ class LevelConfig(PostgresItem):
         self.experience = experience
         await self.send_patch()
 
-    async def add_voice_minutes(self, voice_minutes: int, multiplier: int) -> None:
-        if voice_minutes <= 0:
+    async def add_voice_seconds(self, secs: float, multiplier: int) -> None:
+        if secs <= 0:
             return
-        self.voice_minutes = self.voice_minutes or 0
-        self.voice_minutes += voice_minutes
-        self.experience += round(voice_minutes * multiplier)
+        self.voice_seconds = self.voice_seconds or 0
+        self.voice_seconds += secs
+        self.experience += round(secs * multiplier)
         await self.send_patch()
 
     async def send_patch(self):
@@ -115,7 +118,7 @@ class LevelConfig(PostgresItem):
                     'user_id': self.user_id,
                     'messages': self.messages,
                     'experience': self.experience,
-                    'voice_minutes': self.voice_minutes
+                    'voice_seconds': self.voice_seconds
                 }
             )
             self.cog.get_level_config.refactor(self.user_id, self.guild_id, replace=self)
@@ -129,7 +132,7 @@ class DataBatchEntry(TypedDict):
     guild_id: int
     messages: int
     experience: int
-    voice_minutes: int
+    voice_seconds: float
 
 
 class PointsWatch(TypedDict):
@@ -168,20 +171,20 @@ class Leveling(commands.Cog):
 
     async def bulk_insert(self) -> None:
         query = """
-                INSERT INTO levels (guild_id, user_id, messages, experience, voice_minutes)
-                SELECT x.guild_id, x.user_id, x.messages, x.experience, x.voice_minutes
+                INSERT INTO levels (guild_id, user_id, messages, experience, voice_seconds)
+                SELECT x.guild_id, x.user_id, x.messages, x.experience, x.voice_seconds
                 FROM jsonb_to_recordset($1::jsonb) AS
                 x(
                     guild_id BIGINT,
                     user_id BIGINT,
                     messages INTEGER,
                     experience INTEGER,
-                    voice_minutes INTEGER
+                    voice_seconds FLOAT
                 )
                 ON CONFLICT (guild_id, user_id) DO UPDATE
                 SET messages = excluded.messages,
                     experience = excluded.experience,
-                    voice_minutes = excluded.voice_minutes
+                    voice_seconds = excluded.voice_seconds
             """
 
         if self.batch_data:
@@ -250,9 +253,8 @@ class Leveling(commands.Cog):
         if before.mute != after.mute:
             if member.id in self._voicebatch_data:
                 total_time = discord.utils.utcnow() - self._voicebatch_data[member.id]['started']
-                total_minutes = total_time.total_seconds() // 60
-                await config.add_voice_minutes(
-                    total_minutes, 2 if self._voicebatch_data[member.id]['muted'] else 7)
+                await config.add_voice_seconds(
+                    total_time.total_seconds(), 2 if self._voicebatch_data[member.id]['muted'] else 7)
 
                 self._voicebatch_data[member.id]['started'] = discord.utils.utcnow()
                 self._voicebatch_data[member.id]['muted'] = after.self_mute
@@ -262,9 +264,8 @@ class Leveling(commands.Cog):
         if before.channel:
             if member.id in self._voicebatch_data:
                 total_time = discord.utils.utcnow() - self._voicebatch_data[member.id]['started']
-                total_minutes = total_time.total_seconds() // 60
-                await config.add_voice_minutes(
-                    total_minutes, 2 if self._voicebatch_data[member.id]['muted'] else 7)
+                await config.add_voice_seconds(
+                    total_time.total_seconds(), 2 if self._voicebatch_data[member.id]['muted'] else 7)
 
         if after.channel:
             self._voicebatch_data[member.id] = {
@@ -367,14 +368,14 @@ class Leveling(commands.Cog):
 
         e.add_field(name=f'**TOP 3 TEXT 💬**', value=value, inline=False)
 
-        query = "SELECT * FROM levels WHERE guild_id = $1 AND voice_minutes > 0 ORDER BY voice_minutes DESC LIMIT 3;"
+        query = "SELECT * FROM levels WHERE guild_id = $1 AND voice_seconds > 0 ORDER BY voice_seconds DESC LIMIT 3;"
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
         if not records:
             value = '*There are no statistics for this category available.*'
         else:
             value = '\n'.join(
-                [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{record.voice_minutes}** minutes)'
+                [f'{emoji}: <@{record.user_id}> • LV **{record.level}** • (**{round(record.voice_seconds / 60, 2)}** minutes)'
                  for emoji, record in medal_emojize(records)])
 
         e.add_field(name=f'**TOP 3 VOICE 🎙️**', value=value, inline=False)
