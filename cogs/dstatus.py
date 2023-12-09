@@ -4,7 +4,7 @@ import contextlib
 import dataclasses
 import datetime
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any
 
 import discord
 from discord.ext import commands, tasks
@@ -137,6 +137,7 @@ class Incident:
     page_id: str
     incident_updates: list[Update]
     components: list[Component]
+    reminder_intervals: Any
 
     def __post_init__(self):
         self.created_at = converters.utcparse(self.created_at)
