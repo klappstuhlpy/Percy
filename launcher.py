@@ -329,7 +329,7 @@ def init():
         applied = asyncio.run(run_upgrade(migrations))
     except Exception:
         traceback.print_exc()
-        click.secho('failed to initialize and apply migrations due to error', fg='red')
+        click.secho('Failed to initialize and apply migrations due to error', fg='red')
     else:
         click.secho(f'Successfully initialized and applied {applied} revisions(s)', fg='green')
 

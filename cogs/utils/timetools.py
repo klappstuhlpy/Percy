@@ -192,7 +192,7 @@ class TimeTransformer(app_commands.Transformer):
         if config and config.timezone:
             tzinfo = config.get_tzinfo
 
-        now = interaction.created_at.replace(tzinfo=None)
+        now = interaction.created_at.astimezone(tzinfo)
         with suppress(commands.BadArgument):
             try:
                 if self.future:
@@ -392,6 +392,9 @@ def human_timedelta(
 
     now = now.replace(microsecond=0)
     dt = dt.replace(microsecond=0)
+
+    now = now.astimezone(datetime.timezone.utc)
+    dt = dt.astimezone(datetime.timezone.utc)
 
     if dt > now:
         delta = relativedelta(dt, now)

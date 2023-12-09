@@ -72,7 +72,7 @@ class ExpiringCache(dict):
     def __verify_cache_integrity(self):
         # Have to do this in two steps...
         current_time = time.monotonic()
-        to_remove = [k for (k, (v, t)) in self.items() if current_time > (t + self.__ttl)]
+        to_remove = [k for (k, (v, t)) in super().items() if current_time > (t + self.__ttl)]
         for k in to_remove:
             del self[k]
 
@@ -84,8 +84,20 @@ class ExpiringCache(dict):
         self.__verify_cache_integrity()
         return super().__getitem__(key)
 
+    def get(self, key: str, default: Any = None):
+        v = super().get(key, default)
+        if v is default:
+            return default
+        return v[0]
+
     def __setitem__(self, key: str, value: Any):
         super().__setitem__(key, (value, time.monotonic()))
+
+    def values(self):
+        return map(lambda x: x[0], super().values())
+
+    def items(self):
+        return map(lambda x: (x[0], x[1][0]), super().items())
 
 
 class Strategy(enum.Enum):

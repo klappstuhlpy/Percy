@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import datetime
+import enum
 import io
 import re
 from collections import Counter, defaultdict
-from typing import Optional, Callable, Any, Union, Literal, List, TYPE_CHECKING, MutableMapping, Dict
+from typing import Optional, Callable, Any, Union, Literal, List, TYPE_CHECKING, MutableMapping, Dict, Generic, TypeVar
+from collections.abc import Hashable
 
 import asyncpg
 import discord
@@ -13,6 +16,7 @@ from asyncpg import Record
 from discord import app_commands
 from discord.ext import commands, tasks
 from typing_extensions import Annotated
+from time import time as unix_time
 
 from bot import Percy
 from cogs.reminder import Timer
@@ -33,6 +37,14 @@ if TYPE_CHECKING:
         guild_config: GuildConfig
 
 log = get_logger(__name__)
+
+
+HashableT = TypeVar('HashableT', bound=Hashable)
+
+
+class Arguments(argparse.ArgumentParser):
+    def error(self, message: str):
+        raise RuntimeError(message)
 
 
 def safe_reason_append(base: str, to_append: str) -> str:
@@ -217,6 +229,8 @@ class MassbanFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     roles: Optional[bool] = commands.flag(
         description='Matches users depending on whether they have roles or not', default=None
     )
+    raid: bool = commands.flag(description='Matches users that are internally flagged as potential raiders',
+                               default=False)
     show: bool = commands.flag(description='Show members instead of banning them', default=False)
 
     # Message history related flags
@@ -382,9 +396,117 @@ class Confirm(discord.ui.View):
         self.stop()
 
 
+class FlaggedMember:
+    __slots__ = ('id', 'joined_at', 'display_name', 'messages')
+
+    def __init__(self, user: discord.abc.User | discord.Member, joined_at: datetime.datetime):
+        self.id = user.id
+        self.display_name = str(user)
+        self.joined_at = joined_at
+        self.messages: int = 0
+
+    @property
+    def created_at(self) -> datetime.datetime:
+        return discord.utils.snowflake_time(self.id)
+
+    def __str__(self) -> str:
+        return self.display_name
+
+
+class SpamCheckerResult:
+    def __init__(self, reason: str) -> None:
+        self.reason: str = reason
+
+    def __str__(self) -> str:
+        return self.reason
+
+    @classmethod
+    def spammer(cls) -> SpamCheckerResult:
+        return cls('Auto-ban for spamming')
+
+    @classmethod
+    def flagged_mention(cls) -> SpamCheckerResult:
+        return cls('Auto-ban for suspicious mentions')
+
+
+class MultipleSpammers(SpamCheckerResult):
+    def __init__(self, members: list[discord.abc.Snowflake], *, reason: str = 'Auto-ban for spamming') -> None:
+        super().__init__(reason)
+        self.members: list[discord.abc.Snowflake] = members
+
+
+class TaggedCooldown(commands.Cooldown, Generic[HashableT]):
+    def __init__(self, rate: int, per: float) -> None:
+        super().__init__(rate, per)
+        self.tagged: set[HashableT] = set()
+
+    def update_rate_limit(self, current: float | None = None, *, tokens: int = 1) -> float | None:
+        current = current or unix_time()
+        self._last = current
+
+        self._tokens = self.get_tokens(current)
+
+        if self._tokens == self.rate:
+            self.tagged.clear()
+            self._window = current
+
+        self._tokens -= tokens
+
+        if self._tokens < 0:
+            return self.per - (current - self._window)
+
+    def reset(self) -> None:
+        super().reset()
+        self.tagged.clear()
+
+    def copy(self) -> TaggedCooldown:
+        return TaggedCooldown(self.rate, self.per)
+
+    def __repr__(self) -> str:
+        return f'<TaggedCooldown rate: {self.rate} per: {self.per} tokens: {self._tokens} tagged: {self.tagged!r}>'
+
+
+class TaggedCooldownMapping(commands.CooldownMapping[discord.Message], Generic[HashableT]):
+    _cache: dict[Any, TaggedCooldown[HashableT]]
+    _cooldown: TaggedCooldown[HashableT]
+
+    def __init__(
+        self,
+        rate: int,
+        per: float,
+        type: Callable[[discord.Message], Any],
+        *,
+        tagger: Callable[[discord.Message], HashableT],
+    ):
+        super().__init__(TaggedCooldown(rate, per), type)
+        self.tagger: Callable[[discord.Message], HashableT] = tagger
+
+    def get_bucket(self, message: discord.Message, current: float | None = None) -> TaggedCooldown[HashableT] | None:
+        return super().get_bucket(message, current)  # type: ignore
+
+    def update_rate_limit(self, message: discord.Message, current: float | None = None, tokens: int = 1) -> float | None:
+        bucket = self.get_bucket(message, current)
+        if bucket is None:
+            return None
+
+        retry_after = bucket.update_rate_limit(current, tokens=tokens)
+        bucket.tagged.add(self.tagger(message))
+        return retry_after
+
+    def copy(self) -> TaggedCooldownMapping[HashableT]:
+        mapping = TaggedCooldownMapping(self._cooldown.rate, self._cooldown.per, self._type, tagger=self.tagger)
+        mapping._cache = self._cache.copy()
+        return mapping
+
+
 class CooldownByContent(commands.CooldownMapping):
     def _bucket_key(self, message: discord.Message) -> tuple[int, str]:
         return message.channel.id, message.content
+
+
+class MemberJoinType(enum.Enum):
+    fast = 1
+    suspicious = 2
 
 
 class SpamChecker:
@@ -405,12 +527,21 @@ class SpamChecker:
         self.by_content = CooldownByContent.from_cooldown(15, 17.0, commands.BucketType.member)
         self.by_user = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
         self.last_join: Optional[datetime.datetime] = None
+        self.last_member: Optional[discord.Member] = None
         self.new_user = commands.CooldownMapping.from_cooldown(30, 35.0, commands.BucketType.channel)
         self._by_mentions: Optional[commands.CooldownMapping] = None
         self._by_mentions_rate: Optional[int] = None
 
-        self.fast_joiners: MutableMapping[int, bool] = cache.ExpiringCache(seconds=1800.0)
+        self.last_created: Optional[datetime.datetime] = None
+
+        self.flagged_users: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
         self.hit_and_run = commands.CooldownMapping.from_cooldown(10, 12, commands.BucketType.channel)
+
+    def get_flagged_member(self, user_id: int, /) -> Optional[FlaggedMember]:
+        return self.flagged_users.get(user_id)
+
+    def flag_member(self, member: discord.Member, /) -> None:
+        self.flagged_users[member.id] = FlaggedMember(member, member.joined_at or discord.utils.utcnow())
 
     def by_mentions(self, config: GuildConfig) -> Optional[commands.CooldownMapping]:
         if not config.mention_count:
@@ -430,31 +561,36 @@ class SpamChecker:
         ninety_days_ago = now - datetime.timedelta(days=90)
         return member.created_at > ninety_days_ago and member.joined_at is not None and member.joined_at > seven_days_ago
 
-    def is_spamming(self, message: discord.Message) -> bool:
+    def is_spamming(self, message: discord.Message) -> Optional[SpamCheckerResult]:
         if message.guild is None:
-            return False
+            return None
 
         current = message.created_at.timestamp()
 
-        if message.author.id in self.fast_joiners:
+        flagged = self.flagged_users.get(message.author.id)
+        if flagged is not None:
+            flagged.messages += 1
             bucket = self.hit_and_run.get_bucket(message)
             if bucket and bucket.update_rate_limit(current):
-                return True
+                return MultipleSpammers(list(bucket.tagged))
 
-        if self.is_new(message.author):  # type: ignore
+            if flagged.messages <= 10 and message.raw_mentions:
+                return SpamCheckerResult.flagged_mention()
+
+        if self.is_new(message.author):
             new_bucket = self.new_user.get_bucket(message)
             if new_bucket and new_bucket.update_rate_limit(current):
-                return True
+                return SpamCheckerResult.spammer()
 
         user_bucket = self.by_user.get_bucket(message)
         if user_bucket and user_bucket.update_rate_limit(current):
-            return True
+            return SpamCheckerResult.spammer()
 
         content_bucket = self.by_content.get_bucket(message)
         if content_bucket and content_bucket.update_rate_limit(current):
-            return True
+            return SpamCheckerResult.spammer()
 
-        return False
+        return None
 
     def is_fast_join(self, member: discord.Member) -> bool:
         joined = member.joined_at or discord.utils.utcnow()
@@ -464,8 +600,46 @@ class SpamChecker:
         is_fast = (joined - self.last_join).total_seconds() <= 2.0
         self.last_join = joined
         if is_fast:
-            self.fast_joiners[member.id] = True
+            self.flagged_users[member.id] = FlaggedMember(member, joined)
         return is_fast
+
+    def is_suspicious_join(self, member: discord.Member) -> bool:
+        created = member.created_at
+        if self.last_created is None:
+            self.last_created = created
+            return False
+
+        is_suspicious = abs((created - self.last_created).total_seconds()) <= 86400.0
+        self.last_created = created
+        if is_suspicious:
+            self.flagged_users[member.id] = FlaggedMember(member, member.joined_at or discord.utils.utcnow())
+        return is_suspicious
+
+    def get_join_type(self, member: discord.Member) -> Optional[MemberJoinType]:
+        joined = member.joined_at or discord.utils.utcnow()
+
+        if self.last_member is None:
+            self.last_member = member
+            self.last_join = joined
+            return None
+
+        if self.last_join is not None:
+            is_fast = (joined - self.last_join).total_seconds() <= 2.0
+            self.last_join = joined
+            if is_fast:
+                self.flagged_users[member.id] = FlaggedMember(member, joined)
+                if self.last_member.id not in self.flagged_users:
+                    self.flag_member(self.last_member)
+                return MemberJoinType.fast
+
+        is_suspicious = abs((member.created_at - self.last_member.created_at).total_seconds()) <= 86400.0
+        if is_suspicious:
+            self.flagged_users[member.id] = FlaggedMember(member, joined)
+            if self.last_member.id not in self.flagged_users:
+                self.flag_member(self.last_member)
+            return MemberJoinType.suspicious
+
+        return None
 
     def is_mention_spam(self, message: discord.Message, config: GuildConfig) -> bool:
         mapping = self.by_mentions(config)
@@ -477,6 +651,9 @@ class SpamChecker:
         mention_count = sum(not m.bot and m.id != message.author.id for m in message.mentions)
         return mention_bucket is not None and mention_bucket.update_rate_limit(current,
                                                                                tokens=mention_count) is not None
+
+    def remove_member(self, user: discord.abc.User) -> None:
+        self.flagged_users.pop(user.id, None)
 
 
 class NoMuteRole(commands.CommandError):
@@ -611,21 +788,30 @@ class Mod(commands.Cog):
                 return GuildConfig.from_record(record, self.bot)
             return None
 
-    async def check_raid(self, config: GuildConfig, guild_id: int, member: discord.Member,
-                         message: discord.Message) -> None:
+    async def check_raid(
+        self, config: GuildConfig, guild: discord.Guild, member: discord.Member, message: discord.Message
+    ) -> None:
         if not config.flags.raid:
             return
 
+        guild_id = guild.id
         checker = self._spam_check[guild_id]
-        if not checker.is_spamming(message):
+        result = checker.is_spamming(message)
+        if result is None:
             return
 
-        try:
-            await member.ban(reason='Auto-ban for spamming')
-        except discord.HTTPException:
-            log.info('[Moderation] Failed to ban %s (ID: %s) from server %s.', member, member.id, member.guild)
+        if isinstance(result, MultipleSpammers):
+            members = result.members
         else:
-            log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
+            members = [member]
+
+        for user in members:
+            try:
+                await guild.ban(user, reason=result.reason)
+            except discord.HTTPException:
+                log.info('[Moderation] Failed to ban %s (ID: %s) from server %s.', member, member.id, member.guild)
+            else:
+                log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
 
     async def ban_for_mention_spam(
             self,
@@ -684,7 +870,7 @@ class Mod(commands.Cog):
         if any(i in config.safe_automod_entity_ids for i in author._roles):
             return
 
-        await self.check_raid(config, guild_id, author, message)
+        await self.check_raid(config, message.guild, author, message)
 
         if not config.mention_count:
             return
@@ -702,6 +888,24 @@ class Mod(commands.Cog):
             return
 
         await self.ban_for_mention_spam(mention_count, guild_id, message, author)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        guild_id = member.guild.id
+        config = await self.get_guild_config(guild_id)
+        if config is None:
+            return
+
+        if config.is_muted(member):
+            return await config.apply_mute(member, 'Member was previously muted.')
+
+    @commands.Cog.listener()
+    async def on_raw_member_remove(self, payload: discord.RawMemberRemoveEvent):
+        checker = self._spam_check.get(payload.guild_id)
+        if checker is None:
+            return
+
+        checker.remove_member(payload.user)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
@@ -749,9 +953,11 @@ class Mod(commands.Cog):
         if slowmode_delay > 21600:
             await ctx.send('Provided slowmode duration is too long!', ephemeral=True)
         else:
-            await ctx.channel.edit(slowmode_delay=slowmode_delay, reason=f'Responsible moderator: {ctx.author.name}')
+            reason = f'Slowmode changed by {ctx.author} (ID: {ctx.author.id})'
+            await ctx.channel.edit(slowmode_delay=slowmode_delay, reason=reason)
             if slowmode_delay > 0:
-                await ctx.send(f'Configured slowmode to {slowmode_delay} seconds', ephemeral=True)
+                fmt = timetools.human_timedelta(duration.dt, source=ctx.message.created_at, accuracy=2)
+                await ctx.send(f'Configured slowmode to {fmt}', ephemeral=True)
             else:
                 await ctx.send(f'Disabled slowmode', ephemeral=True)
 
@@ -1461,6 +1667,7 @@ class Mod(commands.Cog):
             message = (
                 f'Successfully locked down `{len(success)}`/`{len(failures)}` channels.\n'
                 f'Failed channels: {", ".join(c.mention for c in failures)}\n\n'
+                f'Failed channels: {", ".join(c.mention for c in failures)}\n\n'
                 f'Give the bot Manage Roles permissions in those channels and try again.'
             )
         else:
@@ -1876,16 +2083,27 @@ class Mod(commands.Cog):
 
             predicates.append(joined_before)
 
-        if len(predicates) == 3:
-            return await ctx.send_tick(False, 'Missing at least one filter to use.')
+        is_only_raid = flags.raid and len(predicates) == 3
+        if len(predicates) == 3 and not flags.raid:
+            return await ctx.send('Missing at least one filter to use')
 
-        members = {m for m in members if all(p(m) for p in predicates)}
+        checker = self._spam_check[ctx.guild.id]
+        if is_only_raid:
+            members = checker.flagged_users
+        else:
+            members = {m.id: m for m in members if all(p(m) for p in predicates)}
+            if flags.raid:
+                members.update(checker.flagged_users)  # type: ignore
+
+        if flags.reason is None and flags.raid:
+            flags.reason = await ActionReason().convert(ctx, 'Raid detected')
+
         if len(members) == 0:
             return await ctx.send_tick(False, 'No members found matching criteria.')
 
         if flags.show:
-            members = sorted(members, key=lambda m: m.joined_at or now)
-            fmt = "\n".join(f'ID: {m.id}\tJoined: {m.joined_a}\tCreated: {m.created_at}\tMember: {m}' for m in members)
+            members = sorted(members.values(), key=lambda m: m.joined_at or now)
+            fmt = "\n".join(f'ID: {m.id}\tJoined: {m.joined_at}\tCreated: {m.created_at}\tMember: {m}' for m in members)
             content = f'- Current Time: {discord.utils.utcnow()}\n- Total members: {len(members)}\n\n{fmt}'
             file = discord.File(io.BytesIO(content.encode('utf-8')), filename='members.txt')
             return await ctx.send(file=file)
@@ -1900,7 +2118,7 @@ class Mod(commands.Cog):
             return
 
         count = 0
-        for member in members:
+        for member in list(members.values()):
             try:
                 await ctx.guild.ban(member, reason=reason)
             except discord.HTTPException:
