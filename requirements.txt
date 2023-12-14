@@ -7,7 +7,7 @@ pygit2
 feedparser
 python-dateutil
 python-Levenshtein
-lru_dict
+lru-dict
 playwright
 beautifulsoup4
 matplotlib

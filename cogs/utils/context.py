@@ -300,8 +300,8 @@ class Context(commands.Context):
 
         return f"<{posted_gist_url}>"
 
-    async def send_tick(self, opt: Optional[bool], content: Optional[str] = None):
-        return await self.send(f"{self.tick(opt)} {content or ''}")
+    async def send_tick(self, opt: Optional[bool], content: Optional[str] = None, **kwargs: Any) -> Message:
+        return await self.send(f"{self.tick(opt)} {content or ''}", **kwargs)
 
     async def send(
             self,
