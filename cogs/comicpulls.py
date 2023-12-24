@@ -801,7 +801,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if feed:
             try:
                 await self.publish_to_feed(feed)
-            except LockedResourceError:
+            except LockedResourceError as e:
                 await self.delay_push(feed)
 
 

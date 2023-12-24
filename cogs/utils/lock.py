@@ -37,6 +37,10 @@ class LockedResourceError(RuntimeError):
         self.type = resource_type
         self.id = resource_id
 
+        # Do not log this error because we use this only to indicate
+        # if a resource is locked or not and handle it accordingly
+        self.bypass_log = True
+
         super().__init__(
             f"Cannot operate on {self.type.lower()} `{self.id}`; "
             "it is currently locked and in use by another operation."

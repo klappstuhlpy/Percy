@@ -1460,6 +1460,10 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:
     if isinstance(exc, commands.CommandInvokeError):
         return
 
+    # Check if there is a "bypass_log" attribute in the exception object
+    if hasattr(exc, "bypass_log"):
+        return
+
     e = discord.Embed(title='<:warning:1113421726861238363> Event Error', colour=0x99002b)
     e.add_field(name='Event', value=event)
     trace = "".join(traceback.format_exception(exc_type, exc, tb))
