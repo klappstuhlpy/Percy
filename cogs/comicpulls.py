@@ -16,7 +16,7 @@ from discord.ext import commands, tasks
 from bot import Percy
 from .utils import cache, commands_ext
 from .utils.helpers import PostgresItem, MaybeAcquire
-from .utils.lock import lock, lock_arg
+from .utils.lock import lock, lock_arg, LockedResourceError
 from .utils.comic._parser import Parser  # noqa
 from launcher import get_logger
 
@@ -790,10 +790,19 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             await interaction.followup.send(
                 f'<:greenTick:1079249732364406854> Successfully modified **{brand.name}** feed configuration.')
 
+    async def delay_push(self, feed: ComicFeed):
+        """Delays a push until the :func:`publish_to_feed` is available"""
+        await asyncio.sleep(10)
+        await self.publish_to_feed(feed)
+        log.debug(f"Delayed push for {feed.brand.name} in {feed.guild_id}.")
+
     @commands.Cog.listener()
     async def on_comic_schedule(self, feed: ComicFeed):
         if feed:
-            await self.publish_to_feed(feed)
+            try:
+                await self.publish_to_feed(feed)
+            except LockedResourceError:
+                await self.delay_push(feed)
 
 
 async def setup(bot):
