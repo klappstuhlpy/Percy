@@ -336,9 +336,11 @@ class Documentation(commands.Cog):
         self.refresh_event = asyncio.Event()
         self.refresh_event.set()
 
+        self.inv_retries: dict[str, int] = {}
+
     async def cog_load(self) -> None:
         """Refresh documentation inventory on cog initialization."""
-        self.bot.loop.create_task(self.refresh_inventories())
+        self.bot.loop.create_task(self.refresh_inventories())  # noqa
 
     async def cog_unload(self) -> None:
         """Clear scheduled inventories, queued symbols and cleanup task on cog unload."""
@@ -360,7 +362,7 @@ class Documentation(commands.Cog):
         if not package_name:
             package_name = "python"
 
-        _, matches = await self.get_symbol_item(package_name, current, 15)
+        _, matches = await self.get_symbol_item(package_name, current, 15)  # noqa
         return [app_commands.Choice(name=m.symbol_id, value=m.symbol_id) for m in matches]
 
     async def package_autocomplete(
@@ -438,10 +440,18 @@ class Documentation(commands.Cog):
 
         if not package:
             if api_package_name in self.inventory_scheduler:
+                self.inv_retries[api_package_name] += 1
                 self.inventory_scheduler.cancel(api_package_name)
                 delay = FETCH_RESCHEDULE_DELAY.repeated
             else:
+                self.inv_retries[api_package_name] = 0
                 delay = FETCH_RESCHEDULE_DELAY.first
+
+            if self.inv_retries[api_package_name] > 5:
+                log.error(f"Failed to fetch inventory for {api_package_name} after 5 attempts.\n"
+                          f"Refresh the inventory manually with `?docs refresh`.")
+                return
+
             log.info(f"Failed to fetch inventory; attempting again in {delay} minutes.")
             self.inventory_scheduler.schedule_later(
                 delay * 60,
@@ -601,7 +611,7 @@ class Documentation(commands.Cog):
             return embed
 
     @commands_ext.command(commands.hybrid_group, name="docs", fallback="search", aliases=["d"],
-             description="Look up documentation for Python symbols.", invoke_without_command=True)
+                          description="Look up documentation for Python symbols.", invoke_without_command=True)
     @app_commands.describe(symbol_name="The symbol to look up documentation for.",
                            package="The package to look up documentation for.")
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
@@ -620,7 +630,7 @@ class Documentation(commands.Cog):
 
         symbol = symbol_name.strip("`")
         async with ctx.typing():
-            _, doc_items = await self.get_symbol_item(package, symbol, limit=12)  # type: str, List[DocItem]
+            _, doc_items = await self.get_symbol_item(package, symbol, limit=12)  # type: str, List[DocItem]  # noqa
 
             if not doc_items:
                 return await ctx.send(f"{ctx.tick(False)} The symbol `{symbol_name}` was not found.")
@@ -633,7 +643,7 @@ class Documentation(commands.Cog):
         return inventory_url.removesuffix("/").rsplit("/", maxsplit=1)[0] + "/"
 
     @commands_ext.command(docs_group.command, name="set", hidden=True, description="Set a new documentation object.",
-             with_app_command=False)
+                          with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def set_command(
@@ -667,7 +677,7 @@ class Documentation(commands.Cog):
             f"{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.")
 
     @commands_ext.command(docs_group.command, name="delete", hidden=True, aliases=["remove", "rm"],
-             description="Delete a documentation object.", with_app_command=False)
+                          description="Delete a documentation object.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def delete_command(
@@ -682,7 +692,7 @@ class Documentation(commands.Cog):
         await ctx.send(f"{ctx.tick(True)} Successfully deleted `{package_name}` and refreshed the inventories.")
 
     @commands_ext.command(docs_group.command, name="refresh", aliases=["rfsh", "r"], hidden=True,
-             description="Refresh the inventories.", with_app_command=False)
+                          description="Refresh the inventories.", with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def refresh_command(self, ctx: Context) -> None:
@@ -706,7 +716,7 @@ class Documentation(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands_ext.command(docs_group.command, name="clearcache", aliases=["deletecache"],
-             description="Clear the cache for a package.", hidden=True, with_app_command=False)
+                          description="Clear the cache for a package.", hidden=True, with_app_command=False)
     @commands.is_owner()
     async def clear_cache_command(
             self,
@@ -737,7 +747,7 @@ class Documentation(commands.Cog):
         Events, objects, and functions are all supported through
         a cruddy fuzzy algorithm.
         """
-        _, matches = await self.get_symbol_item(package, symbol_name, 8)
+        _, matches = await self.get_symbol_item(package, symbol_name, 8)  # noqa
 
         if len(matches) == 0:
             return await ctx.send(f'{ctx.tick(False)} The symbol `{symbol_name}` was not found.')
