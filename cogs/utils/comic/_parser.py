@@ -67,7 +67,7 @@ class Parser:
                         try:
                             price = store_table.find('span').text[1:]
                         except:
-                            price = "N/A"
+                            price = 'N/A'
                         if price.endswith('*'):
                             price = price[:-1]
 
@@ -75,7 +75,7 @@ class Parser:
                             price = 0.0
 
                         base_obj = soup.find('div', class_='o_geo-block')
-                        price_note = "N/A"
+                        price_note = 'N/A'
                         if base_obj:
                             price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
 
@@ -90,16 +90,16 @@ class Parser:
                         result = {}
                         for i in spec_table.find_all('div', class_='mar-b-md'):
                             clean_text = remove_html_tags(i.text.strip())
-                            spec_map = ["Length", "Series", "Category", "Age Rating"]
+                            spec_map = ['Length', 'Series', 'Category', 'Age Rating']
                             for spec in spec_map:
                                 if clean_text.startswith(spec):
                                     value = clean_text.replace(spec, "").strip()
                                     result[spec] = value
 
-                        if result.get('Category') in ["TV Series", "Movie"]:
+                        if result.get('Category') in ['TV Series', 'Movie']:
                             return None
 
-                        page_info = result.get("Length", 'N/A Pages')[0]
+                        page_info = result.get('Length', 'N/A Pages')[0]
                         page_count = int(page_info) if not isinstance(page_info, str) else None
 
                         return GenericComic(
@@ -112,7 +112,7 @@ class Parser:
                             url=element,
                             page_count=page_count,
                             price=float(price),
-                            copyright=f"© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.",
+                            copyright=f'© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.',
                             date=utcparse(release_date),
                             # kwargs
                             isbn=isbn,
@@ -133,7 +133,7 @@ class Parser:
         from ...comicpulls import GenericComic, Brand
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(cls.DC_ENDPOINT + "/comics") as resp:
+            async with session.get(cls.DC_ENDPOINT + '/comics') as resp:
                 if resp.status != 200:
                     resp.raise_for_status()
 
@@ -141,10 +141,10 @@ class Parser:
 
             soup = BeautifulSoup(page, 'html.parser')
             comics = []
-            links: Tag = soup.find('ul', class_="react-multi-carousel-track content-tray-slider")
+            links: Tag = soup.find('ul', class_='react-multi-carousel-track content-tray-slider')
 
             for item in links.contents:
-                branch = item.findNext(class_="card-button usePointer").get("href")
+                branch = item.findNext(class_='card-button usePointer').get('href')
                 link = cls.DC_ENDPOINT + branch
 
                 async with session.get(link) as resp:
@@ -157,12 +157,12 @@ class Parser:
                     continue
 
                 soup = BeautifulSoup(page, 'html.parser')
-                txt = soup.find_all(class_="sc-g8nqnn-0")
+                txt = soup.find_all(class_='sc-g8nqnn-0')
                 if not txt:
                     continue
 
                 c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
-                if c_type != "COMIC BOOK":
+                if c_type != 'COMIC BOOK':
                     continue
 
                 title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()
@@ -173,7 +173,7 @@ class Parser:
                         desc_list = cls._get_desc(txt[1])
                         desc = '\n'.join(i.strip() for i in ''.join(desc_list).split('\n') if i.strip())
 
-                details_list = [i.contents for i in soup.find_all('div', class_="sc-b3fnpg-3")]
+                details_list = [i.contents for i in soup.find_all('div', class_='sc-b3fnpg-3')]
                 details = {}
                 for d in details_list:
                     for dd in d:
@@ -189,12 +189,12 @@ class Parser:
 
                 creators = {}
                 if '24' in details:
-                    creators["Writer"] = [str(i) for i in details['24']]
+                    creators['Writer'] = [str(i) for i in details['24']]
                 if '12' in details:
-                    creators["Artist"] = [str(i) for i in details['12']]
+                    creators['Artist'] = [str(i) for i in details['12']]
 
                 price = from_destination('33', details)
-                price = 0.0 if price == "FREE" else float(price) if price else None
+                price = 0.0 if price == 'FREE' else float(price) if price else None
 
                 date = from_destination('36', details)
                 date = datetime.datetime.strptime(
@@ -203,12 +203,12 @@ class Parser:
 
                 page_count = from_destination('48', details)
 
-                img = soup.find('img', id="page151-band11672-Card11673-img")
+                img = soup.find('img', id='page151-band11672-Card11673-img')
                 image = img['src'].split('?')[0]
                 image = image if image else None
 
                 copyright = str(
-                    soup.find('div', class_="small legal d-inline-block").contents[0].contents[0]  # type: ignore
+                    soup.find('div', class_='small legal d-inline-block').contents[0].contents[0]  # type: ignore
                 )
 
                 _cs_comic = GenericComic(
@@ -231,7 +231,7 @@ class Parser:
     @classmethod
     async def bs4_marvel(cls):
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://marvel.com/comics/calendar/") as resp:
+            async with session.get('https://marvel.com/comics/calendar/') as resp:
                 if resp.status != 200:
                     resp.raise_for_status()
 
@@ -240,7 +240,7 @@ class Parser:
         soup = BeautifulSoup(page, 'html.parser')
         descs = {}
 
-        for link in soup.find_all('a', class_="meta-title"):
+        for link in soup.find_all('a', class_='meta-title'):
             plink = 'https:' + link.get('href').strip()
             id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
 
@@ -296,7 +296,7 @@ class Parser:
 
         _cs_comic.creators = {}
         _cs_comic.image_url = data.images[0].path + '/clean.jpg' \
-            if data.images else "https://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available/clean.jpg"
+            if data.images else 'https://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available/clean.jpg'
 
         _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), None)
         _cs_comic.price = next((i.price for i in data.prices if i.type == 'printPrice'), None)
@@ -320,9 +320,9 @@ class Parser:
             elif isinstance(i, NavigableString):
                 s = str(i)
                 if tag.name == 'em':
-                    s = (" " if s.startswith(" ") else "") + \
-                        f"*{s.strip()}*" + \
-                        (" " if s.endswith(" ") else "")
+                    s = (' ' if s.startswith(' ') else "") + \
+                        f'*{s.strip()}*' + \
+                        (' ' if s.endswith(' ') else "")
                 strings.append(s)
         return strings
 

@@ -21,9 +21,9 @@ class TwitchRequestError(HTTPException):
     pass
 
 
-GRANT_URL = "https://id.twitch.tv/oauth2/token"
-END_URL = "https://api.twitch.tv/helix"
-TWITCH_ICON_URL = "https://media.discordapp.net/attachments/1062074624935993427/1101142491450835036/5968819.png"
+GRANT_URL = 'https://id.twitch.tv/oauth2/token'
+END_URL = 'https://api.twitch.tv/helix'
+TWITCH_ICON_URL = 'https://media.discordapp.net/attachments/1062074624935993427/1101142491450835036/5968819.png'
 
 
 class TwitchUser(NamedTuple):
@@ -39,7 +39,7 @@ class TwitchUser(NamedTuple):
 
     @property
     def url(self) -> str:
-        return f"https://twitch.tv/{self.login}"
+        return f'https://twitch.tv/{self.login}'
 
 
 class TwitchStream(NamedTuple):
@@ -63,7 +63,7 @@ class TwitchNotifications(commands.Cog):
         self._refresh_lock = asyncio.Lock()
         self.online_users: set[str] = set()
 
-        # self.config: config_file = config_file("twitch")
+        # self.config: config_file = config_file('twitch')
 
     async def cog_load(self) -> None:
         self.refresh_notify_check.start()
@@ -73,23 +73,23 @@ class TwitchNotifications(commands.Cog):
 
     async def _expiry(self, expiry: float = None) -> float:
         if expiry:
-            await self.bot.media_config.deep_put("twitch.expiry", expiry)
-        return self.bot.media_config.get("twitch").get("expiry")
+            await self.bot.media_config.deep_put('twitch.expiry', expiry)
+        return self.bot.media_config.get('twitch').get('expiry')
 
     async def _bearer_token(self, bearer_token: str = None) -> str:
         expiry = await self._expiry()
         if not expiry or (expiry and expiry < time.time()):
-            log.trace("Refreshing bearer token")
+            log.trace('Refreshing bearer token')
             await self._get_bearer_token()
 
         if bearer_token:
-            await self.bot.media_config.deep_put("twitch.bearer_token", bearer_token)
-        return self.bot.media_config.get("twitch").get("bearer_token")
+            await self.bot.media_config.deep_put('twitch.bearer_token', bearer_token)
+        return self.bot.media_config.get('twitch').get('bearer_token')
 
-    @cached_slot_property(name="_cs_grant_params")
+    @cached_slot_property(name='_cs_grant_params')
     def grant_params(self) -> dict:
-        return {'client_id': self.bot.media_config.get("twitch").get("client_id"),
-                'client_secret': self.bot.media_config.get("twitch").get("client_secret"),
+        return {'client_id': self.bot.media_config.get('twitch').get('client_id'),
+                'client_secret': self.bot.media_config.get('twitch').get('client_secret'),
                 'grant_type': 'client_credentials',
                 'Content-Type': 'application/x-www-form-urlencoded'}
 
@@ -109,7 +109,7 @@ class TwitchNotifications(commands.Cog):
             headers: Optional[dict[str, Any]] = MISSING,
     ) -> Optional[Dict]:
         hdrs = {'Accept': 'application/json',
-                'Client-Id': self.bot.media_config.get("twitch").get("client_id"),
+                'Client-Id': self.bot.media_config.get('twitch').get('client_id'),
                 'Authorization': f'Bearer {await self._bearer_token()}'}
 
         if headers is not MISSING and isinstance(headers, dict):
@@ -147,45 +147,45 @@ class TwitchNotifications(commands.Cog):
         Optional[:class:`TwitchUser`]
             The user object of the user, if found.
         """
-        data = await self.twitch_request('GET', yarl.URL(END_URL) / 'users', params={"login": login})
-        user_data = data.get("data", [])
+        data = await self.twitch_request('GET', yarl.URL(END_URL) / 'users', params={'login': login})
+        user_data = data.get('data', [])
         if user_data:
             user = TwitchUser(
-                id=user_data[0]["id"],
-                login=user_data[0]["login"],
-                display_name=user_data[0]["display_name"],
-                type=user_data[0]["type"],
-                broadcaster_type=user_data[0]["broadcaster_type"],
-                description=user_data[0]["description"],
-                profile_image_url=user_data[0]["profile_image_url"],
-                offline_image_url=user_data[0]["offline_image_url"],
-                view_count=user_data[0]["view_count"]
+                id=user_data[0]['id'],
+                login=user_data[0]['login'],
+                display_name=user_data[0]['display_name'],
+                type=user_data[0]['type'],
+                broadcaster_type=user_data[0]['broadcaster_type'],
+                description=user_data[0]['description'],
+                profile_image_url=user_data[0]['profile_image_url'],
+                offline_image_url=user_data[0]['offline_image_url'],
+                view_count=user_data[0]['view_count']
             )
             return user
         return None
 
     async def get_stream(self, user: TwitchUser) -> Optional[TwitchStream]:
-        data = await self.twitch_request('GET', yarl.URL(END_URL) / 'streams', params={"user_id": user.id})
-        stream_data = data.get("data", [])
+        data = await self.twitch_request('GET', yarl.URL(END_URL) / 'streams', params={'user_id': user.id})
+        stream_data = data.get('data', [])
         if stream_data:
             stream = TwitchStream(
-                id=stream_data[0]["id"],
+                id=stream_data[0]['id'],
                 user=user,
-                game_id=stream_data[0]["game_id"],
-                game_name=stream_data[0]["game_name"],
-                type=stream_data[0]["type"],
-                title=stream_data[0]["title"],
-                tags=stream_data[0]["tags"],
-                viewer_count=stream_data[0]["viewer_count"],
-                started_at=stream_data[0]["started_at"],
-                language=stream_data[0]["language"],
-                thumbnail_url=stream_data[0]["thumbnail_url"]
+                game_id=stream_data[0]['game_id'],
+                game_name=stream_data[0]['game_name'],
+                type=stream_data[0]['type'],
+                title=stream_data[0]['title'],
+                tags=stream_data[0]['tags'],
+                viewer_count=stream_data[0]['viewer_count'],
+                started_at=stream_data[0]['started_at'],
+                language=stream_data[0]['language'],
+                thumbnail_url=stream_data[0]['thumbnail_url']
             )
             return stream
         return None
 
     async def get_notifications(self) -> AsyncIterator[TwitchStream]:
-        wl = self.bot.media_config.get("twitch").get("watchlist")
+        wl = self.bot.media_config.get('twitch').get('watchlist')
         users = [await self.get_user(user_name) for user_name in wl]
         streams = [await self.get_stream(user) for user in users]
 
@@ -204,7 +204,7 @@ class TwitchNotifications(commands.Cog):
 
     @property
     def channel(self) -> Optional[discord.TextChannel]:
-        channel_id = self.bot.media_config.get("twitch", {}).get("channel_id")
+        channel_id = self.bot.media_config.get('twitch', {}).get('channel_id')
         if not channel_id:
             return
         return self.bot.get_channel(channel_id)
@@ -219,21 +219,21 @@ class TwitchNotifications(commands.Cog):
             started_at = datetime.datetime.fromisoformat(stream.started_at).astimezone(datetime.timezone.utc)
 
             embed = discord.Embed(title=stream.title, url=stream.user.url, color=0x6441a5)
-            embed.set_author(name=f"{stream.user.display_name} is now Live on Twitch!", url=stream.user.url,
+            embed.set_author(name=f'{stream.user.display_name} is now Live on Twitch!', url=stream.user.url,
                              icon_url=TWITCH_ICON_URL)
             embed.set_thumbnail(url=stream.user.profile_image_url)
-            embed.add_field(name="Started", value=discord.utils.format_dt(started_at, style="R"),
+            embed.add_field(name='Started', value=discord.utils.format_dt(started_at, style='R'),
                             inline=False)
-            embed.add_field(name="Game", value=stream.game_name or 'Unknown', inline=True)
-            embed.add_field(name="Viewers", value=f"{stream.viewer_count:,}", inline=True)
+            embed.add_field(name='Game', value=stream.game_name or 'Unknown', inline=True)
+            embed.add_field(name='Viewers', value=f'{stream.viewer_count:,}', inline=True)
             if tags := stream.tags:
-                embed.add_field(name="Tags", value=", ".join(tags), inline=False)
+                embed.add_field(name='Tags', value=', '.join(tags), inline=False)
             embed.set_image(url=stream.thumbnail_url.format(width=1920, height=1080))
 
             try:
                 await self.channel.send(embed=embed)
             except discord.HTTPException:
-                log.warning("Could not send twitch notification due to: %s", exc_info=True)
+                log.warning('Could not send twitch notification due to: %s', exc_info=True)
 
 
 async def setup(bot):

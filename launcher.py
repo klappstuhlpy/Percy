@@ -160,7 +160,7 @@ class PercyLogger(LoggerClass):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.trace("Houston, we have an %s", "interesting problem", exc_info=1)
+        logger.trace('Houston, we have an %s', 'interesting problem', exc_info=1)
         """
         if self.isEnabledFor(TRACE_LEVEL):
             self.log(TRACE_LEVEL, msg, *args, **kwargs)
@@ -216,7 +216,7 @@ class _ColourFormatter(logging.Formatter):
 @contextlib.contextmanager
 def setup_logging():
     logging.TRACE = TRACE_LEVEL
-    logging.addLevelName(TRACE_LEVEL, "TRACE")
+    logging.addLevelName(TRACE_LEVEL, 'TRACE')
     logging.setLoggerClass(PercyLogger)
 
     root_log = get_logger()
@@ -384,7 +384,7 @@ def log(reverse: bool):
     revs = reversed(migrations.ordered_revisions) if not reverse else migrations.ordered_revisions
     for rev in revs:
         as_yellow = click.style(f'V{rev.version:>03}', fg='yellow')
-        click.echo(f'{as_yellow} {rev.description.replace("_", " ")}')
+        click.echo(f'{as_yellow} {rev.description.replace('_', ' ')}')
 
 
 if __name__ == '__main__':

@@ -42,7 +42,7 @@ class Minesweeper(discord.ui.View):
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("This isn't your game.", ephemeral=True)
+            await interaction.response.send_message('This isn\'t your game.', ephemeral=True)
             return False
         return True
 
@@ -57,20 +57,20 @@ class Minesweeper(discord.ui.View):
 
                 if item.cell.value == -1:
                     if item.position == position:
-                        item.label = "\N{COLLISION SYMBOL}"
+                        item.label = '\N{COLLISION SYMBOL}'
                     else:
-                        item.label = "\N{TRIANGULAR FLAG ON POST}" if won else "\N{BOMB}"
+                        item.label = '\N{TRIANGULAR FLAG ON POST}' if won else '\N{BOMB}'
                     item.style = discord.ButtonStyle.green if won else discord.ButtonStyle.red
                 else:
                     item.style = discord.ButtonStyle.gray
-                    item.label = str(item.cell.value) if item.cell.value != 0 else "‎"
+                    item.label = str(item.cell.value) if item.cell.value != 0 else '‎'
 
         embed = discord.Embed(
-            title="Minesweeper",
-            description=f"You {'found all' if won else 'exploded by'} "
-            f"**{self.mines}** mines in **{self.moves}** moves • Time: {readable_time(duration, short=True)}",
+            title='Minesweeper',
+            description=f'You {'found all' if won else 'exploded by'} '
+            f'**{self.mines}** mines in **{self.moves}** moves • Time: {readable_time(duration, short=True)}',
             colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red()
-        ).set_footer(text=f"Player: {self.ctx.author}")
+        ).set_footer(text=f'Player: {self.ctx.author}')
 
         with suppress(discord.NotFound, discord.HTTPException):
             if interaction:
@@ -80,10 +80,10 @@ class Minesweeper(discord.ui.View):
 
     def build_embed(self) -> discord.Embed:
         return discord.Embed(
-            title="Minesweeper",
-            description=f"Moves: **{self.moves}** • Mines: **{self.mines}**",
+            title='Minesweeper',
+            description=f'Moves: **{self.moves}** • Mines: **{self.mines}**',
             colour=helpers.Colour.light_orange(),
-        ).set_footer(text=f"Player: {self.ctx.author}")
+        ).set_footer(text=f'Player: {self.ctx.author}')
 
     def place_mines(self) -> None:
         previous = set()
@@ -120,7 +120,7 @@ class Minesweeper(discord.ui.View):
         return True
 
 
-class MinesweeperButton(discord.ui.Button["Minesweeper"]):
+class MinesweeperButton(discord.ui.Button['Minesweeper']):
     def __init__(self, kind: BoardKind, position: tuple[int, int]):
         self.position: tuple[int, int] = position
         self.kind: BoardKind = kind
@@ -134,9 +134,9 @@ class MinesweeperButton(discord.ui.Button["Minesweeper"]):
 
         if self.cell.selected:
             self.style = discord.ButtonStyle.secondary
-            self.label = str(self.cell.value) if self.cell.value != 0 else "‎"
+            self.label = str(self.cell.value) if self.cell.value != 0 else '‎'
         else:
-            self.label = "‎"
+            self.label = '‎'
             self.style = discord.ButtonStyle.blurple
 
         self.disabled = self.cell.selected

@@ -33,9 +33,9 @@ AnyCommand = Union[
 ]
 
 AnyCommandSignature = {
-    "hybrid.py": CommandCategory.Hybrid,
-    "core.py": CommandCategory.Core,
-    "commands.py": CommandCategory.App,
+    'hybrid.py': CommandCategory.Hybrid,
+    'core.py': CommandCategory.Core,
+    'commands.py': CommandCategory.App,
 }
 
 
@@ -45,12 +45,12 @@ T = TypeVar('T')
 class PermissionTemplate:
     r"""Permission Templates for the bot and user."""
 
-    bot: ClassVar[str] = ["send_messages", "embed_links", "attach_files", "use_external_emojis",
-                          "view_channel", "read_message_history"]
+    bot: ClassVar[str] = ['send_messages', 'embed_links', 'attach_files', 'use_external_emojis',
+                          'view_channel', 'read_message_history']
     user: ClassVar[str] = []  # Placeholder
-    mod: ClassVar[str] = ["ban_members", "manage_messages"]
-    admin: ClassVar[str] = ["administrator"]
-    manager: ClassVar[str] = ["manage_guild"]
+    mod: ClassVar[str] = ['ban_members', 'manage_messages']
+    admin: ClassVar[str] = ['administrator']
+    manager: ClassVar[str] = ['manage_guild']
 
 
 def guilds(*guild_ids: Union[Snowflake, int]) -> Callable[[T], T]:
@@ -122,7 +122,7 @@ def command_permissions(
 
     invalid = (set(user) | set(bot)) - set(discord.Permissions.VALID_FLAGS)
     if invalid:
-        raise TypeError(f"Invalid permission(s): {', '.join(invalid)}")
+        raise TypeError(f'Invalid permission(s): {', '.join(invalid)}')
 
     # After this point, we can assume that the permissions are valid.
     # We are now creating a mapping of permissions to a boolean value set to True.
@@ -166,7 +166,7 @@ def command(
         func: AnyCommand = commands.hybrid_command,
         *,
         name: Optional[str] = None,
-        description: Union[str, locale_str] = "Command undocumented.",
+        description: Union[str, locale_str] = 'Command undocumented.',
         examples: List[str] = None,
         nsfw: bool = False,
         extras: Dict[str, Any] = None,
@@ -194,7 +194,7 @@ def command(
     name: Optional[str]
         The name of the command. Defaults to the name of the function ``func.__name__``.
     description: Union[str, locale_str]
-        The description of the command. Defaults to ``"Command undocumented."``.
+        The description of the command. Defaults to ``'Command undocumented.'``.
     examples: List[str]
         A list of examples for the command. Defaults to ``None``.
     nsfw: bool
@@ -217,8 +217,8 @@ def command(
     if not extras:
         extras = {}
 
-    if not extras.get("examples"):
-        extras["examples"] = examples
+    if not extras.get('examples'):
+        extras['examples'] = examples
 
     self = func(
         name=name,
@@ -227,7 +227,7 @@ def command(
         nsfw=nsfw,
         **kwargs
     )
-    setattr(self, "__type_info__", f"{func.__module__}.{func.__name__}")
+    setattr(self, '__type_info__', f'{func.__module__}.{func.__name__}')
 
     if raw:
         return self

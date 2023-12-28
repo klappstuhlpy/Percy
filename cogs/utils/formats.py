@@ -28,13 +28,13 @@ class plural:
 
     def __format__(self, format_spec: str) -> str:
         s = self.sized
-        singular, sep, plural = format_spec.partition('|')
-        plural = plural or f'{singular}s'
+        singular, sep, _plural = format_spec.partition('|')
+        _plural = _plural or f'{singular}s'
         if self.pass_content:
-            return singular if abs(s) == 1 else plural
+            return singular if abs(s) == 1 else _plural
 
         if abs(s) != 1:
-            return f'{s} {plural}'
+            return f'{s} {_plural}'
         return f'{s} {singular}'
 
 
@@ -128,21 +128,21 @@ def readable_time(seconds: int | float, decimal: bool = False, short: bool = Fal
     years, months = divmod(months, 12)
 
     attrs = {
-        "y" if short else "year": years,
-        "mo" if short else "month": months,
-        "d" if short else "day": days,
-        "hr" if short else "hour": hours,
-        "m" if short else "minute": minutes,
-        "s" if short else "second": seconds,
+        'y' if short else 'year': years,
+        'mo' if short else 'month': months,
+        'd' if short else 'day': days,
+        'hr' if short else 'hour': hours,
+        'm' if short else 'minute': minutes,
+        's' if short else 'second': seconds,
     }
 
     output = []
     for unit, value in attrs.items():
         value = round(value, 2 if decimal else None)
         if value > 0:
-            output.append(f"{value}{' ' * (not short)}{unit}{('s' if value != 1 else '') * (not short)}")
+            output.append(f'{value}{' ' * (not short)}{unit}{('s' if value != 1 else '') * (not short)}')
 
-    return ", ".join(output)
+    return ', '.join(output)
 
 
 def shorten_number(number: int | float) -> str:
@@ -154,19 +154,19 @@ def shorten_number(number: int | float) -> str:
         The number to shorten.
     """
 
-    number = float(f"{number:.3g}")
+    number = float(f'{number:.3g}')
     magnitude = 0
 
     while abs(number) >= 1000:
         magnitude += 1
         number /= 1000
 
-    return f"{f'{number:f}'.rstrip('0').rstrip('.')}{['', 'K', 'M', 'B', 'T'][magnitude]}"
+    return f'{f'{number:f}'.rstrip('0').rstrip('.')}{['', 'K', 'M', 'B', 'T'][magnitude]}'
 
 
 def pagify(
         text: str,
-        delims: Sequence[str] = ["\n"],
+        delims: Sequence[str] = ['\n'],
         *,
         priority: bool = False,
         escape_mass_mentions: bool = True,
@@ -214,7 +214,7 @@ def pagify(
     while (end - start) > page_length:
         stop = start + page_length
         if escape_mass_mentions:
-            stop -= text.count("@here", start, stop) + text.count("@everyone", start, stop)
+            stop -= text.count('@here', start, stop) + text.count('@everyone', start, stop)
         closest_delim = (text.rfind(d, start + 1, stop) for d in delims)
         if priority:
             closest_delim = next((x for x in closest_delim if x > 0), -1)
@@ -239,7 +239,7 @@ def pagify(
 def format_date(dt: Optional[datetime.datetime], style: TimestampStyle = 'f') -> str:
     if dt is None:
         return 'N/A'
-    return f'{discord.utils.format_dt(dt, style)} ({discord.utils.format_dt(dt, style="R")})'
+    return f'{discord.utils.format_dt(dt, style)} ({discord.utils.format_dt(dt, style='R')})'
 
 
 def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:
@@ -310,14 +310,14 @@ class TabularData:
 
 def truncate(text: str, length: int) -> str:
     if len(text) > length:
-        return text[:length - 1] + "…"
+        return text[:length - 1] + '…'
     return text
 
 
 def truncate_iterable(iterable: Iterable[Any], length: int, attribute: str = None) -> str:
     if len(iterable) > length:  # type: ignore
-        return ", ".join(iterable[:length]) + ", …"
-    return ", ".join(iterable)
+        return ', '.join(iterable[:length]) + ', …'
+    return ', '.join(iterable)
 
 
 def WrapList(list_: list, length: int):

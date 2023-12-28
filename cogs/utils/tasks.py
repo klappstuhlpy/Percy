@@ -152,7 +152,7 @@ class Scheduler(ABC):
         self.name = name
 
         from launcher import get_logger
-        self._log = get_logger(f"{__name__}.{name}")
+        self._log = get_logger(f'{__name__}.{name}')
 
         self._scheduled_tasks: dict[Hashable, asyncio.Task] = {}
 
@@ -207,22 +207,22 @@ class Scheduler(ABC):
         The task is added to the scheduler's internal dictionary of scheduled tasks. This allows the
         task to be cancelled prematurely with :obj:`cancel`.
         """
-        self._log.trace(f"Scheduling task #{task_id}...")
+        self._log.trace(f'Scheduling task #{task_id}...')
 
-        msg = f"Cannot schedule an already started coroutine for #{task_id}"
-        if inspect.getcoroutinestate(coroutine) != "CORO_CREATED":
+        msg = f'Cannot schedule an already started coroutine for #{task_id}'
+        if inspect.getcoroutinestate(coroutine) != 'CORO_CREATED':
             raise ValueError(msg)
 
         if task_id in self._scheduled_tasks:
-            self._log.debug(f"Did not schedule task #{task_id}; task was already scheduled.")
+            self._log.debug(f'Did not schedule task #{task_id}; task was already scheduled.')
             coroutine.close()
             return
 
-        task = asyncio.create_task(coroutine, name=f"{self.name}_{task_id}")
+        task = asyncio.create_task(coroutine, name=f'{self.name}_{task_id}')
         task.add_done_callback(functools.partial(self._task_done_callback, task_id))
 
         self._scheduled_tasks[task_id] = task
-        self._log.debug(f"Scheduled task #{task_id} {id(task)}.")
+        self._log.debug(f'Scheduled task #{task_id} {id(task)}.')
 
     def schedule_at(self, time: datetime, task_id: Hashable, coroutine: Coroutine) -> None:
         """Schedule ``coroutine`` to be executed at the given ``time``.
@@ -301,20 +301,20 @@ class Scheduler(ABC):
         -----
         If the task identified by ``task_id`` is already done, then this method does nothing.
         """
-        self._log.trace(f"Cancelling task #{task_id}...")
+        self._log.trace(f'Cancelling task #{task_id}...')
 
         try:
             task = self._scheduled_tasks.pop(task_id)
         except KeyError:
-            self._log.warning(f"Failed to unschedule {task_id} (no task found).")
+            self._log.warning(f'Failed to unschedule {task_id} (no task found).')
         else:
             task.cancel()
 
-            self._log.debug(f"Unscheduled task #{task_id} {id(task)}.")
+            self._log.debug(f'Unscheduled task #{task_id} {id(task)}.')
 
     def cancel_all(self) -> None:
         """Unschedule all known tasks."""
-        self._log.debug("Unscheduling all tasks")
+        self._log.debug('Unscheduling all tasks')
 
         for task_id in self._scheduled_tasks.copy():
             self.cancel(task_id)
@@ -351,11 +351,11 @@ class Scheduler(ABC):
         prevents unawaited coroutine warnings. Don't pass a coroutine that'll be re-used elsewhere.
         """
         try:
-            self._log.trace(f"Waiting {delay} seconds before awaiting coroutine for #{task_id}.")
+            self._log.trace(f'Waiting {delay} seconds before awaiting coroutine for #{task_id}.')
             await asyncio.sleep(delay)
 
             # Use asyncio.shield to prevent the coroutine from cancelling itself.
-            self._log.trace(f"Done waiting for #{task_id}; now awaiting the coroutine.")
+            self._log.trace(f'Done waiting for #{task_id}; now awaiting the coroutine.')
             await asyncio.shield(coroutine)
         finally:
             # Close it to prevent unawaited coroutine warnings,
@@ -363,11 +363,11 @@ class Scheduler(ABC):
             # Only close it if it's not been awaited yet. This check is important because the
             # coroutine may cancel this task, which would also trigger the finally block.
             state = inspect.getcoroutinestate(coroutine)
-            if state == "CORO_CREATED":
-                self._log.debug(f"Explicitly closing the coroutine for #{task_id}.")
+            if state == 'CORO_CREATED':
+                self._log.debug(f'Explicitly closing the coroutine for #{task_id}.')
                 coroutine.close()
             else:
-                self._log.debug(f"Finally block reached for #{task_id}; {state=}")
+                self._log.debug(f'Finally block reached for #{task_id}; {state=}')
 
     def _task_done_callback(self, task_id: Hashable, done_task: asyncio.Task) -> None:
         """Delete the task and raise its exception if one exists.
@@ -386,29 +386,29 @@ class Scheduler(ABC):
         If ``done_task`` and the task associated with ``task_id`` are different, then the latter
         will not be deleted. In this case, a new task was likely rescheduled with the same ID.
         """
-        self._log.trace(f"Performing done callback for task #{task_id} {id(done_task)}.")
+        self._log.trace(f'Performing done callback for task #{task_id} {id(done_task)}.')
 
         scheduled_task = self._scheduled_tasks.get(task_id)
 
         if scheduled_task and done_task is scheduled_task:
             # A task for the ID exists and is the same as the done task.
             # Since this is the done callback, the task is already done so no need to cancel it.
-            self._log.trace(f"Deleting task #{task_id} {id(done_task)}.")
+            self._log.trace(f'Deleting task #{task_id} {id(done_task)}.')
             del self._scheduled_tasks[task_id]
         elif scheduled_task:
             # A new task was likely rescheduled with the same ID.
             self._log.debug(
-                f"The scheduled task #{task_id} {id(scheduled_task)} "
-                f"and the done task {id(done_task)} differ."
+                f'The scheduled task #{task_id} {id(scheduled_task)} '
+                f'and the done task {id(done_task)} differ.'
             )
         elif not done_task.cancelled():
             self._log.warning(
-                f"Task #{task_id} not found while handling task {id(done_task)}! "
-                f"A task somehow got unscheduled improperly (i.e. deleted but not cancelled)."
+                f'Task #{task_id} not found while handling task {id(done_task)}! '
+                f'A task somehow got unscheduled improperly (i.e. deleted but not cancelled).'
             )
 
         with suppress(asyncio.CancelledError):
             exception = done_task.exception()
             # Log the exception if one exists.
             if exception:
-                self._log.error(f"Error in task #{task_id} {id(done_task)}!", exc_info=exception)
+                self._log.error(f'Error in task #{task_id} {id(done_task)}!', exc_info=exception)

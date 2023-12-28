@@ -10,8 +10,8 @@ from bs4 import BeautifulSoup
 from bot import Percy
 from cogs.utils.formats import plural
 
-ANILIST_LOGO = "https://cdn.discordapp.com/attachments/978016869342658630/978033399107289189/anilist.png"
-ANILIST_ICON = "https://media.discordapp.net/attachments/1101850602050424832/1101850610959130655/icon.png?width=344&height=344"
+ANILIST_LOGO = 'https://cdn.discordapp.com/attachments/978016869342658630/978033399107289189/anilist.png'
+ANILIST_ICON = 'https://media.discordapp.net/attachments/1101850602050424832/1101850610959130655/icon.png?width=344&height=344'
 
 
 class AniListEmbed(discord.Embed):
@@ -28,7 +28,7 @@ class AniListEmbedBuilder:
         embed = AniListEmbed(
             title=format_media_title(data.get('title').get('romaji'), data.get('title').get('english')),
             description=sanitize_description(data.get('description'), 400),
-            color=discord.Color.from_str(data.get('coverImage').get('color') or "#2b2d31"),
+            color=discord.Color.from_str(data.get('coverImage').get('color') or '#2b2d31'),
             url=data.get('siteUrl'),
         )
         embed.set_author(name=format_media_format(data.get('format')), icon_url=ANILIST_LOGO)
@@ -43,7 +43,7 @@ class AniListEmbedBuilder:
             if data.get('status') == 'RELEASING':
                 if data.get('nextAiringEpisode'):
                     if data.get('episodes'):
-                        aired_episodes = f'{data.get("nextAiringEpisode").get("episode") - 1}/{data.get("episodes")}'
+                        aired_episodes = f'{data.get('nextAiringEpisode').get('episode') - 1}/{data.get('episodes')}'
                     else:
                         aired_episodes = data.get('nextAiringEpisode').get('episode') - 1
 
@@ -74,7 +74,7 @@ class AniListEmbedBuilder:
             day=data.get('endDate').get('day'),
         )
         end_date = 'Present' if data.get('status') == 'RELEASING' else end_date
-        embed.add_field(name='Running', value=start_date + " - " + end_date, inline=False)
+        embed.add_field(name='Running', value=start_date + ' - ' + end_date, inline=False)
 
         if data.get('type') == 'ANIME':
             status = format_anime_status(data.get('status'))
@@ -85,43 +85,43 @@ class AniListEmbedBuilder:
 
         if data.get('type') == 'ANIME':
             if data.get('duration'):
-                duration = f'~ {data.get("duration")} min'
+                duration = f'~ {data.get('duration')} min'
             else:
                 duration = 'N/A'
 
             studio_data = data.get('studios').get('nodes')
-            studio = f"[{studio_data[0].get('name')}]({studio_data[0].get('siteUrl')})" \
+            studio = f'[{studio_data[0].get('name')}]({studio_data[0].get('siteUrl')})' \
                 if data.get('studios').get('nodes') else 'N/A'
 
             embed.add_field(name='Episode Duration', value=duration, inline=True)
             embed.add_field(name='Studio', value=studio, inline=True)
             embed.add_field(name='Source', value=format_media_source(data.get('source')), inline=True)
 
-        embed.add_field(name='Score', value=f'{data.get("meanScore")}%' or 'N/A', inline=True)
-        embed.add_field(name='Popularity', value=data.get("popularity", 'N/A'), inline=True)
-        embed.add_field(name='Favourites', value=data.get("favourites", 'N/A'), inline=True)
+        embed.add_field(name='Score', value=f'{data.get('meanScore')}%' or 'N/A', inline=True)
+        embed.add_field(name='Popularity', value=data.get('popularity', 'N/A'), inline=True)
+        embed.add_field(name='Favourites', value=data.get('favourites', 'N/A'), inline=True)
 
         potential_hashtags = list(filter(None, data.get('hashtag', '').split(' ')))
         if potential_hashtags:
-            pluralized = f"{plural(len(potential_hashtags)):Hashtag}"
+            pluralized = f'{plural(len(potential_hashtags)):Hashtag}'
             embed.add_field(name=pluralized.split(' ')[1],
                             value=', '.join(
-                                [f"[`{hashtag}`](https://twitter.com/search?q={hashtag.replace('#', '%23')}&src=typd)"
+                                [f'[`{hashtag}`](https://twitter.com/search?q={hashtag.replace('#', '%23')}&src=typd)'
                                  for hashtag in potential_hashtags]
                             ), inline=False)
 
         if data.get('genres'):
             embed.add_field(name='Genres', value=', '.join(
-                [f'[`{i}`](https://anilist.co/search/anime/{i.strip().replace(" ", "%20")})' for i in
+                [f'[`{i}`](https://anilist.co/search/anime/{i.strip().replace(' ', '%20')})' for i in
                  data.get('genres')]), inline=False)
 
         if data.get('trailer'):
-            yt_url = f"https://www.youtube.com/watch?v={data.get('trailer').get('id')}"
+            yt_url = f'https://www.youtube.com/watch?v={data.get('trailer').get('id')}'
             async with self.bot.session.get(yt_url) as resp:
                 if resp.status == 200:
-                    soup = BeautifulSoup(await resp.text(), "lxml")
-                    title = soup.find_all(name="title")[0].text.replace(" - YouTube", "")
-                    embed.add_field(name='Trailer', value=f"[{'Click Here' if not title else title}]({yt_url})")
+                    soup = BeautifulSoup(await resp.text(), 'lxml')
+                    title = soup.find_all(name='title')[0].text.replace(' - YouTube', "")
+                    embed.add_field(name='Trailer', value=f'[{'Click Here' if not title else title}]({yt_url})')
 
         return embed
 
@@ -152,7 +152,7 @@ class AniListEmbedBuilder:
             embed.add_field(name='Synonyms', value=', '.join(synonyms), inline=False)
 
         if media := [
-            f'[{i.get("title").get("romaji")}]({i.get("siteUrl")})'
+            f'[{i.get('title').get('romaji')}]({i.get('siteUrl')})'
             for i in data.get('media').get('nodes')
             if not i.get('isAdult')
         ]:
@@ -162,8 +162,8 @@ class AniListEmbedBuilder:
 
     def user(self, data: Dict[str, Any]) -> discord.Embed:
         embed = AniListEmbed(
-            title=f"{data.get('name')} (ID: {data.get('id')})",
-            description=f"**About:**\n{data.get('about') or '*No description set.*'}",
+            title=f'{data.get('name')} (ID: {data.get('id')})',
+            description=f'**About:**\n{data.get('about') or '*No description set.*'}',
             color=self.bot.colour.darker_red(),
             url=data.get('siteUrl'),
         )
@@ -173,43 +173,43 @@ class AniListEmbedBuilder:
         statistics = data.get('statistics')
 
         if anime_stats := statistics.get('anime'):
-            embed.add_field(name="Anime Statistics",
-                            value=f"**Total:** {anime_stats.get('count')}\n"
-                                  f"**Minutes Watched:** {anime_stats.get('minutesWatched')}\n"
-                                  f"**Episodes Watched:** {anime_stats.get('episodesWatched')}")
+            embed.add_field(name='Anime Statistics',
+                            value=f'**Total:** {anime_stats.get('count')}\n'
+                                  f'**Minutes Watched:** {anime_stats.get('minutesWatched')}\n'
+                                  f'**Episodes Watched:** {anime_stats.get('episodesWatched')}')
 
         if manga_stats := statistics.get('manga'):
-            embed.add_field(name="Manga Statistics",
-                            value=f"**Total:** {manga_stats.get('count')}\n"
-                                  f"**Volumes Read:** {manga_stats.get('volumesRead')}\n"
-                                  f"**Chapters Read:** {manga_stats.get('chaptersRead')}")
+            embed.add_field(name='Manga Statistics',
+                            value=f'**Total:** {manga_stats.get('count')}\n'
+                                  f'**Volumes Read:** {manga_stats.get('volumesRead')}\n'
+                                  f'**Chapters Read:** {manga_stats.get('chaptersRead')}')
 
         return embed
 
     def short_media(self, data: Dict[str, Any]) -> discord.Embed:  # noqa
         if data.get('type') == 'ANIME':
             studio_data = data.get('studios').get('nodes')
-            studio = f"[{studio_data[0].get('name')}]({studio_data[0].get('siteUrl')})" \
+            studio = f'[{studio_data[0].get('name')}]({studio_data[0].get('siteUrl')})' \
                 if data.get('studios').get('nodes') else 'N/A'
 
             description = (
-                    f'**Status:** {format_anime_status(data.get("status"))}\n'
-                    f'**Episodes:** {data.get("episodes", "N/A")}\n'
+                    f'**Status:** {format_anime_status(data.get('status'))}\n'
+                    f'**Episodes:** {data.get('episodes', 'N/A')}\n'
                     f'**Studio:** {studio}\n'
-                    f'**Score:** {str(data.get("meanScore")) + "%" or "N/A"}'
+                    f'**Score:** {str(data.get('meanScore')) + '%' or 'N/A'}'
             )
         else:
             description = (
-                f'**Status:** {format_manga_status(data.get("status"))}\n'
-                f'**Chapters:** {data.get("chapters", "N/A")}\n'
-                f'**Volumes:** {data.get("volumes", "N/A")}\n'
-                f'**Score:** {str(data.get("meanScore")) + "%" or "N/A"}'
+                f'**Status:** {format_manga_status(data.get('status'))}\n'
+                f'**Chapters:** {data.get('chapters', 'N/A')}\n'
+                f'**Volumes:** {data.get('volumes', 'N/A')}\n'
+                f'**Score:** {str(data.get('meanScore')) + '%' or 'N/A'}'
             )
 
         embed = AniListEmbed(
             title=data.get('title').get('romaji'),
             description=description,
-            color=discord.Color.from_str(data.get('coverImage').get('color') or "#2b2d31"),
+            color=discord.Color.from_str(data.get('coverImage').get('color') or '#2b2d31'),
             url=data.get('siteUrl'),
         )
         embed.set_author(name=format_media_format(data.get('format')), icon_url=ANILIST_LOGO)
@@ -316,21 +316,21 @@ def format_date(**kwargs: Dict[str, int]) -> str:
         else:
             date = []
             for key, value in list(_kwargs.items()):
-                if key == "year":
+                if key == 'year':
                     date.append(str(_kwargs.pop(key)))
                     continue
-                if key == "month":
-                    date.append(calendar.month_name[_kwargs.pop(key)])
+                if key == 'month':
+                    date.append(calendar.month_name[_kwargs.pop(key)])  # type: ignore
                     continue
-                if key == "day":
+                if key == 'day':
                     date.append(str(_kwargs.pop(key)))
-            return " ".join(date)
+            return ' '.join(date)
     if date:
         days = (date - datetime.date.today()).days
         timestamp = datetime.datetime.now() + datetime.timedelta(days=abs(days) if days > 0 else days)
         return discord.utils.format_dt(timestamp, style='D')
     else:
-        return "N/A"
+        return 'N/A'
 
 
 def format_name(full: str, native: str) -> str:

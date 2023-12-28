@@ -25,8 +25,8 @@ from launcher import get_logger
 
 log = get_logger(__name__)
 
-ESCAPE_REGEX = re.compile("[`\u202E\u200B]{3,}")
-TXT_LIKE_FILES = {".txt", ".csv", ".json"}
+ESCAPE_REGEX = re.compile('[`\u202E\u200B]{3,}')
+TXT_LIKE_FILES = {'.txt', '.csv', '.json'}
 
 
 # The following code is used to capture the output of timeit.timeit() and print it when the process exits.
@@ -36,7 +36,7 @@ import atexit
 import sys
 from collections import deque
 
-if not hasattr(sys, "_setup_finished"):
+if not hasattr(sys, '_setup_finished'):
     class Writer(deque):
         '''A single-item deque wrapper for sys.stdout that will return the last line when read() is called.'''
 
@@ -76,10 +76,10 @@ MAX_OUTPUT_BLOCK_LINES = 10
 MAX_OUTPUT_BLOCK_CHARS = 1000
 
 
-REDO_EMOJI = "\U0001f501"  # :repeat:
+REDO_EMOJI = '\U0001f501'  # :repeat:
 REDO_TIMEOUT = 30
 
-SupportedPythonVersions = Literal["3.11", "3.10"]
+SupportedPythonVersions = Literal['3.11', '3.10']
 
 
 class FilteredFiles(NamedTuple):
@@ -102,25 +102,25 @@ class CodeblockConverter(commands.Converter):
         Return a list of code blocks if any, otherwise return a list with a single string of code.
         """
         if match := list(FORMATTED_CODE_REGEX.finditer(code)):
-            blocks = [block for block in match if block.group("block")]
+            blocks = [block for block in match if block.group('block')]
 
             if len(blocks) > 1:
-                codeblocks = [block.group("code") for block in blocks]
-                info = "several code blocks"
+                codeblocks = [block.group('code') for block in blocks]
+                info = 'several code blocks'
             else:
                 match = match[0] if len(blocks) == 0 else blocks[0]
-                code, block, lang, delim = match.group("code", "block", "lang", "delim")
+                code, block, lang, delim = match.group('code', 'block', 'lang', 'delim')
                 codeblocks = [dedent(code)]
                 if block:
-                    info = (f"'{lang}' highlighted" if lang else "plain") + " code block"
+                    info = (f'"{lang}" highlighted' if lang else 'plain') + ' code block'
                 else:
-                    info = f"{delim}-enclosed inline code"
+                    info = f'{delim}-enclosed inline code'
         else:
-            codeblocks = [dedent(RAW_CODE_REGEX.fullmatch(code).group("code"))]
-            info = "unformatted or badly formatted code"
+            codeblocks = [dedent(RAW_CODE_REGEX.fullmatch(code).group('code'))]
+            info = 'unformatted or badly formatted code'
 
-        code = "\n".join(codeblocks)
-        log.trace(f"Extracted {info} for evaluation:\n{code}")
+        code = '\n'.join(codeblocks)
+        log.trace(f'Extracted {info} for evaluation:\n{code}')
         return codeblocks
 
 
@@ -135,7 +135,7 @@ class PythonVersionSwitcherButton(discord.ui.Button):
         job: EvalJob,
     ) -> None:
         self.version_to_switch_to = version_to_switch_to
-        super().__init__(label=f"Run in {self.version_to_switch_to}", style=enums.ButtonStyle.primary)
+        super().__init__(label=f'Run in {self.version_to_switch_to}', style=enums.ButtonStyle.primary)
 
         self.snekbox_cog = snekbox_cog
         self.ctx = ctx
@@ -164,7 +164,7 @@ class Snekbox(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="sandbox", id=1117191504973275257)
+        return discord.PartialEmoji(name='sandbox', id=1117191504973275257)
 
     async def post_job(self, job: EvalJob) -> EvalResult:
         """|coro|
@@ -196,14 +196,14 @@ class Snekbox(commands.Cog):
         Raise a :exc:`PasteTooLongError` if the output is too long to upload.
         Raise a :exc:`PasteUploadError` if the upload fails.
         """
-        log.trace("Uploading full output to paste service...")
+        log.trace('Uploading full output to paste service...')
 
         try:
-            return await send_to_paste_service(self.bot, output, extension="txt", max_length=MAX_PASTE_LENGTH)
+            return await send_to_paste_service(self.bot, output, extension='txt', max_length=MAX_PASTE_LENGTH)
         except PasteTooLongError:
-            return "too long to upload"
+            return 'too long to upload'
         except PasteUploadError:
-            return "unable to upload"
+            return 'unable to upload'
 
     @staticmethod
     def prepare_timeit_input(codeblocks: list[str]) -> list[str]:
@@ -211,11 +211,11 @@ class Snekbox(commands.Cog):
 
         If there are multiple codeblocks, insert the first one into the wrapped setup code.
         """
-        args = ["-m", "timeit"]
+        args = ['-m', 'timeit']
         setup_code = codeblocks.pop(0) if len(codeblocks) > 1 else ""
-        code = "\n".join(codeblocks)
+        code = '\n'.join(codeblocks)
 
-        args.extend(["-s", TIMEIT_SETUP_WRAPPER.format(setup=setup_code), code])
+        args.extend(['-s', TIMEIT_SETUP_WRAPPER.format(setup=setup_code), code])
         return args
 
     async def format_output(
@@ -224,7 +224,7 @@ class Snekbox(commands.Cog):
         max_lines: int = MAX_OUTPUT_BLOCK_LINES,
         max_chars: int = MAX_OUTPUT_BLOCK_CHARS,
         line_nums: bool = True,
-        output_default: str = "[No output]",
+        output_default: str = '[No output]',
     ) -> tuple[str, Optional[str]]:
         """|coro|
         Format the output and return a tuple of the formatted output and a URL to the full output.
@@ -250,38 +250,38 @@ class Snekbox(commands.Cog):
         :class:`tuple`[:class:`str`, Optional[:class:`str`]]
             The formatted output and a URL to the full output if it was uploaded to a paste service.
         """
-        output = output.rstrip("\n")
+        output = output.rstrip('\n')
         original_output = output  # To be uploaded to a pasting service if needed
         paste_link = None
 
-        if "<@" in output:
-            output = output.replace("<@", "<@\u200B")  # Zero-width space
+        if '<@' in output:
+            output = output.replace('<@', '<@\u200B')  # Zero-width space
 
-        if "<!@" in output:
-            output = output.replace("<!@", "<!@\u200B")  # Zero-width space
+        if '<!@' in output:
+            output = output.replace('<!@', '<!@\u200B')  # Zero-width space
 
         if ESCAPE_REGEX.findall(output):
             paste_link = await self.upload_output(original_output)
-            return "Code block escape attempt detected; will not output result", paste_link
+            return 'Code block escape attempt detected; will not output result', paste_link
 
         truncated = False
         lines = output.splitlines()
 
         if len(lines) > 1:
             if line_nums:
-                lines = [f"{i:03d} | {line}" for i, line in enumerate(lines, 1)]
+                lines = [f'{i:03d} | {line}' for i, line in enumerate(lines, 1)]
             lines = lines[:max_lines+1]  # Limiting to max+1 lines
-            output = "\n".join(lines)
+            output = '\n'.join(lines)
 
         if len(lines) > max_lines:
             truncated = True
             if len(output) >= max_chars:
-                output = f"{output[:max_chars]}\n... (truncated - too long, too many lines)"
+                output = f'{output[:max_chars]}\n... (truncated - too long, too many lines)'
             else:
-                output = f"{output}\n... (truncated - too many lines)"
+                output = f'{output}\n... (truncated - too many lines)'
         elif len(output) >= max_chars:
             truncated = True
-            output = f"{output[:max_chars]}\n... (truncated - too long)"
+            output = f'{output[:max_chars]}\n... (truncated - too long)'
 
         if truncated:
             paste_link = await self.upload_output(original_output)
@@ -303,15 +303,15 @@ class Snekbox(commands.Cog):
                 allowed.append(file)
 
         if blocked:
-            blocked_str = ", ".join(f.suffix for f in blocked)
+            blocked_str = ', '.join(f.suffix for f in blocked)
             log.info(
-                f"User '{ctx.author}' ({ctx.author.id}) uploaded blacklisted file(s) in eval: {blocked_str}",
-                extra={"attachment_list": [f.filename for f in files]}
+                f'User "{ctx.author}" ({ctx.author.id}) uploaded blacklisted file(s) in eval: {blocked_str}',
+                extra={'attachment_list': [f.filename for f in files]}
             )
 
         return FilteredFiles(allowed, blocked)
 
-    @lock_arg("snekbox.send_job", "ctx", attrgetter("author.id"), raise_error=True)
+    @lock_arg('snekbox.send_job', 'ctx', attrgetter('author.id'), raise_error=True)
     async def send_job(self, ctx: EvalContext, job: EvalJob) -> Message:
         """|coro| @locked(func, ctx)
 
@@ -336,43 +336,43 @@ class Snekbox(commands.Cog):
         if error:
             output, paste_link = error, None
         else:
-            log.trace("Formatting output...")
+            log.trace('Formatting output...')
             output, paste_link = await self.format_output(result.stdout)
 
-        msg = f"{ctx.author.mention}, {result.status_emoji} {msg}\n"
+        msg = f'{ctx.author.mention}, {result.status_emoji} {msg}\n'
 
-        if result.stdout.rstrip().endswith("EOFError: EOF when reading a line") and result.returncode == 1:
-            msg += "\n:warning: Note: `input` is not supported by the bot :warning:\n"
+        if result.stdout.rstrip().endswith('EOFError: EOF when reading a line') and result.returncode == 1:
+            msg += '\n:warning: Note: `input` is not supported by the bot :warning:\n'
 
         if result.stdout or not result.has_files:
-            msg += f"\n```py\n{output}\n```"
+            msg += f'\n```py\n{output}\n```'
 
         if paste_link:
-            msg += f"\nFull output pasted here: <{paste_link}>"
+            msg += f'\nFull output pasted here: <{paste_link}>'
 
         if files_error := result.files_error_message:
-            msg += f"\n{files_error}"
+            msg += f'\n{files_error}'
 
         text_files = [f for f in result.files if f.suffix in TXT_LIKE_FILES]
-        budget_lines = MAX_OUTPUT_BLOCK_LINES - (output.count("\n") + 1)
+        budget_lines = MAX_OUTPUT_BLOCK_LINES - (output.count('\n') + 1)
         budget_chars = MAX_OUTPUT_BLOCK_CHARS - len(output)
         for file in text_files:
-            file_text = file.content.decode("utf-8", errors="replace") or "[Empty]"
-            if len(file_text) <= 50 and not file_text.count("\n"):
-                msg += f"\n`{file.name}`\n```\n{file_text}\n```"
+            file_text = file.content.decode('utf-8', errors='replace') or '[Empty]'
+            if len(file_text) <= 50 and not file_text.count('\n'):
+                msg += f'\n`{file.name}`\n```\n{file_text}\n```'
             else:
                 format_text, link_text = await self.format_output(
                     file_text,
                     budget_lines,
                     budget_chars,
                     line_nums=False,
-                    output_default="[Empty]"
+                    output_default='[Empty]'
                 )
                 if link_text:
-                    msg += f"\n`{file.name}`\n{link_text}"
+                    msg += f'\n`{file.name}`\n{link_text}'
                 else:
-                    msg += f"\n`{file.name}`\n```\n{format_text}\n```"
-                    budget_lines -= format_text.count("\n") + 1
+                    msg += f'\n`{file.name}`\n```\n{format_text}\n```'
+                    budget_lines -= format_text.count('\n') + 1
                     budget_chars -= len(file_text)
 
         files = [f.to_file() for f in result.files if f not in text_files]
@@ -381,7 +381,7 @@ class Snekbox(commands.Cog):
             content=msg, allowed_mentions=allowed_mentions, view=TrashView(ctx.author), attachments=files
         )
 
-        log.info(f"{ctx.author}'s {job.name} job had a return code of {result.returncode}")
+        log.info(f'{ctx.author}\'s {job.name} job had a return code of {result.returncode}')
         return ctx.job_message
 
     async def continue_job(self, ctx: EvalContext, response: Message, job_name: str) -> Optional[EvalJob]:
@@ -412,13 +412,13 @@ class Snekbox(commands.Cog):
         with contextlib.suppress(NotFound):
             try:
                 _, new_message = await self.bot.wait_for(
-                    "message_edit",
+                    'message_edit',
                     check=_predicate_message_edit,
                     timeout=REDO_TIMEOUT
                 )
                 await ctx.message.add_reaction(REDO_EMOJI)
                 await self.bot.wait_for(
-                    "reaction_add",
+                    'reaction_add',
                     check=_predicate_emoji_reaction,
                     timeout=10
                 )
@@ -441,9 +441,9 @@ class Snekbox(commands.Cog):
 
             codeblocks = await CodeblockConverter.convert(ctx, code)
 
-            if job_name == "timeit":
+            if job_name == 'timeit':
                 return EvalJob(self.prepare_timeit_input(codeblocks))
-            return EvalJob.from_code("\n".join(codeblocks))
+            return EvalJob.from_code('\n'.join(codeblocks))
 
         return None
 
@@ -462,15 +462,15 @@ class Snekbox(commands.Cog):
         command: commands.Command
             The command to check for invocation.
         """
-        log.trace(f"Getting context for message {message.id}.")
+        log.trace(f'Getting context for message {message.id}.')
         new_ctx = await self.bot.get_context(message)
 
         if new_ctx.command is command:
-            log.trace(f"Message {message.id} invokes {command} command.")
+            log.trace(f'Message {message.id} invokes {command} command.')
             split = message.content.split(maxsplit=1)
             code = split[1] if len(split) > 1 else None
         else:
-            log.trace(f"Message {message.id} does not invoke {command} command.")
+            log.trace(f'Message {message.id} does not invoke {command} command.')
             code = message.content
 
         return code
@@ -487,18 +487,18 @@ class Snekbox(commands.Cog):
         job: EvalJob
             The job to run.
         """
-        log.info(f"Received code from {ctx.author} for evaluation:\n{job}")
+        log.info(f'Received code from {ctx.author} for evaluation:\n{job}')
 
         while True:
             ctx.job_message = await ctx.send(
-                f"{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*")
+                f'{ctx.author.mention}, <a:loading:1072682806360166430> *Processing **{job.name}** job...*')
 
             try:
                 response = await self.send_job(ctx, job)
             except ValueError:
                 return await ctx.send(
-                    f"{ctx.author.mention}, <:warning:1113421726861238363> You've already got a job running - "
-                    "please wait for it to finish!"
+                    f'{ctx.author.mention}, <:warning:1113421726861238363> You\'ve already got a job running - '
+                    'please wait for it to finish!'
                 )
 
             self.jobs[ctx.message.id] = response.id
@@ -506,9 +506,9 @@ class Snekbox(commands.Cog):
             job = await self.continue_job(ctx, response, job.name)
             if not job:
                 break
-            log.info(f"Re-evaluating code from message {ctx.message.id}:\n{job}")
+            log.info(f'Re-evaluating code from message {ctx.message.id}:\n{job}')
 
-    @commands_ext.command(name="eval", aliases=["e"], usage="[python_version] <code...>")
+    @commands_ext.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
     @commands.guild_only()
     async def eval_command(
         self,
@@ -534,11 +534,11 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or "3.11"
-        job = EvalJob.from_code("\n".join(code)).as_version(python_version)
+        python_version = python_version or '3.11'
+        job = EvalJob.from_code('\n'.join(code)).as_version(python_version)
         await self.run_job(ctx, job)
 
-    @commands_ext.command(name="timeit", aliases=["ti"], usage="[python_version] [setup_code] <code...>")
+    @commands_ext.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
     @commands.guild_only()
     async def timeit_command(
         self,
@@ -561,9 +561,9 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or "3.11"
+        python_version = python_version or '3.11'
         args = self.prepare_timeit_input(code)
-        job = EvalJob(args, version=python_version, name="timeit")
+        job = EvalJob(args, version=python_version, name='timeit')
         await self.run_job(ctx, job)
 
 

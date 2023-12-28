@@ -49,7 +49,7 @@ class LevelConfig(PostgresItem):
         return self.voice_seconds
 
     def __str__(self):
-        return f"{self.experience:,}"
+        return f'{self.experience:,}'
 
     @property
     def level(self) -> int:
@@ -204,7 +204,7 @@ class Leveling(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="oneup", id=1113286994378899516)
+        return discord.PartialEmoji(name='oneup', id=1113286994378899516)
 
     @cache.cache(strategy=cache.Strategy.ADDITIVE)
     async def get_level_config(self, user_id: int, guild_id: int) -> Optional[LevelConfig]:
@@ -316,17 +316,17 @@ class Leveling(commands.Cog):
 
         if leveled_up:
             await message.reply(
-                f"*Congratulations {message.author.mention}!* You leveled up to level **{config.level}**! <:oneup:1113286994378899516>")
+                f'*Congratulations {message.author.mention}!* You leveled up to level **{config.level}**! <:oneup:1113286994378899516>')
 
-    @commands_ext.command(commands.hybrid_group, name="level", description="Leveling purpose Commands.")
+    @commands_ext.command(commands.hybrid_group, name='level', description='Leveling purpose Commands.')
     @commands.guild_only()
     async def level(self, ctx: Context) -> None:
         """Leveling purpose Commands."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands_ext.command(level.command, description="Toggle leveling on or off.")
-    @app_commands.describe(enabled="Boolean to enable or disable leveling. If not provided, it will toggle.")
+    @commands_ext.command(level.command, description='Toggle leveling on or off.')
+    @app_commands.describe(enabled='Boolean to enable or disable leveling. If not provided, it will toggle.')
     @commands.guild_only()
     @commands_ext.command_permissions(user=PermissionTemplate.manager)
     async def toggle(self, ctx: GuildContext, enabled: Optional[bool] = None) -> None:
@@ -346,9 +346,9 @@ class Leveling(commands.Cog):
         enabled = row and row[0]
         self.bot.moderation.get_guild_config.invalidate(self, ctx.guild.id)
         fmt = '*enabled*' if enabled else '*disabled*'
-        await ctx.send_tick(True, f'Leveling {fmt}.')
+        await ctx.stick(True, f'Leveling {fmt}.')
 
-    @commands_ext.command(level.command, aliases=['top'], description="View the server leaderboard.")
+    @commands_ext.command(level.command, aliases=['top'], description='View the server leaderboard.')
     @commands.guild_only()
     async def leaderboard(self, ctx: GuildContext):
         """View the Top 3 active users of the server."""
@@ -382,15 +382,15 @@ class Leveling(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands_ext.command(level.command, description="View your level card.")
+    @commands_ext.command(level.command, description='View your level card.')
     @commands.guild_only()
-    @app_commands.describe(member="The member you want to see the rank card for.")
+    @app_commands.describe(member='The member you want to see the rank card for.')
     async def rank(self, ctx: GuildContext, member: Optional[discord.Member] = None):
         """View yours or someone else's rank card."""
         member = member or ctx.author
 
         if member.bot:
-            return await ctx.send(f"{ctx.tick(False)} You can't view the rank card of a bot.")
+            return await ctx.send(f'{ctx.tick(False)} You can\'t view the rank card of a bot.')
 
         if ctx.interaction:
             await ctx.defer()
@@ -409,17 +409,17 @@ class Leveling(commands.Cog):
             members=sum(not member.bot for member in ctx.guild.members),
             messages=config.messages,
         )
-        await ctx.send(file=discord.File(fp=card, filename="rank.png"))
+        await ctx.send(file=discord.File(fp=card, filename='rank.png'))
 
     @commands_ext.command(
         level.command,
-        description="Set a members experience or level."
+        description='Set a members experience or level.'
     )
     @commands.guild_only()
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
-    @app_commands.describe(target="The target member to modify.")
-    @app_commands.describe(level="The level you want to set.")
-    @app_commands.describe(xp="The amount of XP you want to set.")
+    @app_commands.describe(target='The target member to modify.')
+    @app_commands.describe(level='The level you want to set.')
+    @app_commands.describe(xp='The amount of XP you want to set.')
     async def set(
             self,
             ctx: GuildContext,
@@ -429,27 +429,27 @@ class Leveling(commands.Cog):
     ):
         """Set a users experience/level."""
         if target.bot:
-            return await ctx.send(f"{ctx.tick(False)} You can't manage Bot's Level/Experience.")
+            return await ctx.send(f'{ctx.tick(False)} You can\'t manage Bot\'s Level/Experience.')
 
         if (xp is None and level is None) or (xp and level):
-            return await ctx.send(f"{ctx.tick(False)} You need to provide either a level or xp to set.")
+            return await ctx.send(f'{ctx.tick(False)} You need to provide either a level or xp to set.')
 
         config = await self.get_level_config(target.id, target.guild.id)
 
         if level:
             if level > 500:
-                return await ctx.send(f"{ctx.tick(False)} You can't set more than **Level 500**.")
+                return await ctx.send(f'{ctx.tick(False)} You can\'t set more than **Level 500**.')
 
             await config.set_level(level)
         elif xp:
             if xp > config.get_experience(500):
                 return await ctx.send(
-                    f"{ctx.tick(False)} Sorry. You can't set more than **125,052,000 XP**. (Level 500)")
+                    f'{ctx.tick(False)} Sorry. You can\'t set more than **125,052,000 XP**. (Level 500)')
 
             await config.set_experience(xp)
 
         await ctx.send(
-            f"{target.mention} is now level **{config.level}** with **{str(config)}** total XP. <:oneup:1113286994378899516>"
+            f'{target.mention} is now level **{config.level}** with **{str(config)}** total XP. <:oneup:1113286994378899516>'
         )
 
 

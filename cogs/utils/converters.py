@@ -53,7 +53,7 @@ def tail(f: BinaryIO, n: int = 10) -> List[bytes]:
             f.seek(0, os.SEEK_SET)
             isFileSmall = True
         except IOError:
-            print("Some problem reading/seeking the file")
+            print('Some problem reading/seeking the file')
             sys.exit(-1)
         finally:
             lines = f.readlines()
@@ -102,7 +102,7 @@ def utcparse(timestring: Optional[str]) -> Optional[datetime]:
     parsed = parse(timestring)
 
     if not parsed:
-        raise ValueError(f"Could not parse `{timestring}` as a datetime object.")
+        raise ValueError(f'Could not parse `{timestring}` as a datetime object.')
 
     return parsed.astimezone(datetime.timezone.utc)
 
@@ -142,9 +142,9 @@ class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Tran
         try:
             value = value.strip()
 
-            if value.startswith("#"):
+            if value.startswith('#'):
                 value = value[1:]
-            elif value.startswith("0x"):
+            elif value.startswith('0x'):
                 value = value[2:]
             else:
                 value = value
@@ -164,7 +164,7 @@ class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Tran
 
     async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[Colour]]:
         results = fuzzy.extract(current, COLOUR_DICT, limit=20)
-        return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
+        return [app_commands.Choice(name=f'{result[0]} ({result[2]})', value=result[2]) for result in results]
 
     async def convert(self, ctx: _TContext, argument: str) -> Union[str, Colour]:
         """Converts a color HEX to the matching :class:``discord.Color` if possible else return None."""
@@ -172,9 +172,9 @@ class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Tran
         try:
             argument = argument.strip()
 
-            if argument.startswith("#"):
+            if argument.startswith('#'):
                 argument = argument[1:]
-            elif argument.startswith("0x"):
+            elif argument.startswith('0x'):
                 argument = argument[2:]
             else:
                 argument = argument
@@ -200,9 +200,9 @@ class URLObject:
 
     def __init__(self, url: str):
         if not URL_REGEX.match(url):
-            raise TypeError(f"Invalid url provided")
+            raise TypeError(f'Invalid url provided')
         self.url = url
-        self.filename = url.split("/")[-1]
+        self.filename = url.split('/')[-1]
 
     async def read(self, *, session=None) -> bytes:
         """Reads this asset."""
@@ -212,11 +212,11 @@ class URLObject:
                 if resp.status == 200:
                     return await resp.read()
                 elif resp.status == 404:
-                    raise discord.NotFound(resp, "Asset not found")
+                    raise discord.NotFound(resp, 'Asset not found')
                 elif resp.status == 403:
-                    raise discord.Forbidden(resp, "Cannot retrieve asset")
+                    raise discord.Forbidden(resp, 'Cannot retrieve asset')
                 else:
-                    raise discord.HTTPException(resp, "Failed to get asset")
+                    raise discord.HTTPException(resp, 'Failed to get asset')
         finally:
             if not session:
                 await _session.close()
@@ -236,21 +236,21 @@ class URLObject:
                 fp.seek(0)
             return written
 
-        with open(fp, "wb") as f:
+        with open(fp, 'wb') as f:
             return f.write(data)
 
     @property
     def spoiler(self):
         """Wether the file is a spoiler"""
-        return self.name.startswith("SPOILER_")
+        return self.name.startswith('SPOILER_')
 
     @spoiler.setter
     def spoiler(self, value: bool):
         if value != self.spoiler:
             if value is True:
-                self.name = f"SPOILER_{self.name}"
+                self.name = f'SPOILER_{self.name}'
             else:
-                self.name = self.name.split("_", maxsplit=1)[1]
+                self.name = self.name.split('_', maxsplit=1)[1]
 
     async def to_file(self, *, session: aiohttp.ClientSession = None):
         return discord.File(
@@ -264,24 +264,24 @@ class URLConverter(commands.Converter[str], app_commands.Transformer):
     async def convert(self, ctx: _TContext, argument: str) -> str:
         parsed_url = urlparse(argument)
 
-        if str(parsed_url.netloc).split(":")[0] in (
-                "127.0.0.1",
-                "localhost",
-                "0.0.0.0",
+        if str(parsed_url.netloc).split(':')[0] in (
+                '127.0.0.1',
+                'localhost',
+                '0.0.0.0',
         ) and not await ctx.bot.is_owner(ctx.author):
-            raise commands.BadArgument("<:redTick:1079249771975413910> Invalid URL")
+            raise commands.BadArgument('<:redTick:1079249771975413910> Invalid URL')
 
         return argument
 
     async def transform(self, interaction: discord.Interaction, value: str) -> str:
         parsed_url = urlparse(value)
 
-        if str(parsed_url.netloc).split(":")[0] in (
-                "127.0.0.1",
-                "localhost",
-                "0.0.0.0",
+        if str(parsed_url.netloc).split(':')[0] in (
+                '127.0.0.1',
+                'localhost',
+                '0.0.0.0',
         ) and not await interaction.client.is_owner(interaction.user):
-            raise commands.BadArgument("<:redTick:1079249771975413910> Invalid URL")
+            raise commands.BadArgument('<:redTick:1079249771975413910> Invalid URL')
 
         return value
 
@@ -300,11 +300,11 @@ class FileConverter(commands.Converter[Union[URLObject, discord.Attachment]]):
                     attachment = ctx.message.reference.resolved.attachments[0]
                 else:
                     raise commands.MissingRequiredArgument(
-                        inspect.Parameter("file", inspect.Parameter.KEYWORD_ONLY)
+                        inspect.Parameter('file', inspect.Parameter.KEYWORD_ONLY)
                     )
             else:
                 raise commands.MissingRequiredArgument(
-                    inspect.Parameter("file", inspect.Parameter.KEYWORD_ONLY)
+                    inspect.Parameter('file', inspect.Parameter.KEYWORD_ONLY)
                 )
         else:
             attachment = URLObject(await URLConverter().convert(ctx, file))
@@ -326,8 +326,8 @@ class ModuleConverter(commands.Converter[ModuleType]):
         argument = argument.lower().strip()
         module = sys.modules.get(argument, None)
 
-        icon = "\N{OUTBOX TRAY}" if ctx.invoked_with == "ml" else "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
+        icon = '\N{OUTBOX TRAY}' if ctx.invoked_with == 'ml' else '\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}'
 
         if not module:
-            raise commands.BadArgument(f"{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.")
+            raise commands.BadArgument(f'{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.')
         return module

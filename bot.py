@@ -211,8 +211,8 @@ class Percy(commands.Bot):
 
     def __repr__(self) -> str:
         return (
-            f"<Bot id={self.user.id} name={self.user.name!r} "
-            f"discriminator={self.user.discriminator!r} bot={self.user.bot}>"
+            f'<Bot id={self.user.id} name={self.user.name!r} '
+            f'discriminator={self.user.discriminator!r} bot={self.user.bot}>'
         )
 
     @property
@@ -235,18 +235,18 @@ class Percy(commands.Bot):
             try:
                 await self.load_extension(extension)
             except Exception as e:
-                log.error(f"Failed to load extension `{extension}`", exc_info=e)
+                log.error(f'Failed to load extension `{extension}`', exc_info=e)
 
         await self.reattach_views()
 
     async def reattach_views(self) -> None:
-        records = await self.pool.fetch("SELECT * FROM polls")
+        records = await self.pool.fetch('SELECT * FROM polls')
         cog = self.get_cog('Polls')
         for record in records:
             item = PollItem(cog, record=record)  # type: ignore
             self.add_view(PollView(self, item, archived=not item.kwargs.get('running', False)))
 
-        records = await self.pool.fetch("SELECT * FROM giveaways")
+        records = await self.pool.fetch('SELECT * FROM giveaways')
         for record in records:
             self.add_view(GiveawayEntryView(self, GiveawayItem(record=record)))
 
@@ -317,10 +317,10 @@ class Percy(commands.Bot):
         self.resumes[shard_id].append(discord.utils.utcnow())
 
     async def on_ready(self) -> None:
-        if not hasattr(self, "launched_at"):
+        if not hasattr(self, 'launched_at'):
             self.launched_at = discord.utils.utcnow()  # noqa
 
-        log.info(f"Ready as {self.user} (ID: {self.user.id})")
+        log.info(f'Ready as {self.user} (ID: {self.user.id})')
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if guild.id in self.blacklist:
@@ -338,7 +338,7 @@ class Percy(commands.Bot):
             timer (Timer): The Timer instance that completed.
         """
 
-        object_id = timer.kwargs.get("object_id")
+        object_id = timer.kwargs.get('object_id')
 
         if object_id:
             await self.remove_from_blacklist(object_id)
@@ -353,23 +353,23 @@ class Percy(commands.Bot):
             if isinstance(original, discord.Forbidden):
                 if original.code == 50013:
                     return
-                await ctx.send_tick(False, 'I do not have permission to execute this action.')
+                await ctx.stick(False, 'I do not have permission to execute this action.')
             elif isinstance(original, discord.HTTPException):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
             elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
-                await ctx.send(f"{original} Please wait for it to finish and try again later.")
+                await ctx.send(f'{original} Please wait for it to finish and try again later.')
         elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, commands.BadArgument)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send_tick(False, f"Missing required argument: `{error.param.name}`")
+            await ctx.stick(False, f'Missing required argument: `{error.param.name}`')
         elif isinstance(error, commands.BotMissingPermissions):
             missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_permissions]
-            await ctx.send(f"I don't have the permissions to perform this action.\n"
-                           f"Missing: `{', '.join(missing)}`")
+            await ctx.send(f'I don\'t have the permissions to perform this action.\n'
+                           f'Missing: `{', '.join(missing)}`')
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"<:warning:1113421726861238363> Slow down, you're on cooldown. Retry again in **{error.retry_after:.2f}s**.")
+            await ctx.send(f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
         elif isinstance(error, commands.TooManyArguments):
-            await ctx.send_tick(False, f'You called {ctx.command.name!r} command with too many arguments.')
+            await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
 
     # UTILS
 
@@ -398,13 +398,13 @@ class Percy(commands.Bot):
                 if feature in GUILD_FEATURES:
                     fmt = GUILD_FEATURES[feature]
                     if emojize:
-                        yield f"{fmt[0]} {feature}", fmt[1]
+                        yield f'{fmt[0]} {feature}', fmt[1]
                     else:
                         yield feature, fmt[1]
             else:
                 fmt = GUILD_FEATURES[feature]
                 if emojize:
-                    yield f"{fmt[0]} {feature}", fmt[1]
+                    yield f'{fmt[0]} {feature}', fmt[1]
                 else:
                     yield feature, fmt[1]
 

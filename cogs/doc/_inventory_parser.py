@@ -10,7 +10,7 @@ from launcher import get_logger
 log = get_logger(__name__)
 
 FAILED_REQUEST_ATTEMPTS = 3
-_V2_LINE_RE = re.compile(r"(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+?(\S*)\s+(.*)")
+_V2_LINE_RE = re.compile(r'(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+?(\S*)\s+(.*)')
 
 InventoryDict = defaultdict[str, list[tuple[str, str]]]
 
@@ -40,11 +40,11 @@ class ZlibStreamReader:
         buf = b""
         async for chunk in self._read_compressed_chunks():
             buf += chunk
-            pos = buf.find(b"\n")
+            pos = buf.find(b'\n')
             while pos != -1:
                 yield buf[:pos].decode()
                 buf = buf[pos + 1:]
-                pos = buf.find(b"\n")
+                pos = buf.find(b'\n')
 
 
 async def _load_v1(stream: aiohttp.StreamReader) -> InventoryDict:
@@ -53,12 +53,12 @@ async def _load_v1(stream: aiohttp.StreamReader) -> InventoryDict:
 
     async for line in stream:
         name, type_, location = line.decode().rstrip().split(maxsplit=2)
-        if type_ == "mod":
-            type_ = "py:module"
-            location += "#module-" + name
+        if type_ == 'mod':
+            type_ = 'py:module'
+            location += '#module-' + name
         else:
-            type_ = "py:" + type_
-            location += "#" + name
+            type_ = 'py:' + type_
+            location += '#' + name
         invdata[type_].append((name, location))
     return invdata
 
@@ -70,7 +70,7 @@ async def _load_v2(stream: aiohttp.StreamReader) -> InventoryDict:
     async for line in ZlibStreamReader(stream):
         m = _V2_LINE_RE.match(line.rstrip())
         name, type_, _prio, location, _dispname = m.groups()
-        if location.endswith("$"):
+        if location.endswith('$'):
             location = location[:-1] + name
 
         invdata[type_].append((name, location))
@@ -87,29 +87,29 @@ async def _fetch_inventory(session: aiohttp.ClientSession, url: str) -> Inventor
         try:
             inventory_version = int(inventory_header[-1:])
         except ValueError:
-            raise InvalidHeaderError("Unable to convert inventory version header.")
+            raise InvalidHeaderError('Unable to convert inventory version header.')
 
-        has_project_header = (await stream.readline()).startswith(b"# Project")
-        has_version_header = (await stream.readline()).startswith(b"# Version")
+        has_project_header = (await stream.readline()).startswith(b'# Project')
+        has_version_header = (await stream.readline()).startswith(b'# Version')
         if not (has_project_header and has_version_header):
-            raise InvalidHeaderError("Inventory missing project or version header.")
+            raise InvalidHeaderError('Inventory missing project or version header.')
 
         if inventory_version == 1:
             return await _load_v1(stream)
 
         if inventory_version == 2:
-            if b"zlib" not in await stream.readline():
-                raise InvalidHeaderError("'zlib' not found in header of compressed inventory.")
+            if b'zlib' not in await stream.readline():
+                raise InvalidHeaderError('"zlib" not found in header of compressed inventory.')
             return await _load_v2(stream)
 
-        raise InvalidHeaderError(f"Incompatible inventory version. Expected v1 or v2, got v{inventory_version}")
+        raise InvalidHeaderError(f'Incompatible inventory version. Expected v1 or v2, got v{inventory_version}')
 
 
 async def fetch_inventory(session: aiohttp.ClientSession, url: str) -> InventoryDict | None:
     """Get an inventory dict from `url`, retrying `FAILED_REQUEST_ATTEMPTS` times on errors.
 
     `url` should point at a valid sphinx objects.inv inventory file, which will be parsed into the
-    inventory dict in the format of {"domain:role": [("symbol_name", "relative_url_to_symbol"), ...], ...}
+    inventory dict in the format of {'domain:role': [('symbol_name', 'relative_url_to_symbol'), ...], ...}
     """
     # TODO: Implement check if website is unreachable, for example down for maintenance or because of server site
     # issues, don't raise an error, only log it and return None
@@ -119,24 +119,24 @@ async def fetch_inventory(session: aiohttp.ClientSession, url: str) -> Inventory
             inventory = await _fetch_inventory(session, url)
         except aiohttp.ClientResponseError as e:
             if e.status == 404:
-                log.warning(f"Inventory not found at {url}; trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).")
+                log.warning(f'Inventory not found at {url}; trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).')
             else:
                 # Somehow reachable, but not a valid inventory file?
                 log.error(
-                    f"Failed to get inventory from {url} with status {e.status}; "
-                    f"trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS})."
+                    f'Failed to get inventory from {url} with status {e.status}; '
+                    f'trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).'
                 )
         except aiohttp.ClientError:
             log.error(
-                f"Failed to get inventory from {url}; "
-                f"trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS})."
+                f'Failed to get inventory from {url}; '
+                f'trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).'
             )
         except InvalidHeaderError:
             raise
         except Exception:
             log.exception(
-                f"An unexpected error has occurred during fetching of {url}; "
-                f"trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS})."
+                f'An unexpected error has occurred during fetching of {url}; '
+                f'trying again ({attempt}/{FAILED_REQUEST_ATTEMPTS}).'
             )
         else:
             return inventory

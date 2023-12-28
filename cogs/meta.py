@@ -48,7 +48,7 @@ def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
         return inspect.cleandoc(s1 or s2)
 
     if s1 and s2:
-        return inspect.cleandoc(f"{s1}\n\n{s2}")
+        return inspect.cleandoc(f'{s1}\n\n{s2}')
 
 
 def can_close_threads(ctx: GuildContext) -> bool:
@@ -105,7 +105,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         if is_app_command_cog:
             embed.set_footer(text=f'Those Commands are only available as Slash Commands.')
         else:
-            embed.set_footer(text=f'Use "{getattr(self.ctx, "prefix", "/")}help command" for more info on a command.')
+            embed.set_footer(text=f'Use "{getattr(self.ctx, 'prefix', '/')}help command" for more info on a command.')
 
         return embed
 
@@ -170,7 +170,7 @@ class CategorySelect(discord.ui.Select):
     def __fill_options(self) -> None:
         self.add_option(
             label='Start Page',
-            emoji=discord.PartialEmoji(name="vegaleftarrow", id=1066024601332748389),
+            emoji=discord.PartialEmoji(name='vegaleftarrow', id=1066024601332748389),
             value='__index',
             description='The front page of the Help Menu.',
         )
@@ -206,9 +206,9 @@ class FrontHelpPaginator(BasePaginator[str]):
     groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
     async def format_page(self, entries: List, /):
-        prefix: str = getattr(self.ctx, "prefix", "/")
+        prefix: str = getattr(self.ctx, 'prefix', '/')
 
-        embed = discord.Embed(title=f"{self.ctx.client.user.name}'s Help Page", colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title=f'{self.ctx.client.user.name}\'s Help Page', colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=get_asset_url(self.ctx.client.user))
 
         pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)  # type: ignore
@@ -238,18 +238,18 @@ class FrontHelpPaginator(BasePaginator[str]):
                 ('[argument]', 'This argument is **optional**.'),
                 ('<A|B>', 'This means **multiple choice**, you can choose by using one. Although it must be A or B.'),
                 ('<argument...>', 'There are multiple Arguments.'),
-                ("<'argument'>", 'This argument is case-sensitive and should be typed exaclty as shown.'),
+                ('<\'argument\'>', 'This argument is case-sensitive and should be typed exaclty as shown.'),
                 ('<argument=A>', 'The default value if you dont provide one of this argument is A.'),
-                ("Flags",
-                 "Flags are mostly available for commands with many arguments.\n"
-                 "They can provide a better overview and are not required to be typed in.\n"
-                 "\n"
-                 "Flags are prefixed with `--` and can be used like this:\n"
-                 f"- `{prefix}command --flag1 argument1 --flag2 argument2`\n"
-                 f"- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n"
-                 f"\n"
-                 f"Flag values can also be more than one word long, they end with the next flag you type (`--`):\n"
-                 f"- `{prefix}command --flag1 my first argument --flag2 'argument 2`'"
+                ('Flags',
+                 'Flags are mostly available for commands with many arguments.\n'
+                 'They can provide a better overview and are not required to be typed in.\n'
+                 '\n'
+                 'Flags are prefixed with `--` and can be used like this:\n'
+                 f'- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
+                 f'- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
+                 f'\n'
+                 f'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
+                 f'- `{prefix}command --flag1 my first argument --flag2 \'argument 2`\''
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
@@ -542,7 +542,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if cut:
             return f'{prefix}{alias}'
-        return f'{prefix}{alias} {signature}' + (" [!]" if getattr(command, 'hidden', None) else "")
+        return f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
@@ -633,8 +633,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             for flag in flags.converter.get_flags().values():
                 default = ""
                 if flag.default is not None:
-                    default = " " + (
-                        f"{flag.default!r}" if (flag.annotation is str or Literal or Optional[str])
+                    default = ' ' + (
+                        f'{flag.default!r}' if (flag.annotation is str or Literal or Optional[str])
                         else str(flag.default)
                     )
 
@@ -683,7 +683,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if stringified:
             string: str = ''
             for group, perms in resolved.items():
-                string += f"{group.title()}: {', '.join(fmt(p) for p in perms)}\n"
+                string += f'{group.title()}: {', '.join(fmt(p) for p in perms)}\n'
             return string
         else:
             return resolved
@@ -694,26 +694,26 @@ class PaginatedHelpCommand(commands.HelpCommand):
         This is a modified version of the original command_formatting.
         """
         embed = discord.Embed(colour=helpers.Colour.darker_red())
-        embed.set_author(name="Command Help", icon_url=COMMAND_ICON_URL)
+        embed.set_author(name='Command Help', icon_url=COMMAND_ICON_URL)
 
         embed.description = (
-            f"**```py\n{self.get_command_signature(command)}```**\n"
-            f"{cleanup_docstring(command.description, getattr(command, 'help', None))}"
+            f'**```py\n{self.get_command_signature(command)}```**\n'
+            f'{cleanup_docstring(command.description, getattr(command, 'help', None))}'
         )
 
         if getattr(command, 'aliases', None):
-            embed.add_field(name='**Aliases**', value=f"`{' '.join(command.aliases)}`", inline=False)
+            embed.add_field(name='**Aliases**', value=f'`{' '.join(command.aliases)}`', inline=False)
 
         if isinstance(command, commands.hybrid.HybridGroup):
             embed.add_field(name='**Slash Command Fallback**', value='Commands can be used as a slash commands.',
                             inline=False)
 
         if isinstance(command, App):
-            embed.add_field(name="**Slash Command**", value="Can only be used as a slash command.", inline=False)
+            embed.add_field(name='**Slash Command**', value='Can only be used as a slash command.', inline=False)
 
         if getattr(command, 'commands', None):
             resolved_sub_commands = [
-                f"* `{self.get_command_signature(cmd)}`" for cmd in command.commands
+                f'* `{self.get_command_signature(cmd)}`' for cmd in command.commands
                 if not await self.maybe_hidden(cmd, self.context.author)
             ]
             if resolved_sub_commands:
@@ -778,18 +778,18 @@ class UserJoinView(discord.ui.View):
         if interaction.user.id == self.author.id:
             return True
         await interaction.response.send_message(
-            "<:redTick:1079249771975413910> You are not the author of this interaction.", ephemeral=True)
+            '<:redTick:1079249771975413910> You are not the author of this interaction.', ephemeral=True)
         return False
 
-    @discord.ui.button(label="Join Position", style=discord.ButtonStyle.blurple,
-                       emoji=discord.PartialEmoji(name="join", id=1096930367522472037))
+    @discord.ui.button(label='Join Position', style=discord.ButtonStyle.blurple,
+                       emoji=discord.PartialEmoji(name='join', id=1096930367522472037))
     async def join_position(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         chunked_users = sorted(await interaction.guild.chunk(), key=lambda m: m.joined_at)
 
         def fmt(p, u, j):  # noqa
             if u == interaction.user:
-                return f"<a:arrow_right:1113018784651956334> `{p}.` **{u}** <a:arrow_left:1113018813244518451>"
-            return f"`{p}.` **{u}** ({discord.utils.format_dt(j, style='f')})"
+                return f'<a:arrow_right:1113018784651956334> `{p}.` **{u}** <a:arrow_left:1113018813244518451>'
+            return f'`{p}.` **{u}** ({discord.utils.format_dt(j, style='f')})'
 
         source = TextSource(prefix=None, suffix=None, max_size=4000)
         author_index = chunked_users.index(self.user)
@@ -801,9 +801,9 @@ class UserJoinView(discord.ui.View):
         for p, u in enumerate(chunked_users[author_index:author_index + 6], start=author_index + 1):
             source.add_line(fmt(p, u, u.joined_at))
 
-        embed = discord.Embed(title=f"Join Position in {interaction.guild}", color=0x2b2d31)
-        embed.add_field(name='Joined', value=f"{format_date(self.user.joined_at)}\n"
-                                             f"╰ **Join Position:** {author_index + 1}",
+        embed = discord.Embed(title=f'Join Position in {interaction.guild}', color=0x2b2d31)
+        embed.add_field(name='Joined', value=f'{format_date(self.user.joined_at)}\n'
+                                             f'╰ **Join Position:** {author_index + 1}',
                         inline=False)
         embed.add_field(name='Position', value=source.pages[0], inline=False)
         embed.set_author(name=self.user, icon_url=get_asset_url(self.user))
@@ -825,18 +825,18 @@ class GuildUserJoinView(discord.ui.View):
         if interaction.user.id == self.author.id:
             return True
         await interaction.response.send_message(
-            "<:redTick:1079249771975413910> You are not the author of this interaction.", ephemeral=True)
+            '<:redTick:1079249771975413910> You are not the author of this interaction.', ephemeral=True)
         return False
 
-    @discord.ui.button(label="Join List", style=discord.ButtonStyle.blurple,
-                       emoji=discord.PartialEmoji(name="join", id=1096930367522472037))
+    @discord.ui.button(label='Join List', style=discord.ButtonStyle.blurple,
+                       emoji=discord.PartialEmoji(name='join', id=1096930367522472037))
     async def join_list(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         chunked_users = sorted(await interaction.guild.chunk(), key=lambda m: m.joined_at)
         chunked = [[position, user, user.joined_at]
                    for position, user in enumerate(chunked_users, start=1)]
 
         def fmt(p, u, j):
-            return f"`{p}.` **{u}** ({discord.utils.format_dt(j, style='f')})"
+            return f'`{p}.` **{u}** ({discord.utils.format_dt(j, style='f')})'
 
         source = TextSource(prefix=None, suffix=None, max_size=4000)
         for line in chunked:
@@ -845,9 +845,9 @@ class GuildUserJoinView(discord.ui.View):
         class EmbedPaginator(BasePaginator[str]):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(title=f"Join List in {interaction.guild}", color=helpers.Colour.darker_red())
+                embed = discord.Embed(title=f'Join List in {interaction.guild}', color=helpers.Colour.darker_red())
                 embed.set_author(name=interaction.guild, icon_url=get_asset_url(interaction.guild))
-                embed.set_footer(text=f"{plural(len(chunked_users)):entry|entries}")
+                embed.set_footer(text=f'{plural(len(chunked_users)):entry|entries}')
 
                 embed.description = '\n'.join(entries)
 
@@ -886,7 +886,7 @@ class Meta(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="staff_animated", id=1076911514193231974, animated=True)
+        return discord.PartialEmoji(name='staff_animated', id=1076911514193231974, animated=True)
 
     def cog_unload(self):
         self.bot.help_command = self.old_help_command
@@ -941,25 +941,25 @@ class Meta(commands.Cog):
             await ctx.message.add_reaction(ctx.tick(True))
             await self.mark_as_solved(ctx.channel, ctx.user)
         else:
-            msg = f"<@!{ctx.channel.owner_id}>, would you like to mark this thread as solved? This has been requested by {ctx.author.mention}."
+            msg = f'<@!{ctx.channel.owner_id}>, would you like to mark this thread as solved? This has been requested by {ctx.author.mention}.'
             confirm = await ctx.prompt(msg, author_id=ctx.channel.owner_id, timeout=300.0)
 
             if ctx.channel.locked:
                 return
 
             if confirm:
-                await ctx.send_tick(
+                await ctx.stick(
                     True, f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
                 )
                 await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)
             elif confirm is None:
-                await ctx.send_tick(False, f'Timed out waiting for a response. Not marking as solved.')
+                await ctx.stick(False, f'Timed out waiting for a response. Not marking as solved.')
             else:
-                await ctx.send_tick(False, f'Not marking as solved.')
+                await ctx.stick(False, f'Not marking as solved.')
 
     @commands_ext.command(
         commands.command,
-        aliases=["src"],
+        aliases=['src'],
         description='Shows parts of the Bots Source Command.'
     )
     async def source(self, ctx: Context, *, command: Optional[str] = None):  # noqa
@@ -975,7 +975,7 @@ class Meta(commands.Cog):
 
         obj = self.bot.resolve_command(command)
         if obj is None:
-            return await ctx.send_tick(False, 'Could not find command.')
+            return await ctx.stick(False, 'Could not find command.')
 
         if command == 'help':
             src = type(self.bot.help_command)
@@ -987,22 +987,22 @@ class Meta(commands.Cog):
 
         lines, firstlineno = inspect.getsourcelines(src)
         if filename is None:
-            return await ctx.send_tick(False, 'Could not find source for command.')
+            return await ctx.stick(False, 'Could not find source for command.')
 
         location_parts = filename.split(os.path.sep)
-        cogs_index = location_parts.index("cogs")
-        location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from "cogs" onwards
+        cogs_index = location_parts.index('cogs')
+        location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from 'cogs' onwards
 
         final_url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
 
         embed = discord.Embed(title=f'Command: {command}', description=obj.description)
-        embed.add_field(name="Source Code", value=f"[Jump to GitHub]({final_url})")
-        embed.set_footer(text=f"{location}:{firstlineno}")
+        embed.add_field(name='Source Code', value=f'[Jump to GitHub]({final_url})')
+        embed.set_footer(text=f'{location}:{firstlineno}')
         await ctx.send(embed=embed)
 
-    @app_commands.command(name="help", description="Get help for a command or module.")
+    @app_commands.command(name='help', description='Get help for a command or module.')
     @app_commands.guild_only()
-    @app_commands.describe(module="Get help for a module.", command="Get help for a command")
+    @app_commands.describe(module='Get help for a module.', command='Get help for a command')
     async def _help(
             self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None
     ):
@@ -1040,7 +1040,7 @@ class Meta(commands.Cog):
         results = fuzzy.finder(current, [c.qualified_name for c in cogs])
         return [app_commands.Choice(name=res, value=res) for res in results][:25]
 
-    @commands.hybrid_group(name="info", description="Shows info about a user or server.",
+    @commands.hybrid_group(name='info', description='Shows info about a user or server.',
                            invoke_without_command=True)
     async def info(self, ctx: Context):
         """Shows info about a user or server."""
@@ -1052,24 +1052,24 @@ class Meta(commands.Cog):
         """Shows the features of a guild."""
 
         if guild_id and not guild_id.isdigit():
-            return await ctx.send_tick(False, "Guild ID must be an int.")
+            return await ctx.stick(False, 'Guild ID must be an int.')
 
         guild_id = guild_id or ctx.guild.id
         guild = self.bot.get_guild(guild_id)
         if not guild:
-            return await ctx.send_tick(False, f'Guild with ID `{guild_id}` not found.')
+            return await ctx.stick(False, f'Guild with ID `{guild_id}` not found.')
 
         features = list(
-            map(lambda e: f"**{e[0]}** - {e[1]}", list(self.bot.get_guild_features(guild.features, only_current=True))))
-        embed = discord.Embed(title="Guild Features",
+            map(lambda e: f'**{e[0]}** - {e[1]}', list(self.bot.get_guild_features(guild.features, only_current=True))))
+        embed = discord.Embed(title='Guild Features',
                               timestamp=discord.utils.utcnow(),
                               color=self.bot.colour.darker_red())
-        embed.set_footer(text=f"{plural(len(features)):feature|features}")
+        embed.set_footer(text=f'{plural(len(features)):feature|features}')
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location='description')
 
-    @info.command(name="user", description="Shows info about a user.")
+    @info.command(name='user', description='Shows info about a user.')
     @commands.guild_only()
-    @app_commands.describe(user_id="The user ID to show info about. (Default: You)")
+    @app_commands.describe(user_id='The user ID to show info about. (Default: You)')
     async def info_user(self, ctx: Context, user_id: str = None):
         """Shows info about a user."""
 
@@ -1077,13 +1077,13 @@ class Meta(commands.Cog):
             await ctx.defer()
 
         if user_id and not user_id.isdigit():
-            return await ctx.send_tick(False, "User ID must be a number.")
+            return await ctx.stick(False, 'User ID must be a number.')
 
         user_id = user_id or ctx.author.id
         user = await self.bot.get_or_fetch_member(ctx.guild, user_id)
 
         if not user:
-            return await ctx.send_tick(False, "User not found.")
+            return await ctx.stick(False, 'User not found.')
 
         e = discord.Embed()
         roles = [role.name.replace('@', '@\u200b') for role in getattr(user, 'roles', [])]
@@ -1136,13 +1136,13 @@ class Meta(commands.Cog):
         spotify = next((act for act in activities if isinstance(act, discord.Spotify)), None)
 
         e.add_field(
-            name=f"Spotify",
+            name=f'Spotify',
             value=(
-                f"**[{spotify.title}]({spotify.track_url})**"
-                f"\n__By:__ {spotify.artist}"
-                f"\n__On Album:__ {spotify.album}"
-                f"\n`{datetime.timedelta(seconds=round((ctx.message.created_at - spotify.start).total_seconds()))}`/"
-                f"`{datetime.timedelta(seconds=round(spotify.duration.total_seconds()))}`\n"
+                f'**[{spotify.title}]({spotify.track_url})**'
+                f'\n__By:__ {spotify.artist}'
+                f'\n__On Album:__ {spotify.album}'
+                f'\n`{datetime.timedelta(seconds=round((ctx.message.created_at - spotify.start).total_seconds()))}`/'
+                f'`{datetime.timedelta(seconds=round(spotify.duration.total_seconds()))}`\n'
                 if spotify
                 else '*Not listening to anything...*'
             )
@@ -1150,13 +1150,13 @@ class Meta(commands.Cog):
 
         custom_activity = next((act for act in activities if isinstance(act, discord.CustomActivity)), None)
         activity_string = (
-            f"`{discord.utils.remove_markdown(custom_activity.name)}`"
+            f'`{discord.utils.remove_markdown(custom_activity.name)}`'
             if custom_activity and custom_activity.name
             else '*User has no custom status.*'
         )
         e.add_field(
             name=f'Custom status',
-            value=f"\n{activity_string}",
+            value=f'\n{activity_string}',
             inline=False
         )
 
@@ -1198,23 +1198,23 @@ class Meta(commands.Cog):
 
         await ctx.send(embed=e, view=UserJoinView(member, ctx.author))
 
-    @info.command(name="server", description="Shows info about a server.")
+    @info.command(name='server', description='Shows info about a server.')
     @commands.guild_only()
-    @app_commands.describe(guild_id="The ID of the server to show info about. (Default: Current server)")
+    @app_commands.describe(guild_id='The ID of the server to show info about. (Default: Current server)')
     async def info_server(self, ctx: Context, guild_id: str = None):
         """Shows info about the current or a specified server."""
 
         if not guild_id or (guild_id and not await self.bot.is_owner(ctx.author)):
             if not ctx.guild:
-                return await ctx.send_tick(False, "You must specify a guild ID.")
+                return await ctx.stick(False, 'You must specify a guild ID.')
             guild = ctx.guild
         else:
             if not guild_id.isdigit():
-                return await ctx.send_tick(False, "Guild ID must be a number.")
+                return await ctx.stick(False, 'Guild ID must be a number.')
             guild = self.bot.get_guild(int(guild_id))
 
         if not guild:
-            return await ctx.send_tick(False, "Guild not found.")
+            return await ctx.stick(False, 'Guild not found.')
 
         roles = [role.name.replace('@', '@\u200b') for role in guild.roles]
 
@@ -1289,7 +1289,7 @@ class Meta(commands.Cog):
             boosts = f'Level {guild.premium_tier}\n{guild.premium_subscription_count} boosts'
             last_boost = max(guild.members, key=lambda m: m.premium_since or guild.created_at)
             if last_boost.premium_since is not None:
-                boosts = f'{boosts}\nLast Boost: {last_boost} ({discord.utils.format_dt(last_boost.premium_since, style="R")})'
+                boosts = f'{boosts}\nLast Boost: {last_boost} ({discord.utils.format_dt(last_boost.premium_since, style='R')})'
             e.add_field(name='Boosts', value=boosts, inline=False)
 
         bots = sum(m.bot for m in guild.members)
@@ -1308,11 +1308,11 @@ class Meta(commands.Cog):
                 emoji_stats['disabled'] += not emoji.available
 
         fmt = (
-            f'Regular: {emoji_stats["regular"]}/{guild.emoji_limit}\n'
-            f'Animated: {emoji_stats["animated"]}/{guild.emoji_limit}\n'
+            f'Regular: {emoji_stats['regular']}/{guild.emoji_limit}\n'
+            f'Animated: {emoji_stats['animated']}/{guild.emoji_limit}\n'
         )
         if emoji_stats['disabled'] or emoji_stats['animated_disabled']:
-            fmt = f'{fmt}Disabled: {emoji_stats["disabled"]} regular, {emoji_stats["animated_disabled"]} animated\n'
+            fmt = f'{fmt}Disabled: {emoji_stats['disabled']} regular, {emoji_stats['animated_disabled']} animated\n'
 
         fmt = f'{fmt}Total Emoji: {len(guild.emojis)}/{guild.emoji_limit * 2}'
         e.add_field(name='Emoji', value=fmt, inline=False)
@@ -1338,36 +1338,36 @@ class Meta(commands.Cog):
         name='charinfo',
         description='Shows you information about a number of characters.',
     )
-    @app_commands.describe(characters="A String of characters that should be introspected.")
+    @app_commands.describe(characters='A String of characters that should be introspected.')
     async def charinfo(self, ctx: Context, *, characters: str):
         """Shows you information on up to 50 unicode characters."""
-        match = re.match(r"<(a?):(\w+):(\d+)>", characters)
+        match = re.match(r'<(a?):(\w+):(\d+)>', characters)
         if match:
-            await ctx.send(f"{ctx.tick(False)} Cannot introspect custom emojis.")
+            await ctx.send(f'{ctx.tick(False)} Cannot introspect custom emojis.')
             return
 
         if len(characters) > 50:
-            await ctx.send(f"{ctx.tick(False)} Character limit of `50` exceeded.")
+            await ctx.send(f'{ctx.tick(False)} Character limit of `50` exceeded.')
             return
 
         def char_info(char: str) -> tuple[str, str]:
-            digit = f"{ord(char):x}"
+            digit = f'{ord(char):x}'
             if len(digit) <= 4:
-                u_code = f"\\u{digit:>04}"
+                u_code = f'\\u{digit:>04}'
             else:
-                u_code = f"\\U{digit:>08}"
-            url = f"https://www.compart.com/en/unicode/U+{digit:>04}"
-            name = f"[{unicodedata.name(char, '')}]({url})"
-            info = f"`{u_code.ljust(10)}`: {name} - {discord.utils.escape_markdown(char)}"
+                u_code = f'\\U{digit:>08}'
+            url = f'https://www.compart.com/en/unicode/U+{digit:>04}'
+            name = f'[{unicodedata.name(char, '')}]({url})'
+            info = f'`{u_code.ljust(10)}`: {name} - {discord.utils.escape_markdown(char)}'
             return info, u_code
 
         char_list, raw_list = zip(*(char_info(c) for c in characters), strict=True)
-        embed = discord.Embed(title="Char Info", colour=self.bot.colour.darker_red())
+        embed = discord.Embed(title='Char Info', colour=self.bot.colour.darker_red())
 
         if len(characters) > 1:
-            embed.add_field(name="Full Text", value=f"`{''.join(raw_list)}`", inline=False)
+            embed.add_field(name='Full Text', value=f'`{''.join(raw_list)}`', inline=False)
 
-        await LinePaginator.start(ctx, entries=char_list, per_page=10, embed=embed, location="description")
+        await LinePaginator.start(ctx, entries=char_list, per_page=10, embed=embed, location='description')
 
     @commands_ext.command(
         commands.group,
@@ -1397,12 +1397,12 @@ class Meta(commands.Cog):
         description='Appends a prefix to the list of custom prefixes.',
         ignore_extra=False,
     )
-    @commands_ext.command_permissions(user=["manage_guild"])
+    @commands_ext.command_permissions(user=['manage_guild'])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Appends a prefix to the list of custom prefixes.
         Previously set prefixes are not overridden.
         To have a word prefix, you should quote it and end it with
-        a space, e.g. "hello " to set the prefix to "hello ". This
+        a space, e.g. 'hello ' to set the prefix to 'hello '. This
         is because Discord removes spaces when sending messages so
         the spaces are not preserved.
         Multi-word prefixes must be quoted also.
@@ -1414,14 +1414,14 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.send_tick(False, f'{e}')
+            await ctx.stick(False, f'{e}')
         else:
-            await ctx.send_tick(True, 'Prefix added.')
+            await ctx.stick(True, 'Prefix added.')
 
     @prefix_add.error
     async def prefix_add_error(self, ctx: GuildContext, error: commands.CommandError):
         if isinstance(error, commands.TooManyArguments):
-            await ctx.send("You've given too many prefixes. Either quote it or only do it one by one.")
+            await ctx.send('You\'ve given too many prefixes. Either quote it or only do it one by one.')
 
     @commands_ext.command(
         prefix.command,
@@ -1429,7 +1429,7 @@ class Meta(commands.Cog):
         aliases=['delete'],
         ignore_extra=False
     )
-    @commands_ext.command_permissions(user=["manage_guild"])
+    @commands_ext.command_permissions(user=['manage_guild'])
     async def prefix_remove(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Removes a prefix from the list of custom prefixes.
         This is the inverse of the 'prefix add' command. You can
@@ -1447,9 +1447,9 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.send_tick(False, f'{e}')
+            await ctx.stick(False, f'{e}')
         else:
-            await ctx.send_tick(True, 'Prefix removed.')
+            await ctx.stick(True, 'Prefix removed.')
 
     @commands_ext.command(
         prefix.command,
@@ -1457,7 +1457,7 @@ class Meta(commands.Cog):
         description='Removes all custom prefixes.',
         ignore_extra=False
     )
-    @commands_ext.command_permissions(user=["manage_guild"])
+    @commands_ext.command_permissions(user=['manage_guild'])
     async def prefix_reset(self, ctx: GuildContext):
         """Removes all custom prefixes.
         After this, the bot will listen to only mention prefixes.
@@ -1465,7 +1465,7 @@ class Meta(commands.Cog):
         """
 
         await self.bot.set_guild_prefixes(ctx.guild, [])
-        await ctx.send_tick(True, 'Cleared all prefixes.')
+        await ctx.stick(True, 'Cleared all prefixes.')
 
     @commands_ext.command(
         name='ping',
@@ -1478,7 +1478,7 @@ class Meta(commands.Cog):
 
         def build_embed(content: str) -> discord.Embed:
             return discord.Embed(
-                title="Pong!",
+                title='Pong!',
                 colour=helpers.Colour.darker_red(),
                 description=content
             )
@@ -1487,23 +1487,23 @@ class Meta(commands.Cog):
         websocket_readings: List[float] = []
 
         for _ in range(6):
-            text = "*Calculating round-trip time...*\n\n"
-            text += "\n".join(
-                f"Reading `{index + 1}`: `{reading * 1000:.2f}ms`" for index, reading in enumerate(api_readings))
+            text = '*Calculating round-trip time...*\n\n'
+            text += '\n'.join(
+                f'Reading `{index + 1}`: `{reading * 1000:.2f}ms`' for index, reading in enumerate(api_readings))
 
             if api_readings:
                 average, stddev = mean_stddev(api_readings)
 
-                text += f"\n\n**Average:** `{average * 1000:.2f}ms` \N{PLUS-MINUS SIGN} `{stddev * 1000:.2f}ms`"
+                text += f'\n\n**Average:** `{average * 1000:.2f}ms` \N{PLUS-MINUS SIGN} `{stddev * 1000:.2f}ms`'
             else:
-                text += "\n\n*No readings yet.*"
+                text += '\n\n*No readings yet.*'
 
             if websocket_readings:
                 average = sum(websocket_readings) / len(websocket_readings)
 
-                text += f"\n**Websocket latency:** `{average * 1000:.2f}ms`"
+                text += f'\n**Websocket latency:** `{average * 1000:.2f}ms`'
             else:
-                text += f"\n**Websocket latency:** `{self.bot.latency * 1000:.2f}ms`"
+                text += f'\n**Websocket latency:** `{self.bot.latency * 1000:.2f}ms`'
 
             if _ == 5:
                 gateway_url = await self.bot.http.get_gateway()
@@ -1512,7 +1512,7 @@ class Meta(commands.Cog):
                     end = time.monotonic()
                     gateway_ping = (end - start) * 1000
 
-                text += f"\n**Gateway latency:** `{gateway_ping:.2f}ms`"
+                text += f'\n**Gateway latency:** `{gateway_ping:.2f}ms`'
 
             if message:
                 before = time.perf_counter()
@@ -1649,8 +1649,8 @@ class Meta(commands.Cog):
         embed = discord.Embed(description=obj.message.clean_content, color=self.bot.colour.darker_red(),
                               timestamp=obj.timestamp)
         embed.set_author(name=obj.message.author, icon_url=obj.message.author.display_avatar.url)
-        embed.add_field(name="Message", value=obj.message.jump_url)
-        embed.set_footer(text="Deleted at")
+        embed.add_field(name='Message', value=obj.message.jump_url)
+        embed.set_footer(text='Deleted at')
         await ctx.send(embed=embed)
 
     @commands_ext.command(
@@ -1673,10 +1673,10 @@ class Meta(commands.Cog):
 
         embed = discord.Embed(color=self.bot.colour.darker_red(), timestamp=obj.timestamp)
         embed.set_author(name=obj.message.author, icon_url=obj.message.author.display_avatar.url)
-        embed.add_field(name="Message", value=obj.message.jump_url)
-        embed.add_field(name="Before", value=obj.before.clean_content, inline=False)
-        embed.add_field(name="After", value=obj.after.clean_content, inline=False)
-        embed.set_footer(text="Edited at")
+        embed.add_field(name='Message', value=obj.message.jump_url)
+        embed.add_field(name='Before', value=obj.before.clean_content, inline=False)
+        embed.add_field(name='After', value=obj.after.clean_content, inline=False)
+        embed.set_footer(text='Edited at')
         await ctx.send(embed=embed)
 
     @commands.Cog.listener()

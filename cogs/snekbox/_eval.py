@@ -13,7 +13,7 @@ from launcher import get_logger
 if TYPE_CHECKING:
     from cogs.snekbox._cog import SupportedPythonVersions
 else:
-    SupportedPythonVersions = Literal["3.11", "3.10"]
+    SupportedPythonVersions = Literal['3.11', '3.10']
 
 log = get_logger(__name__)
 
@@ -26,11 +26,11 @@ class EvalJob:
 
     args: list[str]
     files: list[FileAttachment] = field(default_factory=list)
-    name: str = "eval"
-    version: SupportedPythonVersions = "3.11"
+    name: str = 'eval'
+    version: SupportedPythonVersions = '3.11'
 
     @classmethod
-    def from_code(cls, code: str, path: str = "main.py") -> EvalJob:
+    def from_code(cls, code: str, path: str = 'main.py') -> EvalJob:
         """Create an EvalJob from a code string."""
         return cls(
             args=[path],
@@ -49,8 +49,8 @@ class EvalJob:
     def to_dict(self) -> dict[str, list[str | dict[str, str]]]:
         """Convert the job to a dict."""
         return {
-            "args": self.args,
-            "files": [file.to_dict() for file in self.files],
+            'args': self.args,
+            'files': [file.to_dict() for file in self.files],
         }
 
 
@@ -77,11 +77,11 @@ class EvalResult:
     def status_emoji(self) -> str:
         """Return an emoji corresponding to the status code or lack of output in result."""
         if not self.has_output:
-            return "<:warning:1113421726861238363>"
+            return '<:warning:1113421726861238363>'
         if self.returncode == 0:  # No error
-            return "<:greenTick:1079249732364406854>"
+            return '<:greenTick:1079249732364406854>'
         # Exception
-        return "<:redTick:1079249771975413910>"
+        return '<:redTick:1079249771975413910>'
 
     @property
     def error_message(self) -> str:
@@ -90,7 +90,7 @@ class EvalResult:
         if self.returncode is None:
             error = self.stdout.strip()
         elif self.returncode == 255:
-            error = "Returned with `255`. A fatal NsJail error occurred."
+            error = 'Returned with `255`. A fatal NsJail error occurred.'
         return error
 
     @property
@@ -99,19 +99,19 @@ class EvalResult:
         if not self.failed_files:
             return ""
 
-        failed_files = f"({self.get_failed_files_str()})"
+        failed_files = f'({self.get_failed_files_str()})'
 
         n_failed = len(self.failed_files)
-        s_upload = "uploads" if n_failed > 1 else "upload"
+        s_upload = 'uploads' if n_failed > 1 else 'upload'
 
-        msg = f"<:redTick:1079249771975413910> {n_failed} file {s_upload} {failed_files} failed."
+        msg = f'<:redTick:1079249771975413910> {n_failed} file {s_upload} {failed_files} failed.'
 
         if (n_failed + len(self.files)) > FILE_COUNT_LIMIT:
-            s_it = "they" if n_failed > 1 else "it"
-            msg += f" as {s_it} exceeded the {FILE_COUNT_LIMIT} file limit."
+            s_it = 'they' if n_failed > 1 else 'it'
+            msg += f' as {s_it} exceeded the {FILE_COUNT_LIMIT} file limit.'
         else:
-            s_each_file = "each file's" if n_failed > 1 else "its file"
-            msg += f" because {s_each_file} size exceeds {sizeof_fmt(FILE_SIZE_LIMIT)}."
+            s_each_file = 'each file\'s' if n_failed > 1 else 'its file'
+            msg += f' because {s_each_file} size exceeds {sizeof_fmt(FILE_SIZE_LIMIT)}.'
 
         return msg
 
@@ -124,35 +124,35 @@ class EvalResult:
         names = []
         for file in self.failed_files:
             if char_max < 3:
-                names.append("…")
+                names.append('…')
                 break
 
             if len(file) > char_max:
-                names.append(file[:char_max] + "…")
+                names.append(file[:char_max] + '…')
                 break
             char_max -= len(file)
             names.append(file)
 
-        text = ", ".join(names)
+        text = ', '.join(names)
         text = escape_markdown(text)
         text = escape_mentions(text)
         return text
 
     def get_message(self, job: EvalJob) -> str:
         """Return a user-friendly message corresponding to the process's return code."""
-        msg = f"Your **{job.name}** job for Python `{job.version}` "
+        msg = f'Your **{job.name}** job for Python `{job.version}` '
 
         if self.returncode is None:
-            msg += "has failed."
+            msg += 'has failed.'
         elif self.returncode == 128 + SIGKILL:
-            msg += "timed out or ran out of memory."
+            msg += 'timed out or ran out of memory.'
         elif self.returncode == 255:
-            msg += "has failed."
+            msg += 'has failed.'
         else:
-            msg += f"has completed with return code `{self.returncode}`"
+            msg += f'has completed with return code `{self.returncode}`'
             with contextlib.suppress(ValueError):
                 name = Signals(self.returncode - 128).name
-                msg += f" ({name})"
+                msg += f' ({name})'
 
         return msg
 
@@ -160,19 +160,19 @@ class EvalResult:
     def from_dict(cls, data: dict[str, str | int | list[dict[str, str]]]) -> EvalResult:
         """Create an EvalResult from a dict."""
         res = cls(
-            stdout=data["stdout"],
-            returncode=data["returncode"],
+            stdout=data['stdout'],
+            returncode=data['returncode'],
         )
 
-        files: dict = iter(data["files"])  # type: ignore
+        files: dict = iter(data['files'])  # type: ignore
         for i, file in enumerate(files):
             if i >= FILE_COUNT_LIMIT:
-                res.failed_files.extend(file["path"] for file in files)
+                res.failed_files.extend(file['path'] for file in files)
                 break
             try:
                 res.files.append(FileAttachment.from_dict(file))
             except ValueError as e:
-                log.info(f"Failed to parse file from snekbox response: {e}")
-                res.failed_files.append(file["path"])
+                log.info(f'Failed to parse file from snekbox response: {e}')
+                res.failed_files.append(file['path'])
 
         return res

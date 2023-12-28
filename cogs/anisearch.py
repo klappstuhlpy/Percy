@@ -136,12 +136,10 @@ class AniListSearch(commands.Cog, name="Media"):
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, commands.CheckFailure):
             if ctx.command.name == "link":
-                await ctx.send(
-                    "<:redTick:1079249771975413910> You have already linked your AniList account to your Discord account."
+                await ctx.stick(False, "You have already linked your AniList account to your Discord account."
                 )
             else:
-                await ctx.send(
-                    "<:redTick:1079249771975413910> You have not linked your AniList account to your Discord account or your Login has expired.\n"
+                await ctx.stick(False, "You have not linked your AniList account to your Discord account or your Login has expired.\n"
                     f"Use `{ctx.clean_prefix}anilist link` to link your account."
                 )
 

@@ -80,19 +80,19 @@ class Random(commands.Cog):
         try:
             dest = dest[0]
         except IndexError:
-            return await ctx.send(f'{ctx.tick(False)} Invalid language provided. Please provide a valid language.')
+            return await ctx.stick(False, 'Invalid language provided. Please provide a valid language.')
 
         if message is None:
             reply = ctx.replied_message
             if reply is not None:
                 message = reply.content
             else:
-                return await ctx.send(f'{ctx.tick(False)} Please provide a message to translate.')
+                return await ctx.stick(False, 'Please provide a message to translate.')
 
         try:
             result = await translate(message, dest=dest, session=self.bot.session)
         except Exception as e:
-            return await ctx.send(f'{ctx.tick(False)} An error occurred: {e.__class__.__name__}: {e}')
+            return await ctx.stick(False, 'An error occurred: {e.__class__.__name__}: {e}')
 
         embed = discord.Embed(title='Translator', colour=self.bot.colour.darker_red())
         embed.add_field(name=f'Original: {result.source_language} (Auto)', value=result.original, inline=False)
@@ -108,14 +108,28 @@ class Random(commands.Cog):
         """Shows you a random reddit meme."""
         async with self.bot.session.get('https://www.reddit.com/r/dankmemes/new.json?sort=hot') as r:
             if r.status != 200:
-                return await ctx.send('Could not fetch memes :(')
+                return await ctx.stick(False, 'Could not fetch memes :(')
             res = await r.json()
         random_meme = res['data']['children'][random.randint(0, len(res['data']['children']) - 1)]['data']
         embed = discord.Embed(title=random_meme['title'], url=random_meme['url'],
-                              timestamp=datetime.utcnow(),
+                              timestamp=await ctx.timestamp(),
                               colour=0x2b2d31)
         embed.set_image(url=random_meme['url'])
         embed.add_field(name='Rating', value=f'\N{THUMBS UP SIGN} **{random_meme["ups"]}** \N{SPEECH BALLOON} **{random_meme["num_comments"]}**', inline=False)
+        await ctx.send(embed=embed)
+
+    @commands_ext.command(
+        commands.hybrid_command,
+        name='fact',
+        description="Shows you a random fact."
+    )
+    async def fact(self, ctx: Context):
+        """Shows you a random fact."""
+        async with self.bot.session.get('https://uselessfacts.jsph.pl/random.json?language=en') as r:
+            if r.status != 200:
+                return await ctx.stick(False, 'Could not fetch fact :(')
+            res = await r.json()
+        embed = discord.Embed(title='Random Fact', description=res['text'], colour=0x2b2d31)
         await ctx.send(embed=embed)
 
 

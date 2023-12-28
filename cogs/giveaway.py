@@ -66,10 +66,10 @@ class GiveawayRerollView(discord.ui.View):
                 self.bot = bot
                 self.message: discord.Message = MISSING
 
-                super().__init__(label="Reroll", style=discord.ButtonStyle.gray,
+                super().__init__(label='Reroll', style=discord.ButtonStyle.gray,
                                  emoji=discord.PartialEmoji(
-                                     name="\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"),
-                                 custom_id=f"giveaway_reroll:{self.giveaway.id}")
+                                     name='\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}'),
+                                 custom_id=f'giveaway_reroll:{self.giveaway.id}')
 
             async def callback(self, interaction: discord.Interaction):
                 self.message = interaction.message
@@ -81,15 +81,15 @@ class GiveawayRerollView(discord.ui.View):
                     if len(winner_list) < self.giveaway.winner_count:
                         user_id = self.giveaway.entries.pop(random.randint(0, len(self.giveaway.entries) - 1))
                         winner_list.append(guild.get_member(user_id))
-                winners = ", ".join(x.mention for x in winner_list)
+                winners = ', '.join(x.mention for x in winner_list)
 
                 field = embed.fields[0]
                 lines = field.value.split('\n')
-                lines[3] = f"Winner(s): {winners}"
+                lines[3] = f'Winner(s): {winners}'
                 embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
                 await self.message.reply(
-                    f"Congratulations {winners}! You won the giveaway for *{self.giveaway.prize}*!",
+                    f'Congratulations {winners}! You won the giveaway for *{self.giveaway.prize}*!',
                     allowed_mentions=discord.AllowedMentions(users=True))
 
                 await interaction.response.edit_message(
@@ -103,7 +103,7 @@ class GiveawayRerollView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if not interaction.user.guild_permissions.manage_channels:
             await interaction.response.send_message(
-                "<:redTick:1079249771975413910> You are not allowed to reroll this giveaway.",
+                '<:redTick:1079249771975413910> You are not allowed to reroll this giveaway.',
                 ephemeral=True)
             return False
         return True
@@ -119,9 +119,9 @@ class GiveawayEntryView(discord.ui.View):
             def __init__(self):
                 self.bot: Percy = bot
                 self.giveaway: GiveawayItem = giveaway
-                super().__init__(label="Enter", style=discord.ButtonStyle.green,
-                                 emoji=discord.PartialEmoji(name="giveaway", id=1089511337161400390, animated=True),
-                                 custom_id=f"giveaway_enter:{self.giveaway.id}")
+                super().__init__(label='Enter', style=discord.ButtonStyle.green,
+                                 emoji=discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True),
+                                 custom_id=f'giveaway_enter:{self.giveaway.id}')
 
             async def callback(self, interaction: discord.Interaction):
                 self.giveaway.entries.append(interaction.user.id)
@@ -133,7 +133,7 @@ class GiveawayEntryView(discord.ui.View):
                 embed = interaction.message.embeds[0]
                 field = embed.fields[0]
                 lines = field.value.split('\n')
-                lines[2] = f"Entries: **{self.giveaway.entry_count}**"
+                lines[2] = f'Entries: **{self.giveaway.entry_count}**'
                 embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
                 await interaction.response.edit_message(embed=embed)
@@ -153,12 +153,12 @@ class GiveawayEntryView(discord.ui.View):
         return True
 
 
-class CreateGiveawayModal(discord.ui.Modal, title="Create a Giveaway"):
-    duration = discord.ui.TextInput(label="Duration", placeholder="e.g. 10 minutes, 2 days")
-    winner_count = discord.ui.TextInput(label="Winner Count", default="1")
-    prize = discord.ui.TextInput(label="Prize", placeholder="Short description of the prize", max_length=256)
+class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
+    duration = discord.ui.TextInput(label='Duration', placeholder='e.g. 10 minutes, 2 days')
+    winner_count = discord.ui.TextInput(label='Winner Count', default='1')
+    prize = discord.ui.TextInput(label='Prize', placeholder='Short description of the prize', max_length=256)
     description = discord.ui.TextInput(
-        label="Description", placeholder="Additional information about the giveaway", style=discord.TextStyle.long,
+        label='Description', placeholder='Additional information about the giveaway', style=discord.TextStyle.long,
         max_length=1024, required=False
     )
 
@@ -179,7 +179,7 @@ class CreateGiveawayModal(discord.ui.Modal, title="Create a Giveaway"):
         if value := self.description.value:
             embed.description = value
         embed.add_field(name='\u200c',
-                        value=f'Ends: {discord.utils.format_dt(when, style="R")} ({discord.utils.format_dt(when, style="F")})\n'
+                        value=f'Ends: {discord.utils.format_dt(when, style='R')} ({discord.utils.format_dt(when, style='F')})\n'
                               f'Hosted by: {interaction.user.mention}\n'
                               f'Entries: **0**\n'
                               f'Winner(s): {self.winner_count.value}')
@@ -215,7 +215,7 @@ class CreateGiveawayModal(discord.ui.Modal, title="Create a Giveaway"):
         await msg.edit(view=GiveawayEntryView(self.bot, giveaway=gw))
 
         await interaction.response.send_message(
-            f"<:greenTick:1079249732364406854> Giveaway [`{gw.id}`] successfully created. {msg.jump_url}",
+            f'<:greenTick:1079249732364406854> Giveaway [`{gw.id}`] successfully created. {msg.jump_url}',
             ephemeral=True
         )
 
@@ -228,7 +228,7 @@ class Giveaway(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="giveaway", id=1089511337161400390, animated=True)
+        return discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True)
 
     async def create_giveaway(
             self,
@@ -296,7 +296,7 @@ class Giveaway(commands.Cog):
         record = await self.bot.pool.fetchrow(query, giveaway_id)
         return GiveawayItem(record=record) if record else None
 
-    giveaway = app_commands.Group(name="giveaway", description="Manage giveaways.",
+    giveaway = app_commands.Group(name='giveaway', description='Manage giveaways.',
                                   default_permissions=discord.Permissions(manage_channels=True), guild_only=True)
 
     @commands_ext.command(
@@ -305,7 +305,7 @@ class Giveaway(commands.Cog):
         description='Create a giveaway.',
     )
     @app_commands.guild_only()
-    @commands_ext.command_permissions(1, user=["ban_members", "manage_messages"])
+    @commands_ext.command_permissions(1, user=['ban_members', 'manage_messages'])
     async def make_giveaway(self, interaction: discord.Interaction):
         """Interactively creates a giveaway using a Modal."""
         await interaction.response.send_modal(CreateGiveawayModal(self.bot))
@@ -313,7 +313,7 @@ class Giveaway(commands.Cog):
     @commands.Cog.listener()
     async def on_giveaway_timer_complete(self, timer: Timer):
         await self.bot.wait_until_ready()
-        _id = timer.kwargs.get("giveaway_id")
+        _id = timer.kwargs.get('giveaway_id')
 
         record = await self.get_giveaway(giveaway_id=_id)
         channel = self.bot.get_channel(record.channel_id)
@@ -331,27 +331,27 @@ class Giveaway(commands.Cog):
                 if len(winner_list) < record.winner_count:
                     user_id = record.entries.pop(random.randint(0, len(record.entries) - 1))
                     winner_list.append(guild.get_member(user_id))
-            winners = ", ".join(x.mention for x in winner_list)
+            winners = ', '.join(x.mention for x in winner_list)
         else:
             winner_status = False
-            winners = "*No one entered the giveaway.*"
+            winners = '*No one entered the giveaway.*'
 
         field = embed.fields[0]
         lines = field.value.split('\n')
         lines[0] = lines[0].replace('Ends', 'Ended')
-        lines[3] = f"Winner(s): {winners}"
+        lines[3] = f'Winner(s): {winners}'
         embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
-        embed.set_footer(text=f"Giveaway ended")
+        embed.set_footer(text=f'Giveaway ended')
 
         if winner_status and len(record.entries) > 0:
-            await message.reply(f"Congratulations {winners}! You won the giveaway for *{record.prize}*!",
+            await message.reply(f'Congratulations {winners}! You won the giveaway for *{record.prize}*!',
                                 allowed_mentions=discord.AllowedMentions(users=True))
 
             view = GiveawayRerollView(self.bot, self, record)
             await message.edit(embed=embed, view=view)
         else:
-            await message.reply(f"No one entered the giveaway for *{record.prize}*.")
+            await message.reply(f'No one entered the giveaway for *{record.prize}*.')
             await message.edit(embed=embed, view=None)
 
 

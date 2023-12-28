@@ -37,8 +37,8 @@ class TrashView(discord.ui.View):
         self.author: discord.Member = author
 
     @discord.ui.button(
-        style=discord.ButtonStyle.red, emoji=discord.PartialEmoji(name="trashcan", id=1118870793393291294),
-        label="Delete", custom_id="delete"
+        style=discord.ButtonStyle.red, emoji=discord.PartialEmoji(name='trashcan', id=1118870793393291294),
+        label='Delete', custom_id='delete'
     )
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         if interaction.user.id != self.author.id:
@@ -113,11 +113,11 @@ class Base(commands.Cog, name='Exclusives'):
     def _find_ref(path: str, refs: tuple) -> tuple:
         """Loops through all branches and tags to find the required ref."""
         # Base case: there is no slash in the branch name
-        ref, file_path = path.split("/", 1)
+        ref, file_path = path.split('/', 1)
         # In case there are slashes in the branch name, we loop through all branches and tags
         for possible_ref in refs:
-            if path.startswith(possible_ref["name"] + "/"):
-                ref = possible_ref["name"]
+            if path.startswith(possible_ref['name'] + '/'):
+                ref = possible_ref['name']
                 file_path = path[len(ref) + 1:]
                 break
         return ref, file_path
@@ -134,10 +134,10 @@ class Base(commands.Cog, name='Exclusives'):
         rep = await self.github_request('GET', f'repos/{repo}/contents/{file_path}?ref={ref}',
                                         headers={'Accept': 'application/vnd.github+json'})
 
-        dbytes = base64.b64decode(rep["content"])
+        dbytes = base64.b64decode(rep['content'])
         file_contents = dbytes.decode('utf-8')
 
-        return self._snippet_to_codeblock(file_contents, file_path, repo, start_line, end_line)  # rep["html_url"]
+        return self._snippet_to_codeblock(file_contents, file_path, repo, start_line, end_line)  # rep['html_url']
 
     async def _fetch_github_gist_snippet(
             self,
@@ -148,21 +148,21 @@ class Base(commands.Cog, name='Exclusives'):
             end_line: str
     ) -> tuple[str, str | File]:
         """Fetches a snippet from a GitHub gist."""
-        gist_json = await self.github_request('GET', f'gists/{gist_id}{f"/{revision}" if len(revision) > 0 else ""}',
+        gist_json = await self.github_request('GET', f'gists/{gist_id}{f'/{revision}' if len(revision) > 0 else ''}',
                                               headers={'Accept': 'application/vnd.github+json'})
 
-        for gist_file in gist_json["files"]:
-            if file_path == gist_file.lower().replace(".", "-"):
-                url = gist_json["files"][gist_file]["raw_url"]
+        for gist_file in gist_json['files']:
+            if file_path == gist_file.lower().replace('.', '-'):
+                url = gist_json['files'][gist_file]['raw_url']
                 async with self.bot.session.request('GET', url) as resp:
                     if resp.status != 200:
                         raise GithubError(
-                            f"Fetching snippet from GitHub gist returned Status Code `{resp.status}` with {resp.reason!r}.")
+                            f'Fetching snippet from GitHub gist returned Status Code `{resp.status}` with {resp.reason!r}.')
 
                     file_contents = await resp.text()
-                title = gist_json["files"][gist_file]["title"]
+                title = gist_json['files'][gist_file]['title']
                 return self._snippet_to_codeblock(file_contents, gist_file, title, start_line, end_line)
-        return "", "File not found in gist."
+        return '', 'File not found in gist.'
 
     @staticmethod
     def _snippet_to_codeblock(
@@ -197,30 +197,30 @@ class Base(commands.Cog, name='Exclusives'):
         start_line = max(1, start_line)
         end_line = min(len(split_file_contents), end_line)
 
-        required = "\n".join(split_file_contents[start_line - 1:end_line])
-        required = textwrap.dedent(required).rstrip().replace("`", "`\u200b")
+        required = '\n'.join(split_file_contents[start_line - 1:end_line])
+        required = textwrap.dedent(required).rstrip().replace('`', '`\u200b')
 
-        # Extracts the code language and checks whether it's a "valid" language
-        language = file_path.split("/")[-1].split(".")[-1]
-        trimmed_language = language.replace("-", "").replace("+", "").replace("_", "")
+        # Extracts the code language and checks whether it's a 'valid' language
+        language = file_path.split('/')[-1].split('.')[-1]
+        trimmed_language = language.replace('-', '').replace('+', '').replace('_', '')
         is_valid_language = trimmed_language.isalnum()
         if not is_valid_language:
-            language = ""
+            language = ''
 
         # Adds a label showing the file path to the snippet
         if start_line == end_line:
-            ret = f"`{file_path}` from `{full_url}` line `{start_line}`\n"
+            ret = f'`{file_path}` from `{full_url}` line `{start_line}`\n'
         else:
-            ret = f"`{file_path}` from `{full_url}` lines `{start_line}` to `{end_line}`\n"
+            ret = f'`{file_path}` from `{full_url}` lines `{start_line}` to `{end_line}`\n'
 
         if len(required) != 0:
-            fmt = f"{ret}```{language}\n{required}```"
+            fmt = f'{ret}```{language}\n{required}```'
             if len(fmt) <= 2000:
                 return ret, fmt
             else:
                 return ret, discord.File(io.BytesIO(required.encode()), filename=file_path)
         # Returns an empty codeblock if the snippet is empty
-        return ret, f"{ret}``` ```"
+        return ret, f'{ret}``` ```'
 
     async def _parse_snippets(self, content: str) -> list[tuple[str, str | File]]:
         """Parse message content and return a string with a code block for each URL found."""
@@ -235,8 +235,8 @@ class Base(commands.Cog, name='Exclusives'):
                     error_message = error.message
                     log.log(
                         logging.DEBUG if error.status == 404 else logging.ERROR,
-                        f"Failed to fetch code snippet from {match[0]!r}: {error.status} "
-                        f"{error_message} for GET {error.request_info.real_url.human_repr()}"
+                        f'Failed to fetch code snippet from {match[0]!r}: {error.status} '
+                        f'{error_message} for GET {error.request_info.real_url.human_repr()}'
                     )
 
         # Sorts the list of snippets by their match index and joins them into a single message
@@ -350,7 +350,7 @@ class Base(commands.Cog, name='Exclusives'):
 
     async def cog_command_error(self, ctx: Context, error: commands.CommandError):
         if isinstance(error, GithubError):
-            await ctx.send_tick(False, f'Github API Error: {error}')
+            await ctx.stick(False, f'Github API Error: {error}')
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):
@@ -437,7 +437,7 @@ class Base(commands.Cog, name='Exclusives'):
             )
             try:
                 await thread.send(content=thread.owner.mention,
-                                  embed=discord.Embed(title="Thread Closed",
+                                  embed=discord.Embed(title='Thread Closed',
                                                       description=low_quality_title,
                                                       color=discord.Color.yellow()))
             except discord.Forbidden as e:
@@ -468,22 +468,22 @@ class Base(commands.Cog, name='Exclusives'):
         if field_width is None:
             field_width = len(max(mapping.keys(), key=len))
 
-        out = ""
+        out = ''
 
         for key, val in fields:
             if isinstance(val, dict):
                 inner_width = int(field_width * 1.6)
-                val = "\n" + self.format_fields(val, field_width=inner_width)
+                val = '\n' + self.format_fields(val, field_width=inner_width)
 
             elif isinstance(val, str):
                 text = textwrap.fill(val, width=100, replace_whitespace=False)
-                val = textwrap.indent(text, " " * (field_width + len(": ")))
+                val = textwrap.indent(text, ' ' * (field_width + len(': ')))
                 val = val.lstrip()
 
-            if key == "color":
+            if key == 'color':
                 val = hex(val)
 
-            out += "{0:>{width}}: {1}\n".format(key, val, width=field_width)
+            out += '{0:>{width}}: {1}\n'.format(key, val, width=field_width)
 
         return out.rstrip()
 
@@ -494,22 +494,22 @@ class Base(commands.Cog, name='Exclusives'):
         """
 
         if not message.channel.permissions_for(ctx.author).read_messages:
-            await ctx.send(f"{ctx.tick(False)} You do not have permissions to see the channel this message is in.")
+            await ctx.stick(False, 'You do not have permissions to see the channel this message is in.')
             return
 
         raw_data = await ctx.bot.http.get_message(message.channel.id, message.id)
-        paginator = TextSource(prefix="```json", suffix="```")
+        paginator = TextSource(prefix='```json', suffix='```')
 
         def add_content(title: str, content: str) -> None:  # noqa
-            paginator.add_line(f"== {title} ==\n")
-            paginator.add_line(content.replace("`", "`\u200b"))
+            paginator.add_line(f'== {title} ==\n')
+            paginator.add_line(content.replace('`', '`\u200b'))
             paginator.close_page()
 
         if message.content:
-            add_content("Raw message", message.content)
+            add_content('Raw message', message.content)
 
         transformer = pprint.pformat if json else self.format_fields
-        for field_name in ("embeds", "attachments"):
+        for field_name in ('embeds', 'attachments'):
             data = raw_data[field_name]  # type: ignore
 
             if not data:
@@ -517,29 +517,29 @@ class Base(commands.Cog, name='Exclusives'):
 
             total = len(data)
             for current, item in enumerate(data, start=1):
-                title = f"Raw {field_name} ({current}/{total})"
+                title = f'Raw {field_name} ({current}/{total})'
                 add_content(title, transformer(item))
 
         for page in paginator.pages:
             await ctx.send(page)
 
-    @commands_ext.command(commands.command, description="Shows information about the raw API response for a message.")
+    @commands_ext.command(commands.command, description='Shows information about the raw API response for a message.')
     async def raw(self, ctx: Context, message: discord.Message, to_json: bool = False) -> None:
         """Shows information about the raw API response."""
         await self.send_raw_content(ctx, message, json=to_json)
 
-    @commands_ext.command(commands.command, aliases=("snf", "snfl", "sf"))
+    @commands_ext.command(commands.command, aliases=('snf', 'snfl', 'sf'))
     async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
         """Get Discord snowflake creation time."""
         if not snowflakes:
-            raise commands.BadArgument(f"{ctx.tick(False)} At least one snowflake must be provided.")
+            raise commands.BadArgument(f'{ctx.tick(False)} At least one snowflake must be provided.')
 
         lines = []
         for snowflake in snowflakes:
             created_at = discord.utils.snowflake_time(snowflake)
-            lines.append(f"- **{snowflake}** • Created: {created_at} ({discord.utils.format_dt(created_at, 'R')})")
+            lines.append(f'- **{snowflake}** • Created: {created_at} ({discord.utils.format_dt(created_at, 'R')})')
 
-        await ctx.send("\n".join(lines))
+        await ctx.send('\n'.join(lines))
 
 
 async def setup(bot: Percy):

@@ -14,7 +14,7 @@ from cogs.utils.function import BoundArgs, command_wraps
 from launcher import get_logger
 
 log = get_logger(__name__)
-__lock_dicts = defaultdict(WeakValueDictionary)  # type: defaultdict[Hashable]  # lying
+__lock_dicts: defaultdict[Hashable] = defaultdict(WeakValueDictionary)  # noqa
 
 _IdCallableReturn = Hashable | Awaitable[Hashable]
 _IdCallable = Callable[[BoundArgs], _IdCallableReturn]
@@ -42,8 +42,8 @@ class LockedResourceError(RuntimeError):
         self.bypass_log = True
 
         super().__init__(
-            f"Cannot operate on {self.type.lower()} `{self.id}`; "
-            "it is currently locked and in use by another operation."
+            f'Cannot operate on {self.type.lower()} `{self.id}`; '
+            'it is currently locked and in use by another operation.'
         )
 
 
@@ -128,22 +128,22 @@ def lock(
 
         @command_wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            log.trace(f"{name}: mutually exclusive decorator called")
+            log.trace(f'{name}: mutually exclusive decorator called')
 
             if callable(resource_id):
-                log.trace(f"{name}: binding args to signature")
+                log.trace(f'{name}: binding args to signature')
                 bound_args = function.get_bound_args(func, args, kwargs)
 
-                log.trace(f"{name}: calling the given callable to get the resource ID")
+                log.trace(f'{name}: calling the given callable to get the resource ID')
                 id_ = resource_id(bound_args)
 
                 if inspect.isawaitable(id_):
-                    log.trace(f"{name}: awaiting to get resource ID")
+                    log.trace(f'{name}: awaiting to get resource ID')
                     id_ = await id_
             else:
                 id_ = resource_id
 
-            log.trace(f"{name}: getting the lock object for resource {namespace!r}:{id_!r}")
+            log.trace(f'{name}: getting the lock object for resource {namespace!r}:{id_!r}')
 
             # Get the lock for the ID. Create a lock if one doesn't exist yet.
             locks = __lock_dicts[namespace]
@@ -154,11 +154,11 @@ def lock(
             #   2. `asyncio.Lock.acquire()` does not internally await anything if the lock is free
             #   3. awaits only yield execution to the event loop at actual I/O boundaries
             if wait or not waiter_lock.locked():
-                log.debug(f"{name}: acquiring lock for resource {namespace!r}:{id_!r}...")
+                log.debug(f'{name}: acquiring lock for resource {namespace!r}:{id_!r}...')
                 async with waiter_lock:
                     return await func(*args, **kwargs)
             else:
-                log.info(f"{name}: aborted because resource {namespace!r}:{id_!r} is locked")
+                log.info(f'{name}: aborted because resource {namespace!r}:{id_!r} is locked')
                 if raise_error:
                     raise LockedResourceError(str(namespace), id_)
                 return None
@@ -184,10 +184,10 @@ def watch_func(func: types.FunctionType) -> Coro:
         name = func.__name__
 
         bound_args = function.get_bound_args(func, args, kwargs)
-        log.trace(f"{name}: calling the given callable to get the resource ID")
+        log.trace(f'{name}: calling the given callable to get the resource ID')
 
-        id_ = f"{name}." + ".".join(['%s=%r' % (k, v) for k, v in bound_args.items()])
-        log.trace(f"{name}: getting the lock object for resource {func.__name__!r}:{id_!r}")
+        id_ = f'{name}.' + '.'.join(['%s=%r' % (k, v) for k, v in bound_args.items()])
+        log.trace(f'{name}: getting the lock object for resource {func.__name__!r}:{id_!r}')
 
         _inter_lock = __lock_dicts.setdefault(id_, asyncio.Lock())
 
@@ -231,14 +231,14 @@ def lock_func(
 
         @command_wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            log.trace(f"{name}: mutually exclusive decorator called")
+            log.trace(f'{name}: mutually exclusive decorator called')
 
             bound_args = function.get_bound_args(func, args, kwargs)
-            log.trace(f"{name}: calling the given callable to get the resource ID")
+            log.trace(f'{name}: calling the given callable to get the resource ID')
 
-            id_ = f"{name}." + ".".join(['%s=%r' % (k, v) for k, v in bound_args.items()])
+            id_ = f'{name}.' + '.'.join(['%s=%r' % (k, v) for k, v in bound_args.items()])
 
-            log.trace(f"{name}: getting the lock object for resource {watched.__name__!r}:{id_!r}")
+            log.trace(f'{name}: getting the lock object for resource {watched.__name__!r}:{id_!r}')
 
             # Get the lock for the ID. Create a lock if one doesn't exist yet.
             func_lock = __lock_dicts.setdefault(id_, asyncio.Lock())
@@ -248,11 +248,11 @@ def lock_func(
             #   2. `asyncio.Lock.acquire()` does not internally await anything if the lock is free
             #   3. awaits only yield execution to the event loop at actual I/O boundaries
             if wait or not func_lock.locked():
-                log.debug(f"{name}: acquiring lock for resource {watched.__name__!r}:{id_!r}...")
+                log.debug(f'{name}: acquiring lock for resource {watched.__name__!r}:{id_!r}...')
                 async with func_lock:
                     return await func(*args, **kwargs)
             else:
-                log.info(f"{name}: aborted because resource {watched.__name__!r}:{id_!r} is locked")
+                log.info(f'{name}: aborted because resource {watched.__name__!r}:{id_!r} is locked')
                 if raise_error:
                     raise LockedResourceError(str(func.__name__), id_)
                 return None

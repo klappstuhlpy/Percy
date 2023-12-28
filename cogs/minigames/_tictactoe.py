@@ -80,7 +80,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
         state = self.view.get_board_state(self.x, self.y)
         if player.current_selection is not None:
             await interaction.response.send_message(
-                "You've already selected a piece, you can't select multiple pieces.", ephemeral=True
+                'You\'ve already selected a piece, you can\'t select multiple pieces.', ephemeral=True
             )
             return
 
@@ -148,7 +148,7 @@ class TicTacToe(discord.ui.View):
             return False
 
         if interaction.user != self.current_player.member:
-            await interaction.response.send_message("It's not your turn.", ephemeral=True)
+            await interaction.response.send_message('It\'s not your turn.', ephemeral=True)
             return False
 
         return True
@@ -196,11 +196,11 @@ class TicTacToe(discord.ui.View):
     def embed(self) -> discord.Embed:
         next_player = self.players[(self.player_index + 1) % len(self.players)]
         return discord.Embed(
-            title="TicTacToe",
+            title='TicTacToe',
             description=f'It is now {self.current_player.kind.emoji} {self.current_player.member.mention}\'s turn with '
                         f'currently {plural(self.get_player_fields):field}.',
             colour=helpers.Colour.light_orange(),
-        ).set_footer(text=f"Next Player: {next_player.member.name}")
+        ).set_footer(text=f'Next Player: {next_player.member.name}')
 
     @property
     def current_player(self) -> Player:
@@ -253,7 +253,7 @@ class Prompt(discord.ui.View):
     @discord.ui.button(label='Decline', style=discord.ButtonStyle.red)
     async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
-            title="TicTacToe",
+            title='TicTacToe',
             description=f'Your Challenge was declined.',
             colour=helpers.Colour.light_red(),
         )

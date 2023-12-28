@@ -127,24 +127,24 @@ class TextSource:
         return self._pages
 
 
-class JumpToModal(discord.ui.Modal, title="Jump to"):
+class JumpToModal(discord.ui.Modal, title='Jump to'):
     """Modal that prompts users for the page number to change to"""
-    page_number = discord.ui.TextInput(label="Page Index", style=discord.TextStyle.short)
+    page_number = discord.ui.TextInput(label='Page Index', style=discord.TextStyle.short)
 
     def __init__(self, paginator: BasePaginator):
         super().__init__(timeout=30)
         self.paginator: BasePaginator = paginator
-        self.page_number.placeholder = f"Enter a Number between 1 and {self.paginator.total_pages}"
+        self.page_number.placeholder = f'Enter a Number between 1 and {self.paginator.total_pages}'
         self.page_number.min_length = 1
         self.page_number.max_length = len(str(self.paginator.total_pages))
 
     # noinspection PyProtectedMember
     async def on_submit(self, interaction: discord.Interaction, /):
         if not self.page_number.value.isdigit():
-            return await interaction.response.send_message("Please enter a number.", ephemeral=True)
+            return await interaction.response.send_message('Please enter a number.', ephemeral=True)
         if not 1 <= int(self.page_number.value) <= self.paginator.total_pages:
             return await interaction.response.send_message(
-                f"Please enter a valid page number in range `1` to `{self.paginator.total_pages}`.", ephemeral=True)
+                f'Please enter a valid page number in range `1` to `{self.paginator.total_pages}`.', ephemeral=True)
 
         value = int(self.page_number.value) - 1
         count = value - self.paginator._current_page
@@ -153,9 +153,9 @@ class JumpToModal(discord.ui.Modal, title="Jump to"):
         return await interaction.response.edit_message(**self.paginator._message_kwargs(page))
 
 
-class SearchForModal(discord.ui.Modal, title="Search for Similarity"):
+class SearchForModal(discord.ui.Modal, title='Search for Similarity'):
     """Modal that prompts users to search in all embeds for query similarities"""
-    query = discord.ui.TextInput(label="Query", style=discord.TextStyle.short)
+    query = discord.ui.TextInput(label='Query', style=discord.TextStyle.short)
 
     def __init__(self, paginator: BasePaginator):
         super().__init__(timeout=60)
@@ -229,7 +229,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
     @property
     def middle(self) -> str:
         """:class:`str`: Returns the middle text for the paginator."""
-        return f"{self.current_page}/{self.total_pages}"
+        return f'{self.current_page}/{self.total_pages}'
 
     def _message_kwargs(self, page: T) -> dict:
         """:class:`dict`: The kwargs to edit/send the message with."""
@@ -305,15 +305,15 @@ class BasePaginator(discord.ui.View, Generic[T]):
                 if current.fields:
                     name_results = fuzzy.finder(query, current.fields, key=lambda x: x.name or x.value)
                     for entry in name_results:
-                        results.append(f"[{index}] {discord.utils.remove_markdown(entry.name)}")
+                        results.append(f'[{index}] {discord.utils.remove_markdown(entry.name)}')
                 if current.description:
                     description_results = fuzzy.finder(query, current.description.split('\n'))
                     for entry in description_results:
-                        results.append(f"[{index}] {discord.utils.remove_markdown(entry)}")
+                        results.append(f'[{index}] {discord.utils.remove_markdown(entry)}')
             elif isinstance(current, str):
                 current_results = fuzzy.finder(query, current)
                 for entry in current_results:
-                    results.append(f"[{index}] {discord.utils.remove_markdown(entry)}")
+                    results.append(f'[{index}] {discord.utils.remove_markdown(entry)}')
         try:
             result = results[0]
         except ValueError:
@@ -322,7 +322,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
                 ephemeral=True
             )
 
-        ID_REGEX = re.compile(r"\[(\d+)] .+")
+        ID_REGEX = re.compile(r'\[(\d+)] .+')
         value = int(ID_REGEX.match(result[0]).groups()[0]) - 1
         count = value - self._current_page
         entries = self._switch_page(abs(count) if value > self._current_page else -abs(count))
@@ -596,7 +596,7 @@ class FilePaginator(BasePaginator[AnyStr]):
         files = []
         for entry in entries:
             if len(entry) < 8388608:  # 8 MB
-                files.append(discord.File(fp=io.BytesIO(entry), filename=f"{uuid.uuid4()}.png"))
+                files.append(discord.File(fp=io.BytesIO(entry), filename=f'{uuid.uuid4()}.png'))
         return files
 
     def _message_kwargs(self, page: List[discord.File]) -> dict:
@@ -633,7 +633,7 @@ class PaginatorInterface(BasePaginator[AnyStr]):
 
     This allows users to interactively navigate the pages of a Paginator, and supports live output."""
 
-    def __init__(self, *, prefix: str = "```", suffix: str = "```", max_size: int = 2000, entries: List[AnyStr],
+    def __init__(self, *, prefix: str = '```', suffix: str = '```', max_size: int = 2000, entries: List[AnyStr],
                  per_page: int = 10, clamp_pages: bool = True, timeout: int = 180) -> None:
         self.interface: TextSource = TextSource(prefix=prefix, suffix=suffix, max_size=max_size)
         self.sent_page_reactions = False
@@ -742,10 +742,10 @@ class PaginatorInterface(BasePaginator[AnyStr]):
         """Waits on a loop for updates to the interface. This should not be called manually - it is handled by `send_to`."""
 
         if not self.msg:
-            raise RuntimeError("Message not set on PaginatorInterface")
+            raise RuntimeError('Message not set on PaginatorInterface')
 
         if not self.ctx.bot.user:
-            raise RuntimeError("A PaginatorInterface cannot be started while the bot is offline")
+            raise RuntimeError('A PaginatorInterface cannot be started while the bot is offline')
 
         try:
             while not self.ctx.bot.is_closed():

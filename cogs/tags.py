@@ -47,7 +47,7 @@ class TagNameOrID(commands.clean_content):
 
         if not lower:
             raise commands.BadArgument(
-                '<:redTick:1079249771975413910> Please enter a valid tag name' + " or id." if self.with_id else '.')
+                '<:redTick:1079249771975413910> Please enter a valid tag name' + ' or id.' if self.with_id else '.')
 
         if len(lower) > 100:
             raise commands.BadArgument(
@@ -88,20 +88,20 @@ class TagContent(commands.clean_content):
 
 
 class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
+    query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
-        description="The key to sort the results.", aliases=['s'], default='name')
-    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'],
+        description='The key to sort the results.', aliases=['s'], default='name')
+    to_text: bool = commands.flag(description='Whether to output the results as raw tabular text.', aliases=['tt'],
                                   default=False)
 
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    member: Optional[discord.Member] = commands.flag(description="The member to search for", aliases=['m'],
+    member: Optional[discord.Member] = commands.flag(description='The member to search for', aliases=['m'],
                                                      default=None)
-    query: Optional[str] = commands.flag(description="The query to search for", aliases=['q'], default=None)
+    query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
-        description="The key to sort the results.", aliases=['s'], default='name')
-    to_text: bool = commands.flag(description="Whether to output the results as raw tabular text.", aliases=['tt'],
+        description='The key to sort the results.', aliases=['s'], default='name')
+    to_text: bool = commands.flag(description='Whether to output the results as raw tabular text.', aliases=['tt'],
                                   default=False)
 
 
@@ -260,7 +260,7 @@ class Tag(PostgresItem):
         if not kwargs:
             return None
 
-        query = "UPDATE tags SET " + ', '.join(f'{k}=${i}' for i, k in enumerate(kwargs, start=2)) + " WHERE id=$1;"
+        query = "UPDATE tags SET " + ", ".join(f'{k}=${i}' for i, k in enumerate(kwargs, start=2)) + " WHERE id=$1;"
         try:
             updated = await self.bot.pool.fetchrow(query, self.id, *kwargs.values())
         except Exception as e:
@@ -270,9 +270,9 @@ class Tag(PostgresItem):
                         '<:redTick:1079249771975413910> A Tag with this name already exists.')
                 case asyncpg.StringDataRightTruncationError():
                     raise commands.BadArgument(
-                        "<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.")
+                        '<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.')
                 case asyncpg.CheckViolationError():
-                    raise commands.BadArgument("<:redTick:1079249771975413910> Tag Content is missing.")
+                    raise commands.BadArgument('<:redTick:1079249771975413910> Tag Content is missing.')
                 case _:
                     raise e
 
@@ -475,8 +475,7 @@ class Tags(commands.Cog):
 
         to_return = None
 
-        query = "SELECT * FROM tags WHERE " + ' AND '.join(
-            f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+        query = "SELECT * FROM tags WHERE " + " AND ".join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
         if not parent:
@@ -498,7 +497,7 @@ class Tags(commands.Cog):
                 search_kwargs.pop('name')
 
             search_kwargs['parent_id'] = parent['id']
-            query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + ' AND '.join(
+            query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + " AND ".join(
                 f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
             aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
@@ -506,7 +505,7 @@ class Tags(commands.Cog):
                 to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
         else:
             if exact_match:
-                query = "SELECT * FROM tag_lookup WHERE " + ' AND '.join(
+                query = "SELECT * FROM tag_lookup WHERE " + " AND ".join(
                     f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
                 alias = await self.bot.pool.fetchrow(query, name_or_id)
                 if alias:
@@ -563,16 +562,17 @@ class Tags(commands.Cog):
         if isinstance(tag, list):
             # Assuming no tags were found and similarites are returned instead
             if tag is None or len(tag) == 0:
-                await ctx.send_tick(False, 'No Tag with this name or similar name found.')
+                await ctx.stick(False, 'No Tag with this name or similar name found.')
             else:
-                embed = discord.Embed(title="*Did you mean ...*", colour=self.bot.colour.darker_red())
+                embed = discord.Embed(title='*Did you mean ...*', colour=self.bot.colour.darker_red())
                 await LinePaginator.start(
-                    ctx, entries=[f"* **{r.name}** [`{r.id}`]" for r in tag], embed=embed, per_page=20
+                    ctx, entries=[f'* **{r.name}** [`{r.id}`]' for r in tag], embed=embed, per_page=20
                 )
             return
 
         if not tag:
-            return await ctx.send_tick(False, f'No Tag with the name or ID `{name_or_id}` found.')
+            await ctx.stick(False, f'No Tag with the name or ID `{name_or_id}` found.')
+            return
 
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
@@ -634,15 +634,15 @@ class Tags(commands.Cog):
                             '<:redTick:1079249771975413910> A Tag with this name already exists.')
                     case asyncpg.StringDataRightTruncationError():
                         raise commands.BadArgument(
-                            "<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.")
+                            '<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.')
                     case asyncpg.CheckViolationError():
-                        raise commands.BadArgument("<:redTick:1079249771975413910> Tag Content is missing.")
+                        raise commands.BadArgument('<:redTick:1079249771975413910> Tag Content is missing.')
                     case _:
                         raise commands.BadArgument(
                             '<:redTick:1079249771975413910> Tag could not be created due to an Unknown reason. Try again later?')
             else:
                 await tr.commit()
-                await ctx.send(f'<:greenTick:1079249732364406854> Tag `{name}` was successfully created.')
+                await ctx.stick(True, f'Tag `{name}` was successfully created.')
 
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
         """Helper method to check if a Tag with ``name`` is currently being made or reserved.
@@ -712,9 +712,9 @@ class Tags(commands.Cog):
 
     @commands_ext.command(
         commands.hybrid_group,
-        name="tag",
-        description="Shows a tag from the server.",
-        fallback="show"
+        name='tag',
+        description='Shows a tag from the server.',
+        fallback='show'
     )
     @commands.guild_only()
     @app_commands.describe(name_or_id='The tag to retrieve')
@@ -733,10 +733,10 @@ class Tags(commands.Cog):
 
     @commands_ext.command(
         tag.command,
-        name="alias",
-        description="Creates a new alias for an existing tag.",
-        examples=["new-alias original-tag",
-                  "\"new alias\" original tag"]
+        name='alias',
+        description='Creates a new alias for an existing tag.',
+        examples=['new-alias original-tag',
+                  '\'new alias\' original tag']
     )
     @commands.guild_only()
     @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
@@ -766,22 +766,20 @@ class Tags(commands.Cog):
         try:
             status = await ctx.db.execute(query, new_alias, original_tag.lower(), ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
-            await ctx.send('<:redTick:1079249771975413910> This alias is already taken.')
+            await ctx.stick(False, 'This alias is already taken.')
         else:
             if status[-1] == '0':
-                await ctx.send(
-                    f'<:redTick:1079249771975413910> A tag with the name **{original_tag}** does not exist.')
+                await ctx.stick(False, 'A tag with the name **{original_tag}** does not exist.')
             else:
-                await ctx.send(
-                    f'<:greenTick:1079249732364406854> Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
+                await ctx.stick(True, 'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
 
     @commands_ext.command(
         tag.command,
-        name="create",
-        description="Creates a new tag in the server.",
-        aliases=["add"],
-        examples=["new-tag This is the content of the tag.",
-                  "\"new tag\" This is the content of the tag."]
+        name='create',
+        description='Creates a new tag in the server.',
+        aliases=['add'],
+        examples=['new-tag This is the content of the tag.',
+                  '\'new tag\' This is the content of the tag.']
     )
     @commands.guild_only()
     @app_commands.describe(name='The tag name', content='The tag content')
@@ -802,8 +800,8 @@ class Tags(commands.Cog):
 
     @commands_ext.command(
         tag.command,
-        name="make",
-        description="Interactively create a Tag owned by yourself in this server.",
+        name='make',
+        description='Interactively create a Tag owned by yourself in this server.',
         ignore_extra=True
     )
     @commands.guild_only()
@@ -822,7 +820,7 @@ class Tags(commands.Cog):
         converter = TagNameOrID()
         original = ctx.message
 
-        messages.append(await ctx.send("What would you like the tag's **name** to be?"))
+        messages.append(await ctx.send('What would you like the tag\'s **name** to be?'))
 
         def check(msg: discord.Message):  # noqa
             return msg.author == ctx.author and ctx.channel == msg.channel
@@ -842,9 +840,7 @@ class Tags(commands.Cog):
 
         tag = self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True)
         if tag is not None:
-            return await ctx.send(
-                '<:redTick:1079249771975413910> Sorry. This name is already taken. Please choose another one.'
-            )
+            return await ctx.stick(False, 'Sorry. This name is already taken. Please choose another one.')
 
         with self.reserve_tag(ctx.guild.id, name):
             messages.append(await ctx.send(
@@ -987,7 +983,7 @@ class Tags(commands.Cog):
 
         count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
 
-        e.add_field(name='**Tag Command Uses**', value=f"**{count[0]}** times", inline=False)
+        e.add_field(name='**Tag Command Uses**', value=f'**{count[0]}** times', inline=False)
         e.add_field(name='**Owned Tags**', value=owned)
         e.add_field(name='**Owned Tags Used**', value=uses)
 
@@ -1029,7 +1025,7 @@ class Tags(commands.Cog):
         name_or_id='The Tag you want to edit. (Must be yours)',
         content='The new content of the tag. (If not given, you will be prompted to edit the tag in a modal.)',
     )
-    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
     async def tag_edit(
             self,
@@ -1051,11 +1047,11 @@ class Tags(commands.Cog):
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id)
 
         if not tag:
-            return await ctx.send_tick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
+            return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
 
         if content is None and use_embed is None:
             if ctx.interaction is None:
-                return await ctx.send_tick(False, 'Missing content to edit tag with')
+                return await ctx.stick(False, 'Missing content to edit tag with')
             else:
                 modal = TagEditModal(tag)
                 await ctx.interaction.response.send_modal(modal)
@@ -1065,10 +1061,10 @@ class Tags(commands.Cog):
 
         if content:
             if len(content) > 2000:
-                return await ctx.send('<:redTick:1079249771975413910> Tag content can only be up to 2000 characters')
+                return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
 
         await tag.edit(use_embed=use_embed, content=content)
-        await ctx.send_tick(True, 'Successfully edited tag.')
+        await ctx.stick(True, 'Successfully edited tag.')
         # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
         await self.send_tag(ctx, name_or_id)
 
@@ -1102,7 +1098,7 @@ class Tags(commands.Cog):
                                      only_parent=True)
 
         if not tag:
-            return await ctx.send_tick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
+            return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
 
         await tag.delete()
 
@@ -1129,10 +1125,10 @@ class Tags(commands.Cog):
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id)
 
         if tag is None:
-            return await ctx.send('<:redTick:1079249771975413910> Tag was not found.')
+            return await ctx.stick(False, 'Tag was not found.')
 
-        embed = discord.Embed(title="Tag Info", description=f"**```{tag.name}```**\n")
-        embed.add_field(name="**Owner**", value=f"<@{tag.owner_id}>")
+        embed = discord.Embed(title='Tag Info', description=f'**```{tag.name}```**\n')
+        embed.add_field(name='**Owner**', value=f'<@{tag.owner_id}>')
 
         user = self.bot.get_user(tag.owner_id) or (await self.bot.fetch_user(tag.owner_id))
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
@@ -1146,7 +1142,7 @@ class Tags(commands.Cog):
             if rank in (1, 2, 3):
                 text += f' {chr(129350 + int(rank))}'
 
-            embed.add_field(name=text, value=f"**#{rank}**")
+            embed.add_field(name=text, value=f'**#{rank}**')
 
         embed.add_field(name='**Tag Used**', value=tag.uses)
 
@@ -1154,9 +1150,9 @@ class Tags(commands.Cog):
             value = []
             for alias in tag.aliases:
                 value.append(
-                    f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})')
+                    f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})')
 
-            embed.add_field(name=f"**Aliases ({len(tag.aliases)})**", value='\n'.join(value), inline=False)
+            embed.add_field(name=f'**Aliases ({len(tag.aliases)})**', value='\n'.join(value), inline=False)
 
         await ctx.send(embed=embed)
 
@@ -1191,11 +1187,11 @@ class Tags(commands.Cog):
         member = flags.member or ctx.author
 
         SORT = {
-            "id": "id",
-            "newest": "created_at DESC",
-            "oldest": "created_at ASC",
-            "name": "name DESC"
-        }.get(flags.sort, "name DESC")
+            'id': 'id',
+            'newest': 'created_at DESC',
+            'oldest': 'created_at ASC',
+            'name': 'name DESC'
+        }.get(flags.sort, 'name DESC')
 
         if not flags.query:
             query = f"""
@@ -1206,8 +1202,8 @@ class Tags(commands.Cog):
             """
             values = (ctx.guild.id, member.id)
         else:
-            if flags.sort == "name":
-                SORT = "similarity(name, $2) DESC"
+            if flags.sort == 'name':
+                SORT = 'similarity(name, $2) DESC'
 
             query = f"""
                 SELECT name, id
@@ -1223,19 +1219,19 @@ class Tags(commands.Cog):
             if flags.to_text:
                 await self.send_tags_to_text(ctx, rows)
             else:
-                embed = discord.Embed(title="Tag Search",
-                                      description=f"**{member}'s** Tags in {ctx.guild.name}",
+                embed = discord.Embed(title='Tag Search',
+                                      description=f'**{member}\'s** Tags in {ctx.guild.name}',
                                       colour=helpers.Colour.darker_red(),
                                       timestamp=discord.utils.utcnow())
-                embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
+                embed.set_footer(text=f'{plural(len(rows)):entry|entries}')
 
-                results = [f"`{index}.` {entry}" for index, entry in
+                results = [f'`{index}.` {entry}' for index, entry in
                            enumerate([TagPageEntry(record=row) for row in rows], 1)]
                 await LinePaginator.start(
                     ctx, entries=results, search_for=True, per_page=20, embed=embed
                 )
         else:
-            await ctx.send(f'<:redTick:1079249771975413910> **{member}** currently has no tags.')
+            await ctx.stick(False, f'**{member}** currently has no tags.')
 
     @commands_ext.command(
         tag.command,
@@ -1253,18 +1249,17 @@ class Tags(commands.Cog):
         count = row[0]
 
         if count == 0:
-            return await ctx.send(f'<:redTick:1079249771975413910> **{member}** does not have any tags to purge.')
+            return await ctx.stick(False, f'**{member}** does not have any tags to purge.')
 
         confirm = await ctx.prompt(
             f'<:warning:1113421726861238363> This will delete **{count}** tags are you sure? **This action cannot be reversed**.')
         if not confirm:
-            return await ctx.send('<:redTick:1079249771975413910> Cancelling tag purge request.')
+            return await ctx.stick(False, 'Cancelling tag purge request.')
 
         query = "DELETE FROM tags WHERE location_id=$1 AND owner_id=$2;"
         await ctx.db.execute(query, ctx.guild.id, member.id)
 
-        await ctx.send(
-            f'<:greenTick:1079249732364406854> Successfully removed all **{count}** tags that belong to **{member}**.')
+        await ctx.stick(True, f'Successfully removed all **{count}** tags that belong to **{member}**.')
 
     @commands_ext.command(
         tag.command,
@@ -1292,11 +1287,11 @@ class Tags(commands.Cog):
         """
 
         SORT = {
-            "id": "id",
-            "newest": "created_at DESC",
-            "oldest": "created_at ASC",
-            "name": "name DESC"
-        }.get(flags.sort, "name DESC")
+            'id': 'id',
+            'newest': 'created_at DESC',
+            'oldest': 'created_at ASC',
+            'name': 'name DESC'
+        }.get(flags.sort, 'name DESC')
 
         if not flags.query:
             query = f"""
@@ -1307,8 +1302,8 @@ class Tags(commands.Cog):
             """
             values = (ctx.guild.id,)
         else:
-            if flags.sort == "name":
-                SORT = "similarity(name, $2) DESC"
+            if flags.sort == 'name':
+                SORT = 'similarity(name, $2) DESC'
 
             query = f"""
                 SELECT name, id
@@ -1324,19 +1319,19 @@ class Tags(commands.Cog):
             if flags.to_text:
                 await self.send_tags_to_text(ctx, rows)
             else:
-                embed = discord.Embed(title="Tag Search",
-                                      description=f"Sorted by: **{flags.sort}**",
+                embed = discord.Embed(title='Tag Search',
+                                      description=f'Sorted by: **{flags.sort}**',
                                       colour=helpers.Colour.darker_red(),
                                       timestamp=discord.utils.utcnow())
-                embed.set_footer(text=f"{plural(len(rows)):entry|entries}")
+                embed.set_footer(text=f'{plural(len(rows)):entry|entries}')
 
-                results = [f"`{index}.` {entry}" for index, entry in
+                results = [f'`{index}.` {entry}' for index, entry in
                            enumerate([TagPageEntry(record=row) for row in rows], 1)]
                 await LinePaginator.start(
                     ctx, entries=results, search_for=True, per_page=20, embed=embed
                 )
         else:
-            await ctx.send('<:redTick:1079249771975413910> No tags found.')
+            await ctx.stick(False, 'No tags found.')
 
     @commands_ext.command(
         tag.command,
@@ -1358,14 +1353,14 @@ class Tags(commands.Cog):
 
         member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
         if member is not None:
-            return await ctx.send('<:redTick:1079249771975413910> Tag owner is still in server.')
+            return await ctx.stick(False, 'Tag owner is still in server.')
 
         if isinstance(tag, AliasTag):
             await tag.transfer(ctx.author, connection=self.bot.pool)  # type: ignore
         else:
             await tag.transfer(ctx.author, only_parent=True)
 
-        await ctx.send('<:greenTick:1079249732364406854> Successfully transferred tag ownership to you.')
+        await ctx.stick(True, 'Successfully transferred tag ownership to you.')
 
     @commands_ext.command(
         tag.command,
@@ -1385,18 +1380,17 @@ class Tags(commands.Cog):
     ):
         """Transfer a tag owned by you to another member."""
         if member.bot:
-            return await ctx.send('<:redTick:1079249771975413910> You cannot transfer a tag to a bot.')
+            return await ctx.stick(False, 'You cannot transfer a tag to a bot.')
 
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
                                  only_parent=True)
         if tag is None:
-            return await ctx.send(
-                f'<:redTick:1079249771975413910> A tag "**{name_or_id}**" does not exist or is not owned by you.')
+            return await ctx.stick(False, f'A tag "**{name_or_id}**" does not exist or is not owned by you.')
 
         await tag.transfer(member)
-        await ctx.send(f'<:greenTick:1079249732364406854> Successfully transferred tag ownership to **{member}**.')
+        await ctx.stick(True, f'Successfully transferred tag ownership to **{member}**.')
 
-    @commands_ext.command(tag.command, name='export', description="Exports all your tags/server tags to a csv file.")
+    @commands_ext.command(tag.command, name='export', description='Exports all your tags/server tags to a csv file.')
     @commands.cooldown(1, 60, commands.BucketType.member)
     @commands.guild_only()
     @app_commands.describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')
@@ -1408,7 +1402,7 @@ class Tags(commands.Cog):
         """Exports all your tags/server tags to a csv file."""
         if which == 'server':
             if ctx.author.id != ctx.guild.owner_id:
-                return await ctx.send('<:redTick:1079249771975413910> Only the server owner can export server tags.')
+                return await ctx.stick(False, 'Only the server owner can export server tags.')
 
             query = "SELECT name, content FROM tags WHERE location_id=$1;"
             values = (ctx.guild.id,)
@@ -1422,10 +1416,10 @@ class Tags(commands.Cog):
                     records = await conn.fetch(query, *values)
 
         if not records:
-            return await ctx.send('<:redTick:1079249771975413910> No tags were found.')
+            return await ctx.stick(False, 'No tags were found.')
 
         buffer = io.StringIO()
-        writer = csv.writer(buffer, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        writer = csv.writer(buffer, delimiter=',', quotechar="'", quoting=csv.QUOTE_MINIMAL)
         for record in records:
             writer.writerow([record[0], record[1]])
         buffer.seek(0)

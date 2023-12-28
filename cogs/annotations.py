@@ -194,7 +194,7 @@ class Annotations(commands.Cog):
 
         e = self.get_feedback_embed(ctx, summary=content)
         await channel.send(embed=e)
-        await ctx.send(f'{ctx.tick(True)} Successfully sent feedback')
+        await ctx.stick(False, 'Successfully sent feedback')
 
     @commands_ext.command(app_commands.command, name='feedback', description='Sends feedback about the bot to the owner.')
     async def feedback_slash(self, interaction: discord.Interaction):
@@ -213,9 +213,9 @@ class Annotations(commands.Cog):
         try:
             await user.send(fmt)
         except:
-            await ctx.send(f'{ctx.tick(False)} Could not PM user by ID `{user_id}`.')
+            await ctx.stick(False, f'Could not PM user by ID `{user_id}`.')
         else:
-            await ctx.send(f'{ctx.tick(True)} PM successfully sent.')
+            await ctx.stick(False, 'PM successfully sent.')
 
     @commands_ext.command(commands.command, name='urban', description="Searches the urban dictionary.")
     async def _urban(self, ctx: Context, *, word: str):
@@ -224,12 +224,12 @@ class Annotations(commands.Cog):
         url = 'http://api.urbandictionary.com/v0/define'
         async with ctx.session.get(url, params={'term': word}) as resp:
             if resp.status != 200:
-                return await ctx.send(f'{ctx.tick(False)} An error occurred: {resp.status} {resp.reason}')
+                return await ctx.stick(False, f'An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             data = js.get('list', [])
             if not data:
-                return await ctx.send(f'{ctx.tick(False)} No results found, sorry.')
+                return await ctx.stick(False, 'No results found, sorry.')
 
         await UrbanDictionaryPaginator.start(ctx, entries=data, per_page=1)
 
@@ -246,7 +246,7 @@ class Annotations(commands.Cog):
         url = 'https://www.thecolorapi.com/id'
         async with self.bot.session.get(url, params={'hex': f'{color.value:0>6x}'}) as resp:
             if resp.status != 200:
-                return await ctx.send(f'{ctx.user.mention} An error occurred: {resp.status} {resp.reason}')
+                return await ctx.stick(False, f'{ctx.user.mention} An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             embed.url = f"{url}?hex={color.value:0>6x}"

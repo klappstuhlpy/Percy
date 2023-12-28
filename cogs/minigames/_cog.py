@@ -47,7 +47,7 @@ class Minigame(commands.GroupCog):
 
         prompt = _tictactoe.Prompt(ctx.author._user, other._user)  # noqa
         embed = discord.Embed(
-            title="TicTacToe",
+            title='TicTacToe',
             description=f'{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n'
                         f'Do you accept this party, {other.mention}?',
             colour=helpers.Colour.light_orange(),
@@ -85,7 +85,7 @@ class Minigame(commands.GroupCog):
         ]
     )
     @app_commands.describe(language='The language to play with.')
-    async def hangman(self, ctx: Context, language: Literal["de", "en"] = "en"):
+    async def hangman(self, ctx: Context, language: Literal['de', 'en'] = 'en'):
         """Play hangman with the bot."""
 
         GER_WORDS_URL = 'https://raw.githubusercontent.com/enz/german-wordlist/master/words'
@@ -98,7 +98,7 @@ class Minigame(commands.GroupCog):
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
         async with WaitforHangman(self.bot, ctx, word) as builder:
-            message = await ctx.send(f"*If you want to stop the game, type `?abort`.*", embed=builder.build_embed())
+            message = await ctx.send(f'*If you want to stop the game, type `?abort`.*', embed=builder.build_embed())
 
             async for action in builder.wait_for():
                 message = await message.edit(embed=builder.build_embed())
@@ -118,7 +118,7 @@ class Minigame(commands.GroupCog):
                     builder.finished = -1
                     builder._current_colour = helpers.Colour.red()
                     await message.edit(embed=builder.build_embed())
-                    await ctx.send(f"<:redTick:1079249771975413910> You've lost. The word was **`{builder.word}`**.")
+                    await ctx.send(f'<:redTick:1079249771975413910> You\'ve lost. The word was **`{builder.word}`**.')
 
                     break  # Break out to prevent the bot from sending multiple messages
 

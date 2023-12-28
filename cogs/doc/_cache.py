@@ -18,8 +18,8 @@ log = get_logger(__name__)
 
 def serialize_resource_id_from_doc_item(bound_args: dict) -> str:
     """Return the cache key of the DocItem `item` from the bound args of DocRedisCache.set."""
-    item: DocItem = bound_args["item"]
-    return f"doc:{item_key(item)}"
+    item: DocItem = bound_args['item']
+    return f'doc:{item_key(item)}'
 
 
 class DocCache:
@@ -30,50 +30,50 @@ class DocCache:
         self.cache: dict[str, Any] = {}
         self._set_expires: dict[str, Any] = {}
 
-    @lock("DocCache.set", serialize_resource_id_from_doc_item, wait=True)
+    @lock('DocCache.set', serialize_resource_id_from_doc_item, wait=True)
     async def set(self, item: DocItem, value: str) -> None:
         """
         Set the Markdown `value` for the symbol `item`.
 
         All keys from a single page are stored together, expiring a week after the first set.
         """
-        cache_key = f"{self.namespace}:{item_key(item)}"
+        cache_key = f'{self.namespace}:{item_key(item)}'
         needs_expire = False
 
         set_expire = self._set_expires.get(cache_key)
         if set_expire is None:
             ttl = self._get_cache_ttl(cache_key)
-            log.debug(f"Checked TTL for `{cache_key}`.")
+            log.debug(f'Checked TTL for `{cache_key}`.')
 
             if ttl == -1:
-                log.warning(f"Key `{cache_key}` had no expire set.")
+                log.warning(f'Key `{cache_key}` had no expire set.')
             if ttl < 0:
                 needs_expire = True
             else:
-                log.debug(f"Key `{cache_key}` has a {ttl} TTL.")
+                log.debug(f'Key `{cache_key}` has a {ttl} TTL.')
                 self._set_expires[cache_key] = time.monotonic() + ttl - 0.1
 
         elif time.monotonic() > set_expire:
             needs_expire = True
-            log.debug(f"Key `{cache_key}` expired in internal key cache.")
+            log.debug(f'Key `{cache_key}` expired in internal key cache.')
 
         self.cache.setdefault(cache_key, {})
         self.cache[cache_key][item.symbol_id] = value
 
         if needs_expire:
             self._set_expires[cache_key] = time.monotonic() + WEEK_SECONDS
-            log.info(f"Set {cache_key} to expire in a week.")
+            log.info(f'Set {cache_key} to expire in a week.')
 
     async def get(self, item: DocItem) -> str | None:
         """Return the Markdown content of the symbol `item` if it exists."""
-        cache_key = f"{self.namespace}:{item_key(item)}"
+        cache_key = f'{self.namespace}:{item_key(item)}'
         if cache_key in self.cache and item.symbol_id in self.cache[cache_key]:
             return self.cache[cache_key][item.symbol_id]
         return None
 
     async def delete(self, package: str) -> bool:
         """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""
-        pattern = f"{self.namespace}:{package}:*"
+        pattern = f'{self.namespace}:{package}:*'
 
         package_keys = [
             key for key in self.cache.keys() if fnmatch.fnmatchcase(key, pattern)
@@ -81,7 +81,7 @@ class DocCache:
         if package_keys:
             for key in package_keys:
                 del self.cache[key]
-            log.info(f"Deleted keys from cache: {package_keys}.")
+            log.info(f'Deleted keys from cache: {package_keys}.')
             self._set_expires = {
                 key: expire for key, expire in self._set_expires.items() if not fnmatch.fnmatchcase(key, pattern)
             }
@@ -95,4 +95,4 @@ class DocCache:
 
 def item_key(item: DocItem) -> str:
     """Get the redis redis key string from `item`."""
-    return f"{item.package}:{item.relative_url_path.removesuffix('.html')}"
+    return f'{item.package}:{item.relative_url_path.removesuffix('.html')}'

@@ -20,7 +20,7 @@ class StringMatcher:
 
     def __init__(self, isjunk=None, seq1='', seq2=''):
         if isjunk:
-            warn("isjunk not NOT implemented, it will be ignored")
+            warn('isjunk not NOT implemented, it will be ignored')
         self._str1, self._str2 = seq1, seq2
         self._reset_cache()
 

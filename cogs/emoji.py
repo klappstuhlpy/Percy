@@ -26,7 +26,7 @@ def partial_emoji(argument: str, *, regex=EMOJI_REGEX) -> int:
 
     m = regex.match(argument)
     if m is None:
-        raise commands.BadArgument("<:redTick:1079249771975413910> That's not a custom emoji...")
+        raise commands.BadArgument('<:redTick:1079249771975413910> That\'s not a custom emoji...')
     return int(m.group(1))
 
 
@@ -74,7 +74,7 @@ class Emoji(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="bloblul", id=1112406101812592640)
+        return discord.PartialEmoji(name='bloblul', id=1112406101812592640)
 
     def cog_unload(self):
         self.bulk_insert.stop()
@@ -146,7 +146,7 @@ class Emoji(commands.Cog):
         """Returns a discord.Emoji object if the emoji is valid, otherwise returns None."""
         con = connection or self.bot.pool
 
-        query = "SELECT * FROM emoji_stats WHERE emoji_id=$1 LIMIT 1;"
+        query = 'SELECT * FROM emoji_stats WHERE emoji_id=$1 LIMIT 1;'
         record = await con.fetchrow(query, emoji_id)
 
         guild = self.bot.get_guild(record['guild_id'])
@@ -168,7 +168,7 @@ class Emoji(commands.Cog):
         await ctx.send_help(ctx.command)
 
     @commands_ext.command(commands.command, aliases=['emojilist'])
-    @commands_ext.command_permissions(3, user=["administrator"])
+    @commands_ext.command_permissions(3, user=['administrator'])
     @commands.cooldown(1, 600, commands.BucketType.guild)
     async def emojipost(self, ctx: GuildContext):
         """Fancy post the emoji lists"""
@@ -182,12 +182,12 @@ class Emoji(commands.Cog):
         for page in source.pages:
             await ctx.send(page)
 
-    @commands_ext.command(commands.command, name="randomemoji", aliases=["randemoji", "randemote", "randomemote"])
+    @commands_ext.command(commands.command, name='randomemoji', aliases=['randemoji', 'randemote', 'randomemote'])
     @commands.cooldown(1, 90, commands.BucketType.user)
     async def random_emoji(self, ctx: Context):
         """Sends a random emoji from the database."""
         emoji = self.bot.get_emoji(await self.get_random_emoji())
-        await ctx.send(f"<{'a' if emoji.animated else ''}:{emoji.name}:{emoji.id}>")
+        await ctx.send(f'<{'a' if emoji.animated else ''}:{emoji.name}:{emoji.id}>')
 
     @commands_ext.command(
         _emoji.command,
@@ -196,7 +196,7 @@ class Emoji(commands.Cog):
         aliases=['add'],
         usage='<name> [file] [emoji]',
     )
-    @commands_ext.command_permissions(3, user=["manage_emojis"], bot=["manage_emojis"])
+    @commands_ext.command_permissions(3, user=['manage_emojis'], bot=['manage_emojis'])
     @commands.guild_only()
     @app_commands.rename(emoji='emoji-or-url')
     @app_commands.describe(
@@ -264,11 +264,11 @@ class Emoji(commands.Cog):
                         case discord.HTTPException():
                             raise commands.BadArgument(f'<:redTick:1079249771975413910> Failed to create emoji somehow: {exc}')
                 else:
-                    embed = discord.Embed(title="Created Emoji",
+                    embed = discord.Embed(title='Created Emoji',
                                           colour=discord.Colour.from_rgb(*image_color),
-                                          description=f"Successfully added emoji to the server.\n"
-                                                      f"<{'a' if created.animated else ''}:{created.name}:{created.id}> • `{created.name}` • [`{created.id}`]\n"
-                                                      f"{'Animated ' if created.animated else ''}Emoji slots left: `{ctx.guild.emoji_limit - emoji_count - 1}`",
+                                          description=f'Successfully added emoji to the server.\n'
+                                                      f'<{'a' if created.animated else ''}:{created.name}:{created.id}> • `{created.name}` • [`{created.id}`]\n'
+                                                      f'{'Animated ' if created.animated else ''}Emoji slots left: `{ctx.guild.emoji_limit - emoji_count - 1}`',
                                           timestamp=discord.utils.utcnow())
                     embed.set_thumbnail(url=created.url)
                     return await ctx.send(embed=embed)
@@ -298,7 +298,7 @@ class Emoji(commands.Cog):
         """
         record = await ctx.db.fetchrow(query, ctx.guild.id)
         if record is None:
-            await ctx.send(f'{ctx.tick(False)} This server has no emoji stats yet.')
+            await ctx.stick(False, 'This server has no emoji stats yet.')
             return
 
         total = record['Count']
@@ -306,7 +306,7 @@ class Emoji(commands.Cog):
 
         assert ctx.me.joined_at is not None
         per_day = usage_per_day(ctx.me.joined_at, total)
-        e.description = f"`{total}` uses over `{emoji_used}` emoji for **{per_day:.2f}** uses per day."
+        e.description = f'`{total}` uses over `{emoji_used}` emoji for **{per_day:.2f}** uses per day.'
         e.set_footer(text=f'Emoji Stats since')
         e.timestamp = ctx.me.joined_at
 
@@ -330,7 +330,7 @@ class Emoji(commands.Cog):
 
         async with ctx.session.get(cdn) as resp:
             if resp.status == 404:
-                e.description = "This isn't a valid emoji."
+                e.description = 'This isn\'t a valid emoji.'
                 e.colour = 0x000000
                 e.set_thumbnail(url='https://static.vecteezy.com/system/resources/previews/000/440/213/original/question-mark-vector-icon.jpg')
                 await ctx.send(embed=e)
@@ -384,7 +384,7 @@ class Emoji(commands.Cog):
         emoji_ids = [e.id for e in ctx.guild.emojis]
 
         if not emoji_ids:
-            await ctx.send(f'{ctx.tick(False)} This guild has no custom emoji.')
+            await ctx.stick(False, 'This guild has no custom emoji.')
 
         query = """SELECT emoji_id, total
                    FROM emoji_stats

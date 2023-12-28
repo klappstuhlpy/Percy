@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import ssl
-import traceback
 from typing import Any, TYPE_CHECKING, Optional
 import hashlib
 import datetime
@@ -46,17 +44,17 @@ class Marvel:
             data: Optional[dict[str, Any]] = None,
             headers: Optional[dict[str, Any]] = None,
     ) -> Any:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d%H:%M:%S %Z")
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S %Z')
         params = {
-            "apikey": self.config.public_key,
-            "ts": timestamp,
-            "hash": hashlib.md5(
-                ("%s%s%s" % (timestamp, self.config.private_key, self.config.public_key)).encode('utf-8')
+            'apikey': self.config.public_key,
+            'ts': timestamp,
+            'hash': hashlib.md5(
+                ('%s%s%s' % (timestamp, self.config.private_key, self.config.public_key)).encode('utf-8')
             ).hexdigest()
         }
 
         hdrs = {
-            "Accept": "application/json"
+            'Accept': 'application/json'
         }
 
         req_url = yarl.URL(self.BASE_URL) / url
@@ -188,7 +186,7 @@ class List(MarvelObject):
     @property
     def available(self) -> int:
         """The number of total available resources in this list. Will always be greater
-        than or equal to the "returned" value."""
+        than or equal to the 'returned' value."""
         return int(self.data['available'])
 
     @property
@@ -259,7 +257,7 @@ class Image(MarvelObject):
         return self.data['extension']
 
     def __repr__(self):
-        return "%s.%s" % (self.path, self.extension)
+        return '%s.%s' % (self.path, self.extension)
 
 
 class Comic(MarvelObject):
@@ -408,7 +406,7 @@ class Creator(MarvelObject):
 
     @property
     def thumbnail(self) -> str:
-        return "%s.%s" % (self.data['thumbnail']['path'], self.data['thumbnail']['extension'])
+        return '%s.%s' % (self.data['thumbnail']['path'], self.data['thumbnail']['extension'])
 
     @property
     def comics(self):

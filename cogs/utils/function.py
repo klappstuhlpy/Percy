@@ -1,6 +1,7 @@
 import functools
 import inspect
 import types
+from functools import _Wrapped
 from typing import Sequence, Callable, OrderedDict, Any
 
 Argument = int | str
@@ -30,15 +31,15 @@ def get_arg_value(name_or_pos: Argument, arguments: BoundArgs) -> Any:
             name, value = arg_values[arg_pos]
             return value
         except IndexError:
-            raise ValueError(f"Argument position {arg_pos} is out of bounds.")
+            raise ValueError(f'Argument position {arg_pos} is out of bounds.')
     elif isinstance(name_or_pos, str):
         arg_name = name_or_pos
         try:
             return arguments[arg_name]
         except KeyError:
-            raise ValueError(f"Argument {arg_name!r} doesn't exist.")
+            raise ValueError(f'Argument {arg_name!r} doesn\'t exist.')
     else:
-        raise TypeError("'arg' must either be an int (positional index) or a str (keyword).")
+        raise TypeError('"arg" must either be an int (positional index) or a str (keyword).')
 
 
 def get_arg_value_wrapper(
@@ -97,16 +98,16 @@ def update_wrapper_globals(
     as this can cause incorrect objects being used by radioscopy's converters.
     """
     annotation_global_names = (
-        ann.split(".", maxsplit=1)[0] for ann in wrapped.__annotations__.values() if isinstance(ann, str)
+        ann.split('.', maxsplit=1)[0] for ann in wrapped.__annotations__.values() if isinstance(ann, str)
     )
     # Conflicting globals from both functions' modules that are also used in the wrapper and in wrapped's annotations.
     shared_globals = set(wrapper.__code__.co_names) & set(annotation_global_names)
     shared_globals &= set(wrapped.__globals__) & set(wrapper.__globals__) - ignored_conflict_names
     if shared_globals:
         raise GlobalNameConflictError(
-            f"wrapper and the wrapped function share the following "
-            f"global names used by annotations: {', '.join(shared_globals)}. Resolve the conflicts or add "
-            f"the name to the `ignored_conflict_names` set to suppress this error if this is intentional."
+            f'wrapper and the wrapped function share the following '
+            f'global names used by annotations: {', '.join(shared_globals)}. Resolve the conflicts or add '
+            f'the name to the `ignored_conflict_names` set to suppress this error if this is intentional.'
         )
 
     new_globals = wrapper.__globals__.copy()
@@ -129,7 +130,7 @@ def command_wraps(
 ) -> Callable[[types.FunctionType], types.FunctionType]:
     """Update the decorated function to look like `wrapped` and update globals for discordpy forwardref evaluation."""
 
-    def decorator(wrapper: types.FunctionType) -> types.FunctionType:
+    def decorator(wrapper: types.FunctionType) -> _Wrapped[..., Any]:
         return functools.update_wrapper(
             update_wrapper_globals(wrapper, wrapped, ignored_conflict_names=ignored_conflict_names),
             wrapped,

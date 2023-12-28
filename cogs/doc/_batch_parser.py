@@ -76,15 +76,15 @@ class BatchParser:
                 soup = await self.bot.loop.run_in_executor(
                     None,
                     BeautifulSoup,
-                    await response.text(encoding="utf8"),
-                    "lxml",
+                    await response.text(encoding='utf8'),
+                    'lxml',
                 )
 
             self._queue.extendleft(QueueItem(item, soup) for item in self._page_doc_items[doc_item.url])
-            log.debug(f"Added items from {doc_item.url} to the parse queue.")
+            log.debug(f'Added items from {doc_item.url} to the parse queue.')
 
             if self._parse_task is None:
-                self._parse_task = self.bot.loop.create_task(self._parse_queue(), name="Queue parse")
+                self._parse_task = self.bot.loop.create_task(self._parse_queue(), name='Queue parse')
         else:
             self._item_futures[doc_item].user_requested = True
         with suppress(ValueError):
@@ -97,7 +97,7 @@ class BatchParser:
 
         The coroutine will run as long as the queue is not empty, resetting `self._parse_task` to None when finished.
         """
-        log.trace("Starting queue parsing.")
+        log.trace('Starting queue parsing.')
         try:
             while self._queue:
                 item, soup = self._queue.pop()  # type: _cog.DocItem, BeautifulSoup
@@ -113,13 +113,13 @@ class BatchParser:
                         item.resolved_fields = fields_mardown
                         await doc_cache.set(item, markdown)
                 except Exception:
-                    log.exception(f"Unexpected error when handling {item}")
+                    log.exception(f'Unexpected error when handling {item}')
                 future.set_result(markdown)
                 del self._item_futures[item]
                 await asyncio.sleep(0.1)
         finally:
             self._parse_task = None
-            log.trace("Finished parsing queue.")
+            log.trace('Finished parsing queue.')
 
     def _move_to_front(self, item: QueueItem | _cog.DocItem) -> None:
         """Move `item` to the front of the parse queue."""
@@ -128,7 +128,7 @@ class BatchParser:
         del self._queue[item_index]
 
         self._queue.append(queue_item)
-        log.trace(f"Moved {item} to the front of the queue.")
+        log.trace(f'Moved {item} to the front of the queue.')
 
     def add_item(self, doc_item: _cog.DocItem) -> None:
         """Map a DocItem to its page so that the symbol will be parsed once the page is requested."""
@@ -151,7 +151,7 @@ class BatchParser:
 
         Wait for all user-requested symbols to be parsed before clearing the parser.
         """
-        for future in filter(attrgetter("user_requested"), self._item_futures.values()):
+        for future in filter(attrgetter('user_requested'), self._item_futures.values()):
             await future
         if self._parse_task is not None:
             self._parse_task.cancel()

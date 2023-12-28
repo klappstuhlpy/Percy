@@ -22,6 +22,7 @@ class TimeZone(NamedTuple):
     key: str
 
     # noinspection PyProtectedMember
+    # noinspection PyUnresolvedReferences
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
         assert isinstance(ctx.cog, UserSettings)
@@ -62,13 +63,13 @@ class UserConfig(PostgresItem):
         super().__init__(**kwargs)
 
     @property
-    def get_tzinfo(self) -> datetime.tzinfo:
+    def tzinfo(self) -> datetime.tzinfo:
         if self.timezone is None:
             return datetime.timezone.utc
         return dateutil.tz.gettz(self.timezone) or datetime.timezone.utc
 
 
-class UserSettings(commands.Cog, name="User Settings"):
+class UserSettings(commands.Cog, name='User Settings'):
     """Handling user-based settings for the bot."""
 
     DEFAULT_POPULAR_TIMEZONE_IDS = (
@@ -182,16 +183,15 @@ class UserSettings(commands.Cog, name="User Settings"):
         self_query = user.id == ctx.author.id
         config = await self.get_user_config(user.id)
         if config is None or (config and config.timezone is None):
-            return await ctx.send(f'<:redTick:1079249771975413910> {user} has not set their timezone.')
+            return await ctx.stick(False, f'{user} has not set their timezone.')
 
         time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
         offset = timetools.get_timezone_offset(time, with_name=True)
         time = time.strftime('%Y-%m-%d %I:%M %p')
         if self_query:
-            await ctx.send(
-                f'<:greenTick:1079249732364406854> Your timezone is *{config.timezone!r}*. The current time is `{time} {offset}`.')
+            await ctx.stick(True, f'Your timezone is *{config.timezone!r}*. The current time is `{time} {offset}`.')
         else:
-            await ctx.send(f'<:greenTick:1079249732364406854> The current time for {user} is `{time} {offset}`.')
+            await ctx.stick(True, f'The current time for {user} is `{time} {offset}`.')
 
     @commands_ext.command(
         timezone.command,
@@ -201,7 +201,7 @@ class UserSettings(commands.Cog, name="User Settings"):
     async def timezone_info(self, ctx: Context, *, tz: TimeZone):
         """Retrieves info about a timezone."""
 
-        embed = discord.Embed(title=f"ID: {tz.key}", colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title=f'ID: {tz.key}', colour=helpers.Colour.darker_red())
         dt = discord.utils.utcnow().astimezone(dateutil.tz.gettz(tz.key))
         time = dt.strftime('%Y-%m-%d %I:%M %p')
 
@@ -233,10 +233,8 @@ class UserSettings(commands.Cog, name="User Settings"):
         await ctx.db.execute(query, ctx.author.id, tz.key)
 
         self.get_user_config.invalidate(self, ctx.author.id)
-        await ctx.send(
-            f'<:greenTick:1079249732364406854> Your timezone has been set to **{tz.label}** (IANA ID: {tz.key}).',
-            ephemeral=True,
-            delete_after=10)
+        await ctx.stick(True, f'Your timezone has been set to **{tz.label}** (IANA ID: {tz.key}).',
+                        ephemeral=True, delete_after=10)
 
     @timezone_set.autocomplete('tz')
     @timezone_info.autocomplete('tz')
@@ -257,11 +255,11 @@ class UserSettings(commands.Cog, name="User Settings"):
         """Clears your timezone."""
         config = await self.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
-            return await ctx.send(f'<:redTick:1079249771975413910> You currently have no custom timezone set.')
+            return await ctx.stick(False, 'You currently have no custom timezone set.')
 
         await ctx.db.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", ctx.author.id)
         self.get_user_config.invalidate(self, ctx.author.id)
-        await ctx.send('<:greenTick:1079249732364406854> Your timezone has been deleted.', ephemeral=True)
+        await ctx.stick(True, 'Your timezone has been deleted.', ephemeral=True)
 
     @cache.cache()
     async def get_user_config(self, user_id: int, /) -> Optional[UserConfig]:

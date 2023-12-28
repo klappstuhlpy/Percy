@@ -271,7 +271,7 @@ class Context(commands.Context):
             delete_after=delete_after,
             author_id=author_id,
         )
-        view.message = await self.send(embed=discord.Embed(title="Are you sure?",
+        view.message = await self.send(embed=discord.Embed(title='Are you sure?',
                                                            description=message,
                                                            colour=discord.Colour(0xF8DB5E)),
                                        view=view, ephemeral=ephemeral)
@@ -286,6 +286,11 @@ class Context(commands.Context):
     def db(self) -> DatabaseProtocol:
         return self.pool  # type: ignore
 
+    async def timestamp(self):
+        """Returns a timestamp with the timezone of the author or in UTC."""
+        uconfig = await self.bot.user_settings.get_user_config(self.author.id)
+        return datetime.datetime.now(tz=uconfig.tzinfo or datetime.timezone.utc)
+
     def typing(self, *, ephemeral: bool = False) -> Union[Typing, DeferTyping]:
         """A custom typing method that allows us to defer typing if we want to."""
         if self.interaction is None:
@@ -294,14 +299,15 @@ class Context(commands.Context):
 
     async def post(self, filename: str, *, content: str) -> str | None:
         """Create a GitHub Gist from content."""
-        dpy: Optional[Base] = self.bot.get_cog("Exclusives")
-        posted_gist_url = await dpy.create_gist(description=str(self.author) + " - " + filename,
+        dpy: Optional[Base] = self.bot.get_cog('Exclusives')
+        posted_gist_url = await dpy.create_gist(description=str(self.author) + ' - ' + filename,
                                                 content=content, public=True)
 
-        return f"<{posted_gist_url}>"
+        return f'<{posted_gist_url}>'
 
-    async def send_tick(self, opt: Optional[bool], content: Optional[str] = None, **kwargs: Any) -> Message:
-        return await self.send(f"{self.tick(opt)} {content or ''}", **kwargs)
+    async def stick(self, _: Optional[bool], content: Optional[str] = None, **kwargs: Any) -> Message:
+        """Sends a tick or cross emoji based on the value of `x` with an optional message."""
+        return await self.send(f'{self.tick(_)} {content or ''}', **kwargs)
 
     async def send(
             self,
@@ -417,58 +423,58 @@ class Context(commands.Context):
         if content:
             content = str(content)
             for path in sys.path:
-                content = content.replace(path, "[PATH]")
+                content = content.replace(path, '[PATH]')
             if len(content) >= 2000:
                 if post:
-                    content = f"Output too long, posted here: {await self.post(filename='output.py', content=content)}"
+                    content = f'Output too long, posted here: {await self.post(filename='output.py', content=content)}'
 
         if embed:
             if not embed.footer:
                 embed.set_footer(
-                    text=f"Requested by: {self.author}",
+                    text=f'Requested by: {self.author}',
                     icon_url=self.author.display_avatar.url,
                 )
-                embed.timestamp = datetime.datetime.utcnow()
+                embed.timestamp = discord.utils.utcnow()
 
         if ephemeral:
             no_reply = True
 
         kwargs: dict[str, Any] = {
-            "content": content,
-            "tts": tts,
-            "embed": embed,
-            "embeds": embeds,
-            "file": file,
-            "files": files,
-            "stickers": stickers,
-            "delete_after": delete_after,
-            "nonce": nonce,
-            "allowed_mentions": allowed_mentions,
-            "reference": reference,
-            "mention_author": mention_author,
-            "view": view,
-            "suppress_embeds": suppress_embeds,
-            "silent": silent,
+            'content': content,
+            'tts': tts,
+            'embed': embed,
+            'embeds': embeds,
+            'file': file,
+            'files': files,
+            'stickers': stickers,
+            'delete_after': delete_after,
+            'nonce': nonce,
+            'allowed_mentions': allowed_mentions,
+            'reference': reference,
+            'mention_author': mention_author,
+            'view': view,
+            'suppress_embeds': suppress_embeds,
+            'silent': silent,
         }
 
         if self.interaction is None or self.interaction.is_expired():
-            kwargs["reference"] = self.message.to_reference(fail_if_not_exists=False) or reference
+            kwargs['reference'] = self.message.to_reference(fail_if_not_exists=False) or reference
             if no_reply:
-                kwargs["reference"] = None
+                kwargs['reference'] = None
             return await self.send(**kwargs)
 
         kwargs = {
-            "content": content,
-            "tts": tts,
-            "embed": MISSING if embed is None else embed,
-            "embeds": MISSING if embeds is None else embeds,
-            "file": MISSING if file is None else file,
-            "files": MISSING if files is None else files,
-            "allowed_mentions": MISSING if allowed_mentions is None else allowed_mentions,
-            "view": MISSING if view is None else view,
-            "suppress_embeds": suppress_embeds,
-            "ephemeral": ephemeral,
-            "silent": silent,
+            'content': content,
+            'tts': tts,
+            'embed': MISSING if embed is None else embed,
+            'embeds': MISSING if embeds is None else embeds,
+            'file': MISSING if file is None else file,
+            'files': MISSING if files is None else files,
+            'allowed_mentions': MISSING if allowed_mentions is None else allowed_mentions,
+            'view': MISSING if view is None else view,
+            'suppress_embeds': suppress_embeds,
+            'ephemeral': ephemeral,
+            'silent': silent,
         }
 
         if self.interaction.response.is_done():
@@ -486,10 +492,10 @@ class Context(commands.Context):
 
     @staticmethod
     async def string_to_file(
-            content: AnyStr = None, filename: str = "message.txt"
+            content: AnyStr = None, filename: str = 'message.txt'
     ) -> discord.File:
         """Converts a string to a file."""
-        if filename == "random":
+        if filename == 'random':
             filename = "".join(random.choices(string.ascii_letters, k=24))
 
         if isinstance(content, str):
@@ -497,7 +503,7 @@ class Context(commands.Context):
         elif isinstance(content, bytes):
             buf = io.BytesIO()
         else:
-            raise TypeError("Content must be str or bytes")
+            raise TypeError('Content must be str or bytes')
         buf.write(content)
         buf.seek(0)
         return discord.File(buf, filename=filename)
@@ -506,7 +512,7 @@ class Context(commands.Context):
             self,
             content: AnyStr = None,
             message_content: str = None,
-            filename: str = "message.txt",
+            filename: str = 'message.txt',
             *args,
             **kwargs,
     ) -> discord.Message:

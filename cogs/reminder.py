@@ -57,8 +57,8 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
         )
         author_id, _, message = self.timer.args
         await interaction.followup.send(
-            f"<:greenTick:1079249732364406854> Alright <@{author_id}>, "
-            f"I've snoozed your reminder till {discord.utils.format_dt(when, 'R')} for *{message}*",
+            f'<:greenTick:1079249732364406854> Alright <@{author_id}>, '
+            f'I\'ve snoozed your reminder till {discord.utils.format_dt(when, 'R')} for *{message}*',
             ephemeral=True
         )
 
@@ -136,7 +136,7 @@ class Reminder(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="sleep", id=1087490868660928683)
+        return discord.PartialEmoji(name='sleep', id=1087490868660928683)
 
     def cog_unload(self) -> None:
         self._task.cancel()
@@ -312,13 +312,13 @@ class Reminder(commands.Cog):
 
     @commands_ext.command(
         commands.hybrid_group,
-        name="reminder",
+        name='reminder',
         aliases=['timer', 'remindme', 'remind'],
         description="Reminds you of something after a certain amount of timetools.",
-        examples=["next thursday at 3pm do something funny",
-                  "do the dishes tomorrow",
-                  "in 3 days do the thing",
-                  "2d unmute someone"],
+        examples=['next thursday at 3pm do something funny',
+                  'do the dishes tomorrow',
+                  'in 3 days do the thing',
+                  '2d unmute someone'],
         usage='<when...>'
     )
     async def reminder(
@@ -337,7 +337,7 @@ class Reminder(commands.Cog):
         """
 
         if len(when.arg) > 1000:
-            return await ctx.send('<:redTick:1079249771975413910> That\'s too long, sorry.')
+            return await ctx.stick(False, 'That\'s too long, sorry.')
 
         config = await self.bot.user_settings.get_user_config(ctx.author.id)
         zone = config.timezone if config else None
@@ -351,9 +351,9 @@ class Reminder(commands.Cog):
             message_id=ctx.message.id,
             timezone=zone or 'UTC',
         )
-        await ctx.send_tick(
-            True, f"Okay {ctx.author.mention}, "
-            f"I'll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*"
+        await ctx.stick(
+            True, f'Okay {ctx.author.mention}, '
+                  f'I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*'
         )
 
     @commands_ext.command(
@@ -382,8 +382,8 @@ class Reminder(commands.Cog):
             timezone=zone or 'UTC',
         )
         await interaction.response.send_message(
-            f"{tick(True)} Okay {interaction.user.mention}, "
-            f"I'll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*"
+            f'{tick(True)} Okay {interaction.user.mention}, '
+            f'I\'ll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*'
         )
 
     @reminder_create.error
@@ -408,16 +408,16 @@ class Reminder(commands.Cog):
         records = await self.bot.pool.fetch(query, str(ctx.author.id))
 
         if len(records) == 0:
-            return await ctx.send('<:redTick:1079249771975413910> No currently running reminders.')
+            return await ctx.stick(False, 'No currently running reminders.')
 
-        e = discord.Embed(color=self.bot.colour.darker_red(), title="Your Reminders",
-                          description="Here is a list of the last **Reminders** you've set.")
+        e = discord.Embed(color=self.bot.colour.darker_red(), title='Your Reminders',
+                          description='Here is a list of the last **Reminders** you\'ve set.')
         e.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
         e.set_footer(text=f'Showing {plural(len(records)):Reminder}')
 
         for index, (reminder_id, expires, message) in enumerate(records, 1):
             shorten = textwrap.shorten(message, width=512)
-            value = f'*{shorten!r}* expires {discord.utils.format_dt(expires, style="R")}'
+            value = f'*{shorten!r}* expires {discord.utils.format_dt(expires, style='R')}'
             e.add_field(name=f'#{index} • [{reminder_id}]', value=value, inline=False)
 
         await ctx.send(embed=e)
@@ -443,11 +443,11 @@ class Reminder(commands.Cog):
 
         status = await ctx.db.execute(query, reminder_id, str(ctx.author.id))
         if status == 'DELETE 0':
-            return await ctx.send('<:redTick:1079249771975413910> Could not delete any reminders with that ID.')
+            return await ctx.stick(False, 'Could not delete any reminders with that ID.')
 
         self.MaybeSkipTask(self._current_timer and self._current_timer.id == reminder_id)
 
-        await ctx.send('<:greenTick:1079249732364406854> Successfully deleted reminder.', ephemeral=True)
+        await ctx.stick(True, 'Successfully deleted reminder.', ephemeral=True)
 
     @commands_ext.command(
         reminder.command,
@@ -466,7 +466,7 @@ class Reminder(commands.Cog):
         author_id = str(ctx.author.id)
         total: int = await self.bot.pool.fetchval(query, author_id)
         if total == 0:
-            return await ctx.send('<:greenTick:1079249732364406854> You do not have any reminders to delete.')
+            return await ctx.stick(True, 'You do not have any reminders to delete.')
 
         confirm = await ctx.prompt(
             f'<:warning:1113421726861238363> Are you sure you want to delete {formats.plural(total):reminder}?')
@@ -478,8 +478,8 @@ class Reminder(commands.Cog):
 
         self.MaybeSkipTask(self._current_timer and self._current_timer.author_id == ctx.author.id)
 
-        await ctx.send(f'<:greenTick:1079249732364406854> Successfully deleted {formats.plural(total):reminder}.',
-                       ephemeral=True)
+        await ctx.stick(True, f'Successfully deleted {formats.plural(total):reminder}.',
+                        ephemeral=True)
 
     @commands.Cog.listener()
     async def on_reminder_timer_complete(self, timer: Timer):

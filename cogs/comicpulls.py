@@ -26,40 +26,40 @@ MARVEL_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/11
 DC_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107657136013586543/Screenshot_2023-05-15_151251.png'
 VIZ_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1113786444369104978/unnamed.png'
 
-MANGA_POSITIONS = ["Story", "Art", "Story and Art", "Original Conecept", "Written", "Drawn"]
+MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 
 
 def serialize_resource_id_from_brand(bound_args: dict) -> str:
     """Return the cache key of the Brand `item` from the bound args of ComicCache.set."""
-    item: Brand = bound_args["item"]
-    return f"comic:{item}"
+    item: Brand = bound_args['item']
+    return f'comic:{item}'
 
 
 class ComicCache:
     """Cache for the Comicpulls cog."""
 
-    def __init__(self, namespace: str = "comic"):
+    def __init__(self, namespace: str = 'comic'):
         self.namespace: str = namespace
         self.cache: dict[str, list[GenericComic]] = {}
 
-    @lock("ComicCache.set", serialize_resource_id_from_brand, wait=True)
+    @lock('ComicCache.set', serialize_resource_id_from_brand, wait=True)
     async def set(self, item: Brand, value: list[GenericComic]) -> None:
         """Set the Comics `value` for the brand `item`."""
-        cache_key = f"{self.namespace}:{item}"
+        cache_key = f'{self.namespace}:{item}'
 
         self.cache.setdefault(cache_key, [])
         self.cache[cache_key] = value
 
     def get(self, item: Brand) -> list[GenericComic] | None:
         """Return the Markdown content of the symbol `item` if it exists."""
-        cache_key = f"{self.namespace}:{item}"
+        cache_key = f'{self.namespace}:{item}'
         if cache_key in self.cache:
             return self.cache[cache_key]
         return None
 
     def delete(self, package: str) -> bool:
         """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""
-        pattern = f"{self.namespace}:{package}:*"
+        pattern = f'{self.namespace}:{package}:*'
 
         package_keys = [
             key for key in self.cache.keys() if fnmatch.fnmatchcase(key, pattern)
@@ -67,16 +67,16 @@ class ComicCache:
         if package_keys:
             for key in package_keys:
                 del self.cache[key]
-            log.info(f"Deleted keys from cache: {package_keys}.")
+            log.info(f'Deleted keys from cache: {package_keys}.')
             return True
         return False
 
 
 class Brand(Enum):
-    MARVEL = "Marvel"
-    DC = "DC"
-    MANGA = "Manga"
-    UNKNOWN = "Unknown"
+    MARVEL = 'Marvel'
+    DC = 'DC'
+    MANGA = 'Manga'
+    UNKNOWN = 'Unknown'
 
     def __str__(self):
         return self.name
@@ -95,13 +95,13 @@ class Brand(Enum):
     @property
     def link(self) -> str:
         if self == self.MARVEL:
-            return "Marvel.com"
+            return 'Marvel.com'
         elif self == self.DC:
-            return "DC.com"
+            return 'DC.com'
         elif self == self.MANGA:
-            return "Viz.com"
+            return 'Viz.com'
         else:
-            return "Unknown"
+            return 'Unknown'
 
     @property
     def colour(self) -> int:
@@ -125,19 +125,19 @@ class Brand(Enum):
     def copyright(self):
         year = datetime.datetime.now().year
         if self == self.DC:
-            return "© & ™ DC. ALL RIGHTS RESERVED"
+            return '© & ™ DC. ALL RIGHTS RESERVED'
         elif self == self.MARVEL:
-            return f"Data provided by Marvel. © {year} MARVEL"
+            return f'Data provided by Marvel. © {year} MARVEL'
         elif self == self.MANGA:
-            return f"© {year} VIZ Media, LLC. All rights reserved."
+            return f'© {year} VIZ Media, LLC. All rights reserved.'
         else:
             return ""
 
 
 class Format(Enum):
-    FULL = "Full"
-    COMPACT = "Compact"
-    SUMMARY = "Summary"
+    FULL = 'Full'
+    COMPACT = 'Compact'
+    SUMMARY = 'Summary'
 
     def __str__(self):
         return self.name
@@ -223,19 +223,19 @@ class GenericComic:
         return self.title
 
     def __repr__(self):
-        return f"<GenericComic id={self.id} title={self.title} brand={self.brand.name}>"
+        return f'<GenericComic id={self.id} title={self.title} brand={self.brand.name}>'
 
     @property
     def writer(self):
-        next_key = next((a for a in ["Writer", "Creator", *MANGA_POSITIONS] if a in self.creators), None)
+        next_key = next((a for a in ['Writer', 'Creator', *MANGA_POSITIONS] if a in self.creators), None)
         return ', '.join(alpha_surnames(self.creators[next_key] if next_key else []))
 
     @property
     def price_format(self):
-        return f"${self.price:.2f} USD" if self.price else 'Unknown'
+        return f'${self.price:.2f} USD' if self.price else 'Unknown'
 
     def format_creators(self, *, cover: bool = False, compact: bool = False):
-        priority = ["Writer", "Artist", "Penciler", "Inker", "Colorist", "Letterer", "Editor", *MANGA_POSITIONS]
+        priority = ['Writer', 'Artist', 'Penciler', 'Inker', 'Colorist', 'Letterer', 'Editor', *MANGA_POSITIONS]
 
         def sorting_key(person: str) -> int:
             try:
@@ -243,12 +243,12 @@ class GenericComic:
             except ValueError:
                 return len(priority)
 
-        compact_positions = {"Writer", "Penciler", "Artist", *MANGA_POSITIONS}
+        compact_positions = {'Writer', 'Penciler', 'Artist', *MANGA_POSITIONS}
         keys = sorted(self.creators.keys(), key=lambda k: (sorting_key(k), k))
-        return "\n".join(
-            f"**{k}**: {', '.join(alpha_surnames(self.creators[k]))}"
+        return '\n'.join(
+            f'**{k}**: {', '.join(alpha_surnames(self.creators[k]))}'
             for k in keys
-            if (not compact or k in compact_positions) and (cover or not k.endswith("(Cover)"))
+            if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
         )
 
     def to_embed(self, full_img: bool = True):
@@ -260,24 +260,24 @@ class GenericComic:
         )
 
         if self.brand == Brand.MANGA:
-            embed.add_field(name="General Info",
-                            value=f"Price: {self.price_format}\n"
-                                  f"Pages: {self.page_count}\n"
-                                  f"Release Date: {discord.utils.format_dt(self.date, 'D')}\n"
-                                  f"Category: {self.kwargs.get('category')}\n"
-                                  f"Age Rating: {self.kwargs.get('age_rating')}")
+            embed.add_field(name='General Info',
+                            value=f'Price: {self.price_format}\n'
+                                  f'Pages: {self.page_count}\n'
+                                  f'Release Date: {discord.utils.format_dt(self.date, 'D')}\n'
+                                  f'Category: {self.kwargs.get('category')}\n'
+                                  f'Age Rating: {self.kwargs.get('age_rating')}')
 
             if self.creators:
-                embed.add_field(name="Creators", value=self.format_creators())
+                embed.add_field(name='Creators', value=self.format_creators())
         else:
             if self.creators:
-                embed.add_field(name="Creators", value=self.format_creators())
+                embed.add_field(name='Creators', value=self.format_creators())
 
-            embed.add_field(name="General Info",
-                            value=f"Price: {self.price_format}\n"
-                                  f"Pages: {self.page_count}")
+            embed.add_field(name='General Info',
+                            value=f'Price: {self.price_format}\n'
+                                  f'Pages: {self.page_count}')
 
-        embed.set_footer(text=f"{self.title} • {self.copyright}", icon_url=self.brand.icon_url)
+        embed.set_footer(text=f'{self.title} • {self.copyright}', icon_url=self.brand.icon_url)
 
         if full_img:
             embed.set_image(url=self.image_url)
@@ -324,16 +324,16 @@ class ComicFeed(PostgresItem, Generic[B]):
 
     def to_embed(self):
         embed = discord.Embed(
-            title=f"{self.brand.value} Feed Configuration",
+            title=f'{self.brand.value} Feed Configuration',
             description='Mangas are only published once in the first week of a month.' if self.brand == Brand.MANGA else None,
             color=self.brand.colour
         )
-        embed.add_field(name="Publish Channel", value=f"<#{self.channel_id}>")
-        embed.add_field(name="Format", value=f"{self.format.value}")
-        embed.add_field(name="Next Scheduled", value=discord.utils.format_dt(self.next_pull, 'D'))
-        embed.add_field(name="Ping Role", value=f"<@&{self.ping}>" if self.ping else None)
-        embed.add_field(name="Message Pin", value="Enabled" if self.pin else "Disabled")
-        embed.set_footer(text=f"[{self.guild_id}] • {self.brand.name}")
+        embed.add_field(name='Publish Channel', value=f'<#{self.channel_id}>')
+        embed.add_field(name='Format', value=f'{self.format.value}')
+        embed.add_field(name='Next Scheduled', value=discord.utils.format_dt(self.next_pull, 'D'))
+        embed.add_field(name='Ping Role', value=f'<@&{self.ping}>' if self.ping else None)
+        embed.add_field(name='Message Pin', value='Enabled' if self.pin else 'Disabled')
+        embed.set_footer(text=f'[{self.guild_id}] • {self.brand.name}')
         embed.set_thumbnail(url=self.brand.icon_url)
         return embed
 
@@ -386,7 +386,7 @@ class ComicFeed(PostgresItem, Generic[B]):
         return self.next_scheduled() - datetime.timedelta(days=7)
 
 
-class ComicPulls(commands.Cog, name="Comic Feeds"):
+class ComicPulls(commands.Cog, name='Comic Feeds'):
     """Subscribe to weekly comic releases from Marvel and DC!
 
     Publishes lists of new releases at `6 AM`, publish days are configurable.
@@ -434,8 +434,8 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if self._batch_lock.locked():
             with contextlib.suppress(discord.NotFound):
                 await interaction.response.send_message(
-                    "<:discord_info:1113421814132117545> The comic cache is currently being "
-                    "updated. Please try again later.")
+                    '<:discord_info:1113421814132117545> The comic cache is currently being '
+                    'updated. Please try again later.')
             return False
         return True
 
@@ -448,15 +448,15 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             def sort_key(x):
                 return x.date if x.date is not None else datetime.datetime.min
 
-            log.debug("Fetching Marvel...")
+            log.debug('Fetching Marvel...')
             marvel_comics = await self.parser.fetch_marvel_lookup_table(self.bot.marvel_client)
             await self.comic_cache.set(Brand.MARVEL, sorted(marvel_comics, key=sort_key))
 
-            log.debug("Fetching DC...")
+            log.debug('Fetching DC...')
             dc_comics = await self.parser.bs4_dc()
             await self.comic_cache.set(Brand.DC, sorted(dc_comics, key=sort_key))
 
-            log.debug("Fetching Manga...")
+            log.debug('Fetching Manga...')
             viz_comics = await self.parser.bs4_viz()
             await self.comic_cache.set(Brand.MANGA, sorted(viz_comics, key=sort_key))
 
@@ -541,7 +541,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         except discord.Forbidden:
             pass
 
-    @lock_arg("comic", "config", attrgetter("channel_id"), raise_error=True)
+    @lock_arg('comic', 'config', attrgetter('channel_id'), raise_error=True)
     async def publish_to_feed(self, config: ComicFeed):
         channel = self.bot.get_channel(config.channel_id)
 
@@ -550,17 +550,17 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         if comics:
             if config.brand == Brand.MANGA:
                 now = datetime.datetime.now()
-                formatted_date = now.strftime("%B, %Y")
-                lead_text = f"## {config.brand.value} • {formatted_date}"
+                formatted_date = now.strftime('%B, %Y')
+                lead_text = f'## {config.brand.value} • {formatted_date}'
             else:
-                lead_text = f"## {config.brand.value} Comics • {discord.utils.format_dt(await self.prev_schedule(config.brand), 'd')}"
+                lead_text = f'## {config.brand.value} Comics • {discord.utils.format_dt(await self.prev_schedule(config.brand), 'd')}'
 
             lead_msg = await channel.send(lead_text)
             if config.pin:
                 await self.pin(lead_msg)
 
             if config.ping:
-                await channel.send(f"<@&{config.ping}>")
+                await channel.send(f'<@&{config.ping}>')
 
             if config.format in [Format.FULL, Format.COMPACT]:
                 embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
@@ -579,7 +579,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         else:
             await channel.send(
                 embed=discord.Embed(
-                    description=f"*<:discord_info:1113421814132117545> There are no new **{config.brand.name}** comics for this week.*",
+                    description=f'*<:discord_info:1113421814132117545> There are no new **{config.brand.name}** comics for this week.*',
                     timestamp=discord.utils.utcnow(),
                     colour=config.brand.colour
                 ).set_thumbnail(url=config.brand.icon_url)
@@ -598,24 +598,24 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             if cid in comics:
                 cs_cm = discord.utils.get(comics, id=cid.id)
 
-                info = [f"{cs_cm.writer}"] if cs_cm.writer else []
+                info = [f'{cs_cm.writer}'] if cs_cm.writer else []
                 if cs_cm.url:
-                    info.append(f"[Read More]({cs_cm.url})")
+                    info.append(f'[Read More]({cs_cm.url})')
 
-                embed.add_field(name=cs_cm.title, value=" • ".join(info) if info else "…")
+                embed.add_field(name=cs_cm.title, value=' • '.join(info) if info else '…')
         embeds.append(embed)
 
         if brand == Brand.MANGA:
-            embeds[0].title = f"{brand.value} • Summary"
+            embeds[0].title = f'{brand.value} • Summary'
         else:
-            embeds[0].title = f"{brand.value} Comics • Summary"
+            embeds[0].title = f'{brand.value} Comics • Summary'
 
         if brand.copyright:
             embeds[-1].set_footer(text=brand.copyright, icon_url=brand.icon_url)
 
         if start:
             embed = discord.Embed(colour=brand.colour)
-            embed.description = f"*Jump to the Top {start.jump_url}.*"
+            embed.description = f'*Jump to the Top {start.jump_url}.*'
             embeds.append(embed)
 
         return embeds
@@ -645,10 +645,10 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         )
         return ComicFeed(self, record=record) if record else None
 
-    @comics.command(name="current")
-    @app_commands.describe(brand="The comic brand to receive a feed from.")
+    @comics.command(name='current')
+    @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(2, 15.0, key=lambda i: i.guild_id)
-    @commands_ext.command_permissions(1, user=["manage_channels"])
+    @commands_ext.command_permissions(1, user=['manage_channels'])
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
         await interaction.response.defer(
@@ -657,11 +657,11 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         embeds = await self.summary_embed(self.comic_cache.get(brand), brand)
         await interaction.followup.send(embeds=embeds)
 
-    @comics.command(name="push", description="Pushes the latest comic feed to a channel.")
-    @app_commands.describe(brand="The comic brand to receive a feed from.")
+    @comics.command(name='push', description='Pushes the latest comic feed to a channel.')
+    @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
-    @commands_ext.command_permissions(1, user=["manage_channels"])
-    @lock_arg("cogs.comics_push", "interaction", attrgetter("guild.id"), raise_error=True)
+    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @lock_arg('cogs.comics_push', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comics_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
         await interaction.response.defer()
@@ -669,33 +669,33 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
             return await interaction.followup.send(
-                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+                f'<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!')
 
         if not config:
             return await interaction.followup.send(
-                f"<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!")
+                f'<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!')
 
         await self.call_feed(config)
         self.MaybeSkipTask(True)
 
         await interaction.followup.send(
-            f"<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>")
+            f'<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>')
 
-    @comics.command(name="subscribe", description="Subscribes to a comic brand feed.")
+    @comics.command(name='subscribe', description='Subscribes to a comic brand feed.')
     @app_commands.rename(_format='format')
     @app_commands.describe(
-        brand="The comic brand to receive a feed from.",
-        channel="Channel to set up the feed. Leave empty to set up in THIS channel.",
-        _format="Feed format. Use /formats to view options. Summary is default."
+        brand='The comic brand to receive a feed from.',
+        channel='Channel to set up the feed. Leave empty to set up in THIS channel.',
+        _format='Feed format. Use /formats to view options. Summary is default.'
     )
-    @commands_ext.command_permissions(1, user=["manage_channels"])
-    @lock_arg("comicpulls.comic_subscribe", "interaction", attrgetter("guild.id"), raise_error=True)
+    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @lock_arg('comicpulls.comic_subscribe', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comic_subscribe(
             self,
             interaction: discord.Interaction,
             brand: Brand,
             channel: discord.TextChannel = None,
-            _format: Format = "SUMMARY"
+            _format: Format = 'SUMMARY'
     ):
         """Sets up a comic pulls feed."""
         await interaction.response.defer()
@@ -703,7 +703,7 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
 
         if config:
             return await interaction.followup.send(
-                "<:redTick:1079249771975413910> You have already set up a feed for this brand in this server.")
+                '<:redTick:1079249771975413910> You have already set up a feed for this brand in this server.')
 
         if channel is None:
             channel = interaction.channel
@@ -724,25 +724,25 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         self.MaybeSkipTask(True)
 
         await interaction.followup.send(
-            f"<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.",
+            f'<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.',
             embed=new_config.to_embed())
 
     @commands_ext.command(
         comics.command,
-        name="config",
-        description="Show/Edit the current configuration for comic feeds.",
+        name='config',
+        description='Show/Edit the current configuration for comic feeds.',
     )
     @app_commands.rename(_format='format')
     @app_commands.describe(
-        brand="The comic brand to receive a feed from.",
-        channel="Channel to set up the feed.",
-        _format="Feed format. Use /formats to view options.",
-        day="Day of the week to send the feed.",
-        ping="Role to ping when the feed is sent.",
-        pin="Whether to pin the feed message.",
-        reset="Reset the configuration."
+        brand='The comic brand to receive a feed from.',
+        channel='Channel to set up the feed.',
+        _format='Feed format. Use /formats to view options.',
+        day='Day of the week to send the feed.',
+        ping='Role to ping when the feed is sent.',
+        pin='Whether to pin the feed message.',
+        reset='Reset the configuration.'
     )
-    @commands_ext.command_permissions(1, user=["manage_channels"])
+    @commands_ext.command_permissions(1, user=['manage_channels'])
     async def comic_config(
             self, interaction: discord.Interaction,
             brand: Brand,
@@ -757,14 +757,14 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
             return await interaction.followup.send(
-                f"<:redTick:1079249771975413910> You have not set up a feed for **{brand.name}** yet in this server!")
+                f'<:redTick:1079249771975413910> You have not set up a feed for **{brand.name}** yet in this server!')
 
         if reset:
             await config.delete()
             self.MaybeSkipTask(config is not None and self._current_feed and self._current_feed.id == config.id)
             self.get_comic_config.invalidate_containing(str(interaction.guild_id))
             return await interaction.followup.send(
-                f"<:greenTick:1079249732364406854> Reset the **{brand.name}** feed configuration.", ephemeral=True)
+                f'<:greenTick:1079249732364406854> Reset the **{brand.name}** feed configuration.', ephemeral=True)
 
         if not any([channel, _format, ping, day, pin]):
             return await interaction.followup.send(embed=config.to_embed())
@@ -772,16 +772,16 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
             kwargs: dict = dict(config.__iter__())
 
             if channel:
-                kwargs["channel_id"] = channel.id
+                kwargs['channel_id'] = channel.id
             if day:
-                kwargs["day"] = day
-                kwargs["next_pull"] = config.next_scheduled(day)
+                kwargs['day'] = day
+                kwargs['next_pull'] = config.next_scheduled(day)
             if ping:
-                kwargs["ping"] = ping.id
+                kwargs['ping'] = ping.id
             if pin:
-                kwargs["pin"] = pin
+                kwargs['pin'] = pin
             if _format:
-                kwargs["format"] = _format.name
+                kwargs['format'] = _format.name
 
             await config.edit(kwargs)
             self.get_comic_config.invalidate_containing(str(interaction.guild_id))
@@ -794,14 +794,14 @@ class ComicPulls(commands.Cog, name="Comic Feeds"):
         """Delays a push until the :func:`publish_to_feed` is available"""
         await asyncio.sleep(10)
         await self.publish_to_feed(feed)
-        log.debug(f"Delayed push for {feed.brand.name} in {feed.guild_id}.")
+        log.debug(f'Delayed push for {feed.brand.name} in {feed.guild_id}.')
 
     @commands.Cog.listener()
     async def on_comic_schedule(self, feed: ComicFeed):
         if feed:
             try:
                 await self.publish_to_feed(feed)
-            except LockedResourceError as e:
+            except LockedResourceError:
                 await self.delay_push(feed)
 
 

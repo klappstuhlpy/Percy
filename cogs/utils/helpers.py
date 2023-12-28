@@ -85,7 +85,7 @@ class PostgresItemMeta(type):
 
     def __call__(cls, *args, **kwargs):
         if cls is PostgresItem:
-            raise TypeError("`PostgresItem` cannot be instantiated directly.")
+            raise TypeError('`PostgresItem` cannot be instantiated directly.')
         return super().__call__(*args, **kwargs)
 
 
@@ -95,10 +95,10 @@ class PostgresItem(metaclass=PostgresItemMeta):
     __slots__ = ('record',)
 
     def __init__(self, *args, **kwargs) -> None:
-        record: asyncpg.Record = kwargs.pop('record', None)
+        record: Optional[asyncpg.Record] = kwargs.pop('record', None)
 
         if record is None and not self.__class__._ignore_record:
-            raise TypeError("Subclasses of `PostgresItem` must provide a `record` keyword argument.")
+            raise TypeError('Subclasses of `PostgresItem` must provide a `record` keyword argument.')
 
         self.record: asyncpg.Record = record
         if record:
@@ -135,13 +135,13 @@ class PostgresItem(metaclass=PostgresItemMeta):
     def __getitem__(self, item: str):
         """Returns the value of the item's record."""
         if not self.record:
-            raise TypeError("Cannot get item from an item without a record.")
+            raise TypeError('Cannot get item from an item without a record.')
         return self.record[item]
 
     def __setitem__(self, item: str, value: Any):
         """Sets the value of the item's record and the internal attributes."""
         if not self.record:
-            self.record = {}  # setting a "fake" record
+            self.record = {}  # setting a 'fake' record
         self.record[item] = value
 
         if item in self.__slots__:
@@ -287,10 +287,10 @@ class TimeMesh(Protocol):
         return hash(self.time)
 
     def __repr__(self) -> str:
-        return f"<TimeMesh time={self.time} start={self._start} end={self._end}>"
+        return f'<TimeMesh time={self.time} start={self._start} end={self._end}>'
 
     @property
     def time(self) -> int:
         if self._end is None:
-            raise ValueError("TimeMesh has not yet ended.")
+            raise ValueError('TimeMesh has not yet ended.')
         return self._end - self._start

@@ -10,15 +10,15 @@ from launcher import get_logger
 log = get_logger(__name__)
 
 _SEARCH_END_TAG_ATTRS = (
-    "data",
-    "function",
-    "class",
-    "attribute",
-    "exception",
-    "seealso",
-    "section",
-    "rubric",
-    "sphinxsidebar",
+    'data',
+    'function',
+    'class',
+    'attribute',
+    'exception',
+    'seealso',
+    'section',
+    'rubric',
+    'sphinxsidebar',
 )
 
 
@@ -27,12 +27,12 @@ class Strainer(SoupStrainer):
 
     def __init__(self, *, include_strings: bool, **kwargs):
         self.include_strings = include_strings
-        passed_text = kwargs.pop("text", None)
+        passed_text = kwargs.pop('text', None)
         if passed_text is not None:
-            log.warning("`text` is not a supported kwarg in the custom strainer.")
+            log.warning('`text` is not a supported kwarg in the custom strainer.')
         super().__init__(**kwargs)
 
-    Markup = PageElement | list["Markup"]
+    Markup = PageElement | list['Markup']
 
     def search(self, markup: Markup) -> Optional[PageElement | str]:
         """Extend default SoupStrainer behaviour to allow matching both `Tag`s` and `NavigableString`s."""
@@ -87,9 +87,9 @@ def _class_filter_factory(class_names: Iterable[str]) -> Callable[[Tag], bool]:
     """Create callable that returns True when the passed in tag's class is in `class_names` or when it's a table."""
     def match_tag(tag: Tag) -> bool:
         for attr in class_names:
-            if attr in tag.get("class", []):
+            if attr in tag.get('class', []):
                 return True
-        return tag.name == "table"
+        return tag.name == 'table'
 
     return match_tag
 
@@ -100,8 +100,8 @@ def get_general_description(start_element: Tag) -> list[Tag | NavigableString]:
     A headerlink tag is attempted to be found to skip repeating the symbol information in the description.
     If it's found it's used as the tag to start the search from instead of the `start_element`.
     """
-    child_tags = _find_recursive_children_until_tag(start_element, _class_filter_factory(["section"]), limit=100)
-    header = next(filter(_class_filter_factory(["headerlink"]), child_tags), None)
+    child_tags = _find_recursive_children_until_tag(start_element, _class_filter_factory(['section']), limit=100)
+    header = next(filter(_class_filter_factory(['headerlink']), child_tags), None)
     start_tag = header.parent if header is not None else start_element
     return _find_next_siblings_until_tag(start_tag, _class_filter_factory(_SEARCH_END_TAG_ATTRS), include_strings=True)
 
@@ -115,33 +115,33 @@ def get_dd_description(symbol: PageElement, *, class_action: str = None) -> Opti
         The tag to start the search from.
     class_action : str, optional
         The class name of the tag to remove or keep, by default None.
-        Must follow the format `div.action` where `div` is the "class" name and `action` is the action to take.
+        Must follow the format `div.action` where `div` is the 'class' name and `action` is the action to take.
         `action` must be one of `extract`, `discard` or `ignore`.
     """
-    description_tag = symbol.find_next("dd")
+    description_tag = symbol.find_next('dd')
 
     def _getAttr(text: str) -> tuple[str, str, str]:
-        splited: [str, str, Literal["extract", "discard", "ignore", "return"]] = text.split(".", 2)
-        assert len(splited) == 3, "Invalid class_action, attribute must follow: `group.class.action`"
+        splited: [str, str, Literal['extract', 'discard', 'ignore', 'return']] = text.split('.', 2)
+        assert len(splited) == 3, 'Invalid class_action, attribute must follow: `group.class.action`'
         return splited[0], splited[1], splited[2]
 
     # For Supported Operations Category
     if class_action:
         group, class_, action = _getAttr(class_action)
 
-        if action == "extract":
+        if action == 'extract':
             # Only use if you want to remove the tag from the document and return it
             # Remove the tag from the document and return it
             dvmop = description_tag.find(group, class_=class_)
             if dvmop:
                 dvmop.extract()
-        elif action == "discard":
+        elif action == 'discard':
             # Only use if you want to remove the tag from the document recursively but not return it
             # Remove the tag from the document
             dvmop = description_tag.find(group, class_=class_)
             if dvmop:
                 dvmop.decompose()
-        elif action == "return":
+        elif action == 'return':
             # Only use if you want to return the tag without removing it from the document
             if not description_tag:
                 return None
@@ -159,31 +159,31 @@ def get_dd_description(symbol: PageElement, *, class_action: str = None) -> Opti
             if dvmop:
                 dvmop.clear()
 
-    return _find_next_children_until_tag(description_tag, ("dt", "dl"), include_strings=True)
+    return _find_next_children_until_tag(description_tag, ('dt', 'dl'), include_strings=True)
 
 
-def _create_markdown_for_element(elem: Tag, template: str = "[{}]({})"):
+def _create_markdown_for_element(elem: Tag, template: str = '[{}]({})'):
     """Create a markdown string for a tag."""
     def is_valid(item, name):
         return item.name == name
 
-    if is_valid(elem, "a"):
+    if is_valid(elem, 'a'):
         tag_name = elem.text
-        tag_href = elem["href"]
+        tag_href = elem['href']
 
         return template.format(tag_name, tag_href)
 
-    if is_valid(elem, "strong"):
-        return f"**{elem.text}**"
+    if is_valid(elem, 'strong'):
+        return f'**{elem.text}**'
 
-    if is_valid(elem, "code"):
-        return f"`{elem.text}`"
+    if is_valid(elem, 'code'):
+        return f'`{elem.text}`'
 
 
 def get_text(element: PageElement | Tag) -> str:
     """Recursively parse an element and its children into a markdown string."""
 
-    if not hasattr(element, "contents"):
+    if not hasattr(element, 'contents'):
         element.contents = [element]
 
     text = []
@@ -197,10 +197,10 @@ def get_text(element: PageElement | Tag) -> str:
         else:
             text.append(child)
 
-    return " ".join(text)
+    return ' '.join(text)
 
 
-def get_signatures(start_signature: PageElement, groups: list[str] = ["dd"]) -> list[str]:
+def get_signatures(start_signature: PageElement, groups: list[str] = ['dd']) -> list[str]:
     """Collect up to `_MAX_SIGNATURE_AMOUNT` signatures from dt tags around the `start_signature` dt tag.
 
     First the signatures under the `start_signature` are included;
@@ -224,11 +224,11 @@ def get_signatures(start_signature: PageElement, groups: list[str] = ["dd"]) -> 
 
 def _filter_signature_links(tag: Tag) -> bool:
     """Return True if `tag` is a headerlink, or a link to source code; False otherwise."""
-    if tag.name == "a":
-        if "headerlink" in tag.get("class", []):
+    if tag.name == 'a':
+        if 'headerlink' in tag.get('class', []):
             return True
 
-        if tag.find(class_="viewcode-link"):
+        if tag.find(class_='viewcode-link'):
             return True
 
     return False

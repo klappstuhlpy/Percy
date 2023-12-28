@@ -40,7 +40,7 @@ class Admin(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="originally_known_as", id=1113011941921792050)
+        return discord.PartialEmoji(name='originally_known_as', id=1113011941921792050)
 
     async def run_process(self, command: str) -> list[str]:  # noqa
         try:
@@ -69,15 +69,15 @@ class Admin(commands.Cog):
     def build_eval_embed(
             user: discord.Member, time_taken: float, result: Optional[str] = None, trc: Optional[str] = None
     ) -> discord.Embed:
-        py_ver = ".".join(map(str, sys.version_info[:3]))
+        py_ver = '.'.join(map(str, sys.version_info[:3]))
 
         if trc:
             description = f'```py\n{result or ""}{trc}\n```'
-            embed = discord.Embed(title="Compiler Output", description=description, color=discord.Color.red())
+            embed = discord.Embed(title='Compiler Output', description=description, color=discord.Color.red())
         else:
             description = result or f'```py\n<No output>\n```'
-            embed = discord.Embed(title="Program Output", description=description, color=discord.Color.green())
-        embed.set_footer(text=f"{user} • {time_taken}ms • python{py_ver}")
+            embed = discord.Embed(title='Program Output', description=description, color=discord.Color.green())
+        embed.set_footer(text=f'{user} • {time_taken}ms • python{py_ver}')
         return embed
 
     @default_permissions(administrator=True)
@@ -92,7 +92,7 @@ class Admin(commands.Cog):
                                                    suppress_embeds=True, ephemeral=True)
 
         interaction.message = await interaction.followup.send(
-            embed=discord.Embed(description="*Processing request...*",
+            embed=discord.Embed(description='*Processing request...*',
                                 color=discord.Color.orange()),
             ephemeral=True)
 
@@ -112,7 +112,7 @@ class Admin(commands.Cog):
         body = self.cleanup_code(content)
         stdout = io.StringIO()
 
-        to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
+        to_compile = f'async def func():\n{textwrap.indent(body, '  ')}'
 
         t_1 = time.time()
         try:
@@ -135,7 +135,7 @@ class Admin(commands.Cog):
         else:
             value = stdout.getvalue()
             try:
-                await message.add_reaction(discord.PartialEmoji(name="yes", id=1066772402270371850, animated=True))
+                await message.add_reaction(discord.PartialEmoji(name='yes', id=1066772402270371850, animated=True))
             except:  # noqa
                 pass
 
@@ -164,7 +164,7 @@ class Admin(commands.Cog):
         """Evaluates a code"""
 
         message = await ctx.send(
-            embed=discord.Embed(description="*Processing request...*",
+            embed=discord.Embed(description='*Processing request...*',
                                 color=discord.Color.orange())
         )
 
@@ -184,7 +184,7 @@ class Admin(commands.Cog):
         body = self.cleanup_code(body)
         stdout = io.StringIO()
 
-        to_compile = f'async def func():\n{textwrap.indent(body, "  ")}'
+        to_compile = f'async def func():\n{textwrap.indent(body, '  ')}'
 
         t_1 = time.time()
         try:
@@ -207,7 +207,7 @@ class Admin(commands.Cog):
         else:
             value = stdout.getvalue()
             try:
-                await ctx.message.add_reaction(discord.PartialEmoji(name="yes", id=1066772402270371850, animated=True))
+                await ctx.message.add_reaction(discord.PartialEmoji(name='yes', id=1066772402270371850, animated=True))
             except:  # noqa
                 pass
 
@@ -223,7 +223,7 @@ class Admin(commands.Cog):
     @commands_ext.command(
         commands.command,
         hidden=True,
-        description="Checks the timing of a command, attempting to suppress HTTP and DB calls."
+        description='Checks the timing of a command, attempting to suppress HTTP and DB calls.'
     )
     async def perf(self, ctx: Context, *, command: str):  # noqa
         """Checks the timing of a command, attempting to suppress HTTP and DB calls."""
@@ -255,7 +255,7 @@ class Admin(commands.Cog):
                 success = True
 
             await ctx.send(
-                embed=discord.Embed(description=f"Status: {ctx.tick(success)} Time: `{(end - start) * 1000:.2f}ms`",
+                embed=discord.Embed(description=f'Status: {ctx.tick(success)} Time: `{(end - start) * 1000:.2f}ms`',
                                     color=discord.Colour.blurple()))
         except:  # noqa
             traceback.print_exc()
@@ -281,7 +281,7 @@ class Admin(commands.Cog):
         commands.group,
         hidden=True,
         invoke_without_command=True,
-        description="Run some SQL."
+        description='Run some SQL.'
     )
     async def sql(self, ctx: Context, *, query: str):
         """Run some SQL."""
@@ -406,7 +406,7 @@ class Admin(commands.Cog):
 
         json = await ctx.db.fetchrow(query)
         if json is None:
-            return await ctx.send_tick(False, 'Somehow nothing returned.')
+            return await ctx.stick(False, 'Somehow nothing returned.')
 
         file = discord.File(io.BytesIO(json[0].encode('utf-8')), filename='explain.json')
         await ctx.send(file=file)
@@ -449,11 +449,11 @@ class Admin(commands.Cog):
     @commands_ext.command(
         commands.command,
         hidden=True,
-        description="Run git Commands in bots Directory in shell. (Shortcut to sh Command)"
+        description='Run git Commands in bots Directory in shell. (Shortcut to sh Command)'
     )
     async def git(self, ctx: Context, *, command: str):
         """Runs a shell command."""
-        await ctx.invoke(self.sh, command=f"cd {Path(__file__).parent.parent.absolute()}\ngit {command}")  # noqa
+        await ctx.invoke(self.sh, command=f'cd {Path(__file__).parent.parent.absolute()}\ngit {command}')  # noqa
 
     @commands_ext.command(
         commands.command,
@@ -470,7 +470,7 @@ class Admin(commands.Cog):
         else:
             text = stdout
 
-        source = TextSource(prefix="```sh")
+        source = TextSource(prefix='```sh')
         for line in text.split('\n'):
             source.add_line(line)
 
@@ -478,7 +478,7 @@ class Admin(commands.Cog):
 
     @commands_ext.command(
         commands.command,
-        name="showlog",
+        name='showlog',
         hidden=True
     )
     async def showlog(self, ctx: Context, log: str = 'percy', last_lines: int = 600):

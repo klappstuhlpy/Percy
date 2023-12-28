@@ -60,7 +60,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
             else:
                 content = message.content.lower()
 
-                if content == "?abort":
+                if content == '?abort':
                     yield Action.ABORTED
                     break
 
@@ -99,7 +99,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
         yield None
 
     def build_embed(self):
-        state = " guessed the word with " if self.finished == 1 else " lost with " if self.finished == -1 else " "
+        state = ' guessed the word with ' if self.finished == 1 else ' lost with ' if self.finished == -1 else ' '
         text = f'You have{state}{self.errors}/6 errors.'
 
         return (
@@ -110,7 +110,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                 colour=self._current_colour,
             )
             .set_image(url=self._current_state)
-            .add_field(name="Tried Words", value=f"**`{self.gussed_letters}`**", inline=False)
+            .add_field(name='Tried Words', value=f'**`{self.gussed_letters}`**', inline=False)
             .set_footer(text=text)
         )
 

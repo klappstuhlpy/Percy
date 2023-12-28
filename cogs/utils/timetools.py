@@ -88,7 +88,7 @@ class ShortTime:
         tzinfo = datetime.timezone.utc
         config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
         if config and config.timezone:
-            tzinfo = config.get_tzinfo
+            tzinfo = config.tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
@@ -130,7 +130,7 @@ class HumanTime:
         tzinfo = datetime.timezone.utc
         config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
         if config and config.timezone:
-            tzinfo = config.get_tzinfo
+            tzinfo = config.tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
@@ -190,7 +190,7 @@ class TimeTransformer(app_commands.Transformer):
         tzinfo = datetime.timezone.utc
         config = await interaction.client.user_settings.get_user_config(interaction.user.id)
         if config and config.timezone:
-            tzinfo = config.get_tzinfo
+            tzinfo = config.tzinfo
 
         now = interaction.created_at.astimezone(tzinfo)
         with suppress(commands.BadArgument):
@@ -256,13 +256,13 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
         try:
             return self.__do_conversion(argument)
         except ValueError:
-            raise commands.BadArgument("<:redTick:1079249771975413910> Invalid time provided.") from None
+            raise commands.BadArgument('<:redTick:1079249771975413910> Invalid time provided.') from None
 
     async def transform(self, interaction, value: str) -> relativedelta:
         try:
             return self.__do_conversion(value)
         except ValueError:
-            raise app_commands.AppCommandError("<:redTick:1079249771975413910> Invalid time provided.") from None
+            raise app_commands.AppCommandError('<:redTick:1079249771975413910> Invalid time provided.') from None
 
 
 class UserFriendlyTime(commands.Converter):
@@ -298,7 +298,7 @@ class UserFriendlyTime(commands.Converter):
         tzinfo = datetime.timezone.utc
         config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
         if config and config.timezone:
-            tzinfo = config.get_tzinfo
+            tzinfo = config.tzinfo
 
         now = ctx.message.created_at
 
@@ -455,7 +455,7 @@ def human_timedelta(
 def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
     """Returns the Timezone offset of a datetime object as a string.
 
-    Example: "UTC +00:00"
+    Example: 'UTC +00:00'
     """
 
     offset = dt.utcoffset()
@@ -513,7 +513,7 @@ async def future_time_from_interaction(
     tzinfo = datetime.timezone.utc
     config = await interaction.client.user_settings.get_user_config(interaction.user.id)
     if config and config.timezone:
-        timezone = config.get_tzinfo
+        timezone = config.tzinfo
     else:
         timezone = 'UTC'
 

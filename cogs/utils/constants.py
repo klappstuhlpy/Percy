@@ -59,7 +59,7 @@ INVITE_REGEX = re.compile(r'(?:https?:)?discord(?:\.gg|\.com|app\.com(/invite)?)
 
 WORD_REGEX = re.compile(r'\W', re.IGNORECASE)
 
-MENTION_REGEX = re.compile(r"<@(!?)([0-9]*)>")
+MENTION_REGEX = re.compile(r'<@(!?)([0-9]*)>')
 URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
 TOKEN_REGEX = re.compile(r'[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,}')
@@ -69,9 +69,9 @@ EMOJI_REGEX = re.compile(r'<a?:.+?:([0-9]{15,21})>')
 EMOJI_NAME_REGEX = re.compile(r'^[0-9a-zA-Z-_]{2,32}$')
 
 CMYK_REGEX = re.compile(
-    r"^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$")
-HEX_REGEX = re.compile(r"^(#|0x)(?P<hex>[a-fA-F0-9]{6})$")
-RGB_REGEX = re.compile(r"^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$")
+    r'^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$')
+HEX_REGEX = re.compile(r'^(#|0x)(?P<hex>[a-fA-F0-9]{6})$')
+RGB_REGEX = re.compile(r'^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$')
 
 REVISION_FILE = re.compile(r'(?P<kind>V|U)(?P<version>[0-9]+)__(?P<description>.+).sql')
 
@@ -111,17 +111,17 @@ GITHUB_FULL_REGEX = re.compile(
 )
 
 GITHUB_RE = re.compile(
-    r"https://github\.com/(?P<repo>[a-zA-Z0-9-]+/[\w.-]+)/blob/"
-    r"(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)?"
+    r'https://github\.com/(?P<repo>[a-zA-Z0-9-]+/[\w.-]+)/blob/'
+    r'(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)?'
 )
 
 GITHUB_GIST_RE = re.compile(
-    r"https://gist\.github\.com/([a-zA-Z0-9-]+)/(?P<gist_id>[a-zA-Z0-9]+)/*"
-    r"(?P<revision>[a-zA-Z0-9]*)/*#file-(?P<file_path>[^#>]+?)(\?[^#>]+)?"
-    r"(-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)"
+    r'https://gist\.github\.com/([a-zA-Z0-9-]+)/(?P<gist_id>[a-zA-Z0-9]+)/*'
+    r'(?P<revision>[a-zA-Z0-9]*)/*#file-(?P<file_path>[^#>]+?)(\?[^#>]+)?'
+    r'(-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)'
 )
 
-PACKAGE_NAME_RE = re.compile(r"[^a-zA-Z0-9_.]")
+PACKAGE_NAME_RE = re.compile(r'[^a-zA-Z0-9_.]')
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
@@ -314,11 +314,11 @@ LANGUAGES = {
 }
 
 HANG_MAN = [
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793965626896454/hangman0.png",
-    "https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman1.png",
-    "https://media.discordapp.net/attachments/1062082492628222103/1122640374075244544/hangman2.png",
-    "https://media.discordapp.net/attachments/1062082492628222103/1122640373790015569/hangman3.png",
-    "https://media.discordapp.net/attachments/1062082492628222103/1122640373529972736/hangman4.png",
-    "https://media.discordapp.net/attachments/1062082492628222103/1122640373286715442/hangman5.png",
-    "https://media.discordapp.net/attachments/1062082492628222103/1122640373039235112/hangman6.png"
+    'https://media.discordapp.net/attachments/1062074624935993427/1117793965626896454/hangman0.png',
+    'https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman1.png',
+    'https://media.discordapp.net/attachments/1062082492628222103/1122640374075244544/hangman2.png',
+    'https://media.discordapp.net/attachments/1062082492628222103/1122640373790015569/hangman3.png',
+    'https://media.discordapp.net/attachments/1062082492628222103/1122640373529972736/hangman4.png',
+    'https://media.discordapp.net/attachments/1062082492628222103/1122640373286715442/hangman5.png',
+    'https://media.discordapp.net/attachments/1062082492628222103/1122640373039235112/hangman6.png'
 ]

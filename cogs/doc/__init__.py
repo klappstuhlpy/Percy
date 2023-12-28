@@ -5,14 +5,14 @@ from cogs.doc._cache import DocCache
 if TYPE_CHECKING:
     from bot import Percy
 else:
-    Percy = type("Percy", (), {})
+    Percy = type('Percy', (), {})
 
 MAX_SIGNATURE_AMOUNT = 3
 PRIORITY_PACKAGES = (
-    "python",
+    'python',
 )
 
-doc_cache = DocCache("doc")
+doc_cache = DocCache('doc')
 
 
 async def setup(bot: Percy) -> None:

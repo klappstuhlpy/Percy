@@ -183,7 +183,7 @@ class PreExistingMuteRoleView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("Sorry, these buttons aren't for you", ephemeral=True)
+            await interaction.response.send_message('Sorry, these buttons aren\'t for you', ephemeral=True)
             return False
         return True
 
@@ -251,7 +251,7 @@ class MassbanFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
 
 
 class PurgeFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
-    user: Optional[discord.User] = commands.flag(description="Remove messages from this user", default=None)
+    user: Optional[discord.User] = commands.flag(description='Remove messages from this user', default=None)
     contains: Optional[str] = commands.flag(
         description='Remove messages that contains this string (case sensitive)', default=None
     )
@@ -294,7 +294,7 @@ class MemberID(commands.Converter):
             try:
                 member_id = int(argument, base=10)
             except ValueError:
-                raise commands.BadArgument(ctx.tick(False, f"{argument} is not a valid member or member ID.")) from None
+                raise commands.BadArgument(ctx.tick(False, f'{argument} is not a valid member or member ID.')) from None
             else:
                 m = await ctx.bot.get_or_fetch_member(ctx.guild, member_id)
                 if m is None:
@@ -382,14 +382,14 @@ class Confirm(discord.ui.View):
         self.value = None
 
     @discord.ui.button(label='Confirm', style=discord.ButtonStyle.gray,
-                       emoji=discord.PartialEmoji(name="yes", id=1066772402270371850, animated=True))
+                       emoji=discord.PartialEmoji(name='yes', id=1066772402270371850, animated=True))
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         await interaction.message.delete()
         self.value = True
         self.stop()
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.gray,
-                       emoji=discord.PartialEmoji(name="declined", id=1066183072984350770, animated=True))
+                       emoji=discord.PartialEmoji(name='declined', id=1066183072984350770, animated=True))
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         await interaction.message.delete()
         self.value = False
@@ -515,7 +515,7 @@ class SpamChecker:
     1) It checks if a user has spammed more than 10 times in 12 seconds
     2) It checks if the content has been spammed 15 times in 17 seconds.
     3) It checks if new users have spammed 30 times in 35 seconds.
-    4) It checks if "fast joiners" have spammed 10 times in 12 seconds.
+    4) It checks if 'fast joiners' have spammed 10 times in 12 seconds.
     5) It checks if a member spammed `config.mention_count * 2` mentions in 12 seconds.
 
     The second case is meant to catch alternating spambots while the first one
@@ -708,7 +708,7 @@ class Mod(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="alumni_mod_animated", id=1076913120599080970, animated=True)
+        return discord.PartialEmoji(name='alumni_mod_animated', id=1076913120599080970, animated=True)
 
     async def bulk_insert(self):
         query = """
@@ -942,7 +942,7 @@ class Mod(commands.Cog):
 
     @commands.hybrid_command()
     @commands.has_permissions(manage_messages=True)
-    @app_commands.describe(duration="The slowmode duration or 0s to disable")
+    @app_commands.describe(duration='The slowmode duration or 0s to disable')
     @app_commands.guild_only()
     async def slowmode(self, ctx: GuildContext, duration: ShortTime):
         """Applies slowmode to this channel"""
@@ -963,10 +963,10 @@ class Mod(commands.Cog):
 
     @commands_ext.command(
         commands.hybrid_group,
-        name="moderation",
-        aliases=["mod"],
-        fallback="info",
-        description="Show current Moderation (automatic moderation) behaviour on the server."
+        name='moderation',
+        aliases=['mod'],
+        fallback='info',
+        description='Show current Moderation (automatic moderation) behaviour on the server.'
     )
     @commands.guild_only()
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
@@ -978,7 +978,7 @@ class Mod(commands.Cog):
 
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if config is None:
-            return await ctx.send(f'{ctx.tick(False)} This server does not have Moderation set up.')
+            return await ctx.stick(False, 'This server does not have Moderation set up.')
 
         e = discord.Embed(title=f'{ctx.guild.name} Moderation',
                           timestamp=datetime.datetime.utcnow(),
@@ -1028,9 +1028,9 @@ class Mod(commands.Cog):
 
     @commands_ext.command(
         moderation.group,
-        name="auditlog",
-        fallback="channel",
-        description="Toggles audit text log on the server."
+        name='auditlog',
+        fallback='channel',
+        description='Toggles audit text log on the server.'
     )
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(
@@ -1044,7 +1044,7 @@ class Mod(commands.Cog):
         await ctx.defer()
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if config.flags.audit_log:
-            await ctx.send_tick(False, f'You already have audit logging enabled. To disable, use "`{ctx.prefix}moderation disable Audit Logging`"')
+            await ctx.stick(False, f'You already have audit logging enabled. To disable, use "`{ctx.prefix}moderation disable Audit Logging`"')
             return
 
         reason = f'{ctx.author} (ID: {ctx.author.id}) enabled Moderation audit log'
@@ -1052,10 +1052,10 @@ class Mod(commands.Cog):
         try:
             webhook = await channel.create_webhook(name='Moderation Audit Log', avatar=self._avatar, reason=reason)
         except discord.Forbidden:
-            await ctx.send_tick(False, f'The bot does not have permissions to create webhooks in {channel.mention}.')
+            await ctx.stick(False, f'The bot does not have permissions to create webhooks in {channel.mention}.')
             return
         except discord.HTTPException:
-            await ctx.send_tick(False, 'An error occurred while creating the webhook. Note you can only have 10 webhooks per channel.')
+            await ctx.stick(False, 'An error occurred while creating the webhook. Note you can only have 10 webhooks per channel.')
             return
 
         query = """
@@ -1072,24 +1072,24 @@ class Mod(commands.Cog):
         flags.audit_log = True
         await ctx.db.execute(query, ctx.guild.id, flags.value, channel.id, webhook.url)
         self.get_guild_config.invalidate(self, ctx.guild.id)
-        await ctx.send_tick(True, f'Audit log enabled. Broadcasting log events to <#{channel.id}>.')
+        await ctx.stick(True, f'Audit log enabled. Broadcasting log events to <#{channel.id}>.')
 
     @commands_ext.command(
         moderation_auditlog.command,
-        name="alter",
-        description="Configures the audit log events.",
+        name='alter',
+        description='Configures the audit log events.',
     )
-    @app_commands.describe(flag="The flag you want to set.",
-                           value="The value you want to set the flag to.")
+    @app_commands.describe(flag='The flag you want to set.',
+                           value='The value you want to set the flag to.')
     async def moderation_auditlog_alter(self, ctx: GuildContext, flag: str, value: bool):
         """Configures the audit log events.
         You can set the Events you want to get notified about via the Audit Log Channel.
         """
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if not config.flags.audit_log:
-            return await ctx.send_tick(False, 'You do not have audit logging enabled. To enable, use `moderation auditlog`."')
+            return await ctx.stick(False, 'You do not have audit logging enabled. To enable, use `moderation auditlog`.')
 
-        if flag == "all":
+        if flag == 'all':
             for key in config.audit_log_flags:
                 config.audit_log_flags[key] = value
             content = f'Set all Audit Log Events to `{value}`.'
@@ -1098,38 +1098,38 @@ class Mod(commands.Cog):
                 config.audit_log_flags[flag] = value
                 content = f'Set Audit Log Event **{flag}** to `{value}`.'
             else:
-                return await ctx.send("<:redTick:1079249771975413910> That is not a valid flag.")
+                return await ctx.stick(False, 'That is not a valid flag.')
 
         query = "UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;"
         await ctx.db.execute(query, ctx.guild.id, config.audit_log_flags)
         self.get_guild_config.invalidate(self, ctx.guild.id)
-        await ctx.send_tick(True, content)
+        await ctx.stick(True, content)
 
-    @moderation_auditlog_alter.autocomplete("flag")
+    @moderation_auditlog_alter.autocomplete('flag')
     async def moderation_auditlog_alter_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         query = "SELECT audit_log_flags AS flags FROM guild_config WHERE id = $1;"
         results: Record = await self.bot.pool.fetchrow(query, interaction.guild_id)
 
-        flags: dict[str, bool] = results.get("flags")
+        flags: dict[str, bool] = results.get('flags')
         choices = [app_commands.Choice(name='All Logs', value='all')]
 
         if current:
             choices.extend(
-                [app_commands.Choice(name=f"{flag} - {state}", value=flag)
+                [app_commands.Choice(name=f'{flag} - {state}', value=flag)
                  for flag, state in flags.items() if current.lower() in flag]
             )
         else:
             choices.extend(
-                [app_commands.Choice(name=f"{flag} - {state}", value=flag) for flag, state in flags.items()]
+                [app_commands.Choice(name=f'{flag} - {state}', value=flag) for flag, state in flags.items()]
             )
         return choices
 
     @commands_ext.command(
         moderation.command,
-        name="disable",
-        description="Disables Moderation on the server.",
+        name='disable',
+        description='Disables Moderation on the server.',
     )
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(protection='The protection to disable')
@@ -1146,12 +1146,12 @@ class Mod(commands.Cog):
                                  protection: Literal['all', 'joins', 'raid', 'mentions', 'auditlog'] = 'all'):
         """Disables Moderation on the server.
         This can be one of these settings:
-        - "all" to disable everything
-        - "joins" to disable join logging
-        - "raid" to disable raid protection
-        - "mentions" to disable mention spam protection
-        - "auditlog" to disable audit logging
-        If not given then it defaults to "all".
+        - 'all' to disable everything
+        - 'joins' to disable join logging
+        - 'raid' to disable raid protection
+        - 'mentions' to disable mention spam protection
+        - 'auditlog' to disable audit logging
+        If not given then it defaults to 'all'.
         """
 
         if protection == 'all':
@@ -1164,8 +1164,8 @@ class Mod(commands.Cog):
             updates = 'mention_count = NULL'
             message = 'Mention spam protection has been disabled'
         elif protection == 'auditlog':
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}"
-            updates += ", audit_log_channel = NULL, audit_log_flags = NULL"
+            updates = f'flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}'
+            updates += ', audit_log_channel = NULL, audit_log_flags = NULL'
             message = 'Audit logging has been disabled.'
         else:
             raise commands.BadArgument(f'Unknown protection {protection}')
@@ -1178,7 +1178,7 @@ class Mod(commands.Cog):
         self.get_guild_config.invalidate(self, guild_id)
         hooks: list = []
         if protection in ('auditlog', 'all'):
-            hooks.append([records.get("audit_log_webhook_url", None), "Audit Log Webhook"])
+            hooks.append([records.get('audit_log_webhook_url', None), 'Audit Log Webhook'])
         for record in hooks:
             if record[0]:
                 wh = discord.Webhook.from_url(record[0], session=self.bot.session)
@@ -1188,12 +1188,12 @@ class Mod(commands.Cog):
                     await ctx.send(
                         f'<:warning:1113421726861238363> The webhook `{record[1]}` could not be deleted for some reason.')
 
-        await ctx.send_tick(True, message)
+        await ctx.stick(True, message)
 
     @commands_ext.command(
         moderation.command,
-        name="raid",
-        description="Toggles raid protection on the server.",
+        name='raid',
+        description='Toggles raid protection on the server.',
     )
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
@@ -1204,7 +1204,7 @@ class Mod(commands.Cog):
 
         perms = ctx.me.guild_permissions
         if not perms.ban_members:
-            return await ctx.send(f'{ctx.tick(False)} I do not have permissions to ban members.')
+            return await ctx.stick(False, 'I do not have permissions to ban members.')
 
         query = """
             INSERT INTO guild_config (id, flags)
@@ -1222,18 +1222,18 @@ class Mod(commands.Cog):
         enabled = row and row[0]
         self.get_guild_config.invalidate(self, ctx.guild.id)
         fmt = '*enabled*' if enabled else '*disabled*'
-        await ctx.send_tick(True, f'Raid protection {fmt}.')
+        await ctx.stick(True, f'Raid protection {fmt}.')
 
     @commands_ext.command(
         moderation.command,
-        name="mentions",
-        description="Enables auto-banning accounts that spam more than \"count\" mentions.",
+        name='mentions',
+        description='Enables auto-banning accounts that spam more than \'count\' mentions.',
     )
     @commands.guild_only()
     @commands_ext.command_permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
-        """Enables auto-banning accounts that spam more than "count" mentions.
+        """Enables auto-banning accounts that spam more than 'count' mentions.
         If a message contains `count` or more mentions then the
         bot will automatically attempt to auto-ban the member.
         The `count` must be greater than 3.
@@ -1249,20 +1249,20 @@ class Mod(commands.Cog):
         """
         await ctx.db.execute(query, ctx.guild.id, count)
         self.get_guild_config.invalidate(self, ctx.guild.id)
-        await ctx.send_tick(True, f'Mention spam protection threshold set to `{count}`.')
+        await ctx.stick(True, f'Mention spam protection threshold set to `{count}`.')
 
     @moderation_mentions.error
     async def moderation_mentions_error(self, ctx: GuildContext, error: commands.CommandError):
         if isinstance(error, commands.RangeError):
-            await ctx.send_tick(False, 'Mention spam protection threshold must be greater than three.')
+            await ctx.stick(False, 'Mention spam protection threshold must be greater than three.')
 
     @commands_ext.command(
         moderation.command,
-        name="ignore",
-        description="Specifies what roles, members, or channels ignore Moderation Inspections.",
+        name='ignore',
+        description='Specifies what roles, members, or channels ignore Moderation Inspections.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=["ban_members"])
+    @commands_ext.command_permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
     async def moderation_ignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1279,23 +1279,23 @@ class Mod(commands.Cog):
         """
 
         if len(entities) == 0:
-            return await ctx.send_tick(False, 'Missing entities to ignore.')
+            return await ctx.stick(False, 'Missing entities to ignore.')
 
         ids = [c.id for c in entities]
         await ctx.db.execute(query, ctx.guild.id, ids)
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.send(
-            f'<:discord_info:1113421814132117545> Updated ignore list to ignore {", ".join(c.mention for c in entities)}',
+            f'<:discord_info:1113421814132117545> Updated ignore list to ignore {', '.join(c.mention for c in entities)}',
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @commands_ext.command(
         moderation.command,
-        name="unignore",
-        description="Specifies what roles, members, or channels to take off the ignore list.",
+        name='unignore',
+        description='Specifies what roles, members, or channels to take off the ignore list.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=["ban_members"])
+    @commands_ext.command_permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
     async def moderation_unignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1305,7 +1305,7 @@ class Mod(commands.Cog):
         """
 
         if len(entities) == 0:
-            return await ctx.send_tick(False, 'Missing entities to unignore.')
+            return await ctx.stick(False, 'Missing entities to unignore.')
 
         query = """
             UPDATE guild_config
@@ -1318,14 +1318,14 @@ class Mod(commands.Cog):
         await ctx.db.execute(query, ctx.guild.id, [c.id for c in entities])
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.send(
-            f'<:discord_info:1113421814132117545> Updated ignore list to no longer ignore {", ".join(c.mention for c in entities)}',
+            f'<:discord_info:1113421814132117545> Updated ignore list to no longer ignore {', '.join(c.mention for c in entities)}',
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @commands_ext.command(
         moderation.command,
-        name="ignored",
-        description="Lists what channels, roles, and members are in the Moderation ignore list.",
+        name='ignored',
+        description='Lists what channels, roles, and members are in the Moderation ignore list.',
     )
     @commands.guild_only()
     async def moderation_ignored(self, ctx: GuildContext):
@@ -1333,7 +1333,7 @@ class Mod(commands.Cog):
 
         config = await self.get_guild_config(ctx.guild.id)
         if config is None or not config.safe_automod_entity_ids:
-            return await ctx.send_tick(False, 'Nothing is ignored!')
+            return await ctx.stick(False, 'Nothing is ignored!')
 
         def resolve_entity_id(x: int, *, guild=ctx.guild):
             if guild.get_role(x):
@@ -1350,7 +1350,7 @@ class Mod(commands.Cog):
             async def format_page(self, entries: List[str], /) -> discord.Embed:
                 embed = discord.Embed(timestamp=datetime.datetime.utcnow(), color=self.colour)
                 embed.set_author(name=f'Ignored Entities', icon_url=get_asset_url(ctx.guild))
-                embed.set_footer(text=f"{plural(len(entities)):entity|entities}")
+                embed.set_footer(text=f'{plural(len(entities)):entity|entities}')
                 embed.description = '\n'.join(entries)
                 return embed
 
@@ -1358,13 +1358,13 @@ class Mod(commands.Cog):
 
     @commands_ext.command(
         commands.hybrid_command,
-        name="purge",
-        description="Removes messages that meet a criteria.",
+        name='purge',
+        description='Removes messages that meet a criteria.',
         aliases=['clear'],
         usage='[search]'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=["manage_messages"], bot=["manage_messages"])
+    @commands_ext.command_permissions(user=['manage_messages'], bot=['manage_messages'])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
             self, ctx: GuildContext, search: Optional[commands.Range[int, 1, 2000]] = None, *, flags: PurgeFlags
@@ -1456,13 +1456,13 @@ class Mod(commands.Cog):
                     timeout=100,
                 )
             except discord.Forbidden:
-                return await ctx.send_tick(False, 'I do not have permissions to delete messages.')
+                return await ctx.stick(False, 'I do not have permissions to delete messages.')
             except discord.HTTPException as e:
-                return await ctx.send_tick(False, f'E: **{e}** Maybe your search was too big?')
+                return await ctx.stick(False, f'E: **{e}** Maybe your search was too big?')
 
             spammers = Counter(m.author.display_name for m in deleted)
             deleted = len(deleted)
-            messages = [f'`{deleted}` message{" was" if deleted == 1 else "s were"} removed.']
+            messages = [f'`{deleted}` message{' was' if deleted == 1 else 's were'} removed.']
             if deleted:
                 messages.append('')
                 spammers = sorted(spammers.items(), key=lambda t: t[1], reverse=True)
@@ -1473,7 +1473,7 @@ class Mod(commands.Cog):
             if len(to_send) > 4000:
                 to_send = f'Successfully removed `{deleted}` messages.'
 
-            embed = discord.Embed(title="Channel Purge", description=to_send)
+            embed = discord.Embed(title='Channel Purge', description=to_send)
             await ctx.send(embed=embed, delete_after=15)
 
     async def get_lockdown_information(
@@ -1610,12 +1610,12 @@ class Mod(commands.Cog):
     @commands_ext.command(
         commands.hybrid_group,
         name='lockdown',
-        fallback="start",
+        fallback='start',
         description='Locks down specific channels.',
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
+    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space separated list of text or voice channels to lock down')
     async def lockdown(
@@ -1642,7 +1642,7 @@ class Mod(commands.Cog):
         if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
-                await ctx.send(embed=discord.Embed(title="Error",
+                await ctx.send(embed=discord.Embed(title='Error',
                                                    description='For some reason, I could not find an an appropriate channel to edit overwrites for.'
                                                                'Note that this lockdown will potentially lock the bot from sending messages. '
                                                                'Please explicitly give the bot permissions to send messages in threads and channels.',
@@ -1651,7 +1651,7 @@ class Mod(commands.Cog):
 
             view = LockdownPermissionIssueView(ctx.me, parent)
             view.message = await ctx.send(
-                embed=discord.Embed(title="Warning",
+                embed=discord.Embed(title='Warning',
                                     description='<:warning:1113421726861238363> This will potentially lock the bot from sending messages.\n'
                                                 'Would you like to resolve the permission issue?',
                                     color=discord.Color(0xF8DB5E)),
@@ -1666,14 +1666,14 @@ class Mod(commands.Cog):
         if failures:
             message = (
                 f'Successfully locked down `{len(success)}`/`{len(failures)}` channels.\n'
-                f'Failed channels: {", ".join(c.mention for c in failures)}\n\n'
-                f'Failed channels: {", ".join(c.mention for c in failures)}\n\n'
+                f'Failed channels: {', '.join(c.mention for c in failures)}\n\n'
+                f'Failed channels: {', '.join(c.mention for c in failures)}\n\n'
                 f'Give the bot Manage Roles permissions in those channels and try again.'
             )
         else:
             message = f'**{plural(len(success)):channel}** were successfully locked down.'
 
-        embed = discord.Embed(title="Locked down", description=message, color=discord.Color.green())
+        embed = discord.Embed(title='Locked down', description=message, color=discord.Color.green())
         await ctx.send(embed=embed)
 
     @commands_ext.command(
@@ -1682,7 +1682,7 @@ class Mod(commands.Cog):
         description='Locks down specific channels for a specified amount of timetools.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
+    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
@@ -1712,12 +1712,12 @@ class Mod(commands.Cog):
 
         reminder = self.bot.reminder
         if reminder is None:
-            return await ctx.send_tick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
+            return await ctx.stick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
 
         if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
-                await ctx.send(embed=discord.Embed(title="Error",
+                await ctx.send(embed=discord.Embed(title='Error',
                                                    description='For some reason, I could not find an an appropriate channel to edit overwrites for.'
                                                                'Note that this lockdown will potentially lock the bot from sending messages. '
                                                                'Please explicitly give the bot permissions to send messages in threads and channels.',
@@ -1726,7 +1726,7 @@ class Mod(commands.Cog):
 
             view = LockdownPermissionIssueView(ctx.me, parent)
             view.message = await ctx.send(
-                embed=discord.Embed(title="Warning",
+                embed=discord.Embed(title='Warning',
                                     description='<:warning:1113421726861238363> This will potentially lock the bot from sending messages.\n'
                                                 'Would you like to resolve the permission issue?',
                                     color=discord.Color.yellow()),
@@ -1753,14 +1753,14 @@ class Mod(commands.Cog):
         if failures:
             message = (
                 f'Successfully locked down `{len(success)}`/`{len(channels)}` channels until {formatted_time}.\n'
-                f'Failed channels: {", ".join(c.mention for c in failures)}\n'
+                f'Failed channels: {', '.join(c.mention for c in failures)}\n'
                 f'Give the bot Manage Roles permissions in {plural(len(failures)):the channel|those channels} and try '
                 f'the lockdown command on the failed **{plural(len(failures)):channel}** again.'
             )
         else:
             message = f'**{plural(len(success)):Channel}** were successfully locked down until {formatted_time}.'
 
-        embed = discord.Embed(title="Locked down", description=message, color=discord.Color.green())
+        embed = discord.Embed(title='Locked down', description=message, color=discord.Color.green())
         await ctx.send(embed=embed)
 
     @commands_ext.command(
@@ -1769,7 +1769,7 @@ class Mod(commands.Cog):
         description='Ends all lockdowns set.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=["manage_roles"])
+    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
@@ -1777,7 +1777,7 @@ class Mod(commands.Cog):
         """
 
         if not await self.check_active_lockdown(ctx.guild, ctx.channel):
-            return await ctx.send_tick(False, 'This channel is currently not on lock down.')
+            return await ctx.stick(False, 'This channel is currently not on lock down.')
 
         reason = f'Lockdown ended by {ctx.author} (ID: {ctx.author.id})'
         async with ctx.typing():
@@ -1788,9 +1788,9 @@ class Mod(commands.Cog):
         if failures:
             formatted = [c.mention for c in failures]
             await ctx.send(
-                f'<:discord_info:1113421814132117545> Lockdown ended. Failed to edit {human_join(formatted, final="and")}')
+                f'<:discord_info:1113421814132117545> Lockdown ended. Failed to edit {human_join(formatted, final='and')}')
         else:
-            await ctx.send_tick(True, 'Lockdown successfully ended.')
+            await ctx.stick(True, 'Lockdown successfully ended.')
 
     @commands.Cog.listener()
     async def on_lockdown_timer_complete(self, timer: LockdownTimer):
@@ -1819,12 +1819,12 @@ class Mod(commands.Cog):
                 formatted = [c.mention for c in failures]
                 await channel.send(
                     f'<:discord_info:1113421814132117545> Lockdown ended. However, '
-                    f'I failed to properly edit {human_join(formatted, final="and")}'
+                    f'I failed to properly edit {human_join(formatted, final='and')}'
                 )
             else:
                 valid = [f'<#{c}>' for c in channel_ids]
                 await channel.send(
-                    f'<:discord_info:1113421814132117545> Lockdown successfully ended for {human_join(valid, final="and")}')
+                    f'<:discord_info:1113421814132117545> Lockdown successfully ended for {human_join(valid, final='and')}')
 
     @staticmethod
     async def _basic_cleanup_strategy(ctx: GuildContext, search: int):
@@ -1838,7 +1838,7 @@ class Mod(commands.Cog):
     @staticmethod
     async def _complex_cleanup_strategy(ctx: GuildContext, search: int):
         def check(m):
-            return m.author == ctx.me or m.content.startswith("?")
+            return m.author == ctx.me or m.content.startswith('?')
 
         deleted = await ctx.channel.purge(limit=search, check=check, before=ctx.message)
         return Counter(m.author.display_name for m in deleted)
@@ -1846,7 +1846,7 @@ class Mod(commands.Cog):
     @staticmethod
     async def _regular_user_cleanup_strategy(ctx: GuildContext, search: int):
         def check(m):
-            return (m.author == ctx.me or m.content.startswith("?")) and not (m.mentions or m.role_mentions)
+            return (m.author == ctx.me or m.content.startswith('?')) and not (m.mentions or m.role_mentions)
 
         deleted = await ctx.channel.purge(limit=search, check=check, before=ctx.message)
         return Counter(m.author.display_name for m in deleted)
@@ -1893,7 +1893,7 @@ class Mod(commands.Cog):
         if len(to_send) > 4000:
             to_send = f'Successfully removed `{deleted}` messages.'
 
-        embed = discord.Embed(title="Channel Cleanup", description=to_send)
+        embed = discord.Embed(title='Channel Cleanup', description=to_send)
         await ctx.send(embed=embed, delete_after=15)
 
     @commands_ext.command(
@@ -1902,7 +1902,7 @@ class Mod(commands.Cog):
         description='Kicks a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=["kick_members"], bot=["kick_members"])
+    @commands_ext.command_permissions(3, user=['kick_members'], bot=['kick_members'])
     async def kick(
             self,
             ctx: GuildContext,
@@ -1919,7 +1919,7 @@ class Mod(commands.Cog):
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
         await ctx.guild.kick(member, reason=reason)
-        await ctx.send_tick(True, f'Kicked {member}.')
+        await ctx.stick(True, f'Kicked {member}.')
 
     @commands_ext.command(
         commands.command,
@@ -1927,7 +1927,7 @@ class Mod(commands.Cog):
         description='Bans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=["ban_members"], bot=["ban_members"])
+    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
     async def ban(
             self,
             ctx: GuildContext,
@@ -1946,7 +1946,7 @@ class Mod(commands.Cog):
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
         await ctx.guild.ban(member, reason=reason)
-        await ctx.send_tick(True, f'Banned `{member}`.')
+        await ctx.stick(True, f'Banned `{member}`.')
 
     @commands_ext.command(
         commands.command,
@@ -1954,7 +1954,7 @@ class Mod(commands.Cog):
         description='Bans multiple members from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=["ban_members"], bot=["ban_members"])
+    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
     async def multiban(
             self,
             ctx: GuildContext,
@@ -1973,7 +1973,7 @@ class Mod(commands.Cog):
 
         total_members = len(members)
         if total_members == 0:
-            return await ctx.send_tick(False, 'Missing members to ban.')
+            return await ctx.stick(False, 'Missing members to ban.')
 
         confirm = await ctx.prompt(
             f'<:warning:1113421726861238363> This will ban **{plural(total_members):member}**. Are you sure?')
@@ -1987,7 +1987,7 @@ class Mod(commands.Cog):
             except discord.HTTPException:
                 failed += 1
 
-        await ctx.send_tick(True, f'Banned [`{total_members - failed}`/`{total_members}`] members.')
+        await ctx.stick(True, f'Banned [`{total_members - failed}`/`{total_members}`] members.')
 
     @commands_ext.command(
         commands.hybrid_command,
@@ -1995,7 +1995,7 @@ class Mod(commands.Cog):
         description='Mass bans multiple members from the server.'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=["ban_members"], bot=["ban_members"])
+    @commands_ext.command_permissions(user=['ban_members'], bot=['ban_members'])
     async def massban(self, ctx: GuildContext, *, flags: MassbanFlags):
         """Mass bans multiple members from the server.
         This command uses a syntax similar to Discord's search bar. To use this command,
@@ -2021,7 +2021,7 @@ class Mod(commands.Cog):
                 try:
                     _match = re.compile(flags.match)
                 except re.error as e:
-                    return await ctx.send_tick(False, f'Invalid regex passed to `match:` flag: {e}')
+                    return await ctx.stick(False, f'Invalid regex passed to `match:` flag: {e}')
                 else:
                     predicates.append(lambda m, x=_match: x.match(m.content))
             if flags.embeds:
@@ -2050,7 +2050,7 @@ class Mod(commands.Cog):
             try:
                 _regex = re.compile(flags.username)
             except re.error as e:
-                return await ctx.send_tick(False, f'Invalid regex passed to `username:` flag: {e}')
+                return await ctx.stick(False, f'Invalid regex passed to `username:` flag: {e}')
             else:
                 predicates.append(lambda m, x=_regex: x.match(m.name))
 
@@ -2099,17 +2099,17 @@ class Mod(commands.Cog):
             flags.reason = await ActionReason().convert(ctx, 'Raid detected')
 
         if len(members) == 0:
-            return await ctx.send_tick(False, 'No members found matching criteria.')
+            return await ctx.stick(False, 'No members found matching criteria.')
 
         if flags.show:
             members = sorted(members.values(), key=lambda m: m.joined_at or now)
-            fmt = "\n".join(f'ID: {m.id}\tJoined: {m.joined_at}\tCreated: {m.created_at}\tMember: {m}' for m in members)
+            fmt = '\n'.join(f'ID: {m.id}\tJoined: {m.joined_at}\tCreated: {m.created_at}\tMember: {m}' for m in members)
             content = f'- Current Time: {discord.utils.utcnow()}\n- Total members: {len(members)}\n\n{fmt}'
             file = discord.File(io.BytesIO(content.encode('utf-8')), filename='members.txt')
             return await ctx.send(file=file)
 
         if flags.reason is None:
-            return await ctx.send_tick(False, '`--reason` flag is required.')
+            return await ctx.stick(False, '`--reason` flag is required.')
         else:
             reason = await ActionReason().convert(ctx, flags.reason)
 
@@ -2126,7 +2126,7 @@ class Mod(commands.Cog):
             else:
                 count += 1
 
-        await ctx.send_tick(True, f'Banned `{count}`/`{len(members)}` members.')
+        await ctx.stick(True, f'Banned `{count}`/`{len(members)}` members.')
 
     @commands_ext.command(
         commands.command,
@@ -2134,7 +2134,7 @@ class Mod(commands.Cog):
         description='Soft bans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=["kick_members"], bot=["kick_members"])
+    @commands_ext.command_permissions(3, user=['kick_members'], bot=['kick_members'])
     async def softban(
             self,
             ctx: GuildContext,
@@ -2155,7 +2155,7 @@ class Mod(commands.Cog):
 
         await ctx.guild.ban(member, reason=reason)
         await ctx.guild.unban(member, reason=reason)
-        await ctx.send_tick(True, f'Successfully softbanned **{member}**.')
+        await ctx.stick(True, f'Successfully softbanned **{member}**.')
 
     @commands_ext.command(
         commands.command,
@@ -2163,7 +2163,7 @@ class Mod(commands.Cog):
         description='Unbans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=["ban_members"], bot=["ban_members"])
+    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
     async def unban(
             self,
             ctx: GuildContext,
@@ -2183,9 +2183,9 @@ class Mod(commands.Cog):
 
         await ctx.guild.unban(member.user, reason=reason)
         if member.reason:
-            await ctx.send_tick(True, f'Unbanned {member.user} (ID: `{member.user.id}`), previously banned for **{member.reason}**.')
+            await ctx.stick(True, f'Unbanned {member.user} (ID: `{member.user.id}`), previously banned for **{member.reason}**.')
         else:
-            await ctx.send_tick(True, f'Unbanned {member.user} (ID: `{member.user.id}`).')
+            await ctx.stick(True, f'Unbanned {member.user} (ID: `{member.user.id}`).')
 
     @commands_ext.command(
         commands.hybrid_command,
@@ -2193,7 +2193,7 @@ class Mod(commands.Cog):
         description='Temporarily bans a member for the specified duration.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=["ban_members"], bot=["ban_members"])
+    @commands_ext.command_permissions(user=['ban_members'], bot=['ban_members'])
     @app_commands.describe(duration='The duration to ban the member for. Must be a future Time.',
                            member='The member to ban.',
                            reason='The reason for banning the member.')
@@ -2207,11 +2207,11 @@ class Mod(commands.Cog):
     ):
         """Temporarily bans a member for the specified duration.
         The duration can be a short time form, e.g. 30d or a more human
-        duration such as "until thursday at 3PM" or a more concrete time
-        such as "2024-12-31".
+        duration such as 'until thursday at 3PM' or a more concrete time
+        such as '2024-12-31'.
 
         Note that times are in UTC unless the timezone is
-        specified using the "timezone set" command.
+        specified using the 'timezone set' command.
 
         You can also ban from ID to ban regardless of whether they're
         in the server or not.
@@ -2224,9 +2224,9 @@ class Mod(commands.Cog):
 
         reminder = self.bot.reminder
         if reminder is None:
-            return await ctx.send_tick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
+            return await ctx.stick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
 
-        until = f'until {discord.utils.format_dt(duration, "F")}'
+        until = f'until {discord.utils.format_dt(duration, 'F')}'
         heads_up_message = f'<:discord_info:1113421814132117545> You have been banned from {ctx.guild.name} {until}. Reason: {reason}'
 
         try:
@@ -2247,7 +2247,7 @@ class Mod(commands.Cog):
             created=ctx.message.created_at,
             timezone=zone or 'UTC',
         )
-        await ctx.send_tick(True, f'Ban for **{member}** ends {discord.utils.format_dt(duration, "R")}.')
+        await ctx.stick(True, f'Ban for **{member}** ends {discord.utils.format_dt(duration, 'R')}.')
 
     @commands.Cog.listener()
     async def on_tempban_timer_complete(self, timer: Timer):
@@ -2334,7 +2334,7 @@ class Mod(commands.Cog):
         invoke_without_command=True,
     )
     @can_mute()
-    @commands_ext.command_permissions(3, bot=["manage_roles"])
+    @commands_ext.command_permissions(3, bot=['manage_roles'])
     async def _mute(
             self,
             ctx: ModGuildContext,
@@ -2357,7 +2357,7 @@ class Mod(commands.Cog):
         role = discord.Object(id=ctx.guild_config.mute_role_id)
         total = len(members)
         if total == 0:
-            return await ctx.send_tick(False, 'Missing members to mute.')
+            return await ctx.stick(False, 'Missing members to mute.')
 
         failed = 0
         for member in members:
@@ -2366,7 +2366,7 @@ class Mod(commands.Cog):
             except discord.HTTPException:
                 failed += 1
 
-        await ctx.send_tick(True, f'Muted [`{total - failed}`/`{total}`] members.')
+        await ctx.stick(True, f'Muted [`{total - failed}`/`{total}`] members.')
 
     @commands_ext.command(
         commands.command,
@@ -2374,7 +2374,7 @@ class Mod(commands.Cog):
         description='Unmutes members using the configured mute role.',
     )
     @can_mute()
-    @commands_ext.command_permissions(3, bot=["manage_roles"])
+    @commands_ext.command_permissions(3, bot=['manage_roles'])
     async def _unmute(
             self,
             ctx: ModGuildContext,
@@ -2397,7 +2397,7 @@ class Mod(commands.Cog):
         role = discord.Object(id=ctx.guild_config.mute_role_id)
         total = len(members)
         if total == 0:
-            return await ctx.send_tick(False, 'Missing members to unmute.')
+            return await ctx.stick(False, 'Missing members to unmute.')
 
         failed = 0
         for member in members:
@@ -2406,7 +2406,7 @@ class Mod(commands.Cog):
             except discord.HTTPException:
                 failed += 1
 
-        await ctx.send_tick(True, f'Unmuted [`{total - failed}`/`{total}`] members.')
+        await ctx.stick(True, f'Unmuted [`{total - failed}`/`{total}`] members.')
 
     @commands_ext.command(
         commands.hybrid_command,
@@ -2414,7 +2414,7 @@ class Mod(commands.Cog):
         description='Temporarily mutes a member for the specified duration.',
     )
     @can_mute()
-    @commands_ext.command_permissions(bot=["manage_roles"])
+    @commands_ext.command_permissions(bot=['manage_roles'])
     @app_commands.describe(duration='The duration to mute the member for. Must be a future Time.',
                            member='The member to mute.',
                            reason='The reason for muting the member.')
@@ -2428,11 +2428,11 @@ class Mod(commands.Cog):
     ):
         """Temporarily mutes a member for the specified duration.
         The duration can be a short time form, e.g. 30d or a more human
-        duration such as "until thursday at 3PM" or a more concrete time
-        such as "2024-12-31".
+        duration such as 'until thursday at 3PM' or a more concrete time
+        such as '2024-12-31'.
 
         Note that times are in UTC unless a timezone is specified
-        using the "timezone set" command.
+        using the 'timezone set' command.
 
         This has the same permissions as the `mute` command.
         """
@@ -2441,7 +2441,7 @@ class Mod(commands.Cog):
 
         reminder = self.bot.reminder
         if reminder is None:
-            return await ctx.send_tick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
+            return await ctx.stick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
 
         assert ctx.guild_config.mute_role_id is not None
         role_id = ctx.guild_config.mute_role_id
@@ -2459,8 +2459,8 @@ class Mod(commands.Cog):
             created=ctx.message.created_at,
             timezone=zone or 'UTC',
         )
-        await ctx.send_tick(
-            True, f'Mute for {discord.utils.escape_mentions(str(member))} ends {discord.utils.format_dt(duration, "R")}.')
+        await ctx.stick(
+            True, f'Mute for {discord.utils.escape_mentions(str(member))} ends {discord.utils.format_dt(duration, 'R')}.')
 
     @commands.Cog.listener()
     async def on_tempmute_timer_complete(self, timer: Timer):
@@ -2506,7 +2506,7 @@ class Mod(commands.Cog):
         name='role',
         description='Shows configuration of the mute role.',
     )
-    @commands_ext.command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
+    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def _mute_role(self, ctx: GuildContext):
         """Shows configuration of the mute role.
         To use these commands, you need to have Manage Roles
@@ -2521,14 +2521,14 @@ class Mod(commands.Cog):
             role = f'{role} (ID: {role.id})'
         else:
             total = 0
-        await ctx.send(f'<:greenTick:1079249732364406854> Role: {role}\nMembers Muted: {total}')
+        await ctx.stick(True, f'Role: {role}\nMembers Muted: {total}')
 
     @commands_ext.command(
         _mute_role.command,
         name='set',
         description='Sets the mute role to a pre-existing role.',
     )
-    @commands_ext.command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
+    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     @commands.cooldown(1, 60.0, commands.BucketType.guild)
     async def mute_role_set(self, ctx: GuildContext, *, role: discord.Role):
         """Sets the mute role to a pre-existing role.
@@ -2538,13 +2538,13 @@ class Mod(commands.Cog):
         """
 
         if role.is_default():
-            return await ctx.send_tick(False, 'Cannot use the @\u200beveryone role.')
+            return await ctx.stick(False, 'Cannot use the @\u200beveryone role.')
 
         if role > ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-            return await ctx.send_tick(False, 'This role is higher than your highest role.')
+            return await ctx.stick(False, 'This role is higher than your highest role.')
 
         if role > ctx.me.top_role:
-            return await ctx.send_tick(False, 'This role is higher than my highest role.')
+            return await ctx.stick(False, 'This role is higher than my highest role.')
 
         config = await self.get_guild_config(ctx.guild.id)
         has_pre_existing = config is not None and config.mute_role is not None
@@ -2578,7 +2578,7 @@ class Mod(commands.Cog):
         async with ctx.typing():
             await self.update_mute_role(ctx, config, role, merge=merge)
             escaped = discord.utils.escape_mentions(role.name)
-            await ctx.send_tick(True, f'Successfully set the {escaped} role as the mute role.\n\n'
+            await ctx.stick(True, f'Successfully set the {escaped} role as the mute role.\n\n'
                                           '**Note: Permission overwrites have not been changed.**')
 
     @commands_ext.command(
@@ -2587,7 +2587,7 @@ class Mod(commands.Cog):
         description='Updates the permission overwrites of the mute role.',
         aliases=['sync']
     )
-    @commands_ext.command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
+    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_update(self, ctx: GuildContext):
         """Updates the permission overwrites of the mute role.
         This works by blocking the Send Messages and Adding Reactions
@@ -2599,7 +2599,7 @@ class Mod(commands.Cog):
         config = await self.get_guild_config(ctx.guild.id)
         role = config and config.mute_role
         if role is None:
-            return await ctx.send_tick(False, 'No mute role has been set up to update.')
+            return await ctx.stick(False, 'No mute role has been set up to update.')
 
         async with ctx.typing():
             success, failure, skipped = await self.update_mute_role_permissions(
@@ -2616,7 +2616,7 @@ class Mod(commands.Cog):
         name='create',
         description='Creates a mute role with the given name.',
     )
-    @commands_ext.command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
+    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_create(self, ctx: GuildContext, *, name):
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly
@@ -2634,7 +2634,7 @@ class Mod(commands.Cog):
             role = await ctx.guild.create_role(name=name,
                                                reason=f'Mute Role Created By {ctx.author} (ID: {ctx.author.id})')
         except discord.HTTPException as e:
-            return await ctx.send_tick(False, f'An error happened: {e}')
+            return await ctx.stick(False, f'An error happened: {e}')
 
         query = """
             INSERT INTO guild_config (id, mute_role_id)
@@ -2648,13 +2648,13 @@ class Mod(commands.Cog):
         confirm = await ctx.prompt(
             '<:warning:1113421726861238363> Would you like to update the channel overwrites as well?')
         if not confirm:
-            return await ctx.send('<:greenTick:1079249732364406854> Mute role successfully created.')
+            return await ctx.stick(True, 'Mute role successfully created.')
 
         async with ctx.typing():
             success, failure, skipped = await self.update_mute_role_permissions(
                 role, ctx.guild, ctx.author._user  # noqa
             )
-            await ctx.send_tick(
+            await ctx.stick(
                 True, 'Mute role successfully created. Overwrites: ' f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
 
     @commands_ext.command(
@@ -2663,7 +2663,7 @@ class Mod(commands.Cog):
         aliases=['delete'],
         description='Unbinds a mute role without deleting it.',
     )
-    @commands_ext.command_permissions(3, user=["manage_roles", "moderate_members"], bot=["manage_roles"])
+    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_unbind(self, ctx: GuildContext):
         """Unbinds a mute role without deleting it.
         To use these commands, you need to have Manage Roles
@@ -2684,7 +2684,7 @@ class Mod(commands.Cog):
         query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.bot.pool.execute(query, guild_id)
         self.get_guild_config.invalidate(self, guild_id)
-        await ctx.send_tick(True, 'Successfully unbound mute role.')
+        await ctx.stick(True, 'Successfully unbound mute role.')
 
     @commands_ext.command(
         commands.command,
@@ -2692,7 +2692,7 @@ class Mod(commands.Cog):
         description='Temporarily mutes yourself for the specified duration.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, bot=["manage_roles"])
+    @commands_ext.command_permissions(3, bot=['manage_roles'])
     async def selfmute(
             self,
             ctx: GuildContext,
@@ -2708,7 +2708,7 @@ class Mod(commands.Cog):
 
         reminder = self.bot.reminder
         if reminder is None:
-            return await ctx.send_tick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
+            return await ctx.stick(False, 'Sorry, this functionality is currently unavailable. Try again later?')
 
         config = await self.get_guild_config(ctx.guild.id)
         role_id = config and config.mute_role_id
@@ -2716,14 +2716,14 @@ class Mod(commands.Cog):
             raise NoMuteRole()
 
         if ctx.author._roles.has(role_id):  # noqa
-            return await ctx.send_tick(False, 'Somehow you are already muted?')
+            return await ctx.stick(False, 'Somehow you are already muted?')
 
         created_at = ctx.message.created_at
         if duration > (created_at + datetime.timedelta(days=1)):
-            return await ctx.send_tick(False, 'Duration is too long. Must be at most 24 hours.')
+            return await ctx.stick(False, 'Duration is too long. Must be at most 24 hours.')
 
         if duration < (created_at + datetime.timedelta(minutes=5)):
-            return await ctx.send_tick(False, 'Duration is too short. Must be at least 5 minutes.')
+            return await ctx.stick(False, 'Duration is too short. Must be at least 5 minutes.')
 
         delta = timetools.human_timedelta(duration, source=created_at)
         warning = f'Are you sure you want to be muted for {delta}?\n**Do not ask the moderators to undo this!**'
@@ -2743,8 +2743,8 @@ class Mod(commands.Cog):
             created=created_at
         )
 
-        await ctx.send_tick(
-            True, f'Selfmute ends **{discord.utils.format_dt(duration, "f")}**. Be sure not to bother anyone about it.')
+        await ctx.stick(
+            True, f'Selfmute ends **{discord.utils.format_dt(duration, 'f')}**. Be sure not to bother anyone about it.')
 
 
 async def setup(bot):
