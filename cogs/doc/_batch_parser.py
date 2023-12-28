@@ -34,7 +34,7 @@ class ParseResultFuture(asyncio.Future):
     """
     Future with metadata for the parser class.
 
-    `user_requested` is set by the parser when a Future is requested by an user and moved to the front,
+    `user_requested` is set by the parser when a Future is requested by a user and moved to the front,
     allowing the futures to only be waited for when clearing if they were user requested.
     """
 
@@ -49,7 +49,7 @@ class BatchParser:
 
     DocItems are added through the `add_item` method which adds them to the `_page_doc_items` dict.
     `get_markdown` is used to fetch the Markdown; when this is used for the first time on a page,
-    all of the symbols are queued to be parsed to avoid multiple web requests to the same page.
+    all the symbols are queued to be parsed to avoid multiple web requests to the same page.
     """
 
     def __init__(self, bot: Percy):
@@ -107,10 +107,10 @@ class BatchParser:
                     continue
 
                 try:
-                    fields_mardown = await get_field_markdown(soup, item)
+                    fields_markdown = await get_field_markdown(soup, item)
                     markdown = await get_symbol_markdown(soup, item)
                     if markdown is not None:
-                        item.resolved_fields = fields_mardown
+                        item.resolved_fields = fields_markdown
                         await doc_cache.set(item, markdown)
                 except Exception:
                     log.exception(f'Unexpected error when handling {item}')

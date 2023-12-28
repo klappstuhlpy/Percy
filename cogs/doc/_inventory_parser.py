@@ -20,7 +20,7 @@ class InvalidHeaderError(Exception):
 
 
 class ZlibStreamReader:
-    """Class used for decoding zlib data of a stream line by line."""
+    """Class used for decoding zlib data of a streamline by line."""
 
     READ_CHUNK_SIZE = 16 * 1024  # 16 KiB
 
@@ -108,7 +108,7 @@ async def _fetch_inventory(session: aiohttp.ClientSession, url: str) -> Inventor
 async def fetch_inventory(session: aiohttp.ClientSession, url: str) -> InventoryDict | None:
     """Get an inventory dict from `url`, retrying `FAILED_REQUEST_ATTEMPTS` times on errors.
 
-    `url` should point at a valid sphinx objects.inv inventory file, which will be parsed into the
+    `url` should point at a valid sphinx objects.inv file, which will be parsed into the
     inventory dict in the format of {'domain:role': [('symbol_name', 'relative_url_to_symbol'), ...], ...}
     """
     # TODO: Implement check if website is unreachable, for example down for maintenance or because of server site

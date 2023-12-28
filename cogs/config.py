@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 
 from .utils.paginator import BasePaginator, LinePaginator
-from .utils import cache, commands_ext
+from .utils import cache, commands_ext, errors
 from .utils.converters import aenumerate, get_asset_url
 from .utils.formats import plonk_iterator
 from itertools import accumulate
@@ -34,7 +34,7 @@ else:
             }
 
             if lowered not in valid_commands:
-                raise commands.BadArgument(f'<:redTick:1079249771975413910> Command {lowered!r} is not valid.')
+                raise errors.BadArgument(f'Command {lowered!r} is not valid.')
 
             return lowered
 

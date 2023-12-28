@@ -110,12 +110,12 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
                 colour=self._current_colour,
             )
             .set_image(url=self._current_state)
-            .add_field(name='Tried Words', value=f'**`{self.gussed_letters}`**', inline=False)
+            .add_field(name='Tried Words', value=f'**`{self.guessed_letters}`**', inline=False)
             .set_footer(text=text)
         )
 
     @property
-    def gussed_letters(self) -> str:
+    def guessed_letters(self) -> str:
         """Returns the guessed letters."""
         return ' '.join(letter for letter in (self.guessed | self.fail_guessed)) or '\u200b'
 

@@ -9,7 +9,7 @@ import re
 
 from .base import PH_GUILD_ID
 from .utils.paginator import BasePaginator
-from .utils import commands_ext
+from .utils import commands_ext, errors
 from .utils.render import Render
 from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
@@ -32,7 +32,7 @@ class ColorParser(commands.clean_content):
         value = converted.strip()
 
         if not value:
-            raise commands.BadArgument('<:redTick:1079249771975413910> Please enter a valid color format.')
+            raise errors.BadArgument('Please enter a valid color format.')
 
         if match := re.match(HEX_REGEX, value):
             hex_value = match.group("hex")
@@ -48,11 +48,10 @@ class ColorParser(commands.clean_content):
             converted = None
 
         if converted is None:
-            raise commands.BadArgument(f"<:redTick:1079249771975413910> The Input {value!r} is not a valid format.\n"
-                                       f"Please use HEX, RGB or CYMK.")
+            raise errors.BadArgument('The Input {value!r} is not a valid format. Please use HEX, RGB or CYMK.')
 
         if isinstance(converted, str):
-            raise commands.BadArgument(f"<:redTick:1079249771975413910> Could not convert {value!r} to a color.")
+            raise errors.BadArgument(f'Could not convert {value!r} to a color.')
 
         return converted
 

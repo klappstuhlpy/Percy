@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 
 from cogs.utils.paginator import LinePaginator
 from .emoji import usage_per_day
-from .utils import formats, fuzzy, helpers, cache, commands_ext
+from .utils import formats, fuzzy, helpers, cache, commands_ext, errors
 from .utils.converters import get_asset_url
 from .utils.formats import plural, medal_emojize, get_shortened_string
 from .utils.helpers import PostgresItem
@@ -46,20 +46,17 @@ class TagNameOrID(commands.clean_content):
         lower = converted.lower().strip()
 
         if not lower:
-            raise commands.BadArgument(
-                '<:redTick:1079249771975413910> Please enter a valid tag name' + ' or id.' if self.with_id else '.')
+            raise errors.BadArgument('Please enter a valid tag name' + ' or id.' if self.with_id else '.')
 
         if len(lower) > 100:
-            raise commands.BadArgument(
-                f'<:redTick:1079249771975413910> Tag names must be 100 characters or less. (You have *{len(lower)}* characters)')
+            raise errors.BadArgument(f'Tag names must be 100 characters or less. (You have *{len(lower)}* characters)')
 
         cog: Tags = ctx.bot.get_cog('Tags')  # noqa
         if cog is None:
-            raise commands.BadArgument('<:redTick:1079249771975413910> Tags are currently unavailable.')
+            raise errors.BadArgument('Tags are currently unavailable.')
 
         if cog.is_tag_reserved(ctx.guild.id, argument):
-            raise commands.BadArgument(
-                '<:redTick:1079249771975413910> Hey, that\'s a reserved tag name. Choose another one.')
+            raise errors.BadArgument('Hey, that\'s a reserved tag name. Choose another one.')
 
         if self.with_id:
             if converted and converted.isdigit():
@@ -81,8 +78,7 @@ class TagContent(commands.clean_content):
         converted = await super().convert(ctx, argument)
 
         if len(converted) > 2000:
-            raise commands.BadArgument(
-                f'<:redTick:1079249771975413910> Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
+            raise errors.BadArgument('Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
 
         return converted
 
@@ -266,13 +262,11 @@ class Tag(PostgresItem):
         except Exception as e:
             match e:
                 case asyncpg.UniqueViolationError():
-                    raise commands.BadArgument(
-                        '<:redTick:1079249771975413910> A Tag with this name already exists.')
+                    raise errors.BadArgument('A Tag with this name already exists.')
                 case asyncpg.StringDataRightTruncationError():
-                    raise commands.BadArgument(
-                        '<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.')
+                    raise errors.BadArgument('Tag Name length out of range, max. 100 characters.')
                 case asyncpg.CheckViolationError():
-                    raise commands.BadArgument('<:redTick:1079249771975413910> Tag Content is missing.')
+                    raise errors.BadArgument('Tag Content is missing.')
                 case _:
                     raise e
 
@@ -400,8 +394,7 @@ class Tags(commands.Cog):
             self._temporary_reserved_tags[guild_id] = set()
 
         if name in self._temporary_reserved_tags[guild_id]:
-            raise commands.BadArgument(
-                '<:redTick:1079249771975413910> Hey, this Name is temporarily reserved, try again later or use a different one.')
+            raise errors.BadArgument('Hey, this Name is temporarily reserved, try again later or use a different one.')
 
         self._temporary_reserved_tags[guild_id].add(name)
         try:
@@ -630,16 +623,13 @@ class Tags(commands.Cog):
 
                 match e:
                     case asyncpg.UniqueViolationError():
-                        raise commands.BadArgument(
-                            '<:redTick:1079249771975413910> A Tag with this name already exists.')
+                        raise errors.BadArgument('A Tag with this name already exists.')
                     case asyncpg.StringDataRightTruncationError():
-                        raise commands.BadArgument(
-                            '<:redTick:1079249771975413910> Tag Name length out of range, max. 100 characters.')
+                        raise errors.BadArgument('Tag Name length out of range, max. 100 characters.')
                     case asyncpg.CheckViolationError():
-                        raise commands.BadArgument('<:redTick:1079249771975413910> Tag Content is missing.')
+                        raise errors.BadArgument('Tag Content is missing.')
                     case _:
-                        raise commands.BadArgument(
-                            '<:redTick:1079249771975413910> Tag could not be created due to an Unknown reason. Try again later?')
+                        raise errors.BadArgument('Tag could not be created due to an Unknown reason. Try again later?')
             else:
                 await tr.commit()
                 await ctx.stick(True, f'Tag `{name}` was successfully created.')

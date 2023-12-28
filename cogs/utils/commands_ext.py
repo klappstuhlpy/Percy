@@ -198,7 +198,7 @@ def command(
     examples: List[str]
         A list of examples for the command. Defaults to ``None``.
     nsfw: bool
-        Whether or not the command is NSFW. Defaults to ``False``.
+        Whether the command is NSFW. Defaults to ``False``.
     extras: Dict[Any, Any]
         A dictionary of extra information to be stored in the command. Defaults to ``None``.
     raw: bool

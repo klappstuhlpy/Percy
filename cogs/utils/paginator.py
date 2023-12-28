@@ -186,13 +186,13 @@ class BasePaginator(discord.ui.View, Generic[T]):
     ----------
     entries: List[Any]
         A list of entries to get spread across pages.
-    per_page: :class:`int`
+    per_page: :class: `int`
         The number of entries that get passed onto one page.
     pages: List[List[Any]]
         A list of pages which contain all entries for that page.
     clamp_pages: :class:`bool`
-        Whether or not to clamp the pages to the min and max.
-    timeout: :class:`int`
+        Whether to clamp the pages to the min and max.
+    timeout: :class: `int`
         The timeout for the paginator.
     """
 
@@ -383,7 +383,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
 
         Parameters
         ----------
-        context: :class:`commands.Context`
+        context: Union[:class:`commands.Context`, :class:`discord.Interaction`]
             The context to send to. This could also be discord.abc.Messageable as `ctx.send` is the only method
             used.
         entries: List[T]
@@ -391,19 +391,21 @@ class BasePaginator(discord.ui.View, Generic[T]):
         per_page: :class:`int`
             A number of how many entries you want per page.
         clamp_pages: :class:`bool`
-            Whether or not to clamp the pages to the amount of entries.
+            Whether to clamp the pages to the amount of entries.
         timeout: :class:`int`
             How long to wait before the paginator closes due to inactivity.
         search_for: :class:`bool`
-            Whether or not to enable the search feature.
+            Whether to enable the search feature.
         ephemeral: :class:`bool`
-            Whether or not to make the message ephemeral.
-        \*\*kwargs: :class:`Any`
+            Whether to make the message ephemeral.
+        *args: :class:`Any`
+            Any arguments to pass onto the paginator.
+        **kwargs: :class:`Any`
             Any keyword arguments to pass onto the paginator.
 
         Returns
         -------
-        :class:`BaseButtonPaginator`[T]
+        class:`BaseButtonPaginator`[T]
             The paginator that was started.
         """
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
@@ -436,7 +438,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
 
 
 class EmbedPaginator(BasePaginator[discord.Embed]):
-    """Sub class of :class:`BasePaginator` that is used to paginate :class:`discord.Embed`'s."""
+    """Subclass of :class:`BasePaginator` that is used to paginate :class:`discord.Embed`'s."""
 
     async def format_page(self, entries: List[discord.Embed], /) -> List[discord.Embed]:
         return entries
@@ -471,7 +473,7 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
 
 
 class LinePaginator(BasePaginator[List[Any]]):
-    """Sub class of :class:`BasePaginator` that is used to paginate lines with an template Embed."""
+    """Subclass of :class:`BasePaginator` that is used to paginate lines with a template Embed."""
 
     embed: discord.Embed
     location: Literal['field', 'description']
@@ -515,25 +517,27 @@ class LinePaginator(BasePaginator[List[Any]]):
         per_page: :class:`int`
             A number of how many entries you want per page.
         clamp_pages: :class:`bool`
-            Whether or not to clamp the pages to the amount of entries.
+            Whether to clamp the pages to the amount of entries.
         timeout: :class:`int`
             How long to wait before the paginator closes due to inactivity.
         search_for: :class:`bool`
-            Whether or not to enable the search feature.
+            Whether to enable the search feature.
         ephemeral: :class:`bool`
-            Whether or not to make the message ephemeral.
-        \*args: :class:`Any`
+            Whether to make the message ephemeral.
+        *args: :class:`Any`
             Any arguments to pass onto the paginator.
-        \*\*kwargs: :class:`Any`
+        **kwargs: :class:`Any`
             Any keyword arguments to pass onto the paginator.
-        embed: :class:`discord.Embed`
-             Special keyword-only argument for the embed to use for the paginator.
-        location: Literal['field', 'description']
-             Special keyword-only argument for the location to put the entries in.
+
+        ...
+            embed: :class:`discord.Embed`
+                 Special keyword-only argument for the embed to use for the paginator.
+            location: Literal['field', 'description']
+                 Special keyword-only argument for the location to put the entries in.
 
         Returns
         -------
-        :class:`BaseButtonPaginator`[T]
+        class:`BaseButtonPaginator`[T]
             The paginator that was started.
         """
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
@@ -555,7 +559,7 @@ class LinePaginator(BasePaginator[List[Any]]):
 
 
 class TextPaginator(BasePaginator[str]):
-    """Sub class of :class:`BasePaginator` that is used to paginate text."""
+    """Subclass of :class:`BasePaginator` that is used to paginate a text."""
 
     async def format_page(self, entries: List[str], /) -> str:
         return entries[0]
@@ -590,7 +594,7 @@ class TextPaginator(BasePaginator[str]):
 
 
 class FilePaginator(BasePaginator[AnyStr]):
-    """Sub class of :class:`BasePaginator` that is used to paginate files."""
+    """Subclass of :class:`BasePaginator` that is used to paginate files."""
 
     async def format_page(self, entries: List[AnyStr]) -> List[discord.File]:
         files = []

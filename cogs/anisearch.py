@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 from lru import LRU
 
 from bot import Percy
-from .utils import fuzzy, commands_ext
+from .utils import fuzzy, commands_ext, errors
 from .utils.anisearch import _formatter
 from .utils.context import Context
 from .utils.anisearch._client import AniListClient
@@ -280,8 +280,7 @@ class AniListSearch(commands.Cog, name="Media"):
             embeds = [await self._embed_builder.media(anime) for anime in data]
             await EmbedPaginator.start(ctx, entries=embeds, per_page=1)
         else:
-            raise commands.BadArgument(
-                f'<:redTick:1079249771975413910> An anime with the title {prompt!r} could not be found.')
+            raise errors.BadArgument(f'An anime with the title {prompt!r} could not be found.')
 
     @commands_ext.command(
         commands.hybrid_group,
@@ -313,8 +312,7 @@ class AniListSearch(commands.Cog, name="Media"):
             embeds = [await self._embed_builder.media(manga) for manga in data]
             await EmbedPaginator.start(ctx, entries=embeds, per_page=1)
         else:
-            raise commands.BadArgument(
-                f'<:redTick:1079249771975413910> A manga with the title {prompt!r} could not be found.')
+            raise errors.BadArgument(f'A manga with the title {prompt!r} could not be found.')
 
     @commands_ext.command(
         commands.hybrid_command,
@@ -335,8 +333,7 @@ class AniListSearch(commands.Cog, name="Media"):
             embeds = [self._embed_builder.character(character) for character in data]
             await EmbedPaginator.start(ctx, entries=embeds, per_page=1)
         else:
-            raise commands.BadArgument(
-                f'<:redTick:1079249771975413910> A character with the name {prompt!r} could not be found.')
+            raise errors.BadArgument(f'A character with the name {prompt!r} could not be found.')
 
     async def trending(self, ctx: Context, media: str):
         """Displays the current trending anime or manga."""

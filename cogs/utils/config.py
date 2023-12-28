@@ -128,7 +128,7 @@ class Config(Generic[_T]):
 
         Example
         -------
-        .. code-block:: python3
+        ... code-block:: python3
 
             async with config.aquire():
                 await config.put('key', 'value')

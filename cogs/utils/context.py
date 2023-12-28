@@ -25,14 +25,14 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
-def tick(opt: Optional[bool], label: Optional[str] = None) -> str:
+def tick(_: Optional[bool], label: Optional[str] = None) -> str:
     """Returns a tick or cross emoji based on the value of `opt`."""
     lookup = {
         True: '<:greenTick:1079249732364406854>',
         False: '<:redTick:1079249771975413910>',
         None: '<:greyTick:1079250082819477634>',
     }
-    emoji = lookup.get(opt, '<:redTick:1079249771975413910>')
+    emoji = lookup.get(_, '<:redTick:1079249771975413910>')
     if label is not None:
         return f'{emoji} {label}'
     return emoji

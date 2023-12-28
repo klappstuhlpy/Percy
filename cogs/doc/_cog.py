@@ -18,7 +18,7 @@ from launcher import get_logger
 from cogs.doc import PRIORITY_PACKAGES, _batch_parser, doc_cache, _inventory_parser
 from ._inventory_parser import InvalidHeaderError, InventoryDict, fetch_inventory
 
-from ..utils import helpers, fuzzy, commands_ext
+from ..utils import helpers, fuzzy, commands_ext, errors
 from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
@@ -62,12 +62,12 @@ class PackageName(commands.Converter):
                     embed.set_footer(text=f'{plural(len(cog.base_urls)):inventory|invetories} found.')
                     results = [f'• [`{entry[0]}`]({entry[1]})' for entry in [(k, v) for k, v in cog.base_urls.items()]]
                     await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
-                    raise commands.BadArgument(f'{ctx.tick(False)} The package `{argument}` is not available.')
+                    raise errors.BadArgument(f'The package `{argument}` is not available.')
                 else:
-                    raise commands.BadArgument(f'{ctx.tick(False)} There are no inventories available at the moment.')
+                    raise errors.BadArgument(f'There are no inventories available at the moment.')
 
         if PACKAGE_NAME_RE.search(argument):
-            raise commands.BadArgument(
+            raise errors.BadArgument(
                 'The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters.')
         return argument
 
@@ -87,19 +87,15 @@ class ValidURL(commands.Converter):
         try:
             async with ctx.bot.session.get(url) as resp:
                 if resp.status != 200:
-                    raise commands.BadArgument(
-                        f'HTTP GET on `{url}` returned status `{resp.status}`, expected 200'
-                    )
+                    raise errors.BadArgument(f'HTTP GET on `{url}` returned status `{resp.status}`, expected 200')
         except CertificateError:
             if url.startswith('https'):
-                raise commands.BadArgument(
-                    f'Got a `CertificateError` for URL `{url}`. Does it support HTTPS?'
-                )
-            raise commands.BadArgument(f'Got a `CertificateError` for URL `{url}`.')
+                raise errors.BadArgument(f'Got a `CertificateError` for URL `{url}`. Does it support HTTPS?')
+            raise errors.BadArgument(f'Got a `CertificateError` for URL `{url}`.')
         except ValueError:
-            raise commands.BadArgument(f'`{url}` doesn\'t look like a valid hostname to me.')
+            raise errors.BadArgument(f'`{url}` doesn\'t look like a valid hostname to me.')
         except ClientConnectorError:
-            raise commands.BadArgument(f'Cannot connect to host with URL `{url}`.')
+            raise errors.BadArgument(f'Cannot connect to host with URL `{url}`.')
         return url
 
 
@@ -122,13 +118,11 @@ class Inventory(commands.Converter):
         try:
             inventory = await _inventory_parser.fetch_inventory(ctx.bot.session, url)
         except _inventory_parser.InvalidHeaderError:
-            raise commands.BadArgument(
+            raise errors.BadArgument(
                 f'{ctx.tick(False)} Unable to parse inventory because of invalid header, check if URL is correct.')
         else:
             if inventory is None:
-                raise commands.BadArgument(
-                    f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.'
-                )
+                raise errors.BadArgument(f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.')
             return url, inventory
 
 
@@ -272,7 +266,7 @@ class DocView(discord.ui.View, Generic[T]):
 
         try:
             # update the embed in the doc_symbols cache
-            # we set the embed permanently so we don't have to re-create it next time
+            # we set the embed permanently, so we don't have to re-create it next time
             origin = self.cog.doc_symbols[item.package][item.symbol_id]
         except KeyError:
             pass
@@ -464,7 +458,7 @@ class Documentation(commands.Cog):
             self.update_single(api_package_name, base_url, package)
 
     def ensure_unique_symbol_name(self, package_name: str, group_name: str, symbol_name: str) -> str:
-        """Ensure `symbol_name` doesn't overwrite an another symbol in `doc_symbols`.
+        """Ensure `symbol_name` doesn't overwrite a symbol in `doc_symbols`.
 
         For conflicts, rename either the current symbol or the existing symbol with which it conflicts.
         Store the new name in `renamed_symbols` and return the name to use for the symbol.

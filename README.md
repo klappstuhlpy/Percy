@@ -40,7 +40,7 @@ To configure the PostgreSQL database for use by the bot, go to the directory whe
 
 4**Configure the bot:**
 
-- Setup a ``config.py`` File:
+- Set up a ``config.py`` File:
 
 ```py
 client_id = ''  # Your Bots Client ID

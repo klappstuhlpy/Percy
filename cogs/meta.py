@@ -965,8 +965,8 @@ class Meta(commands.Cog):
     async def source(self, ctx: Context, *, command: Optional[str] = None):  # noqa
         """Displays my full source code or for a specific command.
 
-        To display the source code of a subcommand you can separate it by
-        periods, e.g. tag.create for the create subcommand of the tag command
+        To display the source code of a subcommand, you can separate it by
+        periods, e.g., tag.create for the creation subcommand of the tag command
         or by spaces.
         """
         source_url = 'https://github.com/klappstuhlpy/Percy'

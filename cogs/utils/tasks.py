@@ -66,7 +66,7 @@ def executor(sync_function: Callable[P, T]) -> Callable[P, Awaitable[T]]:
 
     Pushing processing with the Python Imaging Library into an executor:
 
-    .. code-block:: python3
+    ... code-block:: python3
 
         from io import BytesIO
         from PIL import Image
@@ -113,8 +113,8 @@ class Scheduler(ABC):
     the instance is suggested.
 
     Coroutines can be scheduled immediately with :obj:`schedule` or in the future with :obj:`schedule_at`
-    or :obj:`schedule_later`. A unique ID is required to be given in order to keep track of the
-    resulting Tasks. Any scheduled task can be cancelled prematurely using :obj:`cancel` by providing
+    or :obj:`schedule_later`. A unique ID is required to be given to keep track of the
+    resulting Tasks. Any scheduled task can be canceled prematurely using :obj:`cancel` by providing
     the same ID used to schedule it.
 
     The ``in`` operator is supported for checking if a task with a given ID is currently scheduled.
@@ -123,7 +123,7 @@ class Scheduler(ABC):
 
     Examples
     --------
-    .. code-block:: python3
+    ... code-block:: python3
 
         from cogs.utils.tasks import Scheduler
 
@@ -361,7 +361,7 @@ class Scheduler(ABC):
             # Close it to prevent unawaited coroutine warnings,
             # which would happen if the task was cancelled during the sleep.
             # Only close it if it's not been awaited yet. This check is important because the
-            # coroutine may cancel this task, which would also trigger the finally block.
+            # coroutine may cancel this task, which would also trigger the final block.
             state = inspect.getcoroutinestate(coroutine)
             if state == 'CORO_CREATED':
                 self._log.debug(f'Explicitly closing the coroutine for #{task_id}.')

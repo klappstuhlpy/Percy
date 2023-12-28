@@ -329,8 +329,7 @@ class Reminder(commands.Cog):
                 timetools.FriendlyTimeResult, timetools.UserFriendlyTime(commands.clean_content, default='…')],  # noqa
     ):
         """Reminds you of something after a certain amount of timetools.
-        The input can be any direct date (e.g. YYYY-MM-DD) or a human
-        readable offset.
+        The input can be any direct date (e.g. YYYY-MM-DD) or a human-readable offset.
 
         Times are in UTC unless a timezone is specified
         using the "timezone set" command.

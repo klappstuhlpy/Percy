@@ -704,7 +704,7 @@ class Stats(commands.Cog):
                     record |= row._mapping  # noqa
 
                 # didn't find a better way to do this because rows returns only the values,
-                # what's a bit heavy to deal with on changes so we use a mapping,
+                # what's a bit heavy to deal with on changes, so we use a mapping,
                 # so I just did it like this
 
             embed = discord.Embed(colour=helpers.Colour.darker_red())

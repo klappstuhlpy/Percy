@@ -94,5 +94,5 @@ class DocCache:
 
 
 def item_key(item: DocItem) -> str:
-    """Get the redis redis key string from `item`."""
+    """Get the redis key string from `item`."""
     return f'{item.package}:{item.relative_url_path.removesuffix('.html')}'

@@ -23,7 +23,7 @@ from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
 from launcher import get_logger
 from cogs.utils.commands_ext import PermissionTemplate
-from .utils import timetools, cache, helpers, commands_ext
+from .utils import timetools, cache, helpers, commands_ext, errors
 from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
@@ -294,14 +294,14 @@ class MemberID(commands.Converter):
             try:
                 member_id = int(argument, base=10)
             except ValueError:
-                raise commands.BadArgument(ctx.tick(False, f'{argument} is not a valid member or member ID.')) from None
+                raise errors.BadArgument(f'{argument} is not a valid member or member ID.') from None
             else:
                 m = await ctx.bot.get_or_fetch_member(ctx.guild, member_id)
                 if m is None:
                     return type('_Hackban', (), {'id': member_id, '__str__': lambda s: f'Member ID {s.id}'})()
 
         if not can_execute_action(ctx, ctx.author, m):
-            raise commands.BadArgument(ctx.tick(False, 'You cannot do this action on this user due to role hierarchy.'))
+            raise errors.BadArgument('You cannot do this action on this user due to role hierarchy.')
         return m
 
 
@@ -312,12 +312,12 @@ class BannedMember(commands.Converter):
             try:
                 return await ctx.guild.fetch_ban(discord.Object(id=member_id))
             except discord.NotFound:
-                raise commands.BadArgument(ctx.tick(False, 'This member has not been banned before.')) from None
+                raise errors.BadArgument('This member has not been banned before.') from None
 
         entity = await discord.utils.find(lambda u: str(u.user) == argument, ctx.guild.bans(limit=None))
 
         if entity is None:
-            raise commands.BadArgument(ctx.tick(False, 'This member has not been banned before.'))
+            raise errors.BadArgument('This member has not been banned before.')
         return entity
 
 
@@ -327,7 +327,7 @@ class ActionReason(commands.Converter):
 
         if len(ret) > 512:
             reason_max = 512 - len(ret) + len(argument)
-            raise commands.BadArgument(ctx.tick(False, f'Reason is too long ({len(argument)}/{reason_max})'))
+            raise errors.BadArgument(f'Reason is too long ({len(argument)}/{reason_max})')
         return ret
 
 
@@ -1168,7 +1168,7 @@ class Mod(commands.Cog):
             updates += ', audit_log_channel = NULL, audit_log_flags = NULL'
             message = 'Audit logging has been disabled.'
         else:
-            raise commands.BadArgument(f'Unknown protection {protection}')
+            raise errors.BadArgument(f'Unknown protection {protection}')
 
         query = f'UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url'
 

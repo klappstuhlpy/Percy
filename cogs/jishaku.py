@@ -14,6 +14,7 @@ from jishaku.features.baseclass import Feature
 from jishaku.math import natural_size
 from jishaku.modules import package_version
 
+from cogs.utils import errors
 from cogs.utils.context import Context
 from cogs.utils.converters import ModuleConverter, get_asset_url
 from cogs.utils.formats import plural
@@ -94,7 +95,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                 try:
                     guilds_set.add(int(target))
                 except ValueError as error:
-                    raise commands.BadArgument(f'{target} is not a valid guild ID') from error
+                    raise errors.BadArgument(f'{target} is not a valid guild ID') from error
 
         if not targets:
             guilds_set.add(None)

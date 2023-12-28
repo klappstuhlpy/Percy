@@ -51,7 +51,7 @@ class SharedEvent:
     """Context manager managing an internal event exposed through the wait coro.
 
     While any code is executing in this context manager, the underlying event will not be set;
-    when all of the holders finish the event will be set.
+    when all the holders finish the event will be set.
 
     This is useful for waiting for all holders of a lock to finish.
     A holder should enter the context manager before acquiring the lock and exit after releasing it.

@@ -17,7 +17,7 @@ import discord
 from discord import File
 from discord.ext import commands, tasks
 
-from .utils import commands_ext
+from .utils import commands_ext, errors
 from .utils.converters import Snowflake
 from .utils.paginator import TextSource
 from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
@@ -532,7 +532,7 @@ class Base(commands.Cog, name='Exclusives'):
     async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
         """Get Discord snowflake creation time."""
         if not snowflakes:
-            raise commands.BadArgument(f'{ctx.tick(False)} At least one snowflake must be provided.')
+            raise errors.BadArgument(f'At least one snowflake must be provided.')
 
         lines = []
         for snowflake in snowflakes:

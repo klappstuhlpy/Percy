@@ -38,7 +38,7 @@ class TimeZone(NamedTuple):
         try:
             return await ctx.disambiguate(timezones, lambda t: t[0], ephemeral=True)
         except ValueError:
-            raise commands.BadArgument(f'<:redTick:1079249771975413910> Could not find timezone for {argument!r}')
+            raise errors.BadArgument(f'Could not find timezone for {argument!r}')
 
     def to_choice(self) -> app_commands.Choice[str]:
         return app_commands.Choice(name=self.label, value=self.key)

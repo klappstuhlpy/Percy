@@ -49,9 +49,9 @@ def censor_object(blacklist: list[int] | Any, obj: str | discord.abc.Snowflake) 
 
 
 def betterget(obj: Any, attr: Union[str, Any], default: Any = None):
-    """Gets a nested attribute from an dictionary/object and formats the output accordingly.
+    """Gets a nested attribute from a dictionary/object and formats the output accordingly.
 
-    Resolves for example isoformatted datetimes etc.
+    Resolves, for example, isoformatted datetimes etc.
     """
 
     if isinstance(obj, dict):
@@ -109,7 +109,7 @@ def remove_html_tags(content: str) -> str:
 
 
 def readable_time(seconds: int | float, decimal: bool = False, short: bool = False) -> str:
-    """Returns a human readable time format.
+    """Returns a human-readable time format.
 
     Parameters
     ----------
@@ -181,12 +181,12 @@ def pagify(
 
     Parameters
     ----------
-    text : str
+    text: str
         The content to pagify and send.
-    delims : `sequence` of `str`, optional
+    delims: `sequence` of `str`, optional
         Characters where page breaks will occur. If no delimiters are found
         in a page, the page will break after ``page_length`` characters.
-        By default this only contains the newline.
+        By default, this only contains the newline.
 
     Other Parameters
     ----------------

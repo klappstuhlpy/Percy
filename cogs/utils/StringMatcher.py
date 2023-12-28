@@ -64,7 +64,7 @@ class StringMatcher:
         return self._ratio
 
     def quick_ratio(self):
-        # This is usually quick enough :o)
+        # This is usually quick enough
         if not self._ratio:
             self._ratio = ratio(self._str1, self._str2)
         return self._ratio
