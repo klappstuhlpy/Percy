@@ -291,7 +291,7 @@ class Reminder(commands.Cog):
         delta = (when - now).total_seconds()
 
         if delta <= 60:  # dont want delta to be negative
-            self.bot.loop.create_task(self.short_timer_optimisation(delta, timer))
+            self.bot.loop.create_task(self.short_timer_optimisation(delta, timer))  # noqa
             return timer
 
         query = """
