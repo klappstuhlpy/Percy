@@ -1,7 +1,6 @@
 import functools
 import inspect
 import types
-from functools import _Wrapped
 from typing import Sequence, Callable, OrderedDict, Any
 
 Argument = int | str
@@ -127,10 +126,10 @@ def command_wraps(
         updated: Sequence[str] = functools.WRAPPER_UPDATES,
         *,
         ignored_conflict_names: set[str] = frozenset(),
-) -> Callable[[types.FunctionType], types.FunctionType]:
+) -> Callable[[...], Any]:
     """Update the decorated function to look like `wrapped` and update globals for discordpy forwardref evaluation."""
 
-    def decorator(wrapper: types.FunctionType) -> _Wrapped[..., Any]:
+    def decorator(wrapper: types.FunctionType):
         return functools.update_wrapper(
             update_wrapper_globals(wrapper, wrapped, ignored_conflict_names=ignored_conflict_names),
             wrapped,
