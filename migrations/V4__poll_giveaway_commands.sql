@@ -1,4 +1,4 @@
--- Revises: V5
+-- Revises: V3
 -- Creation Date: 2023-03-28 13:20:17.941295 UTC
 -- Reason: poll_giveaway_commands
 

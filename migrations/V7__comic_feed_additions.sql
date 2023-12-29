@@ -1,4 +1,4 @@
--- Revises: V9
+-- Revises: V6
 -- Creation Date: 2023-05-15 08:45:52.476354 UTC
 -- Reason: Marvel Comics Configuration Addition
 

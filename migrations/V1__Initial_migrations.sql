@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS guild_config (
     id BIGINT PRIMARY KEY,
+    flags SMALLINT DEFAULT 0 NOT NULL,
     mention_count SMALLINT,
     safe_automod_entity_ids BIGINT ARRAY,
     mute_role_id BIGINT,
@@ -67,7 +68,8 @@ CREATE TABLE IF NOT EXISTS commands (
     used TIMESTAMP,
     prefix TEXT,
     command TEXT,
-    failed BOOLEAN
+    failed BOOLEAN,
+    app_command BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS commands_guild_id_idx ON commands (guild_id);
@@ -75,6 +77,7 @@ CREATE INDEX IF NOT EXISTS commands_author_id_idx ON commands (author_id);
 CREATE INDEX IF NOT EXISTS commands_used_idx ON commands (used);
 CREATE INDEX IF NOT EXISTS commands_command_idx ON commands (command);
 CREATE INDEX IF NOT EXISTS commands_failed_idx ON commands (failed);
+CREATE INDEX IF NOT EXISTS commands_app_command_idx ON commands (app_command);
 
 CREATE TABLE IF NOT EXISTS plonks (
     id SERIAL PRIMARY KEY,
