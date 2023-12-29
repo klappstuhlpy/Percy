@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS tag_lookup (
     location_id BIGINT,
     owner_id BIGINT,
     created_at TIMESTAMP DEFAULT (now() at time zone 'utc'),
-    tag_id INTEGER REFERENCES tags (id) ON DELETE CASCADE ON UPDATE NO ACTION
+    parent_id INTEGER REFERENCES tags (id) ON DELETE CASCADE ON UPDATE NO ACTION
 );
 
 CREATE INDEX IF NOT EXISTS tag_lookup_name_idx ON tag_lookup (name);
