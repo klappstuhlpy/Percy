@@ -1074,6 +1074,7 @@ class Tags(commands.Cog):
         if content and len(content) > 2000:
             return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
 
+        self.get_tag.invalidate_containing(tag.name)
         await tag.edit(name=name, use_embed=use_embed, content=content)
         await ctx.stick(True, 'Successfully edited tag.')
         await self.send_tag(ctx, tag.id)
