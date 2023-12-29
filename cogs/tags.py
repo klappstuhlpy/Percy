@@ -102,17 +102,21 @@ class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
 
 
 class TagEditModal(discord.ui.Modal, title='Edit Tag'):
+    tag_name = discord.ui.TextInput(label='Name', required=True, max_length=100, min_length=1)
     content = discord.ui.TextInput(
-        label='New Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
+        label='Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
     )
 
     def __init__(self, tag: Tag) -> None:
         super().__init__()
         self.content.default = tag.content
+        self.tag_name.default = tag.name
 
+    # noinspection PyAttributeOutsideInit
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        self.interaction = interaction  # noqa
-        self.text = str(self.content)  # noqa
+        self.interaction = interaction
+        self.text = str(self.content)
+        self.name = str(self.tag_name)
         self.stop()
 
 
@@ -221,6 +225,7 @@ class Tag(PostgresItem):
     async def edit(
             self,
             *,
+            name: Optional[str] = None,
             content: Optional[str] = None,
             use_embed: Optional[bool] = None,
     ) -> Optional[str]:
@@ -230,6 +235,8 @@ class Tag(PostgresItem):
 
         Parameters
         ----------
+        name: Optional[str]
+            The new name of the tag.
         content: Optional[str]
             The new content of the tag.
         use_embed: Optional[bool]
@@ -246,6 +253,9 @@ class Tag(PostgresItem):
             The update status of the query.
         """
         kwargs = {}
+
+        if name is not None:
+            kwargs['name'] = name
 
         if content is not None:
             kwargs['content'] = content
@@ -1027,11 +1037,12 @@ class Tags(commands.Cog):
     ):
         """Edit the content or name of a Tag.
         `Note:` If you don't pass a content, you will be prompted to edit the tag in a modal.
-        This may be useful for larger contents."""
+        This may be useful for larger contents.
 
-        if ctx.interaction:
-            await ctx.defer()
-        else:
+        You can only edit the name of the tag in within the modal.
+        """
+
+        if not ctx.interaction:
             await ctx.channel.typing()
 
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id)
@@ -1039,6 +1050,7 @@ class Tags(commands.Cog):
         if not tag:
             return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
 
+        name = tag.name
         if content is None and use_embed is None:
             if ctx.interaction is None:
                 return await ctx.stick(False, 'Missing content to edit tag with')
@@ -1048,12 +1060,12 @@ class Tags(commands.Cog):
                 await modal.wait()
                 ctx.interaction = modal.interaction
                 content = modal.text
+                name = modal.name
 
-        if content:
-            if len(content) > 2000:
-                return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
+        if content and len(content) > 2000:
+            return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
 
-        await tag.edit(use_embed=use_embed, content=content)
+        await tag.edit(name=name, use_embed=use_embed, content=content)
         await ctx.stick(True, 'Successfully edited tag.')
         # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
         await self.send_tag(ctx, name_or_id)
