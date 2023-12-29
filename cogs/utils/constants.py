@@ -1,4 +1,5 @@
 import re
+import platform
 from pathlib import Path
 from typing import Callable, Dict, Any, Union, TypeVar, Coroutine
 
@@ -9,7 +10,10 @@ from discord.ext import commands
 
 from cogs.utils.context import Context, GuildContext
 
-BOT_BASE_FOLDER = Path(__file__).parent.parent.parent.absolute()
+if platform.system() == 'Windows':
+    BOT_BASE_FOLDER = Path(__file__).parent.parent.parent.absolute()
+else:
+    BOT_BASE_FOLDER = Path(__file__).parent.parent.absolute()
 
 PH_GUILD_ID = 1066703165669515264
 PH_BOTS_ROLE = 1066703165669515266
