@@ -254,7 +254,8 @@ class Tag(PostgresItem):
         """
         kwargs = {}
 
-        if name is not None:
+        _name = lambda: name != self.name  # noqa
+        if _name:
             kwargs['name'] = name
 
         if content is not None:
@@ -269,6 +270,10 @@ class Tag(PostgresItem):
         query = "UPDATE tags SET " + ", ".join(f'{k}=${i}' for i, k in enumerate(kwargs, start=2)) + " WHERE id=$1;"
         try:
             updated = await self.bot.pool.fetchrow(query, self.id, *kwargs.values())
+
+            if _name:
+                query = "UPDATE tag_lookup SET name=$1 WHERE name=$2 AND parent_id=$3;"
+                await self.bot.pool.execute(query, name, self.name, self.id)
         except Exception as e:
             match e:
                 case asyncpg.UniqueViolationError():
@@ -284,6 +289,8 @@ class Tag(PostgresItem):
             self.content = content
         if use_embed is not None:
             self.use_embed = use_embed
+        if _name:
+            self.name = name
 
         return updated
 
@@ -1045,7 +1052,8 @@ class Tags(commands.Cog):
         if not ctx.interaction:
             await ctx.channel.typing()
 
-        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id)
+        tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
+                                 only_parent=True)
 
         if not tag:
             return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
