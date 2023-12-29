@@ -597,7 +597,8 @@ class Tags(commands.Cog):
         tag.aliases = [AliasTag(parent=tag, record=alias) for alias in tag.aliases]
 
         self.get_tag.refactor_containing(str(tag.id), tag)
-        self.get_tag.refactor_containing(tag.name, tag)
+        # Need to invalidate the cache in case the Tags name was changed
+        self.get_tag.invalidate_containing(tag.name)
 
     @staticmethod
     async def create_tag(ctx: GuildContext, name: str, content: str) -> None:
@@ -1075,8 +1076,7 @@ class Tags(commands.Cog):
 
         await tag.edit(name=name, use_embed=use_embed, content=content)
         await ctx.stick(True, 'Successfully edited tag.')
-        # Here we don't need to invalidate the cache because it's automatically done in the `send_tag` method.
-        await self.send_tag(ctx, name_or_id)
+        await self.send_tag(ctx, tag.id)
 
     @commands_ext.command(
         tag.command,
