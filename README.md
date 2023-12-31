@@ -6,7 +6,7 @@ This project is a Discord bot written in Python using the discord.py library. Th
 
 Before running the bot, make sure you have the following installed:
 
-- Python >=3.9: [Download Python](https://www.python.org/downloads/)
+- Python >=3.12: [Download Python](https://www.python.org/downloads/)
 - PostgreSQL: [Download PostgreSQL](https://www.postgresql.org/download/)
 
 ## Installation
@@ -43,25 +43,23 @@ To configure the PostgreSQL database for use by the bot, go to the directory whe
 - Set up a ``config.py`` File:
 
 ```py
+from types import SimpleNamespace
+
 client_id = ''  # Your Bots Client ID
 token = ''  # Your Bots Token
 debug = False
 
+mystbin_key = ''  # Mystbin API Key
 wolfram_api_key = ''  # Wolfram Alpha API Key
 github_key = ''  # GitHub Gist creation
-postgresql = ''  # Base Postgres
 
+postgresql = ''  # Base Postgres
 alchemy_postgresql = ''  # For ORM work
+
 stat_webhook = ('', '')  # ID, Code
 
-class anilist:  # AniList Configuration
-    client_id: int = 0
-    client_secret: str = ''
-    redirect_uri: str = 'https://anilist.co/api/v2/oauth/pin'
-
-class marvel:  # Marvel Configuration
-    public_key: str = ''
-    private_key: str = ''
+anilist = SimpleNamespace(client_id=0, client_secret='', redirect_uri='https://anilist.co/api/v2/oauth/pin')  # Anilist API Keys
+marvel = SimpleNamespace(public_key='', private_key='')  # Marvel API Keys
 ```
 
 ## License

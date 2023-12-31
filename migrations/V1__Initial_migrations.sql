@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS tags (
     owner_id BIGINT,
     uses INTEGER DEFAULT (0),
     location_id BIGINT,
-    created_at TIMESTAMP DEFAULT (now() at time zone 'utc')
+    created_at TIMESTAMP DEFAULT (now() at time zone 'utc'),
+    use_embed BOOLEAN DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS tags_name_idx ON tags (name);
