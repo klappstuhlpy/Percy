@@ -73,8 +73,7 @@ class SpamControl:
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
         self.spam_counter: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
-            10, 12.0, commands.BucketType.user
-        )
+            10, 12.0, commands.BucketType.user)
         self._auto_spam_count: Counter[int] = Counter()  # type: ignore
         self.spam_details: Dict[int, List[float]] = defaultdict(list)
 
@@ -92,7 +91,7 @@ class SpamControl:
         embed.add_field(name='Guild Info', value=f'{guild_name} (ID: {guild_id})', inline=False)
         embed.add_field(name='Channel Info', value=f'{message.channel} (ID: {message.channel.id}', inline=False)
         embed.timestamp = discord.utils.utcnow()
-        return await self.bot.stats_webhook.send(embed=embed, username='Percy Spam Control')
+        await self.bot.stats_webhook.send(embed=embed, username='Percy Spam Control')
 
     def calculate_penalty(self, user_id: int) -> int | None:
         """Calculate penalty based on frequency and recency of spamming.
@@ -181,7 +180,7 @@ class Percy(commands.Bot):
             message_content=True,
             # AutoModeration
             auto_moderation_execution=True,
-            auto_moderation_configuration=True,
+            auto_moderation_configuration=True
         )
         super().__init__(
             command_prefix=_callable_prefix,  # type: ignore
@@ -191,11 +190,10 @@ class Percy(commands.Bot):
             heartbeat_timeout=200.0,
             allowed_mentions=allowed_mentions,
             intents=intents,
-            enable_debug_events=True,
+            enable_debug_events=True
         )
         self.command_cache: Dict[int, list[discord.Message]] = ExpiringDict(
-            max_len=1000, max_age_seconds=60
-        )
+            max_len=1000, max_age_seconds=60)
 
         self.resumes: defaultdict[int, list[datetime]] = defaultdict(list)
         self.identifies: defaultdict[int, list[datetime]] = defaultdict(list)
@@ -212,8 +210,7 @@ class Percy(commands.Bot):
     def __repr__(self) -> str:
         return (
             f'<Bot id={self.user.id} name={self.user.name!r} '
-            f'discriminator={self.user.discriminator!r} bot={self.user.bot}>'
-        )
+            f'discriminator={self.user.discriminator!r} bot={self.user.bot}>')
 
     @property
     def owner(self) -> discord.User:
