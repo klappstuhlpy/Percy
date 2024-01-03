@@ -3,9 +3,12 @@
 -- Reason: discordstatus_addition
 
 CREATE TABLE IF NOT EXISTS discord_incidents(
-    id TEXT NOT NULL PRIMARY KEY,
+    id TEXT,
     name TEXT,
     status TEXT,
     started_at TIMESTAMP,
-    data JSONB DEFAULT '{}'::jsonb
+    data JSONB DEFAULT '{}'::jsonb,
+    guild_id BIGINT PRIMARY KEY NOT NULL,
+    channel_id BIGINT,
+    message_id BIGINT
 )
