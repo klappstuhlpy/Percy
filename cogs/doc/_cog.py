@@ -18,7 +18,7 @@ from launcher import get_logger
 from cogs.doc import PRIORITY_PACKAGES, _batch_parser, doc_cache, _inventory_parser
 from ._inventory_parser import InvalidHeaderError, InventoryDict, fetch_inventory
 
-from ..utils import helpers, fuzzy, commands_ext, errors
+from ..utils import helpers, fuzzy, _commands, errors
 from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
@@ -122,7 +122,8 @@ class Inventory(commands.Converter):
                 f'{ctx.tick(False)} Unable to parse inventory because of invalid header, check if URL is correct.')
         else:
             if inventory is None:
-                raise errors.BadArgument(f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.')
+                raise errors.BadArgument(
+                    f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.')
             return url, inventory
 
 
@@ -604,8 +605,8 @@ class Documentation(commands.Cog):
                 embed.add_field(name=name, value=value, inline=False)
             return embed
 
-    @commands_ext.command(commands.hybrid_group, name='docs', fallback='search', aliases=['d'],
-                          description='Look up documentation for Python symbols.', invoke_without_command=True)
+    @_commands.command(commands.hybrid_group, name='docs', fallback='search', aliases=['d'],
+                       description='Look up documentation for Python symbols.', invoke_without_command=True)
     @app_commands.describe(symbol_name='The symbol to look up documentation for.',
                            package='The package to look up documentation for.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
@@ -636,8 +637,8 @@ class Documentation(commands.Cog):
         """Get a base url from the url to an objects inventory by removing the last path segment."""
         return inventory_url.removesuffix('/').rsplit('/', maxsplit=1)[0] + '/'
 
-    @commands_ext.command(docs_group.command, name='set', hidden=True, description='Set a new documentation object.',
-                          with_app_command=False)
+    @_commands.command(docs_group.command, name='set', hidden=True, description='Set a new documentation object.',
+                       with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def set_command(
@@ -670,8 +671,8 @@ class Documentation(commands.Cog):
         await ctx.send(
             f'{ctx.tick(True)} Added the package `{package_name}` to the database and updated the inventories.')
 
-    @commands_ext.command(docs_group.command, name='delete', hidden=True, aliases=['remove', 'rm'],
-                          description='Delete a documentation object.', with_app_command=False)
+    @_commands.command(docs_group.command, name='delete', hidden=True, aliases=['remove', 'rm'],
+                       description='Delete a documentation object.', with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def delete_command(
@@ -685,8 +686,8 @@ class Documentation(commands.Cog):
             await doc_cache.delete(package_name)
         await ctx.send(f'{ctx.tick(True)} Successfully deleted `{package_name}` and refreshed the inventories.')
 
-    @commands_ext.command(docs_group.command, name='refresh', aliases=['rfsh', 'r'], hidden=True,
-                          description='Refresh the inventories.', with_app_command=False)
+    @_commands.command(docs_group.command, name='refresh', aliases=['rfsh', 'r'], hidden=True,
+                       description='Refresh the inventories.', with_app_command=False)
     @commands.is_owner()
     @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
     async def refresh_command(self, ctx: Context) -> None:
@@ -709,8 +710,8 @@ class Documentation(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands_ext.command(docs_group.command, name='clearcache', aliases=['deletecache'],
-                          description='Clear the cache for a package.', hidden=True, with_app_command=False)
+    @_commands.command(docs_group.command, name='clearcache', aliases=['deletecache'],
+                       description='Clear the cache for a package.', hidden=True, with_app_command=False)
     @commands.is_owner()
     async def clear_cache_command(
             self,
@@ -724,7 +725,7 @@ class Documentation(commands.Cog):
         else:
             await ctx.send(f'{ctx.tick(False)} No keys matching the package found.')
 
-    @commands_ext.command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
+    @_commands.command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
     @app_commands.describe(symbol_name='The object to search for',
                            package='The package to search in.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
@@ -736,7 +737,7 @@ class Documentation(commands.Cog):
             *,
             symbol_name: str
     ):
-        """Gives you a documentation link for a commands_ext.py entity.
+        """Gives you a documentation link for a _commands.py entity.
 
         Events, objects, and functions are all supported through
         a cruddy fuzzy algorithm.

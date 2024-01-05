@@ -12,8 +12,8 @@ from discord.ext import commands, tasks
 from typing import TypeVar
 
 from bot import Percy
-from .utils.commands_ext import PermissionTemplate
-from .utils import commands_ext, cache, converters, errors
+from .utils._commands import PermissionTemplate
+from .utils import _commands, cache, converters, errors
 from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
@@ -320,8 +320,13 @@ class DiscordStatus(commands.Cog):
             return None
         return IncidentItem(self.bot, record=record)
 
-    @commands_ext.command(commands.hybrid_group, name="discord-status", aliases=["dstatus"],
-                          fallback="show", description="Shows the current Discord Status.")
+    @_commands.command(
+        commands.hybrid_group,
+        name="discord-status",
+        aliases=["dstatus"],
+        fallback="show",
+        description="Shows the current Discord Status."
+    )
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
         """Shows the current Discord Status."""
@@ -331,12 +336,16 @@ class DiscordStatus(commands.Cog):
 
         embeds = [incident.build_embed() for incident in latest]
         await ctx.send(content=f"Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*"
-                               if len(embeds) > 10 else None,
+        if len(embeds) > 10 else None,
                        embeds=embeds[:10], ephemeral=True)
 
-    @commands_ext.command(dstatus.command, name="release", description="Releases the last incident if not posted.",
-                          with_app_command=False)
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.command(
+        dstatus.command,
+        name="release",
+        description="Releases the last incident if not posted.",
+        with_app_command=False
+    )
+    @_commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_release(self, ctx: GuildContext):
         """Releases the last incident again."""
@@ -349,7 +358,8 @@ class DiscordStatus(commands.Cog):
         if not subscriber:
             return await ctx.stick(False, "This guild is not subscribed to the Discord Status Feed.")
 
-        check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;", latest.id, ctx.guild.id)
+        check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
+                                            latest.id, ctx.guild.id)
         if check.endswith("0"):
             query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
             values = (latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)
@@ -371,8 +381,8 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @commands_ext.command(dstatus.command, name="subscribe", description="Subscribe to Discord Status updates.")
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.command(dstatus.command, name="subscribe", description="Subscribe to Discord Status updates.")
+    @_commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_subscribe(self, ctx: GuildContext, channel: discord.TextChannel):
         """Subscribes to Discord Status updates.
@@ -405,8 +415,8 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @commands_ext.command(dstatus.command, name="unsubscribe", description="Unsubscribe from Discord Status updates.")
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.command(dstatus.command, name="unsubscribe", description="Unsubscribe from Discord Status updates.")
+    @_commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_unsubscribe(self, ctx: GuildContext):
         """Unsubscribes from Discord Status updates."""

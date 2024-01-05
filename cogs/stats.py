@@ -28,7 +28,7 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import FilePaginator
 from launcher import get_logger
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
-from .utils import formats, timetools, helpers, commands_ext
+from .utils import formats, timetools, helpers, _commands
 from .utils.constants import BOT_BASE_FOLDER
 from .utils.converters import get_asset_url
 from .utils.formats import censor_object
@@ -221,19 +221,19 @@ class Stats(commands.Cog):
     async def on_socket_event_type(self, event_type: str):
         self.bot.socket_stats[event_type] += 1
 
-    @commands_ext.command(
+    @_commands.command(
         commands.group,
         name='command',
         invoke_without_command=True,
         hidden=True,
         description='Shows the current command usage statistics.',
     )
-    async def _command(self, ctx: Context):
+    async def _cmd(self, ctx: Context):
         """Shows the current command usage statistics."""
         if self.bot.is_owner(ctx.author) and ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @_command.command(name='stats', description='Shows the current command usage statistics.')
+    @_commands.command(_cmd.command, name='stats', description='Shows the current command usage statistics.')
     @commands.is_owner()
     async def command_stats(self, ctx: Context, *, limit: int = 12):
         """Shows the current command usage statistics.
@@ -260,7 +260,7 @@ class Stats(commands.Cog):
         await ctx.send(f'## {title}')
         await FilePaginator.start(ctx, entries=images, per_page=1)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         hidden=True,
         description='Shows the current socket event statistics.',
@@ -278,10 +278,7 @@ class Stats(commands.Cog):
     def get_bot_uptime(self, *, brief: bool = False) -> str:
         return timetools.human_timedelta(self.bot.launched_at, accuracy=None, brief=brief, suffix=False)
 
-    @commands_ext.command(
-        commands.command,
-        description='Tells you how long the bot has been up for.'
-    )
+    @_commands.command(commands.command, description='Tells you how long the bot has been up for.')
     async def uptime(self, ctx: Context):
         """Tells you how long the bot has been up for."""
         await ctx.send(f'Uptime: **{self.get_bot_uptime()}**')
@@ -289,9 +286,7 @@ class Stats(commands.Cog):
     @executor
     def line_counter(self) -> str:
         path = Path(__file__).parent.parent
-        ignored = [
-            Path(os.path.join(path, 'venv')),
-        ]
+        ignored = [Path(os.path.join(path, 'venv'))]
         files = classes = funcs = comments = lines = characters = 0
         for f in path.rglob(f'*.py'):
             if any(parent in ignored for parent in f.parents):
@@ -327,7 +322,7 @@ class Stats(commands.Cog):
         commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
         return '\n'.join(self.format_commit(c) for c in commits)
 
-    @commands_ext.command()
+    @_commands.command()
     async def about(self, ctx: Context):
         """Tells you information about the bot itself."""
 
@@ -377,10 +372,9 @@ class Stats(commands.Cog):
             value=f'```py\n'
                   f'CPU: {cpu_usage:.2f}% CPU\n'
                   f'Memory: {memory_usage:.2f} MiB | {psutil.virtual_memory().percent}%\n'
-                  f'Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```'
-        )
+                  f'Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```')
 
-        embed.set_footer(text=f'Made with commands_ext.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
+        embed.set_footer(text=f'Made with _cmd.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
@@ -565,7 +559,7 @@ class Stats(commands.Cog):
         embed.add_field(name='Most Used Commands Today', value=value, inline=False)
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.group,
         name='stats',
         description='Tells you command usage stats for the server or a member.',
@@ -582,7 +576,7 @@ class Stats(commands.Cog):
                 await self.show_member_stats(ctx, member)
 
     # noinspection PyTypeChecker
-    @commands_ext.command(
+    @_commands.command(
         stats.command,
         name='for',
         description='Tells you the global stats for a command.',
@@ -751,7 +745,7 @@ class Stats(commands.Cog):
             embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
             await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         stats.command,
         name='global',
         description='Global all time command statistics.',
@@ -826,7 +820,7 @@ class Stats(commands.Cog):
         e.add_field(name='Top Users', value='\n'.join(value), inline=False)
         await ctx.send(embed=e)
 
-    @commands_ext.command(
+    @_commands.command(
         stats.command,
         name='today',
         description='Global command statistics for the day.',
@@ -998,10 +992,7 @@ class Stats(commands.Cog):
 
         await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url)
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     @commands.is_owner()
     async def bothealth(self, ctx: Context):
         """Various bot health monitoring tools."""
@@ -1020,8 +1011,7 @@ class Stats(commands.Cog):
         description = [
             f'Total `Pool.acquire` Waiters: {total_waiting}',
             f'Current Pool Generation: {current_generation}',
-            f'Connections In Use: {len(pool._holders) - pool._queue.qsize()}',  # type: ignore
-        ]
+            f'Connections In Use: {len(pool._holders) - pool._queue.qsize()}']
 
         questionable_connections = 0
         connection_value = []
@@ -1036,10 +1026,9 @@ class Stats(commands.Cog):
         joined_value = '\n'.join(connection_value)
         embed.add_field(name='Connections', value=f'```py\n{joined_value}\n```', inline=False)
 
-        spam_control = self.bot.spam_control
-        being_spammed = [str(key) for key, value in spam_control._cache.items() if value._tokens == 0]
+        being_spammed = self.bot.spam_control.current_spammers
 
-        description.append(f'Current Spammers: {', '.join(being_spammed) if being_spammed else 'None'}')
+        description.append(f'Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}')
         description.append(f'Questionable Connections: {questionable_connections}')
 
         total_warnings += questionable_connections
@@ -1081,10 +1070,7 @@ class Stats(commands.Cog):
         embed.description = '\n'.join(description)
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     @commands.is_owner()
     async def gateway(self, ctx: Context):
         """Gateway related stats."""
@@ -1156,10 +1142,7 @@ class Stats(commands.Cog):
         embed.set_footer(text=f'None warnings')
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     @commands.is_owner()
     async def list_tasks(self, ctx: Context):
         """List all tasks."""
@@ -1183,7 +1166,7 @@ class Stats(commands.Cog):
         for page in pages.pages:
             await ctx.send(page)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         hidden=True,
         aliases=['cancel_task'],
@@ -1226,8 +1209,8 @@ class Stats(commands.Cog):
         fp = io.BytesIO(render.strip().encode('utf-8'))
         await ctx.send('Too many results...', file=discord.File(fp, 'results.sql'))
 
-    @commands_ext.command(
-        _command.group,
+    @_commands.command(
+        _cmd.group,
         name='history',
         hidden=True,
         invoke_without_command=True,
@@ -1243,8 +1226,8 @@ class Stats(commands.Cog):
                     CASE failed
                         WHEN TRUE THEN command || ' [!]'
                         ELSE command
-                    END AS 'command',
-                    to_char(used, 'Mon DD HH12:MI:SS AM') AS 'invoked',
+                    END AS "command",
+                    to_char(used, 'Mon DD HH12:MI:SS AM') AS "invoked",
                     author_id,
                     guild_id
                 FROM commands
@@ -1253,7 +1236,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query)
 
-    @commands_ext.command(
+    @_commands.command(
         command_history.command,
         name='for',
         hidden=True,
@@ -1265,8 +1248,7 @@ class Stats(commands.Cog):
         async with ctx.channel.typing():
             query = """
                 SELECT 
-                    *, 
-                    t.success + t.failed AS "total"
+                    *, t.success + t.failed AS "total"
                 FROM (
                    SELECT guild_id,
                           SUM(CASE WHEN failed THEN 0 ELSE 1 END) AS "success",
@@ -1282,7 +1264,7 @@ class Stats(commands.Cog):
 
             await self.tabulate_query(ctx, query, command, datetime.timedelta(days=days))
 
-    @commands_ext.command(
+    @_commands.command(
         command_history.command,
         name='guild',
         hidden=True,
@@ -1309,7 +1291,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query, guild_id)
 
-    @commands_ext.command(
+    @_commands.command(
         command_history.command,
         name='user',
         hidden=True,
@@ -1335,7 +1317,7 @@ class Stats(commands.Cog):
             """
             await self.tabulate_query(ctx, query, user_id)
 
-    @commands_ext.command(
+    @_commands.command(
         command_history.command,
         name='log',
         hidden=True,
@@ -1385,7 +1367,7 @@ class Stats(commands.Cog):
             await ctx.send(embed=embed,
                            file=discord.File(io.BytesIO(render.encode()), filename='full_results.accesslog'))
 
-    @commands_ext.command(
+    @_commands.command(
         command_history.command,
         name='cog',
         hidden=True,

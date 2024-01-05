@@ -22,8 +22,8 @@ from bot import Percy
 from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
 from launcher import get_logger
-from cogs.utils.commands_ext import PermissionTemplate
-from .utils import timetools, cache, helpers, commands_ext, errors
+from cogs.utils._commands import PermissionTemplate
+from .utils import timetools, cache, helpers, _commands, errors
 from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
@@ -961,7 +961,7 @@ class Mod(commands.Cog):
             else:
                 await ctx.send(f'Disabled slowmode', ephemeral=True)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_group,
         name='moderation',
         aliases=['mod'],
@@ -969,7 +969,7 @@ class Mod(commands.Cog):
         description='Show current Moderation (automatic moderation) behaviour on the server.'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     async def moderation(self, ctx: GuildContext):
         """Show current Moderation (Automatic Moderation) behavior on the server.
         You must have Ban Members and Manage Messages permissions to use this
@@ -1026,13 +1026,13 @@ class Mod(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.group,
         name='auditlog',
         fallback='channel',
         description='Toggles audit text log on the server.'
     )
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(
         channel='The channel to broadcast audit log messages to. The bot must be able to create webhooks in it.'
     )
@@ -1074,7 +1074,7 @@ class Mod(commands.Cog):
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.stick(True, f'Audit log enabled. Broadcasting log events to <#{channel.id}>.')
 
-    @commands_ext.command(
+    @_commands.command(
         moderation_auditlog.command,
         name='alter',
         description='Configures the audit log events.',
@@ -1126,12 +1126,12 @@ class Mod(commands.Cog):
             )
         return choices
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='disable',
         description='Disables Moderation on the server.',
     )
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(protection='The protection to disable')
     @app_commands.choices(
         protection=[
@@ -1190,12 +1190,12 @@ class Mod(commands.Cog):
 
         await ctx.stick(True, message)
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='raid',
         description='Toggles raid protection on the server.',
     )
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
     async def moderation_raid(self, ctx: GuildContext, enabled: Optional[bool] = None):
         """Toggles raid protection on the server.
@@ -1224,13 +1224,13 @@ class Mod(commands.Cog):
         fmt = '*enabled*' if enabled else '*disabled*'
         await ctx.stick(True, f'Raid protection {fmt}.')
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='mentions',
         description='Enables auto-banning accounts that spam more than \'count\' mentions.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
         """Enables auto-banning accounts that spam more than 'count' mentions.
@@ -1256,13 +1256,13 @@ class Mod(commands.Cog):
         if isinstance(error, commands.RangeError):
             await ctx.stick(False, 'Mention spam protection threshold must be greater than three.')
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='ignore',
         description='Specifies what roles, members, or channels ignore Moderation Inspections.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=['ban_members'])
+    @_commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
     async def moderation_ignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1289,13 +1289,13 @@ class Mod(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='unignore',
         description='Specifies what roles, members, or channels to take off the ignore list.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=['ban_members'])
+    @_commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
     async def moderation_unignore(
             self, ctx: GuildContext, entities: Annotated[List[IgnoreableEntity], commands.Greedy[IgnoreEntity]]
@@ -1322,7 +1322,7 @@ class Mod(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands_ext.command(
+    @_commands.command(
         moderation.command,
         name='ignored',
         description='Lists what channels, roles, and members are in the Moderation ignore list.',
@@ -1356,7 +1356,7 @@ class Mod(commands.Cog):
 
         await EmbedPaginator.start(ctx, entries=entities, per_page=15)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='purge',
         description='Removes messages that meet a criteria.',
@@ -1364,7 +1364,7 @@ class Mod(commands.Cog):
         usage='[search]'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=['manage_messages'], bot=['manage_messages'])
+    @_commands.permissions(user=['manage_messages'], bot=['manage_messages'])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
             self, ctx: GuildContext, search: Optional[commands.Range[int, 1, 2000]] = None, *, flags: PurgeFlags
@@ -1607,7 +1607,7 @@ class Mod(commands.Cog):
                 return False
         return True
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_group,
         name='lockdown',
         fallback='start',
@@ -1615,7 +1615,7 @@ class Mod(commands.Cog):
     )
     @commands.guild_only()
     @app_commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
+    @_commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space separated list of text or voice channels to lock down')
     async def lockdown(
@@ -1676,13 +1676,13 @@ class Mod(commands.Cog):
         embed = discord.Embed(title='Locked down', description=message, color=discord.Color.green())
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         lockdown.command,
         name='for',
         description='Locks down specific channels for a specified amount of timetools.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
+    @_commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
@@ -1763,13 +1763,13 @@ class Mod(commands.Cog):
         embed = discord.Embed(title='Locked down', description=message, color=discord.Color.green())
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         lockdown.command,
         name='end',
         description='Ends all lockdowns set.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
+    @_commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
@@ -1851,7 +1851,7 @@ class Mod(commands.Cog):
         deleted = await ctx.channel.purge(limit=search, check=check, before=ctx.message)
         return Counter(m.author.display_name for m in deleted)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='cleanup',
         description='Cleans up only the bot\'s messages from the channel.',
@@ -1896,13 +1896,13 @@ class Mod(commands.Cog):
         embed = discord.Embed(title='Channel Cleanup', description=to_send)
         await ctx.send(embed=embed, delete_after=15)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='kick',
         description='Kicks a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=['kick_members'], bot=['kick_members'])
+    @_commands.permissions(3, user=['kick_members'], bot=['kick_members'])
     async def kick(
             self,
             ctx: GuildContext,
@@ -1921,13 +1921,13 @@ class Mod(commands.Cog):
         await ctx.guild.kick(member, reason=reason)
         await ctx.stick(True, f'Kicked {member}.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='ban',
         description='Bans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
+    @_commands.permissions(3, user=['ban_members'], bot=['ban_members'])
     async def ban(
             self,
             ctx: GuildContext,
@@ -1948,13 +1948,13 @@ class Mod(commands.Cog):
         await ctx.guild.ban(member, reason=reason)
         await ctx.stick(True, f'Banned `{member}`.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='multiban',
         description='Bans multiple members from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
+    @_commands.permissions(3, user=['ban_members'], bot=['ban_members'])
     async def multiban(
             self,
             ctx: GuildContext,
@@ -1989,13 +1989,13 @@ class Mod(commands.Cog):
 
         await ctx.stick(True, f'Banned [`{total_members - failed}`/`{total_members}`] members.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='massban',
         description='Mass bans multiple members from the server.'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=['ban_members'], bot=['ban_members'])
+    @_commands.permissions(user=['ban_members'], bot=['ban_members'])
     async def massban(self, ctx: GuildContext, *, flags: MassbanFlags):
         """Mass bans multiple members from the server.
         This command uses a syntax similar to Discord's search bar. To use this command,
@@ -2128,13 +2128,13 @@ class Mod(commands.Cog):
 
         await ctx.stick(True, f'Banned `{count}`/`{len(members)}` members.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='softban',
         description='Soft bans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=['kick_members'], bot=['kick_members'])
+    @_commands.permissions(3, user=['kick_members'], bot=['kick_members'])
     async def softban(
             self,
             ctx: GuildContext,
@@ -2157,13 +2157,13 @@ class Mod(commands.Cog):
         await ctx.guild.unban(member, reason=reason)
         await ctx.stick(True, f'Successfully softbanned **{member}**.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='unban',
         description='Unbans a member from the server.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, user=['ban_members'], bot=['ban_members'])
+    @_commands.permissions(3, user=['ban_members'], bot=['ban_members'])
     async def unban(
             self,
             ctx: GuildContext,
@@ -2187,13 +2187,13 @@ class Mod(commands.Cog):
         else:
             await ctx.stick(True, f'Unbanned {member.user} (ID: `{member.user.id}`).')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='tempban',
         description='Temporarily bans a member for the specified duration.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=['ban_members'], bot=['ban_members'])
+    @_commands.permissions(user=['ban_members'], bot=['ban_members'])
     @app_commands.describe(duration='The duration to ban the member for. Must be a future Time.',
                            member='The member to ban.',
                            reason='The reason for banning the member.')
@@ -2328,13 +2328,13 @@ class Mod(commands.Cog):
                 skipped += 1
         return success, failure, skipped
 
-    @commands_ext.command(
+    @_commands.command(
         commands.group,
         name='mute',
         invoke_without_command=True,
     )
     @can_mute()
-    @commands_ext.command_permissions(3, bot=['manage_roles'])
+    @_commands.permissions(3, bot=['manage_roles'])
     async def _mute(
             self,
             ctx: ModGuildContext,
@@ -2368,13 +2368,13 @@ class Mod(commands.Cog):
 
         await ctx.stick(True, f'Muted [`{total - failed}`/`{total}`] members.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='unmute',
         description='Unmutes members using the configured mute role.',
     )
     @can_mute()
-    @commands_ext.command_permissions(3, bot=['manage_roles'])
+    @_commands.permissions(3, bot=['manage_roles'])
     async def _unmute(
             self,
             ctx: ModGuildContext,
@@ -2408,13 +2408,13 @@ class Mod(commands.Cog):
 
         await ctx.stick(True, f'Unmuted [`{total - failed}`/`{total}`] members.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='tempmute',
         description='Temporarily mutes a member for the specified duration.',
     )
     @can_mute()
-    @commands_ext.command_permissions(bot=['manage_roles'])
+    @_commands.permissions(bot=['manage_roles'])
     @app_commands.describe(duration='The duration to mute the member for. Must be a future Time.',
                            member='The member to mute.',
                            reason='The reason for muting the member.')
@@ -2501,12 +2501,12 @@ class Mod(commands.Cog):
             async with self._batch_lock:
                 self._data_batch[guild_id].append((member_id, False))
 
-    @commands_ext.command(
+    @_commands.command(
         _mute.group,
         name='role',
         description='Shows configuration of the mute role.',
     )
-    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @_commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def _mute_role(self, ctx: GuildContext):
         """Shows configuration of the mute role.
         To use these commands, you need to have Manage Roles
@@ -2523,12 +2523,12 @@ class Mod(commands.Cog):
             total = 0
         await ctx.stick(True, f'Role: {role}\nMembers Muted: {total}')
 
-    @commands_ext.command(
+    @_commands.command(
         _mute_role.command,
         name='set',
         description='Sets the mute role to a pre-existing role.',
     )
-    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @_commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     @commands.cooldown(1, 60.0, commands.BucketType.guild)
     async def mute_role_set(self, ctx: GuildContext, *, role: discord.Role):
         """Sets the mute role to a pre-existing role.
@@ -2581,13 +2581,13 @@ class Mod(commands.Cog):
             await ctx.stick(True, f'Successfully set the {escaped} role as the mute role.\n\n'
                                           '**Note: Permission overwrites have not been changed.**')
 
-    @commands_ext.command(
+    @_commands.command(
         _mute_role.command,
         name='update',
         description='Updates the permission overwrites of the mute role.',
         aliases=['sync']
     )
-    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @_commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_update(self, ctx: GuildContext):
         """Updates the permission overwrites of the mute role.
         This works by blocking the Send Messages and Adding Reactions
@@ -2611,12 +2611,12 @@ class Mod(commands.Cog):
                 f'[Updated: {success}, Failed: {failure}, Skipped (no permissions): {skipped}]'
             )
 
-    @commands_ext.command(
+    @_commands.command(
         _mute_role.command,
         name='create',
         description='Creates a mute role with the given name.',
     )
-    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @_commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_create(self, ctx: GuildContext, *, name):
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly
@@ -2657,13 +2657,13 @@ class Mod(commands.Cog):
             await ctx.stick(
                 True, 'Mute role successfully created. Overwrites: ' f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
 
-    @commands_ext.command(
+    @_commands.command(
         _mute_role.command,
         name='unbind',
         aliases=['delete'],
         description='Unbinds a mute role without deleting it.',
     )
-    @commands_ext.command_permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @_commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_unbind(self, ctx: GuildContext):
         """Unbinds a mute role without deleting it.
         To use these commands, you need to have Manage Roles
@@ -2686,13 +2686,13 @@ class Mod(commands.Cog):
         self.get_guild_config.invalidate(self, guild_id)
         await ctx.stick(True, 'Successfully unbound mute role.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='selfmute',
         description='Temporarily mutes yourself for the specified duration.',
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(3, bot=['manage_roles'])
+    @_commands.permissions(3, bot=['manage_roles'])
     async def selfmute(
             self,
             ctx: GuildContext,

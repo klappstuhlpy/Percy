@@ -17,7 +17,7 @@ import discord
 from discord import File
 from discord.ext import commands, tasks
 
-from .utils import commands_ext, errors
+from .utils import _commands, errors
 from .utils.converters import Snowflake
 from .utils.paginator import TextSource
 from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
@@ -523,12 +523,12 @@ class Base(commands.Cog, name='Exclusives'):
         for page in paginator.pages:
             await ctx.send(page)
 
-    @commands_ext.command(commands.command, description='Shows information about the raw API response for a message.')
+    @_commands.command(commands.command, description='Shows information about the raw API response for a message.')
     async def raw(self, ctx: Context, message: discord.Message, to_json: bool = False) -> None:
         """Shows information about the raw API response."""
         await self.send_raw_content(ctx, message, json=to_json)
 
-    @commands_ext.command(commands.command, aliases=('snf', 'snfl', 'sf'))
+    @_commands.command(commands.command, aliases=('snf', 'snfl', 'sf'))
     async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
         """Get Discord snowflake creation time."""
         if not snowflakes:

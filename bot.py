@@ -77,6 +77,11 @@ class SpamControl:
         self._auto_spam_count: Counter[int] = Counter()  # type: ignore
         self.spam_details: Dict[int, List[float]] = defaultdict(list)
 
+    @property
+    def current_spammers(self) -> list[int]:
+        """Returns a list of spammers."""
+        return list(self._auto_spam_count.keys())
+
     async def log_spammer(self, ctx: Context, message: discord.Message, retry_after: float, *, autoblock: bool = False):
         guild_name = getattr(ctx.guild, 'name', 'No Guild (DMs)')
         guild_id = getattr(ctx.guild, 'id', None)

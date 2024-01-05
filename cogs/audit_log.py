@@ -120,8 +120,7 @@ class AuditLog(commands.Cog):
         embed = discord.Embed(
             title=f'{emoji} {action_event_type}',
             description='## Changes\n\n' + '\n'.join(message),
-            colour=color
-        )
+            colour=color)
 
         embed.add_field(name='Performed by', value=by, inline=True)
         embed.add_field(name='Target', value=target, inline=True)

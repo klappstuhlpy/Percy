@@ -11,9 +11,9 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from .utils.commands_ext import PermissionTemplate
+from .utils._commands import PermissionTemplate
 from .mod import AutoModFlags
-from .utils import cache, commands_ext
+from .utils import cache, _commands
 from .utils.context import Context, GuildContext
 from .utils.converters import get_asset_url
 from .utils.formats import medal_emojize
@@ -318,17 +318,17 @@ class Leveling(commands.Cog):
             await message.reply(
                 f'*Congratulations {message.author.mention}!* You leveled up to level **{config.level}**! <:oneup:1113286994378899516>')
 
-    @commands_ext.command(commands.hybrid_group, name='level', description='Leveling purpose Commands.')
+    @_commands.command(commands.hybrid_group, name='level', description='Leveling purpose Commands.')
     @commands.guild_only()
     async def level(self, ctx: Context) -> None:
         """Leveling purpose Commands."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands_ext.command(level.command, description='Toggle leveling on or off.')
+    @_commands.command(level.command, description='Toggle leveling on or off.')
     @app_commands.describe(enabled='Boolean to enable or disable leveling. If not provided, it will toggle.')
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.manager)
+    @_commands.permissions(user=PermissionTemplate.manager)
     async def toggle(self, ctx: GuildContext, enabled: Optional[bool] = None) -> None:
         """Toggle leveling on or off."""
         query = """
@@ -348,7 +348,7 @@ class Leveling(commands.Cog):
         fmt = '*enabled*' if enabled else '*disabled*'
         await ctx.stick(True, f'Leveling {fmt}.')
 
-    @commands_ext.command(level.command, aliases=['top'], description='View the server leaderboard.')
+    @_commands.command(level.command, aliases=['top'], description='View the server leaderboard.')
     @commands.guild_only()
     async def leaderboard(self, ctx: GuildContext):
         """View the Top 3 active users of the server."""
@@ -382,7 +382,7 @@ class Leveling(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands_ext.command(level.command, description='View your level card.')
+    @_commands.command(level.command, description='View your level card.')
     @commands.guild_only()
     @app_commands.describe(member='The member you want to see the rank card for.')
     async def rank(self, ctx: GuildContext, member: Optional[discord.Member] = None):
@@ -411,12 +411,12 @@ class Leveling(commands.Cog):
         )
         await ctx.send(file=discord.File(fp=card, filename='rank.png'))
 
-    @commands_ext.command(
+    @_commands.command(
         level.command,
         description='Set a members experience or level.'
     )
     @commands.guild_only()
-    @commands_ext.command_permissions(user=PermissionTemplate.mod)
+    @_commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(target='The target member to modify.')
     @app_commands.describe(level='The level you want to set.')
     @app_commands.describe(xp='The amount of XP you want to set.')

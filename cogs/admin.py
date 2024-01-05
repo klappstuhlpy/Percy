@@ -18,7 +18,7 @@ from discord.ext import commands
 
 from bot import Percy
 from .utils.paginator import TextSource, TextPaginator
-from .utils import converters, commands_ext
+from .utils import converters, _commands
 from .utils.tasks import PerformanceMocker
 from .utils.context import Context
 from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
@@ -155,7 +155,7 @@ class Admin(commands.Cog):
             return text
         return text[:4090] + '…```'
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         hidden=True,
         name='aeval'
@@ -220,7 +220,7 @@ class Admin(commands.Cog):
                     ctx.author, round((t_2 - t_1) * 1000, 2), result=self.truncate_to_code(value))
                 )
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         hidden=True,
         description='Checks the timing of a command, attempting to suppress HTTP and DB calls.'
@@ -277,7 +277,7 @@ class Admin(commands.Cog):
             fmt = f'```sql\n{render}\n```'
             await ctx.send(fmt)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.group,
         hidden=True,
         invoke_without_command=True,
@@ -323,7 +323,7 @@ class Admin(commands.Cog):
             fmt = f'```sql\n{render}\n```\n*Returned {plural(rows):row} in {dt:.2f}ms*'
             await ctx.send(fmt)
 
-    @commands_ext.command(
+    @_commands.command(
         sql.command,
         name='schema',
         hidden=True
@@ -345,7 +345,7 @@ class Admin(commands.Cog):
 
         await self.send_sql_results(ctx, results)
 
-    @commands_ext.command(
+    @_commands.command(
         sql.command,
         name='tables',
         hidden=True
@@ -368,7 +368,7 @@ class Admin(commands.Cog):
 
         await self.send_sql_results(ctx, results)
 
-    @commands_ext.command(
+    @_commands.command(
         sql.command,
         name='sizes',
         hidden=True
@@ -394,7 +394,7 @@ class Admin(commands.Cog):
 
         await self.send_sql_results(ctx, results)
 
-    @commands_ext.command(sql.command, name='explain', aliases=['analyze'], hidden=True)
+    @_commands.command(sql.command, name='explain', aliases=['analyze'], hidden=True)
     async def sql_explain(self, ctx: Context, *, query: str):
         """Explain an SQL query."""
         query = self.cleanup_code(query)
@@ -411,10 +411,7 @@ class Admin(commands.Cog):
         file = discord.File(io.BytesIO(json[0].encode('utf-8')), filename='explain.json')
         await ctx.send(file=file)
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     async def sudo(
             self,
             ctx: Context,
@@ -432,10 +429,7 @@ class Admin(commands.Cog):
         new_ctx = await self.bot.get_context(msg, cls=type(ctx))
         await self.bot.invoke(new_ctx)
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     async def do(self, ctx: Context, times: int, *, command: str):  # noqa
         """Repeats a command a specified number of times."""
         msg = copy.copy(ctx.message)
@@ -446,7 +440,7 @@ class Admin(commands.Cog):
         for i in range(times):
             await new_ctx.reinvoke()
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         hidden=True,
         description='Run git Commands in bots Directory in shell. (Shortcut to sh Command)'
@@ -455,10 +449,7 @@ class Admin(commands.Cog):
         """Runs a shell command."""
         await ctx.invoke(self.sh, command=f'cd {Path(__file__).parent.parent.absolute()}\ngit {command}')  # noqa
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     async def sh(self, ctx: Context, *, command: str):  # noqa
         """Runs a shell command."""
 
@@ -476,7 +467,7 @@ class Admin(commands.Cog):
 
         await TextPaginator.start(ctx, entries=source.pages, timeout=60, per_page=1)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='showlog',
         hidden=True
@@ -493,10 +484,7 @@ class Admin(commands.Cog):
             buf.seek(0)
             await ctx.send(file=discord.File(buf, f_file))
 
-    @commands_ext.command(
-        commands.command,
-        hidden=True,
-    )
+    @_commands.command(commands.command, hidden=True)
     async def perf(self, ctx: Context, *, command: str):  # noqa
         """Checks the timing of a command, attempting to suppress HTTP and DB calls."""
 

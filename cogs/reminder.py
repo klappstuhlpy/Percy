@@ -12,7 +12,7 @@ from discord.ext import commands
 from discord.utils import MISSING
 from typing_extensions import Annotated
 
-from .utils import timetools, formats, commands_ext
+from .utils import timetools, formats, _commands
 from .utils.context import Context, tick
 from .utils.converters import get_asset_url
 from .utils.formats import plural
@@ -310,7 +310,7 @@ class Reminder(commands.Cog):
 
         return timer
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_group,
         name='reminder',
         aliases=['timer', 'remindme', 'remind'],
@@ -355,7 +355,7 @@ class Reminder(commands.Cog):
                   f'I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*'
         )
 
-    @commands_ext.command(
+    @_commands.command(
         reminder.app_command.command,
         name='create',
         description='Reminds you of something at a specific time.',
@@ -390,7 +390,7 @@ class Reminder(commands.Cog):
         if isinstance(error, timetools.BadTimeTransform):
             await interaction.response.send_message(str(error), ephemeral=True)
 
-    @commands_ext.command(
+    @_commands.command(
         reminder.command,
         name='list',
         description='Shows your latest currently running reminders.',
@@ -421,7 +421,7 @@ class Reminder(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands_ext.command(
+    @_commands.command(
         reminder.command,
         name='delete',
         description='Deletes a reminder by its ID.',
@@ -448,7 +448,7 @@ class Reminder(commands.Cog):
 
         await ctx.stick(True, 'Successfully deleted reminder.', ephemeral=True)
 
-    @commands_ext.command(
+    @_commands.command(
         reminder.command,
         name='purge',
         description='Purges all reminders you have set.',

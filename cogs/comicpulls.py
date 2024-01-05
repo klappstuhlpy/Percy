@@ -14,7 +14,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot import Percy
-from .utils import cache, commands_ext
+from .utils import cache, _commands
 from .utils.helpers import PostgresItem, MaybeAcquire
 from .utils.lock import lock, lock_arg, LockedResourceError
 from .utils.comic._parser import Parser  # noqa
@@ -648,7 +648,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     @comics.command(name='current')
     @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(2, 15.0, key=lambda i: i.guild_id)
-    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @_commands.permissions(1, user=['manage_channels'])
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
         await interaction.response.defer(
@@ -660,7 +660,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     @comics.command(name='push', description='Pushes the latest comic feed to a channel.')
     @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
-    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @_commands.permissions(1, user=['manage_channels'])
     @lock_arg('cogs.comics_push', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comics_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
@@ -688,7 +688,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         channel='Channel to set up the feed. Leave empty to set up in THIS channel.',
         _format='Feed format. Use /formats to view options. Summary is default.'
     )
-    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @_commands.permissions(1, user=['manage_channels'])
     @lock_arg('comicpulls.comic_subscribe', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comic_subscribe(
             self,
@@ -727,7 +727,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             f'<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.',
             embed=new_config.to_embed())
 
-    @commands_ext.command(
+    @_commands.command(
         comics.command,
         name='config',
         description='Show/Edit the current configuration for comic feeds.',
@@ -742,7 +742,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         pin='Whether to pin the feed message.',
         reset='Reset the configuration.'
     )
-    @commands_ext.command_permissions(1, user=['manage_channels'])
+    @_commands.permissions(1, user=['manage_channels'])
     async def comic_config(
             self, interaction: discord.Interaction,
             brand: Brand,

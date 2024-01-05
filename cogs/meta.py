@@ -21,7 +21,7 @@ from discord import app_commands, Interaction
 from discord.ext import commands
 from lru import LRU
 
-from .utils import fuzzy, helpers, commands_ext
+from .utils import fuzzy, helpers, _commands
 from .utils.converters import Prefix, get_asset_url
 from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
@@ -923,7 +923,7 @@ class Meta(commands.Cog):
             reason=f'Marked as solved by {user} (ID: {user.id})',
         )
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='solved',
         description='Marks a thread as solved.'
@@ -931,7 +931,7 @@ class Meta(commands.Cog):
     @commands.guild_only()
     @commands.cooldown(1, 20, commands.BucketType.channel)
     @is_help_thread()
-    @commands_ext.guilds(PH_GUILD_ID)
+    @_commands.guilds(PH_GUILD_ID)
     async def solved(self, ctx: GuildContext):
         """Marks a thread as solved."""
 
@@ -957,7 +957,7 @@ class Meta(commands.Cog):
             else:
                 await ctx.stick(False, f'Not marking as solved.')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         aliases=['src'],
         description='Shows parts of the Bots Source Command.'
@@ -1323,7 +1323,7 @@ class Meta(commands.Cog):
         e.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=e, view=GuildUserJoinView(ctx.author))
 
-    @commands_ext.command()
+    @_commands.command()
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):
         """Shows a user's enlarged avatar (if possible)."""
         user = user or ctx.author
@@ -1334,7 +1334,7 @@ class Meta(commands.Cog):
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         name='charinfo',
         description='Shows you information about a number of characters.',
     )
@@ -1369,7 +1369,7 @@ class Meta(commands.Cog):
 
         await LinePaginator.start(ctx, entries=char_list, per_page=10, embed=embed, location='description')
 
-    @commands_ext.command(
+    @_commands.command(
         commands.group,
         name='prefix',
         description='Manages the server\'s custom prefixes.',
@@ -1391,13 +1391,13 @@ class Meta(commands.Cog):
         e.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
         await ctx.send(embed=e)
 
-    @commands_ext.command(
+    @_commands.command(
         prefix.command,
         name='add',
         description='Appends a prefix to the list of custom prefixes.',
         ignore_extra=False,
     )
-    @commands_ext.command_permissions(user=['manage_guild'])
+    @_commands.permissions(user=['manage_guild'])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Appends a prefix to the list of custom prefixes.
         Previously set prefixes are not overridden.
@@ -1423,13 +1423,13 @@ class Meta(commands.Cog):
         if isinstance(error, commands.TooManyArguments):
             await ctx.send('You\'ve given too many prefixes. Either quote it or only do it one by one.')
 
-    @commands_ext.command(
+    @_commands.command(
         prefix.command,
         name='remove',
         aliases=['delete'],
         ignore_extra=False
     )
-    @commands_ext.command_permissions(user=['manage_guild'])
+    @_commands.permissions(user=['manage_guild'])
     async def prefix_remove(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Removes a prefix from the list of custom prefixes.
         This is the inverse of the 'prefix add' command. You can
@@ -1451,13 +1451,13 @@ class Meta(commands.Cog):
         else:
             await ctx.stick(True, 'Prefix removed.')
 
-    @commands_ext.command(
+    @_commands.command(
         prefix.command,
         name='reset',
         description='Removes all custom prefixes.',
         ignore_extra=False
     )
-    @commands_ext.command_permissions(user=['manage_guild'])
+    @_commands.permissions(user=['manage_guild'])
     async def prefix_reset(self, ctx: GuildContext):
         """Removes all custom prefixes.
         After this, the bot will listen to only mention prefixes.
@@ -1467,7 +1467,7 @@ class Meta(commands.Cog):
         await self.bot.set_guild_prefixes(ctx.guild, [])
         await ctx.stick(True, 'Cleared all prefixes.')
 
-    @commands_ext.command(
+    @_commands.command(
         name='ping',
         description='Shows some Client and API latency information.',
     )
@@ -1550,7 +1550,7 @@ class Meta(commands.Cog):
         e.add_field(name='Denied', value='\n'.join(denied))
         await ctx.send(embed=e)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_group,
         name='permissions',
         description='Shows permissions for a member or the bot in a specific channel.',
@@ -1561,7 +1561,7 @@ class Meta(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands_ext.command(
+    @_commands.command(
         permissions.command,
         name='user',
         description='Shows a member\'s permissions in a specific channel.',
@@ -1584,7 +1584,7 @@ class Meta(commands.Cog):
 
         await self.say_permissions(ctx, member, channel)
 
-    @commands_ext.command(
+    @_commands.command(
         permissions.command,
         name='bot',
         description='Shows the bot\'s permissions in a specific channel.',
@@ -1601,7 +1601,7 @@ class Meta(commands.Cog):
         member = ctx.guild.me
         await self.say_permissions(ctx, member, channel)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.command,
         name='debug',
         description='Shows permission resolution for a channel and an optional author.',
@@ -1628,7 +1628,7 @@ class Meta(commands.Cog):
 
         await self.say_permissions(ctx, member, channel)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='snipe',
         description='Snipes a deleted message.',
@@ -1653,7 +1653,7 @@ class Meta(commands.Cog):
         embed.set_footer(text='Deleted at')
         await ctx.send(embed=embed)
 
-    @commands_ext.command(
+    @_commands.command(
         commands.hybrid_command,
         name='esnipe',
         description='Snipes a deleted edited.',

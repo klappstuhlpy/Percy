@@ -89,7 +89,7 @@ def guilds(*guild_ids: Union[Snowflake, int]) -> Callable[[T], T]:
     return decorator
 
 
-def command_permissions(
+def permissions(
         category: CommandCategory | int = CommandCategory.Hybrid,
         *,
         user: Optional[List[str] | str] = PermissionTemplate.user,
@@ -171,6 +171,7 @@ def command(
         nsfw: bool = False,
         extras: Dict[str, Any] = None,
         raw: bool = False,
+        guild_only: bool = False,
         **kwargs
 ):
     r"""A custom decorator that assigns a function as a command.
@@ -184,7 +185,7 @@ def command(
     This decorator also adds a ``__type_info__`` attribute to the command that contains the
     module and function name of the command. This is used for handling the correct permission checks for every command type.
 
-    It also adds a :class:`PermissionTemplate` that can be modified with the :func:`command_permissions` decorator.
+    It also adds a :class:`PermissionTemplate` that can be modified with the :func:`permissions` decorator.
     Default permissions are set to ``PermissionTemplate.user`` for the user and ``PermissionTemplate.bot`` for the bot.
 
     Parameters
@@ -203,6 +204,8 @@ def command(
         A dictionary of extra information to be stored in the command. Defaults to ``None``.
     raw: bool
         Whether to or not to return the command with an applied :class:`PermissionTemplate`.
+    guild_only: bool
+        Whether the command can only be used in a guild.
     **kwargs
         Any keyword arguments to be passed to the command type.
 
@@ -229,6 +232,12 @@ def command(
     )
     setattr(self, '__type_info__', f'{func.__module__}.{func.__name__}')
 
+    if guild_only:
+        if func == app_commands.command:
+            self = app_commands.guild_only()(self)
+        else:
+            self = commands.guild_only()(self)
+
     if raw:
         return self
-    return command_permissions(signature)(self)
+    return permissions(signature)(self)

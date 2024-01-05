@@ -16,7 +16,7 @@ from bot import Percy
 from cogs.base import TrashView
 from cogs.snekbox._eval import EvalJob, EvalResult
 from cogs.snekbox._formatter import FileAttachment
-from cogs.utils import commands_ext
+from cogs.utils import _commands
 from cogs.utils.constants import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 from cogs.utils.context import EvalContext
 from cogs.utils.lock import lock_arg
@@ -508,7 +508,7 @@ class Snekbox(commands.Cog):
                 break
             log.info(f'Re-evaluating code from message {ctx.message.id}:\n{job}')
 
-    @commands_ext.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
+    @_commands.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
     @commands.guild_only()
     async def eval_command(
         self,
@@ -538,7 +538,7 @@ class Snekbox(commands.Cog):
         job = EvalJob.from_code('\n'.join(code)).as_version(python_version)
         await self.run_job(ctx, job)
 
-    @commands_ext.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
+    @_commands.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
     @commands.guild_only()
     async def timeit_command(
         self,

@@ -9,7 +9,7 @@ from discord.ext import commands
 from discord.utils import MISSING
 
 from .reminder import Timer
-from .utils import commands_ext
+from .utils import _commands
 from .utils.helpers import PostgresItem
 from .utils.timetools import TimeTransformer
 
@@ -299,13 +299,13 @@ class Giveaway(commands.Cog):
     giveaway = app_commands.Group(name='giveaway', description='Manage giveaways.',
                                   default_permissions=discord.Permissions(manage_channels=True), guild_only=True)
 
-    @commands_ext.command(
+    @_commands.command(
         giveaway.command,
         name='create',
         description='Create a giveaway.',
     )
     @app_commands.guild_only()
-    @commands_ext.command_permissions(1, user=['ban_members', 'manage_messages'])
+    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
     async def make_giveaway(self, interaction: discord.Interaction):
         """Interactively creates a giveaway using a Modal."""
         await interaction.response.send_modal(CreateGiveawayModal(self.bot))

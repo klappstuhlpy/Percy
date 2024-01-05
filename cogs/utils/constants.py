@@ -127,7 +127,7 @@ PACKAGE_NAME_RE = re.compile(r'[^a-zA-Z0-9_.]')
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
     'ANIMATED_ICON': ('🌟', 'Server can upload an animated icon.'),
-    'APPLICATION_COMMAND_PERMISSIONS_V2': ('🔒', 'Server is using the new command permissions system.'),
+    'APPLICATION_permissions_V2': ('🔒', 'Server is using the new command permissions system.'),
     'AUTO_MODERATION': ('🛡️', 'Server has set up Auto Moderation.'),
     'BANNER': ('🖼️', 'Server can upload and use a banner.'),
     'COMMUNITY': ('👥', 'Server is a community server.'),
