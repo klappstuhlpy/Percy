@@ -8,6 +8,7 @@ from typing import Optional
 import discord
 from discord import PartialEmoji
 
+from cogs.economy import Balance, Economy, cash_emoji
 from cogs.utils import helpers
 from cogs.utils.formats import plural
 
@@ -100,12 +101,17 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
         winner = self.view.get_winner()
         if winner is not None:
             if winner is not BoardKind.Empty:
+                economy: Economy = interaction.client.get_cog('Economy')
+                user_balance: Balance = await economy.get_balance(player.member.id, interaction.guild.id)
+                amount: int = random.randint(25, 100)
+                await user_balance.add(amount, 'cash')
+
                 winning_player = next_player if next_player.kind is winner else player
                 loser = player if next_player is winning_player else next_player
 
                 embed.colour = winning_player.kind.colour
                 embed.description = (
-                    f'{winner.emoji} {winning_player.member.mention} won!\n'
+                    f'{winner.emoji} {winning_player.member.mention} won and earned {cash_emoji} **{amount:,}**!\n'
                     f'*Maybe next time, {loser.member.mention}!*'
                 )
                 embed.set_footer()
@@ -195,12 +201,14 @@ class TicTacToe(discord.ui.View):
     @property
     def embed(self) -> discord.Embed:
         next_player = self.players[(self.player_index + 1) % len(self.players)]
-        return discord.Embed(
+        embed = discord.Embed(
             title='TicTacToe',
             description=f'It is now {self.current_player.kind.emoji} {self.current_player.member.mention}\'s turn with '
                         f'currently {plural(self.get_player_fields):field}.',
             colour=helpers.Colour.light_orange(),
-        ).set_footer(text=f'Next Player: {next_player.member.name}')
+        )
+        embed.set_footer(text=f'Next Player: {next_player.member.name}')
+        return embed
 
     @property
     def current_player(self) -> Player:
@@ -220,6 +228,7 @@ class Prompt(discord.ui.View):
         super().__init__(timeout=180.0)
         self.first: discord.abc.User = first
         self.second: discord.abc.User = second
+
         self.confirmed: bool = False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

@@ -7,6 +7,7 @@ from contextlib import suppress
 import discord
 from discord import Interaction
 
+from cogs.economy import Economy, Balance, cash_emoji
 from cogs.utils import helpers
 from cogs.utils.context import Context
 from cogs.utils.formats import readable_time
@@ -70,7 +71,15 @@ class Minesweeper(discord.ui.View):
             description=f'You {'found all' if won else 'exploded by'} '
             f'**{self.mines}** mines in **{self.moves}** moves • Time: {readable_time(duration, short=True)}',
             colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red()
-        ).set_footer(text=f'Player: {self.ctx.author}')
+        )
+        embed.set_footer(text=f'Player: {self.ctx.author}')
+
+        if won:
+            economy: Economy = interaction.client.get_cog('Economy')
+            user_balance: Balance = await economy.get_balance(interaction.user.id, interaction.guild.id)
+            amount: int = random.randint(25, 100)
+            await user_balance.add(amount, 'cash')
+            embed.description += f' • Earned: {cash_emoji} **{amount:,}**'
 
         with suppress(discord.NotFound, discord.HTTPException):
             if interaction:
@@ -79,11 +88,13 @@ class Minesweeper(discord.ui.View):
         self.stop()
 
     def build_embed(self) -> discord.Embed:
-        return discord.Embed(
+        embed = discord.Embed(
             title='Minesweeper',
             description=f'Moves: **{self.moves}** • Mines: **{self.mines}**',
             colour=helpers.Colour.light_orange(),
-        ).set_footer(text=f'Player: {self.ctx.author}')
+        )
+        embed.set_footer(text=f'Player: {self.ctx.author}')
+        return embed
 
     def place_mines(self) -> None:
         previous = set()
