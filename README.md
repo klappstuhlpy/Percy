@@ -53,6 +53,7 @@ mystbin_key = ''  # Mystbin API Key
 wolfram_api_key = ''  # Wolfram Alpha API Key
 github_key = ''  # GitHub Gist creation
 dbots_key = ''  # Discord Bots API Key
+stability_key = ''  # Stability API Key
 
 postgresql = ''  # Base Postgres
 alchemy_postgresql = ''  # For ORM work
