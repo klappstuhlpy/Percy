@@ -6,27 +6,24 @@ import fnmatch
 import json
 from enum import Enum
 from operator import attrgetter
-from typing import Dict, List, Optional, Union, Self, TypeVar, Callable, Generic
+from typing import List, Optional, Union, Callable, TYPE_CHECKING
 
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from bot import Percy
-from .utils import cache, _commands
-from .utils.helpers import PostgresItem, MaybeAcquire
-from .utils.lock import lock, lock_arg, LockedResourceError
-from .utils.comic._parser import Parser  # noqa
+from cogs.comic._client import Marvel
+from cogs.comic._data import ComicFeed, Brand, GenericComic, Format, GenericComicMessage
+from cogs.utils import cache, commands
+from cogs.utils.helpers import MaybeAcquire
+from cogs.utils.lock import lock, lock_arg, LockedResourceError
+from cogs.comic._parser import Parser
 from launcher import get_logger
+from bot import Percy
+
 
 log = get_logger(__name__)
-
-MARVEL_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107651622978469888/free-marvel-282124.png'
-DC_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107657136013586543/Screenshot_2023-05-15_151251.png'
-VIZ_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1113786444369104978/unnamed.png'
-
-MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 
 
 def serialize_resource_id_from_brand(bound_args: dict) -> str:
@@ -72,81 +69,6 @@ class ComicCache:
         return False
 
 
-class Brand(Enum):
-    MARVEL = 'Marvel'
-    DC = 'DC'
-    MANGA = 'Manga'
-    UNKNOWN = 'Unknown'
-
-    def __str__(self):
-        return self.name
-
-    @property
-    def icon_url(self) -> str:
-        if self == self.MARVEL:
-            return MARVEL_ICON_URL
-        elif self == self.DC:
-            return DC_ICON_URL
-        elif self == self.MANGA:
-            return VIZ_ICON_URL
-        else:
-            return ""
-
-    @property
-    def link(self) -> str:
-        if self == self.MARVEL:
-            return 'Marvel.com'
-        elif self == self.DC:
-            return 'DC.com'
-        elif self == self.MANGA:
-            return 'Viz.com'
-        else:
-            return 'Unknown'
-
-    @property
-    def colour(self) -> int:
-        if self == self.MARVEL:
-            return 0xEC1D24
-        elif self == self.DC:
-            return 0x0074E8
-        elif self == self.MANGA:
-            return 0xFFFFFF
-        else:
-            return 0x000000
-
-    @property
-    def default_day(self):
-        if self == self.DC:
-            return 3
-        else:
-            return 1  # Marvel and Manga
-
-    @property
-    def copyright(self):
-        year = datetime.datetime.now().year
-        if self == self.DC:
-            return '© & ™ DC. ALL RIGHTS RESERVED'
-        elif self == self.MARVEL:
-            return f'Data provided by Marvel. © {year} MARVEL'
-        elif self == self.MANGA:
-            return f'© {year} VIZ Media, LLC. All rights reserved.'
-        else:
-            return ""
-
-
-class Format(Enum):
-    FULL = 'Full'
-    COMPACT = 'Compact'
-    SUMMARY = 'Summary'
-
-    def __str__(self):
-        return self.name
-
-
-def alpha_surnames(names: list[str]) -> list[str]:
-    return sorted(names, key=lambda x: x.split(' ')[-1])
-
-
 class ComicJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Enum):
@@ -156,234 +78,6 @@ class ComicJSONEncoder(json.JSONEncoder):
         elif isinstance(obj, datetime.datetime):
             return obj.isoformat()
         return super().default(obj)
-
-
-class GenericComic:
-    """A wrapped Comic Object that Supports a Marvel and DC Comic or Manga Source
-
-    Parameters
-    ----------
-    brand: Brand
-        The Brand of the Comic
-    id: int | str
-        The ID of the Comic
-    title: str
-        The Title of the Comic
-    description: str
-        The Description of the Comic
-    creators: Dict[str, List[str]]
-        The Creators of the Comic
-    image_url: str
-        The Image URL of the Comic
-    url: str
-        The URL of the Comic
-    page_count: int
-        The Page Count of the Comic
-    price: float
-        The Price of the Comic
-    date: datetime
-        The ReleaseDate of the Comic
-    **kwargs
-        Any other Keyword Arguments
-    """
-
-    def __init__(
-            self,
-            *,
-            brand: Brand = Brand.UNKNOWN,
-            id: int | str = None,
-            title: str = None,
-            description: str = None,
-            creators: Dict[str, List[str]] = None,
-            image_url: str = None,
-            url: str = None,
-            page_count: int = None,
-            price: float = None,
-            copyright: str = None,
-            date: datetime.datetime = None,
-            **kwargs
-    ):
-        self.brand: Brand = brand
-        self.id: int = id
-        self.title: str = title
-        self.description: str = description
-        self.creators: Dict[str, List[str]] = creators
-
-        self.image_url: str = image_url
-        self.url: str = url or ""
-
-        self.date: datetime.datetime = date
-        self.page_count: int = page_count
-        self.price: float = price
-
-        self.copyright: str = copyright
-        self.kwargs = kwargs
-
-    def __str__(self):
-        return self.title
-
-    def __repr__(self):
-        return f'<GenericComic id={self.id} title={self.title} brand={self.brand.name}>'
-
-    @property
-    def writer(self):
-        next_key = next((a for a in ['Writer', 'Creator', *MANGA_POSITIONS] if a in self.creators), None)
-        return ', '.join(alpha_surnames(self.creators[next_key] if next_key else []))
-
-    @property
-    def price_format(self):
-        return f'${self.price:.2f} USD' if self.price else 'Unknown'
-
-    def format_creators(self, *, cover: bool = False, compact: bool = False):
-        priority = ['Writer', 'Artist', 'Penciler', 'Inker', 'Colorist', 'Letterer', 'Editor', *MANGA_POSITIONS]
-
-        def sorting_key(person: str) -> int:
-            try:
-                return priority.index(person)
-            except ValueError:
-                return len(priority)
-
-        compact_positions = {'Writer', 'Penciler', 'Artist', *MANGA_POSITIONS}
-        keys = sorted(self.creators.keys(), key=lambda k: (sorting_key(k), k))
-        return '\n'.join(
-            f'**{k}**: {', '.join(alpha_surnames(self.creators[k]))}'
-            for k in keys
-            if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
-        )
-
-    def to_embed(self, full_img: bool = True):
-        embed = discord.Embed(
-            title=self.title,
-            colour=self.brand.colour,
-            description=self.description,
-            url=self.url,
-        )
-
-        if self.brand == Brand.MANGA:
-            embed.add_field(name='General Info',
-                            value=f'Price: {self.price_format}\n'
-                                  f'Pages: {self.page_count}\n'
-                                  f'Release Date: {discord.utils.format_dt(self.date, 'D')}\n'
-                                  f'Category: {self.kwargs.get('category')}\n'
-                                  f'Age Rating: {self.kwargs.get('age_rating')}')
-
-            if self.creators:
-                embed.add_field(name='Creators', value=self.format_creators())
-        else:
-            if self.creators:
-                embed.add_field(name='Creators', value=self.format_creators())
-
-            embed.add_field(name='General Info',
-                            value=f'Price: {self.price_format}\n'
-                                  f'Pages: {self.page_count}')
-
-        embed.set_footer(text=f'{self.title} • {self.copyright}', icon_url=self.brand.icon_url)
-
-        if full_img:
-            embed.set_image(url=self.image_url)
-        else:
-            embed.set_thumbnail(url=self.image_url)
-
-        return embed
-
-    def to_instance(self, message: discord.Message):
-        return GenericComicMessage(self, message)
-
-
-class GenericComicMessage(GenericComic):
-    def __init__(self, comic: GenericComic, message: discord.Message):
-        super().__init__(**comic.__dict__)
-        self.message = message
-
-    def more(self):
-        return self.message.jump_url
-
-
-B = TypeVar('B', bound=Brand)
-
-
-class ComicFeed(PostgresItem, Generic[B]):
-    id: int
-    guild_id: int
-    channel_id: int
-    format: Format
-    brand: Brand
-    day: int
-    ping: bool
-    pin: bool
-    next_pull: datetime.datetime
-
-    __slots__ = ('cog', 'id', 'guild_id', 'channel_id', 'format', 'brand', 'day', 'ping', 'pin', 'next_pull')
-
-    def __init__(self, cog: ComicPulls, **kwargs):
-        super().__init__(**kwargs)
-        self.cog: ComicPulls = cog
-
-        self.brand: B = Brand[str(self.brand)]
-        self.format = Format[str(self.format)]
-
-    def to_embed(self):
-        embed = discord.Embed(
-            title=f'{self.brand.value} Feed Configuration',
-            description='Mangas are only published once in the first week of a month.' if self.brand == Brand.MANGA else None,
-            color=self.brand.colour
-        )
-        embed.add_field(name='Publish Channel', value=f'<#{self.channel_id}>')
-        embed.add_field(name='Format', value=f'{self.format.value}')
-        embed.add_field(name='Next Scheduled', value=discord.utils.format_dt(self.next_pull, 'D'))
-        embed.add_field(name='Ping Role', value=f'<@&{self.ping}>' if self.ping else None)
-        embed.add_field(name='Message Pin', value='Enabled' if self.pin else 'Disabled')
-        embed.set_footer(text=f'[{self.guild_id}] • {self.brand.name}')
-        embed.set_thumbnail(url=self.brand.icon_url)
-        return embed
-
-    async def create(self) -> Self:
-        self.next_pull = self.next_scheduled()
-
-        query = """
-            INSERT INTO feed_config (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
-            SELECT x.guild_id, x.channel_id, x.brand, x.format, x.day, x.ping, x.pin, x.next_pull
-            FROM jsonb_populate_record(null::feed_config, $1::TEXT::jsonb) AS x
-        """
-
-        await self.cog.bot.pool.execute(query, json.dumps(self.__dict__, cls=ComicJSONEncoder))
-        return self
-
-    async def edit(self, kwargs: dict) -> Self:
-        query = """
-            UPDATE feed_config SET (channel_id, format, day, ping, pin, next_pull) = (x.channel_id, x.format, x.day, x.ping, x.pin, x.next_pull)
-            FROM jsonb_populate_record(null::feed_config, $1::TEXT::jsonb) AS x
-            WHERE feed_config.guild_id = x.guild_id
-            AND feed_config.brand = x.brand::TEXT;
-        """
-
-        await self.cog.bot.pool.execute(query, json.dumps(kwargs, cls=ComicJSONEncoder))
-        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
-        return self
-
-    async def delete(self):
-        query = "DELETE FROM feed_config WHERE guild_id = $1 AND brand = $2;"
-        await self.cog.bot.pool.execute(query, self.guild_id, self.brand.name)
-        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
-
-    def next_scheduled(self, day: int = None):
-        day = day or self.day
-        now = discord.utils.utcnow().date()
-        soon = now + datetime.timedelta(days=(day - now.isoweekday()) % 7)
-        combined = datetime.datetime.combine(soon, datetime.time(0), tzinfo=datetime.timezone.utc) \
-            .astimezone(datetime.timezone.utc)
-
-        if combined < discord.utils.utcnow():
-            if self.brand == Brand.MANGA:
-                combined = combined.replace(month=combined.month + 1, day=day)
-            else:
-                combined += datetime.timedelta(days=7)
-
-        return combined.replace(tzinfo=None)
-
-    @property
-    def prev_scheduled(self):
-        return self.next_scheduled() - datetime.timedelta(days=7)
 
 
 class ComicPulls(commands.Cog, name='Comic Feeds'):
@@ -404,6 +98,8 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         self._task: Optional[asyncio.Task] = bot.loop.create_task(self.dispatch_feeds())
         self._current_feed: Optional[ComicFeed] = None
         self._have_data = asyncio.Event()
+
+        self.marvel_client: Marvel = Marvel(self.bot)
 
         comic: app_commands.Group = self.comics
         comic.interaction_check = self.comic_cache_check
@@ -449,7 +145,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                 return x.date if x.date is not None else datetime.datetime.min
 
             log.debug('Fetching Marvel...')
-            marvel_comics = await self.parser.fetch_marvel_lookup_table(self.bot.marvel_client)
+            marvel_comics = await self.parser.fetch_marvel_lookup_table(self.marvel_client)
             await self.comic_cache.set(Brand.MARVEL, sorted(marvel_comics, key=sort_key))
 
             log.debug('Fetching DC...')
@@ -461,7 +157,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             await self.comic_cache.set(Brand.MANGA, sorted(viz_comics, key=sort_key))
 
     async def call_feed(self, comic: ComicFeed) -> None:
-        query = "UPDATE feed_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
+        query = "UPDATE comic_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
         await self.bot.pool.execute(query, comic.next_scheduled(), comic.guild_id, comic.brand.name)
 
         self.bot.dispatch(f'comic_schedule', comic)
@@ -484,7 +180,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             while not self.bot.is_closed():
                 feed = self._current_feed = await self.wait_for_next_feeds()
 
-                now = datetime.datetime.utcnow()
+                now = discord.utils.utcnow()
                 if feed.next_pull >= now:
                     to_sleep = (feed.next_pull - now).total_seconds()
                     await asyncio.sleep(to_sleep)
@@ -507,7 +203,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     ) -> Optional[ComicFeed]:
         query = """
             SELECT *
-            FROM feed_config
+            FROM comic_config
             WHERE next_pull IS NOT NULL
             AND (next_pull AT TIME ZONE 'UTC') < (CURRENT_TIMESTAMP + $1::interval)
             ORDER BY next_pull
@@ -516,7 +212,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         con = connection or self.bot.pool
 
         record = await con.fetchrow(query, datetime.timedelta(days=days))
-        return ComicFeed(self, record=record) if record else None
+        return ComicFeed(self, record=record, json_encoder=ComicJSONEncoder) if record else None
 
     def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
         if not key:
@@ -640,15 +336,14 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         Optional[:class:`ComicFeed`]
             The comic feed config, if found.
         """
-        record = await self.bot.pool.fetchrow(
-            'SELECT * FROM feed_config WHERE guild_id = $1 AND brand = $2', guild_id, brand
-        )
-        return ComicFeed(self, record=record) if record else None
+        query = "SELECT * FROM comic_config WHERE guild_id = $1 AND brand = $2;"
+        record = await self.bot.pool.fetchrow(query, guild_id, brand)
+        return ComicFeed(self, record=record, json_encoder=ComicJSONEncoder) if record else None
 
     @comics.command(name='current')
     @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(2, 15.0, key=lambda i: i.guild_id)
-    @_commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(1, user=['manage_channels'])
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
         await interaction.response.defer(
@@ -660,7 +355,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     @comics.command(name='push', description='Pushes the latest comic feed to a channel.')
     @app_commands.describe(brand='The comic brand to receive a feed from.')
     @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
-    @_commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(1, user=['manage_channels'])
     @lock_arg('cogs.comics_push', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comics_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
@@ -688,7 +383,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         channel='Channel to set up the feed. Leave empty to set up in THIS channel.',
         _format='Feed format. Use /formats to view options. Summary is default.'
     )
-    @_commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(1, user=['manage_channels'])
     @lock_arg('comicpulls.comic_subscribe', 'interaction', attrgetter('guild.id'), raise_error=True)
     async def comic_subscribe(
             self,
@@ -727,7 +422,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             f'<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.',
             embed=new_config.to_embed())
 
-    @_commands.command(
+    @commands.command(
         comics.command,
         name='config',
         description='Show/Edit the current configuration for comic feeds.',
@@ -742,7 +437,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         pin='Whether to pin the feed message.',
         reset='Reset the configuration.'
     )
-    @_commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(1, user=['manage_channels'])
     async def comic_config(
             self, interaction: discord.Interaction,
             brand: Brand,
@@ -803,7 +498,3 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                 await self.publish_to_feed(feed)
             except LockedResourceError:
                 await self.delay_push(feed)
-
-
-async def setup(bot):
-    await bot.add_cog(ComicPulls(bot))

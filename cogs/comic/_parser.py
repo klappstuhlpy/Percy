@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup, Tag, NavigableString, PageElement
 
 from cogs.utils.converters import utcparse
 from cogs.utils.tasks import executor
-from cogs.utils.comic._client import Marvel, Comic as MarvelComic
+from cogs.comic._client import Marvel, Comic as MarvelComic
 from cogs.utils.formats import remove_html_tags
 
 
@@ -36,7 +36,7 @@ class Parser:
 
     @classmethod
     async def bs4_viz(cls):
-        from ...comicpulls import GenericComic, Brand
+        from ._cog import GenericComic, Brand
 
         ref = cls.VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
 
@@ -130,7 +130,7 @@ class Parser:
 
     @classmethod
     async def bs4_dc(cls):
-        from ...comicpulls import GenericComic, Brand
+        from ._cog import GenericComic, Brand
 
         async with aiohttp.ClientSession() as session:
             async with session.get(cls.DC_ENDPOINT + '/comics') as resp:
@@ -271,7 +271,7 @@ class Parser:
 
     @classmethod
     async def marvel_from_api(cls, client: Marvel):
-        from cogs.comicpulls import Brand
+        from cogs.comic._cog import Brand
 
         raw = await client.get_comics(format='comic', noVariants='true', dateDescriptor='thisWeek', limit=100)
         m_copyright = raw.data['attributionText']
@@ -285,7 +285,7 @@ class Parser:
 
     @classmethod
     def _to_comic(cls, data: MarvelComic):
-        from ...comicpulls import GenericComic
+        from ._cog import GenericComic
 
         _cs_comic = GenericComic(
             id=data.id,
@@ -328,7 +328,7 @@ class Parser:
 
     @classmethod
     async def fetch_marvel_lookup_table(cls, client: Marvel):
-        from ...comicpulls import GenericComic
+        from ._cog import GenericComic
 
         comics: list[GenericComic] = await cls.marvel_from_api(client)
         descs: dict[int, str] = await cls.bs4_marvel()

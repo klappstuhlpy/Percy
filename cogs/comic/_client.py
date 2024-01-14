@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, TYPE_CHECKING, Optional
 import hashlib
+import discord
 import datetime
-
-import discord.utils
 import yarl
+from typing import Any, Optional
 
+from bot import Percy
 from cogs.utils.converters import utcparse
-
-if TYPE_CHECKING:
-    from bot import Percy
 
 
 class MarvelError(discord.HTTPException):
