@@ -62,7 +62,7 @@ class Games(commands.GroupCog):
         self.economy: Economy = bot.get_cog('Economy')  # noqa
 
         self.blackjack_tables: Dict[int, _blackjack.Table] = ExpiringDict(max_len=1000, max_age_seconds=21600)
-        self.roulette_tales: Dict[int, _roulette.RouletteTable] = {}
+        self.roulette_tables: Dict[int, _roulette.RouletteTable] = {}
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -345,8 +345,8 @@ class Games(commands.GroupCog):
 
         await balance.remove(bet, 'cash')
 
-        if ctx.channel.id in self.roulette_tales:
-            roulette = self.roulette_tales[ctx.channel.id]
+        if ctx.channel.id in self.roulette_tables:
+            roulette = self.roulette_tables[ctx.channel.id]
             roulette.place(_roulette.Bet(ctx.author, space, bet))
             await roulette.message.edit(embed=roulette.build_embed())
         else:
@@ -356,16 +356,17 @@ class Games(commands.GroupCog):
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
 
             roulette.message = message
-            self.roulette_tales[ctx.channel.id] = roulette
+            self.roulette_tables[ctx.channel.id] = roulette
 
             # Wait for other bets to be placed before spinning the wheel.
             await asyncio.sleep(60)
 
-            roulette = self.roulette_tales[ctx.channel.id]
+            roulette = self.roulette_tables[ctx.channel.id]
             roulette.close()
 
             # Note this is just for aesthetics
-            await message.edit(embed=roulette.build_embed(image_url='https://i.giphy.com/26uf2YTgF5upXUTm0.gif'))
+            await message.edit(
+                embed=roulette.build_embed(image_url='https://i.giphy.com/26uf2YTgF5upXUTm0.gif'), view=roulette.view)
             await asyncio.sleep(5)
 
             result = random.randint(0, 36)
@@ -380,6 +381,8 @@ class Games(commands.GroupCog):
                     await balance.add(payout, 'cash')
 
             await message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)
+
+            self.roulette_tables.pop(ctx.channel.id)
         await ctx.message.add_reaction(ctx.tick(True))
 
 
