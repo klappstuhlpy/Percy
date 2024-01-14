@@ -15,7 +15,7 @@ from discord.utils import MISSING
 from .utils.converters import get_asset_url
 from .utils.paginator import BasePaginator, LinePaginator
 from .reminder import Timer
-from .utils import timetools, converters, fuzzy, cache, helpers, _commands
+from .utils import timetools, converters, fuzzy, cache, helpers, commands
 from .utils.context import tick
 from .utils.formats import plural, get_shortened_string, betterget
 from .utils.helpers import PostgresItem
@@ -573,8 +573,7 @@ class Polls(commands.Cog):
         results = fuzzy.finder(current, polls, key=lambda p: p.choice_text, raw=True)
         return [
             app_commands.Choice(name=get_shortened_string(length, start, poll.choice_text), value=poll.id)
-            for length, start, poll in results[:20]
-        ]
+            for length, start, poll in results[:20]]
 
     async def create_poll(
             self, poll_id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
@@ -710,12 +709,12 @@ class Polls(commands.Cog):
 
     polls = app_commands.Group(name='polls', description='Commands for managing polls.', guild_only=True)
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='create',
         description='Creates a new poll with customizable settings.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     @app_commands.describe(
         question='Main Poll Question to ask.',
         description='Additional notes/description about the question.',
@@ -802,8 +801,7 @@ class Polls(commands.Cog):
             return await self.send(
                 interaction,
                 '<:redTick:1079249771975413910> The Timer function is currently unavailable, please wait or contact '
-                'the Bot Developer if this problem persists.'
-            )
+                'the Bot Developer if this problem persists.')
         else:
             await reminder.create_timer(
                 when,
@@ -815,8 +813,7 @@ class Polls(commands.Cog):
 
         await self.send(
             interaction,
-            f'{tick(True)} Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}'
-        )
+            f'{tick(True)} Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}')
 
         await message.edit(embed=poll.to_embed(), view=PollView(bot=self.bot, poll=poll))
 
@@ -830,12 +827,12 @@ class Polls(commands.Cog):
                 allowed_mentions=discord.AllowedMentions(roles=True)
             )
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='end',
         description='Ends the voting for a running question.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id='5-digit ID of the poll to end.')
     async def polls_end(self, interaction: discord.Interaction, poll_id: int):
@@ -852,12 +849,12 @@ class Polls(commands.Cog):
 
         await self.send(interaction, f'{tick(True)} Poll [`{check}`] has been ended.')
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='delete',
         description='Deletes a poll question.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id='5-digit ID of the poll to delete.')
     async def polls_delete(self, interaction: discord.Interaction, poll_id: int):
@@ -870,12 +867,12 @@ class Polls(commands.Cog):
 
         await interaction.response.send_message(f'{tick(True)} Poll [`{poll_id}`] has been deleted.')
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='edit',
         description='Edits a poll question. Type "-clear" to clear the current value.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(
         poll_id='5-digit ID of the poll to search for.',
@@ -1036,7 +1033,7 @@ class Polls(commands.Cog):
 
         await self.send(interaction, f'{tick(True)} Poll [`{poll.id}`] edited successfully.', ephemeral=True)
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='search',
         description='Searches poll questions. Search by ID, keyword or flags.',
@@ -1137,7 +1134,7 @@ class Polls(commands.Cog):
             embed.set_footer(text=f'{plural(len(records)):entry|entries}')
             await LinePaginator.start(interaction, entries=results, per_page=12, embed=embed)
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='history',
         description='Shows the vote history of a user for polls.',
@@ -1173,12 +1170,12 @@ class Polls(commands.Cog):
 
         await FieldPaginator.start(interaction, entries=user_polls, per_page=12)
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='debug',
         description='Refactor all existing Polls in this guild and reattach the views.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
     @app_commands.describe(poll_id='The ID of the Poll to debug.')
     @app_commands.checks.cooldown(1, 15.0, key=lambda i: i.guild_id)
@@ -1199,12 +1196,12 @@ class Polls(commands.Cog):
             await poll.message.edit(embed=embed, view=view)
         await interaction.response.send_message(f'{tick(True)} Poll [`{poll.id}`] debugged.', ephemeral=True)
 
-    @_commands.command(
+    @commands.command(
         polls.command,
         name='config',
         description='Shows the current configuration for polls.',
     )
-    @_commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(1, user=['ban_members', 'manage_messages'])
     async def polls_config(
             self, interaction: discord.Interaction,
             poll_channel: discord.TextChannel = None,

@@ -6,12 +6,12 @@
 /__pycache__/
 /cogs/__pycache__/
 /cogs/utils/__pycache__/
-/cogs/utils/anisearch/__pycache__/
-/cogs/utils/comic/__pycache__/
-/cogs/utils/comic/marvel/__pycache__/
+/cogs/anisearch/__pycache__/
+/cogs/comic/__pycache__/
+/cogs/comic/marvel/__pycache__/
 /cogs/utils/scraping/__pycache__/
 /cogs/snekbox/__pycache__/
-/cogs/minigames/__pycache__/
+/cogs/games/__pycache__/
 /cogs/doc/__pycache__/
 /.idea/
 /prefixes.json

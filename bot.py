@@ -18,8 +18,7 @@ from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
 from cogs.user import UserSettings
-from cogs.utils import helpers
-from cogs.utils.comic._client import Marvel  # noqa
+from cogs.utils import helpers, errors
 from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.helpers import BasicJSONEncoder
@@ -207,7 +206,6 @@ class Percy(commands.Bot):
 
         self.context: Type[Context] = Context
         self.colour: Type[helpers.Colour] = helpers.Colour
-        self.marvel_client: Marvel = Marvel(self)
         self._error_message_log: list[int] = []
 
         self.initial_extensions: list[str] = EXTENSIONS
@@ -360,7 +358,7 @@ class Percy(commands.Bot):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
             elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
                 await ctx.send(f'{original} Please wait for it to finish and try again later.')
-        elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, )):
+        elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, errors.BadArgument)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.stick(False, f'Missing required argument: `{error.param.name}`')

@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 
 from cogs.utils.paginator import LinePaginator
 from .emoji import usage_per_day
-from .utils import formats, fuzzy, helpers, cache, _commands, errors
+from .utils import formats, fuzzy, helpers, cache, commands, errors
 from .utils.converters import get_asset_url
 from .utils.formats import plural, medal_emojize, get_shortened_string
 from .utils.helpers import PostgresItem
@@ -87,13 +87,13 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = commands.flag(description='Whether to output the results as raw tabular text.', aliases=['tt'],
-                                  default=False)
+    to_text: bool = commands.flag(
+        description='Whether to output the results as raw tabular text.', aliases=['tt'], default=False)
 
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     member: Optional[discord.Member] = commands.flag(description='The member to search for', aliases=['m'],
-                                                     default=None)
+                                                      default=None)
     query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description='The key to sort the results.', aliases=['s'], default='name')
@@ -718,7 +718,7 @@ class Tags(commands.Cog):
             for length, start, tag in results[:20]
         ]
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name='tag',
         description='Shows a tag from the server.',
@@ -727,7 +727,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(name_or_id='The tag to retrieve')
     @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
     async def tag(
             self,
             ctx: GuildContext,
@@ -739,7 +739,7 @@ class Tags(commands.Cog):
         """
         await self.send_tag(ctx, name_or_id)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='alias',
         description='Creates a new alias for an existing tag.',
@@ -781,7 +781,7 @@ class Tags(commands.Cog):
             else:
                 await ctx.stick(True, 'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='create',
         description='Creates a new tag in the server.',
@@ -806,7 +806,7 @@ class Tags(commands.Cog):
         with self.reserve_tag(ctx.guild.id, name):
             await self.create_tag(ctx, name, content)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='make',
         description='Interactively create a Tag owned by yourself in this server.',
@@ -1008,7 +1008,7 @@ class Tags(commands.Cog):
         fp = io.BytesIO(table.render().encode('utf-8'))
         await ctx.send(file=discord.File(fp, 'tags.txt'))
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='stats',
         description='Shows Tag Statistics about the Server or a Member.',
@@ -1023,7 +1023,7 @@ class Tags(commands.Cog):
         else:
             await self.member_tag_stats(ctx, member)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='edit',
         description='Edit the content or name of a Tag.',
@@ -1079,7 +1079,7 @@ class Tags(commands.Cog):
         await ctx.stick(True, 'Successfully edited tag.')
         await self.send_tag(ctx, tag.id)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='delete',
         description='Removes a Tag by Name or ID.',
@@ -1116,7 +1116,7 @@ class Tags(commands.Cog):
         self.get_tag.invalidate_containing(tag.name)
         self.get_tag.invalidate_containing(str(tag.id))
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='info',
         description='Shows you Information about a Tag.',
@@ -1167,7 +1167,7 @@ class Tags(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='raw',
         description='This displays you the raw content of a tag.',
@@ -1186,7 +1186,7 @@ class Tags(commands.Cog):
         """This displays you the raw content of a tag."""
         await self.send_tag(ctx, name_or_id, escape_markdown=True)
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='list',
         description='Shows a list of Tags owned by yourself or a given member.',
@@ -1244,13 +1244,13 @@ class Tags(commands.Cog):
         else:
             await ctx.stick(False, f'**{member}** currently has no tags.')
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='purge',
         description='Bulk remove all Tags and assigned Aliases of a given User.',
     )
     @commands.guild_only()
-    @_commands.permissions(user=['manage_messages'])
+    @commands.permissions(user=['manage_messages'])
     @app_commands.describe(member='The member to remove all tags of')
     async def tag_purge(self, ctx: GuildContext, member: discord.User):
         """Bulk remove all Tags and assigned Aliases of a given User."""
@@ -1272,7 +1272,7 @@ class Tags(commands.Cog):
 
         await ctx.stick(True, f'Successfully removed all **{count}** tags that belong to **{member}**.')
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='search',
         description='Search for tags matching the given query.',
@@ -1344,7 +1344,7 @@ class Tags(commands.Cog):
         else:
             await ctx.stick(False, 'No tags found.')
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='claim',
         description='Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.',
@@ -1373,7 +1373,7 @@ class Tags(commands.Cog):
 
         await ctx.stick(True, 'Successfully transferred tag ownership to you.')
 
-    @_commands.command(
+    @commands.command(
         tag.command,
         name='transfer',
         description='Transfer a tag owned by you to another member.',
@@ -1401,7 +1401,7 @@ class Tags(commands.Cog):
         await tag.transfer(member)
         await ctx.stick(True, f'Successfully transferred tag ownership to **{member}**.')
 
-    @_commands.command(tag.command, name='export', description='Exports all your tags/server tags to a csv file.')
+    @commands.command(tag.command, name='export', description='Exports all your tags/server tags to a csv file.')
     @commands.cooldown(1, 60, commands.BucketType.member)
     @commands.guild_only()
     @app_commands.describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')

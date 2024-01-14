@@ -48,6 +48,12 @@ def censor_object(blacklist: list[int] | Any, obj: str | discord.abc.Snowflake) 
     return censor_invite(obj)
 
 
+def valid_filename(sentence: str):
+    disallowed_chars_pattern = re.compile(r'[^\w.-]')
+    filename = sentence.replace(' ', '_')
+    return re.sub(disallowed_chars_pattern, '', filename)
+
+
 def betterget(obj: Any, attr: Union[str, Any], default: Any = None):
     """Gets a nested attribute from a dictionary/object and formats the output accordingly.
 
@@ -166,7 +172,7 @@ def shorten_number(number: int | float) -> str:
 
 def pagify(
         text: str,
-        delims: Sequence[str] = ['\n'],
+        delims: Sequence[str] = ['\n'],  # noqa
         *,
         priority: bool = False,
         escape_mass_mentions: bool = True,
@@ -309,23 +315,35 @@ class TabularData:
 
 
 def truncate(text: str, length: int) -> str:
+    """Truncate a string to a certain length, adding an ellipsis if it was truncated."""
     if len(text) > length:
         return text[:length - 1] + '…'
     return text
 
 
 def truncate_iterable(iterable: Iterable[Any], length: int, attribute: str = None) -> str:
+    """Truncate an iterable to a certain length, adding an ellipsis if it was truncated."""
     if len(iterable) > length:  # type: ignore
         return ', '.join(iterable[:length]) + ', …'
     return ', '.join(iterable)
 
 
 def WrapList(list_: list, length: int):
+    """Wrap a list into sublists of a certain length."""
     def chunks(seq, size):
         for i in range(0, len(seq), size):
             yield seq[i: i + size]
 
     return list(chunks(list_, length))
+
+
+def WrapDict(dict_: dict, length: int):
+    """Wrap a dict into subdicts of a certain length."""
+    def chunks(seq, size):
+        for i in range(0, len(seq), size):
+            yield {k: seq[k] for k in list(seq)[i: i + size]}
+
+    return list(chunks(dict_, length))
 
 
 def get_shortened_string(length: int, start: int, string: str) -> str:

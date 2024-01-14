@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS levels (
     guild_id BIGINT NOT NULL,
     messages INT DEFAULT 0,
     experience INT DEFAULT 0,
-    voice_minutes DOUBLE PRECISION DEFAULT 0.0
+    voice_seconds DOUBLE PRECISION DEFAULT 0.0
 );
 
 CREATE INDEX IF NOT EXISTS levels_guild_id_user_id_idx ON levels (user_id, guild_id);

@@ -12,12 +12,12 @@ from discord.ext import commands, tasks
 from lru import LRU
 
 from bot import Percy
-from .utils import fuzzy, _commands, errors
-from .utils.anisearch import _formatter
-from .utils.context import Context
-from .utils.anisearch._client import AniListClient
-from .utils.anisearch._formatter import month_to_season, ANILIST_ICON, ANILIST_LOGO
-from .utils.paginator import EmbedPaginator
+from cogs.utils import fuzzy, commands, errors
+from cogs.utils.context import Context
+from . import _formatter
+from ._client import AniListClient
+from ._formatter import month_to_season, ANILIST_ICON, ANILIST_LOGO
+from cogs.utils.paginator import EmbedPaginator
 
 GRANT_URL = "https://anilist.co/api/v2/oauth/"
 OAUTH_URL = GRANT_URL + "authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
@@ -196,7 +196,7 @@ class AniListSearch(commands.Cog, name="Media"):
         matches = fuzzy.finder(current, table, key=lambda x: x)
         return [app_commands.Choice(name=m, value=m) for m in matches][:15]
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name="anilist",
         description="Handles all AniList related commands",
@@ -206,7 +206,7 @@ class AniListSearch(commands.Cog, name="Media"):
         """Handles all AniList related commands."""
         await ctx.send_help(ctx.command)
 
-    @_commands.command(
+    @commands.command(
         anilist.command,
         name="link",
         description="Links your AniList account to your Discord account",
@@ -235,7 +235,7 @@ class AniListSearch(commands.Cog, name="Media"):
         view = AniListLinkView(ctx, self.format_oauth_url)
         await ctx.send(embed=embed, view=view, ephemeral=True)
 
-    @_commands.command(
+    @commands.command(
         anilist.group,
         name='profile',
         description='Displays information about the given AniList user',
@@ -250,7 +250,7 @@ class AniListSearch(commands.Cog, name="Media"):
             embed = self._embed_builder.user(data)
             await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name='anime',
         description='Searches for an anime with the given title and displays information about the search results',
@@ -260,7 +260,7 @@ class AniListSearch(commands.Cog, name="Media"):
         """Searches for an anime with the given title and displays information about the search results."""
         await ctx.invoke(self.anime_search, ctx, prompt=prompt)  # type: ignore
 
-    @_commands.command(
+    @commands.command(
         anime.command,
         name='search',
         description='Searches for an anime with the given title and displays information about the search results',
@@ -282,7 +282,7 @@ class AniListSearch(commands.Cog, name="Media"):
         else:
             raise errors.BadArgument(f'An anime with the title {prompt!r} could not be found.')
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name='manga',
         description='Searches for a manga with the given title and displays information about the search results',
@@ -292,7 +292,7 @@ class AniListSearch(commands.Cog, name="Media"):
         """Searches for a manga with the given title and displays information about the search results."""
         await ctx.invoke(self.manga_search, ctx, prompt=prompt)  # type: ignore
 
-    @_commands.command(
+    @commands.command(
         manga.command,
         name='search',
         description='Searches for a manga with the given title and displays information about the search results',
@@ -314,7 +314,7 @@ class AniListSearch(commands.Cog, name="Media"):
         else:
             raise errors.BadArgument(f'A manga with the title {prompt!r} could not be found.')
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_command,
         name='character-search',
         description='Searches for a character with the given name and displays information about the search results',
@@ -353,7 +353,7 @@ class AniListSearch(commands.Cog, name="Media"):
 
         await EmbedPaginator.start(ctx, entries=embeds, per_page=1)
 
-    @_commands.command(
+    @commands.command(
         anime.command,
         name='trending',
         description='Displays the current trending anime',
@@ -362,7 +362,7 @@ class AniListSearch(commands.Cog, name="Media"):
         """Displays the current trending anime."""
         await self.trending(ctx, 'anime')
 
-    @_commands.command(
+    @commands.command(
         manga.command,
         name='trending',
         description='Displays the current trending manga',
@@ -371,7 +371,7 @@ class AniListSearch(commands.Cog, name="Media"):
         """Displays the current trending manga."""
         await self.trending(ctx, 'manga')
 
-    @_commands.command(
+    @commands.command(
         anime.command,
         name='seasonal',
         description='Displays the currently airing anime'
@@ -399,7 +399,3 @@ class AniListSearch(commands.Cog, name="Media"):
             embeds.append(embed)
 
         await EmbedPaginator.start(ctx, entries=embeds[:3], per_page=1)
-
-
-async def setup(bot: Percy) -> None:
-    await bot.add_cog(AniListSearch(bot))

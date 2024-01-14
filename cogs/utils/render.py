@@ -373,3 +373,30 @@ class Render:
         background.save(buffer, 'png')
         buffer.seek(0)
         return buffer
+
+    # Image Grid
+
+    @staticmethod
+    def create_image_grid(images, grid_size=(2, 2)) -> BytesIO:
+        if len(images) > grid_size[0] * grid_size[1]:
+            raise ValueError("Number of images doesn't match the grid size")
+
+        if len(images) < grid_size[0] * grid_size[1]:
+            images += [Image.new('RGB', images[0].size, (0, 0, 0)) for _ in range(grid_size[0] * grid_size[1] - len(images))]
+
+        # Create a blank image with the appropriate size
+        grid_width = max(img.width for img in images) * grid_size[0]
+        grid_height = max(img.height for img in images) * grid_size[1]
+
+        grid_image = Image.new('RGB', (grid_width, grid_height))
+
+        # Paste each image into the grid
+        for i in range(grid_size[0]):
+            for j in range(grid_size[1]):
+                index = i * grid_size[1] + j
+                grid_image.paste(images[index], (j * images[index].width, i * images[index].height))
+
+        buffer = BytesIO()
+        grid_image.save(buffer, 'jpeg')
+        buffer.seek(0)
+        return buffer

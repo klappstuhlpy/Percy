@@ -137,7 +137,6 @@ class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Tran
 
     async def transform(self, interaction: discord.Interaction, value: str) -> Union[Colour, str]:
         """Transform a color HEX to the matching :class:``discord.Color` if possible else return None."""
-
         try:
             value = value.strip()
 

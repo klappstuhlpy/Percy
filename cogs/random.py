@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import random
 import re
-from datetime import datetime
 
 from typing_extensions import Annotated
 from typing import TYPE_CHECKING, Optional
 
-from .utils import fuzzy, _commands
+from .utils import fuzzy, commands
 from .utils.constants import LANGUAGES
 from .utils.translation import translate
 
-from discord.ext import commands
 import discord
 
 if TYPE_CHECKING:
@@ -57,8 +55,8 @@ class Random(commands.Cog):
 
         return "en", content
 
-    @_commands.command(
-        commands.command,
+    @commands.command(
+        commands.core_command,
         name='translate',
         description='Translates a message to English using Google Translate.',
         usage='[to] <message>',
@@ -92,15 +90,15 @@ class Random(commands.Cog):
         try:
             result = await translate(message, dest=dest, session=self.bot.session)
         except Exception as e:
-            return await ctx.stick(False, 'An error occurred: {e.__class__.__name__}: {e}')
+            return await ctx.stick(False, f'An error occurred: {e.__class__.__name__}: {e}')
 
         embed = discord.Embed(title='Translator', colour=self.bot.colour.darker_red())
         embed.add_field(name=f'Original: {result.source_language} (Auto)', value=result.original, inline=False)
         embed.add_field(name=f'Translated: {result.target_language}', value=result.translated, inline=False)
         await ctx.send(embed=embed)
 
-    @_commands.command(
-        commands.command,
+    @commands.command(
+        commands.core_command,
         name='meme',
         description='Shows you a random reddit meme.',
     )
@@ -118,7 +116,7 @@ class Random(commands.Cog):
         embed.add_field(name='Rating', value=f'\N{THUMBS UP SIGN} **{random_meme["ups"]}** \N{SPEECH BALLOON} **{random_meme["num_comments"]}**', inline=False)
         await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_command,
         name='fact',
         description="Shows you a random fact."

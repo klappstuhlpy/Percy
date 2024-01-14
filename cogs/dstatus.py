@@ -8,12 +8,12 @@ from typing import Optional, Any
 
 import asyncpg
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from typing import TypeVar
 
 from bot import Percy
-from .utils._commands import PermissionTemplate
-from .utils import _commands, cache, converters, errors
+from .utils.commands import PermissionTemplate
+from .utils import commands, cache, converters, errors
 from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
@@ -320,7 +320,7 @@ class DiscordStatus(commands.Cog):
             return None
         return IncidentItem(self.bot, record=record)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name="discord-status",
         aliases=["dstatus"],
@@ -339,13 +339,13 @@ class DiscordStatus(commands.Cog):
         if len(embeds) > 10 else None,
                        embeds=embeds[:10], ephemeral=True)
 
-    @_commands.command(
+    @commands.command(
         dstatus.command,
         name="release",
         description="Releases the last incident if not posted.",
         with_app_command=False
     )
-    @_commands.permissions(user=PermissionTemplate.mod)
+    @commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_release(self, ctx: GuildContext):
         """Releases the last incident again."""
@@ -381,8 +381,8 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @_commands.command(dstatus.command, name="subscribe", description="Subscribe to Discord Status updates.")
-    @_commands.permissions(user=PermissionTemplate.mod)
+    @commands.command(dstatus.command, name="subscribe", description="Subscribe to Discord Status updates.")
+    @commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_subscribe(self, ctx: GuildContext, channel: discord.TextChannel):
         """Subscribes to Discord Status updates.
@@ -415,8 +415,8 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @_commands.command(dstatus.command, name="unsubscribe", description="Unsubscribe from Discord Status updates.")
-    @_commands.permissions(user=PermissionTemplate.mod)
+    @commands.command(dstatus.command, name="unsubscribe", description="Unsubscribe from Discord Status updates.")
+    @commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_unsubscribe(self, ctx: GuildContext):
         """Unsubscribes from Discord Status updates."""

@@ -16,7 +16,7 @@ from bot import Percy
 from cogs.base import TrashView
 from cogs.snekbox._eval import EvalJob, EvalResult
 from cogs.snekbox._formatter import FileAttachment
-from cogs.utils import _commands
+from cogs.utils import commands
 from cogs.utils.constants import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 from cogs.utils.context import EvalContext
 from cogs.utils.lock import lock_arg
@@ -508,7 +508,7 @@ class Snekbox(commands.Cog):
                 break
             log.info(f'Re-evaluating code from message {ctx.message.id}:\n{job}')
 
-    @_commands.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
+    @commands.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
     @commands.guild_only()
     async def eval_command(
         self,
@@ -535,10 +535,10 @@ class Snekbox(commands.Cog):
         issue with it!
         """
         python_version = python_version or '3.11'
-        job = EvalJob.from_code('\n'.join(code)).as_version(python_version)
+        job = EvalJob.from_code('\n'.join(code)).as_version(python_version)  # type: ignore[arg-type]
         await self.run_job(ctx, job)
 
-    @_commands.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
+    @commands.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
     @commands.guild_only()
     async def timeit_command(
         self,
@@ -563,7 +563,7 @@ class Snekbox(commands.Cog):
         """
         python_version = python_version or '3.11'
         args = self.prepare_timeit_input(code)
-        job = EvalJob(args, version=python_version, name='timeit')
+        job = EvalJob(args, version=python_version, name='timeit')  # type: ignore[arg-type]
         await self.run_job(ctx, job)
 
 

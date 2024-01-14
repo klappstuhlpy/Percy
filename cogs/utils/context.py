@@ -104,7 +104,7 @@ class ConfirmationView(discord.ui.View):
             await self.message.delete()
 
     @discord.ui.button(label='Confirm', style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         self.value = True
         await interaction.response.defer()
         if self.delete_after:
@@ -113,7 +113,7 @@ class ConfirmationView(discord.ui.View):
         self.stop()
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         self.value = False
         await interaction.response.defer()
         if self.delete_after:
@@ -159,6 +159,24 @@ class DisambiguatorView(discord.ui.View, Generic[T]):
             await self.message.delete()
 
         self.stop()
+
+
+class ContextResponse:
+    """A Fake interaction response that has methods like a "discord.Interaction.response" object to be able
+    to send/edit etc. message without needing to double code for a Context and Interaction object when used.
+    """
+
+    def __init__(self, ctx: Context):
+        self.ctx: Context = ctx
+
+    async def send_message(self, *args, **kwargs):
+        return await self.ctx.send(*args, **kwargs)
+
+    async def edit_message(self, *args, **kwargs):
+        return await self.ctx.message.edit(*args, **kwargs)
+
+    async def defer(self, *args, **kwargs):
+        return await self.ctx.defer(*args, **kwargs)
 
 
 class Context(commands.Context):
@@ -207,6 +225,10 @@ class Context(commands.Context):
         return None
 
     @property
+    def response(self) -> ContextResponse:
+        return ContextResponse(self)
+
+    @property
     def user(self) -> discord.User:
         """Returns the author of the message as an :class:`discord.User`."""
         return self.author._user  # noqa
@@ -215,6 +237,11 @@ class Context(commands.Context):
     def client(self) -> 'commands.Bot':
         """Returns the client."""
         return self.bot
+
+    @property
+    def guild_id(self) -> int:
+        """Returns the guild ID of the message."""
+        return self.guild.id
 
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:

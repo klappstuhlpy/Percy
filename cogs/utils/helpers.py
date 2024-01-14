@@ -244,6 +244,10 @@ class Colour(discord.Colour):
     def royal_blue(cls) -> Self:
         return cls(0x133549)
 
+    @classmethod
+    def black(cls) -> Self:
+        return cls(0x000000)
+
 
 class BasicJSONEncoder(json.JSONEncoder):
     """A basic JSON encoder that encodes `NamedDict` objects."""

@@ -9,7 +9,7 @@ import re
 
 from .base import PH_GUILD_ID
 from .utils.paginator import BasePaginator
-from .utils import _commands, errors
+from .utils import commands, errors
 from .utils.render import Render
 from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
@@ -176,7 +176,7 @@ class Annotations(commands.Cog):
         e.set_footer(text=f'Author ID: {user.id}')
         return e
 
-    @_commands.command(commands.command, description='Sends feedback about the bot to the owner.')
+    @commands.command(commands.core_command, description='Sends feedback about the bot to the owner.')
     @commands.cooldown(rate=1, per=60.0, type=commands.BucketType.user)
     async def feedback(self, ctx: Context, *, content: str):
         """Sends feedback about the bot to the owner.
@@ -195,13 +195,13 @@ class Annotations(commands.Cog):
         await channel.send(embed=e)
         await ctx.stick(False, 'Successfully sent feedback')
 
-    @_commands.command(app_commands.command, name='feedback', description='Sends feedback about the bot to the owner.')
+    @commands.command(app_commands.command, name='feedback', description='Sends feedback about the bot to the owner.')
     async def feedback_slash(self, interaction: discord.Interaction):
         """Sends feedback about the bot to the owner."""
 
         await interaction.response.send_modal(FeedbackModal(self))
 
-    @_commands.command(commands.command, hidden=True)
+    @commands.command(commands.core_command, hidden=True)
     @commands.is_owner()
     async def pm(self, ctx: Context, user_id: int, *, content: str):
         """Sends a DM to a user by ID."""
@@ -216,7 +216,7 @@ class Annotations(commands.Cog):
         else:
             await ctx.stick(False, 'PM successfully sent.')
 
-    @_commands.command(commands.command, name='urban', description="Searches the urban dictionary.")
+    @commands.command(commands.core_command, name='urban', description="Searches the urban dictionary.")
     async def _urban(self, ctx: Context, *, word: str):
         """Searches urban dictionary."""
 
@@ -232,7 +232,7 @@ class Annotations(commands.Cog):
 
         await UrbanDictionaryPaginator.start(ctx, entries=data, per_page=1)
 
-    @_commands.command(commands.hybrid_command, name='color', description="Shows information about a color.")
+    @commands.command(commands.hybrid_command, name='color', description="Shows information about a color.")
     @app_commands.describe(color='The color to show information about. Must be in hex format or autocompleted.')
     async def _color(self, ctx: Context, *, color: Annotated[discord.Colour, ColorParser]):
         """Shows information about a color."""

@@ -1,8 +1,8 @@
 -- Revises: V6
 -- Creation Date: 2023-05-15 08:45:52.476354 UTC
--- Reason: Marvel Comics Configuration Addition
+-- Reason: Comics Configuration Addition
 
-CREATE TABLE IF NOT EXISTS feed_config (
+CREATE TABLE IF NOT EXISTS comic_config (
     id SERIAL PRIMARY KEY,
     guild_id BIGINT,
     channel_id BIGINT,
@@ -10,5 +10,6 @@ CREATE TABLE IF NOT EXISTS feed_config (
     format TEXT,
     day SMALLINT,
     ping BIGINT,
-    pin BOOLEAN
+    pin BOOLEAN,
+    next_pull TIMESTAMP WITH TIME ZONE
 );

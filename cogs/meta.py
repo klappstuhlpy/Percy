@@ -10,8 +10,7 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any
-)
+    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any)
 
 import discord
 import psutil
@@ -21,9 +20,9 @@ from discord import app_commands, Interaction
 from discord.ext import commands
 from lru import LRU
 
-from .utils import fuzzy, helpers, _commands
+from .utils import fuzzy, helpers, commands
 from .utils.converters import Prefix, get_asset_url
-from .utils.formats import plural, format_date
+from .utils.formats import plural, format_date, WrapDict
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App, \
     PH_GUILD_ID
@@ -81,10 +80,10 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
 
 
 class GroupHelpPaginator(BasePaginator[PartialCommand]):
-    group: commands.Group | commands.Cog  # The current Group displayed
-    groups: Optional[Dict[commands.Cog, list[PartialCommand]]]  # The list of all groups from this help menu
+    group: commands.Group | commands.Cog
+    groups: Optional[Dict[commands.Cog, list[PartialCommand]]]
 
-    async def format_page(self, entries: List[commands.Command]):
+    async def format_page(self, entries: List[commands.Command]) -> discord.Embed:
         emoji = getattr(self.group, 'display_emoji', None) or ''
         embed = discord.Embed(title=f'{emoji} {self.group.qualified_name} Commands',
                               description=self.group.description,
@@ -130,10 +129,12 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         self.groups = kwargs.pop('groups') if 'groups' in kwargs else None
         self.group = kwargs.pop('group')
 
-        page: discord.Embed = await self.format_page(self.pages[0])  # type: ignore
+        page: discord.Embed = await self.format_page(self.pages[0])
 
         if self.groups is not None:
-            self.add_item(CategorySelect(self.groups, getattr(context, 'bot', context.client)))  # type: ignore
+            for index, groups in enumerate(WrapDict(self.groups, 24)):
+                self.add_item(CategorySelect(getattr(context, 'bot', context.client), groups, with_index=index == 0))
+
         self.update_buttons()
 
         if kwargs.pop('edit', False):
@@ -158,22 +159,23 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
 
 
 class CategorySelect(discord.ui.Select):
-    def __init__(self, entries: dict[commands.Cog, list[commands.Command]], bot: Percy):
-        super().__init__(
-            placeholder='Select a category to view...',
-            row=1,
-        )
-        self.commands: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]] = entries
+    def __init__(self, bot: Percy, entries: dict[commands.Cog, list[commands.Command]], with_index: bool = True):
+        super().__init__(placeholder='Select a category to view...')
+
+        self.commands: dict[commands.Cog, list[commands.Command] | list[app_commands.AppCommand]] = entries
         self.bot: Percy = bot
+        self.with_index: bool = with_index
+
         self.__fill_options()
 
     def __fill_options(self) -> None:
-        self.add_option(
-            label='Start Page',
-            emoji=discord.PartialEmoji(name='vegaleftarrow', id=1066024601332748389),
-            value='__index',
-            description='The front page of the Help Menu.',
-        )
+        if self.with_index:
+            self.add_option(
+                label='Start Page',
+                emoji=discord.PartialEmoji(name='vegaleftarrow', id=1066024601332748389),
+                value='__index',
+                description='The front page of the Help Menu.',
+            )
 
         for cog, cmds in self.commands.items():
             if not cmds:
@@ -298,7 +300,9 @@ class FrontHelpPaginator(BasePaginator[str]):
         self.groups = entries
 
         page = await self.format_page(self.pages[0])
-        self.add_item(CategorySelect(entries, self.ctx.client))  # type: ignore
+        for index, groups in enumerate(WrapDict(self.groups, 24)):
+            self.add_item(CategorySelect(self.ctx.client, groups, with_index=index == 0))  # type: ignore
+
         self.update_buttons()
 
         if kwargs.pop('edit', False):
@@ -723,7 +727,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if permissions := self.get_command_permission_formatting(command, stringified=True):
             embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
 
-        if examples := command.extras.get('examples', None):
+        if examples := command.extras.get('examples'):
             text = '\n'.join(f'* `{self.get_command_signature(command, cut=True)} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
 
@@ -923,7 +927,7 @@ class Meta(commands.Cog):
             reason=f'Marked as solved by {user} (ID: {user.id})',
         )
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_command,
         name='solved',
         description='Marks a thread as solved.'
@@ -931,7 +935,7 @@ class Meta(commands.Cog):
     @commands.guild_only()
     @commands.cooldown(1, 20, commands.BucketType.channel)
     @is_help_thread()
-    @_commands.guilds(PH_GUILD_ID)
+    @commands.guilds(PH_GUILD_ID)
     async def solved(self, ctx: GuildContext):
         """Marks a thread as solved."""
 
@@ -957,8 +961,8 @@ class Meta(commands.Cog):
             else:
                 await ctx.stick(False, f'Not marking as solved.')
 
-    @_commands.command(
-        commands.command,
+    @commands.command(
+        commands.core_command,
         aliases=['src'],
         description='Shows parts of the Bots Source Command.'
     )
@@ -1016,7 +1020,7 @@ class Meta(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         if not hasattr(self, '_help_autocomplete_cache'):
             await interaction.response.autocomplete([])
-            self.bot.loop.create_task(self._fill_autocomplete())
+            self.bot.loop.create_task(self._fill_autocomplete())  # noqa
 
         module = interaction.namespace.module
         if module is not None:
@@ -1034,14 +1038,14 @@ class Meta(commands.Cog):
             self, interaction: discord.Interaction, current: str,  # noqa
     ) -> list[app_commands.Choice[str]]:
         if not hasattr(self, '_help_autocomplete_cache'):
-            self.bot.loop.create_task(self._fill_autocomplete())
+            self.bot.loop.create_task(self._fill_autocomplete())  # noqa
 
         cogs = self._help_autocomplete_cache.keys()
         results = fuzzy.finder(current, [c.qualified_name for c in cogs])
         return [app_commands.Choice(name=res, value=res) for res in results][:25]
 
     @commands.hybrid_group(name='info', description='Shows info about a user or server.',
-                           invoke_without_command=True)
+                            invoke_without_command=True)
     async def info(self, ctx: Context):
         """Shows info about a user or server."""
         await ctx.send_help(ctx.command)
@@ -1323,7 +1327,7 @@ class Meta(commands.Cog):
         e.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=e, view=GuildUserJoinView(ctx.author))
 
-    @_commands.command()
+    @commands.command()
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):
         """Shows a user's enlarged avatar (if possible)."""
         user = user or ctx.author
@@ -1334,7 +1338,7 @@ class Meta(commands.Cog):
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         name='charinfo',
         description='Shows you information about a number of characters.',
     )
@@ -1369,7 +1373,7 @@ class Meta(commands.Cog):
 
         await LinePaginator.start(ctx, entries=char_list, per_page=10, embed=embed, location='description')
 
-    @_commands.command(
+    @commands.command(
         commands.group,
         name='prefix',
         description='Manages the server\'s custom prefixes.',
@@ -1391,13 +1395,13 @@ class Meta(commands.Cog):
         e.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
         await ctx.send(embed=e)
 
-    @_commands.command(
+    @commands.command(
         prefix.command,
         name='add',
         description='Appends a prefix to the list of custom prefixes.',
         ignore_extra=False,
     )
-    @_commands.permissions(user=['manage_guild'])
+    @commands.permissions(user=['manage_guild'])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Appends a prefix to the list of custom prefixes.
         Previously set prefixes are not overridden.
@@ -1423,13 +1427,13 @@ class Meta(commands.Cog):
         if isinstance(error, commands.TooManyArguments):
             await ctx.send('You\'ve given too many prefixes. Either quote it or only do it one by one.')
 
-    @_commands.command(
+    @commands.command(
         prefix.command,
         name='remove',
         aliases=['delete'],
         ignore_extra=False
     )
-    @_commands.permissions(user=['manage_guild'])
+    @commands.permissions(user=['manage_guild'])
     async def prefix_remove(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
         """Removes a prefix from the list of custom prefixes.
         This is the inverse of the 'prefix add' command. You can
@@ -1451,13 +1455,13 @@ class Meta(commands.Cog):
         else:
             await ctx.stick(True, 'Prefix removed.')
 
-    @_commands.command(
+    @commands.command(
         prefix.command,
         name='reset',
         description='Removes all custom prefixes.',
         ignore_extra=False
     )
-    @_commands.permissions(user=['manage_guild'])
+    @commands.permissions(user=['manage_guild'])
     async def prefix_reset(self, ctx: GuildContext):
         """Removes all custom prefixes.
         After this, the bot will listen to only mention prefixes.
@@ -1467,7 +1471,7 @@ class Meta(commands.Cog):
         await self.bot.set_guild_prefixes(ctx.guild, [])
         await ctx.stick(True, 'Cleared all prefixes.')
 
-    @_commands.command(
+    @commands.command(
         name='ping',
         description='Shows some Client and API latency information.',
     )
@@ -1550,7 +1554,7 @@ class Meta(commands.Cog):
         e.add_field(name='Denied', value='\n'.join(denied))
         await ctx.send(embed=e)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name='permissions',
         description='Shows permissions for a member or the bot in a specific channel.',
@@ -1561,7 +1565,7 @@ class Meta(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @_commands.command(
+    @commands.command(
         permissions.command,
         name='user',
         description='Shows a member\'s permissions in a specific channel.',
@@ -1584,7 +1588,7 @@ class Meta(commands.Cog):
 
         await self.say_permissions(ctx, member, channel)
 
-    @_commands.command(
+    @commands.command(
         permissions.command,
         name='bot',
         description='Shows the bot\'s permissions in a specific channel.',
@@ -1601,8 +1605,8 @@ class Meta(commands.Cog):
         member = ctx.guild.me
         await self.say_permissions(ctx, member, channel)
 
-    @_commands.command(
-        commands.command,
+    @commands.command(
+        commands.core_command,
         name='debug',
         description='Shows permission resolution for a channel and an optional author.',
     )
@@ -1628,7 +1632,7 @@ class Meta(commands.Cog):
 
         await self.say_permissions(ctx, member, channel)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_command,
         name='snipe',
         description='Snipes a deleted message.',
@@ -1653,7 +1657,7 @@ class Meta(commands.Cog):
         embed.set_footer(text='Deleted at')
         await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_command,
         name='esnipe',
         description='Snipes a deleted edited.',

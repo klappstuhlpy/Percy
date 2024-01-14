@@ -6,10 +6,9 @@ from typing import NamedTuple, Self, Optional, TYPE_CHECKING
 import dateutil.tz
 import discord
 from discord import app_commands
-from discord.ext import commands
 from lxml import etree
 
-from .utils import cache, timetools, fuzzy, helpers, _commands
+from .utils import cache, timetools, fuzzy, helpers, commands, errors
 from .utils.context import Context
 from .utils.helpers import PostgresItem
 
@@ -21,19 +20,17 @@ class TimeZone(NamedTuple):
     label: str
     key: str
 
-    # noinspection PyProtectedMember
-    # noinspection PyUnresolvedReferences
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
-        assert isinstance(ctx.cog, UserSettings)
+        cog: UserSettings = ctx.cog  # type: ignore
 
-        if argument in ctx.cog._timezone_aliases:
-            return cls(key=argument, label=ctx.cog._timezone_aliases[argument])
+        if argument in cog._timezone_aliases:
+            return cls(key=argument, label=cog._timezone_aliases[argument])
 
-        if argument in ctx.cog.valid_timezones:
+        if argument in cog.valid_timezones:
             return cls(key=argument, label=argument)
 
-        timezones = ctx.cog.find_timezones(argument)
+        timezones = cog.find_timezones(argument)
 
         try:
             return await ctx.disambiguate(timezones, lambda t: t[0], ephemeral=True)
@@ -171,7 +168,7 @@ class UserSettings(commands.Cog, name='User Settings'):
                 if entry is not None:
                     self._default_timezones.append(app_commands.Choice(name=entry.description, value=entry.aliases[0]))
 
-    @_commands.command(
+    @commands.command(
         commands.hybrid_group,
         name='timezone',
         fallback='show',
@@ -193,7 +190,7 @@ class UserSettings(commands.Cog, name='User Settings'):
         else:
             await ctx.stick(True, f'The current time for {user} is `{time} {offset}`.')
 
-    @_commands.command(
+    @commands.command(
         timezone.command,
         name='info'
     )
@@ -212,7 +209,7 @@ class UserSettings(commands.Cog, name='User Settings'):
 
         await ctx.send(embed=embed)
 
-    @_commands.command(
+    @commands.command(
         timezone.command,
         name='set',
         description='Sets the timezone of a user.',
@@ -239,14 +236,14 @@ class UserSettings(commands.Cog, name='User Settings'):
     @timezone_set.autocomplete('tz')
     @timezone_info.autocomplete('tz')
     async def timezone_set_autocomplete(
-            self, interaction: discord.Interaction, argument: str
+            self, interaction: discord.Interaction, argument: str  # noqa
     ) -> list[app_commands.Choice[str]]:
         if not argument:
             return self._default_timezones
         matches = self.find_timezones(argument)
         return [tz.to_choice() for tz in matches[:25]]
 
-    @_commands.command(
+    @commands.command(
         timezone.command,
         name='purge',
         description='Clears the timezone of a user.',
