@@ -42,7 +42,7 @@ AnyCommandSignature = {
 T = TypeVar('T')
 
 
-class CooldownMapping:
+class CooldownMap:
     """A class that represents a mapping of cooldowns."""
 
     rate: ClassVar[int]
@@ -185,7 +185,7 @@ def command(
         extras: Dict[str, Any] = None,
         raw: bool = False,
         guild_only: bool = False,  # noqa
-        cooldown: CooldownMapping = None,  # noqa
+        cooldown: CooldownMap = None,  # noqa
         **kwargs
 ):
     r"""A custom decorator that assigns a function as a command.
