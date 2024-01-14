@@ -22,6 +22,13 @@ if TYPE_CHECKING:
     from ..utils.context import GuildContext, Context
 
 
+class MinimumBet(enum.Enum):
+    """Minimum Bets for Games."""
+
+    BLACKJACK = 100
+    ROULETTE = 100
+
+
 async def roulette_space_autocomplete(
         interaction: discord.Interaction, current: str  # noqa
 ) -> list[app_commands.Choice[int]]:
@@ -181,6 +188,9 @@ class Games(commands.GroupCog):
         if bet < 0:
             return await ctx.send('You cannot bet negative coins.', ephemeral=True)
 
+        if bet < MinimumBet.BLACKJACK.value:
+            return await ctx.send(f'You must bet at least {cash_emoji} **{MinimumBet.BLACKJACK.value:,}**.', ephemeral=True)
+
         balance = await self.economy.get_balance(ctx.author.id, ctx.guild.id)
 
         if bet > balance.cash:
@@ -336,6 +346,9 @@ class Games(commands.GroupCog):
         """
         if bet < 0:
             return await ctx.send('You cannot bet negative coins.', ephemeral=True)
+
+        if bet < MinimumBet.ROULETTE.value:
+            return await ctx.send(f'You must bet at least {cash_emoji} **{MinimumBet.ROULETTE.value:,}**.', ephemeral=True)
 
         balance = await self.economy.get_balance(ctx.author.id, ctx.guild.id)
 
