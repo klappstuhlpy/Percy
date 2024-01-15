@@ -155,14 +155,13 @@ class Bet:
         return f"<Bet placed_by={self.placed_by} space={self.space} amount={self.amount}>"
 
 
-class RouletteTable:
+class Table:
     """Represents a roulette table with all spaces."""
 
-    def __init__(self, ctx: Context, controller: discord.Member):
+    def __init__(self, ctx: Context):
         self.ctx: Context = ctx
 
         self.start_time: time = time.time()
-        self.controller: discord.Member = controller
 
         self.message: Optional[discord.Message] = None
         self.spaces: dict[Space, list[Bet]] = {space: [] for space in Space}
@@ -260,9 +259,9 @@ class PlaceBetModal(discord.ui.Modal, title='Place Bet'):
 class RouletteView(discord.ui.View):
     """Represents the view for the roulette table."""
 
-    def __init__(self, table: RouletteTable):
+    def __init__(self, table: Table):
         super().__init__(timeout=None)
-        self.table: RouletteTable = table
+        self.table: Table = table
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         if not self.table.open:

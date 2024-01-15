@@ -1,26 +1,15 @@
 import copy
 import enum
-import random
 from typing import Optional
 
 import discord
 
 from cogs.economy import Economy, Balance
+from cogs.games._classes import BaseCard, BaseHand, Deck
 from cogs.utils import helpers, constants
 from cogs.utils.context import Context
 
 cash_emoji = constants.cash_emoji
-
-
-class Suit(enum.Enum):
-    """Enum for the suits of a card"""
-
-    # The emojis are named like: "2ofspades, "queenofspades", etc.
-
-    SPADES = 'ofspades'
-    HEARTS = 'ofhearts'
-    DIAMONDS = 'ofdiamonds'
-    CLUBS = 'ofclubs'
 
 
 class WinningType(enum.Enum):
@@ -36,23 +25,16 @@ class WinningType(enum.Enum):
     PUSH = 'Push'
 
 
-class Card:
+class Card(BaseCard):
     """Represents a card in a deck"""
 
-    def __init__(self, name: str, value: int, suit: Suit):
-        self.name: str = name
-        self.value: int = value
-        self.suit: Suit = suit
-
-        self._rl_name = int(self.name) if self.name.isdigit() else self.name
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.emoji: discord.PartialEmoji = discord.PartialEmoji(
             name=f'{self._rl_name}{self.suit.value}',
             id=constants.BLACKJACK_EMOJIS[f'{self._rl_name}{self.suit.value}'])
 
         self._hidden: bool = False
-
-    def __repr__(self):
-        return f'Card(name={self.name}, value={self.value}, suit={self.suit})'
 
     @property
     def hidden(self) -> bool:
@@ -72,70 +54,16 @@ class Card:
         self._hidden = value
 
 
-class Deck:
-    """Represents one or Card Decks with 52 cards that can be shuffled and drawn from"""
-
-    def __init__(self, decks: int = 3):
-        self.decks: int = decks
-        self.cards: list[Card] = []
-        self.used_cards: list[Card] = []
-
-        # Build the deck
-        self._build_deck()
-
-        # Burn the first card ;)
-        self.draw()
-
-    def __repr__(self):
-        return f'Deck(decks={self.decks} cards={len(self.cards)} used_cards={len(self.used_cards)})'
-
-    def _build_deck(self):
-        """Builds the deck"""
-        for _ in range(self.decks):
-            for suit in Suit:
-                for i in range(2, 11):
-                    self.cards.append(Card(name=str(i), value=i, suit=suit))
-
-                for name, value in (('jack', 10), ('queen', 10), ('king', 10), ('ace', 11)):
-                    self.cards.append(Card(name=name, value=value, suit=suit))
-
-        # Shuffle the deck
-        self.shuffle()
-
-    def shuffle(self):
-        """Shuffles the deck"""
-        random.shuffle(self.cards)
-
-    def draw(self) -> Card:
-        """Draws a card from the deck"""
-        card = self.cards.pop(0)
-        self.used_cards.append(card)
-        return card
-
-    def __len__(self):
-        return len(self.cards)
-
-
-class Hand:
-    """Represents a hand of cards"""
+class Hand(BaseHand[Card]):
+    """Represents a hand of cards for a blackjack game"""
 
     def __init__(self, bet: int):
+        super().__init__()
         self.bet: int = bet
-        self.cards: list[Card] = []
         self.message: Optional[discord.Message] = None
 
         self.finished: bool = False
         self.splitted: bool = False
-
-    def __repr__(self):
-        return f'Hand(cards={len(self.cards)})'
-
-    def __len__(self):
-        return len(self.cards)
-
-    def add(self, card: Card):
-        """Adds a card to the hand"""
-        self.cards.append(card)
 
     @property
     def value(self) -> int:

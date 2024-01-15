@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import enum
 import random
 from typing import TYPE_CHECKING, Literal, Annotated, Dict
@@ -9,10 +10,11 @@ import discord
 from discord import app_commands
 from expiringdict import ExpiringDict
 
-from cogs.games import _tictactoe, _minesweeper, _hangman, _blackjack, _roulette
+from cogs.games import _tictactoe, _minesweeper, _hangman, _blackjack, _roulette, _poker
 from ._hangman import WaitforHangman
 from ._roulette import Space
 from ..economy import Economy
+from ..reminder import Timer
 from ..utils import helpers, commands, errors, fuzzy
 from ..utils.constants import cash_emoji, WORKING_RESPONSES, SUCCESSFULL_CRIME_RESPONSES, FAILED_CRIME_RESPONSES, \
     SUCCESSFULL_SLUT_RESPONSES, FAILED_SLUT_RESPONSES
@@ -27,6 +29,7 @@ class MinimumBet(enum.Enum):
 
     BLACKJACK = 100
     ROULETTE = 100
+    POKER = 100
 
 
 async def roulette_space_autocomplete(
@@ -34,7 +37,6 @@ async def roulette_space_autocomplete(
 ) -> list[app_commands.Choice[int]]:
     results = fuzzy.finder(
         current, [space for space in Space], key=lambda p: p.value)
-    print(results)
     return [
         app_commands.Choice(name=space.value, value=space.value) for space in results[:20]
     ]
@@ -69,7 +71,8 @@ class Games(commands.GroupCog):
         self.economy: Economy = bot.get_cog('Economy')  # noqa
 
         self.blackjack_tables: Dict[int, _blackjack.Table] = ExpiringDict(max_len=1000, max_age_seconds=21600)
-        self.roulette_tables: Dict[int, _roulette.RouletteTable] = {}
+        self.roulette_tables: Dict[int, _roulette.Table] = {}
+        self.poker_tables: Dict[int, _poker.Table] = {}
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -100,7 +103,7 @@ class Games(commands.GroupCog):
                         f'Do you accept this party, {other.mention}?',
             colour=helpers.Colour.light_orange(),
         )
-        msg = await ctx.send(embed=embed,  view=prompt)
+        msg = await ctx.send(embed=embed, view=prompt)
 
         await prompt.wait()
         await msg.delete(delay=1)
@@ -147,6 +150,7 @@ class Games(commands.GroupCog):
             data = await resp.text()
             word = data.split('\n')[random.randint(0, len(data.split('\n')) - 1)]
 
+        # TODO: Rework this SHIT!
         async with WaitforHangman(self.bot, ctx, word) as builder:
             message = await ctx.send(f'*If you want to stop the game, type `?abort`.*', embed=builder.build_embed())
 
@@ -163,7 +167,8 @@ class Games(commands.GroupCog):
                     amount: int = len(builder.word) * 15
                     await user_balance.add(amount, 'cash')
 
-                    await ctx.stick(True, f'You\'ve guessed the word. Congratulations, you\'ve earned {cash_emoji} **{amount:,}**.')
+                    await ctx.stick(True,
+                                    f'You\'ve guessed the word. Congratulations, you\'ve earned {cash_emoji} **{amount:,}**.')
                 elif action == _hangman.Action.GUESSED_ALREADY:
                     await ctx.stick(False, 'You already guessed that letter.', delete_after=5)
                 elif action == _hangman.Action.GUESSED_INVALID:
@@ -189,7 +194,8 @@ class Games(commands.GroupCog):
             return await ctx.send('You cannot bet negative coins.', ephemeral=True)
 
         if bet < MinimumBet.BLACKJACK.value:
-            return await ctx.send(f'You must bet at least {cash_emoji} **{MinimumBet.BLACKJACK.value:,}**.', ephemeral=True)
+            return await ctx.send(f'You must bet at least {cash_emoji} **{MinimumBet.BLACKJACK.value:,}**.',
+                                  ephemeral=True)
 
         balance = await self.economy.get_balance(ctx.author.id, ctx.guild.id)
 
@@ -262,7 +268,8 @@ class Games(commands.GroupCog):
         rate = random.uniform(0, 1)
         if rate > Payouts.CRIME_FAIL_RATE.value:
             await balance.add(amount, 'cash')
-            await ctx.stick(True, random.choice(SUCCESSFULL_CRIME_RESPONSES).format(coins=f'{cash_emoji} **{amount:,}**'))
+            await ctx.stick(True,
+                            random.choice(SUCCESSFULL_CRIME_RESPONSES).format(coins=f'{cash_emoji} **{amount:,}**'))
         else:
             amount = round(random.uniform(Payouts.CRIME_FINE_MIN.value, Payouts.CRIME_FINE_MAX.value) * amount)
             await balance.remove(amount, 'cash')
@@ -289,7 +296,8 @@ class Games(commands.GroupCog):
         rate = random.uniform(0, 1)
         if rate > Payouts.SLUT_FAIL_RATE.value:
             await balance.add(amount, 'cash')
-            await ctx.stick(True, random.choice(SUCCESSFULL_SLUT_RESPONSES).format(coins=f'{cash_emoji} **{amount:,}**'))
+            await ctx.stick(True,
+                            random.choice(SUCCESSFULL_SLUT_RESPONSES).format(coins=f'{cash_emoji} **{amount:,}**'))
         else:
             amount = round(random.uniform(Payouts.SLUT_FINE_MIN.value, Payouts.SLUT_FINE_MAX.value) * amount)
             await balance.remove(amount, 'cash')
@@ -300,6 +308,7 @@ class Games(commands.GroupCog):
         description='Attempt to rob another user.',
         guild_only=True
     )
+    @app_commands.describe(user='The user you want to rob.')
     @commands.cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
     async def rob(self, ctx: Context, user: Annotated[discord.Member, commands.UserConverter]):
         """Rob another Users cash.
@@ -337,33 +346,43 @@ class Games(commands.GroupCog):
         description='Play a game of roulette.',
         guild_only=True
     )
-    @app_commands.choices(space=[])
+    @app_commands.choices(space=[])  # Do this because of the "Space" Class Enum
     @app_commands.autocomplete(space=roulette_space_autocomplete)
+    @app_commands.describe(
+        bet='The amount of coins to bet.',
+        space='The space to bet on.'
+    )
     async def roulette(self, ctx: Context, bet: int, space: Space):
         """Play a game of roulette.
 
         You can bet on a single space or a range of spaces.
         """
         if bet < 0:
-            return await ctx.send('You cannot bet negative coins.', ephemeral=True)
+            return await ctx.stick(False, 'You cannot bet negative coins.', ephemeral=True)
 
         if bet < MinimumBet.ROULETTE.value:
-            return await ctx.send(f'You must bet at least {cash_emoji} **{MinimumBet.ROULETTE.value:,}**.', ephemeral=True)
+            return await ctx.stick(False, f'You must bet at least {cash_emoji} **{MinimumBet.ROULETTE.value:,}**.',
+                                   ephemeral=True)
 
         balance = await self.economy.get_balance(ctx.author.id, ctx.guild.id)
 
         if bet > balance.cash:
-            return await ctx.send(f'You do not have enough money to bet that amount.\n'
-                                  f'You currently have {cash_emoji} **{balance.cash:,}** in **cash**.', ephemeral=True)
+            return await ctx.stick(False, f'You do not have enough money to bet that amount.\n'
+                                          f'You currently have {cash_emoji} **{balance.cash:,}** in **cash**.',
+                                   ephemeral=True)
 
         await balance.remove(bet, 'cash')
 
         if ctx.channel.id in self.roulette_tables:
             roulette = self.roulette_tables[ctx.channel.id]
+
+            if not roulette.open:
+                return await ctx.stick(False, '**Bets are closed.** *Rien ne va plus*')
+
             roulette.place(_roulette.Bet(ctx.author, space, bet))
             await roulette.message.edit(embed=roulette.build_embed())
         else:
-            roulette = _roulette.RouletteTable(ctx, ctx.author)
+            roulette = _roulette.Table(ctx)
             roulette.place(_roulette.Bet(ctx.author, space, bet))
 
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
@@ -371,32 +390,40 @@ class Games(commands.GroupCog):
             roulette.message = message
             self.roulette_tables[ctx.channel.id] = roulette
 
-            # Wait for other bets to be placed before spinning the wheel.
-            await asyncio.sleep(60)
-
-            roulette = self.roulette_tables[ctx.channel.id]
-            roulette.close()
-
-            # Note this is just for aesthetics
-            await message.edit(
-                embed=roulette.build_embed(image_url='https://i.giphy.com/26uf2YTgF5upXUTm0.gif'), view=roulette.view)
-            await asyncio.sleep(5)
-
-            result = random.randint(0, 36)
-            # Get all bets that are on the winning space.
-            winning_spaces = list(roulette.get_winning_spaces(result))
-            winning_bets = [bet for _space in winning_spaces for bet in roulette.spaces[_space] if _space == bet.space]
-
-            if winning_bets:
-                # Calculate the payout for each bet.
-                for bet in winning_bets:
-                    payout = round(bet.amount * bet.space.payout)
-                    await balance.add(payout, 'cash')
-
-            await message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)
-
-            self.roulette_tables.pop(ctx.channel.id)
+            await self.bot.reminder.create_timer(
+                discord.utils.utcnow() + datetime.timedelta(minutes=1),
+                'roulette',
+                roulette_id=ctx.channel.id
+            )
         await ctx.message.add_reaction(ctx.tick(True))
+
+    @commands.Cog.listener()
+    async def on_roulette_timer_complete(self, timer: Timer):
+        channel_id = timer.kwargs['roulette_id']
+
+        roulette = self.roulette_tables[channel_id]
+        roulette.close()
+
+        # Note this is just for aesthetics
+        await roulette.message.edit(
+            embed=roulette.build_embed(image_url='https://i.giphy.com/26uf2YTgF5upXUTm0.gif'), view=roulette.view)
+        await asyncio.sleep(5)
+
+        result = random.randint(0, 36)
+        # Get all bets that are on the winning space.
+        winning_spaces = list(roulette.get_winning_spaces(result))
+        winning_bets = [bet for _space in winning_spaces for bet in roulette.spaces[_space] if _space == bet.space]
+
+        if winning_bets:
+            # Calculate the payout for each bet.
+            for bet in winning_bets:
+                balance = await self.economy.get_balance(bet.placed_by.id, roulette.ctx.guild_id)
+                payout = round(bet.amount * bet.space.payout)
+                await balance.add(payout, 'cash')
+
+        await roulette.message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)
+
+        self.roulette_tables.pop(channel_id)
 
 
 async def setup(bot: Percy):

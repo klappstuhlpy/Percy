@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
     audit_log_channel BIGINT,
     audit_log_flags JSONB DEFAULT ('{}'::jsonb),
     audit_log_webhook_url TEXT,
-    poll_channels BIGINT,
+    poll_channel BIGINT,
     poll_ping_role_id BIGINT,
     poll_reason_channel BIGINT,
     dstatus_notification_channel BIGINT,
