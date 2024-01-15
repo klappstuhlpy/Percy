@@ -38,7 +38,6 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-
 HashableT = TypeVar('HashableT', bound=Hashable)
 
 
@@ -236,7 +235,7 @@ class MassbanFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     # Message history related flags
     contains: Optional[str] = commands.flag(description='The substring to search for in the message.', default=None)
     starts: Optional[str] = commands.flag(description='The substring to search if the message starts with.',
-                                           default=None)
+                                          default=None)
     ends: Optional[str] = commands.flag(description='The substring to search if the message ends with.', default=None)
     match: Optional[str] = commands.flag(description='The regex to match the message content to.', default=None)
     search: commands.Range[int, 1, 2000] = commands.flag(description='How many messages to search for', default=100)
@@ -290,7 +289,7 @@ class MemberID(commands.Converter):
     async def convert(self, ctx: GuildContext, argument: str):  # noqa
         try:
             m = await commands.MemberConverter().convert(ctx, argument)
-        except commands.BadArgument:
+        except errors.BadArgument:
             try:
                 member_id = int(argument, base=10)
             except ValueError:
@@ -471,12 +470,12 @@ class TaggedCooldownMapping(commands.CooldownMapping[discord.Message], Generic[H
     _cooldown: TaggedCooldown[HashableT]
 
     def __init__(
-        self,
-        rate: int,
-        per: float,
-        type: Callable[[discord.Message], Any],
-        *,
-        tagger: Callable[[discord.Message], HashableT],
+            self,
+            rate: int,
+            per: float,
+            type: Callable[[discord.Message], Any],
+            *,
+            tagger: Callable[[discord.Message], HashableT],
     ):
         super().__init__(TaggedCooldown(rate, per), type)
         self.tagger: Callable[[discord.Message], HashableT] = tagger
@@ -484,7 +483,8 @@ class TaggedCooldownMapping(commands.CooldownMapping[discord.Message], Generic[H
     def get_bucket(self, message: discord.Message, current: float | None = None) -> TaggedCooldown[HashableT] | None:
         return super().get_bucket(message, current)  # type: ignore
 
-    def update_rate_limit(self, message: discord.Message, current: float | None = None, tokens: int = 1) -> float | None:
+    def update_rate_limit(self, message: discord.Message, current: float | None = None,
+                          tokens: int = 1) -> float | None:
         bucket = self.get_bucket(message, current)
         if bucket is None:
             return None
@@ -789,7 +789,7 @@ class Mod(commands.Cog):
             return None
 
     async def check_raid(
-        self, config: GuildConfig, guild: discord.Guild, member: discord.Member, message: discord.Message
+            self, config: GuildConfig, guild: discord.Guild, member: discord.Member, message: discord.Message
     ) -> None:
         if not config.flags.raid:
             return
@@ -1044,7 +1044,8 @@ class Mod(commands.Cog):
         await ctx.defer()
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if config.flags.audit_log:
-            await ctx.stick(False, f'You already have audit logging enabled. To disable, use "`{ctx.prefix}moderation disable Audit Logging`"')
+            await ctx.stick(False,
+                            f'You already have audit logging enabled. To disable, use "`{ctx.prefix}moderation disable Audit Logging`"')
             return
 
         reason = f'{ctx.author} (ID: {ctx.author.id}) enabled Moderation audit log'
@@ -1055,7 +1056,8 @@ class Mod(commands.Cog):
             await ctx.stick(False, f'The bot does not have permissions to create webhooks in {channel.mention}.')
             return
         except discord.HTTPException:
-            await ctx.stick(False, 'An error occurred while creating the webhook. Note you can only have 10 webhooks per channel.')
+            await ctx.stick(False,
+                            'An error occurred while creating the webhook. Note you can only have 10 webhooks per channel.')
             return
 
         query = """
@@ -1087,7 +1089,8 @@ class Mod(commands.Cog):
         """
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
         if not config.flags.audit_log:
-            return await ctx.stick(False, 'You do not have audit logging enabled. To enable, use `moderation auditlog`.')
+            return await ctx.stick(False,
+                                   'You do not have audit logging enabled. To enable, use `moderation auditlog`.')
 
         if flag == 'all':
             for key in config.audit_log_flags:
@@ -2183,7 +2186,8 @@ class Mod(commands.Cog):
 
         await ctx.guild.unban(member.user, reason=reason)
         if member.reason:
-            await ctx.stick(True, f'Unbanned {member.user} (ID: `{member.user.id}`), previously banned for **{member.reason}**.')
+            await ctx.stick(True,
+                            f'Unbanned {member.user} (ID: `{member.user.id}`), previously banned for **{member.reason}**.')
         else:
             await ctx.stick(True, f'Unbanned {member.user} (ID: `{member.user.id}`).')
 
@@ -2460,7 +2464,8 @@ class Mod(commands.Cog):
             timezone=zone or 'UTC',
         )
         await ctx.stick(
-            True, f'Mute for {discord.utils.escape_mentions(str(member))} ends {discord.utils.format_dt(duration, 'R')}.')
+            True,
+            f'Mute for {discord.utils.escape_mentions(str(member))} ends {discord.utils.format_dt(duration, 'R')}.')
 
     @commands.Cog.listener()
     async def on_tempmute_timer_complete(self, timer: Timer):
@@ -2579,7 +2584,7 @@ class Mod(commands.Cog):
             await self.update_mute_role(ctx, config, role, merge=merge)
             escaped = discord.utils.escape_mentions(role.name)
             await ctx.stick(True, f'Successfully set the {escaped} role as the mute role.\n\n'
-                                          '**Note: Permission overwrites have not been changed.**')
+                                  '**Note: Permission overwrites have not been changed.**')
 
     @commands.command(
         _mute_role.command,
@@ -2655,7 +2660,8 @@ class Mod(commands.Cog):
                 role, ctx.guild, ctx.author._user  # noqa
             )
             await ctx.stick(
-                True, 'Mute role successfully created. Overwrites: ' f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
+                True,
+                'Mute role successfully created. Overwrites: ' f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
 
     @commands.command(
         _mute_role.command,

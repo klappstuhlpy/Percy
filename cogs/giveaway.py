@@ -9,7 +9,7 @@ from discord.ext import commands
 from discord.utils import MISSING
 
 from .reminder import Timer
-from .utils import commands
+from .utils import commands, errors
 from .utils.helpers import PostgresItem
 from .utils.timetools import TimeTransformer
 
@@ -169,7 +169,7 @@ class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
             when = await TimeTransformer(future=True).transform(interaction, self.duration.value)
-        except commands.BadArgument:
+        except errors.BadArgument:
             return await interaction.response.send_message(
                 '<:redTick:1079249771975413910> Duration could not be parsed. Try something like "5 minutes" or "1 hour"',
                 ephemeral=True

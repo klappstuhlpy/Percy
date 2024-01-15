@@ -136,7 +136,7 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
         name = str(self.name)
         try:
             name = await TagNameOrID().convert(self.ctx, name)
-        except commands.BadArgument as e:
+        except errors.BadArgument as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
 
@@ -244,7 +244,7 @@ class Tag(PostgresItem):
 
         Raises
         ------
-        commands.BadArgument
+        errors.BadArgument
             A Tag with this name already exists, or the Tag Name length is out of range or the Tag Name is not valid.
 
         Returns
@@ -841,7 +841,7 @@ class Tags(commands.Cog):
         try:
             ctx.message = name
             name = await converter.convert(ctx, name.content)
-        except commands.BadArgument:
+        except errors.BadArgument:
             raise
         finally:
             ctx.message = original

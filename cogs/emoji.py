@@ -46,7 +46,7 @@ class EmojiURL:
     async def convert(cls, ctx: GuildContext, argument: str):
         try:
             partial = await commands.PartialEmojiConverter().convert(ctx, argument)
-        except commands.BadArgument:
+        except errors.BadArgument:
             try:
                 url = yarl.URL(argument)
                 if url.scheme not in ('http', 'https'):

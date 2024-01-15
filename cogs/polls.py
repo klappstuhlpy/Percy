@@ -831,6 +831,11 @@ class Polls(commands.Cog):
                 allowed_mentions=discord.AllowedMentions(roles=True)
             )
 
+    @polls_create.error
+    async def polls_create_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, timetools.BadTimeTransform):
+            await interaction.response.send_message(str(error), ephemeral=True)
+
     @commands.command(
         polls.command,
         name='end',

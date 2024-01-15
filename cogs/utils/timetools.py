@@ -193,7 +193,7 @@ class TimeTransformer(app_commands.Transformer):
             tzinfo = config.tzinfo
 
         now = interaction.created_at.astimezone(tzinfo)
-        with suppress(commands.BadArgument):
+        with suppress(errors.BadArgument):
             try:
                 if self.future:
                     time = FutureTime(value, now=now, tzinfo=tzinfo)
@@ -202,9 +202,9 @@ class TimeTransformer(app_commands.Transformer):
                 else:
                     try:
                         time = ShortTime(value, now=now, tzinfo=tzinfo)
-                    except commands.BadArgument:
+                    except errors.BadArgument:
                         time = FutureTime(value, now=now, tzinfo=tzinfo)
-            except commands.BadArgument as e:
+            except errors.BadArgument as e:
                 raise BadTimeTransform(str(e)) from None
 
             return time.dt
@@ -492,7 +492,7 @@ def ensure_future_time(
 
     try:
         converter = Time(argument, now=now, tzinfo=tzinfo)
-    except commands.BadArgument:
+    except errors.BadArgument:
         random_future = now + datetime.timedelta(days=random.randint(3, 60))
         raise InvalidTime(
             f'<:redTick:1079249771975413910> Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".')
