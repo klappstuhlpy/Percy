@@ -725,6 +725,7 @@ class Polls(commands.Cog):
         image_url='Image as URL (alternative to upload)',
         when='When to end the poll.',
         color='Color of the embed.',
+        channel='Channel to post the poll in if no channel is set in the configuration.',
         ping='Whether to ping the role.',
         user_reason='Whether to ask for a reason on vote.',
     )
@@ -734,6 +735,7 @@ class Polls(commands.Cog):
             when: app_commands.Transform[datetime.datetime, timetools.TimeTransformer],
             description: str = None,
             color: app_commands.Transform[discord.Colour, converters.ColorTransformer] = helpers.Colour.darker_red(),
+            channel: discord.TextChannel = None,
             thread_question: str = None,
             ping: bool = False,
             user_reason: bool = False,
@@ -745,8 +747,10 @@ class Polls(commands.Cog):
         """Creates a poll with customizable settings."""
         await interaction.response.defer()
         config = await self.bot.moderation.get_guild_config(interaction.guild.id)
-        if not (channel := config.poll_channel):
-            return await self.send(interaction, f'{tick(False)} You must set a poll channel first.')
+        if not channel and (not config or config and not config.poll_channel):
+            return await self.send(interaction, f'{tick(False)} You must set a poll channel first or use the `channel` parameter.')
+        else:
+            channel = channel or config.poll_channel
 
         image_url = image_url or (image.proxy_url if image else None)
         options = list(filter(lambda x: x is not None, [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8]))
@@ -766,13 +770,13 @@ class Polls(commands.Cog):
             thread_message = await thread.send(thread_question)
             await thread_message.pin(reason='Poll Discussion')
 
-        if user_reason and not config.poll_reason_channel:
+        if user_reason and config and not config.poll_reason_channel:
             return await self.send(
                 interaction, f'{tick(False)} You must set a poll reason channel if you want to set user reasons.'
             )
 
-        if ping and not config.poll_ping_role_id:
-            return await self.send(interaction, f'{tick(False)} You must set a ping role to set Pings.')
+        if ping and config and not config.poll_ping_role_id:
+            return await self.send(interaction, f'{tick(False)} You must set a ping role to set pings.')
 
         poll = await self.create_poll(
             unique_id,
@@ -1210,6 +1214,9 @@ class Polls(commands.Cog):
             reset: bool = False
     ):
         config = await self.bot.moderation.get_guild_config(guild_id=interaction.guild.id)
+
+        if not config:
+            return await interaction.response.send_message(f'{tick(False)} No configuration found.', ephemeral=True)
 
         if all(i is None for i in [poll_channel, poll_reason_channel, poll_role]):
             embed = discord.Embed(title='Poll Configuration',
