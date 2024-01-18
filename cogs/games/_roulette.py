@@ -5,12 +5,10 @@ import traceback
 from typing import Optional
 
 import discord
-from discord import Interaction
 
 from cogs.economy import cash_emoji
 from cogs.utils import helpers
-from cogs.utils.context import Context
-
+from cogs.utils.context import Context, tick
 
 VALID_SPACES = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
@@ -252,7 +250,7 @@ class PlaceBetModal(discord.ui.Modal, title='Place Bet'):
         self.stop()
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message('Something broke!', ephemeral=True)
+        await interaction.response.send_message(f'{tick(False)} Something broke!', ephemeral=True)
         traceback.print_tb(error.__traceback__)
 
 
@@ -263,14 +261,14 @@ class RouletteView(discord.ui.View):
         super().__init__(timeout=None)
         self.table: Table = table
 
-    async def interaction_check(self, interaction: Interaction, /) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if not self.table.open:
             await interaction.response.send_message('*Rien ne va plus!*', ephemeral=True)
             return False
         return True
 
     @discord.ui.button(label='Place Bet', style=discord.ButtonStyle.green)
-    async def place_bet(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def place_bet(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         """Place a bet on the roulette table."""
         modal = PlaceBetModal()
         await interaction.response.send_modal(modal)
@@ -279,20 +277,19 @@ class RouletteView(discord.ui.View):
 
         bet = modal.bet_amount.value
         if not bet.isdigit():
-            return await interaction.response.send_message('Invalid bet amount. Please provide a valid number.', ephemeral=True)
+            return await interaction.response.send_message(f'{tick(False)} Invalid bet amount. Please provide a valid number.', ephemeral=True)
         bet = int(bet)
 
         space = modal.space.value.title()
         if space not in Space:
-            return await interaction.response.send_message('Invalid space.', ephemeral=True)
+            return await interaction.response.send_message(f'{tick(False)} Could not determine space, please use a space from above.', ephemeral=True)
 
         self.table.place(Bet(interaction.user, Space(space), bet))
-        await interaction.response.send_message(
-            f'You have placed a bet on **{space}** with {cash_emoji} **{bet:,}**.', ephemeral=True)
+        await interaction.response.send_message(f'{tick(True)} You have placed a bet on **{space}** with {cash_emoji} **{bet:,}**.', ephemeral=True)
         await self.table.message.edit(embed=self.table.build_embed())
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}')
-    async def help(self, interaction: discord.Interaction, button: discord.Button):
+    @discord.ui.button(label='Help', style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}', row=1)
+    async def help(self, interaction: discord.Interaction, button: discord.Button):  # noqa
         """Show the help menu."""
         embed = discord.Embed(title='Roulette Help', color=discord.Color.blurple())
         embed.set_thumbnail(url='https://i.giphy.com/26uflBhaGt5lQsaCA.gif')

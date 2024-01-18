@@ -586,9 +586,9 @@ class EvalContext(Context):
     job_message: discord.Message
 
 
-async def setup(bot):
+async def setup(bot: Percy):
     bot.context = Context
 
 
-async def teardown(bot):
+async def teardown(bot: Percy):
     bot.context = commands.Context

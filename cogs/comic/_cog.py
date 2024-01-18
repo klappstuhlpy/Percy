@@ -16,7 +16,7 @@ from discord.ext import commands, tasks
 from cogs.comic._client import Marvel
 from cogs.comic._data import ComicFeed, Brand, GenericComic, Format, GenericComicMessage
 from cogs.utils import cache, commands
-from cogs.utils.helpers import MaybeAcquire
+from cogs.utils.helpers import AcquireProtocol
 from cogs.utils.lock import lock, lock_arg, LockedResourceError
 from cogs.comic._parser import Parser
 from launcher import get_logger
@@ -163,7 +163,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         self.bot.dispatch(f'comic_schedule', comic)
 
     async def wait_for_next_feeds(self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7) -> ComicFeed:
-        async with MaybeAcquire(connection=connection, pool=self.bot.pool) as con:
+        async with AcquireProtocol(connection=connection, pool=self.bot.pool) as con:
             feed = await self.get_earliest_feed(connection=con, days=days)
             if feed is not None:
                 self._have_data.set()

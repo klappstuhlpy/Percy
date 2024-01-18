@@ -12,11 +12,11 @@ from discord.ext import commands
 from discord.utils import MISSING
 from typing_extensions import Annotated
 
-from .utils import timetools, formats, commands
+from .utils import timetools, formats, commands, errors
 from .utils.context import Context, tick
 from .utils.converters import get_asset_url
 from .utils.formats import plural
-from .utils.helpers import PostgresItem, MaybeAcquire
+from .utils.helpers import PostgresItem, AcquireProtocol
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -26,24 +26,23 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
     duration = discord.ui.TextInput(label='Duration', placeholder='e.g. 10 minutes (Must be a future time.)',
                                     default='10 minutes', min_length=2)
 
-    def __init__(self, parent: ReminderView, cog: Reminder, timer: Timer) -> None:
+    def __init__(self, view: ReminderView, cog: Reminder, timer: Timer) -> None:
         super().__init__()
-        self.parent: ReminderView = parent
+        self.view: ReminderView = view
         self.timer: Timer = timer
         self.cog: Reminder = cog
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
             when = timetools.FutureTime(str(self.duration)).dt
-        except Exception:  # noqa
+        except errors.BadArgument:
             await interaction.response.send_message(
-                '<:redTick:1079249771975413910> Duration could not be parsed, sorry. Try something like "5 minutes" or "1 hour"',
-                ephemeral=True
-            )
+                f'{tick(False)} Duration could not be parsed, sorry. Try something like "5 minutes" or "1 hour"',
+                ephemeral=True)
             return
 
-        self.parent.snooze.disabled = True
-        await interaction.response.edit_message(view=self.parent)
+        self.view.snooze.disabled = True
+        await interaction.response.edit_message(view=self.view)
 
         config = await self.cog.bot.user_settings.get_user_config(interaction.user.id)
         zone = config.timezone if config else None
@@ -57,7 +56,7 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
         )
         author_id, _, message = self.timer.args
         await interaction.followup.send(
-            f'<:greenTick:1079249732364406854> Alright <@{author_id}>, '
+            f'{tick(True)} Alright <@{author_id}>, '
             f'I\'ve snoozed your reminder till {discord.utils.format_dt(when, 'R')} for *{message}*',
             ephemeral=True
         )
@@ -87,7 +86,7 @@ class ReminderView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                '<:redTick:1079249771975413910> Don\'t snooze other peoples timer?!', ephemeral=True)
+                f'{tick(False)} Sorry, but this is not your timer :/', ephemeral=True)
             return False
         return True
 
@@ -116,7 +115,7 @@ class Timer(PostgresItem):
 
     @property
     def human_delta(self) -> str:
-        return discord.utils.format_dt(self.created, style="R")
+        return discord.utils.format_dt(self.created, style='R')
 
     @property
     def author_id(self) -> Optional[int]:
@@ -130,8 +129,12 @@ class Reminder(commands.Cog):
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
-        self._have_data = asyncio.Event()
+
+        # Indicates if there is a timer that is waiting to be dispatched.
+        self._waiting_timer = asyncio.Event()
+        # The next timer to be dispatched.
         self._current_timer: Optional[Timer] = None
+
         self._task = bot.loop.create_task(self.dispatch_timers())
 
     @property
@@ -158,15 +161,15 @@ class Reminder(commands.Cog):
     async def wait_for_active_timers(
             self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7
     ) -> Timer:
-        async with MaybeAcquire(connection=connection, pool=self.bot.pool) as con:
+        async with AcquireProtocol(connection=connection, pool=self.bot.pool) as con:
             timer = await self.get_active_timer(connection=con, days=days)
             if timer is not None:
-                self._have_data.set()
+                self._waiting_timer.set()
                 return timer
 
-            self._have_data.clear()
+            self._waiting_timer.clear()
             self._current_timer = None
-            await self._have_data.wait()
+            await self._waiting_timer.wait()
 
             return await self.get_active_timer(connection=con, days=days)  # type: ignore
 
@@ -181,7 +184,7 @@ class Reminder(commands.Cog):
         try:
             while not self.bot.is_closed():
                 timer = self._current_timer = await self.wait_for_active_timers(days=40)
-                now = discord.utils.utcnow()
+                now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
                 if timer.expires >= now:
                     to_sleep = (timer.expires - now).total_seconds()
@@ -193,7 +196,7 @@ class Reminder(commands.Cog):
         except (OSError, discord.ConnectionClosed, asyncpg.PostgresConnectionError):
             self.MaybeSkipTask(True)
 
-    async def short_timer_optimisation(self, seconds: float, timer: Timer) -> None:
+    async def short_timer_call(self, seconds: float, timer: Timer) -> None:
         await asyncio.sleep(seconds)
         event_name = f'{timer.event}_timer_complete'
         self.bot.dispatch(event_name, timer)
@@ -213,9 +216,8 @@ class Reminder(commands.Cog):
             The timer if found, otherwise None.
         """
 
-        filtered_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in
-                           enumerate(kwargs.keys(), start=2)]
-        query = f"SELECT * FROM reminders WHERE event = $1 AND {' AND '.join(filtered_clause)} LIMIT 1"
+        arg_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in enumerate(kwargs.keys(), start=2)]
+        query = f"SELECT * FROM reminders WHERE event = $1 AND {' AND '.join(arg_clause)} LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, event, list(kwargs.values()))
         return Timer(record=record) if record else None
 
@@ -230,12 +232,10 @@ class Reminder(commands.Cog):
             Keyword arguments to search for in the database.
         """
 
-        filtered_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in
-                           enumerate(kwargs.keys(), start=2)]
-        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(filtered_clause)} RETURNING id;"
-        record: Any = await self.bot.pool.fetchrow(query, event, *kwargs.values())
-
-        self.MaybeSkipTask(record is not None and self._current_timer and self._current_timer.id == record['id'])
+        arg_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in enumerate(kwargs.keys(), start=2)]
+        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(arg_clause)} RETURNING id;"
+        _id = await self.bot.pool.fetchval(query, event, *kwargs.values())
+        self.MaybeSkipTask(_id is not None and self._current_timer and self._current_timer.id == _id)
 
     def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
         if not key:
@@ -264,9 +264,11 @@ class Reminder(commands.Cog):
             Special keyword-only argument to use as the timezone for the
             expiry timetools. This automatically adjusts the expiry time to be
             in the future, should it be in the past.
+
         Note
         ------
-        Arguments and keyword arguments must be JSON serialisable.
+        Arguments and keyword arguments must be JSON serializable.
+
         Returns
         --------
         :class:`Timer`
@@ -291,7 +293,7 @@ class Reminder(commands.Cog):
         delta = (when - now).total_seconds()
 
         if delta <= 60:  # dont want delta to be negative
-            self.bot.loop.create_task(self.short_timer_optimisation(delta, timer))  # noqa
+            self.bot.loop.create_task(self.short_timer_call(delta, timer))  # noqa
             return timer
 
         query = """
@@ -299,15 +301,12 @@ class Reminder(commands.Cog):
             VALUES ($1, $2::jsonb, $3, $4, $5)
             RETURNING id;
         """
-
-        row = await self.bot.pool.fetchrow(query, event, {'args': args, 'kwargs': kwargs}, when, now, timezone_name)
-        timer.id = row[0]
+        timer.id = await self.bot.pool.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when, now, timezone_name)
 
         if delta <= (86400 * 40):  # 40 days
-            self._have_data.set()
+            self._waiting_timer.set()
 
         self.MaybeSkipTask(self._current_timer and when < self._current_timer.expires)
-
         return timer
 
     @commands.command(
@@ -325,8 +324,8 @@ class Reminder(commands.Cog):
             self,
             ctx: Context,
             *,
-            when: Annotated[
-                timetools.FriendlyTimeResult, timetools.UserFriendlyTime(commands.clean_content, default='…')],  # noqa
+            when: Annotated[timetools.FriendlyTimeResult,
+                timetools.UserFriendlyTime(commands.clean_content, default='…')],  # noqa
     ):
         """Reminds you of something after a certain amount of timetools.
         The input can be any direct date (e.g. YYYY-MM-DD) or a human-readable offset.
@@ -336,7 +335,7 @@ class Reminder(commands.Cog):
         """
 
         if len(when.arg) > 1000:
-            return await ctx.stick(False, 'That\'s too long, sorry.')
+            return await ctx.stick(False, 'This time is too far in the future. Please provide a shorter one.')
 
         config = await self.bot.user_settings.get_user_config(ctx.author.id)
         zone = config.timezone if config else None
@@ -352,8 +351,7 @@ class Reminder(commands.Cog):
         )
         await ctx.stick(
             True, f'Okay {ctx.author.mention}, '
-                  f'I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*'
-        )
+                  f'I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*')
 
     @commands.command(
         reminder.app_command.command,
@@ -382,8 +380,7 @@ class Reminder(commands.Cog):
         )
         await interaction.response.send_message(
             f'{tick(True)} Okay {interaction.user.mention}, '
-            f'I\'ll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*'
-        )
+            f'I\'ll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*')
 
     @reminder_create.error
     async def reminder_create_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -409,17 +406,18 @@ class Reminder(commands.Cog):
         if len(records) == 0:
             return await ctx.stick(False, 'No currently running reminders.')
 
-        e = discord.Embed(color=self.bot.colour.darker_red(), title='Your Reminders',
-                          description='Here is a list of the last **Reminders** you\'ve set.')
-        e.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
-        e.set_footer(text=f'Showing {plural(len(records)):Reminder}')
+        embed = discord.Embed(title='Your Reminders',
+                              description='Here is a list of the last **reminders** you\'ve set.',
+                              color=self.bot.colour.darker_red())
+        embed.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
+        embed.set_footer(text=f'Showing {plural(len(records)):Reminder}')
 
         for index, (reminder_id, expires, message) in enumerate(records, 1):
             shorten = textwrap.shorten(message, width=512)
             value = f'*{shorten!r}* expires {discord.utils.format_dt(expires, style='R')}'
-            e.add_field(name=f'#{index} • [{reminder_id}]', value=value, inline=False)
+            embed.add_field(name=f'#{index} • [{reminder_id}]', value=value, inline=False)
 
-        await ctx.send(embed=e)
+        await ctx.send(embed=embed)
 
     @commands.command(
         reminder.command,
@@ -439,13 +437,11 @@ class Reminder(commands.Cog):
             AND event = 'reminder'
             AND extra #>> '{args,0}' = $2;
         """
-
         status = await ctx.db.execute(query, reminder_id, str(ctx.author.id))
         if status == 'DELETE 0':
             return await ctx.stick(False, 'Could not delete any reminders with that ID.')
 
         self.MaybeSkipTask(self._current_timer and self._current_timer.id == reminder_id)
-
         await ctx.stick(True, 'Successfully deleted reminder.', ephemeral=True)
 
     @commands.command(
@@ -461,9 +457,7 @@ class Reminder(commands.Cog):
             WHERE event = 'reminder'
             AND extra #>> '{args,0}' = $1;
         """
-
-        author_id = str(ctx.author.id)
-        total: int = await self.bot.pool.fetchval(query, author_id)
+        total: int = await self.bot.pool.fetchval(query, str(ctx.author.id))
         if total == 0:
             return await ctx.stick(True, 'You do not have any reminders to delete.')
 
@@ -473,11 +467,10 @@ class Reminder(commands.Cog):
             return
 
         query = "DELETE FROM reminders WHERE event = 'reminder' AND extra #>> '{args,0}' = $1;"
-        await ctx.db.execute(query, author_id)
+        await ctx.db.execute(query, str(ctx.author.id))
 
         self.MaybeSkipTask(self._current_timer and self._current_timer.author_id == ctx.author.id)
-
-        await ctx.stick(True, f'Successfully deleted {formats.plural(total):reminder}.',
+        await ctx.stick(True, f'Successfully deleted {plural(total):reminder}.',
                         ephemeral=True)
 
     @commands.Cog.listener()
@@ -491,7 +484,6 @@ class Reminder(commands.Cog):
 
         guild_id = channel.guild.id if isinstance(channel, (discord.TextChannel, discord.Thread)) else '@me'
         message_id = timer.kwargs.get('message_id')
-        msg = f'<@{author_id}>, {timer.human_delta}: {message}'
         view = MISSING
 
         if message_id:
@@ -499,7 +491,7 @@ class Reminder(commands.Cog):
             view = ReminderView(url=url, timer=timer, cog=self, author_id=author_id)
 
         try:
-            msg = await channel.send(msg, view=view)  # type: ignore
+            msg = await channel.send(f'<@{author_id}>, {timer.human_delta}: {message}', view=view)
         except discord.HTTPException:
             return
         else:

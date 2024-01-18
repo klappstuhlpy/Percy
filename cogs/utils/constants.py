@@ -10,6 +10,7 @@ from discord.ext import commands
 from cogs.utils.context import Context, GuildContext
 
 cash_emoji = discord.PartialEmoji(name='cash', id=1195034729083326504)
+coin_emoji = discord.PartialEmoji(name='pokercoin', id=1197217157096939649)
 
 BOT_BASE_FOLDER = Path(__file__).parent.parent.parent.as_posix()
 
@@ -186,7 +187,23 @@ CARD_EMOJIS = {
     'clubs_notop': 1196532978407440384, 'diamonds': 1196532979820941462, 'hearts_notop': 1196532981276344422,
     'jack_red_nobottom': 1196532982824058931, 'king_black_nobottomright': 1196532985365811380,
     'queen_black_nobottom': 1196532986993180764, 'queen_black_notopleft': 1196532990134714459,
-    'spades_notop': 1196532992722600077
+    'spades_notop': 1196532992722600077, '2_red_nobottom': 1196893793073512489,
+    '8_black_nobottomright': 1196891878931578950,
+    '2_red_nobottomright': 1196893796047265842, '2_red_notopleft': 1196893798039564381,
+    '3_red_nobottomright': 1196893800702939248, '3_red_notopleft': 1196893801923485766,
+    '4_red_nobottomright': 1196893802913337426, '4_red_notopleft': 1196893805719335012,
+    '5_red_nobottomright': 1196893806897942621, '5_red_notopleft': 1196893808936357950,
+    '6_red_nobottomright': 1196893810739916850, '6_red_notopleft': 1196893813617201252,
+    '7_red_nobottomright': 1196893815542403082, '7_red_notopleft': 1196893817895403671,
+    '9_red_nobottomright': 1196893821238251561, '10_red_nobottomright': 1196893825671630948,
+    '10_red_notopleft': 1196893830318915675, 'ace_red_nobottomright': 1196893832093122611,
+    'jack_red_nobottomright': 1196893835960254555, 'jack_red_notopleft': 1196893838829162599,
+    'king_red_notopleft': 1196893842952171561, 'queen_red_nobottomright': 1196893845758169213,
+    '8_red_nobottomright': 1196894033272905828, '8_red_notopleft': 1196894034736726086,
+    '9_red_notopleft': 1196894037744037889, 'ace_red_notopleft': 1196894040180924576,
+    'king_red_nobottomright': 1196894041854443600, 'queen_red_notopleft': 1196894044576555172,
+    'cardback_bottom1': 1196908527579578539, 'cardback_bottom2': 1196908529647370401,
+    'cardback_middle': 1196908532470137004, 'cardback_top1': 1196908535850745896, 'cardback_top2': 1196908537863995473
 }
 
 WORKING_RESPONSES = [

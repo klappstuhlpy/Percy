@@ -194,8 +194,9 @@ def ignore_record() -> Callable[[T], T]:
 _TC = TypeVar('_TC', asyncpg.Connection, asyncpg.Pool)
 
 
-class MaybeAcquire(Protocol[_TC]):
+class AcquireProtocol(Protocol[_TC]):
     """A protocol for objects that can be used in a `maybe_acquire` context manager."""
+
     def __init__(self, connection: Optional[asyncpg.Connection], *, pool: asyncpg.Pool) -> None:
         self.connection: Optional[asyncpg.Connection] = connection
         self.pool: asyncpg.Pool = pool

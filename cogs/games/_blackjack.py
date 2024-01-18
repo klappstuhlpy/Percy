@@ -1,13 +1,14 @@
 import copy
 import enum
-from typing import Optional
+from itertools import zip_longest
+from typing import Optional, Literal
 
 import discord
 
 from cogs.economy import Economy, Balance
-from cogs.games._classes import BaseCard, BaseHand, Deck
+from cogs.games._classes import BaseCard, BaseHand, Deck, CARD_EMOJIS_PARTIAL, DisplayCard
 from cogs.utils import helpers, constants
-from cogs.utils.context import Context
+from cogs.utils.context import Context, tick
 
 cash_emoji = constants.cash_emoji
 
@@ -28,30 +29,20 @@ class WinningType(enum.Enum):
 class Card(BaseCard):
     """Represents a card in a deck"""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.emoji: discord.PartialEmoji = discord.PartialEmoji(
-            name=f'{self._rl_name}{self.suit.value}',
-            id=constants.BLACKJACK_EMOJIS[f'{self._rl_name}{self.suit.value}'])
+    def display(self, size: Literal["small", "large"], formatted: bool = False) -> DisplayCard | str:
+        if self.hidden:
+            # Only need a big hidden card for blackjack
+            top = [
+                CARD_EMOJIS_PARTIAL['cardback_top1'], CARD_EMOJIS_PARTIAL['cardback_top2']
+            ]
+            middle = [CARD_EMOJIS_PARTIAL['cardback_middle']] * 2
+            bottom = [
+                CARD_EMOJIS_PARTIAL['cardback_bottom1'], CARD_EMOJIS_PARTIAL['cardback_bottom2']
+            ]
 
-        self._hidden: bool = False
-
-    @property
-    def hidden(self) -> bool:
-        """Gets if the card is hidden"""
-        return self._hidden
-
-    @hidden.setter
-    def hidden(self, value: bool):
-        """Sets if the card is hidden"""
-        if value is True:
-            self.emoji = discord.PartialEmoji(name='cardback', id=constants.BLACKJACK_EMOJIS['cardback'])
-        else:
-            self.emoji = discord.PartialEmoji(
-                name=f'{self._rl_name}{self.suit.value}',
-                id=constants.BLACKJACK_EMOJIS[f'{self._rl_name}{self.suit.value}'])
-
-        self._hidden = value
+            emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
+            return '\n'.join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1], bottom=emojis[2])
+        return super().display(size, formatted)
 
 
 class Hand(BaseHand[Card]):
@@ -89,8 +80,15 @@ class Hand(BaseHand[Card]):
     @property
     def display_text(self) -> str:
         """Gets the display text for the hand"""
-        cards = ''.join([str(card.emoji) for card in self.cards])
-        return cards + f'\n\nValue: `{self.value}`'
+        card_list = [
+            card.display('large', formatted=True).split('\n') for card in self.cards
+        ]
+        # Use zip_longest to handle different lengths of display elements in each card
+        results = [
+            ' '.join(filter(None, elems))  # filter(None) removes empty strings
+            for elems in zip_longest(*card_list, fillvalue='')
+        ]
+        return '\n'.join(results) + f'\n\nValue: `{self.value}`'
 
 
 class Table:
@@ -99,7 +97,7 @@ class Table:
     def __init__(self, ctx: Context, bet: int, decks: int = 1, _wake_up: bool = False):
         self.ctx: Context = ctx
         if not _wake_up:
-            self.deck: Deck = Deck(decks=decks)
+            self.deck: Deck = Deck(game='blackjack', decks=decks, card_cls=Card)
 
         self.dealer: Hand = Hand(bet=bet)
         self.player_hands: list[Hand] = [Hand(bet=bet)]
@@ -118,7 +116,7 @@ class Table:
         # Calculate if 25% of the cards are left in the deck
         # if so, create a new deck
         if len(self.deck.used_cards) / len(self.deck.cards) >= 0.75:
-            self.deck = Deck(decks=self.deck.decks)
+            self.deck = Deck(game='blackjack', decks=self.deck.decks)
 
         self.__init__(ctx, bet, decks=self.deck.decks, _wake_up=True)
 
@@ -270,7 +268,7 @@ class TableView(discord.ui.View):
 
         # Just not get a "Failed Interaction" error displayed
         if isinstance(interaction, Context):
-            _send_action = self.table.active_hand.message.edit
+            _send_action = self.table.active_hand.message.edit  # noqa
         else:
             _send_action = interaction.response.edit_message
         await _send_action(embed=self.table.build_embed(self.table.active_hand), view=self)
@@ -318,7 +316,7 @@ class TableView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Checks if the interaction is valid"""
         if interaction.user.id != self.table.ctx.user.id:
-            await interaction.response.send_message('You cannot interact with this game.', ephemeral=True)
+            await interaction.response.send_message(f'{tick(False)} You cannot interact with this game.', ephemeral=True)
             return False
         return True
 
@@ -374,8 +372,8 @@ class TableView(discord.ui.View):
         if not await self.check_for_winner(interaction):
             await interaction.response.edit_message(embed=self.table.build_embed(self.table.active_hand), view=self)
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}')
-    async def help(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label='Help', style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}', row=1)
+    async def help(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         """Shows the help menu"""
         embed = discord.Embed(title='Blackjack Help', colour=helpers.Colour.blurple())
         embed.set_thumbnail(url='https://i.giphy.com/ZahUvuh70nd6GYmpHi.gif')

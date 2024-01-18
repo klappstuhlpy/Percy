@@ -1,15 +1,17 @@
 import enum
 import random
-from typing import Generic, TypeVar, Literal
+from collections import namedtuple
+from typing import Generic, TypeVar, Literal, Type
 
 import discord
 
 from cogs.utils.constants import CARD_EMOJIS
 
-
 CARD_EMOJIS_PARTIAL: dict[str, discord.PartialEmoji] = {
     name: discord.PartialEmoji(name=name, id=_id) for name, _id in CARD_EMOJIS.items()
 }
+
+DisplayCard = namedtuple('DisplayCard', ['top', 'middle', 'bottom'])
 
 
 class Suit(enum.Enum):
@@ -26,33 +28,40 @@ class Suit(enum.Enum):
 class BaseCard:
     """Represents a card in a deck"""
 
-    def __init__(self, name: str, value: int, suit: Suit):
-        self.name: str = name
+    def __init__(self, name: str | int, value: int, suit: Suit):
+        self.name: str = str(name)
         self.value: int = value
         self.suit: Suit = suit
 
         self.color: str = 'red' if self.suit in (Suit.HEARTS, Suit.DIAMONDS) else 'black'
-        self.rl_name: str | int = self.value if self.name.isdigit() else self.name
+        self.hidden: bool = False
 
     def __repr__(self):
         return f'Card(name={self.name}, value={self.value}, suit={self.suit})'
 
-    def display(self, size: Literal["small", "large"]) -> str:
-        """Returns the emoji representation of the card"""
-        top, middle, bottom = [], [], []
-
+    def display(self, size: Literal["small", "large"], formatted: bool = False) -> DisplayCard | str:
         if size == 'small':
-            top.append(CARD_EMOJIS_PARTIAL[f'{self.suit.value}_{self.color}_no_bottom'])
-            bottom.append(CARD_EMOJIS_PARTIAL[f'{self.suit.name}_notop'])
+            emojis = [
+                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_nobottom'],
+                CARD_EMOJIS_PARTIAL[f'{self.suit.value}_notop']
+            ]
+            return '\n'.join(map(str, emojis)) if formatted else DisplayCard(
+                top=str(emojis[0]), middle=None, bottom=str(emojis[1])
+            )
         else:
-            top.extend([CARD_EMOJIS_PARTIAL[f'{self.suit.value}_{self.color}_nobottomright'],
-                        CARD_EMOJIS_PARTIAL['blank_nobottomleft']])
-            middle.extend([CARD_EMOJIS_PARTIAL[f'{self.suit.name}']] * 2)
-            bottom.extend([CARD_EMOJIS_PARTIAL['blank_notopright'],
-                           CARD_EMOJIS_PARTIAL[f'{self.suit.value}_{self.color}_notopleft']])
+            top = [
+                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_nobottomright'],
+                CARD_EMOJIS_PARTIAL['blank_nobottomleft']
+            ]
+            middle = [CARD_EMOJIS_PARTIAL[f'{self.suit.value}']] * 2
+            bottom = [
+                CARD_EMOJIS_PARTIAL['blank_notopright'],
+                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_notopleft']
+            ]
 
-        print(f"\n{''.join(map(str, top))}\n{''.join(map(str, middle))}\n{''.join(map(str, bottom))}")
-        return f"\n{''.join(map(str, top))}\n{''.join(map(str, middle))}\n{''.join(map(str, bottom))}"
+            emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
+            return '\n'.join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1],
+                                                                   bottom=emojis[2])
 
 
 C = TypeVar('C')
@@ -75,13 +84,28 @@ class BaseHand(Generic[C]):
         self.cards.append(card)
 
 
-class Deck:
-    """Represents one or Card Decks with 52 cards that can be shuffled and drawn from"""
+class Deck(Generic[C]):
+    """Represents one or Card Decks with 52 cards (or more*) that can be shuffled and drawn from
 
-    def __init__(self, decks: int = 1):
+    Parameters
+    ----------
+    game: Literal['blackjack', 'poker']
+        The game that the deck is being used for, important for the value of the Ace card.
+    decks: int
+        The number of decks to use, defaults to 1.
+    card_cls: Type[C]
+        The class to use for the cards, defaults to BaseCard.
+
+    *: The number of cards in the deck can be more than 52 if the number of decks is greater than 1.
+    """
+
+    def __init__(self, game: Literal['blackjack', 'poker'], decks: int = 1, card_cls: Type[C] = BaseCard):
+        self._card_cls: Type[C] = card_cls
+        self.game: Literal['blackjack', 'poker'] = game
+
         self.decks: int = decks
-        self.cards: list[BaseCard] = []
-        self.used_cards: list[BaseCard] = []
+        self.cards: list[C] = []
+        self.used_cards: list[C] = []
 
         # Build the deck
         self._build_deck()
@@ -94,13 +118,16 @@ class Deck:
 
     def _build_deck(self):
         """Builds the deck"""
+        poker_card_list = ('jack', 11), ('queen', 12), ('king', 13), ('ace', 14)
+        blackjack_card_list = ('jack', 10), ('queen', 10), ('king', 10), ('ace', 11)
+
         for _ in range(self.decks):
             for suit in Suit:
                 for i in range(2, 11):
-                    self.cards.append(BaseCard(name=str(i), value=i, suit=suit))
+                    self.cards.append(self._card_cls(name=i, value=i, suit=suit))
 
-                for name, value in (('jack', 10), ('queen', 10), ('king', 10), ('ace', 11)):
-                    self.cards.append(BaseCard(name=name, value=value, suit=suit))
+                for name, value in (poker_card_list if self.game == 'poker' else blackjack_card_list):
+                    self.cards.append(self._card_cls(name=name, value=value, suit=suit))
 
         # Shuffle the deck
         self.shuffle()

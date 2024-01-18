@@ -36,6 +36,8 @@ class TagPageEntry(PostgresItem):
 
 
 class TagNameOrID(commands.clean_content):
+    """Converts to content to either a Integer or a String."""
+
     def __init__(self, *, lower: bool = False, with_id: bool = False):
         self.lower: bool = lower
         self.with_id: bool = with_id
@@ -66,6 +68,7 @@ class TagNameOrID(commands.clean_content):
 
 
 class TagContent(commands.clean_content):
+    """Converts a commands content to a tag like content."""
 
     def __init__(self, *, required: bool = True):
         self.required = required
@@ -78,7 +81,8 @@ class TagContent(commands.clean_content):
         converted = await super().convert(ctx, argument)
 
         if len(converted) > 2000:
-            raise errors.BadArgument('Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
+            raise errors.BadArgument(
+                'Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
 
         return converted
 
@@ -93,7 +97,7 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
     member: Optional[discord.Member] = commands.flag(description='The member to search for', aliases=['m'],
-                                                      default=None)
+                                                     default=None)
     query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description='The key to sort the results.', aliases=['s'], default='name')
@@ -104,19 +108,15 @@ class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
 class TagEditModal(discord.ui.Modal, title='Edit Tag'):
     tag_name = discord.ui.TextInput(label='Name', required=True, max_length=100, min_length=1)
     content = discord.ui.TextInput(
-        label='Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
-    )
+        label='Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000)
 
     def __init__(self, tag: Tag) -> None:
         super().__init__()
         self.content.default = tag.content
         self.tag_name.default = tag.name
 
-    # noinspection PyAttributeOutsideInit
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        self.interaction = interaction
-        self.text = str(self.content)
-        self.name = str(self.tag_name)
+        self.interaction = interaction  # noqa
         self.stop()
 
 
@@ -163,7 +163,8 @@ class Tag(PostgresItem):
     created_at: datetime.datetime
     use_embed: bool
 
-    __slots__ = ('bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
+    __slots__ = (
+        'bot', '_aliases', 'id', 'name', 'content', 'owner_id', 'uses', 'location_id', 'created_at', 'use_embed')
 
     def __init__(self, bot: Percy, **kwargs):
         super().__init__(**kwargs)
@@ -219,7 +220,6 @@ class Tag(PostgresItem):
             FROM tags first
             WHERE first.id=$1
         """
-
         return await self.bot.pool.fetchval(query, self.id)
 
     async def edit(
@@ -253,8 +253,8 @@ class Tag(PostgresItem):
             The update status of the query.
         """
         kwargs = {}
+        _name = name is not None and name != self.name
 
-        _name = lambda: name != self.name  # noqa
         if _name:
             kwargs['name'] = name
 
@@ -435,12 +435,12 @@ class Tags(commands.Cog):
     ) -> Optional[Union[list[AliasTag], Tag, AliasTag]]:
         """|coro| @cached
 
-        Gets the Original :class:`Tag` with Optional all :class:`AliasTag` s of it.
+        Gets the Original :class:`Tag` with Optional all :class:`AliasTag`s of it.
         If no exact_match match is found, it will return a list of :class:`AliasTag`s that are similar to the name.
 
         Note
         ----
-        Returning a list with smiliar Tags is only possible if :attr:`name_or_id` is a string and :attr:`similarites` is True.
+        Returning a list with similar Tags is only possible if :attr:`name_or_id` is a string and :attr:`similarites` is True.
 
         Parameters
         ----------
@@ -472,10 +472,7 @@ class Tags(commands.Cog):
         if identifier_is_int:
             search_kwargs['id'] = name_or_id
         else:
-            if name_or_id.isdigit():
-                search_kwargs['id'] = int(name_or_id)
-            else:
-                search_kwargs['LOWER(name)'] = name_or_id.lower()
+            search_kwargs['LOWER(name)'] = name_or_id.lower()
 
         if location_id:
             search_kwargs['location_id'] = location_id
@@ -485,48 +482,40 @@ class Tags(commands.Cog):
 
         to_return = None
 
-        query = "SELECT * FROM tags WHERE " + " AND ".join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+        query = f"SELECT * FROM tags WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))} LIMIT 1;"
         parent = await self.bot.pool.fetchrow(query, *search_kwargs.values())
 
         if not parent:
             joined = 't.id' if identifier_is_int else 'LOWER(t.name)'
             query = f"SELECT tags.* FROM tags INNER JOIN tag_lookup t on t.parent_id = tags.id WHERE {joined} = $1 LIMIT 1;"
-            parent = await self.bot.pool.fetchrow(
-                query, search_kwargs['id'] if identifier_is_int else search_kwargs['LOWER(name)'])
+            parent = await self.bot.pool.fetchrow(query, search_kwargs['id'] if identifier_is_int else search_kwargs[
+                'LOWER(name)'])
 
         if parent:
-            if only_parent or exact_match:
-                return Tag(self.bot, record=parent)
+            if not only_parent and not exact_match:
+                to_return = Tag(self.bot, record=parent)
+                search_kwargs.pop('id', None)
+                search_kwargs.pop('name', None)
+                search_kwargs['parent_id'] = parent['id']
 
-            to_return = Tag(self.bot, record=parent)
+                query = f"""
+                    SELECT * FROM tag_lookup 
+                    WHERE name != '{parent['name']}' 
+                    AND {' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))}
+                """
+                aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
 
-            if 'id' in search_kwargs:
-                search_kwargs.pop('id')
-
-            if 'name' in search_kwargs:
-                search_kwargs.pop('name')
-
-            search_kwargs['parent_id'] = parent['id']
-            query = f"SELECT * FROM tag_lookup WHERE name != '{parent['name']}' AND " + " AND ".join(
-                f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))
-            aliases = await self.bot.pool.fetch(query, *search_kwargs.values())
-
-            if aliases:
-                to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
+                if aliases:
+                    to_return.aliases = [AliasTag(parent=to_return, record=alias) for alias in aliases]
         else:
             if exact_match:
-                query = "SELECT * FROM tag_lookup WHERE " + " AND ".join(
-                    f'{k}=${i}' for i, k in enumerate(search_kwargs, 1)) + " LIMIT 1;"
+                query = f"SELECT * FROM tag_lookup WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(search_kwargs, 1))} LIMIT 1;"
                 alias = await self.bot.pool.fetchrow(query, name_or_id)
                 if alias:
                     return AliasTag(record=alias)
                 return None
 
-        if (
-            similarites
-            and isinstance(name_or_id, str)
-            and not to_return
-        ):
+        if similarites and isinstance(name_or_id, str) and not to_return:
             query = """
                 SELECT
                     tag_lookup.name,
@@ -679,7 +668,8 @@ class Tags(commands.Cog):
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
         query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses;"
-        tags: list[Tag] = [Tag(self.bot, record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
+        tags: list[Tag] = [
+            Tag(self.bot, record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -697,7 +687,8 @@ class Tags(commands.Cog):
             WHERE tag_lookup.location_id=$1
             ORDER BY uses DESC;
         """
-        tags: list[AliasTag] = [AliasTag(record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
+        tags: list[AliasTag] = [
+            AliasTag(record=record) for record in await self.bot.pool.fetch(query, interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -709,8 +700,9 @@ class Tags(commands.Cog):
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
         query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses;"
-        tags: list[Tag] = [Tag(self.bot, record=record) for record in
-                           await self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)]
+        tags: list[Tag] = [
+            Tag(self.bot, record=record) for record in await
+            self.bot.pool.fetch(query, interaction.guild_id, interaction.user.id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -774,12 +766,13 @@ class Tags(commands.Cog):
         try:
             status = await ctx.db.execute(query, new_alias, original_tag.lower(), ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
-            await ctx.stick(False, 'This alias is already taken.')
+            raise errors.BadArgument('This alias is already taken.')
         else:
             if status[-1] == '0':
-                await ctx.stick(False, 'A tag with the name **{original_tag}** does not exist.')
+                await ctx.stick(False, f'A tag with the name **{original_tag}** does not exist.')
             else:
-                await ctx.stick(True, 'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
+                await ctx.stick(
+                    True, f'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
 
     @commands.command(
         tag.command,
@@ -823,24 +816,27 @@ class Tags(commands.Cog):
             await ctx.interaction.response.send_modal(modal)
             return
 
-        messages: List[discord.Message] = [ctx.message]
+        messages = [ctx.message]
 
         converter = TagNameOrID()
         original = ctx.message
 
-        messages.append(await ctx.send('What would you like the tag\'s **name** to be?'))
+        async def get_user_input(prompt: str, timeout: float = 60.0) -> Optional[str]:
+            try:
+                await ctx.send(prompt)
+                user_input = await self.bot.wait_for(
+                    'message', timeout=timeout, check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel)
+                return user_input.content
+            except asyncio.TimeoutError:
+                return None
 
-        def check(msg: discord.Message):  # noqa
-            return msg.author == ctx.author and ctx.channel == msg.channel
-
-        try:
-            name = await self.bot.wait_for('message', timeout=60.0, check=check)
-        except asyncio.TimeoutError:
+        name = await get_user_input('What would you like the tag\'s **name** to be?')
+        if name is None:
             return
 
         try:
-            ctx.message = name
-            name = await converter.convert(ctx, name.content)
+            ctx.message = original
+            name = await converter.convert(ctx, name)
         except errors.BadArgument:
             raise
         finally:
@@ -851,26 +847,23 @@ class Tags(commands.Cog):
             return await ctx.stick(False, 'Sorry. This name is already taken. Please choose another one.')
 
         with self.reserve_tag(ctx.guild.id, name):
-            messages.append(await ctx.send(
+            content_prompt = (
                 f'The new Tags name is **{name}**.\n'
                 f'Please enter now a content for the tag.\n'
                 f'You can type "`{ctx.prefix}abort`" to abort the tag make process.'
-            ))
+            )
+            content = await get_user_input(content_prompt, timeout=100.0)
 
-            try:
-                msg = await self.bot.wait_for('message', check=check, timeout=100.0)
-            except asyncio.TimeoutError:
+            if content == f'{ctx.prefix}abort':
                 return
 
-            if msg.content == f'{ctx.prefix}abort':
-                return
-            else:
-                clean_content = await TagContent().convert(ctx, msg.content)
+            if content:
+                clean_content = await TagContent().convert(ctx, content)
 
-            if msg.attachments:
-                clean_content = f'{clean_content}\n{msg.attachments[0].url}'
+                if ctx.message.attachments:
+                    clean_content = f'{clean_content}\n{ctx.message.attachments[0].url}'
 
-            await self.create_tag(ctx, name, clean_content)
+                await self.create_tag(ctx, name, clean_content)
 
         try:
             await ctx.channel.delete_messages(messages)
@@ -878,26 +871,28 @@ class Tags(commands.Cog):
             pass
 
     async def guild_tag_stats(self, ctx: GuildContext):
-        e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
-        e.set_thumbnail(url=get_asset_url(ctx.guild))
-        e.set_footer(text='Tag Statistics for this Server.')
+        embed = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_footer(text='Tag Statistics for this Server.')
 
-        query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
+        total_tags_query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
+        total_tags = await self.bot.pool.fetchval(total_tags_query, ctx.guild.id)
 
-        total_tags = await self.bot.pool.fetchval(query, ctx.guild.id)
         if not total_tags:
-            e.description = '*There are no statistics available.*'
+            embed.description = '*There are no statistics available.*'
         else:
-            query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag';"
-            total_uses = await self.bot.pool.fetchval(query, ctx.guild.id)
+            total_uses_query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag';"
+            total_uses = await self.bot.pool.fetchval(total_uses_query, ctx.guild.id)
 
-            e.add_field(name='**Guild Stats**',
-                        value=f'Total Tags: **{total_tags}**\n'
-                              f'Total Uses: **{total_uses}**\n\n'
-                              f'*with **{usage_per_day(ctx.me.joined_at, total_uses):.2f}** tag uses per day*',
-                        inline=False)
+            embed.add_field(
+                name='**Guild Stats**',
+                value=f'Total Tags: **{total_tags}**\n'
+                      f'Total Uses: **{total_uses}**\n\n'
+                      f'*with **{usage_per_day(ctx.me.joined_at, total_uses):.2f}** tag uses per day*',
+                inline=False
+            )
 
-        query = """
+        most_used_tags_query = """
             SELECT
                 name,
                 uses
@@ -906,19 +901,18 @@ class Tags(commands.Cog):
             ORDER BY uses DESC
             LIMIT 3;
         """
+        most_used_records = await ctx.db.fetch(most_used_tags_query, ctx.guild.id)
 
-        records = await ctx.db.fetch(query, ctx.guild.id)
-
-        value = '\n'.join(
+        most_used_tags_value = '\n'.join(
             f'{emoji}: {name} (**{uses}** uses)'
-            for (emoji, (name, uses)) in medal_emojize(records)
+            for (emoji, (name, uses)) in medal_emojize(most_used_records)
         )
 
-        e.add_field(name='**Most Used Tags**', value=value, inline=False)
+        embed.add_field(name='**Most Used Tags**', value=most_used_tags_value, inline=False)
 
-        query = """
+        top_tag_users_query = """
             SELECT
-                COUNT(*) AS tag_uses, 
+                COUNT(*) AS tag_uses,
                 author_id
             FROM commands
             WHERE guild_id=$1 AND command='tag'
@@ -926,16 +920,16 @@ class Tags(commands.Cog):
             ORDER BY COUNT(*) DESC
             LIMIT 3;
         """
+        top_tag_users_records = await ctx.db.fetch(top_tag_users_query, ctx.guild.id)
 
-        records = await ctx.db.fetch(query, ctx.guild.id)
-
-        value = '\n'.join(
+        top_tag_users_value = '\n'.join(
             f'{emoji}: <@{author_id}> (**{uses}** times)'
-            for (emoji, (uses, author_id)) in medal_emojize(records)
+            for (emoji, (uses, author_id)) in medal_emojize(top_tag_users_records)
         )
-        e.add_field(name='**Top Tag Users**', value=value, inline=False)
 
-        query = """
+        embed.add_field(name='**Top Tag Users**', value=top_tag_users_value, inline=False)
+
+        top_creators_query = """
             SELECT
                COUNT(*) AS "tags",
                owner_id
@@ -945,22 +939,21 @@ class Tags(commands.Cog):
             ORDER BY COUNT(*) DESC
             LIMIT 3;
         """
+        top_creators_records = await ctx.db.fetch(top_creators_query, ctx.guild.id)
 
-        records = await ctx.db.fetch(query, ctx.guild.id)
-
-        value = '\n'.join(
+        top_creators_value = '\n'.join(
             f'{emoji}: <@{owner_id}> (**{count}** tags)'
-            for (emoji, (count, owner_id)) in medal_emojize(records)
+            for (emoji, (count, owner_id)) in medal_emojize(top_creators_records)
         )
-        e.add_field(name='**Top Creators**', value=value, inline=False)
+        embed.add_field(name='**Top Creators**', value=top_creators_value, inline=False)
 
-        await ctx.send(embed=e)
+        await ctx.send(embed=embed)
 
     async def member_tag_stats(self, ctx: GuildContext, member: discord.Member | discord.User):
-        e = discord.Embed(color=self.bot.colour.darker_red())
-        e.set_author(name=str(member), icon_url=member.display_avatar.url)
-        e.set_thumbnail(url=get_asset_url(member))
-        e.set_footer(text='Tag Stats for this Member.')
+        embed = discord.Embed(color=self.bot.colour.darker_red())
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.set_thumbnail(url=get_asset_url(member))
+        embed.set_footer(text='Tag Stats for this Member.')
 
         query = """
             SELECT
@@ -983,22 +976,17 @@ class Tags(commands.Cog):
             owned = 'N/A ***(Tag is claimable)***'
             uses = 0
 
-        query = """
-            SELECT COUNT(*)
-            FROM commands
-            WHERE guild_id=$1 AND command='tag' AND author_id=$2
-        """
-
+        query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag' AND author_id=$2;"
         count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
 
-        e.add_field(name='**Tag Command Uses**', value=f'**{count[0]}** times', inline=False)
-        e.add_field(name='**Owned Tags**', value=owned)
-        e.add_field(name='**Owned Tags Used**', value=uses)
+        embed.add_field(name='**Tag Command Uses**', value=f'**{count[0]}** times', inline=False)
+        embed.add_field(name='**Owned Tags**', value=owned)
+        embed.add_field(name='**Owned Tags Used**', value=uses)
 
         for index, (emoji, (name, uses, _, _)) in enumerate(medal_emojize(records), 1):
-            e.add_field(name=f'**#{index} {emoji}**', value=f'**{name}** (**{uses}** uses)', inline=False)
+            embed.add_field(name=f'**#{index} {emoji}**', value=f'**{name}** (**{uses}** uses)', inline=False)
 
-        await ctx.send(embed=e)
+        await ctx.send(embed=embed)
 
     @staticmethod
     async def send_tags_to_text(ctx: GuildContext, tags: list[asyncpg.Record]):
@@ -1068,8 +1056,8 @@ class Tags(commands.Cog):
                 await ctx.interaction.response.send_modal(modal)
                 await modal.wait()
                 ctx.interaction = modal.interaction
-                content = modal.text
-                name = modal.name
+                content = modal.content.value
+                name = modal.tag_name.value
 
         if content and len(content) > 2000:
             return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
@@ -1148,22 +1136,17 @@ class Tags(commands.Cog):
         embed.set_footer(text=f'[{tag.id}] • Tag created at')
 
         rank = await tag.get_rank()
-        if rank:
-            text = '**Rank**'
-            if rank in (1, 2, 3):
-                text += f' {chr(129350 + int(rank))}'
-
-            embed.add_field(name=text, value=f'**#{rank}**')
+        if rank and rank in (1, 2, 3):
+            embed.add_field(name='**Rank**', value=f'**#{rank}** {chr(129350 + int(rank))}')
 
         embed.add_field(name='**Tag Used**', value=tag.uses)
 
         if tag.aliases:
-            value = []
-            for alias in tag.aliases:
-                value.append(
-                    f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})')
-
-            embed.add_field(name=f'**Aliases ({len(tag.aliases)})**', value='\n'.join(value), inline=False)
+            aliases_info = [
+                f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})'
+                for alias in tag.aliases
+            ]
+            embed.add_field(name=f'**Aliases ({len(tag.aliases)})**', value='\n'.join(aliases_info), inline=False)
 
         await ctx.send(embed=embed)
 
@@ -1256,8 +1239,7 @@ class Tags(commands.Cog):
         """Bulk remove all Tags and assigned Aliases of a given User."""
 
         query = "SELECT COUNT(*) FROM tags WHERE location_id=$1 AND owner_id=$2;"
-        row: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
-        count = row[0]
+        count: int = await self.bot.pool.fetchval(query, ctx.guild.id, member.id)
 
         if count == 0:
             return await ctx.stick(False, f'**{member}** does not have any tags to purge.')
@@ -1297,12 +1279,13 @@ class Tags(commands.Cog):
         `Note:` To use autocomplete, you have to at least provide three characters.
         """
 
-        SORT = {
+        sort_options = {
             'id': 'id',
             'newest': 'created_at DESC',
             'oldest': 'created_at ASC',
             'name': 'name DESC'
-        }.get(flags.sort, 'name DESC')
+        }
+        SORT = sort_options.get(flags.sort, 'name DESC')
 
         if not flags.query:
             query = f"""
@@ -1330,17 +1313,16 @@ class Tags(commands.Cog):
             if flags.to_text:
                 await self.send_tags_to_text(ctx, rows)
             else:
-                embed = discord.Embed(title='Tag Search',
-                                      description=f'Sorted by: **{flags.sort}**',
-                                      colour=helpers.Colour.darker_red(),
-                                      timestamp=discord.utils.utcnow())
+                embed = discord.Embed(
+                    title='Tag Search',
+                    description=f'Sorted by: **{flags.sort}**',
+                    colour=helpers.Colour.darker_red(),
+                    timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f'{plural(len(rows)):entry|entries}')
 
-                results = [f'`{index}.` {entry}' for index, entry in
-                           enumerate([TagPageEntry(record=row) for row in rows], 1)]
+                results = [f'`{index}.` {TagPageEntry(record=row)}' for index, row in enumerate(rows, 1)]
                 await LinePaginator.start(
-                    ctx, entries=results, search_for=True, per_page=20, embed=embed
-                )
+                    ctx, entries=results, search_for=True, per_page=20, embed=embed)
         else:
             await ctx.stick(False, 'No tags found.')
 

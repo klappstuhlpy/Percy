@@ -10,6 +10,7 @@ from discord import PartialEmoji
 
 from cogs.economy import Balance, Economy, cash_emoji
 from cogs.utils import helpers
+from cogs.utils.context import tick
 from cogs.utils.formats import plural
 
 
@@ -81,8 +82,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
         state = self.view.get_board_state(self.x, self.y)
         if player.current_selection is not None:
             await interaction.response.send_message(
-                'You\'ve already selected a piece, you can\'t select multiple pieces.', ephemeral=True
-            )
+                f'{tick(False)} You\'ve already selected a piece, you can\'t select multiple pieces.', ephemeral=True)
             return
 
         player.current_selection = (self.x, self.y)
@@ -150,11 +150,12 @@ class TicTacToe(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user not in (self.players[0].member, self.players[1].member):
-            await interaction.response.send_message('This is a game between two other people, sorry.', ephemeral=True)
+            await interaction.response.send_message(
+                f'{tick(False)} This is a game between two other people, sorry.', ephemeral=True)
             return False
 
         if interaction.user != self.current_player.member:
-            await interaction.response.send_message('It\'s not your turn.', ephemeral=True)
+            await interaction.response.send_message(f'{tick(False)} It\'s not your turn.', ephemeral=True)
             return False
 
         return True
@@ -233,12 +234,12 @@ class Prompt(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.second:
-            await interaction.response.send_message('This prompt is not meant for you.', ephemeral=True)
+            await interaction.response.send_message(f'{tick(False)} This prompt is not meant for you.', ephemeral=True)
             return False
         return True
 
     @discord.ui.button(label='Accept', style=discord.ButtonStyle.green)
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         coin = random.randint(0, 1)
         if coin == 0:
             order = (self.first, self.second)
@@ -260,7 +261,7 @@ class Prompt(discord.ui.View):
         self.stop()
 
     @discord.ui.button(label='Decline', style=discord.ButtonStyle.red)
-    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         embed = discord.Embed(
             title='TicTacToe',
             description=f'Your Challenge was declined.',

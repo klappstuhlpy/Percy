@@ -170,6 +170,22 @@ def shorten_number(number: int | float) -> str:
     return f'{f'{number:f}'.rstrip('0').rstrip('.')}{['', 'K', 'M', 'B', 'T'][magnitude]}'
 
 
+def number_suffix(number: int):
+    """Returns the suffix for a number.
+
+    Parameters
+    ----------
+    number : `int`
+        The number to get the suffix for.
+    """
+    if 10 <= number % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(number % 10, 'th')
+
+    return f'{number}{suffix}'
+
+
 def pagify(
         text: str,
         delims: Sequence[str] = ['\n'],  # noqa

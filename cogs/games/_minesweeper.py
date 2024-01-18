@@ -5,11 +5,10 @@ import time
 from contextlib import suppress
 
 import discord
-from discord import Interaction
 
 from cogs.economy import Economy, Balance, cash_emoji
 from cogs.utils import helpers
-from cogs.utils.context import Context
+from cogs.utils.context import Context, tick
 from cogs.utils.formats import readable_time
 
 
@@ -41,9 +40,9 @@ class Minesweeper(discord.ui.View):
             for y in range(5):
                 self.add_item(MinesweeperButton(self.board[x][y], (x, y)))
 
-    async def interaction_check(self, interaction: Interaction, /) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message('This isn\'t your game.', ephemeral=True)
+            await interaction.response.send_message(f'{tick(False)} This isn\'t your game.', ephemeral=True)
             return False
         return True
 
