@@ -20,7 +20,7 @@ from discord import app_commands, Interaction
 from discord.ext import commands
 from lru import LRU
 
-from .utils import fuzzy, helpers, commands
+from .utils import fuzzy, helpers, commands, errors
 from .utils.converters import Prefix, get_asset_url
 from .utils.formats import plural, format_date, WrapDict
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
@@ -1347,12 +1347,10 @@ class Meta(commands.Cog):
         """Shows you information on up to 50 unicode characters."""
         match = re.match(r'<(a?):(\w+):(\d+)>', characters)
         if match:
-            await ctx.send(f'{ctx.tick(False)} Cannot introspect custom emojis.')
-            return
+            raise errors.BadArgument('Cannot get information on custom emoji.')
 
         if len(characters) > 50:
-            await ctx.send(f'{ctx.tick(False)} Character limit of `50` exceeded.')
-            return
+            raise errors.BadArgument(f'Too many characters ({len(characters)}/50)')
 
         def char_info(char: str) -> tuple[str, str]:
             digit = f'{ord(char):x}'
@@ -1418,14 +1416,14 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.stick(False, f'{e}')
+            raise errors.CommandError(f'Unkown error: {e}')
         else:
             await ctx.stick(True, 'Prefix added.')
 
     @prefix_add.error
     async def prefix_add_error(self, ctx: GuildContext, error: commands.CommandError):
         if isinstance(error, commands.TooManyArguments):
-            await ctx.send('You\'ve given too many prefixes. Either quote it or only do it one by one.')
+            raise errors.CommandError('Too many arguments. Did you forget to quote a multi-word prefix?')
 
     @commands.command(
         prefix.command,
@@ -1446,12 +1444,12 @@ class Meta(commands.Cog):
         try:
             current_prefixes.remove(prefix)
         except ValueError:
-            return await ctx.send('I do not have this prefix registered.')
+            raise errors.CommandError('Prefix not found.')
 
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            await ctx.stick(False, f'{e}')
+            raise errors.CommandError(f'Unkown error: {e}')
         else:
             await ctx.stick(True, 'Prefix removed.')
 
@@ -1616,11 +1614,11 @@ class Meta(commands.Cog):
 
         guild = self.bot.get_guild(guild_id)
         if guild is None:
-            return await ctx.send('Guild not found?')
+            raise errors.BadArgument('Guild not found.')
 
         channel = guild.get_channel(channel_id)
         if channel is None:
-            return await ctx.send('Channel not found?')
+            raise errors.BadArgument('Channel not found.')
 
         if author_id is None:
             member = guild.me
@@ -1628,7 +1626,7 @@ class Meta(commands.Cog):
             member = await self.bot.get_or_fetch_member(guild, author_id)
 
         if member is None:
-            return await ctx.send('Member not found?')
+            raise errors.BadArgument('Member not found.')
 
         await self.say_permissions(ctx, member, channel)
 
@@ -1648,7 +1646,7 @@ class Meta(commands.Cog):
             obj = sorted(self.snipe_del_chache[ctx.guild.id][channel.id],
                          key=lambda x: x.timestamp, reverse=True)[0]
         except KeyError:
-            return await ctx.send('I have not sniped any messages in this channel.')
+            raise errors.CommandError('I have not sniped any messages in this channel.')
 
         embed = discord.Embed(description=obj.message.clean_content, color=self.bot.colour.darker_red(),
                               timestamp=obj.timestamp)
@@ -1673,7 +1671,7 @@ class Meta(commands.Cog):
             obj = sorted(self.snipe_edit_chache[ctx.guild.id][channel.id],
                          key=lambda x: x.timestamp, reverse=True)[0]
         except KeyError:
-            return await ctx.send('I have not sniped any messages in this channel.')
+            raise errors.CommandError('I have not sniped any messages in this channel.')
 
         embed = discord.Embed(color=self.bot.colour.darker_red(), timestamp=obj.timestamp)
         embed.set_author(name=obj.message.author, icon_url=obj.message.author.display_avatar.url)

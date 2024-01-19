@@ -139,7 +139,7 @@ class Economy(commands.Cog):
         balance = await self.get_balance(user.id, ctx.guild.id)
 
         if (to == 'bank' and balance.bank < amount) or (to == 'cash' and balance.cash < amount):
-            raise BalanceError("Cannot remove more than the user's balance.")
+            raise BalanceError('Cannot remove more than the user\'s balance.')
 
         await balance.remove(amount, to)
         await ctx.stick(True, f'Successfully removed {cash_emoji} **{amount:,}** from **{user.display_name}\'s** {to}.')
@@ -153,7 +153,7 @@ class Economy(commands.Cog):
         """Deposits money into your bank."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.cash < amount:
-            raise BalanceError("Cannot deposit more than your balance.")
+            raise BalanceError('Cannot deposit more than your balance.')
 
         await balance.remove(amount, 'cash')
         await balance.add(amount, 'bank')
@@ -167,7 +167,7 @@ class Economy(commands.Cog):
         """Withdraws money from your bank."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.bank < amount:
-            raise BalanceError("Cannot withdraw more than your balance.")
+            raise BalanceError('Cannot withdraw more than your balance.')
 
         await balance.remove(amount, 'bank')
         await balance.add(amount, 'cash')
@@ -181,7 +181,7 @@ class Economy(commands.Cog):
         """Transfers money to another user."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.cash < amount:
-            raise BalanceError("Cannot transfer more than your balance.")
+            raise BalanceError('Cannot transfer more than your balance.')
 
         await balance.remove(amount, 'cash')
         balance = await self.get_balance(user.id, ctx.guild.id)

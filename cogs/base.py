@@ -67,7 +67,7 @@ def validate_token(token: str) -> bool:
         return True
 
 
-class GithubError(commands.CommandError):
+class GithubError(errors.CommandError):
     """Base exception for GitHub errors."""
     pass
 
@@ -347,10 +347,6 @@ class Base(commands.Cog, name='Exclusives'):
 
         js = await self.github_request('POST', 'gists', data=data, headers=headers)
         return js['html_url']
-
-    async def cog_command_error(self, ctx: Context, error: commands.CommandError):
-        if isinstance(error, GithubError):
-            await ctx.stick(False, f'Github API Error: {error}')
 
     @tasks.loop(hours=1)
     async def auto_archive_old_forum_threads(self):

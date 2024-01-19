@@ -411,7 +411,7 @@ class Tags(commands.Cog):
             self._temporary_reserved_tags[guild_id] = set()
 
         if name in self._temporary_reserved_tags[guild_id]:
-            raise errors.BadArgument('Hey, this Name is temporarily reserved, try again later or use a different one.')
+            raise errors.BadArgument('Hey, this name is temporarily reserved, try again later or use a different one.')
 
         self._temporary_reserved_tags[guild_id].add(name)
         try:
@@ -561,7 +561,7 @@ class Tags(commands.Cog):
         if isinstance(tag, list):
             # Assuming no tags were found and similarites are returned instead
             if tag is None or len(tag) == 0:
-                await ctx.stick(False, 'No Tag with this name or similar name found.')
+                raise errors.BadArgument(f'No Tag with the name or ID `{name_or_id}` found.')
             else:
                 embed = discord.Embed(title='*Did you mean ...*', colour=self.bot.colour.darker_red())
                 await LinePaginator.start(
@@ -769,7 +769,7 @@ class Tags(commands.Cog):
             raise errors.BadArgument('This alias is already taken.')
         else:
             if status[-1] == '0':
-                await ctx.stick(False, f'A tag with the name **{original_tag}** does not exist.')
+                raise errors.BadArgument('The original tag could not be found.')
             else:
                 await ctx.stick(
                     True, f'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
@@ -825,7 +825,8 @@ class Tags(commands.Cog):
             try:
                 await ctx.send(prompt)
                 user_input = await self.bot.wait_for(
-                    'message', timeout=timeout, check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel)
+                    'message', timeout=timeout,
+                    check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel)
                 return user_input.content
             except asyncio.TimeoutError:
                 return None
@@ -844,7 +845,7 @@ class Tags(commands.Cog):
 
         tag = self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True)
         if tag is not None:
-            return await ctx.stick(False, 'Sorry. This name is already taken. Please choose another one.')
+            raise errors.BadArgument('A Tag with this name already exists.')
 
         with self.reserve_tag(ctx.guild.id, name):
             content_prompt = (
@@ -1045,12 +1046,12 @@ class Tags(commands.Cog):
                                  only_parent=True)
 
         if not tag:
-            return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
+            raise errors.BadArgument('Could not find a tag with that name, are you sure it exists or you own it?')
 
         name = tag.name
         if content is None and use_embed is None:
             if ctx.interaction is None:
-                return await ctx.stick(False, 'Missing content to edit tag with')
+                raise errors.BadArgument('You need to pass a content or use the modal to edit the tag.')
             else:
                 modal = TagEditModal(tag)
                 await ctx.interaction.response.send_modal(modal)
@@ -1060,7 +1061,7 @@ class Tags(commands.Cog):
                 name = modal.tag_name.value
 
         if content and len(content) > 2000:
-            return await ctx.stick(False, 'Tag content can only be up to 2000 characters')
+            raise errors.BadArgument('Tag Content is too long, max. 2000 characters.')
 
         self.get_tag.invalidate_containing(tag.name)
         await tag.edit(name=name, use_embed=use_embed, content=content)
@@ -1097,7 +1098,7 @@ class Tags(commands.Cog):
                                      only_parent=True)
 
         if not tag:
-            return await ctx.stick(False, 'Could not find a tag with that name, are you sure it exists or you own it?')
+            raise errors.BadArgument('Could not find a tag with that name, are you sure it exists or you own it?')
 
         await tag.delete()
 
@@ -1124,7 +1125,7 @@ class Tags(commands.Cog):
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id)
 
         if tag is None:
-            return await ctx.stick(False, 'Tag was not found.')
+            raise errors.BadArgument('Could not find a tag with that name, are you sure it exists or you own it?')
 
         embed = discord.Embed(title='Tag Info', description=f'**```{tag.name}```**\n')
         embed.add_field(name='**Owner**', value=f'<@{tag.owner_id}>')
@@ -1225,7 +1226,7 @@ class Tags(commands.Cog):
                     ctx, entries=results, search_for=True, per_page=20, embed=embed
                 )
         else:
-            await ctx.stick(False, f'**{member}** currently has no tags.')
+            raise errors.BadArgument(f'**{member}** does not have any tags.')
 
     @commands.command(
         tag.command,
@@ -1242,12 +1243,12 @@ class Tags(commands.Cog):
         count: int = await self.bot.pool.fetchval(query, ctx.guild.id, member.id)
 
         if count == 0:
-            return await ctx.stick(False, f'**{member}** does not have any tags to purge.')
+            raise errors.BadArgument(f'**{member}** does not have any tags.')
 
         confirm = await ctx.prompt(
             f'<:warning:1113421726861238363> This will delete **{count}** tags are you sure? **This action cannot be reversed**.')
         if not confirm:
-            return await ctx.stick(False, 'Cancelling tag purge request.')
+            raise errors.BadArgument('Cancelled tag purge.')
 
         query = "DELETE FROM tags WHERE location_id=$1 AND owner_id=$2;"
         await ctx.db.execute(query, ctx.guild.id, member.id)
@@ -1346,7 +1347,7 @@ class Tags(commands.Cog):
 
         member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
         if member is not None:
-            return await ctx.stick(False, 'Tag owner is still in server.')
+            raise errors.BadArgument(f'This tag is already owned by **{member}**.')
 
         if isinstance(tag, AliasTag):
             await tag.transfer(ctx.author, connection=self.bot.pool)  # type: ignore
@@ -1373,12 +1374,12 @@ class Tags(commands.Cog):
     ):
         """Transfer a tag owned by you to another member."""
         if member.bot:
-            return await ctx.stick(False, 'You cannot transfer a tag to a bot.')
+            raise errors.BadArgument('You cannot transfer tags to bots.')
 
         tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
                                  only_parent=True)
         if tag is None:
-            return await ctx.stick(False, f'A tag "**{name_or_id}**" does not exist or is not owned by you.')
+            raise errors.BadArgument('Could not find a tag with that name, are you sure it exists or you own it?')
 
         await tag.transfer(member)
         await ctx.stick(True, f'Successfully transferred tag ownership to **{member}**.')
@@ -1395,7 +1396,7 @@ class Tags(commands.Cog):
         """Exports all your tags/server tags to a csv file."""
         if which == 'server':
             if ctx.author.id != ctx.guild.owner_id:
-                return await ctx.stick(False, 'Only the server owner can export server tags.')
+                raise errors.BadArgument('You need to be the server owner to export server tags.')
 
             query = "SELECT name, content FROM tags WHERE location_id=$1;"
             values = (ctx.guild.id,)
@@ -1409,7 +1410,7 @@ class Tags(commands.Cog):
                     records = await conn.fetch(query, *values)
 
         if not records:
-            return await ctx.stick(False, 'No tags were found.')
+            raise errors.BadArgument('No tags found.')
 
         buffer = io.StringIO()
         writer = csv.writer(buffer, delimiter=',', quotechar="'", quoting=csv.QUOTE_MINIMAL)

@@ -193,11 +193,8 @@ class Config(commands.Cog):
             if bypass:
                 return True
 
-        is_plonked = await self.is_plonked(
-            ctx.guild.id, ctx.author.id, channel=ctx.channel, check_bypass=False
-        )
-
-        return not is_plonked
+        return not await self.is_plonked(
+            ctx.guild.id, ctx.author.id, channel=ctx.channel, check_bypass=False)
 
     @cache.cache()
     async def get_permissions(
@@ -308,7 +305,7 @@ class Config(commands.Cog):
         records = await ctx.db.fetch(query, guild.id)
 
         if len(records) == 0:
-            return await ctx.stick(False, 'There are no ignores set for this guild.')
+            raise errors.CommandError('There are no ignored channels or members in this server.')
 
         class PlonkedPaginator(BasePaginator[asyncpg.Record]):
 
@@ -448,8 +445,8 @@ class Config(commands.Cog):
                 try:
                     await connection.execute(query, guild_id, channel_id, name, whitelist)
                 except asyncpg.UniqueViolationError:
-                    msg = '<:redTick:1079249771975413910> This command is already disabled.' if not whitelist else 'This command is already explicitly enabled.'
-                    raise RuntimeError(msg)
+                    raise errors.CommandError(
+                        'This command is already disabled.' if not whitelist else 'This command is already explicitly enabled.')
 
     @commands.command(
         channel.command,
@@ -461,8 +458,8 @@ class Config(commands.Cog):
 
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, ctx.channel.id, command, whitelist=False)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, 'Command successfully disabled for this channel.')
 
@@ -476,8 +473,8 @@ class Config(commands.Cog):
 
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, ctx.channel.id, command, whitelist=True)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, 'Command successfully enabled for this channel.')
 
@@ -491,8 +488,8 @@ class Config(commands.Cog):
 
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, None, command, whitelist=False)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, 'Command successfully disabled for this server')
 
@@ -506,8 +503,8 @@ class Config(commands.Cog):
 
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, None, command, whitelist=True)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, 'Command successfully enabled for this server.')
 
@@ -524,8 +521,8 @@ class Config(commands.Cog):
         human_friendly = channel.mention if channel else 'the server'
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, channel_id, command, whitelist=True)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, f'Command successfully enabled for {human_friendly}.')
 
@@ -542,8 +539,8 @@ class Config(commands.Cog):
         human_friendly = channel.mention if channel else 'the server'
         try:
             await self.command_toggle(ctx.pool, ctx.guild.id, channel_id, command, whitelist=False)
-        except RuntimeError as e:
-            await ctx.send(str(e))
+        except:  # noqa
+            pass
         else:
             await ctx.stick(True, f'Command successfully disabled for {human_friendly}.')
 
@@ -571,7 +568,7 @@ class Config(commands.Cog):
         disabled = list(resolved.get_blocked_commands(channel_id))
 
         if not disabled:
-            return await ctx.stick(False, 'There are no disabled commands for this channel.')
+            raise errors.CommandError('There are no disabled commands for this channel.')
 
         embed = discord.Embed(timestamp=discord.utils.utcnow(),
                               color=self.bot.colour.darker_red())

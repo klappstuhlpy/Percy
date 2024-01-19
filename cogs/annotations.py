@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, List, Annotated
 
-from discord.ext import commands
 from discord import app_commands
 import discord
 import re
@@ -63,7 +62,7 @@ class UrbanDictionaryPaginator(BasePaginator[dict]):
     def cleanup_definition(definition: str, *, regex=BRACKETED) -> str:
         def repl(m):
             word = m.group(2)
-            return f'[{word}](http://{word.replace(" ", "-")}.urbanup.com)'
+            return f'[{word}](http://{word.replace(" ", "-")}.urbanup.com)'  # noqa
 
         ret = regex.sub(repl, definition)
         if len(ret) >= 2048:
@@ -212,23 +211,23 @@ class Annotations(commands.Cog):
         try:
             await user.send(fmt)
         except:
-            await ctx.stick(False, f'Could not PM user by ID `{user_id}`.')
+            raise errors.CommandError(f'Could not send a DM to {user}.')
         else:
-            await ctx.stick(False, 'PM successfully sent.')
+            await ctx.stick(True, 'PM successfully sent.')
 
     @commands.command(commands.core_command, name='urban', description="Searches the urban dictionary.")
     async def _urban(self, ctx: Context, *, word: str):
         """Searches urban dictionary."""
 
-        url = 'http://api.urbandictionary.com/v0/define'
+        url = 'http://api.urbandictionary.com/v0/define'  # noqa
         async with ctx.session.get(url, params={'term': word}) as resp:
             if resp.status != 200:
-                return await ctx.stick(False, f'An error occurred: {resp.status} {resp.reason}')
+                raise errors.CommandError(f'An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             data = js.get('list', [])
             if not data:
-                return await ctx.stick(False, 'No results found, sorry.')
+                raise errors.CommandError(f'No results found for {word!r}.')
 
         await UrbanDictionaryPaginator.start(ctx, entries=data, per_page=1)
 
@@ -245,7 +244,7 @@ class Annotations(commands.Cog):
         url = 'https://www.thecolorapi.com/id'
         async with self.bot.session.get(url, params={'hex': f'{color.value:0>6x}'}) as resp:
             if resp.status != 200:
-                return await ctx.stick(False, f'{ctx.user.mention} An error occurred: {resp.status} {resp.reason}')
+                raise errors.CommandError(f'An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             embed.url = f"{url}?hex={color.value:0>6x}"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import datetime
+import enum
 from dataclasses import dataclass
 from typing import Optional, Any
 
@@ -20,21 +21,34 @@ from .utils.helpers import PostgresItem
 DS_ENDPOINT = "https://discordstatus.com/api/v2/incidents.json"
 DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
 
-STATE_EMOJI = {
-    "resolved": "<:online:1101531229188272279>",
-    "investigating": "<:idle:1101530975151849522>",
-    "monitoring": "<:idle:1101530975151849522>",
-    "identified": "<:dnd:1101531066600259685>",
-    "update": "<:offline:1105801866312417331>"
-}
 
-EMBED_COLOR = {
-    "resolved": 0x7BCBA7,
-    "investigating": 0xFCC25E,
-    "monitoring": 0xFCC25E,
-    "identified": 0xF57E7E,
-    "update": 0xFCC25E
-}
+class Status(enum.Enum):
+    RESOLVED = "resolved"
+    INVESTIGATING = "investigating"
+    MONITORING = "monitoring"
+    IDENTIFIED = "identified"
+    UPDATE = "update"
+
+    @property
+    def emoji(self) -> str:
+        return {
+            "resolved": "<:online:1101531229188272279>",
+            "investigating": "<:idle:1101530975151849522>",
+            "monitoring": "<:idle:1101530975151849522>",
+            "identified": "<:dnd:1101531066600259685>",
+            "update": "<:offline:1105801866312417331>"
+        }.get(self.value)
+
+    @property
+    def color(self) -> int:
+        return {
+            "resolved": 0x7BCBA7,
+            "investigating": 0xFCC25E,
+            "monitoring": 0xFCC25E,
+            "identified": 0xF57E7E,
+            "update": 0xFCC25E
+        }.get(self.value)
+
 
 T = TypeVar('T')
 
@@ -157,13 +171,13 @@ class Incident:
         updates.reverse()
 
         embed = discord.Embed(title=self.name, timestamp=self.started_at, url=self.shortlink,
-                              colour=EMBED_COLOR.get(updates[-1].status, 0x000000))
+                              colour=Status(updates[-1].status).color)
         embed.set_author(name="Discord Status", url="https://discordstatus.com/", icon_url=DISCORD_ICON_URL)
         embed.set_footer(text="Started at")
 
         for update in updates:
             embed.add_field(
-                name=f"{STATE_EMOJI.get(update.status)} {update.status.title()} "
+                name=f"{Status(update.status).emoji} {update.status.title()} "
                      f"({discord.utils.format_dt(update.created_at, 'R')})",
                 value=update.body,
                 inline=False)
@@ -332,12 +346,12 @@ class DiscordStatus(commands.Cog):
         """Shows the current Discord Status."""
         latest = await self.fetch_unresolved_incidents()
         if not latest:
-            return await ctx.stick(None, "No active incidents found. *There should be though? Contact the developer!*")
+            raise errors.CommandError("No incidents found. *There should be though? Contact the developer!*")
 
         embeds = [incident.build_embed() for incident in latest]
-        await ctx.send(content=f"Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*"
-        if len(embeds) > 10 else None,
-                       embeds=embeds[:10], ephemeral=True)
+        await ctx.send(content=(
+            f'Displaying the **10** last incidents, ***{abs(10 - len(embeds))}** more incidents...*' if len(embeds) > 10 else None),
+            embeds=embeds[:10], ephemeral=True)
 
     @commands.command(
         dstatus.command,
@@ -352,11 +366,11 @@ class DiscordStatus(commands.Cog):
 
         latest = (await self.fetch_unresolved_incidents(bypass=True))[0]
         if not latest:
-            return await ctx.stick(None, "No incidents found. *There should be though? Contact the developer!*")
+            raise errors.CommandError("No incidents found. *There should be though? Contact the developer!*")
 
         subscriber = await self.get_subscriber(ctx.guild.id)
         if not subscriber:
-            return await ctx.stick(False, "This guild is not subscribed to the Discord Status Feed.")
+            raise errors.CommandError("This guild is not subscribed to the Discord Status Feed.")
 
         check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
                                             latest.id, ctx.guild.id)
@@ -370,7 +384,7 @@ class DiscordStatus(commands.Cog):
         incident = IncidentItem(self.bot, record=await self.bot.pool.fetchrow(query, *values))
 
         if incident.id == latest.id and incident.status == latest.status:
-            return await ctx.stick(False, "There is no newer indient than the last one released.")
+            raise errors.CommandError("This incident is already released.")
 
         message = await incident.get_channel().send(embed=latest.build_embed())
 
@@ -407,7 +421,7 @@ class DiscordStatus(commands.Cog):
                         query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
                         await ctx.db.execute(query, ctx.guild.id, channel.id)
                     case _:
-                        raise errors.BadArgument('Tag could not be created due to an Unknown reason. Try again later?')
+                        raise errors.CommandError(f"An error occurred while subscribing to Discord Status updates: {e}")
             else:
                 await tr.commit()
                 await ctx.stick(True, f'Successfully subscribed to Discord Status updates in [{channel.mention}].')

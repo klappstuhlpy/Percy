@@ -24,8 +24,8 @@ class TimeZone(NamedTuple):
     async def convert(cls, ctx: Context, argument: str) -> Self:
         cog: UserSettings = ctx.cog  # type: ignore
 
-        if argument in cog._timezone_aliases:
-            return cls(key=argument, label=cog._timezone_aliases[argument])
+        if argument in cog.timezone_aliases:  
+            return cls(key=argument, label=cog.timezone_aliases[argument])
 
         if argument in cog.valid_timezones:
             return cls(key=argument, label=argument)
@@ -107,7 +107,7 @@ class UserSettings(commands.Cog, name='User Settings'):
 
         self.valid_timezones: set[str] = set(zoneinfo.available_timezones())
         # User-friendly timezone names, some manual and most from the CLDR database.
-        self._timezone_aliases: dict[str, str] = {
+        self.timezone_aliases: dict[str, str] = {
             'Eastern Time': 'America/New_York',
             'Central Time': 'America/Chicago',
             'Mountain Time': 'America/Denver',
@@ -122,7 +122,7 @@ class UserSettings(commands.Cog, name='User Settings'):
             'MDT': 'America/Denver',
             'PDT': 'America/Los_Angeles',
         }
-        self._default_timezones: list[app_commands.Choice[str]] = []
+        self.default_timezones: list[app_commands.Choice[str]] = []
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -159,14 +159,14 @@ class UserSettings(commands.Cog, name='User Settings'):
                 if entry.preferred is not None:
                     preferred = entries.get(entry.preferred)
                     if preferred is not None:
-                        self._timezone_aliases[entry.description] = preferred.aliases[0]
+                        self.timezone_aliases[entry.description] = preferred.aliases[0]
                 else:
-                    self._timezone_aliases[entry.description] = entry.aliases[0]
+                    self.timezone_aliases[entry.description] = entry.aliases[0]
 
             for key in self.DEFAULT_POPULAR_TIMEZONE_IDS:
                 entry = entries.get(key)
                 if entry is not None:
-                    self._default_timezones.append(app_commands.Choice(name=entry.description, value=entry.aliases[0]))
+                    self.default_timezones.append(app_commands.Choice(name=entry.description, value=entry.aliases[0]))
 
     @commands.command(
         commands.hybrid_group,
@@ -239,7 +239,7 @@ class UserSettings(commands.Cog, name='User Settings'):
             self, interaction: discord.Interaction, argument: str  # noqa
     ) -> list[app_commands.Choice[str]]:
         if not argument:
-            return self._default_timezones
+            return self.default_timezones
         matches = self.find_timezones(argument)
         return [tz.to_choice() for tz in matches[:25]]
 
@@ -252,7 +252,7 @@ class UserSettings(commands.Cog, name='User Settings'):
         """Clears your timezone."""
         config = await self.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
-            return await ctx.stick(False, 'You currently have no custom timezone set.')
+            raise errors.CommandError('You have not set your timezone.')
 
         await ctx.db.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", ctx.author.id)
         self.get_user_config.invalidate(self, ctx.author.id)
@@ -282,8 +282,8 @@ class UserSettings(commands.Cog, name='User Settings'):
         if '/' in query:
             return [TimeZone(key=a, label=a) for a in fuzzy.finder(query, self.valid_timezones)]
 
-        keys = fuzzy.finder(query, self._timezone_aliases.keys())
-        return [TimeZone(label=k, key=self._timezone_aliases[k]) for k in keys]
+        keys = fuzzy.finder(query, self.timezone_aliases.keys())
+        return [TimeZone(label=k, key=self.timezone_aliases[k]) for k in keys]
 
 
 async def setup(bot: Percy):

@@ -18,7 +18,7 @@ from discord.ext import commands
 
 from bot import Percy
 from .utils.paginator import TextSource, TextPaginator
-from .utils import converters, commands
+from .utils import converters, commands, errors
 from .utils.tasks import PerformanceMocker
 from .utils.context import Context
 from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
@@ -238,7 +238,7 @@ class Admin(commands.Cog):
             new_ctx.channel = PerformanceMocker()
 
             if new_ctx.command is None:
-                return await ctx.send('No command found')
+                raise errors.CommandError('No command found')
 
             start = time.perf_counter()
             try:
@@ -340,8 +340,7 @@ class Admin(commands.Cog):
         results: list[Record] = await ctx.db.fetch(query, table_name)
 
         if len(results) == 0:
-            await ctx.send('Could not find a table with that name')
-            return
+            raise commands.CommandError(f'Table `{table_name}` not found')
 
         await self.send_sql_results(ctx, results)
 
@@ -363,8 +362,7 @@ class Admin(commands.Cog):
         results: list[Record] = await ctx.db.fetch(query)
 
         if len(results) == 0:
-            await ctx.send('Could not find any tables')
-            return
+            raise commands.CommandError('Could not find any tables')
 
         await self.send_sql_results(ctx, results)
 
@@ -389,8 +387,7 @@ class Admin(commands.Cog):
         results: list[Record] = await ctx.db.fetch(query)
 
         if len(results) == 0:
-            await ctx.send('Could not find any tables')
-            return
+            raise commands.CommandError('Could not find any tables')
 
         await self.send_sql_results(ctx, results)
 
@@ -406,7 +403,7 @@ class Admin(commands.Cog):
 
         json = await ctx.db.fetchrow(query)
         if json is None:
-            return await ctx.stick(False, 'Somehow nothing returned.')
+            raise commands.CommandError('No results.')
 
         file = discord.File(io.BytesIO(json[0].encode('utf-8')), filename='explain.json')
         await ctx.send(file=file)
@@ -497,7 +494,7 @@ class Admin(commands.Cog):
         new_ctx.channel = PerformanceMocker()
 
         if new_ctx.command is None:
-            return await ctx.send(f'{ctx.tick(False)} No command found')
+            raise errors.CommandError('No command found')
 
         start = time.perf_counter()
         try:
