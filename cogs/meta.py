@@ -396,7 +396,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
-    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None): 
+    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None):
         """|coro|
 
         Checks if a command is hidden for a user.
@@ -452,13 +452,13 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if not hasattr(self.context, 'author'):
             class FakeContext:
                 author = None
-            
+
             # We are doing this because on startup, the `filter_commands` method
             # will be triggered without a context,
             # which will result in an AttributeError because for the 
             # `maybe_hidden` method, we need the author
             # attribute of the context.
-            
+
             self.context = FakeContext()  # noqa
 
         for cmd in cmd_iter:
@@ -472,7 +472,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
                             isinstance(subcmd, commands.hybrid.HybridAppCommand)
                             or subcmd.qualified_name in resolved_names
                             or subcmd.name in resolved_names
-                            or isinstance(subcmd, (Hybrid, Core)) and await self.maybe_hidden(subcmd, self.context.author)
+                            or isinstance(subcmd, (Hybrid, Core)) and await self.maybe_hidden(subcmd,
+                                                                                              self.context.author)
                     ):
                         continue
 
@@ -482,7 +483,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
                                     isinstance(subsubcmd, commands.hybrid.HybridAppCommand)
                                     or subsubcmd.qualified_name in resolved_names
                                     or subsubcmd.name in resolved_names
-                                    or isinstance(subsubcmd, (Hybrid, Core)) and await self.maybe_hidden(subsubcmd, self.context.author)
+                                    or isinstance(subsubcmd, (Hybrid, Core)) and await self.maybe_hidden(subsubcmd,
+                                                                                                         self.context.author)
                             ):
                                 continue
 
@@ -951,7 +953,8 @@ class Meta(commands.Cog):
 
             if confirm:
                 await ctx.stick(
-                    True, f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
+                    True,
+                    f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
                 )
                 await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)
             elif confirm is None:
@@ -1043,7 +1046,7 @@ class Meta(commands.Cog):
         return [app_commands.Choice(name=res, value=res) for res in results][:25]
 
     @commands.hybrid_group(name='info', description='Shows info about a user or server.',
-                            invoke_without_command=True)
+                           invoke_without_command=True)
     async def info(self, ctx: Context):
         """Shows info about a user or server."""
         await ctx.send_help(ctx.command)
@@ -1182,7 +1185,8 @@ class Meta(commands.Cog):
             )
 
         perms = user.guild_permissions.value
-        e.add_field(name='Permissions', value=f'[{perms}](https://discordapi.com/permissions.html#{perms})', inline=False)
+        e.add_field(name='Permissions', value=f'[{perms}](https://discordapi.com/permissions.html#{perms})',
+                    inline=False)
 
         colour = user.colour
         if colour.value:

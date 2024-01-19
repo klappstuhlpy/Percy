@@ -374,7 +374,7 @@ class Stats(commands.Cog):
                   f'Memory: {memory_usage:.2f} MiB | {psutil.virtual_memory().percent}%\n'
                   f'Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```')
 
-        embed.set_footer(text=f'Made with _cmd.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
+        embed.set_footer(text=f'Made with discord.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
@@ -599,7 +599,8 @@ class Stats(commands.Cog):
             # First, check if the command is in the database
             # because we want to avoid running this big query if we don't need to
 
-            async_session = sessionmaker(self.bot.alchemy_engine, expire_on_commit=False, class_=AsyncSession)  # type: ignore
+            async_session = sessionmaker(self.bot.alchemy_engine, expire_on_commit=False,
+                                         class_=AsyncSession)  # type: ignore
             async with async_session() as session:
                 assert isinstance(session, AsyncSession)
 
@@ -721,7 +722,8 @@ class Stats(commands.Cog):
             prefix = record['most_invoked_with']
 
             author_id = record['most_invoked_by']
-            most_invoked_by = censor_object(self.bot.blacklist, self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            most_invoked_by = censor_object(self.bot.blacklist,
+                                            self.bot.get_user(author_id) or f'<Unknown {author_id}>')
 
             embed.add_field(name='Most Invoked By',
                             value=f'{most_invoked_by} (**{record['most_invoked_by_count']}** times)', inline=False)
