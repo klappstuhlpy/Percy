@@ -56,7 +56,7 @@ class PerformanceMocker:
         return False
 
 
-def executor(sync_function: Callable[P, T]) -> Callable[P, Awaitable[T]]:
+def executor(sync_function: Callable[P, T]) -> Callable[..., Awaitable[T]]:
     """A decorator that wraps a sync function in an executor, changing it into an async function.
 
     This allows processing functions to be wrapped and used immediately as an async function.

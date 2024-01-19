@@ -76,8 +76,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         """
 
         if not self.bot.application_id:
-            await ctx.stick(False, 'Cannot sync when application info not fetched')
-            return
+            raise errors.CommandError('Bot does not have an application ID.')
 
         guilds_set: set[Optional[int]] = {None}
         for target in targets:

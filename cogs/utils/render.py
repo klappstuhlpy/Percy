@@ -250,6 +250,16 @@ class Render:
         image = Image.alpha_composite(outline, circle_image)
         return image.resize((196, 196), Image.LANCZOS)
 
+    @staticmethod
+    def get_text_dimensions(text_string: str, font: ImageFont) -> tuple[int, int]:
+        # https://stackoverflow.com/a/46220683/9263761
+        ascent, descent = font.getmetrics()
+
+        text_width = font.getmask(text_string).getbbox()[2]
+        text_height = font.getmask(text_string).getbbox()[3] + descent
+
+        return text_width, text_height
+
     # Actual Level Card Render
 
     @executor
@@ -285,7 +295,7 @@ class Render:
             draw.text((252, 114), user.name, font=GINTO_BOLD_28, fill=self.get_color_alpha((216, 216, 216), 0.8))
 
             rank_text = f'Rank #{rank}'
-            rank_text_width, _ = draw.textlength(rank_text, font=GINTO_NORD_HEAVY_48)
+            rank_text_width = draw.textlength(rank_text, font=GINTO_NORD_HEAVY_48)
             draw.text(
                 (background.width - rank_text_width - 38, 62),
                 rank_text,
@@ -294,7 +304,7 @@ class Render:
             )
 
             members_text = f'of {shorten_number(members)}'
-            members_text_width, _ = draw.textlength(members_text, font=GINTO_BOLD_28)
+            members_text_width = draw.textlength(members_text, font=GINTO_BOLD_28)
             draw.text(
                 (background.width - members_text_width - 38, 114),
                 members_text,
@@ -304,25 +314,22 @@ class Render:
 
             color = self.get_dominant_color(avatar)
             empty_bar, empty_bar_mask = self.create_outlined_rounded_rectangle(
-                (862, 38), radius=10, thickness=4, fill=self.get_color_alpha(color, 0.3), outline=color
-            )
+                (862, 38), radius=10, thickness=4, fill=self.get_color_alpha(color, 0.3), outline=color)
             background.paste(empty_bar, (252, 162), empty_bar_mask)
 
             if multiplier := abs(current / required):
                 progress_bar = Image.new('RGB', (round(862 * multiplier), 38), color=color)
                 background.paste(
-                    progress_bar, (252, 164), self.create_rounded_rectangle_mask(progress_bar.size, 10)
-                )
+                    progress_bar, (252, 164), self.create_rounded_rectangle_mask(progress_bar.size, 10))
 
             level_bg, level_bg_mask = self.create_outlined_rounded_rectangle(
-                (192, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5)
-            )
+                (192, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5))
             draw = ImageDraw.Draw(level_bg)
 
             level_text = 'Level'
-            level_text_width, level_text_height = draw.textlength(level_text, font=GINTO_BOLD_32)
+            level_text_width, level_text_height = self.get_text_dimensions(level_text, font=GINTO_BOLD_32)
             level_number = str(level)
-            level_number_width, level_number_height = draw.textlength(level_number, font=GINTO_NORD_HEAVY_36)
+            level_number_width, level_number_height = self.get_text_dimensions(level_number, font=GINTO_NORD_HEAVY_36)
 
             text_offset_x = int((192 - (level_text_width + level_number_width + 8)) / 2)
             text_offset_y = int((60 - max(level_text_height, level_number_height)) / 2)
@@ -334,8 +341,7 @@ class Render:
             background.paste(level_bg, (38, 254), level_bg_mask)
 
             experience_bg, experience_bg_mask = self.create_outlined_rounded_rectangle(
-                (260, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5)
-            )
+                (260, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5))
             draw = ImageDraw.Draw(experience_bg)
             text = f'{shorten_number(current)} XP / {shorten_number(required)}'
 
@@ -345,14 +351,12 @@ class Render:
                 text_size = font.getlength(text)
 
             offset = int((212 - text_size) / 2)
-
             draw.text((offset + 28, y), text=text, font=font, fill=(235, 235, 235))
 
             background.paste(experience_bg, (252, 254), experience_bg_mask)
 
             messages_bg, messages_bg_mask = self.create_outlined_rounded_rectangle(
-                (268, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5)
-            )
+                (268, 60), 20, 4, (57, 62, 70), self.get_color_alpha(color, 0.5))
             draw = ImageDraw.Draw(messages_bg)
             msg_count = shorten_number(messages)
 

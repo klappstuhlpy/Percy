@@ -20,7 +20,7 @@ from cogs.utils import commands
 from cogs.utils.constants import FORMATTED_CODE_REGEX, RAW_CODE_REGEX
 from cogs.utils.context import EvalContext
 from cogs.utils.lock import lock_arg
-from cogs.utils.services import send_to_paste_service, PasteUploadError, PasteTooLongError
+from cogs.snekbox._service import send_to_paste_service, PasteUploadError, PasteTooLongError
 from launcher import get_logger
 
 log = get_logger(__name__)

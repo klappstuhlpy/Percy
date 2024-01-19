@@ -70,13 +70,11 @@ def is_help_thread():
 class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
     messages: int = commands.flag(
         default=5,
-        description='The maximum number of messages the thread needs to be considered active. Defaults to 5.',
-    )
+        description='The maximum number of messages the thread needs to be considered active. Defaults to 5.')
     threshold: relativedelta = commands.flag(
         default=relativedelta(minutes=5),
         description='How old the thread needs to be (e.g. "10m" or "22m"). Defaults to 5 minutes.',
-        converter=RelativeDelta(),
-    )
+        converter=RelativeDelta())
 
 
 class GroupHelpPaginator(BasePaginator[PartialCommand]):
@@ -102,7 +100,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
 
         if is_app_command_cog:
-            embed.set_footer(text=f'Those Commands are only available as Slash Commands.')
+            embed.set_footer(text='Those Commands are only available as Slash Commands.')
         else:
             embed.set_footer(text=f'Use "{getattr(self.ctx, 'prefix', '/')}help command" for more info on a command.')
 
@@ -209,6 +207,7 @@ class FrontHelpPaginator(BasePaginator[str]):
 
     async def format_page(self, entries: List, /):
         prefix: str = getattr(self.ctx, 'prefix', '/')
+        f_prefix = prefix if not prefix.startswith('<@') else f'@{self.ctx.client.user.name} '
 
         embed = discord.Embed(title=f'{self.ctx.client.user.name}\'s Help Page', colour=helpers.Colour.darker_red())
         embed.set_thumbnail(url=get_asset_url(self.ctx.client.user))
@@ -224,8 +223,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
                 ## More Help
                 Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{prefix}help` *`command`*
-                - `{prefix}help` *`category`*
+                - `{f_prefix}help` *`command`*
+                - `{f_prefix}help` *`category`*
                 ## Support
                 For more help, consider joining the official server over at
                 https://discord.com/invite/eKwMtGydqh.
@@ -247,11 +246,11 @@ class FrontHelpPaginator(BasePaginator[str]):
                  'They can provide a better overview and are not required to be typed in.\n'
                  '\n'
                  'Flags are prefixed with `--` and can be used like this:\n'
-                 f'- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
-                 f'- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
+                 f'- `{f_prefix}command --flag1 argument1 --flag2 argument2`\n'
+                 f'- `{f_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
                  f'\n'
                  f'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
-                 f'- `{prefix}command --flag1 my first argument --flag2 \'argument 2`\''
+                 f'- `{f_prefix}command --flag1 my first argument --flag2 \'argument 2`\''
                  ),
                 ('\u200b',
                  '<:discord_info:1113421814132117545> **Important:**\n'
@@ -267,6 +266,8 @@ class FrontHelpPaginator(BasePaginator[str]):
                 f"""
                 ## License
                 Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
+                ## Source Code
+                You can obtain a copy of myself over at [GitHub](https://github.com/klappstuhlpy/Percy)
                 ## Credits
                 I was made by <@991398932397703238>.
                 
@@ -395,7 +396,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
-    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None):  # noqa
+    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None): 
         """|coro|
 
         Checks if a command is hidden for a user.
@@ -578,7 +579,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 continue
 
             cog = self.context.bot.get_cog(name)
-            if cog is None:
+            if cog is None or cog and all(getattr(_cmd, 'hidden', False) is True for _cmd in children):
                 continue
 
             grouped[cog] = list(children)
@@ -592,10 +593,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         This is a modified version of the original send_cog_help.
         """
-        entries = await self.filter_commands(
-            self.get_cog_commands(cog),
-            sort=True
-        )
+        entries = await self.filter_commands(self.get_cog_commands(cog), sort=True)
         await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
 
     @staticmethod
@@ -1241,8 +1239,8 @@ class Meta(commands.Cog):
             elif isinstance(channel, discord.VoiceChannel) and (not perms.connect or not perms.speak):
                 secret[channel_type] += 1
 
-        e = discord.Embed(title=guild.name, description=f'**ID**: {guild.id}\n**Owner**: {guild.owner}')
-        e.set_thumbnail(url=get_asset_url(guild))
+        embed = discord.Embed(title=guild.name, description=f'**ID**: {guild.id}\n**Owner**: {guild.owner}')
+        embed.set_thumbnail(url=get_asset_url(guild))
 
         channel_info = []
         key_to_emoji = {
@@ -1285,22 +1283,22 @@ class Meta(commands.Cog):
                 info.append(f'{ctx.tick(True)}: {label}')
 
         if info:
-            e.add_field(name='Features', value='\n'.join(info))
+            embed.add_field(name='Features', value='\n'.join(info))
 
-        e.add_field(name='Channels', value='\n'.join(channel_info))
+        embed.add_field(name='Channels', value='\n'.join(channel_info))
 
         if guild.premium_tier != 0:
             boosts = f'Level {guild.premium_tier}\n{guild.premium_subscription_count} boosts'
             last_boost = max(guild.members, key=lambda m: m.premium_since or guild.created_at)
             if last_boost.premium_since is not None:
                 boosts = f'{boosts}\nLast Boost: {last_boost} ({discord.utils.format_dt(last_boost.premium_since, style='R')})'
-            e.add_field(name='Boosts', value=boosts, inline=False)
+            embed.add_field(name='Boosts', value=boosts, inline=False)
 
         bots = sum(m.bot for m in guild.members)
         fmt = f'Total: {guild.member_count} ({plural(bots):bot} `{bots / guild.member_count:.2%}`)'
 
-        e.add_field(name='Members', value=fmt, inline=False)
-        e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
+        embed.add_field(name='Members', value=fmt, inline=False)
+        embed.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
 
         emoji_stats = Counter()
         for emoji in guild.emojis:
@@ -1319,13 +1317,13 @@ class Meta(commands.Cog):
             fmt = f'{fmt}Disabled: {emoji_stats['disabled']} regular, {emoji_stats['animated_disabled']} animated\n'
 
         fmt = f'{fmt}Total Emoji: {len(guild.emojis)}/{guild.emoji_limit * 2}'
-        e.add_field(name='Emoji', value=fmt, inline=False)
+        embed.add_field(name='Emoji', value=fmt, inline=False)
 
         if guild.banner:
-            e.set_image(url=guild.banner.url)
+            embed.set_image(url=guild.banner.url)
 
-        e.set_footer(text='Created').timestamp = guild.created_at
-        await ctx.send(embed=e, view=GuildUserJoinView(ctx.author))
+        embed.set_footer(text='Created').timestamp = guild.created_at
+        await ctx.send(embed=embed, view=GuildUserJoinView(ctx.author))
 
     @commands.command()
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):

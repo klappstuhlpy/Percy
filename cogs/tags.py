@@ -1412,15 +1412,14 @@ class Tags(commands.Cog):
         if not records:
             raise errors.BadArgument('No tags found.')
 
-        buffer = io.StringIO()
+        buffer = io.BytesIO()
         writer = csv.writer(buffer, delimiter=',', quotechar="'", quoting=csv.QUOTE_MINIMAL)
         for record in records:
             writer.writerow([record[0], record[1]])
         buffer.seek(0)
 
         file = discord.File(
-            fp=buffer,  # type: ignore
-            filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
+            fp=buffer, filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
         )
         await ctx.send(file=file)
 

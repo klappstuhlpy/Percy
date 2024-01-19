@@ -1194,7 +1194,8 @@ class Stats(commands.Cog):
         for page in paginator.pages:
             await ctx.send(page)
 
-    async def tabulate_query(self, ctx: Context, query: str, *args: Any):
+    @staticmethod
+    async def tabulate_query(ctx: Context, query: str, *args: Any):
         records = await ctx.db.fetch(query, *args)
 
         if len(records) == 0:
