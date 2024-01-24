@@ -33,6 +33,7 @@ class BaseCard:
         self.value: int = value
         self.suit: Suit = suit
 
+        self.suit_name: str = self.suit.value.title()
         self.color: str = 'red' if self.suit in (Suit.HEARTS, Suit.DIAMONDS) else 'black'
         self.hidden: bool = False
 
