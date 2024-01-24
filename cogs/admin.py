@@ -24,7 +24,7 @@ from .utils.context import Context
 from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
 
 
-class Admin(commands.Cog):
+class Admin(commands.Cog, command_attrs=dict(hidden=True)):
     """Admin commands for the bot owner."""
 
     def __init__(self, bot):
