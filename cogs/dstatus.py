@@ -289,10 +289,8 @@ class DiscordStatus(commands.Cog):
             query = "UPDATE discord_incidents SET status = $3 WHERE id = $1 AND guild_id = $2;"
             await self.bot.pool.execute(query, saved.id, saved.guild_id, incident.status)
         else:
-            query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
-            saved = IncidentItem(
-                self.bot, record=await self.bot.pool.fetchrow(
-                    query, incident.id, incident.status, saved.guild_id, saved.channel_id))
+            query = "UPDATE discord_incidents SET id = $1, status = $3 WHERE id = $2 AND guild_id = $4;"
+            await self.bot.pool.execute(query, incident.id, saved.id, incident.status, saved.guild_id)
 
         channel = saved.get_channel()
         message = await saved.get_message()
