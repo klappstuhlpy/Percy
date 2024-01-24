@@ -60,14 +60,14 @@ class Render:
         return buffer
 
     @classmethod
-    def generate_bar_chart(cls, data: dict, title: Optional[str] = None) -> list[bytes]:
+    def generate_bar_chart(cls, data: dict[str, int], title: Optional[str] = None) -> list[bytes]:
         """Generate a bar chart image from a dictionary of data.
 
         Parameters
         ----------
         data : dict
             A dictionary of data to generate the bar chart from.
-            Data must follow the format of {str[key]: int[value]}.
+            Data must follow the format of {str: int}.
         title : Optional[str], optional
             The title of the bar chart, by default None
         """
