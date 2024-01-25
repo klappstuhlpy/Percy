@@ -403,6 +403,7 @@ class Leveling(commands.Cog):
             avatar=await member.display_avatar.read(),
             user=member,
             level=config.level,
+            total_xp=config.experience,
             current=config.experience - config.get_experience(config.level),
             required=config.get_required(config.level),
             rank=await config.get_rank(),
@@ -413,9 +414,9 @@ class Leveling(commands.Cog):
 
     @commands.command(
         level.command,
-        description='Set a members experience or level.'
+        description='Set a members experience or level.',
+        guild_only=True
     )
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(target='The target member to modify.')
     @app_commands.describe(level='The level you want to set.')

@@ -310,6 +310,7 @@ class Render:
             avatar: bytes,
             user: discord.Member,
             level: int,
+            total_xp: int,
             current: int,
             required: int,
             rank: int,
@@ -337,9 +338,10 @@ class Render:
                 font=GINTO_NORD_HEAVY_48,
             )
 
+            total_xp = f'{total_xp:,} XP'
             user_canvas.text(
                 (252, 114),
-                user.name,
+                total_xp,
                 self.get_color_alpha((216, 216, 216), 0.8),
                 font=GINTO_BOLD_28,
             )
