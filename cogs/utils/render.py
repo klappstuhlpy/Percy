@@ -333,15 +333,15 @@ class Render:
             user_canvas.text(
                 (252, 62),
                 str(user),
-                GINTO_NORD_HEAVY_48,
-                (235, 235, 235)
+                (235, 235, 235),
+                font=GINTO_NORD_HEAVY_48,
             )
 
             user_canvas.text(
                 (252, 114),
                 user.name,
-                GINTO_BOLD_28,
-                self.get_color_alpha((216, 216, 216), 0.8)
+                self.get_color_alpha((216, 216, 216), 0.8),
+                font=GINTO_BOLD_28,
             )
 
             rank = f'Rank #{rank}'
@@ -352,8 +352,8 @@ class Render:
                     62
                 ),
                 rank,
-                font=GINTO_NORD_HEAVY_48,
-                fill=(235, 235, 235),
+                (235, 235, 235),
+                GINTO_NORD_HEAVY_48,
             )
 
             members = f'of {shorten_number(members)}'
@@ -364,8 +364,8 @@ class Render:
                     114
                 ),
                 members,
-                GINTO_BOLD_28,
                 self.get_color_alpha((216, 216, 216), 0.8),
+                GINTO_BOLD_28,
             )
 
             color = self.get_dominant_color(avatar)
@@ -401,22 +401,22 @@ class Render:
             level_number_width, level_number_height = self.get_text_dimensions(level_number, font=GINTO_NORD_HEAVY_36)
 
             text_offset_x = int((192 - (level_text_width + level_number_width + 8)) / 2)
-            text_offset_y = int((60 - max(level_text_height, level_number_height)) / 2)
+            text_offset_y = int((55 - max(level_text_height, level_number_height)) / 2)
 
             level_canvas.text(
                 (text_offset_x, text_offset_y),
                 level_text,
-                GINTO_BOLD_32,
-                (216, 216, 216)
+                (216, 216, 216),
+                GINTO_BOLD_32
             )
             level_canvas.text(
                 (
                     text_offset_x + level_text_width + 8,
-                    text_offset_y
+                    text_offset_y + level_text_height - level_number_height - 2
                 ),
                 level_number,
+                (235, 235, 235),
                 GINTO_NORD_HEAVY_36,
-                (235, 235, 235)
             )
 
             background.paste(level_bg, (38, 254), level_bg_mask)
@@ -437,10 +437,13 @@ class Render:
                 text_size = font.getlength(text)
 
             experience_canvas.text(
-                (int((212 - text_size) / 2) + 28, y),
+                (
+                    int((212 - text_size) / 2) + 24,
+                    y
+                ),
                 text,
+                (235, 235, 235),
                 font,
-                (235, 235, 235)
             )
 
             background.paste(experience_bg, (252, 254), experience_bg_mask)
@@ -455,21 +458,21 @@ class Render:
             message_canvas = ImageDraw.Draw(messages_bg)
             msg_count = shorten_number(messages)
 
-            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY_28, GINTO_BOLD_24, 16, 18
+            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY_28, GINTO_BOLD_24, 14, 16
             if (text_size := (count_font.getlength(msg_count) + 12 + text_font.getlength('Messages'))) > 200:
-                cfont, tfont, count_offset, text_offset = GINTO_NORD_HEAVY_22, GINTO_BOLD_20, 18, 20
+                cfont, tfont, count_offset, text_offset = GINTO_NORD_HEAVY_22, GINTO_BOLD_20, 16, 18
                 text_size = cfont.getlength(msg_count) + 12 + tfont.getlength('Messages')
 
-            offset = int((165 - text_size) / 2)
+            offset = int((200 - text_size) / 2)
 
             message_canvas.text(
                 (
-                    offset + 33,
+                    offset + 40,
                     count_offset
                 ),
                 msg_count,
+                (235, 235, 235),
                 count_font,
-                (235, 235, 235)
             )
             message_canvas.text(
                 (
@@ -477,8 +480,8 @@ class Render:
                     text_offset
                 ),
                 'Messages',
+                (216, 216, 216),
                 text_font,
-                (216, 216, 216)
             )
 
             background.paste(messages_bg, (846, 256), messages_bg_mask)
