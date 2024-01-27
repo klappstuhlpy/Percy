@@ -358,8 +358,8 @@ class Percy(commands.Bot):
                 await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
             elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
                 await ctx.send(f'{original} Please wait for it to finish and try again later.')
-        elif isinstance(error, (commands.ArgumentParsingError, commands.FlagError, errors.BadArgument,
-                                errors.CommandError)):
+        elif isinstance(error, (
+                commands.ArgumentParsingError, commands.FlagError, errors.BadArgument, errors.CommandError)):
             await ctx.send(str(error))
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.stick(False, f'Missing required argument: `{error.param.name}`')

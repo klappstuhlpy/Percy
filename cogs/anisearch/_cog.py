@@ -14,10 +14,13 @@ from lru import LRU
 from bot import Percy
 from cogs.utils import fuzzy, commands, errors
 from cogs.utils.context import Context
+from launcher import get_logger
 from . import _formatter
 from ._client import AniListClient
 from ._formatter import month_to_season, ANILIST_ICON, ANILIST_LOGO
 from cogs.utils.paginator import EmbedPaginator
+
+log = get_logger(__name__)
 
 GRANT_URL = "https://anilist.co/api/v2/oauth/"
 OAUTH_URL = GRANT_URL + "authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
@@ -120,15 +123,18 @@ class AniListSearch(commands.Cog, name="Media"):
         return discord.PartialEmoji(name="\N{TELEVISION}")
 
     async def cog_load(self) -> None:
-        self.clear_token_cache.start()
+        try:
+            self.clear_token_cache.start()
 
-        data = await self.anilistcls.media(page=1, perPage=50, type="ANIME", isAdult=False, sort='TRENDING_DESC')
-        for item in data:
-            self._lookup_anime_table.append(item.get('title').get('romaji'))
+            data = await self.anilistcls.media(page=1, perPage=50, type="ANIME", isAdult=False, sort='TRENDING_DESC')
+            for item in data:
+                self._lookup_anime_table.append(item.get('title').get('romaji'))
 
-        data = await self.anilistcls.media(page=1, perPage=50, type="MANGA", isAdult=False, sort='TRENDING_DESC')
-        for item in data:
-            self._lookup_manga_table.append(item.get('title').get('romaji'))
+            data = await self.anilistcls.media(page=1, perPage=50, type="MANGA", isAdult=False, sort='TRENDING_DESC')
+            for item in data:
+                self._lookup_manga_table.append(item.get('title').get('romaji'))
+        except:
+            log.error("Failed to load AniList data", exc_info=True)
 
     async def cog_unload(self) -> None:
         self.clear_token_cache.cancel()

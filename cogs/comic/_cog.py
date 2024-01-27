@@ -3,15 +3,14 @@ import asyncio
 import contextlib
 import datetime
 import fnmatch
-import json
-from enum import Enum
+import traceback
 from operator import attrgetter
-from typing import List, Optional, Union, Callable, TYPE_CHECKING
+from typing import List, Optional, Union, Callable
 
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
 from cogs.comic._client import Marvel
 from cogs.comic._data import ComicFeed, Brand, GenericComic, Format, GenericComicMessage
@@ -69,17 +68,6 @@ class ComicCache:
         return False
 
 
-class ComicJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Enum):
-            return obj.name
-        elif isinstance(obj, ComicPulls):
-            return f"<class '{obj.__module__}'>"
-        elif isinstance(obj, datetime.datetime):
-            return obj.isoformat()
-        return super().default(obj)
-
-
 class ComicPulls(commands.Cog, name='Comic Feeds'):
     """Subscribe to weekly comic releases from Marvel and DC!
 
@@ -116,12 +104,6 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
         if self._task:
             self._task.cancel()
-
-    async def cog_app_command_error(
-            self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        if isinstance(error, app_commands.errors.CheckFailure):
-            return
 
     async def prev_schedule(self, brand: Brand) -> datetime.datetime:
         return max(i.date if i.date is not None else datetime.datetime.min for i in self.comic_cache.get(brand))
@@ -212,7 +194,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         con = connection or self.bot.pool
 
         record = await con.fetchrow(query, datetime.timedelta(days=days))
-        return ComicFeed(self, record=record, json_encoder=ComicJSONEncoder) if record else None
+        return ComicFeed(self, record=record) if record else None
 
     def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
         if not key:
@@ -319,7 +301,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True)
 
     @cache.cache()
-    async def get_comic_config(self, guild_id: int, brand: str) -> Optional[ComicFeed]:
+    async def get_comic_config(self, guild_id: int, brand: Brand) -> Optional[ComicFeed]:
         """|coro| @cached
 
         Gets the comic feed config for a guild.
@@ -337,8 +319,8 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             The comic feed config, if found.
         """
         query = "SELECT * FROM comic_config WHERE guild_id = $1 AND brand = $2;"
-        record = await self.bot.pool.fetchrow(query, guild_id, brand)
-        return ComicFeed(self, record=record, json_encoder=ComicJSONEncoder) if record else None
+        record = await self.bot.pool.fetchrow(query, guild_id, str(brand))
+        return ComicFeed(self, record=record) if record else None
 
     @comics.command(name='current')
     @app_commands.describe(brand='The comic brand to receive a feed from.')

@@ -6,6 +6,7 @@ import json
 from enum import Enum
 from typing import Self, Generic, TypeVar, Dict, List
 
+from cogs.utils import commands
 from cogs.utils.helpers import PostgresItem
 
 
@@ -124,7 +125,7 @@ class GenericComic:
             self,
             *,
             brand: Brand = Brand.UNKNOWN,
-            id: int | str = None,
+            _id: int | str = None,
             title: str = None,
             description: str = None,
             creators: Dict[str, List[str]] = None,
@@ -132,12 +133,12 @@ class GenericComic:
             url: str = None,
             page_count: int = None,
             price: float = None,
-            copyright: str = None,
+            _copyright: str = None,
             date: datetime.datetime = None,
             **kwargs
     ):
         self.brand: Brand = brand
-        self.id: int = id
+        self.id: int = _id
         self.title: str = title
         self.description: str = description
         self.creators: Dict[str, List[str]] = creators
@@ -149,7 +150,7 @@ class GenericComic:
         self.page_count: int = page_count
         self.price: float = price
 
-        self.copyright: str = copyright
+        self.copyright: str = _copyright
         self.kwargs = kwargs
 
     def __str__(self):
@@ -255,7 +256,17 @@ class ComicFeed(PostgresItem, Generic[B]):
         self.brand: B = Brand[str(self.brand)]
         self.format = Format[str(self.format)]
 
-        self._json_encoder = kwargs.pop('json_encoder')
+    def __dict__(self):
+        return {
+            'guild_id': self.guild_id,
+            'channel_id': self.channel_id,
+            'format': self.format.name,
+            'brand': self.brand.name,
+            'day': self.day,
+            'ping': self.ping,
+            'pin': self.pin,
+            'next_pull': self.next_pull.isoformat(),
+        }
 
     def to_embed(self):
         embed = discord.Embed(
@@ -281,7 +292,7 @@ class ComicFeed(PostgresItem, Generic[B]):
             FROM jsonb_populate_record(null::comic_config, $1::TEXT::jsonb) AS x
         """
 
-        await self.cog.bot.pool.execute(query, json.dumps(self.__dict__, cls=self._json_encoder))
+        await self.cog.bot.pool.execute(query, json.dumps(self.__dict__()))
         return self
 
     async def edit(self, kwargs: dict) -> Self:
@@ -292,7 +303,7 @@ class ComicFeed(PostgresItem, Generic[B]):
             AND comic_config.brand = x.brand::TEXT;
         """
 
-        await self.cog.bot.pool.execute(query, json.dumps(kwargs, cls=self._json_encoder))
+        await self.cog.bot.pool.execute(query, json.dumps(kwargs, cls=ComicJSONEncoder))
         self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
         return self
 
@@ -319,3 +330,16 @@ class ComicFeed(PostgresItem, Generic[B]):
     @property
     def prev_scheduled(self):
         return self.next_scheduled() - datetime.timedelta(days=7)
+
+
+class ComicJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Enum):
+            return obj.name
+        elif isinstance(obj, commands.Cog):
+            return f"<class '{obj.__module__}'>"
+        elif isinstance(obj, datetime.datetime):
+            return obj.isoformat()
+        elif isinstance(obj, object):
+            return f"<class '{obj.__class__.__module__}.{obj.__class__.__name__}'>"
+        return super().default(obj)

@@ -1470,44 +1470,48 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:
 
 
 async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
-    command = interaction.command
-    error = getattr(error, 'original', error)
+    try:
+        command = interaction.command
+        error = getattr(error, 'original', error)
 
-    if isinstance(error, (discord.Forbidden, discord.NotFound)):
-        return
-
-    hook: discord.Webhook = interaction.client.stats_webhook  # type: ignore
-    e = discord.Embed(title='<:warning:1113421726861238363> App Command Error', colour=0x99002b)
-
-    if command is not None:
-        if command._has_any_error_handlers():  # noqa
+        if isinstance(error, (discord.Forbidden, discord.NotFound)):
             return
 
-        e.add_field(name='Name', value=command.qualified_name)
+        hook: discord.Webhook = interaction.client.stats_webhook
+        embed = discord.Embed(
+            title='<:warning:1113421726861238363> App Command Error', timestamp=interaction.created_at, colour=0x99002b)
 
-    e.add_field(name='User',
-                value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
+        if command is not None:
+            if command._has_any_error_handlers():  # noqa
+                return
 
-    fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url}) (ID: {interaction.channel_id})'
-    if interaction.guild:
-        fmt = f'{fmt}\nGuild: {interaction.guild} (ID: {interaction.guild.id})'
-    else:
-        fmt = f'{fmt}\nGuild: *<Private Message>*'
+            embed.add_field(name='Name', value=command.qualified_name)
 
-    e.add_field(name='Location', value=fmt, inline=False)
+        embed.add_field(
+            name='User',
+            value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
 
-    namespace: dict = interaction.namespace.__dict__
-    e.add_field(name='Namespace(s)', value=' '.join(f'{k}: {v!r}' for k, v in namespace.items()), inline=False)
+        fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url}) (ID: {interaction.channel_id})'
+        if interaction.guild:
+            fmt = f'{fmt}\nGuild: {interaction.guild} (ID: {interaction.guild.id})'
+        else:
+            fmt = f'{fmt}\nGuild: *<Private Message>*'
 
-    exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-    e.description = f'### Retrieved Traceback\n```py\n{exc}\n```'
-    e.set_footer(text='Occured at')
-    e.timestamp = interaction.created_at
+        embed.add_field(name='Location', value=fmt, inline=False)
 
-    try:
-        await hook.send(embed=e)
-    except (discord.HTTPException, ValueError):
-        pass
+        namespace: dict = interaction.namespace.__dict__
+        embed.add_field(name='Namespace(s)', value=' '.join(f'{k}: {v!r}' for k, v in namespace.items()), inline=False)
+
+        exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
+        embed.description = f'### Retrieved Traceback\n```py\n{exc}\n```'
+        embed.set_footer(text='Occured at')
+
+        try:
+            await hook.send(embed=embed)
+        except (discord.HTTPException, ValueError):
+            pass
+    except:
+        traceback.print_exc()
 
 
 async def setup(bot: Percy):
