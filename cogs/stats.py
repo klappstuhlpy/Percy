@@ -994,6 +994,7 @@ class Stats(commands.Cog):
 
         await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url)
 
+    # noinspection PyProtectedMember
     @commands.command(commands.core_command, hidden=True)
     @commands.is_owner()
     async def bothealth(self, ctx: Context):
@@ -1007,7 +1008,7 @@ class Stats(commands.Cog):
         embed = discord.Embed(title='Bot Health Report', colour=HEALTHY)
 
         pool = self.bot.pool
-        total_waiting = len(pool._queue._getters)  # type: ignore
+        total_waiting = len(pool._queue._getters)
         current_generation = pool._generation
 
         description = [
@@ -1470,48 +1471,45 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:
 
 
 async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
-    try:
-        command = interaction.command
-        error = getattr(error, 'original', error)
+    command = interaction.command
+    error = getattr(error, 'original', error)
 
-        if isinstance(error, (discord.Forbidden, discord.NotFound)):
+    if isinstance(error, (discord.Forbidden, discord.NotFound)):
+        return
+
+    hook: discord.Webhook = interaction.client.stats_webhook
+    embed = discord.Embed(
+        title='<:warning:1113421726861238363> App Command Error', timestamp=interaction.created_at, colour=0x99002b)
+
+    if command is not None:
+        if command._has_any_error_handlers():  # noqa
             return
 
-        hook: discord.Webhook = interaction.client.stats_webhook
-        embed = discord.Embed(
-            title='<:warning:1113421726861238363> App Command Error', timestamp=interaction.created_at, colour=0x99002b)
+        embed.add_field(name='Name', value=command.qualified_name)
 
-        if command is not None:
-            if command._has_any_error_handlers():  # noqa
-                return
+    embed.add_field(
+        name='User',
+        value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
 
-            embed.add_field(name='Name', value=command.qualified_name)
+    fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url}) (ID: {interaction.channel_id})'
+    if interaction.guild:
+        fmt = f'{fmt}\nGuild: {interaction.guild} (ID: {interaction.guild.id})'
+    else:
+        fmt = f'{fmt}\nGuild: *<Private Message>*'
 
-        embed.add_field(
-            name='User',
-            value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
+    embed.add_field(name='Location', value=fmt, inline=False)
 
-        fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url}) (ID: {interaction.channel_id})'
-        if interaction.guild:
-            fmt = f'{fmt}\nGuild: {interaction.guild} (ID: {interaction.guild.id})'
-        else:
-            fmt = f'{fmt}\nGuild: *<Private Message>*'
+    namespace: dict = interaction.namespace.__dict__
+    embed.add_field(name='Namespace(s)', value=' '.join(f'{k}: {v!r}' for k, v in namespace.items()), inline=False)
 
-        embed.add_field(name='Location', value=fmt, inline=False)
+    exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
+    embed.description = f'### Retrieved Traceback\n```py\n{exc}\n```'
+    embed.set_footer(text='Occured at')
 
-        namespace: dict = interaction.namespace.__dict__
-        embed.add_field(name='Namespace(s)', value=' '.join(f'{k}: {v!r}' for k, v in namespace.items()), inline=False)
-
-        exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-        embed.description = f'### Retrieved Traceback\n```py\n{exc}\n```'
-        embed.set_footer(text='Occured at')
-
-        try:
-            await hook.send(embed=embed)
-        except (discord.HTTPException, ValueError):
-            pass
-    except:
-        traceback.print_exc()
+    try:
+        await hook.send(embed=embed)
+    except (discord.HTTPException, ValueError):
+        pass
 
 
 async def setup(bot: Percy):
