@@ -77,19 +77,23 @@ class GiveawayRerollView(discord.ui.View):
                 guild = self.bot.get_guild(self.giveaway.guild_id)
 
                 winner_list = []
-                for i in range(0, len(self.giveaway.entries)):
-                    if len(winner_list) < self.giveaway.winner_count:
-                        user_id = self.giveaway.entries.pop(random.randint(0, len(self.giveaway.entries) - 1))
-                        winner_list.append(guild.get_member(user_id))
-                winners = ', '.join(x.mention for x in winner_list)
+                entries = self.giveaway.entries.copy()
+                for _ in range(self.giveaway.winner_count):
+                    if len(entries) == 0:
+                        # Assuming that there are more possible winners than entries
+                        winner_list.extend([0 for _ in range(self.giveaway.winner_count - len(winner_list))])
+                        break
+                    user_id = entries.pop(random.randint(0, len(entries) - 1))
+                    winner_list.append(user_id)
 
                 field = embed.fields[0]
                 lines = field.value.split('\n')
+                winners = ', '.join(guild.get_member(x).mention for x in winner_list if x != 0)
                 lines[3] = f'Winner(s): {winners}'
                 embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
                 await self.message.reply(
-                    f'Congratulations {winners}! You won the giveaway for *{self.giveaway.prize}*!',
+                    f'{cog.display_emoji} Congratulations **{winners}**! You won the giveaway for *{self.giveaway.prize}*!',
                     allowed_mentions=discord.AllowedMentions(users=True))
 
                 await interaction.response.edit_message(
