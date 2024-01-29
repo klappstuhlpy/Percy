@@ -9,7 +9,14 @@ from discord.abc import Snowflake
 from discord.app_commands import locale_str
 from discord.ext.commands import *
 from discord.ext import commands
-from cogs.utils import checks
+from cogs.utils import checks, helpers
+
+
+# Aliases
+core_command = commands.command
+FlagConverter = helpers.FlagConverter
+Flag = helpers.Flag
+flag = helpers.flag
 
 
 class CommandCategory(enum.Enum):
@@ -60,10 +67,6 @@ class PermissionTemplate:
     mod: ClassVar[str] = ['ban_members', 'manage_messages']
     admin: ClassVar[str] = ['administrator']
     manager: ClassVar[str] = ['manage_guild']
-
-
-# Alias
-core_command = commands.command
 
 
 def guilds(*guild_ids: Union[Snowflake, int]) -> Callable[[T], T]:

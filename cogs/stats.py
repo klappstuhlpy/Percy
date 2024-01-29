@@ -722,8 +722,8 @@ class Stats(commands.Cog):
             prefix = record['most_invoked_with']
 
             author_id = record['most_invoked_by']
-            most_invoked_by = censor_object(self.bot.blacklist,
-                                            self.bot.get_user(author_id) or f'<Unknown {author_id}>')
+            most_invoked_by = censor_object(
+                self.bot.blacklist, self.bot.get_user(author_id) or f'<Unknown {author_id}>')
 
             embed.add_field(name='Most Invoked By',
                             value=f'{most_invoked_by} (**{record['most_invoked_by_count']}** times)', inline=False)

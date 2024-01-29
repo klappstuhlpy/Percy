@@ -4,15 +4,45 @@ import datetime
 import enum
 import json
 import time
-from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type, Protocol
+from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type, Protocol, List, Dict
 
 import asyncpg
 import discord
+from discord.ext.commands import TooManyFlags, MissingRequiredFlag, TooManyArguments, MissingFlagArgument
+from discord.ext import commands
+
+from cogs.utils.context import Context
 
 T = TypeVar('T', bound='BaseFlags')
 
 
 class BaseFlags:
+    """
+    This is base class for numeric flags.
+
+    This class can be used to create certain flags that can be toggled on and off.
+
+    Example
+    --------
+    .. code-block:: python3
+
+            class MyFlags(BaseFlags):
+                foo = 1 << 0
+                bar = 1 << 1
+                baz = 1 << 2
+
+            >> flags = MyFlags()
+            >> flags.has_flag(MyFlags.foo)
+            False
+            >> flags.set_flag(MyFlags.foo, True)
+            >> flags.has_flag(MyFlags.foo)
+            True
+            >> print(flags)
+            <MyFlags value=1>
+
+    All flags are stored therefore as a single integer value, which can be accessed through the `value` attribute.
+    """
+
     __slots__ = ('value',)
 
     def __init__(self, value: int = 0) -> None:
@@ -44,6 +74,12 @@ class BaseFlags:
 
 
 class flag_value(Protocol[T]):
+    """A descriptor that returns whether the flag is set or not.
+
+    This is used to create a descriptor that returns a boolean value for a flag.
+
+    Can be used in combination with `BaseFlags` to create a flag that can be toggled on and off.
+    """
     def __init__(self, func: Callable[[Any], int]):
         self.flag: int = func(None)
         self.__doc__: Optional[str] = func.__doc__
@@ -70,7 +106,7 @@ class flag_value(Protocol[T]):
 
 class PostgresItemMeta(type):
     if TYPE_CHECKING:
-        _ignore_record: bool
+        __ignore_record__: bool
 
     def __new__(
             cls,
@@ -80,7 +116,7 @@ class PostgresItemMeta(type):
             *,
             ignore_record: bool = False,
     ) -> 'PostgresItemMeta':
-        attrs['_ignore_record'] = ignore_record
+        attrs['__ignore_record__'] = ignore_record
         return super().__new__(cls, name, bases, attrs)
 
     def __call__(cls, *args, **kwargs):
@@ -90,14 +126,72 @@ class PostgresItemMeta(type):
 
 
 class PostgresItem(metaclass=PostgresItemMeta):
-    """The base class for PostgreSQL fetched rows."""
+    """
+    The base class for representing PostgreSQL fetched rows.
+
+    This class facilitates the creation of a class that maps to a PostgreSQL row. It automatically maps the record's
+    values to the class attributes, providing convenient access to the data.
+
+    By overriding the `__slots__` attribute, you can specify which attributes should be mapped to the record. Additional
+    attributes, which are not mapped to the record, can be added by specifying them in the `__init__` method and calling
+    `super().__init__()`.
+
+    Attributes
+    ----------
+    record : Optional[asyncpg.Record]
+        The PostgreSQL record associated with the item.
+
+    Parameters
+    ----------
+    record : Optional[asyncpg.Record]
+        The PostgreSQL record to be associated with the item.
+
+    Raises
+    ------
+    TypeError
+        If a subclass of `PostgresItem` is instantiated without providing a `record` keyword argument, and the class
+        does not specify to ignore the record.
+
+    Examples
+    --------
+    .. code-block:: python3
+
+            class User(PostgresItem):
+                __slots__ = ('id', 'name', 'age')
+
+                def __init__(year: int, **kwargs):
+                    self.year = year
+                    super().__init__(**kwargs)
+
+                @property
+                def display_text() -> str:
+                    return f'{self.name} ({self.age} Years old) - {self.year}'
+
+            >> user = User(record=asyncpg.Record)
+            >> print(user.display_text)
+            John Doe (20 Years old) - 2021
+    """
 
     __slots__ = ('record',)
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs: dict[str, Any]) -> None:
+        """
+        Initialize a new instance of the `PostgresItem` class.
+
+        Parameters
+        ----------
+        record : Optional[asyncpg.Record]
+            The PostgreSQL record to be associated with the item.
+
+        Raises
+        ------
+        TypeError
+            If a subclass of `PostgresItem` is instantiated without providing a `record` keyword argument, and the
+            class does not specify to ignore the record.
+        """
         record: Optional[asyncpg.Record] = kwargs.pop('record', None)
 
-        if record is None and not self.__class__._ignore_record:
+        if record is None and not self.__class__.__ignore_record__:
             raise TypeError('Subclasses of `PostgresItem` must provide a `record` keyword argument.')
 
         self.record: asyncpg.Record = record
@@ -141,7 +235,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
     def __setitem__(self, item: str, value: Any):
         """Sets the value of the item's record and the internal attributes."""
         if not self.record:
-            self.record = {}  # setting a 'fake' record
+            self.record = {}  # type: ignore # setting a 'fake' record
         self.record[item] = value
 
         if item in self.__slots__:
@@ -179,6 +273,167 @@ class PostgresItem(metaclass=PostgresItemMeta):
     def get(self, key: str, default: Any = None) -> Any:
         """Returns the value of the item's record."""
         return self.record.get(key, default)
+
+
+class FlagConverter(commands.FlagConverter):
+    """
+    This is an enhanced version of discord.py's FlagConverter that offers greater flexibility.
+
+    With this converter, you can specify flags with no prefix by applying the `without_prefix` attribute to the flag.
+    This allows the use of the flag without a prefix, parsing it as a flag. Useful for commands with one required flag
+    followed by optional flags.
+
+    Class Parameters
+    ----------
+    case_insensitive: bool
+        Toggle case insensitivity of flag parsing. If True, flags are parsed in a case-insensitive manner.
+        Defaults to False.
+    prefix: str
+        The prefix that all flags must be prefixed with. By default, there is no prefix.
+    delimiter: str
+        The delimiter that separates a flag's argument from the flag's name. By default, this is `:`.
+
+    Example
+    --------
+    .. code-block:: python3
+
+            class MyFlags(commands.FlagConverter):
+                foo: bool = commands.Flag(aliases=['bar'], without_prefix=True)
+                bar: str = commands.Flag(description='A flag that requires a string argument.')
+
+            >> Discord: !mycommand this is my foo flag --bar this is my bar flag
+            >> MyFlags(foo=True, bar='this is my bar flag')
+    """
+
+    @classmethod
+    def parse_flags(cls, argument: str, *, ignore_extra: bool = True) -> Dict[str, List[str]]:
+        result: Dict[str, List[str]] = {}
+        flags = cls.__commands_flags__
+        aliases = cls.__commands_flag_aliases__
+
+        case_insensitive = cls.__commands_flag_case_insensitive__
+        last_position = 0
+        flag_first_positions = []
+        last_flag: Optional[commands.Flag] = None
+
+        for match in cls.__commands_flag_regex__.finditer(argument):
+            begin, end = match.span(0)
+            key = aliases.get(match.group('flag').casefold(), match.group('flag'))
+
+            flag = flags.get(key)
+            if last_position and last_flag is not None:
+                value = argument[last_position: begin - 1].lstrip()
+                if not value and not hasattr(last_flag, 'without_prefix'):
+                    raise MissingFlagArgument(last_flag)
+
+                name = last_flag.name.casefold() if case_insensitive else last_flag.name
+                result.setdefault(name, []).append(value)
+
+            last_position = end
+            flag_first_positions.append(begin)
+            last_flag = flag
+
+        # Handle left flags that use a prefix
+        value = argument[last_position:].strip()
+
+        # Add the remaining string to the last available flag
+        if last_flag is not None:
+            if not value:
+                raise MissingFlagArgument(last_flag)
+
+            name = last_flag.name.casefold() if case_insensitive else last_flag.name
+            result.setdefault(name, []).append(value)
+        elif value and not ignore_extra:
+            raise TooManyArguments(f'Too many arguments passed to {cls.__name__}')
+
+        # Handle left flags that do not use a prefix (escape_prefix=True)
+        value = argument[:min(flag_first_positions) if flag_first_positions else len(argument)].rstrip()
+
+        if any(hasattr(flag, 'without_prefix') for flag in flags.values()):
+            last_flag = next((flag for flag in flags.values() if hasattr(flag, 'without_prefix')), None)
+
+        # Add the remaining string to the last available flag
+        if last_flag is not None:
+            if not value:
+                raise MissingFlagArgument(last_flag)
+
+            name = last_flag.name.casefold() if case_insensitive else last_flag.name
+            result.setdefault(name, []).append(value)
+        elif value and not ignore_extra:
+            raise TooManyArguments(f'Too many arguments passed to {cls.__name__}')
+
+        return result
+
+    @classmethod
+    async def convert(cls, ctx: Context, argument: str) -> Self:
+        """|coro|
+
+        The method that actually converters an argument to the flag mapping.
+
+        Parameters
+        ----------
+        ctx: :class:`Context`
+            The invocation context.
+        argument: :class:`str`
+            The argument to convert from.
+
+        Raises
+        --------
+        FlagError
+            A flag related parsing error.
+
+        Returns
+        --------
+        :class:`FlagConverter`
+            The flag converter instance with all flags parsed.
+        """
+
+        ignore_extra = True
+        if (
+                ctx.command is not None
+                and ctx.current_parameter is not None
+                and ctx.current_parameter.kind == ctx.current_parameter.KEYWORD_ONLY
+        ):
+            ignore_extra = ctx.command.ignore_extra
+
+        arguments = cls.parse_flags(argument, ignore_extra=ignore_extra)
+        flags = cls.__commands_flags__
+
+        self = cls.__new__(cls)
+        for name, flag in flags.items():
+            try:
+                values = arguments[name]
+            except KeyError:
+                if flag.required:
+                    raise MissingRequiredFlag(flag)
+                else:
+                    if callable(flag.default):
+                        # Type checker does not understand flag.default is a Callable
+                        default = await maybe_coroutine(flag.default, ctx)  # type: ignore
+                        setattr(self, flag.attribute, default)
+                    else:
+                        setattr(self, flag.attribute, flag.default)
+                    continue
+
+            if 0 < flag.max_args < len(values):
+                if flag.override:
+                    values = values[-flag.max_args:]
+                else:
+                    raise TooManyFlags(flag, values)
+
+            # Special case:
+            if flag.max_args == 1:
+                value = await commands.flags.convert_flag(ctx, values[0], flag)
+                setattr(self, flag.attribute, value)
+                continue
+
+            values = [await commands.flags.convert_flag(ctx, value, flag) for value in values]
+            if flag.cast_to_dict:
+                values = dict(values)
+
+            setattr(self, flag.attribute, values)
+
+        return self
 
 
 def ignore_record() -> Callable[[T], T]:

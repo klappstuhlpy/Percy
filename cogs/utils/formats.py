@@ -42,8 +42,8 @@ def censor_invite(obj: Any, *, _regex=INVITE_REGEX) -> str:
     return _regex.sub('[censored-invite]', str(obj))
 
 
-def censor_object(blacklist: list[int] | Any, obj: str | discord.abc.Snowflake) -> str:
-    if not isinstance(obj, str) and obj.id in blacklist:
+def censor_object(iterable: list[int] | Any, obj: str | discord.abc.Snowflake) -> str:
+    if not isinstance(obj, str) and obj.id in iterable:
         return '[censored]'
     return censor_invite(obj)
 

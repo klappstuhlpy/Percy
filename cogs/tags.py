@@ -96,8 +96,8 @@ class TagSearchFlags(commands.FlagConverter, prefix='--', delimiter=' '):
 
 
 class TagListFlags(commands.FlagConverter, prefix='--', delimiter=' '):
-    member: Optional[discord.Member] = commands.flag(description='The member to search for', aliases=['m'],
-                                                     default=None)
+    member: Optional[discord.Member] = commands.flag(
+        description='The member to search for', aliases=['m'], default=None)
     query: Optional[str] = commands.flag(description='The query to search for', aliases=['q'], default=None)
     sort: Literal['name', 'newest', 'oldest', 'id'] = commands.flag(
         description='The key to sort the results.', aliases=['s'], default='name')

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import uuid
 from operator import attrgetter
-from typing import Annotated
 
 import discord
 from PIL import Image
@@ -18,40 +16,12 @@ from cogs.utils.lock import lock_arg
 from cogs.utils.render import Render
 
 
-default_flags = [
-    {"name": "guidance", "aliases": ["gi"], "description": "How strictly the diffusion process adheres to the prompt text.", "default": "10"},
-    {"name": "aspect", "aliases": ["ar"], "description": "The aspect ratio of the image.", "default": "1:1"}
-]
+class PromptFlags(commands.FlagConverter, prefix='--', delimiter=' '):
+    prompt: str = commands.Flag(description='The prompt to generate an image from.')
+    prompt.__setattr__('without_prefix', True)
 
-
-class Prompt(commands.clean_content):
-    """Prompt converter to filter out flags."""
-
-    async def convert(self, ctx: Context, argument: str) -> str:
-        clean_content = await super().convert(ctx, argument)
-
-        flags = {}
-        for flag in reversed(clean_content.split(' ')):
-            flag = flag.lower()
-
-            if not flag.startswith('--'):
-                break
-
-            flag_name, flag_value = flag[2:].split(' ', 1)
-
-            for default_flag in default_flags:
-                if flag_name in default_flag['aliases']:
-                    flag_name = default_flag['name']
-                    break
-
-            if flag_name in {default_flag['name'] for default_flag in default_flags}:
-                flags[flag_name] = flag_value
-
-        for default_flag in default_flags:
-            flags.setdefault(default_flag['name'], default_flag['default'])
-
-        # Because we can only return a string, we design a json-like string that can be serialized
-        return f'{{"prompt": "{clean_content}", "flags": {flags}}}'.replace("'", '"')
+    guidance: int = commands.Flag(default=10, aliases=['gi'], description='How strictly the diffusion process adheres to the prompt text.')
+    aspect: str = commands.Flag(default='1:1', aliases=['ar'], description='The aspect ratio of the image.')
 
 
 class RerunButton(discord.ui.Button):
@@ -261,18 +231,16 @@ class AITools(commands.Cog):
         description='Generate an image from text.',
     )
     @_image.check_daily_credits()
-    async def text_to_image(self, ctx: Context, *, prompt: Annotated[str, Prompt]):
+    async def text_to_image(self, ctx: Context, *, flags: PromptFlags):
         """Generate an image from text."""
 
-        data = json.loads(prompt)
-
         settings = TextToImageSettings(
-            guidance=int(data['flags']['guidance']),
-            aspect=data['flags']['aspect']
+            guidance=flags.guidance,
+            aspect=flags.aspect,
         )
 
         _job = ImageJob(
-            prompt=data['prompt'],
+            prompt=flags.prompt,
             settings=settings,
             author=ctx.author,
             message=None,
