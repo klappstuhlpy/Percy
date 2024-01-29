@@ -15,8 +15,6 @@ from cogs.utils import checks, helpers
 # Aliases
 core_command = commands.command
 FlagConverter = helpers.FlagConverter
-Flag = helpers.Flag
-flag = helpers.flag
 
 
 class CommandCategory(enum.Enum):
