@@ -322,24 +322,25 @@ class Giveaway(commands.Cog):
 
         winner_list = []
         if record.entries:
+            entries = record.entries.copy()
             for _ in range(record.winner_count):
-                if len(record.entries) == 0:
+                if len(entries) == 0:
                     # Assuming that there are more possible winners than entries
                     winner_list.extend([0 for _ in range(record.winner_count - len(winner_list))])
                     break
-                user_id = record.entries.pop(random.randint(0, len(record.entries) - 1))
+                user_id = entries.pop(random.randint(0, len(entries) - 1))
                 winner_list.append(user_id)
 
         field = embed.fields[0]
         lines = field.value.split('\n')
         lines[0] = lines[0].replace('Ends', 'Ended')
-        winners = ', '.join(guild.get_member(x).mention if x != 0 else '*empty*' for x in winner_list)
+        winners = ', '.join(guild.get_member(x).mention for x in winner_list if x != 0)
         lines[3] = f'Winner(s): {winners}'
         embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
         embed.set_footer(text=f'Giveaway ended')
 
-        if len(record.entries) > 0:
+        if len(record.entries) > 0 and any(winner != 0 for winner in winner_list):
             await message.edit(embed=embed, view=GiveawayRerollView(self.bot, self, record))
             await message.reply(f'{self.display_emoji} Congratulations **{winners}**! You won the giveaway for *{record.prize}*!',
                                 allowed_mentions=discord.AllowedMentions(users=True))
