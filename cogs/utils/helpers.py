@@ -440,7 +440,7 @@ def ignore_record() -> Callable[[T], T]:
     r"""A decorator that bypasses the `record` keyword argument check for `PostgresItem` subclasses."""
 
     def decorator(func: T) -> T:
-        func._ignore_record = True
+        func.__ignore_record__ = True
         return func
 
     return decorator
