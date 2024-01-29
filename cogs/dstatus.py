@@ -18,35 +18,35 @@ from .utils import commands, cache, converters, errors
 from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
-DS_ENDPOINT = "https://discordstatus.com/api/v2/incidents.json"
-DISCORD_ICON_URL = "https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png"
+DS_ENDPOINT = 'https://discordstatus.com/api/v2/incidents.json'
+DISCORD_ICON_URL = 'https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png'
 
 
 class Status(enum.Enum):
-    RESOLVED = "resolved"
-    INVESTIGATING = "investigating"
-    MONITORING = "monitoring"
-    IDENTIFIED = "identified"
-    UPDATE = "update"
+    RESOLVED = 'resolved'
+    INVESTIGATING = 'investigating'
+    MONITORING = 'monitoring'
+    IDENTIFIED = 'identified'
+    UPDATE = 'update'
 
     @property
     def emoji(self) -> str:
         return {
-            "resolved": "<:online:1101531229188272279>",
-            "investigating": "<:idle:1101530975151849522>",
-            "monitoring": "<:idle:1101530975151849522>",
-            "identified": "<:dnd:1101531066600259685>",
-            "update": "<:offline:1105801866312417331>"
+            'resolved': '<:online:1101531229188272279>',
+            'investigating': '<:idle:1101530975151849522>',
+            'monitoring': '<:idle:1101530975151849522>',
+            'identified': '<:dnd:1101531066600259685>',
+            'update': '<:offline:1105801866312417331>'
         }.get(self.value)
 
     @property
     def color(self) -> int:
         return {
-            "resolved": 0x7BCBA7,
-            "investigating": 0xFCC25E,
-            "monitoring": 0xFCC25E,
-            "identified": 0xF57E7E,
-            "update": 0xFCC25E
+            'resolved': 0x7BCBA7,
+            'investigating': 0xFCC25E,
+            'monitoring': 0xFCC25E,
+            'identified': 0xF57E7E,
+            'update': 0xFCC25E
         }.get(self.value)
 
 
@@ -58,7 +58,6 @@ class IncidentItem(PostgresItem):
     name: str
     status: str
     started_at: datetime
-
     guild_id: int
     channel_id: int
     message_id: Optional[int]
@@ -172,13 +171,13 @@ class Incident:
 
         embed = discord.Embed(title=self.name, timestamp=self.started_at, url=self.shortlink,
                               colour=Status(updates[-1].status).color)
-        embed.set_author(name="Discord Status", url="https://discordstatus.com/", icon_url=DISCORD_ICON_URL)
-        embed.set_footer(text="Started at")
+        embed.set_author(name='Discord Status', url='https://discordstatus.com/', icon_url=DISCORD_ICON_URL)
+        embed.set_footer(text='Started at')
 
         for update in updates:
             embed.add_field(
-                name=f"{Status(update.status).emoji} {update.status.title()} "
-                     f"({discord.utils.format_dt(update.created_at, 'R')})",
+                name=f'{Status(update.status).emoji} {update.status.title()} '
+                     f'({discord.utils.format_dt(update.created_at, 'R')})',
                 value=update.body,
                 inline=False)
 
@@ -199,7 +198,7 @@ class DiscordStatus(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name="connections", id=1118604869104840744)
+        return discord.PartialEmoji(name='connections', id=1118604869104840744)
 
     async def cog_load(self) -> None:
         self.check_new_incident.start()
@@ -257,10 +256,10 @@ class DiscordStatus(commands.Cog):
 
         # x[0] is the newest incident
         if bypass:
-            return [Incident(**data) for data in data["incidents"]]
+            return [Incident(**data) for data in data['incidents']]
 
-        return [Incident(**data) for data in data["incidents"]
-                if converters.utcparse(data["updated_at"]) >
+        return [Incident(**data) for data in data['incidents']
+                if converters.utcparse(data['updated_at']) >
                 discord.utils.utcnow() - datetime.timedelta(minutes=10)]
 
     async def _compare_changes_and_update(self, incident: Incident, saved: IncidentItem) -> Optional[discord.Message]:
@@ -334,17 +333,17 @@ class DiscordStatus(commands.Cog):
 
     @commands.command(
         commands.hybrid_group,
-        name="discord-status",
-        aliases=["dstatus"],
-        fallback="show",
-        description="Shows the current Discord Status."
+        name='discord-status',
+        aliases=['dstatus'],
+        fallback='show',
+        description='Shows the current Discord Status.'
     )
     @commands.guild_only()
     async def dstatus(self, ctx: GuildContext):
         """Shows the current Discord Status."""
         latest = await self.fetch_unresolved_incidents()
         if not latest:
-            raise errors.CommandError("No incidents found. *There should be though? Contact the developer!*")
+            raise errors.CommandError('No incidents found. *There should be though? Contact the developer!*')
 
         embeds = [incident.build_embed() for incident in latest]
         await ctx.send(content=(
@@ -353,8 +352,8 @@ class DiscordStatus(commands.Cog):
 
     @commands.command(
         dstatus.command,
-        name="release",
-        description="Releases the last incident if not posted.",
+        name='release',
+        description='Releases the last incident if not posted.',
         with_app_command=False
     )
     @commands.permissions(user=PermissionTemplate.mod)
@@ -364,15 +363,15 @@ class DiscordStatus(commands.Cog):
 
         latest = (await self.fetch_unresolved_incidents(bypass=True))[0]
         if not latest:
-            raise errors.CommandError("No incidents found. *There should be though? Contact the developer!*")
+            raise errors.CommandError('No incidents found. *There should be though?* Contact the developer!')
 
         subscriber = await self.get_subscriber(ctx.guild.id)
         if not subscriber:
-            raise errors.CommandError("This guild is not subscribed to the Discord Status Feed.")
+            raise errors.CommandError('This guild is not subscribed to the Discord Status Feed.')
 
         check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
                                             latest.id, ctx.guild.id)
-        if check.endswith("0"):
+        if check.endswith('0'):
             query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
             values = (latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)
         else:
@@ -382,7 +381,7 @@ class DiscordStatus(commands.Cog):
         incident = IncidentItem(self.bot, record=await self.bot.pool.fetchrow(query, *values))
 
         if incident.id == latest.id and incident.status == latest.status:
-            raise errors.CommandError("This incident is already released.")
+            raise errors.CommandError('This incident is already released.')
 
         message = await incident.get_channel().send(embed=latest.build_embed())
 
@@ -393,7 +392,7 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @commands.command(dstatus.command, name="subscribe", description="Subscribe to Discord Status updates.")
+    @commands.command(dstatus.command, name='subscribe', description='Subscribe to Discord Status updates.')
     @commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_subscribe(self, ctx: GuildContext, channel: discord.TextChannel):
@@ -403,7 +402,6 @@ class DiscordStatus(commands.Cog):
         """
 
         query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2) RETURNING *;"
-
         async with ctx.db.acquire() as connection:
             tr = connection.transaction()
             await tr.start()
@@ -419,7 +417,7 @@ class DiscordStatus(commands.Cog):
                         query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
                         await ctx.db.execute(query, ctx.guild.id, channel.id)
                     case _:
-                        raise errors.CommandError(f"An error occurred while subscribing to Discord Status updates: {e}")
+                        raise errors.CommandError(f'An error occurred while subscribing to Discord Status updates: {e}')
             else:
                 await tr.commit()
                 await ctx.stick(True, f'Successfully subscribed to Discord Status updates in [{channel.mention}].')
@@ -427,7 +425,7 @@ class DiscordStatus(commands.Cog):
         self.get_subscribers.invalidate(self)
         self.get_subscriber.invalidate(self, ctx.guild.id)
 
-    @commands.command(dstatus.command, name="unsubscribe", description="Unsubscribe from Discord Status updates.")
+    @commands.command(dstatus.command, name='unsubscribe', description='Unsubscribe from Discord Status updates.')
     @commands.permissions(user=PermissionTemplate.mod)
     @commands.guild_only()
     async def dstatus_unsubscribe(self, ctx: GuildContext):
@@ -447,7 +445,7 @@ class DiscordStatus(commands.Cog):
 
         Checks for new incidents and updates the subscribers.
         This is a loop that runs every 3 minutes.
-        This is called automatically by the bot.
+        The bot calls this automatically.
         """
         await self.bot.wait_until_ready()
 

@@ -5,7 +5,6 @@ from typing import Optional, List, TYPE_CHECKING
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 from discord.utils import MISSING
 
 from .reminder import Timer
@@ -52,6 +51,7 @@ class GiveawayItem(PostgresItem):
 
 
 class GiveawayRerollView(discord.ui.View):
+
     def __init__(self, bot: Percy, cog: Giveaway, giveaway: GiveawayItem):
         super().__init__(timeout=None)
         self.giveaway: GiveawayItem = giveaway
@@ -110,6 +110,7 @@ class GiveawayRerollView(discord.ui.View):
 
 
 class GiveawayEntryView(discord.ui.View):
+
     def __init__(self, bot: Percy, giveaway: GiveawayItem):
         super().__init__(timeout=None)
         self.bot: Percy = bot
@@ -119,16 +120,15 @@ class GiveawayEntryView(discord.ui.View):
             def __init__(self):
                 self.bot: Percy = bot
                 self.giveaway: GiveawayItem = giveaway
-                super().__init__(label='Enter', style=discord.ButtonStyle.green,
-                                 emoji=discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True),
-                                 custom_id=f'giveaway_enter:{self.giveaway.id}')
+                super().__init__(
+                    label='Enter', style=discord.ButtonStyle.green,
+                    emoji=discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True),
+                    custom_id=f'giveaway_enter:{self.giveaway.id}')
 
             async def callback(self, interaction: discord.Interaction):
                 self.giveaway.entries.append(interaction.user.id)
                 query = "UPDATE giveaways SET entries = $1 WHERE id = $2;"
-                await self.bot.pool.execute(
-                    query, self.giveaway.entries, self.giveaway.id
-                )
+                await self.bot.pool.execute(query, self.giveaway.entries, self.giveaway.id)
 
                 embed = interaction.message.embeds[0]
                 field = embed.fields[0]
@@ -178,15 +178,14 @@ class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
         embed = discord.Embed(title=self.prize.value, timestamp=when, color=discord.Color.blurple())
         if value := self.description.value:
             embed.description = value
-        embed.add_field(name='\u200c',
-                        value=f'Ends: {discord.utils.format_dt(when, style='R')} ({discord.utils.format_dt(when, style='F')})\n'
-                              f'Hosted by: {interaction.user.mention}\n'
-                              f'Entries: **0**\n'
-                              f'Winner(s): {self.winner_count.value}')
+        embed.add_field(
+            name='\u200c',
+            value=f'Ends: {discord.utils.format_dt(when, style='R')} ({discord.utils.format_dt(when, style='F')})\n'
+                  f'Hosted by: {interaction.user.mention}\n'
+                  f'Entries: **0**\n'
+                  f'Winner(s): {self.winner_count.value}')
 
-        msg = await interaction.channel.send(
-            embed=embed, allowed_mentions=discord.AllowedMentions(roles=True)
-        )
+        msg = await interaction.channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(roles=True))
 
         giveaway: Giveaway = self.bot.get_cog('Giveaway')  # type: ignore
         gw = await giveaway.create_giveaway(
@@ -278,16 +277,13 @@ class Giveaway(commands.Cog):
             RETURNING id;
         """
 
-        row = await self.bot.pool.fetchrow(query, channel_id, message_id, guild_id, author_id, prize, description,
-                                           winner_count)
-        giveaway.id = row[0]
-
+        giveaway.id = await self.bot.pool.fetchval(
+            query, channel_id, message_id, guild_id, author_id, prize, description, winner_count)
         return giveaway
 
     async def delete_giveaway(self, giveaway_id: int) -> str:
         """Deletes a giveaway from the database."""
         query = "DELETE FROM giveaways WHERE id = $1;"
-        # DELETE <num>
         return await self.bot.pool.execute(query, giveaway_id)
 
     async def get_giveaway(self, giveaway_id: int) -> Optional[GiveawayItem]:
@@ -324,35 +320,32 @@ class Giveaway(commands.Cog):
         embed = message.embeds[0]
         guild = self.bot.get_guild(record.guild_id)
 
+        winner_list = []
         if record.entries:
-            winner_status = True
-            winner_list = []
-            for i in range(0, len(record.entries)):
-                if len(winner_list) < record.winner_count:
-                    user_id = record.entries.pop(random.randint(0, len(record.entries) - 1))
-                    winner_list.append(guild.get_member(user_id))
-            winners = ', '.join(x.mention for x in winner_list)
-        else:
-            winner_status = False
-            winners = '*No one entered the giveaway.*'
+            for _ in range(record.winner_count):
+                if len(record.entries) == 0:
+                    # Assuming that there are more possible winners than entries
+                    winner_list.extend([0 for _ in range(record.winner_count - len(winner_list))])
+                    break
+                user_id = record.entries.pop(random.randint(0, len(record.entries) - 1))
+                winner_list.append(user_id)
 
         field = embed.fields[0]
         lines = field.value.split('\n')
         lines[0] = lines[0].replace('Ends', 'Ended')
+        winners = ', '.join(guild.get_member(x).mention if x != 0 else '*empty*' for x in winner_list)
         lines[3] = f'Winner(s): {winners}'
         embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
         embed.set_footer(text=f'Giveaway ended')
 
-        if winner_status and len(record.entries) > 0:
-            await message.reply(f'Congratulations {winners}! You won the giveaway for *{record.prize}*!',
+        if len(record.entries) > 0:
+            await message.edit(embed=embed, view=GiveawayRerollView(self.bot, self, record))
+            await message.reply(f'{self.display_emoji} Congratulations **{winners}**! You won the giveaway for *{record.prize}*!',
                                 allowed_mentions=discord.AllowedMentions(users=True))
-
-            view = GiveawayRerollView(self.bot, self, record)
-            await message.edit(embed=embed, view=view)
         else:
-            await message.reply(f'No one entered the giveaway for *{record.prize}*.')
             await message.edit(embed=embed, view=None)
+            await message.reply(f'No winners were determined for *{record.prize}*.')
 
 
 async def setup(bot: Percy):
