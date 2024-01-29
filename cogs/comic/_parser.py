@@ -66,7 +66,7 @@ class Parser:
                         store_table = soup.find('table', class_='purchase-table')
                         try:
                             price = store_table.find('span').text[1:]
-                        except:
+                        except (KeyError, AttributeError):
                             price = 'N/A'
                         if price.endswith('*'):
                             price = price[:-1]
@@ -75,9 +75,10 @@ class Parser:
                             price = 0.0
 
                         base_obj = soup.find('div', class_='o_geo-block')
-                        price_note = 'N/A'
                         if base_obj:
                             price_note: Optional[str] = base_obj.find('p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
+                        else:
+                            price_note = 'N/A'
 
                         info_table = soup.find('div', class_='row pad-b-xl')
                         desc = remove_html_tags(info_table.find('p').text.strip())
@@ -104,7 +105,7 @@ class Parser:
 
                         return GenericComic(
                             brand=Brand.MANGA,
-                            id=index,
+                            _id=index,
                             title=title,
                             description=desc,
                             creators=authors,
@@ -112,7 +113,7 @@ class Parser:
                             url=element,
                             page_count=page_count,
                             price=float(price),
-                            copyright=f'© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.',
+                            _copyright=f'© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.',
                             date=utcparse(release_date),
                             # kwargs
                             isbn=isbn,
@@ -184,8 +185,8 @@ class Parser:
                             x = None if d_id not in ['24', '12'] else x
                         if d_id not in details:
                             details[d_id] = []
-                        details[d_id] += [i.contents[0].contents[0] if x else i.contents[0] for i in dd.contents if
-                                          type(i) == Tag]
+                        details[d_id] += [
+                            i.contents[0].contents[0] if x else i.contents[0] for i in dd.contents if type(i) is Tag]
 
                 creators = {}
                 if '24' in details:
@@ -197,9 +198,7 @@ class Parser:
                 price = 0.0 if price == 'FREE' else float(price) if price else None
 
                 date = from_destination('36', details)
-                date = datetime.datetime.strptime(
-                    date.replace('st', 'th').replace('nd,', 'th,')
-                    .replace('rd', 'th'), '%A, %B %dth, %Y') if date else None
+                date = utcparse(date) if date else None
 
                 page_count = from_destination('48', details)
 
@@ -207,21 +206,21 @@ class Parser:
                 image = img['src'].split('?')[0]
                 image = image if image else None
 
-                copyright = str(
+                _copyright = str(
                     soup.find('div', class_='small legal d-inline-block').contents[0].contents[0]  # type: ignore
                 )
 
                 _cs_comic = GenericComic(
                     brand=Brand.DC,
-                    id=''.join(i for i in title if i.isalnum()),
+                    _id=''.join(i for i in title if i.isalnum()),
                     title=title,
                     description=desc,
                     creators=creators,
                     image_url=image,
-                    link=link,
+                    url=link,
                     page_count=int(page_count),
                     price=price,
-                    copyright=copyright,
+                    _copyright=_copyright,
                     date=date
                 )
                 comics.append(_cs_comic)
@@ -242,7 +241,7 @@ class Parser:
 
         for link in soup.find_all('a', class_='meta-title'):
             plink = 'https:' + link.get('href').strip()
-            id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
+            _id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
 
             page = None
             for i in range(10):
@@ -265,7 +264,7 @@ class Parser:
             except StopIteration:
                 continue
 
-            descs[id] = desc
+            descs[_id] = desc
 
         return descs
 
@@ -288,7 +287,7 @@ class Parser:
         from ._cog import GenericComic
 
         _cs_comic = GenericComic(
-            id=data.id,
+            _id=data.id,
             title=data.title,
             page_count=data.pageCount,
             description=data.description,

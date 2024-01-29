@@ -384,7 +384,7 @@ class Stats(commands.Cog):
 
     @staticmethod
     async def show_guild_stats(ctx: GuildContext) -> None:
-        lookup = (
+        medals = (
             '\N{FIRST PLACE MEDAL}',
             '\N{SECOND PLACE MEDAL}',
             '\N{THIRD PLACE MEDAL}',
@@ -419,7 +419,7 @@ class Stats(commands.Cog):
 
         value = (
                 '\n'.join(
-                    f'{lookup[index]}: {command} (`{uses}` uses)' for (index, (command, uses)) in enumerate(records))
+                    f'{medals[index]}: {command} (`{uses}` uses)' for (index, (command, uses)) in enumerate(records))
                 or '*No Command Usages available.*'
         )
 
@@ -440,7 +440,7 @@ class Stats(commands.Cog):
 
         value = (
                 '\n'.join(
-                    f'{lookup[index]}: {command} (`{uses}` uses)' for (index, (command, uses)) in enumerate(records))
+                    f'{medals[index]}: {command} (`{uses}` uses)' for (index, (command, uses)) in enumerate(records))
                 or '*No Command Usages available.*'
         )
         embed.add_field(name='Top Commands Today', value=value, inline=True)
@@ -460,7 +460,7 @@ class Stats(commands.Cog):
 
         value = (
                 '\n'.join(
-                    f'{lookup[index]}: <@!{author_id}> (`{uses}` bot uses)' for (index, (author_id, uses)) in
+                    f'{medals[index]}: <@!{author_id}> (`{uses}` bot uses)' for (index, (author_id, uses)) in
                     enumerate(records)
                 )
                 or '*No Command Bot Users available.*'
@@ -483,7 +483,7 @@ class Stats(commands.Cog):
 
         value = (
                 '\n'.join(
-                    f'{lookup[index]}: <@!{author_id}> (`{uses}` bot uses)' for (index, (author_id, uses)) in
+                    f'{medals[index]}: <@!{author_id}> (`{uses}` bot uses)' for (index, (author_id, uses)) in
                     enumerate(records)
                 )
                 or '*No Command Bot Users available.*'
@@ -1476,6 +1476,11 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
 
     if isinstance(error, (discord.Forbidden, discord.NotFound)):
         return
+
+    # Check if there is a 'bypass_log' attribute in the exception object
+    if to_bypass := command.extras.get('bypass_error', None):
+        if isinstance(error, to_bypass):
+            return
 
     hook: discord.Webhook = interaction.client.stats_webhook
     embed = discord.Embed(

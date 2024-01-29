@@ -3,7 +3,6 @@ import asyncio
 import contextlib
 import datetime
 import fnmatch
-import traceback
 from operator import attrgetter
 from typing import List, Optional, Union, Callable
 
@@ -24,6 +23,8 @@ from bot import Percy
 
 log = get_logger(__name__)
 
+AnyComic = Union[GenericComic, GenericComicMessage]
+
 
 def serialize_resource_id_from_brand(bound_args: dict) -> str:
     """Return the cache key of the Brand `item` from the bound args of ComicCache.set."""
@@ -37,6 +38,9 @@ class ComicCache:
     def __init__(self, namespace: str = 'comic'):
         self.namespace: str = namespace
         self.cache: dict[str, list[GenericComic]] = {}
+
+    def __repr__(self):
+        return f'<ComicCache namespace={self.namespace} len={len(self.cache)}>'
 
     @lock('ComicCache.set', serialize_resource_id_from_brand, wait=True)
     async def set(self, item: Brand, value: list[GenericComic]) -> None:
@@ -244,14 +248,13 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                 embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
 
                 instances = {}
-                for entry in self.comic_cache.get(config.brand):
-                    if entry in comics:
-                        msg = await channel.send(embed=embeds[entry.id])
-                        instances[entry.id] = entry.to_instance(msg)
+                for entry in comics:
+                    msg = await channel.send(embed=embeds[entry.id])
+                    instances[entry.id] = entry.to_instance(msg)
 
             summary_embeds = await self.summary_embed(comics, config.brand, lead_msg)
-            summ_msg = await channel.send(embeds=summary_embeds,
-                                          allowed_mentions=discord.AllowedMentions(roles=True))
+            summ_msg = await channel.send(
+                embeds=summary_embeds, allowed_mentions=discord.AllowedMentions(roles=True))
             if config.pin and config.format == Format.SUMMARY:
                 await self.pin(summ_msg)
         else:
@@ -263,11 +266,9 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                 ).set_thumbnail(url=config.brand.icon_url)
             )
 
-    async def summary_embed(
-            self, comics: List[Union[GenericComic, GenericComicMessage]], brand: Brand, start: discord.Message = None
-    ):
-        embed = discord.Embed(colour=brand.colour)
-        embeds = []
+    async def summary_embed(self, comics: List[AnyComic], brand: Brand, start: discord.Message = None):
+        embed, embeds = discord.Embed(colour=brand.colour), []
+
         for fi, cid in enumerate(self.comic_cache.get(brand)):
             if not fi % 25 and fi != 0:
                 embeds.append(embed)
@@ -298,7 +299,8 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
         return embeds
 
-    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True)
+    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True,
+                                extras=dict(bypass_error=app_commands.errors.CheckFailure))
 
     @cache.cache()
     async def get_comic_config(self, guild_id: int, brand: Brand) -> Optional[ComicFeed]:
