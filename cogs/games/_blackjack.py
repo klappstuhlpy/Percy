@@ -4,6 +4,7 @@ from itertools import zip_longest
 from typing import Optional, Literal
 
 import discord
+import numpy as np
 
 from cogs.economy import Economy, Balance
 from cogs.games._classes import BaseCard, BaseHand, Deck, CARD_EMOJIS_PARTIAL, DisplayCard
@@ -115,7 +116,7 @@ class Table:
 
         # Calculate if 25% of the cards are left in the deck
         # if so, create a new deck
-        if len(self.deck.used_cards) / len(self.deck.cards) >= 0.75:
+        if ((52 * self.deck.decks) - len(self.deck.cards)) / len(self.deck.cards) >= 0.75:
             self.deck = Deck(game='blackjack', decks=self.deck.decks)
 
         self.__init__(ctx, bet, decks=self.deck.decks, _wake_up=True)
@@ -354,12 +355,14 @@ class TableView(discord.ui.View):
     async def split(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         """Splits the hand"""
         new_hand = Hand(bet=self.table.active_hand.bet)
-
         new_hand.splitted = True
         self.table.active_hand.splitted = True
 
         # Get the left card and add it to the second hand and draw a new card for both hands
-        new_hand.add(self.table.active_hand.cards.pop(1))
+        hand = self.table.active_hand.card_arr
+        card = hand[1]
+        new_hand.add(np.array([[card[0], card[1]]]))
+        self.table.active_hand.card_arr = np.delete(hand, 1, 0)
 
         self.table.hit(new_hand)
         self.table.hit(self.table.active_hand)
