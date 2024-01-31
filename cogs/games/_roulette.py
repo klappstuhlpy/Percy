@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import enum
 import time
@@ -7,20 +9,53 @@ from typing import Optional
 import discord
 
 from cogs.economy import cash_emoji
-from cogs.utils import helpers
+from cogs.utils import helpers, commands
 from cogs.utils.context import Context, tick
+from cogs.utils.formats import plural
 
-VALID_SPACES = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-    23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 35, 36,
-    '1st', '2nd', '3rd',
-    '1-18', '19-36',
-    'Red', 'Black',
-    'Even', 'Odd'
+SOWCASE_SPACES = [
+    'Single Numbers', '1st', '2nd', '3rd', '1-12', '13-24', '25-36', '1-18', '19-36', 'Red', 'Black', 'Even', 'Odd'
 ]
 
 
-class SpacePayout(enum.Enum):
+class SpaceConverter(commands.Converter):
+    """Convert a space."""
+
+    async def convert(self, ctx: Context, argument: str) -> Space:
+        """Convert the space."""
+        if argument.capitalize() == 'Single Numbers':
+            # Can't use this because it's a placeholder
+            raise commands.BadArgument('Invalid space.')
+
+        try:
+            _space = Space(argument.capitalize())
+        except ValueError:
+            raise commands.BadArgument('Invalid space.')
+        else:
+            return _space
+
+
+def validate_space(space: str) -> Optional[Space]:
+    """Validate a space."""
+    if space.capitalize() == 'Single Numbers':
+        # Can't use this because it's a placeholder
+        return None
+
+    try:
+        _space = Space(int(space))
+    except ValueError:
+        try:
+            _space = Space(space.capitalize())
+        except ValueError:
+            return None
+        else:
+            return _space
+    else:
+        return _space
+
+
+class Payout(enum.Enum):
+    """Represents the payout for each space."""
     SINGLE_NUMBER = 36
     DOZEN = 3
     COLUMN = 3
@@ -28,51 +63,68 @@ class SpacePayout(enum.Enum):
     COLOR = 2
     ODD_EVEN = 2
 
+    @classmethod
+    def by_space(cls, space: Space) -> int:
+        """Get the payout for a space."""
+        if space.value in ('1st', '2nd', '3rd'):
+            return cls.COLUMN.value
+        elif space.value in ('1-12', '13-24', '25-36'):
+            return cls.DOZEN.value
+        elif space.value in ('1-18', '19-36'):
+            return cls.HALF.value
+        elif space.value in ('Red', 'Black'):
+            return cls.COLOR.value
+        elif space.value in ('Even', 'Odd'):
+            return cls.ODD_EVEN.value
+        else:
+            return cls.SINGLE_NUMBER.value
+
 
 class Space(enum.Enum):
-    SINGLE_NUMBERS = 'Single Numbers'  # This is just used for grouping
+    """Represents a space on the roulette table."""
+    SINGLE_NUMBERS = 'Single Numbers'  # placeholder
 
-    SINGLE_0 = '0'
-    SINGLE_1 = '1'
-    SINGLE_2 = '2'
-    SINGLE_3 = '3'
-    SINGLE_4 = '4'
-    SINGLE_5 = '5'
-    SINGLE_6 = '6'
-    SINGLE_7 = '7'
-    SINGLE_8 = '8'
-    SINGLE_9 = '9'
-    SINGLE_10 = '10'
-    SINGLE_11 = '11'
-    SINGLE_12 = '12'
-    SINGLE_13 = '13'
-    SINGLE_14 = '14'
-    SINGLE_15 = '15'
-    SINGLE_16 = '16'
-    SINGLE_17 = '17'
-    SINGLE_18 = '18'
-    SINGLE_19 = '19'
-    SINGLE_20 = '20'
-    SINGLE_21 = '21'
-    SINGLE_22 = '22'
-    SINGLE_23 = '23'
-    SINGLE_24 = '24'
-    SINGLE_25 = '25'
-    SINGLE_26 = '26'
-    SINGLE_27 = '27'
-    SINGLE_28 = '28'
-    SINGLE_29 = '29'
-    SINGLE_30 = '30'
-    SINGLE_31 = '31'
-    SINGLE_32 = '32'
-    SINGLE_33 = '33'
-    SINGLE_34 = '34'
-    SINGLE_35 = '35'
-    SINGLE_36 = '36'
+    SINGLE_0 = 0
+    SINGLE_1 = 1
+    SINGLE_2 = 2
+    SINGLE_3 = 3
+    SINGLE_4 = 4
+    SINGLE_5 = 5
+    SINGLE_6 = 6
+    SINGLE_7 = 7
+    SINGLE_8 = 8
+    SINGLE_9 = 9
+    SINGLE_10 = 10
+    SINGLE_11 = 11
+    SINGLE_12 = 12
+    SINGLE_13 = 13
+    SINGLE_14 = 14
+    SINGLE_15 = 15
+    SINGLE_16 = 16
+    SINGLE_17 = 17
+    SINGLE_18 = 18
+    SINGLE_19 = 19
+    SINGLE_20 = 20
+    SINGLE_21 = 21
+    SINGLE_22 = 22
+    SINGLE_23 = 23
+    SINGLE_24 = 24
+    SINGLE_25 = 25
+    SINGLE_26 = 26
+    SINGLE_27 = 27
+    SINGLE_28 = 28
+    SINGLE_29 = 29
+    SINGLE_30 = 30
+    SINGLE_31 = 31
+    SINGLE_32 = 32
+    SINGLE_33 = 33
+    SINGLE_34 = 34
+    SINGLE_35 = 35
+    SINGLE_36 = 36
 
-    COLUMN_FIRST = '1st'  # 1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34
-    COLUMN_SECOND = '2nd'  # 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35
-    COLUMN_THIRD = '3rd'  # 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33
+    COLUMN_FIRST = '1st'
+    COLUMN_SECOND = '2nd'
+    COLUMN_THIRD = '3rd'
 
     DOZEN_FIRST = '1-12'
     DOZEN_SECOND = '13-24'
@@ -86,21 +138,6 @@ class Space(enum.Enum):
 
     EVEN = 'Even'
     ODD = 'Odd'
-
-    @property
-    def payout(self) -> int:
-        if self.name.startswith('SINGLE'):
-            return SpacePayout.SINGLE_NUMBER.value
-        elif self.name.startswith('COLUMN'):
-            return SpacePayout.COLUMN.value
-        elif self.name.startswith('DOZEN'):
-            return SpacePayout.DOZEN.value
-        elif self.name.startswith('HALF'):
-            return SpacePayout.HALF.value
-        elif self.name in ('RED', 'BLACK'):
-            return SpacePayout.COLOR.value
-        elif self.name in ('EVEN', 'ODD'):
-            return SpacePayout.ODD_EVEN.value
 
     @property
     def real_value(self) -> list:
@@ -162,13 +199,13 @@ class Table:
         self.start_time: time = time.time()
 
         self.message: Optional[discord.Message] = None
-        self.spaces: dict[Space, list[Bet]] = {space: [] for space in Space}
+        self.bets: list[Bet] = []
         self.view: RouletteView = RouletteView(self)
 
         self.open: bool = True
 
     def __repr__(self) -> str:
-        return f"<RouletteTable spaces={self.spaces}>"
+        return f"<RouletteTable spaces={len(self.bets)}>"
 
     def close(self):
         """Close the roulette table."""
@@ -182,7 +219,7 @@ class Table:
         """Get the winning spaces from a result."""
         spaces = []
         for space in Space:
-            if space.name == 'SINGLE_NUMBERS':
+            if space == Space.SINGLE_NUMBERS:
                 continue
             if Space.SINGLE_0 in spaces:
                 # 0 is green, so all bets lose
@@ -193,18 +230,17 @@ class Table:
 
     def place(self, bet: Bet) -> None:
         """Place a bet on the table."""
-        is_single_number = bet.space.name.startswith('SINGLE') and not bet.space.name.endswith('NUMBERS')
-        self.spaces[bet.space if not is_single_number else Space.SINGLE_NUMBERS].append(bet)
+        self.bets.append(bet)
 
     def build_embed(self, winning_spaces: list[Space] = [], image_url: str = None, result: int = None) -> discord.Embed:  # noqa
         """Build the embed for the roulette table."""
-        embed = discord.Embed(title='Roulette Table', color=discord.Color.blurple())
+        embed = discord.Embed(title='Roulette Table', color=helpers.Colour.darker_red())
         embed.set_image(url='https://i.imgur.com/n4QHQmv.png')
-        embed.set_footer(text=f'Bets placed: {len([bet for space in self.spaces.values() for bet in space])}')
+        embed.set_footer(text=f'Total of {plural(len(self.bets)):bet} placed.')
 
         if self.open:
             time_left = datetime.timedelta(seconds=60 - (time.time() - self.start_time))
-            embed.description = f'Bets are closing {discord.utils.format_dt(datetime.datetime.now() + time_left, style='R')}'
+            embed.description = f'*Bets are closing {discord.utils.format_dt(datetime.datetime.now() + time_left, style='R')}*'
         else:
             if Space.RED in winning_spaces:
                 embed.colour = helpers.Colour.red()
@@ -220,18 +256,27 @@ class Table:
             embed.colour = helpers.Colour.lighter_grey()
             embed.set_image(url=image_url)
 
-        for space, bets in self.spaces.items():
-            if space.name.startswith('SINGLE') and not space.name.endswith('NUMBERS'):
-                continue
+        for space in SOWCASE_SPACES:
+            is_numbered_space = space == 'Single Numbers'
+            space: Space = Space(space)
 
-            value = [
-                (f'On **{bet.space.value}** • ' if space.name.startswith('SINGLE') else '') +
-                f'{bet.placed_by.mention} • {cash_emoji} **{bet.amount:,}**' +
-                ((' • **WON**' if bet.space in winning_spaces else ' • **LOSE**') if not self.open and not image_url else '') for bet in bets]
+            bets = [bet for bet in self.bets if (
+                bet.space == space if not space == Space.SINGLE_NUMBERS else (bet.space.name.startswith('SINGLE')))]
+
+            value = []
+            for bet in bets:
+                space_value_part = f'On **{bet.space.value}** • ' if space.name.startswith('SINGLE') else ''
+                mention_part = f'{bet.placed_by.mention} • {cash_emoji} **{bet.amount:,}**'
+                result_part = (
+                    ' • **WON**' if bet.space in winning_spaces else ' • **LOSE**'
+                ) if not self.open and not image_url else ''
+
+                value.append(space_value_part + mention_part + result_part)
+
             if not value:
                 value = ['*Not bets placed.*']
 
-            embed.add_field(name=space.value, value='\n'.join(value), inline=False if space.name.startswith('SINGLE') else True)
+            embed.add_field(name=space.value, value='\n'.join(value), inline=True if not is_numbered_space else False)
             for _ in range(space.placeholder_field):
                 embed.add_field(
                     name='\u200b',
@@ -242,8 +287,8 @@ class Table:
 
 
 class PlaceBetModal(discord.ui.Modal, title='Place Bet'):
-    bet_amount = discord.ui.TextInput(label='Bet Amount', style=discord.TextStyle.short, placeholder='Amount to bet, e.g. 100')
     space = discord.ui.TextInput(label='Space', style=discord.TextStyle.short, placeholder='Space on a roulette table, e.g. 1, 2nd, Red')
+    bet_amount = discord.ui.TextInput(label='Bet Amount', style=discord.TextStyle.short, placeholder='Amount to bet, e.g. 100')
 
     async def on_submit(self, interaction: discord.Interaction):
         self.interaction = interaction  # noqa
@@ -275,20 +320,21 @@ class RouletteView(discord.ui.View):
         await modal.wait()
         interaction = modal.interaction
 
-        bet = modal.bet_amount.value
-        if not bet.isdigit():
-            return await interaction.response.send_message(f'{tick(False)} Invalid bet amount. Please provide a valid number.', ephemeral=True)
-        bet = int(bet)
+        try:
+            bet = int(modal.bet_amount.value)
+        except ValueError:
+            return await interaction.response.send_message(
+                f'{tick(False)} Invalid bet amount. Please provide a valid number.', ephemeral=True)
 
-        space = modal.space.value.title()
-        if space not in Space:
-            return await interaction.response.send_message(f'{tick(False)} Could not determine space, please use a space from above.', ephemeral=True)
+        if (space := validate_space(modal.space.value)) is None:
+            return await interaction.response.send_message(
+                f'{tick(False)} Could not determine space, please use a space from above.', ephemeral=True)
 
-        self.table.place(Bet(interaction.user, Space(space), bet))
-        await interaction.response.send_message(f'{tick(True)} You have placed a bet on **{space}** with {cash_emoji} **{bet:,}**.', ephemeral=True)
+        self.table.place(Bet(interaction.user, space, bet))
+        await interaction.response.send_message(f'{tick(True)} You have placed a bet on **{space.value}** with {cash_emoji} **{bet:,}**.', ephemeral=True)
         await self.table.message.edit(embed=self.table.build_embed())
 
-    @discord.ui.button(label='Help', style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}', row=1)
+    @discord.ui.button(label='Help', style=discord.ButtonStyle.grey, emoji='\N{WHITE QUESTION MARK ORNAMENT}')
     async def help(self, interaction: discord.Interaction, button: discord.Button):  # noqa
         """Show the help menu."""
         embed = discord.Embed(title='Roulette Help', color=discord.Color.blurple())
@@ -296,15 +342,15 @@ class RouletteView(discord.ui.View):
         embed.description = (
             'Roulette is a game where you bet on a space on the table. '
             'The dealer will spin the wheel, and if the ball lands on your space, you win!\n\n'
-            'If the ball lands on **0**, all other bets lose.'
+            'If the ball lands on **0** (green), all other bets lose.'
         )
 
-        embed.add_field(name='Single Numbers', value='Bet on a single number. Payout: **36x**')
-        embed.add_field(name='Dozen', value='Bet on a dozen. Payout: **3x**')
-        embed.add_field(name='Column', value='Bet on a column. Payout: **3x**')
-        embed.add_field(name='Half', value='Bet on a half. Payout: **2x**')
-        embed.add_field(name='Color', value='Bet on a color. Payout: **2x**')
-        embed.add_field(name='Odd/Even', value='Bet on odd or even. Payout: **2x**')
+        embed.add_field(name='Single Numbers', value=f'Bet on a single number. Payout: **{Payout.SINGLE_NUMBER}x**')
+        embed.add_field(name='Dozen', value=f'Bet on a dozen. Payout: **{Payout.DOZEN}x**')
+        embed.add_field(name='Column', value=f'Bet on a column. Payout: **{Payout.COLUMN}x**')
+        embed.add_field(name='Half', value=f'Bet on a half. Payout: **{Payout.HALF}x**')
+        embed.add_field(name='Color', value=f'Bet on a color. Payout: **{Payout.COLOR}x**')
+        embed.add_field(name='Odd/Even', value=f'Bet on odd or even. Payout: **{Payout.ODD_EVEN}x**')
 
         embed.set_footer(text='You have 60 seconds to place your bets.')
 

@@ -12,7 +12,7 @@ from expiringdict import ExpiringDict
 
 from cogs.games import _tictactoe, _minesweeper, _hangman, _blackjack, _roulette, _poker
 from ._hangman import WaitforHangman
-from ._roulette import Space
+from ._roulette import Space, SpaceConverter, Payout
 from ..economy import Economy
 from ..reminder import Timer
 from ..utils import helpers, commands, errors, fuzzy
@@ -29,7 +29,7 @@ class MinimumBet(enum.Enum):
 
     BLACKJACK = 100
     ROULETTE = 100
-    POKER = 100
+    POKER = 1000
 
 
 async def roulette_space_autocomplete(
@@ -352,10 +352,10 @@ class Games(commands.GroupCog):
         bet='The amount of coins to bet.',
         space='The space to bet on.'
     )
-    async def roulette(self, ctx: Context, bet: int, space: Space):
+    async def roulette(self, ctx: Context, bet: int, space: Annotated[Space, SpaceConverter]):
         """Play a game of roulette.
 
-        You can bet on a single space or a range of spaces.
+        You can bet on a single space or a range of VALID_SPACES.
         """
         if bet < 0:
             return await ctx.stick(False, 'You cannot bet negative coins.', ephemeral=True)
@@ -412,13 +412,13 @@ class Games(commands.GroupCog):
         result = random.randint(0, 36)
         # Get all bets that are on the winning space.
         winning_spaces = list(roulette.get_winning_spaces(result))
-        winning_bets = [bet for _space in winning_spaces for bet in roulette.spaces[_space] if _space == bet.space]
+        winning_bets = [bet for bet in roulette.bets if bet.space in winning_spaces]
 
         if winning_bets:
             # Calculate the payout for each bet.
             for bet in winning_bets:
                 balance = await self.economy.get_balance(bet.placed_by.id, roulette.ctx.guild_id)
-                payout = round(bet.amount * bet.space.payout)
+                payout = round(bet.amount * Payout.by_space(bet.space))
                 await balance.add(payout, 'cash')
 
         await roulette.message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)

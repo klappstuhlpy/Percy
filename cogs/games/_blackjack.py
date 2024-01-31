@@ -7,7 +7,7 @@ import discord
 import numpy as np
 
 from cogs.economy import Economy, Balance
-from cogs.games._classes import BaseCard, BaseHand, Deck, CARD_EMOJIS_PARTIAL, DisplayCard
+from cogs.games._classes import BaseCard, BaseHand, Deck, CARD_PEMOJIS, DisplayCard
 from cogs.utils import helpers, constants
 from cogs.utils.context import Context, tick
 
@@ -34,11 +34,11 @@ class Card(BaseCard):
         if self.hidden:
             # Only need a big hidden card for blackjack
             top = [
-                CARD_EMOJIS_PARTIAL['cardback_top1'], CARD_EMOJIS_PARTIAL['cardback_top2']
+                CARD_PEMOJIS['cardback_top1'], CARD_PEMOJIS['cardback_top2']
             ]
-            middle = [CARD_EMOJIS_PARTIAL['cardback_middle']] * 2
+            middle = [CARD_PEMOJIS['cardback_middle']] * 2
             bottom = [
-                CARD_EMOJIS_PARTIAL['cardback_bottom1'], CARD_EMOJIS_PARTIAL['cardback_bottom2']
+                CARD_PEMOJIS['cardback_bottom1'], CARD_PEMOJIS['cardback_bottom2']
             ]
 
             emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
@@ -156,7 +156,7 @@ class Table:
     def build_embed(
             self,
             hand: Hand,
-            colour: discord.Colour = discord.Colour.blurple(),
+            colour: discord.Colour = helpers.Colour.darker_red(),
             text: str = None,
             image_url: str = None
     ) -> discord.Embed:
@@ -271,7 +271,7 @@ class TableView(discord.ui.View):
         if isinstance(interaction, Context):
             _send_action = self.table.active_hand.message.edit  # noqa
         else:
-            _send_action = interaction.response.edit_message
+            _send_action = interaction.response.edit_message  # noqa
         await _send_action(embed=self.table.build_embed(self.table.active_hand), view=self)
 
         _disabled_self = copy.copy(self)

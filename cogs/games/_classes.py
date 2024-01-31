@@ -7,27 +7,31 @@ import numpy as np
 from cogs.utils.constants import CARD_EMOJIS
 from cogs.utils.formats import RevDict
 
-CARD_EMOJIS_PARTIAL: dict[str, discord.PartialEmoji] = {
+CARD_PEMOJIS: dict[str, discord.PartialEmoji] = {
     name: discord.PartialEmoji(name=name, id=_id) for name, _id in CARD_EMOJIS.items()
 }
 
 DisplayCard = namedtuple('DisplayCard', ['top', 'middle', 'bottom'])
 
-PNUM_DICT = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
-BNUM_DICT = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 11}
-SUIT_DICT = {'diamonds': 0, 'clubs': 1, 'spades': 2, 'hearts': 3}
-HAND_DICT = {0: 'High Card', 1: 'One Pair', 2: 'Two Pairs', 3: 'Three of a Kind', 4: 'Straight', 5: 'Flush',
-             6: 'Full House', 7: 'Four of a Kind', 8: 'Straight Flush', 9: 'Royal Flush'}
+_BASE_CARDS: dict[str, int] = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10}
+POKER_NUM: dict[str, int] = _BASE_CARDS | {'J': 11, 'Q': 12, 'K': 13, 'A': 14}
+BJ_NUM: dict[str, int] = _BASE_CARDS | {'J': 10, 'Q': 10, 'K': 10, 'A': 11}
 
-NAME_DICT = {2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: 10, 11: 'jack', 12: 'queen', 13: 'king', 14: 'ace'}
-UPPER_NAME_DICT = {2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: 10, 11: 'Jack', 12: 'Queen', 13: 'King', 14: 'Ace'}
+SUITS: dict[str, int] = {'diamonds': 0, 'clubs': 1, 'spades': 2, 'hearts': 3}
+NAMED_HAND: dict[int, str] = {
+    0: 'High Card', 1: 'One Pair', 2: 'Two Pairs', 3: 'Three of a Kind', 4: 'Straight', 5: 'Flush',
+    6: 'Full House', 7: 'Four of a Kind', 8: 'Straight Flush', 9: 'Royal Flush'}
+
+LNAMED: dict[int, str] = {2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10',
+                          11: 'jack', 12: 'queen', 13: 'king', 14: 'ace'}
+UNAMED: dict[int, str] = {key: value.title() for key, value in LNAMED.items()} | {0: 'None'}  # 0 is a placeholder
 
 
 class BaseCard:
     """Represents a card in a deck"""
 
-    def __init__(self, name: str, value: int, suit: int):
-        self.name: str = str(name)
+    def __init__(self, value: int, suit: int):
+        self.name: str = LNAMED.get(value, str(value))
         self.value: int = value
         self.suit: int = suit
 
@@ -40,26 +44,31 @@ class BaseCard:
     def display(self, size: Literal['small', 'large'], formatted: bool = False) -> DisplayCard | str:
         if size == 'small':
             emojis = [
-                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_nobottom'],
-                CARD_EMOJIS_PARTIAL[f'{RevDict(SUIT_DICT)[self.suit]}_notop']
+                CARD_PEMOJIS[f'{self.name}_{self.color}_nobottom'],
+                CARD_PEMOJIS[f'{RevDict(SUITS)[self.suit]}_notop']
             ]
             return '\n'.join(map(str, emojis)) if formatted else DisplayCard(
                 top=str(emojis[0]), middle=None, bottom=str(emojis[1])
             )
         else:
             top = [
-                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_nobottomright'],
-                CARD_EMOJIS_PARTIAL['blank_nobottomleft']
+                CARD_PEMOJIS[f'{self.name}_{self.color}_nobottomright'],
+                CARD_PEMOJIS['blank_nobottomleft']
             ]
-            middle = [CARD_EMOJIS_PARTIAL[RevDict(SUIT_DICT)[self.suit]]] * 2
+            middle = [CARD_PEMOJIS[RevDict(SUITS)[self.suit]]] * 2
             bottom = [
-                CARD_EMOJIS_PARTIAL['blank_notopright'],
-                CARD_EMOJIS_PARTIAL[f'{self.name}_{self.color}_notopleft']
+                CARD_PEMOJIS['blank_notopright'],
+                CARD_PEMOJIS[f'{self.name}_{self.color}_notopleft']
             ]
 
             emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
             return '\n'.join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1],
                                                                    bottom=emojis[2])
+
+    @property
+    def display_text(self) -> str:
+        """Returns the display text of the card"""
+        return f'{self.name.title()} of {RevDict(SUITS)[self.suit].title()}'
 
 
 C = TypeVar('C', bound=BaseCard)
@@ -84,7 +93,7 @@ class BaseHand(Generic[C]):
     @property
     def cards(self) -> list[C]:
         """Returns a list of cards formatted in the hand"""
-        return [BaseCard(name=NAME_DICT[value], suit=suit, value=value) for value, suit in self.card_arr]
+        return [BaseCard(suit=suit, value=value) for value, suit in self.card_arr]
 
 
 class Deck(Generic[C]):
@@ -115,12 +124,12 @@ class Deck(Generic[C]):
         return f'Deck(decks={self.decks} cards={len(self.cards)})'
 
     def _build_deck(self):
-        _card_deck = PNUM_DICT if self.game == 'poker' else BNUM_DICT
+        _card_deck = POKER_NUM if self.game == 'poker' else BJ_NUM
 
         for _ in range(self.decks):
             self.cards = np.concatenate([
                 self.cards,
-                np.array([[value, suit] for value in _card_deck.values() for suit in SUIT_DICT.values()])
+                np.array([[value, suit] for value in _card_deck.values() for suit in SUITS.values()])
             ], axis=0)
 
         self.shuffle()
