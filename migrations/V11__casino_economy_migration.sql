@@ -3,7 +3,8 @@
 -- Reason: casino_economy_migration
 
 CREATE TABLE IF NOT EXISTS economy (
-    user_id BIGINT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT,
     guild_id BIGINT,
     cash BIGINT DEFAULT 0,
     bank BIGINT DEFAULT 0
