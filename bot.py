@@ -18,7 +18,7 @@ from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
 from cogs.user import UserSettings
-from cogs.utils import helpers, errors
+from cogs.utils import helpers
 from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.helpers import BasicJSONEncoder
@@ -345,32 +345,31 @@ class Percy(commands.Bot):
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.NoPrivateMessage):
-            await ctx.author.send(f'{ctx.tick(False)} This command cannot be used in private messages.')
+            await ctx.author.send('This command cannot be used in private messages.')
         elif isinstance(error, commands.DisabledCommand):
-            await ctx.author.send(f'{ctx.tick(False)} Sorry. This command is disabled and cannot be used.')
-        elif isinstance(error, commands.CommandInvokeError):
-            original = error.original
-            if isinstance(original, discord.Forbidden):
-                if original.code == 50013:
-                    return
-                await ctx.stick(False, 'I do not have permission to execute this action.')
-            elif isinstance(original, discord.HTTPException):
-                await ctx.send('<:warning:1113421726861238363> Somehow, an unexpected error occurred. Try again later?')
-            elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
-                await ctx.send(f'{original} Please wait for it to finish and try again later.')
-        elif isinstance(error, (
-                commands.ArgumentParsingError, commands.FlagError, errors.BadArgument, errors.CommandError)):
-            await ctx.send(str(error))
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.stick(False, f'Missing required argument: `{error.param.name}`')
+            await ctx.author.send('Sorry. This command is disabled and cannot be used.')
         elif isinstance(error, commands.BotMissingPermissions):
             missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_permissions]
             await ctx.send(f'I don\'t have the permissions to perform this action.\n'
-                           f'Missing: `{', '.join(missing)}`')
+                           f'Missing: `{", ".join(missing)}`')
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
+            await ctx.send(
+                f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
         elif isinstance(error, commands.TooManyArguments):
             await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
+        elif isinstance(error, commands.CommandInvokeError):
+            original = error.__cause__
+            if not isinstance(original, discord.HTTPException):
+                log.exception('In %s:', ctx.command.qualified_name, exc_info=original)
+            elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
+                await ctx.send(f'{original} Please wait for it to finish and try again later.')
+        elif isinstance(error, (
+                commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
+        )):
+            await ctx.send(str(error))
+        else:
+            # Handle any other unhandled errors
+            await ctx.stick(False, str(error))
 
     # UTILS
 
@@ -498,7 +497,7 @@ class Percy(commands.Bot):
 
     async def close(self) -> None:
         await super().close()
-        
+
         if hasattr(self, 'session'):
             await self.session.close()
 
