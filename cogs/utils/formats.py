@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import datetime
 import re
+from collections import Counter
 from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING, Union
 
 import asyncpg
 import discord
-from discord.utils import TimestampStyle
+from discord.utils import TimestampStyle  # noqa
 
 from cogs.utils.constants import INVITE_REGEX
 
@@ -337,7 +338,7 @@ def truncate(text: str, length: int) -> str:
     return text
 
 
-def truncate_iterable(iterable: Iterable[Any], length: int, attribute: str = None) -> str:
+def truncate_iterable(iterable: Iterable[Any], length: int) -> str:
     """Truncate an iterable to a certain length, adding an ellipsis if it was truncated."""
     if len(iterable) > length:  # type: ignore
         return ', '.join(iterable[:length]) + ', …'
@@ -360,6 +361,16 @@ def WrapDict(dict_: dict, length: int):
             yield {k: seq[k] for k in list(seq)[i: i + size]}
 
     return list(chunks(dict_, length))
+
+
+def RevDict(dict_: dict):
+    """Reverse a dict."""
+    return {v: k for k, v in dict_.items()}
+
+
+def SortDict(dict_: dict, key: Any = None, reverse: bool = False):
+    """Sorts a dict by a key and returns an actual dict."""
+    return dict(sorted(dict_.items(), key=key, reverse=reverse))
 
 
 def get_shortened_string(length: int, start: int, string: str) -> str:

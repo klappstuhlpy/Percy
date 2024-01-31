@@ -10,11 +10,15 @@ from discord.app_commands import locale_str
 from discord.ext.commands import *
 from discord.ext import commands
 from cogs.utils import checks, helpers
+from cogs.utils import errors as error_utils
 
 
 # Aliases
 core_command = commands.command
 FlagConverter = helpers.FlagConverter
+
+BadArgument = error_utils.BadArgument
+CommandError = error_utils.CommandError
 
 
 class CommandCategory(enum.Enum):
@@ -29,14 +33,7 @@ class CommandCategory(enum.Enum):
     Core = 3
 
 
-AnyCommand = Union[
-    app_commands.command,
-    command,
-    group,
-    hybrid_command,
-    hybrid_group,
-]
-
+AnyCommand = Union[app_commands.command, command, group, hybrid_command, hybrid_group]
 AnyCommandSignature = {
     'hybrid.py': CommandCategory.Hybrid,
     'core.py': CommandCategory.Core,
@@ -248,6 +245,7 @@ def command(
         nsfw=nsfw,
         **kwargs
     )
+    # This is used to determine the type of command
     setattr(self, '__type_info__', f'{func.__module__}.{func.__name__}')
 
     if guild_only:

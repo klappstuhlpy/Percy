@@ -1,3 +1,4 @@
+import io
 from io import BytesIO
 from typing import Optional
 
@@ -60,7 +61,13 @@ class Render:
         return buffer
 
     @classmethod
-    def generate_bar_chart(cls, data: dict[str, int], title: Optional[str] = None) -> list[bytes]:
+    def generate_bar_chart(
+            cls,
+            data: dict[str, int | float],
+            title: Optional[str] = None,
+            merge: bool = False,
+            to_buffer: bool = True
+    ) -> list[Image.Image] | list[bytes] | bytes:
         """Generate a bar chart image from a dictionary of data.
 
         Parameters
@@ -70,6 +77,10 @@ class Render:
             Data must follow the format of {str: int}.
         title : Optional[str], optional
             The title of the bar chart, by default None
+        merge : bool, optional
+            Whether to merge the images into one, by default False
+        to_buffer : bool, optional
+            Whether to return a list of bytes or a list of PIL images, by default True
         """
         BAR_HEIGHT = 25
         BAR_COLOR = (227, 38, 54)
@@ -167,12 +178,36 @@ class Render:
 
                 y += BAR_HEIGHT + LABEL_PADDING
 
-            buffer = BytesIO()
-            image.save(buffer, 'png')
-            buffer.seek(0)
-            images.append(buffer.read())
+            if merge:
+                images.append(image)
+            else:
+                buffer = BytesIO()
+                image.save(buffer, 'png')
+                buffer.seek(0)
+                images.append(buffer.read())
+
+        if merge:
+            # Add the images together among the y-axis
+            return cls.add_images_yaxis(images, to_buffer=to_buffer)
 
         return images
+
+    @classmethod
+    def add_images_yaxis(cls, images: list[Image.Image], to_buffer: bool = False) -> Image.Image | bytes:
+        """Add the images together among the y-axis."""
+        final_image = Image.new('RGB', (images[0].width, sum(image.height for image in images)))
+        y_positions = 0
+        for i, image in enumerate(images):
+            final_image.paste(image, (0, y_positions))
+            y_positions += image.height
+
+        if to_buffer:
+            buffer = BytesIO()
+            final_image.save(buffer, 'png')
+            buffer.seek(0)
+            return buffer.read()
+
+        return final_image
 
     # Level Card
 
