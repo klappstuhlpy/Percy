@@ -355,6 +355,8 @@ class Percy(commands.Bot):
         elif isinstance(error, commands.CommandOnCooldown):
             await ctx.send(
                 f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(f'You are missing a required argument: `{error.param.name}`')
         elif isinstance(error, commands.TooManyArguments):
             await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
         elif isinstance(error, commands.CommandInvokeError):
