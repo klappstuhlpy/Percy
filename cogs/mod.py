@@ -553,6 +553,7 @@ class SpamChecker:
     3) It checks if new users have spammed 30 times in 35 seconds.
     4) It checks if 'fast joiners' have spammed 10 times in 12 seconds.
     5) It checks if a member spammed `config.mention_count * 2` mentions in 12 seconds.
+    6) It checks if a member hits and runs 10 times in 12 seconds.
 
     The second case is meant to catch alternating spambots while the first one
     just catches regular singular spambots.
@@ -562,9 +563,11 @@ class SpamChecker:
     def __init__(self):
         self.by_content = CooldownByContent.from_cooldown(15, 17.0, commands.BucketType.member)
         self.by_user = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
+        self.new_user = commands.CooldownMapping.from_cooldown(30, 35.0, commands.BucketType.channel)
+
         self.last_join: Optional[datetime.datetime] = None
         self.last_member: Optional[discord.Member] = None
-        self.new_user = commands.CooldownMapping.from_cooldown(30, 35.0, commands.BucketType.channel)
+
         self._by_mentions: Optional[commands.CooldownMapping] = None
         self._by_mentions_rate: Optional[int] = None
 
@@ -685,8 +688,8 @@ class SpamChecker:
         current = message.created_at.timestamp()
         mention_bucket = mapping.get_bucket(message, current)
         mention_count = sum(not m.bot and m.id != message.author.id for m in message.mentions)
-        return mention_bucket is not None and mention_bucket.update_rate_limit(current,
-                                                                               tokens=mention_count) is not None
+        return mention_bucket is not None and mention_bucket.update_rate_limit(
+            current, tokens=mention_count) is not None
 
     def remove_member(self, user: discord.abc.User) -> None:
         self.flagged_users.pop(user.id, None)
@@ -722,7 +725,7 @@ class Mod(commands.Cog):
         self.bot: Percy = bot
         self._spam_check: defaultdict[int, SpamChecker] = defaultdict(SpamChecker)
 
-        self._data_batch: defaultdict[int, list[tuple[int, Any]]] = defaultdict(list)
+        self._mute_data_batch: defaultdict[int, list[tuple[int, Any]]] = defaultdict(list)
         self._batch_lock = asyncio.Lock()
         self._disable_lock = asyncio.Lock()
         self.batch_updates.add_exception_type(asyncpg.PostgresConnectionError)
@@ -748,17 +751,17 @@ class Mod(commands.Cog):
             WHERE guild_config.id = x.guild_id;
         """
 
-        if not self._data_batch:
+        if not self._mute_data_batch:
             return
 
         final_data = []
-        for guild_id, data in self._data_batch.items():
+        for guild_id, data in self._mute_data_batch.items():
             config = await self.get_guild_config(guild_id)
 
             if config is None:
                 continue
 
-            as_set = config.muted_members
+            as_set: set[int] = config.muted_members
             for member_id, insertion in data:
                 func = as_set.add if insertion else as_set.discard
                 func(member_id)
@@ -767,7 +770,7 @@ class Mod(commands.Cog):
             self.get_guild_config.invalidate(self, guild_id)
 
         await self.bot.pool.execute(query, final_data)
-        self._data_batch.clear()
+        self._mute_data_batch.clear()
 
     @tasks.loop(seconds=15.0)
     async def batch_updates(self):
@@ -776,6 +779,11 @@ class Mod(commands.Cog):
 
     @tasks.loop(seconds=10.0)
     async def bulk_send_messages(self):
+        """|coro|
+
+        Bulk send messages to the guilds used for broadcasting.
+        This is done to avoid rate limits.
+        """
         async with self._batch_message_lock:
             for ((guild_id, channel_id), messages) in self.message_batches.items():
                 guild = self.bot.get_guild(guild_id)
@@ -843,7 +851,7 @@ class Mod(commands.Cog):
             else:
                 log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
 
-    async def ban_for_mention_spam(
+    async def mention_spam_ban(
             self,
             mention_count: int,
             guild_id: int,
@@ -871,19 +879,13 @@ class Mod(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         author = message.author
-        if author.id in (self.bot.user.id, self.bot.owner_id):
-            return
-
-        if message.guild is None:
-            return
-
-        if not isinstance(author, discord.Member):
-            return
-
-        if author.bot:
-            return
-
-        if author.guild_permissions.manage_messages:
+        if (
+                author.id in (self.bot.user.id, self.bot.owner_id)
+                or message.guild is None
+                or not isinstance(author, discord.Member)
+                or author.bot
+                or author.guild_permissions.manage_messages
+        ):
             return
 
         guild_id = message.guild.id
@@ -891,13 +893,11 @@ class Mod(commands.Cog):
         if config is None:
             return
 
-        if message.channel.id in config.safe_automod_entity_ids:
-            return
-
-        if author.id in config.safe_automod_entity_ids:
-            return
-
-        if any(i in config.safe_automod_entity_ids for i in author._roles):  # noqa
+        if (
+                message.channel.id in config.safe_automod_entity_ids
+                or author.id in config.safe_automod_entity_ids
+                or any(i in config.safe_automod_entity_ids for i in author._roles)  # noqa
+        ):
             return
 
         await self.check_raid(config, message.guild, author, message)
@@ -907,7 +907,7 @@ class Mod(commands.Cog):
 
         checker = self._spam_check[guild_id]
         if checker.is_mention_spam(message, config):
-            await self.ban_for_mention_spam(config.mention_count, guild_id, message, author, multiple=True)
+            await self.mention_spam_ban(config.mention_count, guild_id, message, author, multiple=True)
             return
 
         if len(message.mentions) <= 3:
@@ -917,20 +917,28 @@ class Mod(commands.Cog):
         if mention_count < config.mention_count:
             return
 
-        await self.ban_for_mention_spam(mention_count, guild_id, message, author)
+        await self.mention_spam_ban(mention_count, guild_id, message, author)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
+        """|coro|
+
+        This listener is used to check if a member is a fast joiner or a suspicious joiner.
+        """
         guild_id = member.guild.id
         config = await self.get_guild_config(guild_id)
         if config is None:
             return
 
         if config.is_muted(member):
-            return await config.apply_mute(member, 'Member was previously muted.')
+            return await config.apply_mute(member, 'Re-applied mute. (Member was previously muted.)')
 
     @commands.Cog.listener()
     async def on_raw_member_remove(self, payload: discord.RawMemberRemoveEvent):
+        """|coro|
+
+        This listener is used to remove members from the spam checker when they leave the guild.
+        """
         checker = self._spam_check.get(payload.guild_id)
         if checker is None:
             return
@@ -957,7 +965,7 @@ class Mod(commands.Cog):
             return
 
         async with self._batch_lock:
-            self._data_batch[guild_id].append((after.id, after_has))
+            self._mute_data_batch[guild_id].append((after.id, after_has))
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
@@ -1070,13 +1078,19 @@ class Mod(commands.Cog):
         """Toggles audit text log on the server.
         Audit Log sends a message to the log channel whenever a certain event is triggered.
         """
-
         await ctx.defer()
-        config: GuildConfig = await self.get_guild_config(ctx.guild.id)
-        if config.flags.audit_log:
-            raise errors.CommandError('Audit log is already enabled on this server.')
 
         reason = f'{ctx.author} (ID: {ctx.author.id}) enabled Moderation audit log'
+
+        query = "SELECT audit_log_webhook_url FROM guild_config WHERE id = $1;"
+        wh_url: Optional[str] = await self.bot.pool.fetchval(query, ctx.guild.id)
+        if wh_url is not None:
+            # Delete the old webhook, if it exists
+            try:
+                webhook = discord.Webhook.from_url(wh_url, session=self.bot.session)
+                await webhook.delete(reason=reason)
+            except discord.HTTPException:
+                pass
 
         try:
             webhook = await channel.create_webhook(
@@ -1092,15 +1106,17 @@ class Mod(commands.Cog):
             INSERT INTO guild_config (id, flags, audit_log_channel, audit_log_webhook_url, audit_log_flags)
                 VALUES ($1, $2, $3, $4, DEFAULT) ON CONFLICT (id)
                 DO UPDATE SET
-                   flags = guild_config.flags | EXCLUDED.flags,
-                   audit_log_channel = EXCLUDED.audit_log_channel,
-                   audit_log_webhook_url = EXCLUDED.audit_log_webhook_url,
-                   audit_log_flags = DEFAULT;
+                flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
+                                WHEN TRUE THEN guild_config.flags | $2
+                                WHEN FALSE THEN guild_config.flags & ~$2
+                        END,
+                audit_log_channel = $3,
+                audit_log_webhook_url = $4,
+                audit_log_flags = DEFAULT
+                RETURNING COALESCE($3, (flags & $2 = $2));
         """
 
-        flags = AutoModFlags()
-        flags.audit_log = True
-        await ctx.db.execute(query, ctx.guild.id, flags.value, channel.id, webhook.url)
+        await ctx.db.execute(query, ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
         self.get_guild_config.invalidate(self, ctx.guild.id)
         await ctx.stick(True, f'Audit log enabled. Broadcasting log events to <#{channel.id}>.')
 
@@ -1109,13 +1125,18 @@ class Mod(commands.Cog):
         name='alter',
         description='Configures the audit log events.',
     )
-    @app_commands.describe(flag='The flag you want to set.',
-                           value='The value you want to set the flag to.')
+    @app_commands.describe(
+        flag='The flag you want to set.',
+        value='The value you want to set the flag to.'
+    )
     async def moderation_auditlog_alter(self, ctx: GuildContext, flag: str, value: bool):
         """Configures the audit log events.
         You can set the Events you want to get notified about via the Audit Log Channel.
         """
         config: GuildConfig = await self.get_guild_config(ctx.guild.id)
+        if config is None:
+            raise errors.CommandError('This server does not have moderation enabled.')
+
         if not config.flags.audit_log:
             raise errors.CommandError('Audit log is not enabled on this server.')
 
@@ -1172,8 +1193,12 @@ class Mod(commands.Cog):
             app_commands.Choice(name='Audit Logging', value='auditlog'),
         ]
     )
-    async def moderation_disable(self, ctx: GuildContext, *,
-                                 protection: Literal['all', 'joins', 'raid', 'mentions', 'auditlog'] = 'all'):
+    async def moderation_disable(
+            self,
+            ctx: GuildContext,
+            *,
+            protection: Literal['all', 'joins', 'raid', 'mentions', 'auditlog'] = 'all'
+    ):
         """Disables Moderation on the server.
         This can be one of these settings:
         - 'all' to disable everything
@@ -1263,12 +1288,14 @@ class Mod(commands.Cog):
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
-        """Enables auto-banning accounts that spam more than 'count' mentions.
-        If a message contains `count` or more mentions then the
-        bot will automatically attempt to auto-ban the member.
-        The `count` must be greater than 3.
-        This only applies for user mentions. Everyone or Role
-        mentions aren't included.
+        """
+        Enables auto-banning accounts that spam more than 'count' mentions.
+        To use this command, you must have the Ban Members permission.
+
+        The count must be greater than 3.
+        The bot will automatically ban members that spam more than the specified amount of mentions.
+
+        Note: This applies to only for user mentions, role mentions are not counted.
         """
 
         query = """
@@ -2514,7 +2541,7 @@ class Mod(commands.Cog):
         member = await self.bot.get_or_fetch_member(guild, member_id)
         if member is None or not member._roles.has(role_id):  # noqa
             async with self._batch_lock:
-                self._data_batch[guild_id].append((member_id, False))
+                self._mute_data_batch[guild_id].append((member_id, False))
             return
 
         if mod_id != member_id:
@@ -2537,7 +2564,7 @@ class Mod(commands.Cog):
             await member.remove_roles(discord.Object(id=role_id), reason=reason)
         except discord.HTTPException:
             async with self._batch_lock:
-                self._data_batch[guild_id].append((member_id, False))
+                self._mute_data_batch[guild_id].append((member_id, False))
 
     @commands.command(
         _mute.group,
