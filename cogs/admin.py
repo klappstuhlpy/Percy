@@ -148,6 +148,80 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
                     interaction.user, round((t_2 - t_1) * 1000, 2), result=self.truncate_to_code(value))
                 )
 
+    @commands.command(commands.group, hidden=True)
+    async def images(self, ctx: Context):
+        """Commands for image managing for https://images.klappstuhl.me."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @commands.command(
+        images.command,
+        name='upload',
+        hidden=True
+    )
+    async def images_upload(self, ctx: Context, file: discord.Attachment):
+        """Uploads a file to https://images.klappstuhl.me."""
+        async with ctx.typing():
+            headers = {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': self.bot.config.images.key
+            }
+            files = {
+                'file': await file.read()
+            }
+            async with self.bot.session.post(
+                    'https://images.klappstuhl.me/upload',
+                    headers=headers,
+                    data=files
+            ) as resp:
+                if resp.status == 200:
+                    await ctx.stick(True, f'Uploaded to <{(await resp.json())['url']}>')
+                else:
+                    await ctx.stick(False, f'Response: **{resp.status}**\n```json\n{await resp.json()}```')
+
+    @commands.command(
+        images.command,
+        name='delete',
+        hidden=True
+    )
+    async def images_delete(self, ctx: Context, _id: str):
+        """Deletes a file from https://images.klappstuhl.me."""
+        async with ctx.typing():
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': self.bot.config.images.key
+            }
+            async with self.bot.session.delete(
+                    f'https://images.klappstuhl.me/delete?id={_id}',
+                    headers=headers,
+            ) as resp:
+                if resp.status == 200:
+                    await ctx.stick(True, f'Deleted [**{_id}**]')
+                else:
+                    await ctx.stick(False, f'Failed to delete: **{resp.status}**\n```json\n{await resp.json()}```')
+
+    @commands.command(
+        images.command,
+        name='get',
+        hidden=True
+    )
+    async def images_get(self, ctx: Context, _id: str):
+        """Gets a file from https://images.klappstuhl.me."""
+        async with ctx.typing():
+            headers = {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': self.bot.config.images.key
+            }
+            async with self.bot.session.get(
+                    f'https://images.klappstuhl.me/gallery/{_id}',
+                    headers=headers
+            ) as resp:
+                if resp.status == 200:
+                    file = discord.File(fp=io.BytesIO(await resp.read()), filename=f'{_id}.png')
+                    await ctx.stick(True, f'Image [**{_id}**]', file=file)
+                else:
+                    await ctx.stick(False, f'Failed to get: **{resp.status}**\n```json\n{await resp.json()}```')
+
     @staticmethod
     def truncate_to_code(text: str) -> str:
         text = '```py\n' + text + '```'
