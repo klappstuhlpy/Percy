@@ -24,7 +24,7 @@ from cogs.reminder import Timer
 from cogs.utils.paginator import BasePaginator
 from launcher import get_logger
 from cogs.utils.commands import PermissionTemplate
-from .utils import timetools, cache, helpers, commands, errors
+from .utils import timetools, cache, helpers, commands, errors, fuzzy
 from .utils.context import GuildContext
 from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
@@ -1067,7 +1067,7 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.group,
         name='auditlog',
-        fallback='channel',
+        fallback='set',
         description='Toggles audit text log on the server.'
     )
     @commands.permissions(user=PermissionTemplate.mod)
@@ -1103,17 +1103,12 @@ class Mod(commands.Cog):
                 'Note that the limit for webhooks in each channel is **10**.') from None
 
         query = """
-            INSERT INTO guild_config (id, flags, audit_log_channel, audit_log_webhook_url, audit_log_flags)
-                VALUES ($1, $2, $3, $4, DEFAULT) ON CONFLICT (id)
+            INSERT INTO guild_config (id, flags, audit_log_channel, audit_log_webhook_url)
+                VALUES ($1, $2, $3, $4) ON CONFLICT (id)
                 DO UPDATE SET
-                flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
-                                WHEN TRUE THEN guild_config.flags | $2
-                                WHEN FALSE THEN guild_config.flags & ~$2
-                        END,
-                audit_log_channel = $3,
-                audit_log_webhook_url = $4,
-                audit_log_flags = DEFAULT
-                RETURNING COALESCE($3, (flags & $2 = $2));
+                    flags = guild_config.flags | $2,
+                    audit_log_channel = $3,
+                    audit_log_webhook_url = $4;
         """
 
         await ctx.db.execute(query, ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
@@ -1160,22 +1155,16 @@ class Mod(commands.Cog):
     async def moderation_auditlog_alter_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT audit_log_flags AS flags FROM guild_config WHERE id = $1;"
-        results: Record = await self.bot.pool.fetchrow(query, interaction.guild_id)
+        query = "SELECT audit_log_flags FROM guild_config WHERE id = $1;"
+        flags = [
+            (k, v) for k, v in (await self.bot.pool.fetchval(query, interaction.guild_id)).items()
+        ]
 
-        flags: dict[str, bool] = results.get('flags')
-        choices = [app_commands.Choice(name='All Logs', value='all')]
-
-        if current:
-            choices.extend(
-                [app_commands.Choice(name=f'{flag} - {state}', value=flag)
-                 for flag, state in flags.items() if current.lower() in flag]
-            )
-        else:
-            choices.extend(
-                [app_commands.Choice(name=f'{flag} - {state}', value=flag) for flag, state in flags.items()]
-            )
-        return choices
+        results = fuzzy.finder(current, flags, key=lambda x: x[0])
+        return [
+            app_commands.Choice(name='All', value='all'),
+            *[app_commands.Choice(name=f'{flag} - {value}', value=flag) for (flag, value) in results]
+        ]
 
     @commands.command(
         moderation.command,
