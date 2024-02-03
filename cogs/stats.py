@@ -1477,16 +1477,16 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     if isinstance(error, (discord.Forbidden, discord.NotFound)):
         return
 
-    # Check if there is a 'bypass_log' attribute in the exception object
-    if to_bypass := command.extras.get('bypass_error', None):
-        if isinstance(error, to_bypass):
-            return
-
     hook: discord.Webhook = interaction.client.stats_webhook
     embed = discord.Embed(
         title='<:warning:1113421726861238363> App Command Error', timestamp=interaction.created_at, colour=0x99002b)
 
     if command is not None:
+        # Check if there is a 'bypass_log' attribute in the exception object
+        if to_bypass := command.extras.get('bypass_error', None):
+            if isinstance(error, to_bypass):
+                return
+
         if command._has_any_error_handlers():  # noqa
             return
 

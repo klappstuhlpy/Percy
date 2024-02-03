@@ -116,7 +116,7 @@ class StabilityInterface:
         url = f'{self.host}/v1/user/balance'
 
         headers = {
-            "Authorization": f"Bearer {self.key}"
+            'Authorization': f'Bearer {self.key}'
         }
 
         async with self.bot.session.get(url, headers=headers) as resp:

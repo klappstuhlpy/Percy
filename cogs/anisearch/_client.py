@@ -15,39 +15,53 @@ class AniListClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self.session: aiohttp.ClientSession = session
 
-    async def _request(self, query: str, **variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _request(self, query: str, **variables: Dict[str, Any]) -> Dict[str, Any] | None:
         headers = variables.pop('headers', {})
         async with self.session.post(API_ENDPOINT, json={'query': query, 'variables': variables},
                                      headers=headers) as resp:
             data = await resp.json()
 
             if resp.status != 200:
-                raise AniListError(resp, data.get('errors')[0])
+                if resp.status == 500:
+                    return None
+                raise AniListError(resp, data.get('errors'))
         return data
 
     async def media(self, **variables) -> List[Dict[str, Any]]:
         data = await self._request(query=self._media_query, **variables)
-        return data['data']['Page']['media']
+        if data:
+            return data['data']['Page']['media']
+        return []
 
     async def character(self, **variables) -> List[Dict[str, Any]]:
         data = await self._request(query=self._character_query, **variables)
-        return data['data']['Page']['characters']
+        if data:
+            return data['data']['Page']['characters']
+        return []
 
     async def staff(self, **variables) -> List[Dict[str, Any]]:
         data = await self._request(query=self._staff_query, **variables)
-        return data['data']['Page']['staff']
+        if data:
+            return data['data']['Page']['staff']
+        return []
 
     async def studio(self, **variables) -> List[Dict[str, Any]]:
         data = await self._request(query=self._studio_query, **variables)
-        return data['data']['Page']['studios']
+        if data:
+            return data['data']['Page']['studios']
+        return []
 
     async def user(self, **variables) -> Dict[str, Any]:
         data = await self._request(query=self._user_query, **variables)
-        return data['data']['Viewer']
+        if data:
+            return data['data']['Viewer']
+        return {}
 
     async def schedule(self, **variables) -> List[Dict[str, Any]]:
         data = await self._request(query=self._schedule_query, **variables)
-        return data['data']['Page']['airingSchedules']
+        if data:
+            return data['data']['Page']['airingSchedules']
+        return []
 
     @property
     def _media_query(self) -> str:
