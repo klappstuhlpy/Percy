@@ -372,9 +372,6 @@ class Percy(commands.Bot):
                     commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
             )):
                 await ctx.send(str(error))
-            else:
-                # Handle any other unhandled errors
-                await ctx.stick(False, str(error))
 
     # UTILS
 
