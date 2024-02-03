@@ -1,6 +1,6 @@
--- Revises: V7
+-- Revises: V6
 -- Creation Date: 2023-05-28 14:47:43.760632 UTC
--- Reason: Emoji_Migrations
+-- Reason: emoji_stats
 
 CREATE TABLE IF NOT EXISTS emoji_stats (
     id BIGSERIAL PRIMARY KEY,

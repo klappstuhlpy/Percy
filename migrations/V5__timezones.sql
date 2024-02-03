@@ -3,8 +3,8 @@
 -- Reason: timezones
 
 CREATE TABLE IF NOT EXISTS user_settings (
-    id BIGINT PRIMARY KEY, -- The discord user ID
-    timezone TEXT -- The user's timezone
+    id BIGINT PRIMARY KEY,
+    timezone TEXT
 );
 
 ALTER TABLE reminders ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC';

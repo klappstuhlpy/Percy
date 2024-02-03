@@ -1,6 +1,6 @@
--- Revises: V9
+-- Revises: V8
 -- Creation Date: 2023-06-27 18:24:05.605699 UTC
--- Reason: discordstatus_addition
+-- Reason: discordstatus
 
 CREATE TABLE IF NOT EXISTS discord_incidents(
     id TEXT,

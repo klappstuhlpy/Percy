@@ -1,6 +1,6 @@
--- Revises: V6
+-- Revises: V5
 -- Creation Date: 2023-05-15 08:45:52.476354 UTC
--- Reason: Comics Configuration Addition
+-- Reason: Comics Configuration
 
 CREATE TABLE IF NOT EXISTS comic_config (
     id SERIAL PRIMARY KEY,
