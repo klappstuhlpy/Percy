@@ -17,7 +17,7 @@ from launcher import get_logger
 from cogs.doc import PRIORITY_PACKAGES, _batch_parser, doc_cache, _inventory_parser
 from ._inventory_parser import InvalidHeaderError, InventoryDict, fetch_inventory
 
-from ..utils import helpers, fuzzy, commands, errors
+from ..utils import helpers, fuzzy, commands
 from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
@@ -37,7 +37,6 @@ FORCE_PREFIX_GROUPS = (
 )
 
 FETCH_RESCHEDULE_DELAY = SimpleNamespace(first=2, repeated=5)
-COMMAND_LOCK_SINGLETON = 'inventory refresh'
 
 
 class PackageName(commands.Converter):
@@ -61,12 +60,12 @@ class PackageName(commands.Converter):
                     embed.set_footer(text=f'{plural(len(cog.base_urls)):inventory|invetories} found.')
                     results = [f'• [`{entry[0]}`]({entry[1]})' for entry in [(k, v) for k, v in cog.base_urls.items()]]
                     await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
-                    raise errors.BadArgument(f'The package `{argument}` is not available.')
+                    raise commands.BadArgument(f'The package `{argument}` is not available.')
                 else:
-                    raise errors.BadArgument(f'There are no inventories available at the moment.')
+                    raise commands.BadArgument(f'There are no inventories available at the moment.')
 
         if PACKAGE_NAME_RE.search(argument):
-            raise errors.BadArgument(
+            raise commands.BadArgument(
                 'The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters.')
         return argument
 
@@ -86,15 +85,15 @@ class ValidURL(commands.Converter):
         try:
             async with ctx.bot.session.get(url) as resp:
                 if resp.status != 200:
-                    raise errors.BadArgument(f'HTTP GET on `{url}` returned status `{resp.status}`, expected 200')
+                    raise commands.BadArgument(f'HTTP GET on `{url}` returned status `{resp.status}`, expected 200')
         except CertificateError:
             if url.startswith('https'):
-                raise errors.BadArgument(f'Got a `CertificateError` for URL `{url}`. Does it support HTTPS?')
-            raise errors.BadArgument(f'Got a `CertificateError` for URL `{url}`.')
+                raise commands.BadArgument(f'Got a `CertificateError` for URL `{url}`. Does it support HTTPS?')
+            raise commands.BadArgument(f'Got a `CertificateError` for URL `{url}`.')
         except ValueError:
-            raise errors.BadArgument(f'`{url}` doesn\'t look like a valid hostname to me.')
+            raise commands.BadArgument(f'`{url}` doesn\'t look like a valid hostname to me.')
         except ClientConnectorError:
-            raise errors.BadArgument(f'Cannot connect to host with URL `{url}`.')
+            raise commands.BadArgument(f'Cannot connect to host with URL `{url}`.')
         return url
 
 
@@ -117,11 +116,11 @@ class Inventory(commands.Converter):
         try:
             inventory = await _inventory_parser.fetch_inventory(ctx.bot.session, url)
         except _inventory_parser.InvalidHeaderError:
-            raise errors.BadArgument(
+            raise commands.BadArgument(
                 f'{ctx.tick(False)} Unable to parse inventory because of invalid header, check if URL is correct.')
         else:
             if inventory is None:
-                raise errors.BadArgument(
+                raise commands.BadArgument(
                     f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.')
             return url, inventory
 
@@ -612,9 +611,11 @@ class Documentation(commands.Cog):
         description='Look up documentation for Python symbols.',
         invoke_without_command=True
     )
-    @app_commands.describe(symbol_name='The symbol to look up documentation for.',
-                           package='The package to look up documentation for.')
-    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
+    @app_commands.describe(
+        symbol_name='The symbol to look up documentation for.',
+        package='The package to look up documentation for.'
+    )
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
     @lock_func(refresh_inventories, raise_error=True, wait=True)
     async def docs_group(
             self,
@@ -650,7 +651,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
+    @lock('doc', 'inventory refresh', raise_error=True)
     async def set_command(
             self,
             ctx: Context,
@@ -690,7 +691,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
+    @lock('doc', 'inventory refresh', raise_error=True)
     async def delete_command(
             self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]  # type: ignore
     ) -> None:
@@ -711,7 +712,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', COMMAND_LOCK_SINGLETON, raise_error=True)
+    @lock('doc', 'inventory refresh', raise_error=True)
     async def refresh_command(self, ctx: Context) -> None:
         """Refresh inventories and show the difference."""
         old_inventories = set(self.base_urls)
@@ -735,7 +736,7 @@ class Documentation(commands.Cog):
     @commands.command(
         docs_group.command,
         name='clearcache',
-        aliases=['deletecache'],
+        aliases=['deletecache', 'cc'],
         description='Clear the cache for a package.',
         hidden=True,
         with_app_command=False
@@ -753,7 +754,10 @@ class Documentation(commands.Cog):
         else:
             await ctx.send(f'{ctx.tick(False)} No keys matching the package found.')
 
-    @commands.command(aliases=['rtfd'], description='Searches some documentations for the given query. (Short)')
+    @commands.command(
+        aliases=['rtfd'],
+        description='Searches some documentations for the given query. (Short)'
+    )
     @app_commands.describe(symbol_name='The object to search for',
                            package='The package to search in.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore

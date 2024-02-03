@@ -10,7 +10,6 @@ from typing import Literal, NamedTuple, Annotated, Optional
 
 import discord
 from discord import AllowedMentions, HTTPException, Interaction, Message, NotFound, Reaction, User, enums
-from discord.ext import commands
 
 from bot import Percy
 from cogs.base import TrashView

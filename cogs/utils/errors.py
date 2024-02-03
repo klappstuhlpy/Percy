@@ -1,12 +1,11 @@
 from typing import Any, Optional
 
-from discord import DiscordException
-from discord.ext.commands import UserInputError
+from discord.ext import commands
 
 from cogs.utils.context import tick
 
 
-class BadArgument(UserInputError):
+class BadArgument(commands.BadArgument):
     """Custom Class with added functionality for prefix.
 
     Exception raised when a parsing or conversion failure is encountered
@@ -25,7 +24,7 @@ class BadArgument(UserInputError):
             super().__init__(*args)
 
 
-class CommandError(DiscordException):
+class CommandError(commands.CommandError):
     """Custom Class with added functionality for prefix.
 
     Exception raised when the command being invoked raised an exception.

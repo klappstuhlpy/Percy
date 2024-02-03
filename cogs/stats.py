@@ -19,7 +19,7 @@ import asyncpg
 import discord
 import psutil
 import pygit2
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from sqlalchemy import func, Integer, String, DateTime, Boolean, Column, select, join, case, BigInteger, Result
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -332,8 +332,8 @@ class Stats(commands.Cog):
         embed.url = 'https://discord.gg/eKwMtGydqh'
         embed.colour = self.bot.colour.darker_red()
 
-        embed.set_author(name=str(self.bot.owner), icon_url=self.bot.owner.display_avatar.url)
-        embed.set_thumbnail(url=self.bot.user.avatar.url)
+        embed.set_author(name=str(self.bot.owner), icon_url=get_asset_url(self.bot.owner))
+        embed.set_thumbnail(url=get_asset_url(self.bot.user))
 
         total_members = 0
         total_unique = len(self.bot.users)
@@ -503,7 +503,7 @@ class Stats(commands.Cog):
         )
 
         embed = discord.Embed(title='Command Stats', colour=member.colour)
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.set_author(name=str(member), icon_url=get_asset_url(member))
 
         query = "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1 AND author_id=$2;"
         count: tuple[int, datetime.datetime] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
@@ -744,7 +744,7 @@ class Stats(commands.Cog):
                 first_used = discord.utils.utcnow()
 
             embed.set_footer(text='First command used at', icon_url=COMMAND_ICON_URL).timestamp = first_used
-            embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
+            embed.set_thumbnail(url=get_asset_url(ctx.guild))
             await ctx.send(embed=embed)
 
     @commands.command(
@@ -912,22 +912,22 @@ class Stats(commands.Cog):
         e.add_field(name='Top Users', value='\n'.join(value), inline=False)
         await ctx.send(embed=e)
 
-    async def send_guild_stats(self, e: discord.Embed, guild: discord.Guild):
-        e.add_field(name='Name', value=guild.name)
-        e.add_field(name='ID', value=guild.id)
-        e.add_field(name='Shard ID', value=guild.shard_id or 'N/A')
-        e.add_field(name='Owner', value=f'{guild.owner} (ID: `{guild.owner_id}`)')
+    async def send_guild_stats(self, embed: discord.Embed, guild: discord.Guild):
+        embed.add_field(name='Name', value=guild.name)
+        embed.add_field(name='ID', value=guild.id)
+        embed.add_field(name='Shard ID', value=guild.shard_id or 'N/A')
+        embed.add_field(name='Owner', value=f'{guild.owner} (ID: `{guild.owner_id}`)')
 
         bots = sum(m.bot for m in guild.members)
         total = guild.member_count or 1
-        e.add_field(name='Members', value=str(total))
-        e.add_field(name='Bots', value=f'{bots} ({bots / total:.2%})')
-        e.set_thumbnail(url=get_asset_url(guild))
+        embed.add_field(name='Members', value=str(total))
+        embed.add_field(name='Bots', value=f'{bots} ({bots / total:.2%})')
+        embed.set_thumbnail(url=get_asset_url(guild))
 
         if guild.me:
-            e.timestamp = guild.me.joined_at
+            embed.timestamp = guild.me.joined_at
 
-        await self.bot.stats_webhook.send(embed=e)
+        await self.bot.stats_webhook.send(embed=embed)
 
     @stats_today.before_invoke
     @stats_global.before_invoke

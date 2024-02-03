@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, Type
 
 import discord
 from discord import app_commands, Interaction
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from discord.utils import MISSING
 
 from .utils.converters import get_asset_url

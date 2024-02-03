@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Callable, Union
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import commands
 from discord.utils import MISSING
 from typing_extensions import Annotated
 
-from .utils import timetools, formats, commands, errors
+from .utils import timetools, formats, commands
 from .utils.context import Context, tick
 from .utils.converters import get_asset_url
 from .utils.formats import plural
@@ -35,7 +34,7 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
             when = timetools.FutureTime(str(self.duration)).dt
-        except errors.BadArgument:
+        except commands.BadArgument:
             await interaction.response.send_message(
                 f'{tick(False)} Duration could not be parsed, sorry. Try something like "5 minutes" or "1 hour"',
                 ephemeral=True)

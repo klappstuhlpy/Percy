@@ -8,7 +8,7 @@ import re
 
 from .base import PH_GUILD_ID
 from .utils.paginator import BasePaginator
-from .utils import commands, errors
+from .utils import commands
 from .utils.render import Render
 from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
@@ -31,7 +31,7 @@ class ColorParser(commands.clean_content):
         value = converted.strip()
 
         if not value:
-            raise errors.BadArgument('Please enter a valid color format.')
+            raise commands.BadArgument('Please enter a valid color format.')
 
         if match := re.match(HEX_REGEX, value):
             hex_value = match.group("hex")
@@ -47,10 +47,10 @@ class ColorParser(commands.clean_content):
             converted = None
 
         if converted is None:
-            raise errors.BadArgument('The Input {value!r} is not a valid format. Please use HEX, RGB or CYMK.')
+            raise commands.BadArgument(f'The Input {value!r} is not a valid format. Please use **HEX**, **RGB** or **CYMK**.')
 
         if isinstance(converted, str):
-            raise errors.BadArgument(f'Could not convert {value!r} to a color.')
+            raise commands.BadArgument(f'Could not convert {value!r} to a color.')
 
         return converted
 
@@ -72,8 +72,11 @@ class UrbanDictionaryPaginator(BasePaginator[dict]):
     async def format_page(self, entries: List[dict], /) -> discord.Embed:
         entry = entries[0]
 
-        embed = discord.Embed(title=f'"{entry["word"]}": {self.current_page} of {self.total_pages}',
-                              colour=0x1d2439, url=entry['permalink'])
+        embed = discord.Embed(
+            title=f'"{entry["word"]}": {self.current_page} of {self.total_pages}',
+            colour=0x1d2439,
+            url=entry['permalink']
+        )
         embed.set_thumbnail(url='https://i.imgur.com/cZkQ6Vg.png')
         embed.set_footer(text=f'by {entry["author"]}')
         embed.description = self.cleanup_definition(entry['definition'])
@@ -210,8 +213,8 @@ class Annotations(commands.Cog):
                          ' in a command you used, I do not monitor this DM.*')
         try:
             await user.send(fmt)
-        except:
-            raise errors.CommandError(f'Could not send a DM to {user}.')
+        except:  # noqa
+            raise commands.CommandError(f'Could not send a DM to {user}.')
         else:
             await ctx.stick(True, 'PM successfully sent.')
 
@@ -222,12 +225,12 @@ class Annotations(commands.Cog):
         url = 'http://api.urbandictionary.com/v0/define'  # noqa
         async with ctx.session.get(url, params={'term': word}) as resp:
             if resp.status != 200:
-                raise errors.CommandError(f'An error occurred: {resp.status} {resp.reason}')
+                raise commands.CommandError(f'An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             data = js.get('list', [])
             if not data:
-                raise errors.CommandError(f'No results found for {word!r}.')
+                raise commands.CommandError(f'No results found for {word!r}.')
 
         await UrbanDictionaryPaginator.start(ctx, entries=data, per_page=1)
 
@@ -244,7 +247,7 @@ class Annotations(commands.Cog):
         url = 'https://www.thecolorapi.com/id'
         async with self.bot.session.get(url, params={'hex': f'{color.value:0>6x}'}) as resp:
             if resp.status != 200:
-                raise errors.CommandError(f'An error occurred: {resp.status} {resp.reason}')
+                raise commands.CommandError(f'An error occurred: {resp.status} {resp.reason}')
 
             js = await resp.json()
             embed.url = f"{url}?hex={color.value:0>6x}"

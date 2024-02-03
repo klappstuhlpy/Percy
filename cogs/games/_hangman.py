@@ -39,7 +39,7 @@ class WaitforHangman(contextlib.AsyncContextDecorator, ABC):
 
         self._current_state_index: int = 0
         self._current_state: str = HANG_MAN[0]
-        self.finished: Literal[1, 0, -1] = 0  # 1 = won, 0 = not finished, -1 = lost
+        self.finished: Literal[-1, 0, 1] = 0  # 1 = won, 0 = not finished, -1 = lost
 
     async def __aenter__(self) -> 'WaitforHangman':
         return self

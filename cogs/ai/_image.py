@@ -9,10 +9,9 @@ from uuid import UUID
 
 import discord
 import param
-from discord.ext import commands
 
 from bot import Percy
-from cogs.utils import errors
+from cogs.utils import commands
 from cogs.utils.formats import valid_filename
 from launcher import get_logger
 
@@ -179,7 +178,7 @@ class StabilityInterface:
         async with self.bot.session.post(url, headers=headers, json=json) as resp:
             data = await resp.json()
             if resp.status != 200:
-                raise errors.BadArgument(f'Failed to generate image:\n```{data['message']}```')
+                raise commands.BadArgument(f'Failed to generate image:\n```{data['message']}```')
 
             return [
                 ImageFile(requestor=job.author, prompt=job.prompt,
@@ -223,7 +222,7 @@ class StabilityInterface:
 
         async with self.bot.session.post(url, headers=headers, data=data, params=params) as resp:
             if resp.status != 200:
-                raise errors.BadArgument(f'Failed to generate image:\n```{(await resp.json())['message']}```')
+                raise commands.BadArgument(f'Failed to generate image:\n```{(await resp.json())['message']}```')
 
             return ImageFile(requestor=job.author, prompt=job.prompt, id=uuid.uuid4(), content=await resp.read())
 
@@ -247,7 +246,7 @@ class StabilityInterface:
 
         async with self.bot.session.post(url, headers=headers, data=data, params=params) as resp:
             if resp.status != 200:
-                raise errors.BadArgument(f'Failed to upscale image:\n```{(await resp.json())["message"]}```')
+                raise commands.BadArgument(f'Failed to upscale image:\n```{(await resp.json())["message"]}```')
 
             return ImageFile(requestor=job.author, prompt=job.prompt, id=uuid.uuid4(), content=await resp.read())
 
@@ -264,7 +263,7 @@ def check_daily_credits():
         interface = StabilityInterface(ctx.bot, key=ctx.bot.config.stability_key)
 
         if not await interface.check_daily_credits():
-            raise errors.BadArgument('You have no daily credits left.')
+            raise commands.BadArgument('You have no daily credits left.')
 
         return True
 

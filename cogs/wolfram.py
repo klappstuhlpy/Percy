@@ -8,7 +8,6 @@ import aiohttp
 import arrow
 import discord
 import yarl
-from discord.ext import commands
 
 from bot import Percy
 from .utils import helpers, commands

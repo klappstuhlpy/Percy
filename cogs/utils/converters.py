@@ -11,10 +11,10 @@ import aiohttp
 import discord
 from dateutil.parser import parse
 from discord import app_commands, Colour
-from discord.ext import commands
 from discord.utils import MISSING
 
-from cogs.utils import fuzzy, errors
+from cogs.utils import fuzzy
+from . import commands
 from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
 from ..utils.context import GuildContext
 
@@ -138,8 +138,8 @@ class Snowflake(commands.Converter[int]):
         except ValueError:
             param = ctx.current_parameter
             if param:
-                raise errors.BadArgument(f'{param.name} argument expected a Discord ID not {argument!r}')
-            raise errors.BadArgument(f'expected a Discord ID not {argument!r}')
+                raise commands.BadArgument(f'{param.name} argument expected a Discord ID not {argument!r}')
+            raise commands.BadArgument(f'expected a Discord ID not {argument!r}')
 
 
 class Prefix(commands.Converter):
@@ -148,9 +148,9 @@ class Prefix(commands.Converter):
     async def convert(self, ctx: _TContext, argument: str) -> str:
         user_id = ctx.bot.user.id
         if argument.startswith((f'<@{user_id}>', f'<@!{user_id}>')):
-            raise errors.BadArgument('That is a reserved prefix already in use.')
+            raise commands.BadArgument('That is a reserved prefix already in use.')
         if len(argument) > 150:
-            raise errors.BadArgument('That prefix is too long.')
+            raise commands.BadArgument('That prefix is too long.')
         return argument
 
 
@@ -299,7 +299,7 @@ class URLConverter(commands.Converter[str], app_commands.Transformer):
                 'localhost',
                 '0.0.0.0',
         ) and not await ctx.bot.is_owner(ctx.author):
-            raise errors.BadArgument('Invalid URL')
+            raise commands.BadArgument('Invalid URL')
 
         return argument
 
@@ -311,7 +311,7 @@ class URLConverter(commands.Converter[str], app_commands.Transformer):
                 'localhost',
                 '0.0.0.0',
         ) and not await interaction.client.is_owner(interaction.user):
-            raise errors.BadArgument('Invalid URL')
+            raise commands.BadArgument('Invalid URL')
 
         return value
 
@@ -359,5 +359,5 @@ class ModuleConverter(commands.Converter[ModuleType]):
         icon = '\N{OUTBOX TRAY}' if ctx.invoked_with == 'ml' else '\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}'
 
         if not module:
-            raise errors.BadArgument(f'{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.')
+            raise commands.BadArgument(f'{icon}\N{WARNING SIGN} `{argument!r}` is not a valid module.')
         return module

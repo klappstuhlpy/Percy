@@ -101,7 +101,8 @@ class AniListEmbedBuilder:
         embed.add_field(name='Popularity', value=data.get('popularity', 'N/A'), inline=True)
         embed.add_field(name='Favourites', value=data.get('favourites', 'N/A'), inline=True)
 
-        potential_hashtags = list(filter(None, data.get('hashtag', '').split(' ')))
+        hashtag = data.get('hashtag', None) or ''
+        potential_hashtags = list(filter(None, hashtag.split(' ')))
         if potential_hashtags:
             pluralized = f'{plural(len(potential_hashtags)):Hashtag}'
             embed.add_field(name=pluralized.split(' ')[1],

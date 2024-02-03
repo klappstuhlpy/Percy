@@ -7,7 +7,7 @@ import asyncpg
 import discord
 
 from .utils.paginator import BasePaginator, LinePaginator
-from .utils import cache, commands, errors
+from .utils import cache, commands
 from .utils.converters import aenumerate, get_asset_url
 from .utils.formats import plonk_iterator
 from itertools import accumulate
@@ -32,7 +32,7 @@ else:
             }
 
             if lowered not in valid_commands:
-                raise errors.BadArgument(f'Command {lowered!r} is not valid.')
+                raise commands.BadArgument(f'Command {lowered!r} is not valid.')
 
             return lowered
 
@@ -305,7 +305,7 @@ class Config(commands.Cog):
         records = await ctx.db.fetch(query, guild.id)
 
         if len(records) == 0:
-            raise errors.CommandError('There are no ignored channels or members in this server.')
+            raise commands.CommandError('There are no ignored channels or members in this server.')
 
         class PlonkedPaginator(BasePaginator[asyncpg.Record]):
 
@@ -445,7 +445,7 @@ class Config(commands.Cog):
                 try:
                     await connection.execute(query, guild_id, channel_id, name, whitelist)
                 except asyncpg.UniqueViolationError:
-                    raise errors.CommandError(
+                    raise commands.CommandError(
                         'This command is already disabled.' if not whitelist else 'This command is already explicitly enabled.')
 
     @commands.command(
@@ -568,7 +568,7 @@ class Config(commands.Cog):
         disabled = list(resolved.get_blocked_commands(channel_id))
 
         if not disabled:
-            raise errors.CommandError('There are no disabled commands for this channel.')
+            raise commands.CommandError('There are no disabled commands for this channel.')
 
         embed = discord.Embed(timestamp=discord.utils.utcnow(),
                               color=self.bot.colour.darker_red())

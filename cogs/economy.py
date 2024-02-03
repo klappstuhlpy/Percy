@@ -3,9 +3,10 @@ from typing import Literal, Optional, Annotated, List
 import discord
 
 from bot import Percy
-from cogs.utils import commands, constants, errors, helpers
+from cogs.utils import commands, constants, helpers
 from cogs.utils.commands import PermissionTemplate
 from cogs.utils.context import Context
+from cogs.utils.converters import get_asset_url
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.paginator import BasePaginator, T
 from launcher import get_logger
@@ -14,7 +15,7 @@ log = get_logger(__name__)
 cash_emoji = constants.cash_emoji
 
 
-class BalanceError(errors.BadArgument):
+class BalanceError(commands.BadArgument):
     """Base error for balance errors"""
     pass
 
@@ -207,7 +208,7 @@ class Economy(commands.Cog):
                     colour=helpers.Colour.darker_red()
                 )
                 embed.description += '\n'.join(entries)
-                embed.set_author(name=f'{ctx.guild.name}\'s Economy Leaderboard', icon_url=ctx.guild.icon.url)
+                embed.set_author(name=f'{ctx.guild.name}\'s Economy Leaderboard', icon_url=get_asset_url(ctx.guild))
                 embed.set_footer(text=f'Total Server Money: {total:,}', icon_url=cash_emoji.url)
                 return embed
 
@@ -226,7 +227,7 @@ class Economy(commands.Cog):
             description='Server Leaderboard Rank: x',
             colour=self.bot.colour.darker_red()
         )
-        embed.set_author(name=f'{user.display_name}\'s Balance', icon_url=user.avatar.url)
+        embed.set_author(name=f'{user.display_name}\'s Balance', icon_url=get_asset_url(user))
         embed.add_field(name='Cash', value=f'{cash_emoji} **{balance.cash:,}**')
         embed.add_field(name='Bank', value=f'{cash_emoji} **{balance.bank:,}**')
         embed.add_field(name='Total', value=f'{cash_emoji} **{balance.total:,}**')

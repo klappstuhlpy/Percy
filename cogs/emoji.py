@@ -8,10 +8,10 @@ import discord
 
 import yarl
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
 from bot import Percy
-from .utils import commands, errors
+from .utils import commands
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
 from .utils.paginator import TextSource
@@ -26,14 +26,14 @@ def partial_emoji(argument: str, *, regex=EMOJI_REGEX) -> int:
 
     m = regex.match(argument)
     if m is None:
-        raise errors.BadArgument('That\'s not a custom emoji...')
+        raise commands.BadArgument('That\'s not a custom emoji...')
     return int(m.group(1))
 
 
 def emoji_name(argument: str, *, regex=EMOJI_NAME_REGEX) -> str:
     m = regex.match(argument)
     if m is None:
-        raise errors.BadArgument('Invalid emoji name.')
+        raise commands.BadArgument('Invalid emoji name.')
     return argument
 
 
@@ -46,7 +46,7 @@ class EmojiURL:
     async def convert(cls, ctx: GuildContext, argument: str):
         try:
             partial = await commands.PartialEmojiConverter().convert(ctx, argument)
-        except errors.BadArgument:
+        except commands.BadArgument:
             try:
                 url = yarl.URL(argument)
                 if url.scheme not in ('http', 'https'):
@@ -56,7 +56,7 @@ class EmojiURL:
                     raise RuntimeError
                 return cls(animated=url.path.endswith('.gif'), url=argument)
             except Exception:
-                raise errors.BadArgument('Not a valid or supported emoji URL.') from None
+                raise commands.BadArgument('Not a valid or supported emoji URL.') from None
         else:
             return cls(animated=partial.animated, url=str(partial.url))
 
@@ -67,7 +67,7 @@ class Emoji(commands.Cog):
         self.bot: Percy = bot
         self.render: Render = Render  # type: ignore
 
-        self._batch_of_data: defaultdict[int, Counter[int]] = defaultdict(Counter)
+        self._emoji_data_batch: defaultdict[int, Counter[int]] = defaultdict(Counter)
         self._batch_lock = asyncio.Lock()
         self.bulk_insert.add_exception_type(asyncpg.PostgresConnectionError)
         self.bulk_insert.start()
@@ -92,10 +92,10 @@ class Emoji(commands.Cog):
         async with self._batch_lock:
             transformed = [
                 {'guild': guild_id, 'emoji': emoji_id, 'added': count}
-                for guild_id, data in self._batch_of_data.items()
+                for guild_id, data in self._emoji_data_batch.items()
                 for emoji_id, count in data.items()
             ]
-            self._batch_of_data.clear()
+            self._emoji_data_batch.clear()
             await self.bot.pool.execute(query, transformed)
 
     @staticmethod
@@ -115,7 +115,7 @@ class Emoji(commands.Cog):
             return
 
         async with self._batch_lock:
-            self._batch_of_data[message.guild.id].update(map(int, matches))
+            self._emoji_data_batch[message.guild.id].update(map(int, matches))
 
     async def get_random_emoji(
             self,
@@ -160,6 +160,7 @@ class Emoji(commands.Cog):
         name='emoji',
         aliases=['emotes', 'emote'],
         invoke_without_command=True,
+        description='Create/Show/Manage emojis in the server.',
     )
     @commands.guild_only()
     @app_commands.guild_only()
@@ -167,7 +168,11 @@ class Emoji(commands.Cog):
         """Emoji management commands."""
         await ctx.send_help(ctx.command)
 
-    @commands.command(commands.core_command, aliases=['emojilist'])
+    @commands.command(
+        commands.core_command,
+        aliases=['emojilist'],
+        description='Fancy post all emojis in this server in a list.',
+    )
     @commands.permissions(3, user=['administrator'])
     @commands.cooldown(1, 600, commands.BucketType.guild)
     async def emojipost(self, ctx: GuildContext):
@@ -182,7 +187,12 @@ class Emoji(commands.Cog):
         for page in source.pages:
             await ctx.send(page)
 
-    @commands.command(commands.core_command, name='randomemoji', aliases=['randemoji', 'randemote', 'randomemote'])
+    @commands.command(
+        commands.core_command,
+        name='randomemoji',
+        aliases=['randemoji', 'randemote', 'randomemote'],
+        description='Sends a random emoji from the database.',
+    )
     @commands.cooldown(1, 90, commands.BucketType.user)
     async def random_emoji(self, ctx: Context):
         """Sends a random emoji from the database."""
@@ -217,15 +227,15 @@ class Emoji(commands.Cog):
         The bot must have this permission too.
         """
         if not ctx.me.guild_permissions.manage_emojis:
-            raise errors.BadArgument('I don\'t have permission to add emojis.')
+            raise commands.BadArgument('I don\'t have permission to add emojis.')
 
         reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
         if file is None and emoji is None:
-            raise errors.BadArgument('Missing emoji, file or url to upload with.')
+            raise commands.BadArgument('Missing emoji, file or url to upload with.')
 
         if file is not None and emoji is not None:
-            raise errors.BadArgument('Cannot mix both file and url arguments, choose **one** only.')
+            raise commands.BadArgument('Cannot mix both file and url arguments, choose **one** only.')
 
         is_animated = False
         request_url = ''
@@ -235,20 +245,20 @@ class Emoji(commands.Cog):
             request_url = upgraded.url
         elif file is not None:
             if not file.filename.endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                raise errors.BadArgument('Unsupported file type given, expected `png`, `jpg`, or `gif`')
+                raise commands.BadArgument('Unsupported file type given, expected `png`, `jpg`, or `gif`')
 
             is_animated = file.filename.endswith('.gif')
             request_url = file.url
 
         emoji_count = sum(e.animated == is_animated for e in ctx.guild.emojis)
         if emoji_count >= ctx.guild.emoji_limit:
-            raise errors.BadArgument('There are no more emoji slots in this server.')
+            raise commands.BadArgument('There are no more emoji slots in this server.')
 
         async with self.bot.session.get(request_url) as resp:
             if resp.status >= 400:
-                raise errors.BadArgument('Could not fetch the image.')
+                raise commands.BadArgument('Could not fetch the image.')
             if int(resp.headers['Content-Length']) >= (256 * 1024):
-                raise errors.BadArgument('Image is too big.')
+                raise commands.BadArgument('Image is too big.')
 
             data = await resp.read()
             image_color = self.render.get_dominant_color(io.BytesIO(data))
@@ -260,9 +270,9 @@ class Emoji(commands.Cog):
                 except Exception as exc:
                     match exc:
                         case asyncio.TimeoutError():
-                            raise errors.BadArgument('Sorry, the bot is rate limited or it took too long.')
+                            raise commands.BadArgument('Sorry, the bot is rate limited or it took too long.')
                         case discord.HTTPException():
-                            raise errors.BadArgument(f'Failed to create emoji somehow: {exc}')
+                            raise commands.BadArgument(f'Failed to create emoji somehow: {exc}')
                 else:
                     embed = discord.Embed(title='Created Emoji',
                                           colour=discord.Colour.from_rgb(*image_color),

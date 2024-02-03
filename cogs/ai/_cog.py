@@ -10,7 +10,7 @@ from discord import Message, Interaction
 from bot import Percy
 from cogs.ai import _image
 from cogs.ai._image import TextToImageSettings, ImageJob, StabilityInterface, ImageFile
-from cogs.utils import commands, errors
+from cogs.utils import commands
 from cogs.utils.context import Context
 from cogs.utils.lock import lock_arg
 from cogs.utils.render import Render
@@ -72,7 +72,7 @@ class ImageSamplerView(discord.ui.View):
         """Check if the interaction is from the same user as the original message."""
 
         if interaction.user.id != self.job.author.id:
-            raise errors.BadArgument('You are not permitted to interact with this message.')
+            raise commands.BadArgument('You are not permitted to interact with this message.')
         return True
 
     def __init__(self, job: _image.ImageJob, cog: AITools, *args, **kwargs):
@@ -103,7 +103,7 @@ class ImageEditorView(discord.ui.View):
         """Check if the interaction is from the same user as the original message."""
 
         if interaction.user.id != self.job.author.id:
-            raise errors.BadArgument('You are not permitted to interact with this message.')
+            raise commands.BadArgument('You are not permitted to interact with this message.')
         return True
 
     @discord.ui.button(emoji='⏫', label='Upscale (2x)', style=discord.ButtonStyle.grey)
@@ -203,10 +203,10 @@ class AITools(commands.Cog):
         try:
             result = await self.interface.generate(job=job)
         except Exception as e:
-            raise errors.BadArgument(f'Failed to generate image: {e}') from e
+            raise commands.BadArgument(f'Failed to generate image: {e}') from e
 
         if not result:
-            raise errors.BadArgument('Failed somehow to generate image. :/')
+            raise commands.BadArgument('Failed somehow to generate image. :/')
 
         grid_image = ImageFile(
             requestor=job.author, prompt=job.prompt, id=uuid.uuid4(),

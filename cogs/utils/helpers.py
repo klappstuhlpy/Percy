@@ -174,7 +174,7 @@ class PostgresItem(metaclass=PostgresItemMeta):
 
     __slots__ = ('record',)
 
-    def __init__(self, *args, **kwargs: dict[str, Any]) -> None:
+    def __init__(self, *args, **kwargs: dict[str, Any] | asyncpg.Record) -> None:
         """
         Initialize a new instance of the `PostgresItem` class.
 

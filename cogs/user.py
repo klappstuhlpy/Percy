@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from lxml import etree
 
-from .utils import cache, timetools, fuzzy, helpers, commands, errors
+from .utils import cache, timetools, fuzzy, helpers, commands
 from .utils.context import Context
 from .utils.helpers import PostgresItem
 
@@ -35,7 +35,7 @@ class TimeZone(NamedTuple):
         try:
             return await ctx.disambiguate(timezones, lambda t: t[0], ephemeral=True)
         except ValueError:
-            raise errors.BadArgument(f'Could not find timezone for {argument!r}')
+            raise commands.BadArgument(f'Could not find timezone for {argument!r}')
 
     def to_choice(self) -> app_commands.Choice[str]:
         return app_commands.Choice(name=self.label, value=self.key)
@@ -252,7 +252,7 @@ class UserSettings(commands.Cog, name='User Settings'):
         """Clears your timezone."""
         config = await self.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
-            raise errors.CommandError('You have not set your timezone.')
+            raise commands.CommandError('You have not set your timezone.')
 
         await ctx.db.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", ctx.author.id)
         self.get_user_config.invalidate(self, ctx.author.id)

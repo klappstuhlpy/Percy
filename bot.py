@@ -11,7 +11,6 @@ import aiohttp
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import commands
 from expiringdict import ExpiringDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -19,7 +18,7 @@ from cogs import EXTENSIONS
 from cogs.giveaway import GiveawayEntryView, GiveawayItem
 from cogs.polls import PollView, PollItem
 from cogs.user import UserSettings
-from cogs.utils import helpers
+from cogs.utils import helpers, commands
 from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.helpers import BasicJSONEncoder
@@ -368,11 +367,12 @@ class Percy(commands.Bot):
                     log.exception('In %s:', ctx.command.qualified_name, exc_info=original)
                 elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
                     await ctx.send(f'{original} Please wait for it to finish and try again later.')
+                else:
+                    await ctx.send(str(error))
             elif isinstance(error, (
                     commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
             )):
                 await ctx.send(str(error))
-
     # UTILS
 
     @staticmethod

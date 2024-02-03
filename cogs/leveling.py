@@ -8,7 +8,7 @@ from typing import Optional, TypedDict
 import asyncpg
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
 from bot import Percy
 from .utils.commands import PermissionTemplate
@@ -335,7 +335,6 @@ class Leveling(commands.Cog):
             INSERT INTO guild_config (id, flags)
             VALUES ($1, $2) ON CONFLICT (id)
             DO UPDATE SET
-                -- If we're toggling then we need to negate the previous result
                 flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
                                 WHEN TRUE THEN guild_config.flags | $2
                                 WHEN FALSE THEN guild_config.flags & ~$2
@@ -390,7 +389,7 @@ class Leveling(commands.Cog):
         member = member or ctx.author
 
         if member.bot:
-            return await ctx.send(f'{ctx.tick(False)} You can\'t view the rank card of a bot.')
+            return await ctx.stick(False, 'You can\'t view the rank card of a bot.')
 
         if ctx.interaction:
             await ctx.defer()
@@ -430,22 +429,21 @@ class Leveling(commands.Cog):
     ):
         """Set a users experience/level."""
         if target.bot:
-            return await ctx.send(f'{ctx.tick(False)} You can\'t manage Bot\'s Level/Experience.')
+            return await ctx.stick(False, 'You can\'t manage Bot\'s Level/Experience.')
 
         if (xp is None and level is None) or (xp and level):
-            return await ctx.send(f'{ctx.tick(False)} You need to provide either a level or xp to set.')
+            return await ctx.stick(False, 'You need to provide either a level or xp to set.')
 
         config = await self.get_level_config(target.id, target.guild.id)
 
         if level:
             if level > 500:
-                return await ctx.send(f'{ctx.tick(False)} You can\'t set more than **Level 500**.')
+                return await ctx.stick(False, 'You can\'t set more than **Level 500**.')
 
             await config.set_level(level)
         elif xp:
             if xp > config.get_experience(500):
-                return await ctx.send(
-                    f'{ctx.tick(False)} Sorry. You can\'t set more than **125,052,000 XP**. (Level 500)')
+                return await ctx.stick(False, 'Sorry. You can\'t set more than **125,052,000 XP**. (Level **500**)')
 
             await config.set_experience(xp)
 

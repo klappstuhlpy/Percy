@@ -7,9 +7,9 @@ import uuid
 from typing import List, Optional, Any, TypeVar, Generic, Type, AnyStr, overload, Literal
 
 import discord
-from discord.ext import commands
 from discord.utils import MISSING
 
+from cogs.utils import commands
 from cogs.utils import fuzzy, helpers
 from cogs.utils.context import Context
 from cogs.utils.converters import aenumerate
@@ -196,8 +196,14 @@ class BasePaginator(discord.ui.View, Generic[T]):
         The timeout for the paginator.
     """
 
-    def __init__(self, *, entries: List[T], per_page: int = 10, clamp_pages: bool = True,
-                 timeout: int = 180) -> None:
+    def __init__(
+            self,
+            *,
+            entries: List[T],
+            per_page: int = 10,
+            clamp_pages: bool = True,
+            timeout: int = 180
+    ) -> None:
         super().__init__(timeout=timeout)
         self.entries: List[T] = entries
         self.per_page: int = per_page
@@ -304,7 +310,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
             if isinstance(current, discord.Embed):
                 if current.fields:
                     name_results = fuzzy.finder(query, current.fields, key=lambda x: x.name or x.value)
-                    for entry in name_results:
+                    for entry in name_results:  # noqa
                         results.append(f'[{index}] {discord.utils.remove_markdown(entry.name)}')
                 if current.description:
                     description_results = fuzzy.finder(query, current.description.split('\n'))

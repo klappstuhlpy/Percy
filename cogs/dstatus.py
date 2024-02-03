@@ -14,7 +14,7 @@ from typing import TypeVar
 
 from bot import Percy
 from .utils.commands import PermissionTemplate
-from .utils import commands, cache, converters, errors
+from .utils import commands, cache, converters
 from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
@@ -169,8 +169,11 @@ class Incident:
         updates = self.incident_updates.copy()
         updates.reverse()
 
-        embed = discord.Embed(title=self.name, timestamp=self.started_at, url=self.shortlink,
-                              colour=Status(updates[-1].status).color)
+        embed = discord.Embed(
+            title=self.name,
+            timestamp=self.started_at,
+            url=self.shortlink,
+            colour=Status(updates[-1].status).color)
         embed.set_author(name='Discord Status', url='https://discordstatus.com/', icon_url=DISCORD_ICON_URL)
         embed.set_footer(text='Started at')
 
@@ -343,7 +346,7 @@ class DiscordStatus(commands.Cog):
         """Shows the current Discord Status."""
         latest = await self.fetch_unresolved_incidents()
         if not latest:
-            raise errors.CommandError('No incidents found. *There should be though? Contact the developer!*')
+            raise commands.CommandError('No incidents found. *There should be though? Contact the developer!*')
 
         embeds = [incident.build_embed() for incident in latest]
         await ctx.send(content=(
@@ -363,11 +366,11 @@ class DiscordStatus(commands.Cog):
 
         latest = (await self.fetch_unresolved_incidents(bypass=True))[0]
         if not latest:
-            raise errors.CommandError('No incidents found. *There should be though?* Contact the developer!')
+            raise commands.CommandError('No incidents found. *There should be though?* Contact the developer!')
 
         subscriber = await self.get_subscriber(ctx.guild.id)
         if not subscriber:
-            raise errors.CommandError('This guild is not subscribed to the Discord Status Feed.')
+            raise commands.CommandError('This guild is not subscribed to the Discord Status Feed.')
 
         check = await self.bot.pool.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
                                             latest.id, ctx.guild.id)
@@ -381,7 +384,7 @@ class DiscordStatus(commands.Cog):
         incident = IncidentItem(self.bot, record=await self.bot.pool.fetchrow(query, *values))
 
         if incident.id == latest.id and incident.status == latest.status:
-            raise errors.CommandError('This incident is already released.')
+            raise commands.CommandError('This incident is already released.')
 
         message = await incident.get_channel().send(embed=latest.build_embed())
 
@@ -417,7 +420,7 @@ class DiscordStatus(commands.Cog):
                         query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
                         await ctx.db.execute(query, ctx.guild.id, channel.id)
                     case _:
-                        raise errors.CommandError(f'An error occurred while subscribing to Discord Status updates: {e}')
+                        raise commands.CommandError(f'An error occurred while subscribing to Discord Status updates: {e}')
             else:
                 await tr.commit()
                 await ctx.stick(True, f'Successfully subscribed to Discord Status updates in [{channel.mention}].')

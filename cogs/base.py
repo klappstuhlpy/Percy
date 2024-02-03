@@ -15,9 +15,9 @@ from urllib.parse import urljoin
 import aiohttp
 import discord
 from discord import File
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
-from .utils import commands, errors
+from .utils import commands
 from .utils.converters import Snowflake
 from .utils.paginator import TextSource
 from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
@@ -67,7 +67,7 @@ def validate_token(token: str) -> bool:
         return True
 
 
-class GithubError(errors.CommandError):
+class GithubError(commands.CommandError):
     """Base exception for GitHub errors."""
     pass
 
@@ -528,7 +528,7 @@ class Base(commands.Cog, name='Exclusives'):
     async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
         """Get Discord snowflake creation time."""
         if not snowflakes:
-            raise errors.BadArgument(f'At least one snowflake must be provided.')
+            raise commands.BadArgument(f'At least one snowflake must be provided.')
 
         lines = []
         for snowflake in snowflakes:

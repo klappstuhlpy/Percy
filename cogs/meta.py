@@ -17,10 +17,9 @@ import psutil
 import unicodedata
 from dateutil.relativedelta import relativedelta
 from discord import app_commands, Interaction
-from discord.ext import commands
 from lru import LRU
 
-from .utils import fuzzy, helpers, commands, errors
+from .utils import fuzzy, helpers, commands
 from .utils.converters import Prefix, get_asset_url
 from .utils.formats import plural, format_date, WrapDict
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
@@ -94,7 +93,7 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
 
         helper = PaginatedHelpCommand.temporary(self.ctx)
         for cmd in entries:
-            signature = helper.get_command_signature(cmd, with_prefix=False)  # type: ignore
+            signature = helper.get_command_signature(cmd, shortened_signature=True, with_prefix=False)  # type: ignore
             embed.add_field(name=signature, value=cmd.description or '…', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
@@ -513,18 +512,33 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return resolved
 
     def get_command_signature(
-            self, command: PartialCommand, cut: bool = False, with_prefix: bool = False  # noqa
+            self,
+            command: PartialCommand,
+            no_signature: bool = False,
+            shortened_signature: bool = False,
+            with_prefix: bool = False
     ) -> str:
         """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
 
         This is a modified version of the original get_command_signature.
+
+        Parameters
+        ----------
+        command: :class:`.PartialCommand`
+            The command to get the signature for.
+        no_signature: :class:`bool`
+            Whether to return only the command name without signature.
+        shortened_signature: :class:`bool`
+            Whether to return the command with a shortened_signature signature.
+        with_prefix: :class:`bool`
+            Whether to include the prefix in the signature.
         """
         is_app = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
 
         prefix = ('/' if is_app else self.context.clean_prefix) if with_prefix else ''
 
         if is_app:
-            if cut:
+            if no_signature:
                 return f'{prefix}{command.qualified_name}'
 
             if isinstance(command, app_commands.commands.Group):
@@ -547,8 +561,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
         parent = command.full_parent_name if command.parent else None
         alias = f'{parent} {command.name}' if parent else command.name
 
-        if cut:
+        if no_signature:
             return f'{prefix}{alias}'
+
+        if shortened_signature and len(flags) > 3:
+            signature = f'<flags...>'
         return f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', None) else "")
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
@@ -728,7 +745,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
 
         if examples := command.extras.get('examples'):
-            text = '\n'.join(f'* `{self.get_command_signature(command, cut=True)} {example}`' for example in examples)
+            text = '\n'.join(
+                f'* `{self.get_command_signature(command, no_signature=True)} {example}`' for example in examples)
             embed.add_field(name='**Examples**', value=text, inline=False)
 
         for field in self.get_command_flag_formatting(command, descripted=True):
@@ -1045,13 +1063,20 @@ class Meta(commands.Cog):
         results = fuzzy.finder(current, [c.qualified_name for c in cogs])
         return [app_commands.Choice(name=res, value=res) for res in results][:25]
 
-    @commands.hybrid_group(name='info', description='Shows info about a user or server.',
-                           invoke_without_command=True)
+    @commands.hybrid_group(
+        name='info',
+        description='Shows info about a user or server.',
+        invoke_without_command=True
+    )
     async def info(self, ctx: Context):
         """Shows info about a user or server."""
         await ctx.send_help(ctx.command)
 
-    @info.command(name='features', description='Shows the features of a guild.')
+    @commands.command(
+        info.command,
+        name='features',
+        description='Shows the features of a guild.'
+    )
     @commands.guild_only()
     async def info_features(self, ctx: Context, guild_id: str = None):
         """Shows the features of a guild."""
@@ -1072,7 +1097,11 @@ class Meta(commands.Cog):
         embed.set_footer(text=f'{plural(len(features)):feature|features}')
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location='description')
 
-    @info.command(name='user', description='Shows info about a user.')
+    @commands.command(
+        info.command,
+        name='user',
+        description='Shows info about a user.'
+    )
     @commands.guild_only()
     @app_commands.describe(user_id='The user ID to show info about. (Default: You)')
     async def info_user(self, ctx: Context, user_id: str = None):
@@ -1090,12 +1119,12 @@ class Meta(commands.Cog):
         if not user:
             return await ctx.stick(False, 'User not found.')
 
-        e = discord.Embed()
+        embed = discord.Embed()
         roles = [role.name.replace('@', '@\u200b') for role in getattr(user, 'roles', [])]
-        e.set_author(name=str(user))
+        embed.set_author(name=str(user))
 
-        e.add_field(name='ID', value=user.id, inline=False)
-        e.add_field(name='Created', value=format_date(user.created_at), inline=False)
+        embed.add_field(name='ID', value=user.id, inline=False)
+        embed.add_field(name='Created', value=format_date(user.created_at), inline=False)
 
         badges_to_emoji = {
             'partner': '<:partner:1110272293780848710>',  # Emoji Server
@@ -1128,11 +1157,11 @@ class Meta(commands.Cog):
             badges.append('<:owner:1110273602324005025>')  # Emoji Server
 
         if isinstance(user, discord.Member) and user.premium_since is not None:
-            e.add_field(name='Boosted', value=format_date(user.premium_since), inline=False)
+            embed.add_field(name='Boosted', value=format_date(user.premium_since), inline=False)
             badges.append('<:booster:1088921589145415751>')  # Emoji Server
 
         if badges:
-            e.description = ''.join(badges)
+            embed.description = ''.join(badges)
 
         activities = getattr(user, 'activities', None)
         if activities is None:
@@ -1140,7 +1169,7 @@ class Meta(commands.Cog):
 
         spotify = next((act for act in activities if isinstance(act, discord.Spotify)), None)
 
-        e.add_field(
+        embed.add_field(
             name=f'Spotify',
             value=(
                 f'**[{spotify.title}]({spotify.track_url})**'
@@ -1159,7 +1188,7 @@ class Meta(commands.Cog):
             if custom_activity and custom_activity.name
             else '*User has no custom status.*'
         )
-        e.add_field(
+        embed.add_field(
             name=f'Custom status',
             value=f'\n{activity_string}',
             inline=False
@@ -1170,41 +1199,45 @@ class Meta(commands.Cog):
             vc = voice.channel
             other_people = len(vc.members) - 1
             voice = f'`{vc.name}` with {other_people} others' if other_people else f'`{vc.name}` by themselves'
-            e.add_field(name='Voice', value=voice, inline=False)
+            embed.add_field(name='Voice', value=voice, inline=False)
 
         if roles:
-            e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles',
-                        inline=False)
+            embed.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles',
+                            inline=False)
 
         remaining_flags = (set_flags - subset_flags) & misc_flags_descriptions.keys()
         if remaining_flags:
-            e.add_field(
+            embed.add_field(
                 name='Public Flags',
                 value='\n'.join(misc_flags_descriptions[flag] for flag in remaining_flags),
                 inline=False,
             )
 
         perms = user.guild_permissions.value
-        e.add_field(name='Permissions', value=f'[{perms}](https://discordapi.com/permissions.html#{perms})',
-                    inline=False)
+        embed.add_field(name='Permissions', value=f'[{perms}](https://discordapi.com/permissions.html#{perms})',
+                        inline=False)
 
         colour = user.colour
         if colour.value:
-            e.colour = colour
+            embed.colour = colour
 
-        e.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=user.display_avatar.url)
 
         member = user
 
         user = await self.bot.fetch_user(user.id)
         if user.banner:
-            e.set_image(url=user.banner.url)
+            embed.set_image(url=user.banner.url)
 
-        e.set_footer(text=f'Requested by: {ctx.author}')
+        embed.set_footer(text=f'Requested by: {ctx.author}')
 
-        await ctx.send(embed=e, view=UserJoinView(member, ctx.author))
+        await ctx.send(embed=embed, view=UserJoinView(member, ctx.author))
 
-    @info.command(name='server', description='Shows info about a server.')
+    @commands.command(
+        info.command,
+        name='server',
+        description='Shows info about a server.'
+    )
     @commands.guild_only()
     @app_commands.describe(guild_id='The ID of the server to show info about. (Default: Current server)')
     async def info_server(self, ctx: Context, guild_id: str = None):
@@ -1349,10 +1382,10 @@ class Meta(commands.Cog):
         """Shows you information on up to 50 unicode characters."""
         match = re.match(r'<(a?):(\w+):(\d+)>', characters)
         if match:
-            raise errors.BadArgument('Cannot get information on custom emoji.')
+            raise commands.BadArgument('Cannot get information on custom emoji.')
 
         if len(characters) > 50:
-            raise errors.BadArgument(f'Too many characters ({len(characters)}/50)')
+            raise commands.BadArgument(f'Too many characters ({len(characters)}/50)')
 
         def char_info(char: str) -> tuple[str, str]:
             digit = f'{ord(char):x}'
@@ -1388,12 +1421,12 @@ class Meta(commands.Cog):
         prefixes = self.bot.get_guild_prefixes(ctx.guild)
         del prefixes[1]
 
-        e = discord.Embed(title='Prefix List', colour=self.bot.colour.darker_red())
-        e.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
-        e.set_thumbnail(url=get_asset_url(ctx.guild))
-        e.set_footer(text=f'{len(prefixes)} prefixes')
-        e.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
-        await ctx.send(embed=e)
+        embed = discord.Embed(title='Prefix List', colour=self.bot.colour.darker_red())
+        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_footer(text=f'{len(prefixes)} prefixes')
+        embed.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
+        await ctx.send(embed=embed)
 
     @commands.command(
         prefix.command,
@@ -1403,14 +1436,8 @@ class Meta(commands.Cog):
     )
     @commands.permissions(user=['manage_guild'])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
-        """Appends a prefix to the list of custom prefixes.
-        Previously set prefixes are not overridden.
-        To have a word prefix, you should quote it and end it with
-        a space, e.g. 'hello ' to set the prefix to 'hello '. This
-        is because Discord removes spaces when sending messages so
-        the spaces are not preserved.
-        Multi-word prefixes must be quoted also.
-        You must have Manage Server permission to use this command.
+        """Adds a prefix to the list of custom prefixes.
+        Multi-word prefixes must be quoted.
         """
 
         current_prefixes = self.bot.get_raw_guild_prefixes(ctx.guild.id)
@@ -1418,14 +1445,14 @@ class Meta(commands.Cog):
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            raise errors.CommandError(f'Unkown error: {e}')
+            raise commands.CommandError(f'Unkown error: {e}')
         else:
             await ctx.stick(True, 'Prefix added.')
 
     @prefix_add.error
     async def prefix_add_error(self, ctx: GuildContext, error: commands.CommandError):
         if isinstance(error, commands.TooManyArguments):
-            raise errors.CommandError('Too many arguments. Did you forget to quote a multi-word prefix?')
+            await ctx.stick(False, 'Too many arguments. Did you forget to quote a multi-word prefix?')
 
     @commands.command(
         prefix.command,
@@ -1446,12 +1473,12 @@ class Meta(commands.Cog):
         try:
             current_prefixes.remove(prefix)
         except ValueError:
-            raise errors.CommandError('Prefix not found.')
+            raise commands.CommandError(f'{prefix!r} is not in the list of prefixes.')
 
         try:
             await self.bot.set_guild_prefixes(ctx.guild, current_prefixes)
         except Exception as e:
-            raise errors.CommandError(f'Unkown error: {e}')
+            raise commands.CommandError(f'Unkown error: {e}')
         else:
             await ctx.stick(True, 'Prefix removed.')
 
@@ -1473,7 +1500,7 @@ class Meta(commands.Cog):
 
     @commands.command(
         name='ping',
-        description='Shows some Client and API latency information.',
+        description='Shows some client and API latency information.',
     )
     async def ping(self, ctx: Context):
         """Shows some Client and API latency information."""
@@ -1539,9 +1566,9 @@ class Meta(commands.Cog):
             ctx: Context, member: discord.Member, channel: Union[discord.abc.GuildChannel, discord.Thread]
     ):
         permissions = channel.permissions_for(member)
-        e = discord.Embed(colour=member.colour)
+        embed = discord.Embed(colour=member.colour)
         avatar = member.display_avatar.with_static_format('png')
-        e.set_author(name=str(member), url=avatar)
+        embed.set_author(name=str(member), url=avatar)
         allowed, denied = [], []
         for name, value in permissions:
             name = name.replace('_', ' ').replace('guild', 'server').title()
@@ -1550,9 +1577,9 @@ class Meta(commands.Cog):
             else:
                 denied.append(name)
 
-        e.add_field(name='Allowed', value='\n'.join(allowed))
-        e.add_field(name='Denied', value='\n'.join(denied))
-        await ctx.send(embed=e)
+        embed.add_field(name='Allowed', value='\n'.join(allowed))
+        embed.add_field(name='Denied', value='\n'.join(denied))
+        await ctx.send(embed=embed)
 
     @commands.command(
         commands.hybrid_group,
@@ -1616,11 +1643,11 @@ class Meta(commands.Cog):
 
         guild = self.bot.get_guild(guild_id)
         if guild is None:
-            raise errors.BadArgument('Guild not found.')
+            raise commands.BadArgument('Guild not found.')
 
         channel = guild.get_channel(channel_id)
         if channel is None:
-            raise errors.BadArgument('Channel not found.')
+            raise commands.BadArgument('Channel not found.')
 
         if author_id is None:
             member = guild.me
@@ -1628,7 +1655,7 @@ class Meta(commands.Cog):
             member = await self.bot.get_or_fetch_member(guild, author_id)
 
         if member is None:
-            raise errors.BadArgument('Member not found.')
+            raise commands.BadArgument('Member not found.')
 
         await self.say_permissions(ctx, member, channel)
 
@@ -1648,11 +1675,11 @@ class Meta(commands.Cog):
             obj = sorted(self.snipe_del_chache[ctx.guild.id][channel.id],
                          key=lambda x: x.timestamp, reverse=True)[0]
         except KeyError:
-            raise errors.CommandError('I have not sniped any messages in this channel.')
+            raise commands.CommandError('I have not sniped any messages in this channel.')
 
         embed = discord.Embed(description=obj.message.clean_content, color=self.bot.colour.darker_red(),
                               timestamp=obj.timestamp)
-        embed.set_author(name=obj.message.author, icon_url=obj.message.author.display_avatar.url)
+        embed.set_author(name=obj.message.author, icon_url=get_asset_url(obj.message.author))
         embed.add_field(name='Message', value=obj.message.jump_url)
         embed.set_footer(text='Deleted at')
         await ctx.send(embed=embed)
@@ -1673,10 +1700,10 @@ class Meta(commands.Cog):
             obj = sorted(self.snipe_edit_chache[ctx.guild.id][channel.id],
                          key=lambda x: x.timestamp, reverse=True)[0]
         except KeyError:
-            raise errors.CommandError('I have not sniped any messages in this channel.')
+            raise commands.CommandError('I have not sniped any messages in this channel.')
 
         embed = discord.Embed(color=self.bot.colour.darker_red(), timestamp=obj.timestamp)
-        embed.set_author(name=obj.message.author, icon_url=obj.message.author.display_avatar.url)
+        embed.set_author(name=obj.message.author, icon_url=get_asset_url(obj.message.author))
         embed.add_field(name='Message', value=obj.message.jump_url)
         embed.add_field(name='Before', value=obj.before.clean_content, inline=False)
         embed.add_field(name='After', value=obj.after.clean_content, inline=False)

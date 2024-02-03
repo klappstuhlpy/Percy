@@ -8,13 +8,12 @@ from typing import Optional, List, Any, Type, Union
 import discord
 import jishaku
 import psutil
-from discord.ext import commands
 from jishaku.cog import OPTIONAL_FEATURES, STANDARD_FEATURES
 from jishaku.features.baseclass import Feature
 from jishaku.math import natural_size
 from jishaku.modules import package_version
 
-from cogs.utils import errors
+from cogs.utils import commands
 from cogs.utils.context import Context
 from cogs.utils.converters import ModuleConverter, get_asset_url
 from cogs.utils.formats import plural
@@ -76,7 +75,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         """
 
         if not self.bot.application_id:
-            raise errors.CommandError('Bot does not have an application ID.')
+            raise commands.CommandError('Bot does not have an application ID.')
 
         guilds_set: set[Optional[int]] = {None}
         for target in targets:
@@ -94,7 +93,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                 try:
                     guilds_set.add(int(target))
                 except ValueError as error:
-                    raise errors.BadArgument(f'{target} is not a valid guild ID') from error
+                    raise commands.BadArgument(f'{target} is not a valid guild ID') from error
 
         if not targets:
             guilds_set.add(None)
@@ -173,7 +172,7 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
                                     ':',
                                     str(inspections.line_span_inspection(to_inspect)),  # type: ignore
                                 ]))
-                            except Exception:
+                            except Exception as exc:  # noqa
                                 error_lines.append(f'\N{MAGNET} This is likely caused by: `{name}`')
                     except Exception as diag_error:
                         error_lines.append(
@@ -351,8 +350,8 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         else:
             summary.append(f'This bot is not sharded and can see {cache_summary}.')
 
-        if self.bot._connection.max_messages:  # type: ignore
-            message_cache = f'Message cache capped at `{self.bot._connection.max_messages}`'
+        if self.bot._connection.max_messages:  # noqa
+            message_cache = f'Message cache capped at `{self.bot._connection.max_messages}`'  # noqa
         else:
             message_cache = 'Message cache is disabled'
 
