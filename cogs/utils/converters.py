@@ -12,6 +12,7 @@ import discord
 from dateutil.parser import parse
 from discord import app_commands, Colour
 from discord.ext import commands
+from discord.utils import MISSING
 
 from cogs.utils import fuzzy, errors
 from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
@@ -63,6 +64,27 @@ def tail(f: BinaryIO, n: int = 10) -> List[bytes]:
         pos *= 2
 
     return lines[-n:]
+
+
+def to_bool(arg: str | int) -> Optional[bool]:
+    """Converts a string into a boolean."""
+    bool_map = {
+        'true': True,
+        'yes': True,
+        'on': True,
+        '1': True,
+        'false': False,
+        'no': False,
+        'off': False,
+        '0': False,
+    }
+    argument = str(arg).lower()
+    try:
+        key = bool_map[argument]
+    except KeyError:
+        raise ValueError(f'{arg!r} is not a recognized boolean value')
+    else:
+        return key
 
 
 @overload
@@ -192,15 +214,26 @@ class ColorTransformer(commands.Converter[Union[Colour, str]], app_commands.Tran
 
 
 class URLObject:
-    """Represents a URL object.
-    This is used for downloading assets from Discord.
+    """Represents a URL object that can read and save to a file.
+
+    Attributes
+    -----------
+    url: :class:`str`
+        The URL of the asset.
+    filename: :class:`str`
+        The filename of the asset.
+    name: :class:`str`
+        The name of the asset.
     """
 
     def __init__(self, url: str):
         if not URL_REGEX.match(url):
             raise TypeError(f'Invalid url provided')
-        self.url = url
-        self.filename = url.split('/')[-1]
+
+        self.url: str = url
+        self.filename: str = url.split('/')[-1]
+
+        self.name: str = MISSING
 
     async def read(self, *, session=None) -> bytes:
         """Reads this asset."""
@@ -252,8 +285,7 @@ class URLObject:
 
     async def to_file(self, *, session: aiohttp.ClientSession = None):
         return discord.File(
-            BytesIO(await self.read(session=session)), self.name, spoiler=False
-        )
+            BytesIO(await self.read(session=session)), self.name, spoiler=False)
 
 
 class URLConverter(commands.Converter[str], app_commands.Transformer):
