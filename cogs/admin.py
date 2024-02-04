@@ -162,7 +162,7 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
         """Uploads a file to https://images.klappstuhl.me."""
         async with ctx.typing():
             headers = {
-                'Content-Type': 'multipart/form-data',
+                'Accept': 'application/json',
                 'Authorization': self.bot.config.images.key
             }
             files = {
