@@ -379,7 +379,7 @@ class TableView(discord.ui.View):
     async def help(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         """Shows the help menu"""
         embed = discord.Embed(title='Blackjack Help', colour=helpers.Colour.blurple())
-        embed.set_thumbnail(url='https://i.giphy.com/ZahUvuh70nd6GYmpHi.gif')
+        embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/scxLKOsiqq.gif')
         embed.description = (
             'The goal of blackjack is to beat the dealer\'s hand without going over 21.\n'
             'Face cards are worth 10. Aces are worth 1 or 11, whichever makes a better hand.\n'

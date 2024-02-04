@@ -362,7 +362,7 @@ class RouletteView(discord.ui.View):
     async def help(self, interaction: discord.Interaction, button: discord.Button):  # noqa
         """Show the help menu."""
         embed = discord.Embed(title='Roulette Help', color=discord.Color.blurple())
-        embed.set_thumbnail(url='https://i.giphy.com/26uflBhaGt5lQsaCA.gif')
+        embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/XXIgtsOlCY.gif')
         embed.description = (
             'Roulette is a game where you bet on a space on the table. '
             'The dealer will spin the wheel, and if the ball lands on your space, you win!\n\n'

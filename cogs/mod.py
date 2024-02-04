@@ -1563,7 +1563,13 @@ class Mod(commands.Cog):
         query = """
             INSERT INTO guild_lockdowns(guild_id, channel_id, allow, deny)
             SELECT d.guild_id, d.channel_id, d.allow, d.deny
-            FROM jsonb_to_recordset($1::jsonb) AS d(guild_id BIGINT, channel_id BIGINT, allow BIGINT, deny BIGINT)
+            FROM jsonb_to_recordset($1::jsonb) 
+            AS d(
+                guild_id BIGINT, 
+                channel_id BIGINT, 
+                allow BIGINT, 
+                deny BIGINT
+            )
             ON CONFLICT (guild_id, channel_id) DO NOTHING
         """
         await self.bot.pool.execute(query, records)
@@ -2258,7 +2264,7 @@ class Mod(commands.Cog):
         heads_up_message = f'<:discord_info:1113421814132117545> You have been banned from {ctx.guild.name} {until}. Reason: {reason}'
 
         try:
-            await member.send(heads_up_message)  # type: ignore  # Guarded by AttributeError
+            await member.send(heads_up_message)  # type: ignore
         except (AttributeError, discord.HTTPException):
             pass
 

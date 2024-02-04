@@ -10,7 +10,8 @@ import time
 from collections import Counter
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Sequence, Type, Iterable, Callable, Literal, Any)
+    NamedTuple, Type, Iterable, Callable, Literal, Any
+)
 
 import discord
 import psutil
@@ -23,8 +24,10 @@ from .utils import fuzzy, helpers, commands
 from .utils.converters import Prefix, get_asset_url
 from .utils.formats import plural, format_date, WrapDict
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
-from .utils.constants import PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand, PartialCommandGroup, Hybrid, Core, App, \
-    PH_GUILD_ID
+from .utils.constants import (
+    PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand,
+    PartialCommandGroup, Hybrid, Core, App, PH_GUILD_ID
+)
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
@@ -933,10 +936,10 @@ class Meta(commands.Cog):
 
     @staticmethod
     async def mark_as_solved(thread: discord.Thread, user: discord.abc.User) -> None:
-        tags: Sequence[discord.ForumTag] = thread.applied_tags
+        tags: list[discord.ForumTag] = thread.applied_tags
 
         if not any(tag.id == PH_SOLVED_TAG for tag in tags):
-            tags.append(discord.Object(id=PH_SOLVED_TAG))  # type: ignore
+            tags.append(discord.Object(id=PH_SOLVED_TAG))  # noqa
 
         await thread.edit(
             locked=True,

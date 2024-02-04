@@ -182,6 +182,7 @@ class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
         embed = discord.Embed(title=self.prize.value, timestamp=when, color=discord.Color.blurple())
         if value := self.description.value:
             embed.description = value
+
         embed.add_field(
             name='\u200c',
             value=f'Ends: {discord.utils.format_dt(when, style='R')} ({discord.utils.format_dt(when, style='F')})\n'

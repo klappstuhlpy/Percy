@@ -303,8 +303,14 @@ class Stats(commands.Cog):
                     if '#' in line:
                         comments += 1
                     lines += 1
-        stats = {'Files': files, 'Classes': classes, 'Functions': funcs,
-                 'Comments': comments, 'Lines': lines, 'Characters': characters}
+        stats = {
+            'Files': files,
+            'Classes': classes,
+            'Functions': funcs,
+            'Comments': comments,
+            'Lines': lines,
+            'Characters': characters
+        }
         return '\n'.join(f'{k}: {v}' for k, v in stats.items())
 
     @staticmethod
@@ -338,9 +344,12 @@ class Stats(commands.Cog):
         total_members = 0
         total_unique = len(self.bot.users)
 
-        text = 0
-        voice = 0
-        guilds = 0
+        CHANNEL_MAP = {
+            discord.TextChannel: 'text',
+            discord.VoiceChannel: 'voice',
+        }
+
+        text, voice, guilds = 0, 0, 0
         for guild in self.bot.guilds:
             guilds += 1
             if guild.unavailable:
@@ -348,10 +357,11 @@ class Stats(commands.Cog):
 
             total_members += guild.member_count or 0
             for channel in guild.channels:
-                if isinstance(channel, discord.TextChannel):
-                    text += 1
-                elif isinstance(channel, discord.VoiceChannel):
-                    voice += 1
+                match(CHANNEL_MAP.get(type(channel))):
+                    case 'text':
+                        text += 1
+                    case 'voice':
+                        voice += 1
 
         embed.add_field(name='Members', value=f'`{total_members}` total\n`{total_unique}` unique\n'
                                               f'Bot percentage: `{(total_unique / total_members):.2%}`')
@@ -1151,7 +1161,7 @@ class Stats(commands.Cog):
     @commands.is_owner()
     async def list_tasks(self, ctx: Context):
         """List all tasks."""
-        tasks = asyncio.all_tasks(loop=self.bot.loop)
+        _tasks = asyncio.all_tasks(loop=self.bot.loop)
         table = formats.TabularData()
         table.set_columns(['Memory ID', 'Name', 'Object'])
 
@@ -1160,7 +1170,7 @@ class Stats(commands.Cog):
 
         table.add_rows(
             (strip_memory_id(str(task.get_coro())), task.get_name(), str(task.get_coro()).split(' ')[2]) for task in
-            tasks)
+            _tasks)
         render = table.render()
         render = re.sub(r'```\w?.*', '', render, re.RegexFlag.M)
 
@@ -1443,7 +1453,7 @@ class Stats(commands.Cog):
 old_on_error = commands.Bot.on_error
 
 
-async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:
+async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None:  # noqa
     (exc_type, exc, tb) = sys.exc_info()
     if isinstance(exc, commands.CommandInvokeError):
         return
