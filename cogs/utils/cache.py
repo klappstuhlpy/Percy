@@ -8,7 +8,7 @@ import time
 from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol, Generic, Generator
 from lru import LRU
 
-from cogs.utils.constants import Coro
+from cogs.utils.constants import Coro, NonCoro
 
 R = TypeVar('R')
 
@@ -42,7 +42,7 @@ class AwaitableObj(Generic[T]):
 class CacheProtocol(Protocol[R]):
     cache: MutableMapping[str, asyncio.Task[R]]
 
-    def __call__(self, *args: Any, **kwds: Any) -> asyncio.Task[R]:
+    def __call__(self, *args: Any, **kwds: Any) -> asyncio.Task[R] | R:
         ...
 
     def get_key(self, *args: Any, **kwargs: Any) -> str:
@@ -111,8 +111,10 @@ def cache(
     maxsize: int = 128,
     strategy: Strategy = Strategy.LRU,
     ignore_kwargs: bool = False,
-) -> Callable[[Callable[..., Coroutine[Any, Any, R]]], CacheProtocol[R]]:
+) -> Callable[[Callable[..., Coroutine[Any, Any, R] | R]], CacheProtocol[R]]:
     """A decorator that caches the result of a coroutine to its internal cache.
+
+    This can be used on both coroutines and regular functions.
 
     Parameters
     ----------
@@ -125,11 +127,11 @@ def cache(
 
     Returns
     -------
-    Callable[[Callable[..., Coroutine[Any, Any, R]]], CacheProtocol[R]]
+    Callable[[Callable[..., Coroutine[Any, Any, R] | R], CacheProtocol[R]]
         The actual decorator.
     """
 
-    def decorator(func: Coro) -> CacheProtocol[R]:
+    def decorator(func: Coro | NonCoro) -> CacheProtocol[R]:
         """The actual decorator."""
         if strategy is Strategy.LRU:
             _internal_cache = LRU(maxsize)
@@ -167,13 +169,16 @@ def cache(
             return ':'.join(key_parts)
 
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any):
+        def wrapper(*args: Any, **kwargs: Any) -> asyncio.Task[R] | R:
             """The actual wrapper for the cache to be assigned to the corresponding function."""
             key = _make_key(args, kwargs)
             try:
                 task = _internal_cache[key]
             except KeyError:
-                _internal_cache[key] = task = asyncio.create_task(func(*args, **kwargs))
+                if asyncio.iscoroutinefunction(func):
+                    _internal_cache[key] = task = asyncio.create_task(func(*args, **kwargs))
+                else:
+                    _internal_cache[key] = task = func(*args, **kwargs)
                 return task
             else:
                 return task
