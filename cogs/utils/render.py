@@ -1,25 +1,30 @@
-import io
 from io import BytesIO
 from typing import Optional
 
 import discord
 from PIL import Image, ImageDraw, ImageFont
+from PIL.ImageFont import FreeTypeFont
+
+from cogs.utils import cache
+from cogs.utils.constants import BOT_BASE_FOLDER
 from cogs.utils.tasks import executor
 from cogs.utils.formats import shorten_number
 from pathlib import Path
 
-PATH = str(Path(__file__).parent.parent.parent.absolute() / 'assets')
+BASE_PATH = Path(BOT_BASE_FOLDER, 'assets')
 
-GINTO_NORD_HEAVY_48 = ImageFont.truetype(PATH + '/GintoNordHeavy.otf', 48)
-GINTO_NORD_HEAVY_36 = ImageFont.truetype(PATH + '/GintoNordHeavy.otf', 36)
-GINTO_NORD_HEAVY_28 = ImageFont.truetype(PATH + '/GintoNordHeavy.otf', 28)
-GINTO_NORD_HEAVY_22 = ImageFont.truetype(PATH + '/GintoNordHeavy.otf', 22)
-GINTO_BOLD_32 = ImageFont.truetype(PATH + '/GintoBold.otf', 32)
-GINTO_BOLD_28 = ImageFont.truetype(PATH + '/GintoBold.otf', 28)
-GINTO_BOLD_24 = ImageFont.truetype(PATH + '/GintoBold.otf', 24)
-GINTO_BOLD_20 = ImageFont.truetype(PATH + '/GintoBold.otf', 20)
 
-EXPERIENCE = {False: (GINTO_NORD_HEAVY_28, 12), True: (GINTO_NORD_HEAVY_22, 16)}
+@cache.cache()
+def GINTO_BOLD(size: int) -> FreeTypeFont:
+    return ImageFont.truetype(str(Path(BASE_PATH, 'GintoBold.otf')), size)
+
+
+@cache.cache()
+def GINTO_NORD_HEAVY(size: int) -> FreeTypeFont:
+    return ImageFont.truetype(str(Path(BASE_PATH, 'GintoNordHeavy.otf')), size)
+
+
+EXPERIENCE = {False: (GINTO_NORD_HEAVY(28), 12), True: (GINTO_NORD_HEAVY(22), 16)}
 
 
 class Render:
@@ -52,8 +57,8 @@ class Render:
             else:
                 text_color = 'black'
 
-            _, _, w, h = draw.textbbox((0, 0), text, font=GINTO_BOLD_28)
-            draw.text(((256 - w) / 2, (256 - h) / 2), text, font=GINTO_BOLD_28, fill=text_color)
+            _, _, w, h = draw.textbbox((0, 0), text, font=GINTO_BOLD(28))
+            draw.text(((256 - w) / 2, (256 - h) / 2), text, font=GINTO_BOLD(28), fill=text_color)
 
         buffer = BytesIO()
         image.save(buffer, 'png')
@@ -112,12 +117,12 @@ class Render:
             image = Image.new('RGB', (int(chart_width), int(chart_height)), color=0x1A1A1A)
             draw = ImageDraw.Draw(image)
 
-            font = ImageFont.truetype(PATH + '/GintoBold.otf', int(LABEL_FONT_SIZE * scale_factor))
+            font = GINTO_BOLD(int(LABEL_FONT_SIZE * scale_factor))
             max_label_width = max([cls.get_text_dimensions(label, font=font)[0] for label in subset_data.keys()])
             max_value_width = max([cls.get_text_dimensions(str(value), font=font)[0] for value in subset_data.values()])
 
             if title:
-                title_font = ImageFont.truetype(PATH + '/GintoBold.otf', int(LABEL_FONT_SIZE * scale_factor * 1.5))
+                title_font = GINTO_BOLD(int(LABEL_FONT_SIZE * scale_factor * 1.5))
                 title_bbox = draw.textbbox((0, 0), title, font=title_font)
                 title_width = title_bbox[2] - title_bbox[0]
                 title_height = title_bbox[3] - title_bbox[1]
@@ -352,7 +357,7 @@ class Render:
             members: int,
             messages: int
     ) -> BytesIO:
-        with Image.open(PATH + '/template.png') as background:
+        with Image.open(str(Path(BASE_PATH, 'template.png'))) as background:
             avatar = Image.open(BytesIO(avatar)).resize((196, 196), Image.BOX)
 
             mask = Image.new('L', (196, 196), 0)
@@ -370,7 +375,7 @@ class Render:
                 (252, 62),
                 str(user),
                 (235, 235, 235),
-                font=GINTO_NORD_HEAVY_48,
+                font=GINTO_NORD_HEAVY(48),
             )
 
             total_xp = f'{total_xp:,} XP'
@@ -378,11 +383,11 @@ class Render:
                 (252, 114),
                 total_xp,
                 self.get_color_alpha((216, 216, 216), 0.8),
-                font=GINTO_BOLD_28,
+                font=GINTO_BOLD(28),
             )
 
             rank = f'Rank #{rank}'
-            rank_width = user_canvas.textlength(rank, font=GINTO_NORD_HEAVY_48)
+            rank_width = user_canvas.textlength(rank, font=GINTO_NORD_HEAVY(48))
             user_canvas.text(
                 (
                     background.width - rank_width - 38,
@@ -390,11 +395,11 @@ class Render:
                 ),
                 rank,
                 (235, 235, 235),
-                GINTO_NORD_HEAVY_48,
+                GINTO_NORD_HEAVY(48),
             )
 
             members = f'of {shorten_number(members)}'
-            members_width = user_canvas.textlength(members, font=GINTO_BOLD_28)
+            members_width = user_canvas.textlength(members, font=GINTO_BOLD(28))
             user_canvas.text(
                 (
                     background.width - members_width - 38,
@@ -402,7 +407,7 @@ class Render:
                 ),
                 members,
                 self.get_color_alpha((216, 216, 216), 0.8),
-                GINTO_BOLD_28,
+                GINTO_BOLD(28),
             )
 
             color = self.get_dominant_color(avatar)
@@ -433,9 +438,9 @@ class Render:
             level_canvas = ImageDraw.Draw(level_bg)
 
             level_text = 'Level'
-            level_text_width, level_text_height = self.get_text_dimensions(level_text, font=GINTO_BOLD_32)
+            level_text_width, level_text_height = self.get_text_dimensions(level_text, font=GINTO_BOLD(32))
             level_number = str(level)
-            level_number_width, level_number_height = self.get_text_dimensions(level_number, font=GINTO_NORD_HEAVY_36)
+            level_number_width, level_number_height = self.get_text_dimensions(level_number, font=GINTO_NORD_HEAVY(36))
 
             text_offset_x = int((192 - (level_text_width + level_number_width + 8)) / 2)
             text_offset_y = int((55 - max(level_text_height, level_number_height)) / 2)
@@ -444,7 +449,7 @@ class Render:
                 (text_offset_x, text_offset_y),
                 level_text,
                 (216, 216, 216),
-                GINTO_BOLD_32
+                GINTO_BOLD(32)
             )
             level_canvas.text(
                 (
@@ -453,7 +458,7 @@ class Render:
                 ),
                 level_number,
                 (235, 235, 235),
-                GINTO_NORD_HEAVY_36,
+                GINTO_NORD_HEAVY(36),
             )
 
             background.paste(level_bg, (38, 254), level_bg_mask)
@@ -495,9 +500,9 @@ class Render:
             message_canvas = ImageDraw.Draw(messages_bg)
             msg_count = shorten_number(messages)
 
-            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY_28, GINTO_BOLD_24, 14, 16
+            count_font, text_font, count_offset, text_offset = GINTO_NORD_HEAVY(28), GINTO_BOLD(24), 14, 16
             if (text_size := (count_font.getlength(msg_count) + 12 + text_font.getlength('Messages'))) > 200:
-                cfont, tfont, count_offset, text_offset = GINTO_NORD_HEAVY_22, GINTO_BOLD_20, 16, 18
+                cfont, tfont, count_offset, text_offset = GINTO_NORD_HEAVY(22), GINTO_BOLD(20), 16, 18
                 text_size = cfont.getlength(msg_count) + 12 + tfont.getlength('Messages')
 
             offset = int((200 - text_size) / 2)

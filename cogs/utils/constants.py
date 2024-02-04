@@ -55,6 +55,7 @@ IgnoreableEntity = Union[discord.TextChannel, discord.VoiceChannel, discord.Thre
 _TContext = Union[Context, GuildContext]
 
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
+NonCoro = TypeVar('NonCoro', bound=Callable[..., Any])
 
 # REGEX
 
