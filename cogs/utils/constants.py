@@ -849,11 +849,11 @@ LANGUAGES = {
 }
 
 HANG_MAN = [
-    'https://media.discordapp.net/attachments/1062074624935993427/1117793965626896454/hangman0.png',
-    'https://media.discordapp.net/attachments/1062074624935993427/1117793965928878160/hangman1.png',
-    'https://media.discordapp.net/attachments/1062082492628222103/1122640374075244544/hangman2.png',
-    'https://media.discordapp.net/attachments/1062082492628222103/1122640373790015569/hangman3.png',
-    'https://media.discordapp.net/attachments/1062082492628222103/1122640373529972736/hangman4.png',
-    'https://media.discordapp.net/attachments/1062082492628222103/1122640373286715442/hangman5.png',
-    'https://media.discordapp.net/attachments/1062082492628222103/1122640373039235112/hangman6.png'
+    'https://images.klappstuhl.me/gallery/mUZMwfXDtS.png',  # Hangman 0
+    'https://images.klappstuhl.me/gallery/HMbpLMtPmT.png',
+    'https://images.klappstuhl.me/gallery/kOTROrapxh.png',
+    'https://images.klappstuhl.me/gallery/fQWXqJSbLS.png',
+    'https://images.klappstuhl.me/gallery/LDuaOZqsHe.png',
+    'https://images.klappstuhl.me/gallery/RdZkqyntSS.png',
+    'https://images.klappstuhl.me/gallery/PncSvIxMJI.png'
 ]

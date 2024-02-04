@@ -342,7 +342,7 @@ class Emoji(commands.Cog):
             if resp.status == 404:
                 e.description = 'This isn\'t a valid emoji.'
                 e.colour = 0x000000
-                e.set_thumbnail(url='https://static.vecteezy.com/system/resources/previews/000/440/213/original/question-mark-vector-icon.jpg')
+                e.set_thumbnail(url='https://images.klappstuhl.me/gallery/fNnccSNJon.jpeg')
                 await ctx.send(embed=e)
                 return
             e.colour = discord.Colour.from_rgb(*self.render.get_dominant_color(io.BytesIO(await resp.read())))

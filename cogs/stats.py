@@ -374,7 +374,9 @@ class Stats(commands.Cog):
                   f'Memory: {memory_usage:.2f} MiB | {psutil.virtual_memory().percent}%\n'
                   f'Disk: {psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%```')
 
-        embed.set_footer(text=f'Made with discord.py v{discord.__version__}', icon_url='http://i.imgur.com/5BFecvA.png')
+        embed.set_footer(
+            text=f'Made with discord.py v{discord.__version__}',
+            icon_url='https://images.klappstuhl.me/gallery/UYzvwImyRS.png')
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
@@ -987,7 +989,7 @@ class Stats(commands.Cog):
         msg = textwrap.shorten(f'{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}', width=1990)
         if record.name == 'discord.gateway':
             username = 'Gateway'
-            avatar_url = 'https://i.imgur.com/74UqM1Z.png'  # https://i.imgur.com/4PnCKB3.png
+            avatar_url = 'https://images.klappstuhl.me/gallery/mTuDFXPDrx.png'
         else:
             username = f'{record.name} Logger'
             avatar_url = discord.utils.MISSING

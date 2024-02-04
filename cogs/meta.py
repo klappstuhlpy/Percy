@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from bot import Percy
     from .utils.context import GuildContext, Context
 
-COMMAND_ICON_URL = 'https://cdn.discordapp.com/emojis/782701715479724063.webp?size=32'
-INFO_ICON_URL = 'https://cdn3.emoji.gg/emojis/4765-discord-info-white-theme.png'
+COMMAND_ICON_URL = 'https://images.klappstuhl.me/gallery/rWgaVHMMpl.png'
+INFO_ICON_URL = 'https://images.klappstuhl.me/gallery/zxfezkjkSp.png'
 
 
 def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:

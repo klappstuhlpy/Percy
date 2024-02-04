@@ -77,7 +77,7 @@ class UrbanDictionaryPaginator(BasePaginator[dict]):
             colour=0x1d2439,
             url=entry['permalink']
         )
-        embed.set_thumbnail(url='https://i.imgur.com/cZkQ6Vg.png')
+        embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/qLxbrWeWaR.png')
         embed.set_footer(text=f'by {entry["author"]}')
         embed.description = self.cleanup_definition(entry['definition'])
 
@@ -117,14 +117,15 @@ class FeedbackModal(discord.ui.Modal, title='Submit Feedback'):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         channel = self.cog.feedback_channel
         if channel is None:
-            await interaction.response.send_message('<:redTick:1079249771975413910> '
-                                                    'Could not submit your feedback, sorry about this', ephemeral=True)
+            await interaction.response.send_message(
+                '<:redTick:1079249771975413910> Could not submit your feedback, sorry about this',
+                ephemeral=True)
             return
 
         embed = self.cog.get_feedback_embed(interaction, summary=str(self.summary), details=self.details.value)
         await channel.send(embed=embed)
-        await interaction.response.send_message('<:greenTick:1079249732364406854> '
-                                                'Successfully submitted feedback', ephemeral=True)
+        await interaction.response.send_message(
+            '<:greenTick:1079249732364406854> Successfully submitted feedback', ephemeral=True)
 
 
 class Annotations(commands.Cog):

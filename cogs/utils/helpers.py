@@ -24,21 +24,21 @@ class BaseFlags:
 
     Example
     --------
-    .. code-block:: python3
+    ````py
+        class MyFlags(BaseFlags):
+            foo = 1 << 0
+            bar = 1 << 1
+            baz = 1 << 2
 
-            class MyFlags(BaseFlags):
-                foo = 1 << 0
-                bar = 1 << 1
-                baz = 1 << 2
-
-            >> flags = MyFlags()
-            >> flags.has_flag(MyFlags.foo)
-            False
-            >> flags.set_flag(MyFlags.foo, True)
-            >> flags.has_flag(MyFlags.foo)
-            True
-            >> print(flags)
-            <MyFlags value=1>
+        >> flags = MyFlags()
+        >> flags.has_flag(MyFlags.foo)
+        False
+        >> flags.set_flag(MyFlags.foo, True)
+        >> flags.has_flag(MyFlags.foo)
+        True
+        >> print(flags)
+        <MyFlags value=1>
+    ```
 
     All flags are stored therefore as a single integer value, which can be accessed through the `value` attribute.
     """
@@ -46,6 +46,14 @@ class BaseFlags:
     __slots__ = ('value',)
 
     def __init__(self, value: int = 0) -> None:
+        """
+        Initialize a new instance of the `BaseFlags` class.
+
+        Parameters
+        ----------
+        value : int
+            The value of the flags.
+        """
         self.value = value
 
     def __eq__(self, other: object) -> bool:
@@ -62,9 +70,36 @@ class BaseFlags:
         return self.value == 0
 
     def has_flag(self, o: int) -> bool:
+        """
+        Returns whether the flag is set or not.
+
+        Parameters
+        ----------
+        o : int
+            The flag to check for.
+
+        Returns
+        -------
+        bool
+            Whether the flag is set or not.
+        """
         return (self.value & o) == o
 
     def set_flag(self, o: int, toggle: bool) -> None:
+        """
+        Sets the flag to the given value.
+
+        Parameters
+        ----------
+        o : int
+            The flag to set.
+        toggle : bool
+            The value to set the flag to.
+
+        Returns
+        -------
+        None
+        """
         if toggle is True:
             self.value |= o
         elif toggle is False:

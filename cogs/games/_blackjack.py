@@ -306,9 +306,9 @@ class TableView(discord.ui.View):
 
         if not hand.finished:
             can_split = (
-                    len(hand) == 2
-                    and hand.cards[0].value == hand.cards[1].value
-                    and hand.bet <= balance.cash
+                len(hand) == 2
+                and hand.cards[0].value == hand.cards[1].value
+                and hand.bet <= balance.cash
             )
 
             self.split.disabled = not can_split

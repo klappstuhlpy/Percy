@@ -10,8 +10,8 @@ from bs4 import BeautifulSoup
 from bot import Percy
 from cogs.utils.formats import plural
 
-ANILIST_LOGO = 'https://cdn.discordapp.com/attachments/978016869342658630/978033399107289189/anilist.png'
-ANILIST_ICON = 'https://media.discordapp.net/attachments/1101850602050424832/1101850610959130655/icon.png?width=344&height=344'
+ANILIST_LOGO = 'https://images.klappstuhl.me/gallery/JnHOfJJUIM.png'
+ANILIST_ICON = 'https://images.klappstuhl.me/gallery/JlVSNxClMA.png'
 
 
 class AniListEmbed(discord.Embed):

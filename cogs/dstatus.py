@@ -19,7 +19,7 @@ from .utils.context import GuildContext
 from .utils.helpers import PostgresItem
 
 DS_ENDPOINT = 'https://discordstatus.com/api/v2/incidents.json'
-DISCORD_ICON_URL = 'https://images-ext-2.discordapp.net/external/6jW0q_egONj8FelyNsUt_ighZ6obXn0TTFuxLNJf1v4/https/discord.com/assets/f9bb9c4af2b9c32a2c5ee0014661546d.png'
+DISCORD_ICON_URL = 'https://images.klappstuhl.me/gallery/bAAcgiqBGL.png'
 
 
 class Status(enum.Enum):

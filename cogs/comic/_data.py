@@ -10,9 +10,9 @@ from cogs.utils import commands
 from cogs.utils.helpers import PostgresItem
 
 
-MARVEL_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107651622978469888/free-marvel-282124.png'
-DC_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1107657136013586543/Screenshot_2023-05-15_151251.png'
-VIZ_ICON_URL = 'https://cdn.discordapp.com/attachments/1066703171243745377/1113786444369104978/unnamed.png'
+MARVEL_ICON_URL = 'https://images.klappstuhl.me/gallery/FdAlelfzIB.png'
+DC_ICON_URL = 'https://images.klappstuhl.me/gallery/rnWWeJHdiz.png'
+VIZ_ICON_URL = 'https://images.klappstuhl.me/gallery/wUPsJVFjHm.png'
 
 MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 

@@ -160,6 +160,9 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
     )
     async def images_upload(self, ctx: Context, file: discord.Attachment):
         """Uploads a file to https://images.klappstuhl.me."""
+        if not file.content_type.startswith('image'):
+            return await ctx.stick(False, 'Only images are allowed.')
+
         async with ctx.typing():
             headers = {
                 'Accept': 'application/json',

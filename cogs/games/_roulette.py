@@ -141,43 +141,67 @@ class Space(enum.Enum):
 
     @property
     def real_value(self) -> list:
-        if self.name.startswith('SINGLE'):
-            return [int(self.value)]
-        elif self.name == 'COLUMN_FIRST':
-            return list(range(1, 37, 3))
-        elif self.name == 'COLUMN_SECOND':
-            return list(range(2, 37, 3))
-        elif self.name == 'COLUMN_THIRD':
-            return list(range(3, 37, 3))
-        elif self.name == 'DOZEN_FIRST':
-            return list(range(1, 13))
-        elif self.name == 'DOZEN_SECOND':
-            return list(range(13, 25))
-        elif self.name == 'DOZEN_THIRD':
-            return list(range(25, 37))
-        elif self.name == 'HALF_FIRST':
-            return list(range(1, 19))
-        elif self.name == 'HALF_SECOND':
-            return list(range(19, 37))
-        elif self.name == 'RED':
-            return [1, 3, 5, 7, 9, 12, 14, 16, 18, 21,
-                    23, 25, 27, 30, 32, 34, 36]
-        elif self.name == 'BLACK':
-            return [2, 4, 6, 8, 10, 11, 13, 15, 17, 20,
-                    22, 24, 26, 28, 29, 31, 33, 35]
-        elif self.name == 'EVEN':
-            return list(range(2, 37, 2))
-        elif self.name == 'ODD':
-            return list(range(1, 37, 2))
-        else:
-            return []
+        VALUE_MAP = {
+            'SINGLE_0': [0],
+            'SINGLE_1': [1],
+            'SINGLE_2': [2],
+            'SINGLE_3': [3],
+            'SINGLE_4': [4],
+            'SINGLE_5': [5],
+            'SINGLE_6': [6],
+            'SINGLE_7': [7],
+            'SINGLE_8': [8],
+            'SINGLE_9': [9],
+            'SINGLE_10': [10],
+            'SINGLE_11': [11],
+            'SINGLE_12': [12],
+            'SINGLE_13': [13],
+            'SINGLE_14': [14],
+            'SINGLE_15': [15],
+            'SINGLE_16': [16],
+            'SINGLE_17': [17],
+            'SINGLE_18': [18],
+            'SINGLE_19': [19],
+            'SINGLE_20': [20],
+            'SINGLE_21': [21],
+            'SINGLE_22': [22],
+            'SINGLE_23': [23],
+            'SINGLE_24': [24],
+            'SINGLE_25': [25],
+            'SINGLE_26': [26],
+            'SINGLE_27': [27],
+            'SINGLE_28': [28],
+            'SINGLE_29': [29],
+            'SINGLE_30': [30],
+            'SINGLE_31': [31],
+            'SINGLE_32': [32],
+            'SINGLE_33': [33],
+            'SINGLE_34': [34],
+            'SINGLE_35': [35],
+            'SINGLE_36': [36],
+            'COLUMN_FIRST': list(range(1, 37, 3)),
+            'COLUMN_SECOND': list(range(2, 37, 3)),
+            'COLUMN_THIRD': list(range(3, 37, 3)),
+            'DOZEN_FIRST': list(range(1, 13)),
+            'DOZEN_SECOND': list(range(13, 25)),
+            'DOZEN_THIRD': list(range(25, 37)),
+            'HALF_FIRST': list(range(1, 19)),
+            'HALF_SECOND': list(range(19, 37)),
+            'RED': [1, 3, 5, 7, 9, 12, 14, 16, 18, 21, 23, 25, 27, 30, 32, 34, 36],
+            'BLACK': [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35],
+            'EVEN': list(range(2, 37, 2)),
+            'ODD': list(range(1, 37, 2))
+        }
+        return VALUE_MAP[self.name]
 
     @property
     def placeholder_field(self) -> int:
-        if self.name in ('HALF_SECOND', 'BLACK', 'ODD'):
-            return 1
-        else:
-            return 0
+        PLACEHOLDER_MAP = {
+            'HALF_SECOND': 1,
+            'BLACK': 1,
+            'ODD': 1
+        }
+        return PLACEHOLDER_MAP.get(self.name, 0)
 
 
 class Bet:
@@ -235,7 +259,7 @@ class Table:
     def build_embed(self, winning_spaces: list[Space] = [], image_url: str = None, result: int = None) -> discord.Embed:  # noqa
         """Build the embed for the roulette table."""
         embed = discord.Embed(title='Roulette Table', color=helpers.Colour.darker_red())
-        embed.set_image(url='https://i.imgur.com/n4QHQmv.png')
+        embed.set_image(url='https://images.klappstuhl.me/gallery/uzWbgjgCOj.png')
         embed.set_footer(text=f'Total of {plural(len(self.bets)):bet} placed.')
 
         if self.open:

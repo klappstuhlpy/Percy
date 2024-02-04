@@ -25,7 +25,7 @@ class YouTubeRequestError(discord.HTTPException):
 
 
 BASE_URL = 'https://www.googleapis.com/youtube/v3/{endpoint}'
-YOUTUBE_ICON_URL = 'https://media.discordapp.net/attachments/1062074624935993427/1101142491199180831/youtube-icon.png?width=519&height=519'
+YOUTUBE_ICON_URL = 'https://images.klappstuhl.me/gallery/vXIDExSNYa.png'
 YOUTUBE_VIDEO_URL = 'https://www.youtube.com/watch?v={video_id}'
 
 

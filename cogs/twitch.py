@@ -23,7 +23,7 @@ class TwitchRequestError(HTTPException):
 
 GRANT_URL = 'https://id.twitch.tv/oauth2/token'
 END_URL = 'https://api.twitch.tv/helix'
-TWITCH_ICON_URL = 'https://media.discordapp.net/attachments/1062074624935993427/1101142491450835036/5968819.png'
+TWITCH_ICON_URL = 'https://images.klappstuhl.me/gallery/sNPPxMaWBo.png'
 
 
 class TwitchUser(NamedTuple):

@@ -294,8 +294,9 @@ class Parser:
         )
 
         _cs_comic.creators = {}
-        _cs_comic.image_url = data.images[0].path + '/clean.jpg' \
-            if data.images else 'https://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available/clean.jpg'
+        _cs_comic.image_url = (
+            data.images[0].path + '/clean.jpg'
+            if data.images else 'https://images.klappstuhl.me/gallery/EWIcjYNFMf.jpeg')
 
         _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), None)
         _cs_comic.price = next((i.price for i in data.prices if i.type == 'printPrice'), None)
