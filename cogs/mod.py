@@ -28,6 +28,7 @@ from .utils.converters import Snowflake, IgnoreEntity, get_asset_url
 from .utils.formats import plural, human_join
 from .utils.helpers import BaseFlags, flag_value
 from .utils.constants import IgnoreableEntity
+from .utils.lock import lock
 from .utils.timetools import ShortTime
 
 if TYPE_CHECKING:
@@ -572,6 +573,9 @@ class SpamChecker:
     def get_flagged_member(self, user_id: int, /) -> Optional[FlaggedMember]:
         return self.flagged_users.get(user_id)
 
+    def is_flagged(self, user_id: int, /) -> bool:
+        return user_id in self.flagged_users
+
     def flag_member(self, member: discord.Member, /) -> None:
         self.flagged_users[member.id] = FlaggedMember(member, member.joined_at or discord.utils.utcnow())
 
@@ -714,23 +718,37 @@ class Mod(commands.Cog):
         self._spam_check: defaultdict[int, SpamChecker] = defaultdict(SpamChecker)
 
         self._mute_data_batch: defaultdict[int, list[tuple[int, Any]]] = defaultdict(list)
-        self._batch_lock = asyncio.Lock()
-        self._disable_lock = asyncio.Lock()
         self.batch_updates.add_exception_type(asyncpg.PostgresConnectionError)
         self.batch_updates.start()
 
         self.message_batches: defaultdict[tuple[int, int], list[str]] = defaultdict(list)
-        self._batch_message_lock = asyncio.Lock()
         self.bulk_send_messages.start()
-
-    def cog_unload(self) -> None:
-        self.batch_updates.stop()
-        self.bulk_send_messages.stop()
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='alumni_mod_animated', id=1076913120599080970, animated=True)
 
+    def cog_unload(self) -> None:
+        self.batch_updates.stop()
+        self.bulk_send_messages.stop()
+
+    async def bot_check(self, ctx: commands.Context) -> bool:
+        if ctx.guild is None:
+            return True
+
+        full_bypass = ctx.permissions.manage_guild or await self.bot.is_owner(ctx.author)
+        if full_bypass:
+            return True
+
+        guild_id = ctx.guild.id
+        config = await self.get_guild_config(guild_id)
+        if config is None or not config.automod_flags.value:
+            return True
+
+        checker = self._spam_check[guild_id]
+        return not checker.is_flagged(ctx.author.id)
+
+    @lock('Moderation', 'mute_batch', wait=True)
     async def bulk_insert(self):
         query = """
             UPDATE guild_config
@@ -762,32 +780,31 @@ class Mod(commands.Cog):
 
     @tasks.loop(seconds=15.0)
     async def batch_updates(self):
-        async with self._batch_lock:
-            await self.bulk_insert()
+        await self.bulk_insert()
 
     @tasks.loop(seconds=10.0)
+    @lock('Moderation', 'message_batch', wait=True)
     async def bulk_send_messages(self):
         """|coro|
 
         Bulk send messages to the guilds used for broadcasting.
         This is done to avoid rate limits.
         """
-        async with self._batch_message_lock:
-            for ((guild_id, channel_id), messages) in self.message_batches.items():
-                guild = self.bot.get_guild(guild_id)
-                channel: Optional[discord.abc.Messageable] = guild and guild.get_channel(channel_id)  # type: ignore
-                if channel is None:
-                    continue
+        for ((guild_id, channel_id), messages) in self.message_batches.items():
+            guild = self.bot.get_guild(guild_id)
+            channel: Optional[discord.abc.Messageable] = guild and guild.get_channel(channel_id)  # type: ignore
+            if channel is None:
+                continue
 
-                paginator = commands.Paginator(suffix='', prefix='')
-                for message in messages:
-                    paginator.add_line(message)
+            paginator = commands.Paginator(suffix='', prefix='')
+            for message in messages:
+                paginator.add_line(message)
 
-                for page in paginator.pages:
-                    try:
-                        await channel.send(page)
-                    except discord.HTTPException:
-                        pass
+            for page in paginator.pages:
+                try:
+                    await channel.send(page)
+                except discord.HTTPException:
+                    pass
 
             self.message_batches.clear()
 
@@ -839,6 +856,10 @@ class Mod(commands.Cog):
             else:
                 log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
 
+    @lock('Moderation', 'message_batch', wait=True)
+    async def send_message_patch(self, guild_id: int, channel_id: int, to_send: str):
+        self.message_batches[(guild_id, channel_id)].append(to_send)
+
     async def mention_spam_ban(
             self,
             mention_count: int,
@@ -859,8 +880,7 @@ class Mod(commands.Cog):
             log.info('[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s', member, member.id, guild_id)
         else:
             to_send = f'<:discord_info:1113421814132117545> Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions.'
-            async with self._batch_message_lock:
-                self.message_batches[(guild_id, message.channel.id)].append(to_send)
+            await self.send_message_patch(guild_id, message.channel.id, to_send)
 
             log.info('[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s', member, member.id, guild_id)
 
@@ -933,6 +953,10 @@ class Mod(commands.Cog):
 
         checker.remove_member(payload.user)
 
+    @lock('Moderation', 'mute_batch', wait=True)
+    async def send_mute_patch(self, guild_id: int, member_id: int, value: Any):
+        self._mute_data_batch[guild_id].append((member_id, value))
+
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if before.roles == after.roles:
@@ -952,8 +976,7 @@ class Mod(commands.Cog):
         if before_has == after_has:
             return
 
-        async with self._batch_lock:
-            self._mute_data_batch[guild_id].append((after.id, after_has))
+        await self.send_mute_patch(guild_id, after.id, after_has)
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
@@ -972,7 +995,7 @@ class Mod(commands.Cog):
         description='Applies slowmode to this channel.',
         guild_only=True
     )
-    @commands.has_permissions(manage_messages=True)
+    @commands.permissions(bot=['manage_channels'], user=['manage_channels'])
     @app_commands.describe(duration='The slowmode duration or 0s to disable')
     async def slowmode(self, ctx: GuildContext, duration: ShortTime):
         """Applies slowmode to this channel"""
@@ -996,9 +1019,9 @@ class Mod(commands.Cog):
         name='moderation',
         aliases=['mod'],
         fallback='info',
-        description='Show current Moderation (automatic moderation) behaviour on the server.'
+        description='Show current Moderation (automatic moderation) behaviour on the server.',
+        guild_only=True
     )
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod)
     async def moderation(self, ctx: GuildContext):
         """Show current Moderation (Automatic Moderation) behavior on the server.
@@ -1263,9 +1286,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='mentions',
-        description='Enables auto-banning accounts that spam more than \'count\' mentions.',
+        description='Enables auto-banning accounts that spam more than \'count\' mentions.'
     )
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
     async def moderation_mentions(self, ctx: GuildContext, count: commands.Range[int, 3]):
@@ -1297,9 +1319,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='ignore',
-        description='Specifies what roles, members, or channels ignore Moderation Inspections.',
+        description='Specifies what roles, members, or channels ignore Moderation Inspections.'
     )
-    @commands.guild_only()
     @commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
     async def moderation_ignore(
@@ -1329,9 +1350,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='unignore',
-        description='Specifies what roles, members, or channels to take off the ignore list.',
+        description='Specifies what roles, members, or channels to take off the ignore list.'
     )
-    @commands.guild_only()
     @commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
     async def moderation_unignore(
@@ -1360,9 +1380,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='ignored',
-        description='Lists what channels, roles, and members are in the Moderation ignore list.',
+        description='Lists what channels, roles, and members are in the Moderation ignore list.'
     )
-    @commands.guild_only()
     async def moderation_ignored(self, ctx: GuildContext):
         """List all the channels, roles, and members that are in the Moderation ignore list."""
 
@@ -1396,9 +1415,9 @@ class Mod(commands.Cog):
         name='purge',
         description='Removes messages that meet a criteria.',
         aliases=['clear'],
-        usage='[search]'
+        usage='[search]',
+        guild_only=True
     )
-    @commands.guild_only()
     @commands.permissions(user=['manage_messages'], bot=['manage_messages'])
     @app_commands.describe(search='How many messages to search for')
     async def purge(
@@ -1642,12 +1661,11 @@ class Mod(commands.Cog):
         commands.hybrid_group,
         name='lockdown',
         fallback='start',
-        description='Locks down specific channels.'
+        description='Locks down specific channels.',
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=30.0, type=commands.BucketType.guild)
     )
-    @commands.guild_only()
-    @app_commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
-    @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(channels='A space-separated list of text or voice channels to lock down')
     async def lockdown(
             self,
@@ -1675,11 +1693,11 @@ class Mod(commands.Cog):
     @commands.command(
         lockdown.command,
         name='for',
-        description='Locks down specific channels for a specified amount of time.'
+        description='Locks down specific channels for a specified amount of time.',
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=30.0, type=commands.BucketType.guild)
     )
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
-    @commands.cooldown(1, 30.0, commands.BucketType.guild)
     @app_commands.describe(
         duration='A duration on how long to lock down for, e.g. 30m',
         channels='A space-separated list of text or voice channels to lock down',
@@ -1799,8 +1817,8 @@ class Mod(commands.Cog):
         lockdown.command,
         name='end',
         description='Ends all lockdowns set.',
+        guild_only=True,
     )
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.mod, bot=['manage_roles'])
     async def lockdown_end(self, ctx: GuildContext):
         """Ends all set lockdowns.
@@ -1887,6 +1905,7 @@ class Mod(commands.Cog):
         commands.core_command,
         name='cleanup',
         description='Cleans up only the bot\'s messages from the channel.',
+        guild_only=True,
     )
     async def cleanup(self, ctx: GuildContext, search: int = 100):
         """Cleans up the bot's messages from the channel.
@@ -1932,9 +1951,9 @@ class Mod(commands.Cog):
         commands.core_command,
         name='kick',
         description='Kicks a member from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
-    @commands.permissions(3, user=['kick_members'], bot=['kick_members'])
+    @commands.permissions(user=['kick_members'], bot=['kick_members'])
     async def kick(
             self,
             ctx: GuildContext,
@@ -1957,9 +1976,9 @@ class Mod(commands.Cog):
         commands.core_command,
         name='ban',
         description='Bans a member from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
-    @commands.permissions(3, user=['ban_members'], bot=['ban_members'])
+    @commands.permissions(user=['ban_members'], bot=['ban_members'])
     async def ban(
             self,
             ctx: GuildContext,
@@ -1984,9 +2003,9 @@ class Mod(commands.Cog):
         commands.core_command,
         name='multiban',
         description='Bans multiple members from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
-    @commands.permissions(3, user=['ban_members'], bot=['ban_members'])
+    @commands.permissions(user=['ban_members'], bot=['ban_members'])
     async def multiban(
             self,
             ctx: GuildContext,
@@ -2024,9 +2043,9 @@ class Mod(commands.Cog):
     @commands.command(
         commands.hybrid_command,
         name='massban',
-        description='Mass bans multiple members from the server.'
+        description='Mass bans multiple members from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
     @commands.permissions(user=['ban_members'], bot=['ban_members'])
     async def massban(self, ctx: GuildContext, *, flags: MassbanFlags):
         """Mass bans multiple members from the server.
@@ -2164,9 +2183,9 @@ class Mod(commands.Cog):
         commands.core_command,
         name='softban',
         description='Soft bans a member from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
-    @commands.permissions(3, user=['kick_members'], bot=['kick_members'])
+    @commands.permissions(user=['kick_members'], bot=['kick_members'])
     async def softban(
             self,
             ctx: GuildContext,
@@ -2193,9 +2212,9 @@ class Mod(commands.Cog):
         commands.core_command,
         name='unban',
         description='Unbans a member from the server.',
+        guild_only=True,
     )
-    @commands.guild_only()
-    @commands.permissions(3, user=['ban_members'], bot=['ban_members'])
+    @commands.permissions(user=['ban_members'], bot=['ban_members'])
     async def unban(
             self,
             ctx: GuildContext,
@@ -2224,8 +2243,8 @@ class Mod(commands.Cog):
         commands.hybrid_command,
         name='tempban',
         description='Temporarily bans a member for the specified duration.',
+        guild_only=True,
     )
-    @commands.guild_only()
     @commands.permissions(user=['ban_members'], bot=['ban_members'])
     @app_commands.describe(
         duration='The duration to ban the member for. Must be a future Time.',
@@ -2367,9 +2386,10 @@ class Mod(commands.Cog):
         name='mute',
         description='Mutes members using the configured mute role.',
         invoke_without_command=True,
+        guild_only=True,
     )
     @can_mute()
-    @commands.permissions(3, bot=['manage_roles'])
+    @commands.permissions(bot=['manage_roles'])
     async def _mute(
             self,
             ctx: ModGuildContext,
@@ -2409,7 +2429,7 @@ class Mod(commands.Cog):
         description='Unmutes members using the configured mute role.',
     )
     @can_mute()
-    @commands.permissions(3, bot=['manage_roles'])
+    @commands.permissions(bot=['manage_roles'])
     async def _unmute(
             self,
             ctx: ModGuildContext,
@@ -2509,8 +2529,7 @@ class Mod(commands.Cog):
 
         member = await self.bot.get_or_fetch_member(guild, member_id)
         if member is None or not member._roles.has(role_id):  # noqa
-            async with self._batch_lock:
-                self._mute_data_batch[guild_id].append((member_id, False))
+            await self.send_mute_patch(guild_id, member_id, False)
             return
 
         if mod_id != member_id:
@@ -2532,15 +2551,14 @@ class Mod(commands.Cog):
         try:
             await member.remove_roles(discord.Object(id=role_id), reason=reason)
         except discord.HTTPException:
-            async with self._batch_lock:
-                self._mute_data_batch[guild_id].append((member_id, False))
+            await self.send_mute_patch(guild_id, member_id, False)
 
     @commands.command(
         _mute.group,
         name='role',
         description='Shows configuration of the mute role.',
     )
-    @commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def _mute_role(self, ctx: GuildContext):
         """Shows configuration of the mute role.
         To use these commands, you need to have Manage Roles
@@ -2561,9 +2579,9 @@ class Mod(commands.Cog):
         _mute_role.command,
         name='set',
         description='Sets the mute role to a pre-existing role.',
+        cooldown=commands.CooldownMap(rate=1, per=60.0, type=commands.BucketType.guild)
     )
-    @commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
-    @commands.cooldown(1, 60.0, commands.BucketType.guild)
+    @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_set(self, ctx: GuildContext, *, role: discord.Role):
         """Sets the mute role to a pre-existing role.
         This command can only be used once every minute.
@@ -2621,7 +2639,7 @@ class Mod(commands.Cog):
         description='Updates the permission overwrites of the mute role.',
         aliases=['sync']
     )
-    @commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_update(self, ctx: GuildContext):
         """Automatically updates the permission overwrites of the mute role on the server."""
         config = await self.get_guild_config(ctx.guild.id)
@@ -2643,7 +2661,7 @@ class Mod(commands.Cog):
         name='create',
         description='Creates a mute role with the given name.',
     )
-    @commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_create(self, ctx: GuildContext, *, name):
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly
@@ -2690,7 +2708,7 @@ class Mod(commands.Cog):
         aliases=['delete'],
         description='Unbinds a mute role without deleting it.',
     )
-    @commands.permissions(3, user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
+    @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_unbind(self, ctx: GuildContext):
         """Unbinds a mute role without deleting it.
         To use these commands, you need to have Manage Roles
@@ -2719,7 +2737,7 @@ class Mod(commands.Cog):
         description='Temporarily mutes yourself for the specified duration.',
     )
     @commands.guild_only()
-    @commands.permissions(3, bot=['manage_roles'])
+    @commands.permissions(bot=['manage_roles'])
     async def selfmute(
             self,
             ctx: GuildContext,
