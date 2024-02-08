@@ -80,6 +80,7 @@ class Migrations:
     def dump(self) -> Revisions:
         return Revisions(version=self.version, database_uri=self.database_uri)
 
+    # noinspection PyAttributeOutsideInit
     def load(self) -> None:
         self.ensure_path()
         data = self.load_metadata()
@@ -233,7 +234,7 @@ def setup_logging():
         get_logger('discord.state').addFilter(RemoveNoise())
         get_logger('charset_normalizer').setLevel(logging.ERROR)
 
-        root_log.setLevel(logging.INFO)
+        root_log.setLevel(logging.INFO if not config.debug else logging.DEBUG)
         handler = RotatingFileHandler(
             filename=os.path.join(BOT_BASE_FOLDER, 'percy.log'),
             encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5
@@ -256,7 +257,7 @@ async def create_pool() -> asyncpg.Pool:
     def _decode_jsonb(value):
         return json.loads(value)
 
-    async def init(con):
+    async def init(con):  # noqa
         await con.set_type_codec(
             'jsonb',
             schema='pg_catalog',
@@ -280,7 +281,7 @@ async def run_bot():
 
     try:
         pool = await create_pool()
-    except Exception:
+    except Exception:  # noqa
         click.echo('Unable to establish a connection with PostgreSQL. Exiting.', file=sys.stderr)
         _log.exception('Unable to establish a connection with PostgreSQL. Exiting.')
         return
@@ -360,7 +361,7 @@ def upgrade(sql: bool):
 
     try:
         applied = asyncio.run(run_upgrade(migrations))
-    except Exception:
+    except Exception:  # noqa
         traceback.print_exc()
         click.secho('An error occurred while applying the database migrations. Please check your migration scripts.', fg='red')
     else:
