@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import enum
 import random
+import re
 import traceback
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple, Union
@@ -38,8 +39,13 @@ def to_emoji(index: int) -> str:
     return str(EMOJIS.get(index))
 
 
-LINE_EMOJIS = ['<:lf:1103076956645363712>', '<:le:1103076791666610197>', '<:lfc:1103076698687295568>',
-               '<:red_info:1113513200319733790>', '<:ld:1103077171158859796>']
+LINE_EMOJIS = [
+    '<:lf:1103076956645363712>',
+    '<:le:1103076791666610197>',
+    '<:lfc:1103076698687295568>',
+    '<:red_info:1113513200319733790>',
+    '<:ld:1103077171158859796>'
+]
 
 
 def lineformat(x: int):
@@ -77,7 +83,7 @@ class VoteOption(TypedDict):
 
 
 class PollReasonModal(discord.ui.Modal, title='The Reason for you choice.'):
-    def __init__(self, poll: PollItem, selected_option: Dict[str, Any], bot: Percy):
+    def __init__(self, poll: Poll, selected_option: Dict[str, Any], bot: Percy):
         super().__init__(timeout=60.0)
         self.poll = poll
         self.selected_option = selected_option
@@ -108,13 +114,76 @@ class PollReasonModal(discord.ui.Modal, title='The Reason for you choice.'):
         self.stop()
 
 
-class ClearVoteButton(discord.ui.Button):
-    def __init__(self, bot: Percy, poll: PollItem):
-        self.poll = poll
-        self.bot = bot
+class EditModal(discord.ui.Modal, title='Edit Poll'):
+    question = discord.ui.TextInput(label='Question', placeholder='The Main Question for the poll.')
+    description = discord.ui.TextInput(label='Description', placeholder='The Description for the poll.',
+                                       style=discord.TextStyle.long, required=False)
+    thread_question = discord.ui.TextInput(label='Thread Question', placeholder='The Question for the thread.',
+                                           required=False)
+    image = discord.ui.TextInput(label='Image URL', placeholder='The Image URL for the poll.', required=False)
+    color = discord.ui.TextInput(label='Color', placeholder='The Color for the poll.', required=False)
 
-        super().__init__(label='Clear Vote', style=discord.ButtonStyle.red,
-                         custom_id=f'poll:{poll.id}:clear_vote', row=1)
+    def __init__(self, poll: Poll):
+        super().__init__(title=f'Edit Poll [{poll.id}]', timeout=180.0)
+
+        self.question.default = poll.question
+        self.description.default = poll.description
+        self.thread_question.default = poll.kwargs.get('thread', [None, None])[1]
+        self.image.default = poll.kwargs.get('image', None)
+        self.color.default = poll.kwargs.get('color', None)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.interaction = interaction  # noqa
+        self.stop()
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        await interaction.response.send_message('Something broke!', ephemeral=True)
+        traceback.print_tb(error.__traceback__)
+
+
+class PollClearVoteButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'poll:clear:(?P<id>[0-9]+)',
+):
+    def __init__(self, poll: Poll) -> None:
+        self.poll: Poll = poll
+        super().__init__(
+            discord.ui.Button(
+                label='Clear Vote',
+                style=discord.ButtonStyle.red,
+                row=1,
+                custom_id=f'poll:clear:{poll.id}'
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Polls] = interaction.client.get_cog('Polls')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        poll = await cog.get_guild_poll(interaction.guild.id, int(match['id']))
+        if not poll:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(poll)
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.poll is None:
+            await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
+            return False
+
+        return True
 
     async def callback(self, interaction: Interaction) -> None:
         if not interaction.message.embeds:
@@ -130,20 +199,56 @@ class ClearVoteButton(discord.ui.Button):
         user_option = next((i for i in self.poll.options if i['index'] == user[1]), None)
         self.poll.users.remove(user)
 
-        await self.poll.edit(options=[(user_option, EditType.VOTES, user_option['votes'] - 1)],
-                             votes=self.poll.votes - 1)
+        await self.poll.edit(
+            options=[(user_option, EditType.VOTES, user_option['votes'] - 1)],
+            votes=self.poll.votes - 1)
 
         await interaction.response.edit_message(embed=self.poll.to_embed())
 
 
-class PollInfoButton(discord.ui.Button):
-    def __init__(self, bot: Percy, poll: PollItem):
-        self.poll = poll
-        self.bot = bot
+class PollInfoButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'poll:info:(?P<id>[0-9]+)',
+):
+    def __init__(self, poll: Poll) -> None:
+        self.poll: Poll = poll
+        super().__init__(
+            discord.ui.Button(
+                emoji=discord.PartialEmoji(name='red_info', id=1113513200319733790),
+                style=discord.ButtonStyle.grey,
+                row=1,
+                custom_id=f'poll:info:{poll.id}'
+            )
+        )
 
-        super().__init__(emoji=discord.PartialEmoji(name='red_info', id=1113513200319733790),
-                         style=discord.ButtonStyle.grey,
-                         custom_id=f'poll:{poll.id}:info', row=1)
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Polls] = interaction.client.get_cog('Polls')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        poll = await cog.get_guild_poll(interaction.guild.id, int(match['id']))
+        if not poll:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(poll)
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.poll is None:
+            await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
+            return False
+
+        return True
 
     async def callback(self, interaction: Interaction) -> None:
         embed = discord.Embed(title=f'#{self.poll.kwargs.get('index')}: {self.poll.question}')
@@ -164,14 +269,80 @@ class PollInfoButton(discord.ui.Button):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-class PollEnterBase(discord.ui.Item):
-    def __init__(self, bot: Percy, poll: PollItem, index: int = MISSING):
-        super().__init__()
-        self.bot: Percy = bot
-        self.poll: PollItem = poll
-        self.index: int = index
+async def PollEnterCallback(interaction: Interaction, poll: Poll, index: int):
+    if not interaction.message.embeds:
+        return
 
-    async def callback(self, interaction: Interaction):
+    current_option = next((i for i in poll.options if i['index'] == index), None)
+
+    is_expired = False
+    if poll.kwargs.get('user_reason'):
+        is_expired = True
+        modal = PollReasonModal(poll, current_option, interaction.client)
+        await interaction.response.send_modal(modal)
+        state = await modal.wait()
+        if state is True:
+            return await interaction.followup.send(
+                content=f'{tick(False)} This poll requires a reason to vote.',
+                ephemeral=True)
+
+    poll.users.append([interaction.user.id, current_option['index']])
+    await poll.edit(
+        options=[(current_option, EditType.VOTES, current_option['votes'] + 1)],
+        votes=poll.votes + 1)
+
+    if is_expired:
+        await interaction.edit_original_response(embed=poll.to_embed())
+    else:
+        await interaction.response.edit_message(embed=poll.to_embed())
+
+    await interaction.followup.send(
+        f'On the poll *{poll.question}* [`{poll.id}`], you voted:\n'
+        f'{to_emoji(current_option["index"])} - `{current_option["content"]}`',
+        ephemeral=True)
+
+
+class PollEnterButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'poll:enter:(?P<id>[0-9]+):option:(?P<index>[0-9]+)',
+):
+    def __init__(self, poll: Poll, index: int) -> None:
+        self.poll: Poll = poll
+        self.index: int = index
+        super().__init__(
+            discord.ui.Button(
+                emoji=to_emoji(index), style=discord.ButtonStyle.gray,
+                custom_id=f'poll:enter:{poll.id}:option:{index}'
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Polls] = interaction.client.get_cog('Polls')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        poll = await cog.get_guild_poll(interaction.guild.id, int(match['id']))
+        if not poll:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(poll, int(match['index']))
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.poll is None:
+            await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
+            return False
+
         entry = next((i for i in self.poll.users if i[0] == interaction.user.id), None)
         if entry:
             option = next((i for i in self.poll.options if i['index'] == entry[1]), None)
@@ -179,97 +350,144 @@ class PollEnterBase(discord.ui.Item):
                 f'On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
                 f'{to_emoji(option['index'])} - `{option['content']}`',
                 ephemeral=True)
-            return
-
-        if not interaction.message.embeds:
-            return
-
-        if self.index == MISSING:
-            raise ValueError('The index is somehow missing. This is a bug. Please report it.')
-
-        current_option = next((i for i in self.poll.options if i['index'] == self.index), None)
-
-        is_expired = False
-        if self.poll.kwargs.get('user_reason'):
-            is_expired = True
-            modal = PollReasonModal(self.poll, current_option, self.bot)
-            await interaction.response.send_modal(modal)
-            state = await modal.wait()
-            if state is True:
-                return await interaction.followup.send(
-                    content=f'{tick(False)} This poll requires a reason to vote.',
-                    ephemeral=True)
-
-        self.poll.users.append([interaction.user.id, current_option['index']])
-        await self.poll.edit(options=[(current_option, EditType.VOTES, current_option['votes'] + 1)],
-                             votes=self.poll.votes + 1)
-
-        if is_expired:
-            await interaction.edit_original_response(embed=self.poll.to_embed())
-        else:
-            await interaction.response.edit_message(embed=self.poll.to_embed())
-
-        await interaction.followup.send(
-            f'On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
-            f'{to_emoji(current_option["index"])} - `{current_option["content"]}`',
-            ephemeral=True)
-
-
-class PollEnterButton(PollEnterBase, discord.ui.Button):
-    def __init__(self, bot: Percy, poll: PollItem, index: int):
-        PollEnterBase.__init__(self, bot, poll, index)
-        discord.ui.Button.__init__(
-            self, emoji=to_emoji(index), style=discord.ButtonStyle.gray,
-            custom_id=f'poll:{poll.id}:opt_{index}'
-        )
-
-
-class PollEnterSelect(PollEnterBase, discord.ui.Select):
-    def __init__(self, bot: Percy, poll: PollItem):
-        PollEnterBase.__init__(self, bot, poll)
-
-        options = [
-            discord.SelectOption(
-                label=option['content'], value=str(option['index']), emoji=to_emoji(option['index'])
-            ) for option in poll.options
-        ]
-
-        discord.ui.Select.__init__(
-            self, placeholder='Click here to vote.', custom_id=f'poll:{poll.id}:select',
-            options=options, row=0
-        )
-
-    async def callback(self, interaction: Interaction) -> None:
-        self.index = int(self.values[0])
-        await super().callback(interaction)
-
-
-class PollView(discord.ui.View):
-    def __init__(self, bot: Percy, poll: PollItem, archived: bool = False):
-        super().__init__(timeout=None)
-        self.poll = poll
-        self.bot = bot
-
-        if not archived:
-            if len(self.poll.options) <= 5:
-                for option in self.poll.options:
-                    self.add_item(PollEnterButton(bot, poll, option['index']))
-            else:
-                self.add_item(PollEnterSelect(bot, poll))
-
-            self.add_item(ClearVoteButton(bot, poll))
-        self.add_item(PollInfoButton(bot, poll))
-
-    async def interaction_check(self, interaction: Interaction, /) -> bool:
-        if retry_after := self.poll.cog.cooldown.update_rate_limit(interaction):
-            await interaction.response.send_message(
-                f'{tick(False)} You are being rate limited. Try again in {retry_after:.2f} seconds.',
-                ephemeral=True)
             return False
+
         return True
 
+    async def callback(self, interaction: Interaction) -> None:
+        await PollEnterCallback(interaction, self.poll, self.index)
 
-class PollItem(PostgresItem):
+
+class PollEnterSelect(
+    discord.ui.DynamicItem[discord.ui.Select],
+    template=r'poll:select:(?P<id>[0-9]+)',
+):
+    def __init__(self, poll: Poll) -> None:
+        self.poll: Poll = poll
+        super().__init__(
+            discord.ui.Select(
+                placeholder='Select the option to vote for...',
+                row=0,
+                custom_id=f'poll:select:{poll.id}',
+                options=[
+                    discord.SelectOption(
+                        label=option['content'], value=str(option['index']), emoji=to_emoji(option['index'])
+                    ) for option in poll.options
+                ]
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Polls] = interaction.client.get_cog('Polls')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        poll = await cog.get_guild_poll(interaction.guild.id, int(match['id']))
+        if not poll:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(poll)
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.poll is None:
+            await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
+            return False
+
+        entry = next((i for i in self.poll.users if i[0] == interaction.user.id), None)
+        if entry:
+            option = next((i for i in self.poll.options if i['index'] == entry[1]), None)
+            await interaction.response.send_message(
+                f'On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
+                f'{to_emoji(option['index'])} - `{option['content']}`',
+                ephemeral=True)
+            return False
+
+        return True
+
+    async def callback(self, interaction: Interaction) -> None:
+        await PollEnterCallback(interaction, self.poll, int(self.values[0]))
+
+
+class PollRolePingButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'poll:ping:role:(?P<role_id>[0-9]+)',
+):
+    def __init__(self, role_id: int) -> None:
+        self.role_id: int = role_id
+        super().__init__(
+            discord.ui.Button(
+                label='Add/Remove Role',
+                style=discord.ButtonStyle.grey,
+                custom_id=f'poll:ping:role:{role_id}'
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Polls] = interaction.client.get_cog('Polls')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        return cls(int(match['role_id']))
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.poll is None:
+            await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
+            return False
+
+        return True
+
+    async def callback(self, interaction: Interaction) -> Any:
+        role = discord.Object(id=self.role_id)
+        if any(r.id == self.role_id for r in interaction.user.roles):
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(
+                f'{tick(True)} Successfully **removed** from you these roles: '
+                f'<@&{self.role_id}>. Click again to re-add.',
+                ephemeral=True
+            )
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(
+                f'{tick(True)} Successfully **added** you the roles: '
+                f'<@&{self.role_id}>. Click again to remove.',
+                ephemeral=True
+            )
+
+
+def create_view(poll: Poll) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    if poll.kwargs.get('running') is True:
+        if len(poll.options) <= 5:
+            for option in poll.options:
+                view.add_item(PollEnterButton(poll, option['index']))
+        else:
+            view.add_item(PollEnterSelect(poll))
+        view.add_item(PollClearVoteButton(poll))
+    view.add_item(PollInfoButton(poll))
+    return view
+
+
+class Poll(PostgresItem):
     """Represents a poll item."""
 
     id: int
@@ -288,7 +506,7 @@ class PollItem(PostgresItem):
 
     __slots__ = (
         'cog', 'bot', 'id', 'extra', 'channel_id', 'message_id', 'guild_id', 'users',
-        'args', 'kwargs', 'message', 'question', 'votes', 'description', 'options'
+        'args', 'kwargs', 'message', 'ping_message', 'question', 'votes', 'description', 'options'
     )
 
     def __init__(self, cog: Polls, **kwargs):
@@ -301,10 +519,12 @@ class PollItem(PostgresItem):
         self.kwargs: dict[str, Any] = self.extra.get('kwargs', {})
 
         self.message: discord.Message = MISSING
+        self.ping_message: discord.Message = MISSING
+
         self.question = self.kwargs.get('question')
         self.votes = self.kwargs.get('votes', 0)
         self.description = self.kwargs.get('description')
-        self.options: List[Dict[str, Any]] = self.kwargs.get('options', [])
+        self.options: List[VoteOption] = self.kwargs.get('options', [])
 
     @property
     def jump_url(self) -> Optional[str]:
@@ -331,6 +551,10 @@ class PollItem(PostgresItem):
         channel = self.channel
         if channel is not None and self.message_id is not None:
             message = await self.cog.get_message(channel, self.message_id)
+            if (ping_message_id := self.kwargs.get('ping_message_id')) is not None:
+                ping_message = await self.cog.get_message(channel, ping_message_id)
+                if ping_message:
+                    self.ping_message = ping_message
             if message:
                 self.message = message
 
@@ -452,57 +676,6 @@ class PollItem(PostgresItem):
         self.cog.get_guild_polls.invalidate(self, self.guild_id)
 
 
-class PollPingView(discord.ui.View):
-    def __init__(self, role_id: int):
-        self.role_id = role_id
-        super().__init__(timeout=None)
-
-    @discord.ui.button(style=discord.ButtonStyle.gray, label='Add/Remove Role')
-    async def callback(self, interaction: Interaction) -> Any:
-        role = discord.Object(id=self.role_id)
-        if any(r.id == self.role_id for r in interaction.user.roles):
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(
-                f'Successfully **removed** from you these roles:'
-                f' <@&{self.role_id}>. Click again to re-add.',
-                ephemeral=True
-            )
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(
-                f'Successfully **gave** you the roles:'
-                f' <@&{self.role_id}>. Click again to remove.',
-                ephemeral=True
-            )
-
-
-class EditModal(discord.ui.Modal, title='Edit Poll'):
-    question = discord.ui.TextInput(label='Question', placeholder='The Main Question for the poll.')
-    description = discord.ui.TextInput(label='Description', placeholder='The Description for the poll.',
-                                       style=discord.TextStyle.long, required=False)
-    thread_question = discord.ui.TextInput(label='Thread Question', placeholder='The Question for the thread.',
-                                           required=False)
-    image = discord.ui.TextInput(label='Image URL', placeholder='The Image URL for the poll.', required=False)
-    color = discord.ui.TextInput(label='Color', placeholder='The Color for the poll.', required=False)
-
-    def __init__(self, poll: PollItem):
-        super().__init__(title=f'Edit Poll [{poll.id}]', timeout=180.0)
-
-        self.question.default = poll.question
-        self.description.default = poll.description
-        self.thread_question.default = poll.kwargs.get('thread', [None, None])[1]
-        self.image.default = poll.kwargs.get('image', None)
-        self.color.default = poll.kwargs.get('color', None)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        self.interaction = interaction  # noqa
-        self.stop()
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message('Something broke!', ephemeral=True)
-        traceback.print_tb(error.__traceback__)
-
-
 class Polls(commands.Cog):
     """Poll voting system."""
 
@@ -512,6 +685,9 @@ class Polls(commands.Cog):
         self._message_cache: dict[int, discord.Message] = {}
         self.cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
             2, 5, lambda interaction: interaction.user)
+
+        bot.add_dynamic_items(
+            PollEnterButton, PollEnterSelect, PollClearVoteButton, PollInfoButton, PollRolePingButton)
 
     async def cog_load(self) -> None:
         self.cleanup_message_cache.start()
@@ -547,7 +723,7 @@ class Polls(commands.Cog):
 
     async def create_poll(
             self, poll_id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
-    ) -> PollItem:
+    ) -> Poll:
         r"""Creates a poll.
 
         Parameters
@@ -570,10 +746,10 @@ class Polls(commands.Cog):
 
         Returns
         --------
-        :class:`PollItem`
+        :class:`Poll`
             The created Poll if creation succeeded, otherwise ``None``.
         """
-        poll = PollItem.temporary(
+        poll = Poll.temporary(
             self, channel_id=channel_id, message_id=message_id, guild_id=guild_id,
             extra={'args': args, 'kwargs': kwargs, 'users': []}
         )
@@ -590,7 +766,7 @@ class Polls(commands.Cog):
         self.get_guild_polls.invalidate(self, guild_id)
         return poll
 
-    async def get_guild_poll(self, guild_id: int, poll_id: int) -> Optional[PollItem]:
+    async def get_guild_poll(self, guild_id: int, poll_id: int) -> Optional[Poll]:
         """|coro|
 
         Parameters
@@ -602,15 +778,15 @@ class Polls(commands.Cog):
 
         Returns
         -------
-        PollItem
-            The :class:`PollItem` object from the fetched record.
+        Poll
+            The :class:`Poll` object from the fetched record.
         """
         query = "SELECT * FROM polls WHERE id = $1 AND guild_id = $2 LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, poll_id, guild_id)
-        return PollItem(self, record=record) if record else None
+        return Poll(self, record=record) if record else None
 
     @cache.cache()
-    async def get_guild_polls(self, guild_id: int) -> List[PollItem]:
+    async def get_guild_polls(self, guild_id: int) -> List[Poll]:
         """|coro| @cached
 
         Parameters
@@ -620,13 +796,13 @@ class Polls(commands.Cog):
 
         Returns
         -------
-        List[PollItem]
-            A list of :class:`PollItem` objects from the fetched records.
+        List[Poll]
+            A list of :class:`Poll` objects from the fetched records.
         """
         query = "SELECT * FROM polls WHERE guild_id = $1;"
-        return [PollItem(self, record=record) for record in await self.bot.pool.fetch(query, guild_id)]
+        return [Poll(self, record=record) for record in await self.bot.pool.fetch(query, guild_id)]
 
-    async def end_poll(self, poll: PollItem) -> int | None:
+    async def end_poll(self, poll: Poll) -> int | None:
         """|coro|
 
         Ends a poll and maybe removes the corresponding timer from the reminder system.
@@ -634,7 +810,7 @@ class Polls(commands.Cog):
 
         Parameters
         ----------
-        poll: PollItem
+        poll: Poll
             The poll to end.
 
         Returns
@@ -645,10 +821,13 @@ class Polls(commands.Cog):
         if poll.kwargs.get('running') is False:
             return None
 
-        await poll.edit(running=False)
+        poll = await poll.edit(running=False)
         await self.bot.reminder.delete_timer('poll', poll_id=str(poll.id))
 
-        if poll.message_id is not None and poll.message is MISSING:
+        if (
+                (poll.message_id is not None and poll.message is MISSING)
+                or (poll.kwargs.get('ping_message_id') is not None and poll.ping_message is MISSING)
+        ):
             await poll.fetch_message()
 
         if poll.message:
@@ -669,7 +848,9 @@ class Polls(commands.Cog):
                     await thread.edit(archived=True, locked=True)
 
             try:
-                await poll.message.edit(embed=embed, view=PollView(self.bot, poll, archived=True))
+                await poll.message.edit(embed=embed, view=create_view(poll))
+                if poll.ping_message:
+                    await poll.ping_message.delete()
             except discord.HTTPException:
                 pass
 
@@ -732,6 +913,9 @@ class Polls(commands.Cog):
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
 
         message = await channel.send(embed=discord.Embed(description='*Preparing Poll...*'))
+        ping_message = None
+        if ping:
+            ping_message = await channel.send(f'*...*')
 
         new_index = len(await self.get_guild_polls(guild_id=interaction.guild.id)) + 1
         unique_id = uuid([rec[0] for rec in await self.bot.pool.fetch('SELECT id FROM polls')])
@@ -755,6 +939,7 @@ class Polls(commands.Cog):
             message.id,
             interaction.guild.id,
             interaction.user.id,
+            ping_message_id=ping_message.id if ping else None,
             question=question,
             description=description,
             options=to_options,
@@ -788,16 +973,20 @@ class Polls(commands.Cog):
         await interaction.followup.send(
             f'{tick(True)} Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}')
 
-        await message.edit(embed=poll.to_embed(), view=PollView(bot=self.bot, poll=poll))
+        await message.edit(embed=poll.to_embed(), view=create_view(poll))
 
         if ping:
-            await channel.send(
+            view = discord.ui.View(timeout=None)
+            view.add_item(PollRolePingButton(config.poll_ping_role_id))
+            await ping_message.edit(
                 content=f'<@&{config.poll_ping_role_id}>',
-                embed=discord.Embed(description='You wanna tell us your opinion?\n'
-                                                'To be notified when new polls are posted, click below!',
-                                    color=discord.Color.green()),
-                view=PollPingView(config.poll_ping_role_id),
-                allowed_mentions=discord.AllowedMentions(roles=True))
+                embed=discord.Embed(
+                    description='You wanna tell us your opinion?\n'
+                                'To be notified when new polls are posted, click below!',
+                    color=helpers.Colour.light_grey()),
+                view=view,
+                allowed_mentions=discord.AllowedMentions(roles=True)
+            )
 
     @polls_create.error
     async def polls_create_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -994,7 +1183,7 @@ class Polls(commands.Cog):
                     kwargs[f'opt_{index + 1}'] = opt_content
 
         poll = await poll.edit(**kwargs)
-        await poll.message.edit(embed=poll.to_embed(), view=PollView(self.bot, poll))
+        await poll.message.edit(embed=poll.to_embed(), view=create_view(poll))
 
         await interaction.followup.send(f'{tick(True)} Poll [`{poll.id}`] edited successfully.', ephemeral=True)
 
@@ -1029,20 +1218,25 @@ class Polls(commands.Cog):
                 return await interaction.followup.send(f'{tick(False)} Poll not found.', ephemeral=True)
 
             if showextrainfo and interaction.channel.permissions_for(interaction.user).manage_messages:
-                embed = discord.Embed(title=f'#{poll.kwargs.get('index')}: {poll.question}',
-                                      description=poll.description)
+                embed = discord.Embed(
+                    title=f'#{poll.kwargs.get('index')}: {poll.question}',
+                    description=poll.description)
 
-                embed.add_field(name='Choices', value='\n'.join(f'{v['value']}' for v in poll.to_fields(extras=False)),
-                                inline=False)
+                embed.add_field(
+                    name='Choices',
+                    value='\n'.join(f'{v['value']}' for v in poll.to_fields(extras=False)),
+                    inline=False)
                 embed.add_field(name='Voting', value=f'Total Votes: **{poll.votes}**')
 
                 running = poll.kwargs.get('running')
                 embed.add_field(name='Active?', value=running)
 
-                embed.add_field(name='Poll published',
-                                value=discord.utils.format_dt(betterget(poll.kwargs, 'published'), 'f'))
-                embed.add_field(name='Poll ends' if running else 'Poll finished',
-                                value=discord.utils.format_dt(betterget(poll.kwargs, 'expires'), 'R'))
+                embed.add_field(
+                    name='Poll published',
+                    value=discord.utils.format_dt(betterget(poll.kwargs, 'published'), 'f'))
+                embed.add_field(
+                    name='Poll ends' if running else 'Poll finished',
+                    value=discord.utils.format_dt(betterget(poll.kwargs, 'expires'), 'R'))
 
                 embed.add_field(name='Poll Message',
                                 value=poll.jump_url or f'Can\'t locate message `{poll.message_id}`')
@@ -1087,11 +1281,11 @@ class Polls(commands.Cog):
                 records = [r for r in records if fuzzy.partial_ratio(
                     keyword.lower(), r['extra']['kwargs'].get('question').lower()) > 70]
 
-            def fmt_poll(_poll: PollItem) -> str:
+            def fmt_poll(_poll: Poll) -> str:
                 fmt_timestamp = discord.utils.format_dt(_poll.published, 'd')
                 return f'`{_poll.id}` (`#{_poll.kwargs.get("index")}`): {_poll.question} ({fmt_timestamp})'
 
-            results = [fmt_poll(poll) for poll in [PollItem(self, record=r) for r in records]]
+            results = [fmt_poll(poll) for poll in [Poll(self, record=r) for r in records]]
             embed = discord.Embed(
                 title='Poll Search',
                 description='\n'.join(text),
@@ -1120,9 +1314,9 @@ class Polls(commands.Cog):
         member = member or interaction.user
         user_polls = list(filter(lambda poll: any(x[0] == member.id for x in poll.users), polls))
 
-        class FieldPaginator(BasePaginator[PollItem]):
+        class FieldPaginator(BasePaginator[Poll]):
 
-            async def format_page(self, entries: List[PollItem], /) -> discord.Embed:
+            async def format_page(self, entries: List[Poll], /) -> discord.Embed:
                 embed = discord.Embed(
                     title=f'Poll History for {member}',
                     colour=helpers.Colour.darker_red(),
@@ -1147,7 +1341,7 @@ class Polls(commands.Cog):
         description='Refactor all existing Polls in this guild and reattach the views.',
     )
     @commands.permissions(user=['ban_members', 'manage_messages'])
-    @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore
+    @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(poll_id='The ID of the Poll to debug.')
     @app_commands.checks.cooldown(1, 15.0, key=lambda i: i.guild_id)
     async def polls_debug(self, interaction: discord.Interaction, poll_id: int):
@@ -1163,10 +1357,9 @@ class Polls(commands.Cog):
                 f'{tick(False)} Poll not found.', ephemeral=True)
 
         embed = poll.to_embed()
-        view = PollView(self.bot, poll=poll, archived=not poll.kwargs.get('running', True))
         await poll.fetch_message()
         if poll.message:
-            await poll.message.edit(embed=embed, view=view)
+            await poll.message.edit(embed=embed, view=create_view(poll))
 
         await interaction.response.send_message(f'{tick(True)} Poll [`{poll.id}`] debugged.', ephemeral=True)
 
@@ -1243,7 +1436,7 @@ class Polls(commands.Cog):
 
         query = "SELECT * FROM polls WHERE id = $1 LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, poll_id)
-        poll = PollItem(self, record=record) if record else None
+        poll = Poll(self, record=record) if record else None
 
         if poll:
             await self.end_poll(poll)

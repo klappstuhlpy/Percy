@@ -4,11 +4,11 @@ import random
 from typing import Optional, List, TYPE_CHECKING
 
 import discord
-from discord import app_commands
-from discord.utils import MISSING
+from discord import app_commands, Interaction
 
 from .reminder import Timer
 from .utils import commands
+from .utils.context import tick
 from .utils.helpers import PostgresItem
 from .utils.timetools import TimeTransformer
 
@@ -16,145 +16,156 @@ if TYPE_CHECKING:
     from bot import Percy
 
 
-class GiveawayItem(PostgresItem):
-    """Represents a giveaway item."""
+class GiveawayRerollButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'giveaway:reroll:(?P<id>[0-9]+)',
+):
+    def __init__(self, giveaway: Giveaway) -> None:
+        self.giveaway: Giveaway = giveaway
+        super().__init__(
+            discord.ui.Button(
+                label='Reroll',
+                style=discord.ButtonStyle.gray,
+                emoji=discord.PartialEmoji(
+                    name='\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}'),
+                custom_id=f'giveaway:reroll:{giveaway.id}'
+            )
+        )
 
-    id: int
-    channel_id: int
-    message_id: int
-    guild_id: int
-    author_id: int
-    prize: str
-    description: str
-    winner_count: int
-    entries: List[int]
-
-    __slots__ = ('id', 'channel_id', 'message_id', 'guild_id', 'author_id', 'prize', 'description', 'winner_count', 'entries')
-
-    @property
-    def jump_url(self) -> Optional[str]:
-        if self.message_id and self.channel_id:
-            guild = self.guild_id or '@me'
-            return f'https://discord.com/channels/{guild}/{self.channel_id}/{self.message_id}'
-        return None
-
-    @property
-    def entry_count(self) -> int:
-        return len(self.entries) or 0
-
-    async def message(self, guild: discord.Guild) -> Optional[discord.Message]:
-        if self.message_id and self.channel_id:
-            channel = guild.get_channel(self.channel_id)
-            if channel:
-                return await channel.fetch_message(self.message_id)
-        return None
-
-
-class GiveawayRerollView(discord.ui.View):
-
-    def __init__(self, bot: Percy, cog: Giveaway, giveaway: GiveawayItem):
-        super().__init__(timeout=None)
-        self.giveaway: GiveawayItem = giveaway
-        self.cog: Giveaway = cog
-        self.bot: Percy = bot
-        self.message: discord.Message = MISSING
-
-        class RerollButton(discord.ui.Button):
-            def __init__(self):
-                self.giveaway: GiveawayItem = giveaway
-                self.cog: Giveaway = cog
-                self.bot = bot
-                self.message: discord.Message = MISSING
-
-                super().__init__(label='Reroll', style=discord.ButtonStyle.gray,
-                                 emoji=discord.PartialEmoji(
-                                     name='\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}'),
-                                 custom_id=f'giveaway_reroll:{self.giveaway.id}')
-
-            async def callback(self, interaction: discord.Interaction):
-                self.message = interaction.message
-                embed = self.message.embeds[0]
-                guild = self.bot.get_guild(self.giveaway.guild_id)
-
-                winner_list = []
-                entries = self.giveaway.entries.copy()
-                for _ in range(self.giveaway.winner_count):
-                    if len(entries) == 0:
-                        # Assuming that there are more possible winners than entries
-                        winner_list.extend([0 for _ in range(self.giveaway.winner_count - len(winner_list))])
-                        break
-                    user_id = entries.pop(random.randint(0, len(entries) - 1))
-                    winner_list.append(user_id)
-
-                field = embed.fields[0]
-                lines = field.value.split('\n')
-                winners = ', '.join(guild.get_member(x).mention for x in winner_list if x != 0)
-                lines[3] = f'Winner(s): {winners}'
-                embed.set_field_at(0, name=field.name, value='\n'.join(lines))
-
-                await self.message.reply(
-                    f'{cog.display_emoji} Congratulations **{winners}**! You won the giveaway for *{self.giveaway.prize}*!',
-                    allowed_mentions=discord.AllowedMentions(users=True))
-
-                await interaction.response.edit_message(
-                    embed=embed,
-                    view=GiveawayRerollView(self.bot, self.cog, self.giveaway)
-                    if not len(self.giveaway.entries) == 0 else None
-                )
-
-        self.add_item(RerollButton())
-
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-        if not interaction.user.guild_permissions.manage_channels:
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Giveaways] = interaction.client.get_cog('Giveaways')
+        if cog is None:
             await interaction.response.send_message(
-                '<:redTick:1079249771975413910> You are not allowed to reroll this giveaway.',
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        giveaway = await cog.get_giveaway(int(match['id']))
+        if not giveaway:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(giveaway)
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.giveaway is None:
+            await interaction.response.send_message(f'{tick(False)} Giveaway was not found.', ephemeral=True)
+            return False
+
+        if interaction.user.id != self.giveaway.author_id:
+            await interaction.response.send_message(
+                f'{tick(False)} You are not allowed to reroll this giveaway. Only the author can do this.',
                 ephemeral=True)
             return False
+
         return True
 
+    async def callback(self, interaction: discord.Interaction):
+        embed = self.message.embeds[0]
+        guild = self.bot.get_guild(self.giveaway.guild_id)
 
-class GiveawayEntryView(discord.ui.View):
+        winner_list = []
+        entries = self.giveaway.entries.copy()
 
-    def __init__(self, bot: Percy, giveaway: GiveawayItem):
-        super().__init__(timeout=None)
-        self.bot: Percy = bot
-        self.giveaway: GiveawayItem = giveaway
+        # Loop through the number of winners specified
+        for _ in range(self.giveaway.winner_count):
+            if entries:
+                # If there are entries remaining, randomly select one and add it to the winner list
+                user_id = entries.pop(random.randint(0, len(entries) - 1))
+                winner_list.append(user_id)
+            else:
+                # If there are no more entries, fill the remaining slots with zeros
+                winner_list.extend([0] * (self.giveaway.winner_count - len(winner_list)))
+                break
 
-        class EnterButton(discord.ui.Button):
-            def __init__(self):
-                self.bot: Percy = bot
-                self.giveaway: GiveawayItem = giveaway
-                super().__init__(
-                    label='Enter', style=discord.ButtonStyle.green,
-                    emoji=discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True),
-                    custom_id=f'giveaway_enter:{self.giveaway.id}')
+        field = embed.fields[0]
+        lines = field.value.split('\n')
+        winners = ', '.join(guild.get_member(x).mention for x in winner_list if x != 0)
+        lines[3] = f'Winner(s): {winners}'
+        embed.set_field_at(0, name=field.name, value='\n'.join(lines))
 
-            async def callback(self, interaction: discord.Interaction):
-                self.giveaway.entries.append(interaction.user.id)
-                query = "UPDATE giveaways SET entries = $1 WHERE id = $2;"
-                await self.bot.pool.execute(query, self.giveaway.entries, self.giveaway.id)
+        await self.message.reply(
+            f'<a:giveaway:1089511337161400390> Congratulations **{winners}**! '
+            f'You won the giveaway for *{self.giveaway.prize}*!',
+            allowed_mentions=discord.AllowedMentions(users=True)
+        )
 
-                embed = interaction.message.embeds[0]
-                field = embed.fields[0]
-                lines = field.value.split('\n')
-                lines[2] = f'Entries: **{self.giveaway.entry_count}**'
-                embed.set_field_at(0, name=field.name, value='\n'.join(lines))
+        await interaction.response.edit_message(embed=embed, view=None)
 
-                await interaction.response.edit_message(embed=embed)
-                await interaction.followup.send(
-                    '<:greenTick:1079249732364406854> You have successfully entered this giveaway.',
-                    ephemeral=True
-                )
 
-        self.add_item(EnterButton())
+class GiveawayEnterButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r'giveaway:enter:(?P<id>[0-9]+)',
+):
+    def __init__(self, giveaway: Giveaway) -> None:
+        self.giveaway: Giveaway = giveaway
+        super().__init__(
+            discord.ui.Button(
+                label='Enter',
+                style=discord.ButtonStyle.green,
+                emoji=discord.PartialEmoji(name='giveaway', id=1089511337161400390, animated=True),
+                custom_id=f'giveaway:enter:{giveaway.id}'
+            )
+        )
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+    @classmethod
+    async def from_custom_id(
+            cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
+    ):
+        cog: Optional[Giveaways] = interaction.client.get_cog('Giveaways')
+        if cog is None:
+            await interaction.response.send_message(
+                f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+            )
+            raise AssertionError(f'{tick(False)} Polls cog is not loaded')
+
+        giveaway = await cog.get_giveaway(int(match['id']))
+        if not giveaway:
+            await interaction.response.send_message(
+                f'{tick(False)} The poll you are trying to vote on does not exist.', ephemeral=True)
+            return
+
+        return cls(giveaway)
+
+    async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
+        if interaction.guild_id is None:
+            return False
+
+        if self.giveaway is None:
+            await interaction.response.send_message(f'{tick(False)} Giveaway was not found.', ephemeral=True)
+            return False
+
         if interaction.user.id in self.giveaway.entries:
             await interaction.response.send_message(
-                '<:redTick:1079249771975413910> You have already entered this giveaway.',
+                f'{tick(False)} You have already entered this giveaway.',
                 ephemeral=True)
             return False
+
         return True
+
+    async def callback(self, interaction: Interaction) -> None:
+        self.giveaway.entries.append(interaction.user.id)
+        query = "UPDATE giveaways SET entries = $1 WHERE id = $2;"
+        await self.bot.pool.execute(query, self.giveaway.entries, self.giveaway.id)
+
+        embed = interaction.message.embeds[0]
+        field = embed.fields[0]
+        lines = field.value.split('\n')
+        lines[2] = f'Entries: **{self.giveaway.entry_count}**'
+        embed.set_field_at(0, name=field.name, value='\n'.join(lines))
+
+        await interaction.response.edit_message(embed=embed)
+        await interaction.followup.send(
+            f'{tick(True)} You have successfully entered this giveaway.',
+            ephemeral=True
+        )
 
 
 class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
@@ -192,8 +203,8 @@ class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
 
         msg = await interaction.channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(roles=True))
 
-        giveaway: Giveaway = self.bot.get_cog('Giveaway')  # type: ignore
-        gw = await giveaway.create_giveaway(
+        cog: Giveaways = self.bot.get_cog('Giveaways')  # type: ignore
+        giveaway = await cog.create_giveaway(
             interaction.channel.id,
             msg.id,
             interaction.guild.id,
@@ -211,24 +222,62 @@ class CreateGiveawayModal(discord.ui.Modal, title='Create a Giveaway'):
             await reminder.create_timer(
                 when,
                 'giveaway',
-                giveaway_id=gw.id,
+                giveaway_id=giveaway.id,
                 created=discord.utils.utcnow(),
                 timezone='UTC',
             )
 
-        await msg.edit(view=GiveawayEntryView(self.bot, giveaway=gw))
+        view = discord.ui.View(timeout=None)
+        view.add_item(GiveawayEnterButton(giveaway))
+        await msg.edit(view=view)
 
         await interaction.response.send_message(
-            f'<:greenTick:1079249732364406854> Giveaway [`{gw.id}`] successfully created. {msg.jump_url}',
+            f'<:greenTick:1079249732364406854> Giveaway [`{giveaway.id}`] successfully created. {msg.jump_url}',
             ephemeral=True
         )
 
 
-class Giveaway(commands.Cog):
+class Giveaway(PostgresItem):
+    """Represents a giveaway item."""
+
+    id: int
+    channel_id: int
+    message_id: int
+    guild_id: int
+    author_id: int
+    prize: str
+    description: str
+    winner_count: int
+    entries: List[int]
+
+    __slots__ = ('id', 'channel_id', 'message_id', 'guild_id', 'author_id', 'prize', 'description', 'winner_count', 'entries')
+
+    @property
+    def jump_url(self) -> Optional[str]:
+        if self.message_id and self.channel_id:
+            guild = self.guild_id or '@me'
+            return f'https://discord.com/channels/{guild}/{self.channel_id}/{self.message_id}'
+        return None
+
+    @property
+    def entry_count(self) -> int:
+        return len(self.entries) or 0
+
+    async def message(self, guild: discord.Guild) -> Optional[discord.Message]:
+        if self.message_id and self.channel_id:
+            channel = guild.get_channel(self.channel_id)
+            if channel:
+                return await channel.fetch_message(self.message_id)
+        return None
+
+
+class Giveaways(commands.Cog):
     """Create Giveaways using Modals."""
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
+
+        bot.add_dynamic_items(GiveawayEnterButton, GiveawayRerollButton)
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -243,7 +292,7 @@ class Giveaway(commands.Cog):
             description: str,
             prize: str,
             winner_count: int
-    ) -> GiveawayItem:
+    ) -> Giveaway:
         """Creates a giveaway.
         Parameters
         -----------
@@ -265,7 +314,7 @@ class Giveaway(commands.Cog):
         ------
         Arguments and keyword arguments must be JSON serializable.
         """
-        giveaway = GiveawayItem.temporary(
+        giveaway = Giveaway.temporary(
             channel_id=channel_id,
             message_id=message_id,
             guild_id=guild_id,
@@ -291,14 +340,15 @@ class Giveaway(commands.Cog):
         query = "DELETE FROM giveaways WHERE id = $1;"
         return await self.bot.pool.execute(query, giveaway_id)
 
-    async def get_giveaway(self, giveaway_id: int) -> Optional[GiveawayItem]:
+    async def get_giveaway(self, giveaway_id: int) -> Optional[Giveaway]:
         """Gets a giveaways from the database."""
         query = "SELECT * FROM giveaways WHERE id = $1 LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, giveaway_id)
-        return GiveawayItem(record=record) if record else None
+        return Giveaway(record=record) if record else None
 
-    giveaway = app_commands.Group(name='giveaway', description='Manage giveaways.',
-                                  default_permissions=discord.Permissions(manage_channels=True), guild_only=True)
+    giveaway = app_commands.Group(
+        name='giveaway', description='Manage giveaways.',
+        default_permissions=discord.Permissions(manage_channels=True), guild_only=True)
 
     @commands.command(
         giveaway.command,
@@ -316,22 +366,22 @@ class Giveaway(commands.Cog):
         await self.bot.wait_until_ready()
         _id = timer.kwargs.get('giveaway_id')
 
-        record = await self.get_giveaway(giveaway_id=_id)
-        channel = self.bot.get_channel(record.channel_id)
-        message = await channel.fetch_message(record.message_id)
+        giveaway = await self.get_giveaway(giveaway_id=_id)
+        channel = self.bot.get_channel(giveaway.channel_id)
+        message = await channel.fetch_message(giveaway.message_id)
 
         await self.delete_giveaway(giveaway_id=_id)
 
         embed = message.embeds[0]
-        guild = self.bot.get_guild(record.guild_id)
+        guild = self.bot.get_guild(giveaway.guild_id)
 
         winner_list = []
-        if record.entries:
-            entries = record.entries.copy()
-            for _ in range(record.winner_count):
+        if giveaway.entries:
+            entries = giveaway.entries.copy()
+            for _ in range(giveaway.winner_count):
                 if len(entries) == 0:
                     # Assuming that there are more possible winners than entries
-                    winner_list.extend([0 for _ in range(record.winner_count - len(winner_list))])
+                    winner_list.extend([0 for _ in range(giveaway.winner_count - len(winner_list))])
                     break
                 user_id = entries.pop(random.randint(0, len(entries) - 1))
                 winner_list.append(user_id)
@@ -345,14 +395,16 @@ class Giveaway(commands.Cog):
 
         embed.set_footer(text=f'Giveaway ended')
 
-        if len(record.entries) > 0 and any(winner != 0 for winner in winner_list):
-            await message.edit(embed=embed, view=GiveawayRerollView(self.bot, self, record))
-            await message.reply(f'{self.display_emoji} Congratulations **{winners}**! You won the giveaway for *{record.prize}*!',
+        if len(giveaway.entries) > 0 and any(winner != 0 for winner in winner_list):
+            view = discord.ui.View(timeout=None)
+            view.add_item(GiveawayRerollButton(giveaway))
+            await message.edit(embed=embed, view=view)
+            await message.reply(f'{self.display_emoji} Congratulations **{winners}**! You won the giveaway for *{giveaway.prize}*!',
                                 allowed_mentions=discord.AllowedMentions(users=True))
         else:
             await message.edit(embed=embed, view=None)
-            await message.reply(f'No winners were determined for *{record.prize}*.')
+            await message.reply(f'No winners were determined for *{giveaway.prize}*.')
 
 
 async def setup(bot: Percy):
-    await bot.add_cog(Giveaway(bot))
+    await bot.add_cog(Giveaways(bot))

@@ -15,8 +15,6 @@ from expiringdict import ExpiringDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cogs import EXTENSIONS
-from cogs.giveaway import GiveawayEntryView, GiveawayItem
-from cogs.polls import PollView, PollItem
 from cogs.user import UserSettings
 from cogs.utils import helpers, commands
 from cogs.utils.config import Config
@@ -237,19 +235,6 @@ class Percy(commands.Bot):
                 await self.load_extension(extension)
             except Exception as e:
                 log.error(f'Failed to load extension `{extension}`', exc_info=e)
-
-        await self.reattach_views()
-
-    async def reattach_views(self) -> None:
-        records = await self.pool.fetch('SELECT * FROM polls')
-        cog = self.get_cog('Polls')
-        for record in records:
-            item = PollItem(cog, record=record)  # type: ignore
-            self.add_view(PollView(self, item, archived=not item.kwargs.get('running', False)))
-
-        records = await self.pool.fetch('SELECT * FROM giveaways')
-        for record in records:
-            self.add_view(GiveawayEntryView(self, GiveawayItem(record=record)))
 
     def get_guild_prefixes(self, guild: Optional[discord.abc.Snowflake], *, local_inject=_callable_prefix) -> list[str]:
         proxy_msg = ProxyObject(guild)
