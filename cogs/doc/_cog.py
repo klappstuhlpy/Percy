@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 from ssl import CertificateError
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ import aiohttp
 import discord
 from aiohttp import ClientConnectorError
 from discord import app_commands
+from discord.ext.commands._types import BotT
 from discord.utils import MISSING
 
 from bot import Percy
@@ -22,7 +24,7 @@ from ..utils.tasks import Scheduler, executor
 from ..utils.constants import PACKAGE_NAME_RE
 from ..utils.context import Context
 from ..utils.formats import plural
-from ..utils.lock import lock, SharedEvent, watch_func, lock_func
+from ..utils.lock import lock, SharedEvent, lock_func, LockedResourceError
 from ..utils.paginator import LinePaginator
 
 log = get_logger(__name__)
@@ -326,10 +328,20 @@ class Documentation(commands.Cog):
         self.inventory_scheduler = Scheduler(self.__class__.__name__)
         self.symbol_get_event: SharedEvent = SharedEvent()
 
-        self.refresh_event = asyncio.Event()
-        self.refresh_event.set()
-
         self.inv_retries: dict[str, int] = {}
+
+    @property
+    def display_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name='\N{OPEN BOOK}')
+
+    async def reset_cache(self) -> None:
+        """Reset the internal cache of the cog."""
+        await self.symbol_get_event.wait()
+        self.inventory_scheduler.cancel_all()
+
+        self.base_urls.clear()
+        self.doc_symbols.clear()
+        await self.item_fetcher.clear()
 
     async def cog_load(self) -> None:
         """Refresh documentation inventory on cog initialization."""
@@ -340,14 +352,25 @@ class Documentation(commands.Cog):
         self.inventory_scheduler.cancel_all()
         await self.item_fetcher.clear()
 
-    @property
-    def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='\N{OPEN BOOK}')
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        with contextlib.suppress(discord.HTTPException):
+            if isinstance(error.__cause__, LockedResourceError):
+                await interaction.response.send_message(
+                    '<:discord_info:1113421814132117545> The documentation inventory is currently being '
+                    'updated. Please try again later.'
+                )
+
+    async def cog_command_error(self, ctx: Context[BotT], error: Exception) -> None:
+        with contextlib.suppress(discord.HTTPException):
+            if isinstance(error.__cause__, LockedResourceError):
+                await ctx.send(
+                    '<:discord_info:1113421814132117545> The documentation inventory is currently being '
+                    'updated. Please try again later.'
+                )
 
     async def documentation_autocomplete(
             self, interaction: discord.Interaction, current: str  # noqa
     ) -> list[app_commands.Choice[str]]:
-
         if not current:
             return []
 
@@ -470,7 +493,7 @@ class Documentation(commands.Cog):
         if (item := self.doc_symbols[package_name].get(symbol_name)) is None:
             return symbol_name
 
-        def rename(prefix: str, *, rename_extant: bool = False) -> str:
+        def _rename(prefix: str, *, rename_extant: bool = False) -> str:
             new_name = f'{prefix}.{symbol_name}'
             if new_name in self.doc_symbols[package_name]:
                 if rename_extant:
@@ -485,29 +508,24 @@ class Documentation(commands.Cog):
 
         if package_name != item.package:
             if package_name in PRIORITY_PACKAGES:
-                return rename(item.package, rename_extant=True)
-            return rename(package_name)
+                return _rename(item.package, rename_extant=True)
+            return _rename(package_name)
 
         if group_name in FORCE_PREFIX_GROUPS:
             if item.group in FORCE_PREFIX_GROUPS:
                 needs_moving = FORCE_PREFIX_GROUPS.index(group_name) < FORCE_PREFIX_GROUPS.index(item.group)
             else:
                 needs_moving = False
-            return rename(item.group if needs_moving else group_name, rename_extant=needs_moving)
+            return _rename(item.group if needs_moving else group_name, rename_extant=needs_moving)
 
-        return rename(item.group, rename_extant=True)
+        return _rename(item.group, rename_extant=True)
 
-    @watch_func
+    @lock('DocCache.refresh', 'inventory refresh task', wait=True, raise_error=True)
     async def refresh_inventories(self) -> None:
         """Refresh internal documentation inventories."""
-        self.refresh_event.clear()
-        await self.symbol_get_event.wait()
         log.debug('Refreshing documentation inventory...')
-        self.inventory_scheduler.cancel_all()
-
-        self.base_urls.clear()
-        self.doc_symbols.clear()
-        await self.item_fetcher.clear()
+        # Cleanup
+        await self.reset_cache()
 
         coros = [
             self.update_or_reschedule_inventory(
@@ -516,7 +534,6 @@ class Documentation(commands.Cog):
         ]
         await asyncio.gather(*coros)
         log.debug('Finished inventory refresh.')
-        self.refresh_event.set()
 
     @executor
     def get_symbol_item(
@@ -574,6 +591,7 @@ class Documentation(commands.Cog):
                     return 'Unable to parse the requested symbol.'
                 return markdown
 
+    @lock_func(refresh_inventories, wait=True)
     async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
         """Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
 
@@ -581,11 +599,6 @@ class Documentation(commands.Cog):
 
         First check the DocRedisCache before querying the cog's `BatchParser`.
         """
-        log.trace(f'Building embed for symbol `{item.symbol_id}`.')
-        if not self.refresh_event.is_set():
-            log.debug('Waiting for inventories to be refreshed before processing item.')
-            await self.refresh_event.wait()
-
         with self.symbol_get_event:
             if item is None:
                 log.debug('Symbol does not exist.')
@@ -613,10 +626,9 @@ class Documentation(commands.Cog):
     )
     @app_commands.describe(
         symbol_name='The symbol to look up documentation for.',
-        package='The package to look up documentation for.'
-    )
+        package='The package to look up documentation for.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
-    @lock_func(refresh_inventories, raise_error=True, wait=True)
+    @lock_func(refresh_inventories, raise_error=True)
     async def docs_group(
             self,
             ctx: Context,
@@ -651,7 +663,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', 'inventory refresh', raise_error=True)
+    @lock('Docs', 'set', raise_error=True)
     async def set_command(
             self,
             ctx: Context,
@@ -691,7 +703,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', 'inventory refresh', raise_error=True)
+    @lock('Docs', 'delete', raise_error=True)
     async def delete_command(
             self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]  # type: ignore
     ) -> None:
@@ -712,7 +724,7 @@ class Documentation(commands.Cog):
         with_app_command=False
     )
     @commands.is_owner()
-    @lock('doc', 'inventory refresh', raise_error=True)
+    @lock('Docs', 'refresh', raise_error=True)
     async def refresh_command(self, ctx: Context) -> None:
         """Refresh inventories and show the difference."""
         old_inventories = set(self.base_urls)
@@ -760,8 +772,8 @@ class Documentation(commands.Cog):
     )
     @app_commands.describe(symbol_name='The object to search for',
                            package='The package to search in.')
-    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
-    @lock_func(refresh_inventories, raise_error=True, wait=True)
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
+    @lock_func(refresh_inventories, raise_error=True)
     async def rtfm(
             self,
             ctx: Context,

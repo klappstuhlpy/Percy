@@ -23,11 +23,20 @@ def serialize_resource_id_from_doc_item(bound_args: dict) -> str:
 
 
 class DocCache:
-    """Cache for the Doc cog."""
+    """Custom Cache class for storing Markdown content of documentation symbols.
+
+    This class is used to store the Markdown content of documentation symbols.
+    The items in the cache are stored with time-to-live (TTL) and are expired after a week.
+
+    Attributes
+    ----------
+    namespace: :class:`str`
+        The namespace of the cache.
+    """
 
     def __init__(self, namespace: str):
         self.namespace: str = namespace
-        self.cache: dict[str, Any] = {}
+        self._internal_cache: dict[str, Any] = {}
         self._set_expires: dict[str, Any] = {}
 
     @lock('DocCache.set', serialize_resource_id_from_doc_item, wait=True)
@@ -57,8 +66,8 @@ class DocCache:
             needs_expire = True
             log.debug(f'Key `{cache_key}` expired in internal key cache.')
 
-        self.cache.setdefault(cache_key, {})
-        self.cache[cache_key][item.symbol_id] = value
+        self._internal_cache.setdefault(cache_key, {})
+        self._internal_cache[cache_key][item.symbol_id] = value
 
         if needs_expire:
             self._set_expires[cache_key] = time.monotonic() + WEEK_SECONDS
@@ -67,8 +76,8 @@ class DocCache:
     async def get(self, item: DocItem) -> str | None:
         """Return the Markdown content of the symbol `item` if it exists."""
         cache_key = f'{self.namespace}:{item_key(item)}'
-        if cache_key in self.cache and item.symbol_id in self.cache[cache_key]:
-            return self.cache[cache_key][item.symbol_id]
+        if cache_key in self._internal_cache and item.symbol_id in self._internal_cache[cache_key]:
+            return self._internal_cache[cache_key][item.symbol_id]
         return None
 
     async def delete(self, package: str) -> bool:
@@ -76,11 +85,11 @@ class DocCache:
         pattern = f'{self.namespace}:{package}:*'
 
         package_keys = [
-            key for key in self.cache.keys() if fnmatch.fnmatchcase(key, pattern)
+            key for key in self._internal_cache.keys() if fnmatch.fnmatchcase(key, pattern)
         ]
         if package_keys:
             for key in package_keys:
-                del self.cache[key]
+                del self._internal_cache[key]
             log.info(f'Deleted keys from cache: {package_keys}.')
             self._set_expires = {
                 key: expire for key, expire in self._set_expires.items() if not fnmatch.fnmatchcase(key, pattern)

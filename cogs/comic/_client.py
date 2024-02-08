@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from bot import Percy
 from cogs.utils.converters import utcparse
+from cogs.utils.lock import lock
 
 
 class MarvelError(discord.HTTPException):
@@ -31,8 +32,7 @@ class Marvel:
         self.bot: Percy = bot
         self.config = self.bot.config.marvel
 
-        self._req_lock: asyncio.Lock = asyncio.Lock()
-
+    @lock('Marvel', 'request', wait=True)
     async def request(
             self,
             method: str,
@@ -61,19 +61,17 @@ class Marvel:
 
         params.update(data)
 
-        async with self._req_lock:
-            async with self.bot.session.request(method, req_url, params=params, headers=headers) as r:
-                remaining = r.headers.get('X-Ratelimit-Remaining')
-                js = await r.json()
-                if r.status == 429 or remaining == '0':
-                    delta = discord.utils._parse_ratelimit_header(r)
-                    await asyncio.sleep(delta)
-                    self._req_lock.release()
-                    return await self.request(method, url, data=data, headers=headers)
-                elif 300 > r.status >= 200:
-                    return js
-                else:
-                    raise MarvelError(r, js['message'])
+        async with self.bot.session.request(method, req_url, params=params, headers=headers) as r:
+            remaining = r.headers.get('X-Ratelimit-Remaining')
+            js = await r.json()
+            if r.status == 429 or remaining == '0':
+                delta = discord.utils._parse_ratelimit_header(r)  # noqa
+                await asyncio.sleep(delta)
+                return await self.request(method, url, data=data, headers=headers)
+            elif 300 > r.status >= 200:
+                return js
+            else:
+                raise MarvelError(r, js['message'])
 
     async def get_comic(self, _id: int):
         """Fetches a single comic by id."""

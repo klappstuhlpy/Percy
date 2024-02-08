@@ -2,7 +2,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime
-import fnmatch
 from operator import attrgetter
 from typing import List, Optional, Union, Callable
 
@@ -11,11 +10,12 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+from cogs.comic._cache import ComicCache
 from cogs.comic._client import Marvel
 from cogs.comic._data import ComicFeed, Brand, GenericComic, Format, GenericComicMessage
 from cogs.utils import cache, commands
 from cogs.utils.helpers import AcquireProtocol
-from cogs.utils.lock import lock, lock_arg, LockedResourceError
+from cogs.utils.lock import lock_arg, lock_func, lock, LockedResourceError
 from cogs.comic._parser import Parser
 from launcher import get_logger
 from bot import Percy
@@ -24,52 +24,6 @@ from bot import Percy
 log = get_logger(__name__)
 
 AnyComic = Union[GenericComic, GenericComicMessage]
-
-
-def serialize_resource_id_from_brand(bound_args: dict) -> str:
-    """Return the cache key of the Brand `item` from the bound args of ComicCache.set."""
-    item: Brand = bound_args['item']
-    return f'comic:{item}'
-
-
-class ComicCache:
-    """Cache for the Comicpulls cog."""
-
-    def __init__(self, namespace: str = 'comic'):
-        self.namespace: str = namespace
-        self.cache: dict[str, list[GenericComic]] = {}
-
-    def __repr__(self):
-        return f'<ComicCache namespace={self.namespace} len={len(self.cache)}>'
-
-    @lock('ComicCache.set', serialize_resource_id_from_brand, wait=True)
-    async def set(self, item: Brand, value: list[GenericComic]) -> None:
-        """Set the Comics `value` for the brand `item`."""
-        cache_key = f'{self.namespace}:{item}'
-
-        self.cache.setdefault(cache_key, [])
-        self.cache[cache_key] = value
-
-    def get(self, item: Brand) -> list[GenericComic] | None:
-        """Return the Markdown content of the symbol `item` if it exists."""
-        cache_key = f'{self.namespace}:{item}'
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-        return None
-
-    def delete(self, package: str) -> bool:
-        """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""
-        pattern = f'{self.namespace}:{package}:*'
-
-        package_keys = [
-            key for key in self.cache.keys() if fnmatch.fnmatchcase(key, pattern)
-        ]
-        if package_keys:
-            for key in package_keys:
-                del self.cache[key]
-            log.info(f'Deleted keys from cache: {package_keys}.')
-            return True
-        return False
 
 
 class ComicPulls(commands.Cog, name='Comic Feeds'):
@@ -82,19 +36,14 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self.parser: Parser = Parser  # type: ignore
+        self.parser: Parser = Parser()
         self.comic_cache: ComicCache = ComicCache()
-
-        self._batch_lock: asyncio.Lock = asyncio.Lock()
 
         self._task: Optional[asyncio.Task] = bot.loop.create_task(self.dispatch_feeds())
         self._current_feed: Optional[ComicFeed] = None
         self._have_data = asyncio.Event()
 
         self.marvel_client: Marvel = Marvel(self.bot)
-
-        comic: app_commands.Group = self.comics
-        comic.interaction_check = self.comic_cache_check
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -112,35 +61,41 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     async def prev_schedule(self, brand: Brand) -> datetime.datetime:
         return max(i.date if i.date is not None else datetime.datetime.min for i in self.comic_cache.get(brand))
 
-    async def comic_cache_check(self, interaction: discord.Interaction) -> bool:
-        if self._batch_lock.locked():
-            with contextlib.suppress(discord.NotFound):
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        with contextlib.suppress(discord.HTTPException):
+            if isinstance(error.__cause__, LockedResourceError):
                 await interaction.response.send_message(
                     '<:discord_info:1113421814132117545> The comic cache is currently being '
-                    'updated. Please try again later.')
-            return False
-        return True
+                    'updated. Please try again later.'
+                )
 
     @tasks.loop(hours=6)
     async def auto_fetch_comics(self):
-        await self.fetch_comics()
+        await self.refresh_comics()
 
-    async def fetch_comics(self):
-        async with self._batch_lock:
-            def sort_key(x):
-                return x.date if x.date is not None else datetime.datetime.min
+    @lock('ComicCache.refresh', 'comic refresh task', wait=True, raise_error=True)
+    async def refresh_comics(self):
+        log.debug('Refreshing comic cache...')
+        if self._task:
+            self._task.cancel()
 
-            log.debug('Fetching Marvel...')
-            marvel_comics = await self.parser.fetch_marvel_lookup_table(self.marvel_client)
-            await self.comic_cache.set(Brand.MARVEL, sorted(marvel_comics, key=sort_key))
+        def sort_key(x):
+            return x.date if x.date is not None else datetime.datetime.min
 
-            log.debug('Fetching DC...')
-            dc_comics = await self.parser.bs4_dc()
-            await self.comic_cache.set(Brand.DC, sorted(dc_comics, key=sort_key))
+        log.debug('Fetching Marvel...')
+        marvel_comics = await self.parser.fetch_marvel_lookup_table(self.marvel_client)
+        await self.comic_cache.set(Brand.MARVEL, sorted(marvel_comics, key=sort_key))
 
-            log.debug('Fetching Manga...')
-            viz_comics = await self.parser.bs4_viz()
-            await self.comic_cache.set(Brand.MANGA, sorted(viz_comics, key=sort_key))
+        log.debug('Fetching DC...')
+        dc_comics = await self.parser.bs4_dc()
+        await self.comic_cache.set(Brand.DC, sorted(dc_comics, key=sort_key))
+
+        log.debug('Fetching Manga...')
+        viz_comics = await self.parser.bs4_viz()
+        await self.comic_cache.set(Brand.MANGA, sorted(viz_comics, key=sort_key))
+
+        self._task = self.bot.loop.create_task(self.dispatch_feeds())
+        log.debug('Comic cache refreshed.')
 
     async def call_feed(self, comic: ComicFeed) -> None:
         query = "UPDATE comic_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
@@ -148,7 +103,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
         self.bot.dispatch(f'comic_schedule', comic)
 
-    async def wait_for_next_feeds(self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7) -> ComicFeed:
+    async def wait_for_next_feed(self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7) -> ComicFeed:
         async with AcquireProtocol(connection=connection, pool=self.bot.pool) as con:
             feed = await self.get_earliest_feed(connection=con, days=days)
             if feed is not None:
@@ -164,18 +119,12 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     async def dispatch_feeds(self) -> None:
         try:
             while not self.bot.is_closed():
-                feed = self._current_feed = await self.wait_for_next_feeds()
+                feed = self._current_feed = await self.wait_for_next_feed()
 
                 now = discord.utils.utcnow()
                 if feed.next_pull >= now:
                     to_sleep = (feed.next_pull - now).total_seconds()
                     await asyncio.sleep(to_sleep)
-
-                if self._batch_lock.locked():  # If we're already updating the cache, wait for it to finish
-                    try:
-                        await self._batch_lock.acquire()
-                    finally:
-                        self._batch_lock.release()
 
                 await self.call_feed(feed)
         except asyncio.CancelledError:
@@ -223,7 +172,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         except discord.Forbidden:
             pass
 
-    @lock_arg('comic', 'config', attrgetter('channel_id'), raise_error=True)
+    @lock_arg('Comic.publish', 'config', attrgetter('channel_id'), raise_error=True)
     async def publish_to_feed(self, config: ComicFeed):
         channel = self.bot.get_channel(config.channel_id)
 
@@ -299,9 +248,6 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
         return embeds
 
-    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True,
-                                extras=dict(bypass_error=app_commands.errors.CheckFailure))
-
     @cache.cache()
     async def get_comic_config(self, guild_id: int, brand: Brand) -> Optional[ComicFeed]:
         """|coro| @cached
@@ -324,10 +270,18 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         record = await self.bot.pool.fetchrow(query, guild_id, str(brand))
         return ComicFeed(self, record=record) if record else None
 
-    @comics.command(name='current')
+    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True,
+                                extras=dict(bypass_error=app_commands.errors.CheckFailure))
+
+    @commands.command(
+        comics.command,
+        name='current',
+        description='Lists this week\'s/month\'s comics!',
+        cooldown=commands.CooldownMap(rate=2, per=15.0, key=attrgetter('guild_id'))
+    )
     @app_commands.describe(brand='The comic brand to receive a feed from.')
-    @app_commands.checks.cooldown(2, 15.0, key=lambda i: i.guild_id)
-    @commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(user=['manage_channels'])
+    @lock_func(refresh_comics, raise_error=True)
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
         await interaction.response.defer(
@@ -336,11 +290,16 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         embeds = await self.summary_embed(self.comic_cache.get(brand), brand)
         await interaction.followup.send(embeds=embeds)
 
-    @comics.command(name='push', description='Pushes the latest comic feed to a channel.')
+    @commands.command(
+        comics.command,
+        name='push',
+        description='Pushes the latest comic feed to a channel.',
+        cooldown=commands.CooldownMap(rate=2, per=15.0, key=attrgetter('guild_id'))
+    )
     @app_commands.describe(brand='The comic brand to receive a feed from.')
-    @app_commands.checks.cooldown(3, 15.0, key=lambda i: i.guild_id)
-    @commands.permissions(1, user=['manage_channels'])
-    @lock_arg('cogs.comics_push', 'interaction', attrgetter('guild.id'), raise_error=True)
+    @commands.permissions(user=['manage_channels'])
+    @lock_arg('Comic.push', 'interaction', attrgetter('guild.id'), raise_error=True)
+    @lock_func(refresh_comics, raise_error=True)
     async def comics_push(self, interaction: discord.Interaction, brand: Brand):
         """Triggers your current feed configuration."""
         await interaction.response.defer()
@@ -360,21 +319,26 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         await interaction.followup.send(
             f'<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>')
 
-    @comics.command(name='subscribe', description='Subscribes to a comic brand feed.')
+    @commands.command(
+        comics.command,
+        name='subscribe',
+        description='Subscribes to a comic brand feed.'
+    )
     @app_commands.rename(_format='format')
     @app_commands.describe(
         brand='The comic brand to receive a feed from.',
         channel='Channel to set up the feed. Leave empty to set up in THIS channel.',
         _format='Feed format. Use /formats to view options. Summary is default.'
     )
-    @commands.permissions(1, user=['manage_channels'])
-    @lock_arg('comicpulls.comic_subscribe', 'interaction', attrgetter('guild.id'), raise_error=True)
+    @commands.permissions(user=['manage_channels'])
+    @lock_arg('Comic.subscribe', 'interaction', attrgetter('guild.id'), raise_error=True)
+    @lock_func(refresh_comics, raise_error=True)
     async def comic_subscribe(
             self,
             interaction: discord.Interaction,
             brand: Brand,
             channel: discord.TextChannel = None,
-            _format: Format = 'SUMMARY'
+            _format: Format = Format.SUMMARY
     ):
         """Sets up a comic pulls feed."""
         await interaction.response.defer()
@@ -421,9 +385,10 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         pin='Whether to pin the feed message.',
         reset='Reset the configuration.'
     )
-    @commands.permissions(1, user=['manage_channels'])
+    @commands.permissions(user=['manage_channels'])
     async def comic_config(
-            self, interaction: discord.Interaction,
+            self,
+            interaction: discord.Interaction,
             brand: Brand,
             channel: discord.TextChannel = None,
             day: app_commands.Range[int, 1, 7] = None,
@@ -469,16 +434,8 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             await interaction.followup.send(
                 f'<:greenTick:1079249732364406854> Successfully modified **{brand.name}** feed configuration.')
 
-    async def delay_push(self, feed: ComicFeed):
-        """Delays a push until the :func:`publish_to_feed` is available"""
-        await asyncio.sleep(10)
-        await self.publish_to_feed(feed)
-        log.debug(f'Delayed push for {feed.brand.name} in {feed.guild_id}.')
-
     @commands.Cog.listener()
+    @lock_func(publish_to_feed, wait=True)
     async def on_comic_schedule(self, feed: ComicFeed):
         if feed:
-            try:
-                await self.publish_to_feed(feed)
-            except LockedResourceError:
-                await self.delay_push(feed)
+            await self.publish_to_feed(feed)

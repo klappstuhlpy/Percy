@@ -25,7 +25,6 @@ class Brand(Enum):
     MARVEL = 'Marvel'
     DC = 'DC'
     MANGA = 'Manga'
-    UNKNOWN = 'Unknown'
 
     def __str__(self):
         return self.name
@@ -124,7 +123,7 @@ class GenericComic:
     def __init__(
             self,
             *,
-            brand: Brand = Brand.UNKNOWN,
+            brand: Brand = None,
             _id: int | str = None,
             title: str = None,
             description: str = None,
