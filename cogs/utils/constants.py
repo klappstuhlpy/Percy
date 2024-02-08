@@ -1,3 +1,4 @@
+import inspect
 import re
 from pathlib import Path
 from typing import Callable, Dict, Any, Union, TypeVar, Coroutine
@@ -857,4 +858,66 @@ HANG_MAN = [
     'https://images.klappstuhl.me/gallery/LDuaOZqsHe.png',
     'https://images.klappstuhl.me/gallery/RdZkqyntSS.png',
     'https://images.klappstuhl.me/gallery/PncSvIxMJI.png'
+]
+
+HELP_PAGES = [
+    inspect.cleandoc(
+        """
+        ## Introduction
+        Here you can find all *Message-/Slash-Commands* for {name}.
+        Try using the dropdown to navigate through the categories to get a list of all Commands.
+    
+        I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
+        ## More Help
+        Alternatively you can use the following Commands to get Information about a specific Command or Category:
+        - `{prefix}help` *`command`*
+        - `{prefix}help` *`category`*
+        ## Support
+        For more help, consider joining the official server over at
+        https://discord.com/invite/eKwMtGydqh.
+        ## Stats
+        Total of **{command_runs}** command runs.
+        Currently are **{commands}** commands loaded.
+        """
+    ),
+    (
+        ('<argument>', 'This argument is **required**.'),
+        ('[argument]', 'This argument is **optional**.'),
+        ('<A|B>', 'This means **multiple choice**, you can choose by using one. Although it must be A or B.'),
+        ('<argument...>', 'There are multiple Arguments.'),
+        ('<\'argument\'>', 'This argument is case-sensitive and should be typed exaclty as shown.'),
+        ('<argument=A>', 'The default value if you dont provide one of this argument is A.'),
+        (
+            'Flags',
+            'Flags are mostly available for commands with many arguments.\n'
+            'They can provide a better overview and are not required to be typed in.\n'
+            '\n'
+            'Flags are prefixed with `--` and can be used like this:\n'
+            '- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
+            '- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
+            'Some **first** flag may be used without the `--` prefix:'
+            '- `{prefix}command argument1 --flag2 argument2`\n'
+            '\n'
+            'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
+            '- `{prefix}command --flag1 my first argument --flag2 \'argument 2`\''
+        ),
+        (
+            '\u200b',
+            '<:discord_info:1113421814132117545> **Important:**\n'
+            'Do not type the arguments in brackets.\n'
+            'Most of the Commands are **Hybrid Commands**, which means that you can use them as Slash Commands or Message Commands.'
+        )
+    ),
+    inspect.cleandoc(
+        """
+        ## License
+        Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
+        ## Source Code
+        You can obtain a copy of myself over at [GitHub](https://github.com/klappstuhlpy/Percy)
+        ## Credits
+        I was made by <@991398932397703238>.
+
+        Any questions regarding licensing and credits can be directed to <@991398932397703238>.
+        """
+    ),
 ]
