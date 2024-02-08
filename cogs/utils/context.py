@@ -103,7 +103,8 @@ class ConfirmationView(discord.ui.View):
         if self.delete_after and self.message:
             await self.message.delete()
 
-    @discord.ui.button(label='Confirm', style=discord.ButtonStyle.green)
+    @discord.ui.button(label='Confirm', style=discord.ButtonStyle.green,
+                       emoji=discord.PartialEmoji(name='yes', id=1066772402270371850, animated=True))
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         self.value = True
         await interaction.response.defer()
@@ -112,7 +113,8 @@ class ConfirmationView(discord.ui.View):
 
         self.stop()
 
-    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red)
+    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red,
+                       emoji=discord.PartialEmoji(name='declined', id=1066183072984350770, animated=True))
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         self.value = False
         await interaction.response.defer()
