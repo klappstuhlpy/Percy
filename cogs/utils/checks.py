@@ -124,13 +124,23 @@ async def check_guild_permissions(ctx: GuildContext, perms: dict[str, bool], *, 
     return check(getattr(resolved, name, None) == value for name, value in perms.items())
 
 
-def hybrid_permissions_check(**perms: bool) -> Callable[[T], T]:
+def hybrid_user_permissions_check(**perms: bool) -> Callable[[T], T]:
     async def pred(ctx: GuildContext):
         return await check_guild_permissions(ctx, perms)
 
     def decorator(func: T) -> T:
         commands.check(pred)(func)
         app_commands.default_permissions(**perms)(func)
+        return func
+
+    return decorator
+
+
+def hybrid_bot_permissions_check(**perms: bool) -> Callable[[T], T]:
+
+    def decorator(func: T) -> T:
+        commands.bot_has_permissions(**perms)(func)
+        app_commands.checks.bot_has_permissions(**perms)(func)
         return func
 
     return decorator

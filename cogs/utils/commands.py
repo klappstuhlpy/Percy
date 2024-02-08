@@ -1,6 +1,6 @@
 from __future__ import annotations
-import enum
-import inspect
+
+from dataclasses import dataclass
 from typing import List, Optional, Union, Dict, Any, Callable, TypeVar, ClassVar
 
 import discord
@@ -21,36 +21,20 @@ BadArgument = error_utils.BadArgument
 CommandError = error_utils.CommandError
 
 
-class CommandCategory(enum.Enum):
-    """The category of the command.
-
-    Note
-    ----
-    App = 1; Hybrid = 2; Core = 3;
-    """
-    App = 1
-    Hybrid = 2
-    Core = 3
-
-
 AnyCommand = Union[app_commands.command, command, group, hybrid_command, hybrid_group]
-AnyCommandSignature = {
-    'hybrid.py': CommandCategory.Hybrid,
-    'core.py': CommandCategory.Core,
-    'commands.py': CommandCategory.App,
-}
 
 
 T = TypeVar('T')
 
 
+@dataclass
 class CooldownMap:
     """A class that represents a mapping of cooldowns."""
 
-    rate: ClassVar[int]
-    per: ClassVar[int]
-    type: Optional[ClassVar[BucketType]]
-    key: Optional[ClassVar[Callable]]
+    rate: int
+    per: int | float
+    type: Optional[BucketType] = BucketType.default
+    key: Optional[Callable] = None
 
 
 class PermissionTemplate:
@@ -101,32 +85,19 @@ def guilds(*guild_ids: Union[Snowflake, int]) -> Callable[[T], T]:
 
 
 def permissions(
-        category: CommandCategory | int = CommandCategory.Hybrid,
         *,
         user: Optional[List[str] | str] = PermissionTemplate.user,
         bot: Optional[List[str] | str] = PermissionTemplate.bot  # noqa
 ) -> Callable[[T], T]:
     r"""A custom decorator that allows you to assign permission for the bot and user.
-    Assign a :class:`CommandCategory` to the ``category`` parameter to determine which decorator to use.
-
-    Note
-    ----
-    To set permissions accordingly, the function that you are decorating must be wrapped with the :func:`command` decorator.
-    It needs to have the ``__type_info__`` attribute to handle the permission setting.
 
     Parameters
     ----------
-    category: CommandCategory | int
-        The type of command you are creating. This is used to determine which decorator to use.
-        If you are using a hybrid command, you must use the `CommandCategory.Hybrid` enum.
     user: Optional[List[str]]
         A list of permissions that the user must have to run the command.
     bot: Optional[List[str]]
         A list of permissions that the bot must have to run the command.
     """
-
-    if isinstance(category, int):
-        category = CommandCategory(category)
 
     if bot is not PermissionTemplate.bot:
         bot += PermissionTemplate.bot
@@ -147,20 +118,10 @@ def permissions(
         func.default_permissions = discord.Permissions(**_user_permissions)
 
         if _bot_permissions:
-            if category == CommandCategory.App:
-                func = app_commands.checks.bot_has_permissions(**_bot_permissions)(func)
-            elif category in (CommandCategory.Core, CommandCategory.Hybrid):
-                func = bot_has_permissions(**_bot_permissions)(func)
+            func = checks.hybrid_bot_permissions_check(**_bot_permissions)(func)
 
         if _user_permissions:
-            if category == CommandCategory.App:
-                func = app_commands.checks.has_permissions(**_user_permissions)(func)
-            elif category == CommandCategory.Core:
-                func = has_permissions(**_user_permissions)(func)
-            elif category == CommandCategory.Hybrid:
-                func = checks.hybrid_permissions_check(**_user_permissions)(func)
-            else:
-                func.__discord_app_commands_default_permissions__ = discord.Permissions(**_user_permissions)
+            func = checks.hybrid_user_permissions_check(**_user_permissions)(func)
 
         # This is used to determine the bot and user
         # permissions wherever you like,
@@ -181,7 +142,7 @@ def command(
         examples: List[str] = None,
         nsfw: bool = False,
         extras: Dict[str, Any] = None,
-        raw: bool = False,
+        perm_template: bool = True,
         guild_only: bool = False,  # noqa
         cooldown: CooldownMap = None,  # noqa
         **kwargs
@@ -214,7 +175,7 @@ def command(
         Whether the command is NSFW. Defaults to ``False``.
     extras: Dict[Any, Any]
         A dictionary of extra information to be stored in the command. Defaults to ``None``.
-    raw: bool
+    perm_template: bool
         Whether to or not to return the command with an applied :class:`PermissionTemplate`.
     guild_only: bool
         Whether the command can only be used in a guild.
@@ -230,8 +191,6 @@ def command(
         The wrapped command with or without the applied :class:`PermissionTemplate`.
     """
 
-    signature = AnyCommandSignature.get(inspect.getfile(func).split('\\')[-1])
-    # Searching for filename of the position from the function
     if not extras:
         extras = {}
 
@@ -245,21 +204,18 @@ def command(
         nsfw=nsfw,
         **kwargs
     )
-    # This is used to determine the type of command
-    setattr(self, '__type_info__', f'{func.__module__}.{func.__name__}')
 
-    if guild_only:
-        if func == app_commands.command:
-            self = app_commands.guild_only()(self)
-        else:
+    if func == app_commands.command:
+        if cooldown:
+            self = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(self)
+        if guild_only:
+            self = app_commands.guild_only(self)
+    else:
+        if cooldown:
+            self = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(self)
+        if guild_only:
             self = commands.guild_only()(self)
 
-    if cooldown:
-        if func == app_commands.command:
-            self = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(self)
-        else:
-            self = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(self)
-
-    if raw:
+    if not perm_template:
         return self
-    return permissions(signature)(self)
+    return permissions()(self)
