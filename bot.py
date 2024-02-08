@@ -23,6 +23,7 @@ from cogs.utils.config import Config
 from cogs.utils.context import Context
 from cogs.utils.helpers import BasicJSONEncoder
 from cogs.utils.constants import GUILD_FEATURES
+from cogs.utils.lock import LockedResourceError
 
 if TYPE_CHECKING:
     from cogs.reminder import Reminder, Timer
@@ -344,7 +345,6 @@ class Percy(commands.Bot):
             await self.remove_from_blacklist(object_id)
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
-        # Suppress any Forbidden errors that might arise by sending a message
         with suppress(discord.errors.Forbidden):
             if isinstance(error, commands.NoPrivateMessage):
                 await ctx.author.send('This command cannot be used in private messages.')
@@ -365,8 +365,8 @@ class Percy(commands.Bot):
                 original = error.__cause__
                 if not isinstance(original, discord.HTTPException):
                     log.exception('In %s:', ctx.command.qualified_name, exc_info=original)
-                elif issubclass(type(original), RuntimeError):  # Caused by locking  -> lock.py
-                    await ctx.send(f'{original} Please wait for it to finish and try again later.')
+                elif isinstance(original, LockedResourceError):
+                    await ctx.stick(False, str(error))
                 else:
                     await ctx.send(str(error))
             elif isinstance(error, (
