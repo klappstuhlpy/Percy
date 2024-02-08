@@ -1,5 +1,5 @@
 from contextlib import suppress
-from typing import Optional
+from typing import Optional, Any
 
 import discord
 
@@ -59,7 +59,7 @@ class AuditLog(commands.Cog):
         return None
 
     @staticmethod
-    def get_flags(config, only_active: bool = True) -> dict:
+    def get_flags(config: Any, only_active: bool = True) -> dict:
         flags = config.audit_log_flags
         if not flags:
             return {}

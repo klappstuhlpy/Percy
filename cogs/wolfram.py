@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from collections.abc import Callable
 from io import BytesIO
@@ -12,6 +11,7 @@ import yarl
 from bot import Percy
 from .utils import helpers, commands
 from .utils.context import Context
+from .utils.lock import lock
 from .utils.paginator import EmbedPaginator
 
 log = logging.getLogger(__name__)
@@ -104,8 +104,6 @@ class Wolfram(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self._req_lock: asyncio.Lock = asyncio.Lock()
-
     @property
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='wolfram', id=1118615618418114711)
@@ -179,6 +177,7 @@ class Wolfram(commands.Cog):
                     pages.append((title, img))
             return pages
 
+    @lock('Wolfram', 'wolfram_request', wait=True)
     async def wolfram_request(
             self,
             method: str,
@@ -223,17 +222,16 @@ class Wolfram(commands.Cog):
         if params:
             prms.update(params)
 
-        async with self._req_lock:
-            async with self.bot.session.request(method, req_url, params=prms) as r:
-                if 300 > r.status >= 200:
-                    if response_type == 'json':
-                        return await r.json()
-                    elif response_type == 'bytes':
-                        return await r.read()
-                    else:
-                        return await r.text()
+        async with self.bot.session.request(method, req_url, params=prms) as r:
+            if 300 > r.status >= 200:
+                if response_type == 'json':
+                    return await r.json()
+                elif response_type == 'bytes':
+                    return await r.read()
                 else:
-                    raise WolframError(r)
+                    return await r.text()
+            else:
+                raise WolframError(r)
 
     @commands.command(commands.hybrid_group, name='wolfram', aliases=('wolf', 'wa'), invoke_without_command=True,
                       description='Requests all answers on a single image, sends an image of all related pods.')

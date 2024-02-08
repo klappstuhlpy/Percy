@@ -19,6 +19,7 @@ from discord.ext import tasks
 
 from .utils import commands
 from .utils.converters import Snowflake
+from .utils.lock import lock
 from .utils.paginator import TextSource
 from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
     PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE
@@ -86,7 +87,6 @@ class Base(commands.Cog, name='Exclusives'):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
         self.bot.loop.create_task(self._prepare_invites())
-        self._req_lock = asyncio.Lock()
         self.auto_archive_old_forum_threads.start()
 
         self.pattern_handlers = [
@@ -242,6 +242,7 @@ class Base(commands.Cog, name='Exclusives'):
         # Sorts the list of snippets by their match index and joins them into a single message
         return [x[1] for x in sorted(all_snippets)]
 
+    @lock('Base', 'github_request', wait=True)
     async def github_request(
             self,
             method: str,
@@ -285,22 +286,20 @@ class Base(commands.Cog, name='Exclusives'):
         if headers is not None and isinstance(headers, dict):
             hdrs.update(headers)
 
-        async with self._req_lock:
-            async with self.bot.session.request(method, req_url, params=params, json=data, headers=hdrs) as r:
-                remaining = r.headers.get('X-Ratelimit-Remaining')
-                js = await r.json()
-                if r.status == 429 or remaining == '0':
-                    delta = discord.utils._parse_ratelimit_header(r)  # noqa
-                    await asyncio.sleep(delta)
-                    self._req_lock.release()
-                    return await self.github_request(method, url, params=params, data=data, headers=headers)
-                elif 300 > r.status >= 200:
-                    if return_type == 'json':
-                        return js
-                    else:
-                        return await r.text()
+        async with self.bot.session.request(method, req_url, params=params, json=data, headers=hdrs) as r:
+            remaining = r.headers.get('X-Ratelimit-Remaining')
+            js = await r.json()
+            if r.status == 429 or remaining == '0':
+                delta = discord.utils._parse_ratelimit_header(r)  # noqa
+                await asyncio.sleep(delta)
+                return await self.github_request(method, url, params=params, data=data, headers=headers)
+            elif 300 > r.status >= 200:
+                if return_type == 'json':
+                    return js
                 else:
-                    raise GithubError(js['message'])
+                    return await r.text()
+            else:
+                raise GithubError(js['message'])
 
     async def create_gist(
             self,

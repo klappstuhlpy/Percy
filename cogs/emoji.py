@@ -1,6 +1,6 @@
 import asyncio
 import io
-from typing import Optional, Annotated, Counter
+from typing import Optional, Annotated, Counter, Any
 from collections import defaultdict, Counter
 
 import asyncpg
@@ -14,6 +14,7 @@ from bot import Percy
 from .utils import commands
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
+from .utils.lock import lock
 from .utils.paginator import TextSource
 from .utils.render import Render
 from .utils.constants import EMOJI_REGEX, EMOJI_NAME_REGEX
@@ -63,14 +64,15 @@ class EmojiURL:
 
 class Emoji(commands.Cog):
     """Emoji managing related commands."""
+
     def __init__(self, bot):
         self.bot: Percy = bot
         self.render: Render = Render  # type: ignore
 
         self._emoji_data_batch: defaultdict[int, Counter[int]] = defaultdict(Counter)
-        self._batch_lock = asyncio.Lock()
-        self.bulk_insert.add_exception_type(asyncpg.PostgresConnectionError)
-        self.bulk_insert.start()
+
+        self.bulk_insert_loop.add_exception_type(asyncpg.PostgresConnectionError)
+        self.bulk_insert_loop.start()
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -79,28 +81,40 @@ class Emoji(commands.Cog):
     def cog_unload(self):
         self.bulk_insert.stop()
 
-    @tasks.loop(seconds=60.0)
+    @lock('Emoji', 'emoji_batch', wait=True)
     async def bulk_insert(self):
         query = """
             INSERT INTO emoji_stats (guild_id, emoji_id, total)
             SELECT x.guild, x.emoji, x.added
-            FROM jsonb_to_recordset($1::jsonb) AS x(guild BIGINT, emoji BIGINT, added INT)
+            FROM jsonb_to_recordset($1::jsonb) 
+            AS x(
+                guild BIGINT, 
+                emoji BIGINT, 
+                added INT
+            )
             ON CONFLICT (guild_id, emoji_id) DO UPDATE
             SET total = emoji_stats.total + excluded.total;
         """
 
-        async with self._batch_lock:
-            transformed = [
-                {'guild': guild_id, 'emoji': emoji_id, 'added': count}
-                for guild_id, data in self._emoji_data_batch.items()
-                for emoji_id, count in data.items()
-            ]
-            self._emoji_data_batch.clear()
-            await self.bot.pool.execute(query, transformed)
+        transformed = [
+            {'guild': guild_id, 'emoji': emoji_id, 'added': count}
+            for guild_id, data in self._emoji_data_batch.items()
+            for emoji_id, count in data.items()
+        ]
+        self._emoji_data_batch.clear()
+        await self.bot.pool.execute(query, transformed)
+
+    @tasks.loop(seconds=60.0)
+    async def bulk_insert_loop(self):
+        await self.bulk_insert()
 
     @staticmethod
     def find_all_emoji(message: discord.Message, *, regex=EMOJI_REGEX) -> list[str]:
         return regex.findall(message.content)
+
+    @lock('Emoji', 'emoji_batch', wait=True)
+    async def send_emoji_patch(self, guild_id: int, matches: list[Any]):
+        self._emoji_data_batch[guild_id].update(map(int, matches))
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -114,8 +128,7 @@ class Emoji(commands.Cog):
         if not matches:
             return
 
-        async with self._batch_lock:
-            self._emoji_data_batch[message.guild.id].update(map(int, matches))
+        await self.send_emoji_patch(message.guild.id, matches)
 
     async def get_random_emoji(
             self,
@@ -161,6 +174,7 @@ class Emoji(commands.Cog):
         aliases=['emotes', 'emote'],
         invoke_without_command=True,
         description='Create/Show/Manage emojis in the server.',
+        guild_only=True,
     )
     @commands.guild_only()
     @app_commands.guild_only()
@@ -172,9 +186,9 @@ class Emoji(commands.Cog):
         commands.core_command,
         aliases=['emojilist'],
         description='Fancy post all emojis in this server in a list.',
+        cooldown=commands.CooldownMap(rate=1, per=600, type=commands.BucketType.guild)
     )
-    @commands.permissions(3, user=['administrator'])
-    @commands.cooldown(1, 600, commands.BucketType.guild)
+    @commands.permissions(user=['administrator'])
     async def emojipost(self, ctx: GuildContext):
         """Fancy post the emoji lists"""
         emojis = sorted([e for e in ctx.guild.emojis if len(e.roles) == 0 and e.available],
@@ -192,8 +206,8 @@ class Emoji(commands.Cog):
         name='randomemoji',
         aliases=['randemoji', 'randemote', 'randomemote'],
         description='Sends a random emoji from the database.',
+        cooldown=commands.CooldownMap(rate=1, per=90, type=commands.BucketType.user)
     )
-    @commands.cooldown(1, 90, commands.BucketType.user)
     async def random_emoji(self, ctx: Context):
         """Sends a random emoji from the database."""
         emoji = self.bot.get_emoji(await self.get_random_emoji())
@@ -204,10 +218,9 @@ class Emoji(commands.Cog):
         name='create',
         description='Create an emoji for the server under the given name.',
         aliases=['add'],
-        usage='<name> [file] [emoji]',
+        usage='<name> [file] [emoji]'
     )
-    @commands.permissions(3, user=['manage_emojis'], bot=['manage_emojis'])
-    @commands.guild_only()
+    @commands.permissions(user=['manage_emojis'], bot=['manage_emojis'])
     @app_commands.rename(emoji='emoji-or-url')
     @app_commands.describe(
         name='The emoji name.',
@@ -274,12 +287,13 @@ class Emoji(commands.Cog):
                         case discord.HTTPException():
                             raise commands.BadArgument(f'Failed to create emoji somehow: {exc}')
                 else:
-                    embed = discord.Embed(title='Created Emoji',
-                                          colour=discord.Colour.from_rgb(*image_color),
-                                          description=f'Successfully added emoji to the server.\n'
-                                                      f'<{'a' if created.animated else ''}:{created.name}:{created.id}> • `{created.name}` • [`{created.id}`]\n'
-                                                      f'{'Animated ' if created.animated else ''}Emoji slots left: `{ctx.guild.emoji_limit - emoji_count - 1}`',
-                                          timestamp=discord.utils.utcnow())
+                    embed = discord.Embed(
+                        title='Created Emoji',
+                        colour=discord.Colour.from_rgb(*image_color),
+                        description=f'Successfully added emoji to the server.\n'
+                                    f'<{'a' if created.animated else ''}:{created.name}:{created.id}> • `{created.name}` • [`{created.id}`]\n'
+                                    f'{'Animated ' if created.animated else ''}Emoji slots left: `{ctx.guild.emoji_limit - emoji_count - 1}`',
+                        timestamp=discord.utils.utcnow())
                     embed.set_thumbnail(url=created.url)
                     return await ctx.send(embed=embed)
 
@@ -295,8 +309,8 @@ class Emoji(commands.Cog):
         p = count / total
         return f'{name}: {count} uses ({p:.1%}), {per_day:.1f} uses/day.'
 
-    async def get_guild_stats(self, ctx: GuildContext) -> None:
-        e = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
+    async def get_guild_stats(self, ctx: GuildContext):
+        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
 
         query = """
             SELECT
@@ -308,17 +322,16 @@ class Emoji(commands.Cog):
         """
         record = await ctx.db.fetchrow(query, ctx.guild.id)
         if record is None:
-            await ctx.stick(False, 'This server has no emoji stats yet.')
-            return
+            return await ctx.stick(False, 'This server has no emoji stats yet.')
 
         total = record['Count']
         emoji_used = record['Emoji']
 
         assert ctx.me.joined_at is not None
         per_day = usage_per_day(ctx.me.joined_at, total)
-        e.description = f'`{total}` uses over `{emoji_used}` emoji for **{per_day:.2f}** uses per day.'
-        e.set_footer(text=f'Emoji Stats since')
-        e.timestamp = ctx.me.joined_at
+        embed.description = f'`{total}` uses over `{emoji_used}` emoji for **{per_day:.2f}** uses per day.'
+        embed.set_footer(text=f'Emoji Stats since')
+        embed.timestamp = ctx.me.joined_at
 
         query = """
             SELECT emoji_id, total
@@ -330,24 +343,24 @@ class Emoji(commands.Cog):
 
         top = await ctx.db.fetch(query, ctx.guild.id)
 
-        e.description = '\n'.join(
+        embed.description = '\n'.join(
             f'{i}. {self.emoji_fmt(emoji, count, total)}' for i, (emoji, count) in enumerate(top, 1))
-        await ctx.send(embed=e)
+        await ctx.send(embed=embed)
 
     async def get_emoji_stats(self, ctx: GuildContext, emoji_id: int) -> None:
-        e = discord.Embed(title='Emoji Stats')
+        embed = discord.Embed(title='Emoji Stats')
         cdn = f'https://cdn.discordapp.com/emojis/{emoji_id}.png'
 
         async with ctx.session.get(cdn) as resp:
             if resp.status == 404:
-                e.description = 'This isn\'t a valid emoji.'
-                e.colour = 0x000000
-                e.set_thumbnail(url='https://images.klappstuhl.me/gallery/fNnccSNJon.jpeg')
-                await ctx.send(embed=e)
+                embed.description = 'This isn\'t a valid emoji.'
+                embed.colour = 0x000000
+                embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/fNnccSNJon.jpeg')
+                await ctx.send(embed=embed)
                 return
-            e.colour = discord.Colour.from_rgb(*self.render.get_dominant_color(io.BytesIO(await resp.read())))
+            embed.colour = discord.Colour.from_rgb(*self.render.get_dominant_color(io.BytesIO(await resp.read())))
 
-        e.set_thumbnail(url=cdn)
+        embed.set_thumbnail(url=cdn)
 
         query = """
             SELECT guild_id, SUM(total) AS "Count"
@@ -369,15 +382,19 @@ class Emoji(commands.Cog):
         except KeyError:
             value = 'Not used here.'
 
-        e.add_field(name='**SERVER**', value=value, inline=False)
+        embed.add_field(name='**SERVER**', value=value, inline=False)
 
         per_day = usage_per_day(dt, total)
         value = f'`{total}` uses, `{per_day:.2f}` uses/day'
-        e.add_field(name='**GLOBAL**', value=value, inline=False)
-        e.set_footer(text='Statistics based on traffic I can see.')
-        await ctx.send(embed=e)
+        embed.add_field(name='**GLOBAL**', value=value, inline=False)
+        embed.set_footer(text='Statistics based on traffic I can see.')
+        await ctx.send(embed=embed)
 
-    @_emoji.group(name='stats', fallback='show')
+    @commands.command(
+        _emoji.group,
+        name='stats',
+        fallback='show'
+    )
     @commands.guild_only()
     @app_commands.describe(emoji='The emoji to show stats for. If not given then it shows server stats')
     async def emojistats(self, ctx: GuildContext, *, emoji: Annotated[Optional[int], partial_emoji] = None):
@@ -387,8 +404,7 @@ class Emoji(commands.Cog):
         else:
             await self.get_emoji_stats(ctx, emoji)
 
-    @emojistats.command(name='server', aliases=['guild'])
-    @commands.guild_only()
+    @commands.command(emojistats.command, name='server', aliases=['guild'])
     async def emojistats_guild(self, ctx: GuildContext):
         """Shows you statistics about the local server emojis in this server."""
         emoji_ids = [e.id for e in ctx.guild.emojis]
@@ -396,13 +412,14 @@ class Emoji(commands.Cog):
         if not emoji_ids:
             await ctx.stick(False, 'This guild has no custom emoji.')
 
-        query = """SELECT emoji_id, total
-                   FROM emoji_stats
-                   WHERE guild_id=$1 AND emoji_id = ANY($2::bigint[])
-                   ORDER BY total DESC
-                """
+        query = """
+            SELECT emoji_id, total
+            FROM emoji_stats
+            WHERE guild_id=$1 AND emoji_id = ANY($2::bigint[])
+            ORDER BY total DESC
+        """
 
-        e = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
+        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
         records = await ctx.db.fetch(query, ctx.guild.id, emoji_ids)
 
         total = sum(a for _, a in records)
@@ -410,18 +427,18 @@ class Emoji(commands.Cog):
 
         assert ctx.me.joined_at is not None
         per_day = usage_per_day(ctx.me.joined_at, total)
-        e.set_footer(text=f'{total} uses over {emoji_used} emoji for {per_day:.2f} uses per day.')
+        embed.set_footer(text=f'{total} uses over {emoji_used} emoji for {per_day:.2f} uses per day.')
         top = records[:10]
         value = '\n'.join(self.emoji_fmt(emoji, count, total) for (emoji, count) in top)
-        e.add_field(name=f'Top {len(top)}', value=value or 'Nothing...')
+        embed.add_field(name=f'Top {len(top)}', value=value or 'Nothing...')
 
         record_count = len(records)
         if record_count > 10:
             bottom = records[-10:] if record_count >= 20 else records[-record_count + 10:]
             value = '\n'.join(self.emoji_fmt(emoji, count, total) for (emoji, count) in bottom)
-            e.add_field(name=f'Bottom {len(bottom)}', value=value)
+            embed.add_field(name=f'Bottom {len(bottom)}', value=value)
 
-        await ctx.send(embed=e)
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):

@@ -132,7 +132,7 @@ class Reminder(commands.Cog):
         # Indicates if there is a timer that is waiting to be dispatched.
         self._waiting_timer = asyncio.Event()
         # The next timer to be dispatched.
-        self._current_timer: Optional[Timer] = None
+        self._loaded_timer: Optional[Timer] = None
 
         self._task = bot.loop.create_task(self.dispatch_timers())
 
@@ -143,12 +143,23 @@ class Reminder(commands.Cog):
     def cog_unload(self) -> None:
         self._task.cancel()
 
-    async def get_active_timer(
+    async def load_next_timer(
             self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7
     ) -> Optional[Timer]:
+        """|coro|
+
+        Loads the next timer to be dispatched.
+
+        Parameters
+        -----------
+        connection: Optional[:class:`asyncpg.Connection`]
+            The connection to use for the query.
+        days: int
+            The amount of days to look for the next timer.
+        """
         query = """
             SELECT * FROM reminders
-            WHERE (expires AT TIME ZONE 'UTC' AT TIME ZONE timezone) < (CURRENT_TIMESTAMP + $1::interval)
+            WHERE (expires AT TIME ZONE timezone) < (CURRENT_TIMESTAMP + $1::interval)
             ORDER BY expires
             LIMIT 1;
         """
@@ -160,19 +171,39 @@ class Reminder(commands.Cog):
     async def wait_for_active_timers(
             self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7
     ) -> Timer:
+        """|coro|
+
+        Waits for the next timer to be dispatched.
+
+        Parameters
+        -----------
+        connection: Optional[:class:`asyncpg.Connection`]
+            The connection to use for the query.
+        days: int
+            The amount of days to look for the next timer.
+        """
         async with AcquireProtocol(connection=connection, pool=self.bot.pool) as con:
-            timer = await self.get_active_timer(connection=con, days=days)
+            timer = await self.load_next_timer(connection=con, days=days)
             if timer is not None:
                 self._waiting_timer.set()
                 return timer
 
             self._waiting_timer.clear()
-            self._current_timer = None
+            self._loaded_timer = None
             await self._waiting_timer.wait()
 
-            return await self.get_active_timer(connection=con, days=days)  # type: ignore
+            return await self.load_next_timer(connection=con, days=days)  # type: ignore
 
     async def call_timer(self, timer: Timer) -> None:
+        """|coro|
+
+        Dispatches the specified event of the given :class:`Timer`.
+
+        Parameters
+        -----------
+        timer: :class:`Timer`
+            The timer to dispatch.
+        """
         query = "DELETE FROM reminders WHERE id=$1;"
         await self.bot.pool.execute(query, timer.id)
 
@@ -180,9 +211,18 @@ class Reminder(commands.Cog):
         self.bot.dispatch(event_name, timer)
 
     async def dispatch_timers(self) -> None:
+        """|coro|
+
+        Dispatches the timers when they are ready.
+
+        Raises
+        -------
+        asyncio.CancelledError
+            The task was cancelled.
+        """
         try:
             while not self.bot.is_closed():
-                timer = self._current_timer = await self.wait_for_active_timers(days=40)
+                timer = self._loaded_timer = await self.wait_for_active_timers(days=40)
                 now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
                 if timer.expires >= now:
@@ -196,27 +236,42 @@ class Reminder(commands.Cog):
             self.MaybeSkipTask(True)
 
     async def short_timer_call(self, seconds: float, timer: Timer) -> None:
+        """|coro|
+
+        Dispatches a timer after a certain amount of seconds.
+        This is used for small timers that are less than 60 seconds, to avoid the overhead of the database.
+
+        Parameters
+        -----------
+        seconds: float
+            The amount of seconds to wait.
+        timer: :class:`Timer`
+            The timer to dispatch.
+        """
         await asyncio.sleep(seconds)
         event_name = f'{timer.event}_timer_complete'
         self.bot.dispatch(event_name, timer)
 
     async def get_timer(self, event: str, /, **kwargs: Any) -> Optional[Timer]:
-        r"""Gets a timer from the database.
-        Note you cannot find a database by its expiry or creation timetools.
+        """|coro|
+
+        Gets a timer from the database.
+        Note: you cannot find a timer by its expiry or creation time.
+
         Parameters
         -----------
         event: str
             The name of the event to search for.
         \*\*kwargs
             Keyword arguments to search for in the database.
+
         Returns
         --------
         Optional[:class:`Timer`]
             The timer if found, otherwise None.
         """
-
-        arg_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in enumerate(kwargs.keys(), start=2)]
-        query = f"SELECT * FROM reminders WHERE event = $1 AND {' AND '.join(arg_clause)} LIMIT 1;"
+        filter_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for i, key in enumerate(kwargs.keys(), start=2)]
+        query = f"SELECT * FROM reminders WHERE event = $1 AND {' AND '.join(filter_clause)} LIMIT 1;"
         record = await self.bot.pool.fetchrow(query, event, list(kwargs.values()))
         return Timer(record=record) if record else None
 
@@ -231,20 +286,31 @@ class Reminder(commands.Cog):
             Keyword arguments to search for in the database.
         """
 
-        arg_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for (i, key) in enumerate(kwargs.keys(), start=2)]
-        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(arg_clause)} RETURNING id;"
-        _id = await self.bot.pool.fetchval(query, event, *kwargs.values())
-        self.MaybeSkipTask(_id is not None and self._current_timer and self._current_timer.id == _id)
+        filter_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for i, key in enumerate(kwargs.keys(), start=2)]
+        query = f"DELETE FROM reminders WHERE event = $1 AND {' AND '.join(filter_clause)} RETURNING id;"
+        timer_id = await self.bot.pool.fetchval(query, event, *kwargs.values())
+        self.MaybeSkipTask(timer_id is not None and self._loaded_timer and self._loaded_timer.id == timer_id)
 
-    def MaybeSkipTask(self, key: Union[Callable, bool]) -> bool:
+    def MaybeSkipTask(self, key: Union[Callable, bool]) -> None:
+        """Cancels the current task and creates create a new `dispatch_timers` task if the condition is met."""
         if not key:
-            return False
+            return
 
         self._task.cancel()
         self._task = self.bot.loop.create_task(self.dispatch_timers())
 
-    async def create_timer(self, when: datetime.datetime, event: str, /, *args: Any, **kwargs: Any) -> Timer:
-        r"""Creates a timer.
+    async def create_timer(
+            self,
+            when: datetime.datetime,
+            event: str,
+            /,
+            *args: Any,
+            **kwargs: Any
+    ) -> Timer:
+        """|coro|
+
+        Creates a timer to be dispatched at a given time.
+
         Parameters
         -----------
         when: datetime.datetime
@@ -256,29 +322,28 @@ class Reminder(commands.Cog):
             Arguments to pass to the event
         \*\*kwargs
             Keyword arguments to pass to the event
-        created: datetime.datetime
-            Special keyword-only argument to use as the creation timetools.
-            Should make the timedeltas a bit more consistent.
-        timezone: str
-            Special keyword-only argument to use as the timezone for the
-            expiry timetools. This automatically adjusts the expiry time to be
-            in the future, should it be in the past.
+
+            ... special keyword-only arguments::
+
+                created: datetime.datetime
+                    Special keyword-only argument to use as the creation time.
+                timezone: str
+                    Special keyword-only argument to use as the timezone for the
+                    expiry time. This automatically adjusts the expiry time to be
+                    in the future, should it be in the past.
 
         Note
-        ------
+        ----
         Arguments and keyword arguments must be JSON serializable.
 
         Returns
         --------
         :class:`Timer`
+            The timer that was created.
         """
+        now = kwargs.pop('created', discord.utils.utcnow())
+        tz = kwargs.pop('timezone', 'UTC')
 
-        try:
-            now = kwargs.pop('created')
-        except KeyError:
-            now = discord.utils.utcnow()
-
-        timezone_name = kwargs.pop('timezone', 'UTC')
         when = when.astimezone(datetime.timezone.utc).replace(tzinfo=None)
         now = now.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
@@ -286,7 +351,7 @@ class Reminder(commands.Cog):
             event=event,
             expires=when,
             created=now,
-            timezone=timezone_name,
+            timezone=tz,
             extra={'args': args, 'kwargs': kwargs}
         )
         delta = (when - now).total_seconds()
@@ -300,12 +365,13 @@ class Reminder(commands.Cog):
             VALUES ($1, $2::jsonb, $3, $4, $5)
             RETURNING id;
         """
-        timer.id = await self.bot.pool.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when, now, timezone_name)
+        timer.id = await self.bot.pool.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when, now, tz)
 
         if delta <= (86400 * 40):  # 40 days
+            # if the delta is less than 40 days, we can just wait for the next timer to be dispatched
             self._waiting_timer.set()
 
-        self.MaybeSkipTask(self._current_timer and when < self._current_timer.expires)
+        self.MaybeSkipTask(self._loaded_timer and when < self._loaded_timer.expires)
         return timer
 
     @commands.command(
@@ -323,14 +389,13 @@ class Reminder(commands.Cog):
             self,
             ctx: Context,
             *,
-            when: Annotated[timetools.FriendlyTimeResult,
-                timetools.UserFriendlyTime(commands.clean_content, default='…')],  # noqa
+            when: Annotated[
+                timetools.FriendlyTimeResult, timetools.UserFriendlyTime(commands.clean_content, default='…')],  # noqa
     ):
         """Reminds you of something after a certain amount of timetools.
         The input can be any direct date (e.g. YYYY-MM-DD) or a human-readable offset.
 
-        Times are in UTC unless a timezone is specified
-        using the "timezone set" command.
+        Times are in UTC unless a timezone is specified using the "timezone set" command.
         """
 
         if len(when.arg) > 1000:
@@ -440,7 +505,7 @@ class Reminder(commands.Cog):
         if status == 'DELETE 0':
             return await ctx.stick(False, 'Could not delete any reminders with that ID.')
 
-        self.MaybeSkipTask(self._current_timer and self._current_timer.id == reminder_id)
+        self.MaybeSkipTask(self._loaded_timer and self._loaded_timer.id == reminder_id)
         await ctx.stick(True, 'Successfully deleted reminder.', ephemeral=True)
 
     @commands.command(
@@ -468,12 +533,21 @@ class Reminder(commands.Cog):
         query = "DELETE FROM reminders WHERE event = 'reminder' AND extra #>> '{args,0}' = $1;"
         await ctx.db.execute(query, str(ctx.author.id))
 
-        self.MaybeSkipTask(self._current_timer and self._current_timer.author_id == ctx.author.id)
+        self.MaybeSkipTask(self._loaded_timer and self._loaded_timer.author_id == ctx.author.id)
         await ctx.stick(True, f'Successfully deleted {plural(total):reminder}.',
                         ephemeral=True)
 
     @commands.Cog.listener()
     async def on_reminder_timer_complete(self, timer: Timer):
+        """|coro|
+
+        The event that is called when a reminder timer is complete.
+
+        Parameters
+        -----------
+        timer: :class:`Timer`
+            The timer that is complete.
+        """
         author_id, channel_id, message = timer.args
 
         try:

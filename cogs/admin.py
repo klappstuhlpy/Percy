@@ -240,8 +240,8 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
         """Evaluates a code"""
 
         message = await ctx.send(
-            embed=discord.Embed(description='*Processing request...*',
-                                color=discord.Color.orange())
+            embed=discord.Embed(
+                description='*Processing request...*', color=discord.Color.orange())
         )
 
         env = {
@@ -303,7 +303,6 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
     )
     async def perf(self, ctx: Context, *, command: str):  # noqa
         """Checks the timing of a command, attempting to suppress HTTP and DB calls."""
-
         try:
             msg = copy.copy(ctx.message)
             msg.content = ctx.prefix + command

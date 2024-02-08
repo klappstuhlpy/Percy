@@ -35,7 +35,7 @@ class TagPageEntry(PostgresItem):
 
 
 class TagNameOrID(commands.clean_content):
-    """Converts to content to either a Integer or a String."""
+    """Converts the content to either an integer or string."""
 
     def __init__(self, *, lower: bool = False, with_id: bool = False):
         self.lower: bool = lower
@@ -716,9 +716,9 @@ class Tags(commands.Cog):
         commands.hybrid_group,
         name='tag',
         description='Shows a tag from the server.',
-        fallback='show'
+        fallback='show',
+        guild_only=True
     )
-    @commands.guild_only()
     @app_commands.describe(name_or_id='The tag to retrieve')
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
@@ -740,7 +740,6 @@ class Tags(commands.Cog):
         examples=['new-alias original-tag',
                   '\'new alias\' original tag']
     )
-    @commands.guild_only()
     @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
     @app_commands.describe(new_alias='The new alias to set', original_tag='The original tag to alias')
     @app_commands.autocomplete(original_tag=non_aliased_tag_autocomplete)  # type: ignore
@@ -784,7 +783,6 @@ class Tags(commands.Cog):
         examples=['new-tag This is the content of the tag.',
                   '\'new tag\' This is the content of the tag.']
     )
-    @commands.guild_only()
     @app_commands.describe(name='The tag name', content='The tag content')
     async def tag_create(
             self,
@@ -807,7 +805,6 @@ class Tags(commands.Cog):
         description='Interactively create a Tag owned by yourself in this server.',
         ignore_extra=True
     )
-    @commands.guild_only()
     async def tag_make(self, ctx: GuildContext):
         """Interactively create a Tag owned by yourself in this server.
         `Note:` May be useful for larger contents / bigger names.
@@ -1004,7 +1001,6 @@ class Tags(commands.Cog):
         name='stats',
         description='Shows Tag Statistics about the Server or a Member.',
     )
-    @commands.guild_only()
     @app_commands.describe(
         member='The member to get tag statistics for. If not given, the server\'s tag statistics will be shown.')
     async def tag_stats(self, ctx: GuildContext, *, member: discord.User = None):
@@ -1019,13 +1015,12 @@ class Tags(commands.Cog):
         name='edit',
         description='Edit the content or name of a Tag.',
     )
-    @commands.guild_only()
     @app_commands.describe(
         name_or_id='The Tag you want to edit. (Must be yours)',
         content='The new content of the tag. (If not given, you will be prompted to edit the tag in a modal.)',
     )
     @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
+    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)
     async def tag_edit(
             self,
             ctx: GuildContext,
@@ -1076,7 +1071,6 @@ class Tags(commands.Cog):
         description='Removes a Tag by Name or ID.',
         aliases=['remove']
     )
-    @commands.guild_only()
     @app_commands.describe(name_or_id='The assigned Tag to delete.')
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
@@ -1090,14 +1084,14 @@ class Tags(commands.Cog):
         Your Tags can also be removed by Moderators if they have the `MANAGE MESSAGES` permission.
         `Note:` This will also remove all aliases of the tag.
         """
-
         bypass_owner_check = ctx.author.id == self.bot.owner_id or ctx.author.guild_permissions.manage_messages
 
         if bypass_owner_check:
-            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, only_parent=True)
+            tag = await self.get_tag(
+                name_or_id=name_or_id, location_id=ctx.guild.id, only_parent=True)
         else:
-            tag = await self.get_tag(name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id,
-                                     only_parent=True)
+            tag = await self.get_tag(
+                name_or_id=name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
         if not tag:
             raise commands.BadArgument('Could not find a tag with that name, are you sure it exists or you own it?')
@@ -1112,7 +1106,6 @@ class Tags(commands.Cog):
         name='info',
         description='Shows you Information about a Tag.',
     )
-    @commands.guild_only()
     @app_commands.describe(name_or_id='The name or id of the tag to get info about.')
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
@@ -1159,7 +1152,6 @@ class Tags(commands.Cog):
         description='This displays you the raw content of a tag.',
         aliases=['content']
     )
-    @commands.guild_only()
     @app_commands.describe(name_or_id='The name or id of the tag to display the escaped markdown content.')
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.autocomplete(name_or_id=non_aliased_tag_autocomplete)  # type: ignore
@@ -1177,7 +1169,6 @@ class Tags(commands.Cog):
         name='list',
         description='Shows a list of Tags owned by yourself or a given member.',
     )
-    @commands.guild_only()
     @app_commands.describe(member='The member to list tags of, if not given then it defaults to you.')
     async def tag_list(self, ctx: GuildContext, *, flags: TagListFlags):
         """Shows a list of Tags owned by yourself or a given member."""
@@ -1235,8 +1226,7 @@ class Tags(commands.Cog):
         name='purge',
         description='Bulk remove all Tags and assigned Aliases of a given User.',
     )
-    @commands.guild_only()
-    @commands.permissions(user=['manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.describe(member='The member to remove all tags of')
     async def tag_purge(self, ctx: GuildContext, member: discord.User):
         """Bulk remove all Tags and assigned Aliases of a given User."""
@@ -1262,7 +1252,6 @@ class Tags(commands.Cog):
         name='search',
         description='Search for tags matching the given query.',
     )
-    @commands.guild_only()
     @app_commands.describe(query='The tag name to search for')
     @app_commands.choices(
         sort=[
@@ -1334,10 +1323,9 @@ class Tags(commands.Cog):
         name='claim',
         description='Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.',
     )
-    @commands.guild_only()
     @app_commands.describe(name_or_id='The tag to claim')
     @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
     async def tag_claim(
             self,
             ctx: GuildContext,
@@ -1363,10 +1351,9 @@ class Tags(commands.Cog):
         name='transfer',
         description='Transfer a tag owned by you to another member.',
     )
-    @commands.guild_only()
     @app_commands.describe(member='The member to transfer the tag to', name_or_id='The tag to transfer')
     @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
     async def tag_transfer(
             self,
             ctx: GuildContext,
@@ -1386,9 +1373,12 @@ class Tags(commands.Cog):
         await tag.transfer(member)
         await ctx.stick(True, f'Successfully transferred tag ownership to **{member}**.')
 
-    @commands.command(tag.command, name='export', description='Exports all your tags/server tags to a csv file.')
-    @commands.cooldown(1, 60, commands.BucketType.member)
-    @commands.guild_only()
+    @commands.command(
+        tag.command,
+        name='export',
+        description='Exports all your tags/server tags to a csv file.',
+        cooldown=commands.CooldownMap(rate=1, per=60, type=commands.BucketType.member)
+    )
     @app_commands.describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')
     async def tag_export(
             self,

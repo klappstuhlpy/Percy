@@ -179,8 +179,11 @@ class Annotations(commands.Cog):
         e.set_footer(text=f'Author ID: {user.id}')
         return e
 
-    @commands.command(commands.core_command, description='Sends feedback about the bot to the owner.')
-    @commands.cooldown(rate=1, per=60.0, type=commands.BucketType.user)
+    @commands.command(
+        commands.core_command,
+        description='Sends feedback about the bot to the owner.',
+        cooldown=commands.CooldownMap(rate=1, per=60.0, type=commands.BucketType.user)
+    )
     async def feedback(self, ctx: Context, *, content: str):
         """Sends feedback about the bot to the owner.
 

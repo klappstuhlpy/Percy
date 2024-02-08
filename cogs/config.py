@@ -266,9 +266,10 @@ class Config(commands.Cog):
         description='Ignores text channels or members from using the bot.',
         invoke_without_command=True,
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
-    async def ignore(self, ctx: GuildContext,
-                     *entities: Union[discord.TextChannel, discord.Member, discord.VoiceChannel]):
+    @commands.permissions(user=['ban_members', 'manage_messages'])
+    async def ignore(
+            self, ctx: GuildContext, *entities: Union[discord.TextChannel, discord.Member, discord.VoiceChannel]
+    ):
         """Ignores text channels or members from using the bot.
         If no channel or member is specified, the current channel is ignored.
         Users with Administrator can still use the bot, regardless of ignore
@@ -291,9 +292,9 @@ class Config(commands.Cog):
         ignore.command,
         name='list',
         description='Tells you what channels or members are currently ignored in this server.',
+        cooldown=commands.CooldownMap(rate=2, per=60.0, type=commands.BucketType.guild)
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
-    @commands.cooldown(2, 60.0, commands.BucketType.guild)
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def ignore_list(self, ctx: GuildContext):
         """Tells you what channels or members are currently ignored in this server.
         To use this command you must have Ban Members and Manage Messages permissions.
@@ -328,7 +329,7 @@ class Config(commands.Cog):
         name='all',
         description='Ignores every channel in the server from being processed.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def _all(self, ctx: GuildContext):
         """Ignores every channel in the server from being processed.
         This works by adding every channel that the server currently has into
@@ -344,7 +345,7 @@ class Config(commands.Cog):
         name='clear',
         description='Clears all the currently set ignores.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def ignore_clear(self, ctx: GuildContext):
         """Clears all the currently set ignores.
         To use this command you must have Ban Members and Manage Messages permissions.
@@ -362,7 +363,7 @@ class Config(commands.Cog):
         description='Allows channels or members to use the bot again.',
         invoke_without_command=True,
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def unignore(self, ctx: GuildContext,
                        *entities: Union[discord.TextChannel, discord.Member, discord.VoiceChannel]):
         """Allows channels or members to use the bot again.
@@ -386,7 +387,7 @@ class Config(commands.Cog):
         name='all',
         description='Unignores every channel in the server.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def unignore_all(self, ctx: GuildContext):
         """An alias for ignore clear command."""
         await ctx.invoke(self.ignore_clear)  # type: ignore
@@ -397,7 +398,7 @@ class Config(commands.Cog):
         description='Toggles a command on or off.',
         invoke_without_command=True,
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def server(self, ctx: GuildContext):
         """Handles the server-specific permissions."""
         pass
@@ -408,7 +409,7 @@ class Config(commands.Cog):
         description='Toggles a command on or off for a specific channel.',
         invoke_without_command=True,
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def channel(self, ctx: GuildContext):
         """Handles the channel-specific permissions."""
         pass
@@ -513,7 +514,7 @@ class Config(commands.Cog):
         name='enable',
         description='Enables a command for the server or a channel.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def config_enable(self, ctx: GuildContext, channel: Optional[discord.TextChannel], *, command: CommandName):
         """Enables a command the server or a channel."""
 
@@ -531,7 +532,7 @@ class Config(commands.Cog):
         name='disable',
         description='Disables a command for the server or a channel.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def config_disable(self, ctx: GuildContext, channel: Optional[discord.TextChannel], *, command: CommandName):
         """Disables a command for the server or a channel."""
 
@@ -549,7 +550,7 @@ class Config(commands.Cog):
         name='disabled',
         description='Shows the disabled commands for the channel given.',
     )
-    @commands.permissions(3, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def config_disabled(
             self, ctx: GuildContext, *, channel: Optional[Union[discord.TextChannel, discord.VoiceChannel]] = None
     ):

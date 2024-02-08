@@ -306,7 +306,7 @@ class Giveaway(commands.Cog):
         description='Create a giveaway.',
     )
     @app_commands.guild_only()
-    @commands.permissions(1, user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=['ban_members', 'manage_messages'])
     async def make_giveaway(self, interaction: discord.Interaction):
         """Interactively creates a giveaway using a Modal."""
         await interaction.response.send_modal(CreateGiveawayModal(self.bot))

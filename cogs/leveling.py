@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import random
 from typing import Optional, TypedDict
@@ -18,6 +17,7 @@ from .utils.context import Context, GuildContext
 from .utils.converters import get_asset_url
 from .utils.formats import medal_emojize
 from .utils.helpers import PostgresItem
+from .utils.lock import lock
 from .utils.render import Render
 from launcher import get_logger
 
@@ -110,18 +110,18 @@ class LevelConfig(PostgresItem):
         self.experience += round(secs * multiplier)
         await self.send_patch()
 
+    @lock('LevelConfig', 'send_patch', wait=True)
     async def send_patch(self):
-        async with self.cog.batch_lock:
-            self.cog.batch_data.append(
-                {
-                    'guild_id': self.guild_id,
-                    'user_id': self.user_id,
-                    'messages': self.messages,
-                    'experience': self.experience,
-                    'voice_seconds': self.voice_seconds
-                }
-            )
-            self.cog.get_level_config.refactor(self.user_id, self.guild_id, replace=self)
+        self.cog.batch_data.append(
+            {
+                'guild_id': self.guild_id,
+                'user_id': self.user_id,
+                'messages': self.messages,
+                'experience': self.experience,
+                'voice_seconds': self.voice_seconds
+            }
+        )
+        self.cog.get_level_config.refactor(self.user_id, self.guild_id, replace=self)
 
 
 log = get_logger(__name__)
@@ -159,9 +159,7 @@ class Leveling(commands.Cog):
 
         # Better for those two variables to be global, not private to
         # access them from the :class:`LevelConfig` class.
-        self.batch_lock = asyncio.Lock()
         self.batch_data: OverwriteList[DataBatchEntry] = OverwriteList()
-
         self._voicebatch_data: dict[int, PointsWatch] = {}
 
         self.bulk_insert_loop.add_exception_type(asyncpg.PostgresConnectionError)
@@ -169,6 +167,14 @@ class Leveling(commands.Cog):
 
         self.message_cooldown = commands.CooldownMapping.from_cooldown(1, 60, commands.BucketType.member)
 
+    @property
+    def display_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name='oneup', id=1113286994378899516)
+
+    def cog_unload(self):
+        self.bulk_insert.stop()
+
+    @lock('Leveling', 'level_batch', wait=True)
     async def bulk_insert(self) -> None:
         query = """
                 INSERT INTO levels (guild_id, user_id, messages, experience, voice_seconds)
@@ -194,17 +200,9 @@ class Leveling(commands.Cog):
                 log.debug('Registered %s leveling batches to the database.', total)
             self.batch_data.clear()
 
-    def cog_unload(self):
-        self.bulk_insert_loop.stop()
-
     @tasks.loop(seconds=15.0)
     async def bulk_insert_loop(self):
-        async with self.batch_lock:
-            await self.bulk_insert()
-
-    @property
-    def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='oneup', id=1113286994378899516)
+        await self.bulk_insert()
 
     @cache.cache(strategy=cache.Strategy.ADDITIVE)
     async def get_level_config(self, user_id: int, guild_id: int) -> Optional[LevelConfig]:

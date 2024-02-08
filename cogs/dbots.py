@@ -22,7 +22,8 @@ class WebAPIManager(commands.Cog):
                    'content-type': 'application/json'}
 
         async with self.bot.session.post(
-                f'{DISCORD_BOTS_API}/bots/{self.bot.user.id}/stats', data=payload, headers=headers) as resp:
+                f'{DISCORD_BOTS_API}/bots/{self.bot.user.id}/stats', data=payload, headers=headers
+        ) as resp:
             if resp.status != 200:
                 log.warning(f'DBots statistics returned {resp.status} for {payload}')
                 return
