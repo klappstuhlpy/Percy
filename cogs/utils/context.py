@@ -243,6 +243,11 @@ class Context(commands.Context):
         """Returns the guild ID of the message."""
         return self.guild.id
 
+    @property
+    def safe_prefix(self) -> str:
+        """Returns the command prefix properly escaped."""
+        return self.prefix if not self.prefix.startswith('<@') else f'@{self.bot.user.name} '
+
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:
             raise ValueError('No results found.')
