@@ -1,19 +1,22 @@
 import asyncio
-import functools
 import inspect
 import types
 from collections import defaultdict
 from collections.abc import Awaitable, Hashable
 from functools import partial
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine, TYPE_CHECKING
 from weakref import WeakValueDictionary
 
 from cogs.utils import function
-from cogs.utils.constants import Coro
 from cogs.utils.function import BoundArgs, command_wraps
-from launcher import get_logger
 
-log = get_logger(__name__)
+if TYPE_CHECKING:
+    from launcher import get_logger
+    log = get_logger(__name__)
+else:
+    import logging
+    log = logging.getLogger(__name__)
+
 __lock_dicts: defaultdict[Hashable] = defaultdict(WeakValueDictionary)  # noqa
 
 _IdCallableReturn = Hashable | Awaitable[Hashable]
@@ -22,29 +25,25 @@ ResourceId = Hashable | _IdCallable
 
 
 class LockedResourceError(RuntimeError):
-    """
-    Exception raised when an operation is attempted on a locked resource.
+    """Exception raised when an operation is attempted on a locked resource.
 
     Attributes
     ----------
-    type: :class:`str`
-        The type of the resource.
+    namespace: :class:`str`
+        The namespace of the resource.
     id: :class:`Hashable`
-        The ID of the resource.
+        The id of the resource.
     """
 
-    def __init__(self, resource_type: str, resource_id: Hashable):
-        self.type = resource_type
+    def __init__(self, namespace: str, resource_id: Hashable):
+        self.namespace = namespace
         self.id = resource_id
 
         # Do not log this error because we use this only to indicate
         # if a resource is locked or not and handle it accordingly
         self.bypass_log = True
 
-        super().__init__(
-            f'Cannot operate on {self.type.lower()} `{self.id}`; '
-            'it is currently locked and in use by another operation.'
-        )
+        super().__init__(f'Cannot operate on `{self.namespace.lower()}` [{self.id}] due to being locked.')
 
 
 class SharedEvent:
@@ -123,27 +122,33 @@ def lock(
         The decorated coroutine function.
     """
 
-    def decorator(func: types.FunctionType) -> types.FunctionType:
+    def decorator(func: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
+        if not asyncio.iscoroutinefunction(func):
+            raise RuntimeError('The function to lock must be a coroutine function.')
+
         name = func.__name__
+
+        func.__resource_id__ = resource_id
+        func.__namespace__ = namespace
 
         @command_wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            log.trace(f'{name}: mutually exclusive decorator called')
+            log.debug(f'{name}: mutually exclusive decorator called')
 
             if callable(resource_id):
-                log.trace(f'{name}: binding args to signature')
+                log.debug(f'{name}: binding args to signature')
                 bound_args = function.get_bound_args(func, args, kwargs)
 
-                log.trace(f'{name}: calling the given callable to get the resource ID')
+                log.debug(f'{name}: calling the given callable to get the resource ID')
                 id_ = resource_id(bound_args)
 
                 if inspect.isawaitable(id_):
-                    log.trace(f'{name}: awaiting to get resource ID')
+                    log.debug(f'{name}: awaiting to get resource ID')
                     id_ = await id_
             else:
                 id_ = resource_id
 
-            log.trace(f'{name}: getting the lock object for resource {namespace!r}:{id_!r}')
+            log.debug(f'{name}: getting the lock object for resource {namespace!r}:{id_!r}')
 
             # Get the lock for the ID. Create a lock if one doesn't exist yet.
             locks = __lock_dicts[namespace]
@@ -164,97 +169,66 @@ def lock(
                 return None
 
         return wrapper
-
     return decorator
 
 
-def watch_func(func: types.FunctionType) -> Coro:
-    """Watch the decorated function.
-
-     Sets the `__is_running__` attribute to True when the function is running.
-
-     Parameters
-     ----------
-     func: :class:`types.FunctionType`
-         The function to watch.
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs) -> Any:
-        name = func.__name__
-
-        bound_args = function.get_bound_args(func, args, kwargs)
-        log.trace(f'{name}: calling the given callable to get the resource ID')
-
-        id_ = f'{name}.' + '.'.join(['%s=%r' % (k, v) for k, v in bound_args.items()])
-        log.trace(f'{name}: getting the lock object for resource {func.__name__!r}:{id_!r}')
-
-        _inter_lock = __lock_dicts.setdefault(id_, asyncio.Lock())
-
-        await _inter_lock.acquire()
-        try:
-            result = await func(*args, **kwargs)
-        finally:
-            _inter_lock.release()
-
-        return result
-    return wrapper
-
-
 def lock_func(
-        watched: Coro,
+        to_wait: Callable[..., Coroutine[Any, Any, Any]],
         *,
         raise_error: bool = False,
         wait: bool = False,
 ) -> Callable:
-    """Apply the `lock` decorator using the return value of the given function as the ID.
+    """Apply the `lock` decorator to the given function.
 
-    This is generally used to lock a decorated function if another function assigned by `watched` is currently running
-    or in use.
+    This locks the decorated function while the `to_wait` function is locked.
 
     Note
     ----
-    The `watched` function must be a coroutine function and must be decorated with `watch_func`.
+    The `to_wait` function must be a coroutine function and must be decorated with either `lock` or `lock_arg`.
 
     Parameters
     ----------
-    watched: :class:`Coro`
+    to_wait: :class:`Coro`
         The function that gets watched and checked if it is running.
     raise_error: :class:`bool`
         Whether to raise `LockedResourceError` if the lock cannot be acquired.
     wait: :class:`bool`
         Whether to wait until the lock becomes available.
     """
+    if not asyncio.iscoroutinefunction(to_wait):
+        raise RuntimeError('The function to wait for must be a coroutine function.')
 
-    def decorator(func: types.FunctionType) -> types.FunctionType:
+    if not hasattr(to_wait, '__wrapped__'):
+        raise RuntimeError('The function to wait for must be decorated with `lock` or `lock_arg`.')
+
+    namespace = getattr(to_wait, '__namespace__')
+    resource_id = getattr(to_wait, '__resource_id__')
+
+    if namespace is None or resource_id is None:
+        raise RuntimeError('The function to wait for must be decorated with `lock` or `lock_arg`.')
+
+    def decorator(func: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
+        if not asyncio.iscoroutinefunction(func):
+            raise RuntimeError('The function to lock must be a coroutine function.')
+
         name = func.__name__
 
         @command_wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            log.trace(f'{name}: mutually exclusive decorator called')
+            waiter_lock: asyncio.Lock = __lock_dicts[namespace].setdefault(resource_id, asyncio.Lock())
 
-            bound_args = function.get_bound_args(func, args, kwargs)
-            log.trace(f'{name}: calling the given callable to get the resource ID')
-
-            id_ = f'{name}.' + '.'.join(['%s=%r' % (k, v) for k, v in bound_args.items()])
-
-            log.trace(f'{name}: getting the lock object for resource {watched.__name__!r}:{id_!r}')
-
-            # Get the lock for the ID. Create a lock if one doesn't exist yet.
-            func_lock = __lock_dicts.setdefault(id_, asyncio.Lock())
-
-            # It's safe to check an asyncio.Lock is free before acquiring it because:
-            #   1. Synchronous code like `if not lock_.locked()` does not yield execution
-            #   2. `asyncio.Lock.acquire()` does not internally await anything if the lock is free
-            #   3. awaits only yield execution to the event loop at actual I/O boundaries
-            if wait or not func_lock.locked():
-                log.debug(f'{name}: acquiring lock for resource {watched.__name__!r}:{id_!r}...')
-                async with func_lock:
-                    return await func(*args, **kwargs)
+            if waiter_lock is None or not waiter_lock.locked():
+                log.debug(f'{name}: resource {namespace!r}:{resource_id!r} is unlocked, continue...')
+                return await func(*args, **kwargs)
             else:
-                log.info(f'{name}: aborted because resource {watched.__name__!r}:{id_!r} is locked')
+                log.info(f'{name}: aborted because resource {namespace!r}:{resource_id!r} is locked')
+                if wait:
+                    log.debug(f'{name}: waiting for locked resource {namespace!r}:{resource_id!r} to release...')
+                    while __lock_dicts[namespace].get(resource_id).locked():
+                        await asyncio.sleep(0.1)
+                    return await func(*args, **kwargs)
                 if raise_error:
-                    raise LockedResourceError(str(func.__name__), id_)
+                    raise LockedResourceError(str(namespace), resource_id)
                 return None
 
         return wrapper
