@@ -485,7 +485,10 @@ _TC = TypeVar('_TC', asyncpg.Connection, asyncpg.Pool)
 
 
 class AcquireProtocol(Protocol[_TC]):
-    """A protocol for objects that can be used in a `maybe_acquire` context manager."""
+    """A protocol for objects that can be used in a `maybe_acquire` context manager.
+
+    This is useful to completly cleanup and release the connection or pool after the context manager is done.
+    """
 
     def __init__(self, connection: Optional[asyncpg.Connection], *, pool: asyncpg.Pool) -> None:
         self.connection: Optional[asyncpg.Connection] = connection

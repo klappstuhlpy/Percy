@@ -182,7 +182,7 @@ class AITools(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='\N{FRAME WITH PICTURE}')
 
-    @lock_arg('image.send_job', 'ctx', attrgetter('user.id'), raise_error=True)
+    @lock_arg('Image.send_job', 'ctx', attrgetter('user.id'), raise_error=True)
     async def send_job(self, ctx: Context | Interaction, job: ImageJob, rerun: bool = False) -> Message:
         """|coro| @locked(func, ctx)
 

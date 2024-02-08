@@ -27,15 +27,15 @@ class Config(Generic[_T]):
 
     Attributes
     ----------
-    name : str
+    name: str
         The name of the config file.
-    object_hook : Optional[ObjectHook]
+    object_hook: Optional[ObjectHook]
         A function that will be called on every decoded JSON object, by default None
-    encoder : Optional[Type[json.JSONEncoder]]
+    encoder: Optional[Type[json.JSONEncoder]]
         A custom JSON encoder, by default None
-    loop : asyncio.AbstractEventLoop
+    loop: asyncio.AbstractEventLoop
         The event loop.
-    lock : asyncio.Lock
+    lock: asyncio.Lock
         The lock for saving, loading and dumping the config file.
 
     Raises

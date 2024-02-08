@@ -127,7 +127,7 @@ def command_wraps(
         *,
         ignored_conflict_names: set[str] = frozenset(),
 ) -> Callable[[...], Any]:
-    """Update the decorated function to look like `wrapped` and update globals for discordpy forwardref evaluation."""
+    """Update the decorated function to look like `wrapped` and update globals for discord.py forwardref evaluation."""
 
     def decorator(wrapper: types.FunctionType):
         return functools.update_wrapper(
