@@ -84,9 +84,9 @@ class TextSource:
         RuntimeError
             The line was too big for the current :attr:`max_size`.
         """
-        max_page_size = self.max_size - self.prefix_len - self.suffix_len - 2 * len(self.seperator)
-        if len(line) > max_page_size:
-            raise RuntimeError(f'Line exceeds maximum page size {max_page_size}')
+        MAX_PAGE_SIZE = self.max_size - self.prefix_len - self.suffix_len - 2 * len(self.seperator)
+        if len(line) > MAX_PAGE_SIZE:
+            raise RuntimeError(f'Line exceeds maximum page size {MAX_PAGE_SIZE}')
 
         if self._count + len(line) + len(self.seperator) > self.max_size - self.suffix_len:
             self.close_page()
@@ -208,6 +208,8 @@ class BasePaginator(discord.ui.View, Generic[T]):
         self.entries: List[T] = entries
         self.per_page: int = per_page
         self.clamp_pages: bool = clamp_pages
+
+        self.extras: dict[str, Any] = {}
 
         self._current_page = 0
         self.pages = [entries[i: i + per_page] for i in range(0, len(entries), per_page)]
@@ -356,7 +358,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
     @overload
     async def start(
             cls: Type[BasePaginator],
-            context: Context | discord.Interaction,
+            context: discord.Interaction,
             /,
             *,
             entries: List[T],
@@ -404,8 +406,6 @@ class BasePaginator(discord.ui.View, Generic[T]):
             Whether to enable the search feature.
         ephemeral: :class:`bool`
             Whether to make the message ephemeral.
-        *args: :class:`Any`
-            Any arguments to pass onto the paginator.
         **kwargs: :class:`Any`
             Any keyword arguments to pass onto the paginator.
 
@@ -416,6 +416,7 @@ class BasePaginator(discord.ui.View, Generic[T]):
         """
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
+        self.extras.update(kwargs)
 
         page = await self.format_page(self.pages[0])
         object_kwargs = self._message_kwargs(page)
@@ -441,6 +442,19 @@ class BasePaginator(discord.ui.View, Generic[T]):
                 await ctx.response.send_message(**kwargs, ephemeral=ephemeral)
             message = await ctx.original_response()
         return message  # noqa
+
+    @classmethod
+    async def _edit(cls, ctx: Context | discord.Interaction, **kwargs) -> discord.Message:
+        kwargs.pop('ephemeral', None)
+
+        if isinstance(ctx, discord.Interaction):
+            if ctx.response.is_done():
+                message = await ctx.edit_original_response(**kwargs)
+            else:
+                message = await ctx.response.edit_message(**kwargs)
+        else:
+            message = await ctx.message.edit(**kwargs)
+        return message
 
 
 class EmbedPaginator(BasePaginator[discord.Embed]):
@@ -535,11 +549,11 @@ class LinePaginator(BasePaginator[List[Any]]):
         **kwargs: :class:`Any`
             Any keyword arguments to pass onto the paginator.
 
-        ...
-            embed: :class:`discord.Embed`
-                 Special keyword-only argument for the embed to use for the paginator.
-            location: Literal['field', 'description']
-                 Special keyword-only argument for the location to put the entries in.
+            ...
+                embed: :class:`discord.Embed`
+                     Special keyword-only argument for the embed to use for the paginator.
+                location: Literal['field', 'description']
+                     Special keyword-only argument for the location to put the entries in.
 
         Returns
         -------
@@ -643,8 +657,17 @@ class PaginatorInterface(BasePaginator[AnyStr]):
 
     This allows users to interactively navigate the pages of a Paginator, and supports live output."""
 
-    def __init__(self, *, prefix: str = '```', suffix: str = '```', max_size: int = 2000, entries: List[AnyStr],
-                 per_page: int = 10, clamp_pages: bool = True, timeout: int = 180) -> None:
+    def __init__(
+            self, 
+            *, 
+            prefix: str = '```',
+            suffix: str = '```', 
+            max_size: int = 2000, 
+            entries: List[AnyStr],
+            per_page: int = 10, 
+            clamp_pages: bool = True,
+            timeout: int = 180
+    ) -> None:
         self.interface: TextSource = TextSource(prefix=prefix, suffix=suffix, max_size=max_size)
         self.sent_page_reactions = False
 
@@ -653,10 +676,10 @@ class PaginatorInterface(BasePaginator[AnyStr]):
 
         self.close_exception: Optional[BaseException] = None
 
-        if len(self.pages) > self.max_page_size:
+        if len(self.pages) > self.MAX_PAGE_SIZE:
             raise ValueError(
                 f'Paginator passed has too large of a page size for this interface. '
-                f'({len(self.pages)} > {self.max_page_size})'
+                f'({len(self.pages)} > {self.MAX_PAGE_SIZE})'
             )
 
         super().__init__(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
@@ -697,7 +720,7 @@ class PaginatorInterface(BasePaginator[AnyStr]):
 
         self._current_page = max(0, min(self.page_count - 1, value))
 
-    max_page_size = 2000
+    MAX_PAGE_SIZE = 2000
 
     async def add_line(self, *args: Any, **kwargs: Any):
         """A proxy function that allows this PaginatorInterface to remain locked to the last page
