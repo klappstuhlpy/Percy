@@ -101,7 +101,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         query = "UPDATE comic_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
         await self.bot.pool.execute(query, comic.next_scheduled(), comic.guild_id, comic.brand.name)
 
-        self.bot.dispatch(f'comic_schedule', comic)
+        self.bot.dispatch('comic_schedule', comic)
 
     async def wait_for_next_feed(self, *, connection: Optional[asyncpg.Connection] = None, days: int = 7) -> ComicFeed:
         async with AcquireProtocol(connection=connection, pool=self.bot.pool) as con:
