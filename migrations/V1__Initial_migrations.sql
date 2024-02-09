@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
     safe_automod_entity_ids BIGINT ARRAY,
     mute_role_id BIGINT,
     muted_members BIGINT ARRAY,
-    audit_log_channel BIGINT,
+    audit_log_channel_id BIGINT,
     audit_log_flags JSONB DEFAULT ('{
       "Server Updates": false,
       "Channel Logs": false,
@@ -28,12 +28,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
       "Thread Logs": false,
       "Automod Logs": false
     }'::jsonb),
-    audit_log_webhook_url TEXT,
-    poll_channel BIGINT,
-    poll_ping_role_id BIGINT,
-    poll_reason_channel BIGINT,
-    dstatus_notification_channel BIGINT,
-    dstatus_last_incident JSONB DEFAULT ('{}'::jsonb)
+    audit_log_webhook_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tags (
