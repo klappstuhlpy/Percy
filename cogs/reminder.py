@@ -272,7 +272,7 @@ class Reminder(commands.Cog):
         """
         filter_clause = [f"extra #>> ARRAY['kwargs', '{key}'] = ${i}" for i, key in enumerate(kwargs.keys(), start=2)]
         query = f"SELECT * FROM reminders WHERE event = $1 AND {' AND '.join(filter_clause)} LIMIT 1;"
-        record = await self.bot.pool.fetchrow(query, event, list(kwargs.values()))
+        record = await self.bot.pool.fetchrow(query, event, *kwargs.values())
         return Timer(record=record) if record else None
 
     async def delete_timer(self, event: str, /, **kwargs: Any) -> None:

@@ -1,19 +1,25 @@
--- Revises: V3
+-- Revises: V2
 -- Creation Date: 2023-03-28 13:20:17.941295 UTC
 -- Reason: poll_giveaway_commands
+
+CREATE TYPE poll_entry AS (user_id bigint, vote smallint);
 
 CREATE TABLE IF NOT EXISTS polls (
     id SERIAL PRIMARY KEY,
     message_id BIGINT,
     channel_id BIGINT,
     guild_id   BIGINT,
-    extra      jsonb DEFAULT '{}'::jsonb,
-    users      BIGINT[]
+    extra      JSONB DEFAULT '{}'::JSONB,
+    entries    poll_entry[]
 );
 
 CREATE INDEX IF NOT EXISTS polls_message_id_idx ON polls(message_id);
 CREATE INDEX IF NOT EXISTS polls_channel_id_idx ON polls(channel_id);
 CREATE INDEX IF NOT EXISTS polls_guild_id_idx ON polls(guild_id);
+
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS poll_channel_id BIGINT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS poll_ping_role_id BIGINT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS poll_reason_channel_id BIGINT;
 
 CREATE TABLE IF NOT EXISTS giveaways (
     id SERIAL PRIMARY KEY,
