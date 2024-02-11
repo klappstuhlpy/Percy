@@ -131,16 +131,6 @@ class AuditLog(commands.Cog):
         embed.set_footer(text=f'Log: [{entry.id}]', icon_url=get_asset_url(entry.user))
         embed.timestamp = entry.created_at
 
-        if config.requires_migration:
-            ch = f'<#{config.audit_log_channel_id}>'
-            broadcast = (
-                f'{ch}\n\n\N{WARNING SIGN}\ufe0f '
-                f'This server requires migration for this feature to continue working.\n'
-                f'Run "`/moderation disable Audit Logging`" followed by "`/moderation auditlog config {ch}`" '
-                f'to ensure this feature continues working!'
-            )
-            return await entry.guild.system_channel.send(broadcast)
-
         webhook = config.audit_log_webhook
         await webhook.send(embed=embed)
 
