@@ -267,6 +267,13 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
 class UserFriendlyTime(commands.Converter):
     """Converter Class to convert a human time input with optional context into a datetime.datetime object.
 
+    Parameters
+    ----------
+    converter: Optional[Union[type[commands.Converter], commands.Converter]]
+        A converter to use to convert the remaining argument after the time.
+    default: Any
+        The default argument to use if none is provided after the time.
+
     Examples
     --------
     - Do this on 4th of July at 8pm: `4th of July 8pm`
@@ -363,8 +370,7 @@ class UserFriendlyTime(commands.Converter):
                     raise commands.BadArgument('Expected quote before time input...')
 
                 if not (end < len(argument) and argument[end] == '"'):
-                    raise commands.BadArgument(''
-                                               'If the time is quoted, you must unquote it.')
+                    raise commands.BadArgument('If the time is quoted, you must unquote it.')
 
                 remaining = argument[end + 1:].lstrip(' ,.!')
             else:
