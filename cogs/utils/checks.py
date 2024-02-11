@@ -3,6 +3,7 @@ import functools
 import sys
 from typing import Callable, TypeVar
 
+import discord
 from discord import app_commands
 from discord.ext import commands
 
@@ -64,7 +65,7 @@ def asciionly(s: str | bytes) -> str:
     if PY3:
         return s.translate(translation_table)
     else:
-        return s.translate(None, bad_chars)
+        return s.translate(None, bad_chars)  # type: ignore
 
 
 def asciidammit(s: str) -> str | bytes:
@@ -113,6 +114,7 @@ def intr(n: float) -> int:
 
 
 async def check_guild_permissions(ctx: GuildContext, perms: dict[str, bool], *, check=all):
+    """Check if the user has the specified permissions."""
     is_owner = await ctx.bot.is_owner(ctx.author._user)  # noqa
     if is_owner:
         return True
@@ -125,6 +127,7 @@ async def check_guild_permissions(ctx: GuildContext, perms: dict[str, bool], *, 
 
 
 def hybrid_user_permissions_check(**perms: bool) -> Callable[[T], T]:
+    """Check if the user has the specified permissions."""
     async def pred(ctx: GuildContext):
         return await check_guild_permissions(ctx, perms)
 
@@ -137,7 +140,7 @@ def hybrid_user_permissions_check(**perms: bool) -> Callable[[T], T]:
 
 
 def hybrid_bot_permissions_check(**perms: bool) -> Callable[[T], T]:
-
+    """Check if the bot has the specified permissions."""
     def decorator(func: T) -> T:
         commands.bot_has_permissions(**perms)(func)
         app_commands.checks.bot_has_permissions(**perms)(func)
@@ -147,6 +150,7 @@ def hybrid_bot_permissions_check(**perms: bool) -> Callable[[T], T]:
 
 
 def guilds_check(*guild_ids: int) -> Callable[[T], T]:
+    """Check if the guild is in the list of guild_ids."""
     async def pred(ctx: GuildContext):
         return ctx.guild.id in guild_ids
 
@@ -155,3 +159,36 @@ def guilds_check(*guild_ids: int) -> Callable[[T], T]:
         return func
 
     return decorator
+
+
+def has_manage_roles_overwrite(member: discord.Member, channel: discord.abc.GuildChannel) -> bool:
+    """Check if a member has the manage_roles permission in a channel."""
+    ow = channel.overwrites
+    default = discord.PermissionOverwrite()
+    if ow.get(member, default).manage_roles:
+        return True
+
+    for role in member.roles:
+        if ow.get(role, default).manage_roles:
+            return True
+
+    return False
+
+
+def can_mute():
+    """Check if the author can mute someone in the current context."""
+    async def predicate(ctx: GuildContext) -> bool:
+        is_owner = await ctx.bot.is_owner(ctx.author)  # noqa
+        if ctx.guild is None:
+            return False
+
+        if not ctx.author.guild_permissions.manage_roles and not is_owner:
+            return False
+
+        ctx.guild_config = config = await ctx.cog.get_guild_config(ctx.guild.id)  # type: ignore
+        role = config and config.mute_role
+        if role is None:
+            raise commands.BadArgument('This server does not have a mute role set up.')
+        return ctx.author.top_role > role
+
+    return commands.check(predicate)
