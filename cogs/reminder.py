@@ -22,23 +22,24 @@ if TYPE_CHECKING:
 
 
 class SnoozeModal(discord.ui.Modal, title='Snooze'):
-    duration = discord.ui.TextInput(label='Duration', placeholder='e.g. 10 minutes (Must be a future time.)',
-                                    default='10 minutes', min_length=2)
+    duration = discord.ui.TextInput(
+        label='Duration', placeholder='e.g. 10 minutes (Must be a future time.)',
+        default='10 minutes', min_length=2
+    )
 
-    def __init__(self, view: ReminderView, cog: Reminder, timer: Timer) -> None:
+    def __init__(self, view: SnoozeTimerView, cog: Reminder, timer: Timer) -> None:
         super().__init__()
-        self.view: ReminderView = view
+        self.view: SnoozeTimerView = view
         self.timer: Timer = timer
         self.cog: Reminder = cog
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    async def on_submit(self, interaction: discord.Interaction):
         try:
             when = timetools.FutureTime(str(self.duration)).dt
         except commands.BadArgument:
-            await interaction.response.send_message(
+            return await interaction.response.send_message(
                 f'{tick(False)} Duration could not be parsed, sorry. Try something like "5 minutes" or "1 hour"',
                 ephemeral=True)
-            return
 
         self.view.snooze.disabled = True
         await interaction.response.edit_message(view=self.view)
@@ -61,7 +62,7 @@ class SnoozeModal(discord.ui.Modal, title='Snooze'):
         )
 
 
-class SnoozeButton(discord.ui.Button['ReminderView']):
+class SnoozeButton(discord.ui.Button['SnoozeTimerView']):
     def __init__(self, cog: Reminder, timer: Timer) -> None:
         super().__init__(label='Snooze', style=discord.ButtonStyle.blurple)
         self.timer: Timer = timer
@@ -72,12 +73,14 @@ class SnoozeButton(discord.ui.Button['ReminderView']):
         await interaction.response.send_modal(SnoozeModal(self.view, self.cog, self.timer))
 
 
-class ReminderView(discord.ui.View):
+class SnoozeTimerView(discord.ui.View):
+    """A view that is used to snooze a reminder."""
     message: discord.Message
 
-    def __init__(self, *, url: str, timer: Timer, cog: Reminder, author_id: int) -> None:
-        super().__init__(timeout=300)
+    def __init__(self, cog: Reminder, *, url: str, timer: Timer, author_id: int) -> None:
+        super().__init__(timeout=500)
         self.author_id: int = author_id
+
         self.snooze = SnoozeButton(cog, timer)
         self.add_item(discord.ui.Button(url=url, label='Jump to Message'))
         self.add_item(self.snooze)
@@ -129,9 +132,7 @@ class Reminder(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        # Indicates if there is a timer that is waiting to be dispatched.
         self._waiting_timer = asyncio.Event()
-        # The next timer to be dispatched.
         self._loaded_timer: Optional[Timer] = None
 
         self._task = bot.loop.create_task(self.dispatch_timers())
@@ -307,7 +308,7 @@ class Reminder(commands.Cog):
             *args: Any,
             **kwargs: Any
     ) -> Timer:
-        """|coro|
+        r"""|coro|
 
         Creates a timer to be dispatched at a given time.
 
@@ -398,8 +399,13 @@ class Reminder(commands.Cog):
         Times are in UTC unless a timezone is specified using the "timezone set" command.
         """
 
-        if len(when.arg) > 1000:
-            return await ctx.stick(False, 'This time is too far in the future. Please provide a shorter one.')
+        if len(when.arg) > 1500:
+            return await ctx.stick(
+                False, 'The reminder message is too long. Please keep it under **1500** characters.')
+
+        to_remind = when.arg
+        if ctx.replied_message is not None and ctx.replied_message.content:
+            to_remind = ctx.replied_message.content
 
         config = await self.bot.user_settings.get_user_config(ctx.author.id)
         zone = config.timezone if config else None
@@ -408,21 +414,24 @@ class Reminder(commands.Cog):
             'reminder',
             ctx.author.id,
             ctx.channel.id,
-            when.arg,
+            to_remind,
             created=ctx.message.created_at,
             message_id=ctx.message.id,
             timezone=zone or 'UTC',
         )
         await ctx.stick(
-            True, f'Okay {ctx.author.mention}, '
-                  f'I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{when.arg}*')
+            True, f'Okay {ctx.author.mention}, I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{to_remind}*'
+        )
 
     @commands.command(
         reminder.app_command.command,
         name='create',
         description='Reminds you of something at a specific time.',
     )
-    @app_commands.describe(when='When to be reminded of something.', prompt='What to be reminded of')
+    @app_commands.describe(
+        when='When to be reminded of something.',
+        prompt='What to be reminded of'
+    )
     async def reminder_create(
             self,
             interaction: discord.Interaction,
@@ -432,6 +441,7 @@ class Reminder(commands.Cog):
         """Sets a reminder to remind you of something at a specific timetools."""
         config = await self.bot.user_settings.get_user_config(interaction.user.id)
         zone = config.timezone if config else None
+
         await self.create_timer(
             when,
             'reminder',
@@ -443,8 +453,8 @@ class Reminder(commands.Cog):
             timezone=zone or 'UTC',
         )
         await interaction.response.send_message(
-            f'{tick(True)} Okay {interaction.user.mention}, '
-            f'I\'ll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*')
+            f'{tick(True)} Okay {interaction.user.mention}, I\'ll remind you *{discord.utils.format_dt(when, 'R')}* for *{prompt}*'
+        )
 
     @reminder_create.error
     async def reminder_create_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -464,7 +474,6 @@ class Reminder(commands.Cog):
             AND extra #>> '{args,0}' = $1
             ORDER BY expires;
         """
-
         records = await self.bot.pool.fetch(query, str(ctx.author.id))
 
         if len(records) == 0:
@@ -495,7 +504,6 @@ class Reminder(commands.Cog):
         To get a reminder ID, use the reminder list command.
         You must own the reminder to delete it, obviously.
         """
-
         query = """
             DELETE FROM reminders WHERE id=$1
             AND event = 'reminder'
@@ -515,7 +523,6 @@ class Reminder(commands.Cog):
     )
     async def reminder_purge(self, ctx: Context):
         """Purges all reminders you have set."""
-
         query = """
             SELECT COUNT(*) FROM reminders
             WHERE event = 'reminder'
@@ -561,10 +568,10 @@ class Reminder(commands.Cog):
 
         if message_id:
             url = f'https://discord.com/channels/{guild_id}/{channel.id}/{message_id}'
-            view = ReminderView(url=url, timer=timer, cog=self, author_id=author_id)
+            view = SnoozeTimerView(self, url=url, timer=timer, author_id=author_id)
 
         try:
-            msg = await channel.send(f'<@{author_id}>, {timer.human_delta}: {message}', view=view)
+            msg = await channel.send(f'<@{author_id}>, {timer.human_delta}: *{message}*', view=view)
         except discord.HTTPException:
             return
         else:
