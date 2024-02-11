@@ -172,7 +172,7 @@ class Leveling(commands.Cog):
         return discord.PartialEmoji(name='oneup', id=1113286994378899516)
 
     def cog_unload(self):
-        self.bulk_insert.stop()
+        self.bulk_insert_loop.stop()
 
     @lock('Leveling', 'level_batch', wait=True)
     async def bulk_insert(self) -> None:

@@ -79,7 +79,7 @@ class Emoji(commands.Cog):
         return discord.PartialEmoji(name='bloblul', id=1112406101812592640)
 
     def cog_unload(self):
-        self.bulk_insert.stop()
+        self.bulk_insert_loop.stop()
 
     @lock('Emoji', 'emoji_batch', wait=True)
     async def bulk_insert(self):
