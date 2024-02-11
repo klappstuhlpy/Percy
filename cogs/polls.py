@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import datetime
-import enum
 import random
 import re
 import traceback
 import warnings
-from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple
 
 import discord
 from discord import app_commands, Interaction
@@ -68,13 +67,6 @@ def uuid(ids: list[int]) -> int:
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
-class EditType(enum.Enum):
-    """The type of editing to perform."""
-    CONTENT = 1
-    DELETE = 2
-    VOTES = 3
-
-
 class VoteOption(TypedDict):
     """A vote option."""
     index: int
@@ -84,10 +76,10 @@ class VoteOption(TypedDict):
 
 class PollReasonModal(discord.ui.Modal, title='The Reason for you choice.'):
     def __init__(self, poll: Poll, selected_option: Dict[str, Any], bot: Percy):
-        super().__init__(timeout=60.0)
         self.poll = poll
-        self.selected_option = selected_option
         self.bot = bot
+        self.selected_option = selected_option
+        super().__init__(timeout=60.0)
 
     reason = discord.ui.TextInput(label='Reason', placeholder='Why did you choose this option.',
                                   style=discord.TextStyle.long, min_length=1, max_length=200)
@@ -183,24 +175,24 @@ class PollClearVoteButton(
             await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
             return False
 
+        entry = self.poll.get_entry(interaction.user.id)
+        if not entry:
+            await interaction.response.send_message(
+                f'You haven\'t voted on the poll *{self.poll.question}* [`{self.poll.id}`].', ephemeral=True)
+            return False
+
         return True
 
     async def callback(self, interaction: Interaction) -> None:
         if not interaction.message.embeds:
             return
 
-        entry = next(((user, option) for (user, option) in self.poll.entries if user == interaction.user.id), None)
-        if not entry:
-            return await interaction.response.send_message(
-                f'You haven\'t voted on the poll *{self.poll.question}* [`{self.poll.id}`].',
-                ephemeral=True)
+        entry = self.poll.get_entry(interaction.user.id)
 
-        user_option = next((i for i in self.poll.options if i['index'] == entry[1]), None)
-        self.poll.entries.remove(entry)
-
-        await self.poll.edit(
-            options=[(user_option, EditType.VOTES, user_option['votes'] - 1)]
-        )
+        self.poll.entries.discard(entry)
+        options: list[VoteOption] = self.poll.options.copy()
+        options[entry[1]]['votes'] -= 1
+        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
         await interaction.response.edit_message(embed=self.poll.to_embed())
 
@@ -268,40 +260,6 @@ class PollInfoButton(
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-async def PollEnterCallback(interaction: Interaction, poll: Poll, index: int):
-    if not interaction.message.embeds:
-        return
-
-    current_option = next((i for i in poll.options if i['index'] == index), None)
-
-    is_expired = False
-    if poll.kwargs.get('user_reason'):
-        is_expired = True
-        modal = PollReasonModal(poll, current_option, interaction.client)
-        await interaction.response.send_modal(modal)
-        state = await modal.wait()
-        if state is True:
-            return await interaction.followup.send(
-                content=f'{tick(False)} This poll requires a reason to vote.',
-                ephemeral=True)
-
-    poll.entries.add((interaction.user.id, int(current_option['index'])))
-    await poll.edit(
-        options=[(current_option, EditType.VOTES, current_option['votes'] + 1)],
-        votes=poll.votes + 1
-    )
-
-    if is_expired:
-        await interaction.edit_original_response(embed=poll.to_embed())
-    else:
-        await interaction.response.edit_message(embed=poll.to_embed())
-
-    await interaction.followup.send(
-        f'On the poll *{poll.question}* [`{poll.id}`], you voted:\n'
-        f'{to_emoji(current_option["index"])} - `{current_option["content"]}`',
-        ephemeral=True)
-
-
 class PollEnterButton(
     discord.ui.DynamicItem[discord.ui.Button],
     template=r'poll:enter:(?P<id>[0-9]+):option:(?P<index>[0-9]+)',
@@ -343,19 +301,43 @@ class PollEnterButton(
             await interaction.response.send_message(f'{tick(False)} Poll was not found.', ephemeral=True)
             return False
 
-        vote = next((option for (user, option) in self.poll.entries if user == interaction.user.id), None)
-        if vote:
-            option = next((i for i in self.poll.options if i['index'] == vote), None)
+        entry = self.poll.get_entry(interaction.user.id)
+        if entry:
+            vote = self.poll.get_option(entry[1])
             await interaction.response.send_message(
                 f'On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
-                f'{to_emoji(option['index'])} - `{option['content']}`',
+                f'{to_emoji(vote['index'])} - `{vote['content']}`',
                 ephemeral=True)
             return False
 
         return True
 
     async def callback(self, interaction: Interaction) -> None:
-        await PollEnterCallback(interaction, self.poll, self.index)
+        if not interaction.message.embeds:
+            return
+
+        option = self.poll.get_option(self.index)
+        if self.poll.kwargs.get('user_reason'):
+            modal = PollReasonModal(self.poll, option, interaction.client)
+            await interaction.response.send_modal(modal)
+            state = await modal.wait()
+            if state is True:
+                return await interaction.followup.send(
+                    content=f'{tick(False)} This poll requires you to submit a reason for your vote.',
+                    ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+
+        self.poll.entries.add((interaction.user.id, option['index']))
+        options: list[VoteOption] = self.poll.options.copy()
+        options[option['index']]['votes'] += 1
+        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
+
+        await interaction.edit_original_response(embed=self.poll.to_embed())
+        await interaction.followup.send(
+            f'On the self.poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
+            f'{to_emoji(option['index'])} - `{option['content']}`',
+            ephemeral=True)
 
 
 class PollEnterSelect(
@@ -416,7 +398,31 @@ class PollEnterSelect(
         return True
 
     async def callback(self, interaction: Interaction) -> None:
-        await PollEnterCallback(interaction, self.poll, int(self.values[0]))
+        if not interaction.message.embeds:
+            return
+
+        option = self.poll.get_option(int(self.values[0]))
+        if self.poll.kwargs.get('user_reason'):
+            modal = PollReasonModal(self.poll, option, interaction.client)
+            await interaction.response.send_modal(modal)
+            state = await modal.wait()
+            if state is True:
+                return await interaction.followup.send(
+                    content=f'{tick(False)} This poll requires you to submit a reason for your vote.',
+                    ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+
+        self.poll.entries.add((interaction.user.id, option['index']))
+        options: list[VoteOption] = self.poll.options.copy()
+        options[option['index']]['votes'] += 1
+        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
+
+        await interaction.edit_original_response(embed=self.poll.to_embed())
+        await interaction.followup.send(
+            f'On the self.poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n'
+            f'{to_emoji(option['index'])} - `{option['content']}`',
+            ephemeral=True)
 
 
 class PollRolePingButton(
@@ -487,6 +493,18 @@ def create_view(poll: Poll) -> discord.ui.View:
     return view
 
 
+class PollEntry(PostgresItem):
+    """Represents a poll entry."""
+
+    user_id: int
+    vote: int
+
+    __slots__ = ('user_id', 'vote')
+
+    def __iter__(self) -> tuple[int, int]:
+        return tuple((self.user_id, self.vote))
+
+
 class Poll(PostgresItem):
     """Represents a poll item."""
 
@@ -502,7 +520,7 @@ class Poll(PostgresItem):
     question: str
     votes: int
     description: str
-    options: List[dict[str, Any]]
+    options: List[list[VoteOption]]
 
     __slots__ = (
         'cog', 'bot', 'id', 'extra', 'channel_id', 'message_id', 'guild_id', 'entries',
@@ -520,12 +538,12 @@ class Poll(PostgresItem):
         self.message: discord.Message = MISSING
         self.ping_message: discord.Message = MISSING
 
-        self.question = self.kwargs.get('question')
-        self.votes = self.kwargs.get('votes', 0)
-        self.description = self.kwargs.get('description')
+        self.question: str = self.kwargs.get('question')
+        self.votes: int = self.kwargs.get('votes', 0)
+        self.description: str = self.kwargs.get('description')
         self.options: List[VoteOption] = self.kwargs.get('options', [])
 
-        self.entries = set(self.entries or [])
+        self.entries = set(PollEntry(record=entry).__iter__() for entry in self.entries or [])
 
     @property
     def jump_url(self) -> Optional[str]:
@@ -552,17 +570,35 @@ class Poll(PostgresItem):
         """The published date of the poll."""
         return datetime.datetime.fromisoformat(self.kwargs.get('published'))
 
-    async def fetch_message(self) -> None:
-        """Fetches the message of the poll."""
-        channel = self.channel
-        if channel is not None and self.message_id is not None:
-            message = await self.cog.get_message(channel, self.message_id)
-            if (ping_message_id := self.kwargs.get('ping_message_id')) is not None:
-                ping_message = await self.cog.get_message(channel, ping_message_id)
-                if ping_message:
-                    self.ping_message = ping_message
-            if message:
-                self.message = message
+    def get_option(self, index: int) -> Optional[VoteOption]:
+        """Gets an option from the poll.
+
+        Parameters
+        ----------
+        index: int
+            The index of the option to get.
+
+        Returns
+        -------
+        Optional[VoteOption]
+            The option from the poll.
+        """
+        return next((option for option in self.options if option['index'] == index), None)
+
+    def get_entry(self, user_id: int) -> Optional[tuple[int, int]]:
+        """Gets the vote of a user.
+
+        Parameters
+        ----------
+        user_id: int
+            The user ID to get the vote of.
+
+        Returns
+        -------
+        Optional[tuple[int, int]]
+            The vote of the user.
+        """
+        return next(((user, vote) for (user, vote) in self.entries if user == user_id), None)
 
     def to_fields(self, extras: bool = True) -> list[dict]:
         """Converts the poll to fields."""
@@ -591,6 +627,18 @@ class Poll(PostgresItem):
 
         return fields
 
+    async def fetch_message(self) -> None:
+        """Fetches the message of the poll."""
+        channel = self.channel
+        if channel is not None and self.message_id is not None:
+            message = await self.cog.get_message(channel, self.message_id)
+            if (ping_message_id := self.kwargs.get('ping_message_id')) is not None:
+                ping_message = await self.cog.get_message(channel, ping_message_id)
+                if ping_message:
+                    self.ping_message = ping_message
+            if message:
+                self.message = message
+
     def to_embed(self) -> discord.Embed:
         """Converts the poll to an embed."""
         embed = discord.Embed(
@@ -607,39 +655,23 @@ class Poll(PostgresItem):
         embed.set_footer(text=f'#{self.kwargs.get('index')} • [{self.id}]')
         return embed
 
-    async def update_option(
-            self,
-            option: Dict[str, Any] | None,
-            edit_type: EditType,
-            value: Optional[str | int] = None
-    ) -> None:
-        """|coro|
-
-        Updates an option in the poll.
+    def remove_option(self, option: VoteOption = MISSING) -> Optional[list[VoteOption]]:
+        """Removes an option from the poll by erasing the votes and removing the option.
 
         Parameters
         ----------
-        option: Dict[str, Any] | None
-            The option to update.
-        edit_type: EditType
-            The type of editing to perform.
-        value: Optional[str | int]
-            The value to update the option with.
+        option: VoteOption
+            The option to remove from the poll.
         """
-        if option:
-            if edit_type == EditType.DELETE and len(self.options) > 2:
-                self.options.remove(option)
-                for index, ch in enumerate(sorted(self.options, key=lambda x: x['index'])):
-                    ch['index'] = index
+        if len(self.options) > 2:
+            self.options.remove(option)
+            for index, ch in enumerate(sorted(self.options, key=lambda x: x['index'])):
+                ch['index'] = index
 
-                self.votes -= option['votes']
-                self.entries = {(user, user_option) for user, user_option in self.entries if user_option != option['index']}
-            elif edit_type == EditType.CONTENT:
-                self.options[option['index']]['content'] = value
-            elif edit_type == EditType.VOTES:
-                self.options[option['index']]['votes'] = value
-        else:
-            self.options.append(VoteOption(index=len(self.options), content=value, votes=0))
+            self.votes -= option['votes']
+            self.entries = {(user, user_option) for user, user_option in self.entries if user_option != option['index']}
+            return self.options
+        return None
 
     async def edit(
             self,
@@ -649,7 +681,7 @@ class Poll(PostgresItem):
             thread: Optional[List[int, str]] = MISSING,
             image_url: Optional[str] = MISSING,
             color: Optional[str] = MISSING,
-            options: Optional[List[Tuple[Dict[str, Any] | None, EditType, int | None]]] = MISSING,
+            options: Optional[list[VoteOption]] = MISSING,
             running: Optional[bool] = MISSING,
             votes: Optional[int] = MISSING,
     ) -> Self:
@@ -681,34 +713,28 @@ class Poll(PostgresItem):
         Self
             The updated poll.
         """
-        updates = {}
+        form: dict[str, Any] = {}
 
         if question is not MISSING:
-            updates['content'] = question
-
+            form['content'] = question
         if description is not MISSING:
-            updates['description'] = description
-
+            form['description'] = description
         if thread is not MISSING:
-            updates['thread'] = thread
-
+            form['thread'] = thread
         if image_url is not MISSING:
-            updates['image_url'] = image_url
-
+            form['image_url'] = image_url
         if running is not MISSING:
-            updates['running'] = running
-
+            form['running'] = running
         if color is not MISSING:
-            updates['color'] = color
-
+            form['color'] = color
         if options is not MISSING:
-            for option in options:
-                await self.update_option(*option)
-
+            form['options'] = options
         if votes is not MISSING:
+            form['votes'] = votes
+            # NOTE: This is a temporary fix for the votes not updating properly.
             self.votes = votes
 
-        self.kwargs.update(updates)
+        self.extra.get('kwargs').update(form)
 
         query = "UPDATE polls SET extra = $1::jsonb, entries = $2 WHERE id = $3;"
         await self.bot.pool.execute(query, self.extra, self.entries, self.id)
@@ -776,6 +802,10 @@ class Polls(commands.Cog):
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
         polls = await self.get_guild_polls(interaction.guild.id)
+
+        if interaction.command.name in ('end', 'edit', 'debug'):
+            polls = [poll for poll in polls if poll.kwargs.get('running') is True]
+
         results = fuzzy.finder(current, polls, key=lambda p: p.choice_text, raw=True)
         return [
             app_commands.Choice(name=get_shortened_string(length, start, poll.choice_text), value=poll.id)
@@ -784,7 +814,7 @@ class Polls(commands.Cog):
     async def create_poll(
             self, poll_id: int, channel_id: int, message_id: int, guild_id: int, /, *args: Any, **kwargs: Any
     ) -> Poll:
-        """Creates a poll.
+        r"""Creates a poll.
 
         Parameters
         -----------
@@ -1130,7 +1160,7 @@ class Polls(commands.Cog):
     ):
         """Edits a poll question.
 
-        You can also remove the following fields by typing `-clear` as the value to change.
+        You can also remove the following fields by typing `--clear` as the value to change.
 
         Possible Parameters to remove:
         - Question
@@ -1151,7 +1181,7 @@ class Polls(commands.Cog):
             await poll.fetch_message()
 
         open_thread = poll.kwargs.get('thread')
-        kwargs: dict[str, Optional[Union[str, list]]] = {}
+        form: dict[str, Any] = {}
 
         if all(value is None for value in [
             question, description, thread_question, image, image_url,
@@ -1163,91 +1193,94 @@ class Polls(commands.Cog):
             interaction = modal.interaction
 
             if modal.question.value != poll.question:
-                kwargs['question'] = modal.question.value
-
+                form['question'] = modal.question.value
             if modal.description.value != poll.description:
-                kwargs['description'] = modal.description.value
-
+                form['description'] = modal.description.value
             if modal.color.value != poll.kwargs.get('color'):
-                kwargs['color'] = modal.color.value
+                form['color'] = modal.color.value
 
             if modal.thread_question.value != open_thread[1] if open_thread else None:
                 if open_thread:
                     thread = poll.channel.get_thread(open_thread[0])
 
-                    if modal.thread_question.value == '-clear':
+                    if modal.thread_question.value == '--clear':
                         if thread:
                             await thread.edit(archived=True, locked=True)
 
-                        kwargs['thread'] = []
+                        form['thread'] = []
                     else:
                         if thread:
                             msg = [msg async for msg in thread.history(limit=2, oldest_first=True)][1]
                             if msg.author.id == self.bot.user.id:
                                 await msg.edit(content=modal.thread_question.value)
 
-                        kwargs['thread'] = [thread.id, modal.thread_question.value]
+                        form['thread'] = [thread.id, modal.thread_question.value]
                 else:
                     thread = await poll.message.create_thread(name=poll.question, auto_archive_duration=4320)
                     thread_message = await thread.send(modal.thread_question.value)
                     await thread_message.pin(reason='Poll Discussion')
 
-                    kwargs['thread'] = [thread.id, modal.thread_question.value]
+                    form['thread'] = [thread.id, modal.thread_question.value]
 
             if modal.image.value != poll.kwargs.get('image'):
-                kwargs['image_url'] = modal.image.value
-
+                form['image_url'] = modal.image.value
         else:
-            await interaction.response.defer()
-
             if question:
-                if question != '-clear':
-                    kwargs['question'] = question
+                if question != '--clear':
+                    form['question'] = question
 
             if description:
-                if description == '-clear':
-                    kwargs['description'] = None
+                if description == '--clear':
+                    form['description'] = None
                 else:
-                    kwargs['description'] = description
+                    form['description'] = description
 
             if image or image_url:
                 image_url = image_url or (image.proxy_url if image else None)
-                kwargs['image_url'] = image_url
+                form['image_url'] = image_url
 
             if color:
-                kwargs['color'] = str(color)
+                form['color'] = str(color)
 
             if thread_question:
                 if open_thread:
                     thread = poll.channel.get_thread(open_thread[0])
 
-                    if thread_question == '-clear':
+                    if thread_question == '--clear':
                         if thread:
                             await thread.edit(archived=True, locked=True)
 
-                        kwargs['thread'] = []
+                        form['thread'] = []
                     else:
                         if thread:
                             msg = [msg async for msg in thread.history(limit=2, oldest_first=True)][1]
                             if msg.author.id == self.bot.user.id:
                                 await msg.edit(content=thread_question)
 
-                        kwargs['thread'] = [thread.id, thread_question]
+                        form['thread'] = [thread.id, thread_question]
                 else:
                     thread = await poll.message.create_thread(name=poll.question, auto_archive_duration=4320)
                     thread_message = await thread.send(thread_question)
                     await thread_message.pin(reason='Poll Discussion')
 
-                    kwargs['thread'] = [thread.id, thread_question]
+                    form['thread'] = [thread.id, thread_question]
 
-        for index, opt_content in enumerate([opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8]):
-            if opt_content:
-                if opt_content == '-clear':
-                    kwargs[f'opt_{index + 1}'] = None
+        options: list[VoteOption] = poll.options.copy()
+        for index, content in enumerate([opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8]):
+            if content:
+                is_option = index + 1 <= len(options)
+                if not is_option:
+                    if content != '--clear':
+                        options.append(VoteOption(index=index, content=content, votes=0))
+                elif content == '--clear':
+                    options = poll.remove_option(options[index]) or options
                 else:
-                    kwargs[f'opt_{index + 1}'] = opt_content
+                    options[index]['content'] = content
 
-        poll = await poll.edit(**kwargs)
+        form['votes'] = poll.votes
+        form['options'] = options
+
+        poll = await poll.edit(**form)
         await poll.message.edit(embed=poll.to_embed(), view=create_view(poll))
 
         await interaction.followup.send(f'{tick(True)} Poll [`{poll.id}`] edited successfully.', ephemeral=True)
@@ -1445,7 +1478,8 @@ class Polls(commands.Cog):
     )
     @commands.permissions(user=['ban_members', 'manage_messages'])
     async def polls_config(
-            self, interaction: discord.Interaction,
+            self,
+            interaction: discord.Interaction,
             channel: discord.TextChannel = None,
             reason_channel: discord.TextChannel = None,
             ping_role: discord.Role = None,
