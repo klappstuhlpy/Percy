@@ -37,7 +37,8 @@ COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
 PartialCommandGroup = Union[
     commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
 PartialCommand = Union[
-    commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand, commands.hybrid.Command]
+    commands.Command | app_commands.commands.Command | commands.hybrid.HybridCommand,
+    commands.hybrid.HybridAppCommand | commands.hybrid.Command]
 
 Core = Union[commands.Command, commands.Group]
 App = Union[app_commands.commands.Command, app_commands.commands.Group]

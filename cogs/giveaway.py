@@ -498,9 +498,7 @@ class Giveaways(commands.Cog):
         self.bot.dispatch('giveaway_timer_complete', timer)
         await self.bot.reminder.delete_timer('giveaway', giveaway_id=str(giveaway_id))
 
-    giveaway = app_commands.Group(
-        name='giveaway', description='Manage giveaways.',
-        default_permissions=discord.Permissions(manage_channels=True), guild_only=True)
+    giveaway = app_commands.Group(name='giveaway', description='Manage giveaways.', guild_only=True)
 
     @commands.command(
         giveaway.command,

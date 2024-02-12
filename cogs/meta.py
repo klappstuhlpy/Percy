@@ -8,9 +8,10 @@ import os
 import re
 import time
 from collections import Counter
+from dataclasses import dataclass
 from typing import (
     Optional, Union, TYPE_CHECKING, Mapping, List, Annotated, Dict,
-    NamedTuple, Type, Iterable, Callable, Literal, Any
+    Type, Iterable, Callable, Literal, Any
 )
 
 import discord
@@ -22,17 +23,17 @@ from lru import LRU
 
 from .utils import fuzzy, helpers, commands
 from .utils.converters import Prefix, get_asset_url
-from .utils.formats import plural, format_date, WrapDict
+from .utils.formats import plural, format_date
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import (
     PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand,
-    PartialCommandGroup, Hybrid, Core, App, PH_GUILD_ID
+    PartialCommandGroup, App, PH_GUILD_ID, HELP_PAGES
 )
 from .utils.timetools import mean_stddev, RelativeDelta
 
 if TYPE_CHECKING:
     from bot import Percy
-    from .utils.context import GuildContext, Context
+    from .utils.context import GuildContext, Context, tick
 
 COMMAND_ICON_URL = 'https://images.klappstuhl.me/gallery/rWgaVHMMpl.png'
 INFO_ICON_URL = 'https://images.klappstuhl.me/gallery/zxfezkjkSp.png'
@@ -79,38 +80,37 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
         converter=RelativeDelta())
 
 
-class GroupHelpPaginator(BasePaginator[PartialCommand]):
-    group: commands.Group | commands.Cog
-    groups: Optional[Dict[commands.Cog, list[PartialCommand]]]
+class GroupPaginator(BasePaginator[PartialCommand]):
 
     async def format_page(self, entries: List[commands.Command]) -> discord.Embed:
-        emoji = getattr(self.group, 'display_emoji', None) or ''
-        embed = discord.Embed(title=f'{emoji} {self.group.qualified_name} Commands',
-                              description=self.group.description,
-                              colour=helpers.Colour.darker_red())
+        group = self.extras.get('group')
+        if not group:
+            raise commands.CommandError('The group attribute is missing.')
 
-        is_app_command_cog = False
-        if isinstance(self.group, commands.Cog):
-            if not list(filter(lambda c: not c.hidden, self.group.get_commands())):
-                is_app_command_cog = True
+        emoji = getattr(group, 'display_emoji', None) or ''
+        embed = discord.Embed(
+            title=f'{emoji} {group.qualified_name} Commands',
+            description=group.description,
+            colour=helpers.Colour.darker_red()
+        )
 
-        helper = PaginatedHelpCommand.temporary(self.ctx)
+        _temp = PaginatedHelpCommand.temporary(self.ctx)
         for cmd in entries:
-            signature = helper.get_command_signature(cmd, shortened_signature=True, with_prefix=False)  # type: ignore
+            signature = _temp.get_command_signature(cmd, shortened_signature=True, with_prefix=False)
             embed.add_field(name=signature, value=cmd.description or '…', inline=False)
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
 
-        if is_app_command_cog:
-            embed.set_footer(text='Those Commands are only available as Slash Commands.')
+        if all(isinstance(cmd, app_commands.AppCommand) for cmd in self.entries):
+            text = 'Those Commands are only available as Slash Commands.'
         else:
-            embed.set_footer(text=f'Use "{getattr(self.ctx, 'prefix', '/')}help command" for more info on a command.')
-
+            text = f'Use "{getattr(self.ctx, 'safe_prefix', '/')}help command" for more info on a command.'
+        embed.set_footer(text=text)
         return embed
 
     @classmethod
     async def start(
-            cls: Type[GroupHelpPaginator],
+            cls: Type[GroupPaginator],
             context: Context | discord.Interaction,
             /,
             *,
@@ -121,47 +121,29 @@ class GroupHelpPaginator(BasePaginator[PartialCommand]):
             search_for: bool = False,
             ephemeral: bool = False,
             **kwargs: Any,
-    ) -> GroupHelpPaginator[PartialCommand]:
+    ) -> GroupPaginator[PartialCommand]:
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
+        self.extras.update(kwargs)
 
-        self.groups = kwargs.pop('groups') if 'groups' in kwargs else None
-        self.group = kwargs.pop('group')
+        groups: Optional[Dict] = self.extras.get('groups', None)
+        if groups is not None:
+            self.add_item(CategorySelect(getattr(context, 'bot', context.client), groups))
 
         page: discord.Embed = await self.format_page(self.pages[0])
-
-        if self.groups is not None:
-            for index, groups in enumerate(WrapDict(self.groups, 24)):
-                self.add_item(CategorySelect(getattr(context, 'bot', context.client), groups, with_index=index == 0))
-
         self.update_buttons()
 
-        if kwargs.pop('edit', False):
-            await self._edit(context, embed=page, view=self)
-        else:
-            if self.total_pages <= 1:
-                await self._send(context, embed=page, ephemeral=ephemeral)
-            else:
-                await self._send(context, embed=page, view=self, ephemeral=ephemeral)
+        func = self._edit if kwargs.pop('edit', False) else self._send
+        view = None if self.total_pages <= 1 and func == self._send else self
+        await func(ctx=context, embed=page, view=view, ephemeral=ephemeral)
         return self
-
-    @classmethod
-    async def _edit(cls, context, **kwargs) -> discord.Message:
-        if isinstance(context, discord.Interaction):
-            if context.response.is_done():
-                msg = await context.edit_original_response(**kwargs)
-            else:
-                msg = await context.response.edit_message(**kwargs)
-        else:
-            msg = await context.message.edit(**kwargs)
-        return msg
 
 
 class CategorySelect(discord.ui.Select):
+
     def __init__(self, bot: Percy, entries: dict[commands.Cog, list[commands.Command]], with_index: bool = True):
         super().__init__(placeholder='Select a category to view...')
-
         self.commands: dict[commands.Cog, list[commands.Command] | list[app_commands.AppCommand]] = entries
         self.bot: Percy = bot
         self.with_index: bool = with_index
@@ -177,10 +159,7 @@ class CategorySelect(discord.ui.Select):
                 description='The front page of the Help Menu.',
             )
 
-        for cog, cmds in self.commands.items():
-            if not cmds:
-                continue
-
+        for cog, cmds in filter(lambda x: x[1], self.commands.items()):
             description = cog.description.split('\n', 1)[0] or None
             emoji = getattr(cog, 'display_emoji', None)
             self.add_option(label=cog.qualified_name, value=cog.qualified_name, description=description, emoji=emoji)
@@ -189,97 +168,45 @@ class CategorySelect(discord.ui.Select):
         assert self.view is not None
         value = self.values[0]
         if value == '__index':
-            await FrontHelpPaginator.start(ctx, entries=self.commands, edit=True)
+            await FrontHelpPaginator.start(
+                ctx, entries=self.commands, edit=True, groups=self.view.extras.get('groups', {}))
         else:
             cog = self.bot.get_cog(value)
             if cog is None:
-                await ctx.response.send_message('Somehow this category does not exist?', ephemeral=True)
-                return
+                return await ctx.response.send_message('Somehow this category does not exist?', ephemeral=True)
 
             cmds = self.commands[cog]
             if not cmds:
-                await ctx.response.send_message('This category has no commands for you', ephemeral=True)
-                return
+                return await ctx.response.send_message('This category has no commands for you', ephemeral=True)
 
-            await GroupHelpPaginator.start(ctx, entries=cmds, edit=True, group=cog, groups=self.view.groups)
+            await GroupPaginator.start(
+                ctx, entries=cmds, edit=True, group=cog, groups=self.view.extras.get('groups', {}))
 
 
 class FrontHelpPaginator(BasePaginator[str]):
-    groups: dict[commands.Cog, list[commands.Command], list[app_commands.AppCommand]]
 
-    async def format_page(self, entries: List, /):
-        prefix: str = getattr(self.ctx, 'prefix', '/')
-        f_prefix = prefix if not prefix.startswith('<@') else f'@{self.ctx.client.user.name} '
-
-        embed = discord.Embed(title=f'{self.ctx.client.user.name}\'s Help Page', colour=helpers.Colour.darker_red())
+    async def format_page(self, entries: List, /) -> discord.Embed:
+        prefix: str = getattr(self.ctx, 'safe_prefix', '/')
+        embed = discord.Embed(
+            title=f'{self.ctx.client.user.name}\'s Help Page',
+            colour=helpers.Colour.darker_red(),
+            timestamp=self.ctx.client.user.created_at
+        )
         embed.set_thumbnail(url=get_asset_url(self.ctx.client.user))
 
         pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)  # type: ignore
         if self._current_page == 0:
-            embed.description = inspect.cleandoc(
-                f"""
-                ## Introduction
-                Here you can find all *Message-/Slash-Commands* for {self.ctx.client.user.name}.
-                Try using the dropdown to navigate through the categories to get a list of all Commands.
-
-                I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
-                ## More Help
-                Alternatively you can use the following Commands to get Information about a specific Command or Category:
-                - `{f_prefix}help` *`command`*
-                - `{f_prefix}help` *`category`*
-                ## Support
-                For more help, consider joining the official server over at
-                https://discord.com/invite/eKwMtGydqh.
-                ## Stats
-                Total of **{await pag_help.total_commands_invoked()}** command runs.
-                Currently are **{len(pag_help.all_commands)}** commands loaded.
-                """
+            embed.description = entries[0].format(
+                name=self.ctx.client.user.name, prefix=prefix,
+                command_runs=await pag_help.total_commands_invoked(), commands=len(pag_help.get_commands())
             )
         elif self._current_page == 1:
-            entries = (
-                ('<argument>', 'This argument is **required**.'),
-                ('[argument]', 'This argument is **optional**.'),
-                ('<A|B>', 'This means **multiple choice**, you can choose by using one. Although it must be A or B.'),
-                ('<argument...>', 'There are multiple Arguments.'),
-                ('<\'argument\'>', 'This argument is case-sensitive and should be typed exaclty as shown.'),
-                ('<argument=A>', 'The default value if you dont provide one of this argument is A.'),
-                ('Flags',
-                 'Flags are mostly available for commands with many arguments.\n'
-                 'They can provide a better overview and are not required to be typed in.\n'
-                 '\n'
-                 'Flags are prefixed with `--` and can be used like this:\n'
-                 f'- `{f_prefix}command --flag1 argument1 --flag2 argument2`\n'
-                 f'- `{f_prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
-                 f'\n'
-                 f'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
-                 f'- `{f_prefix}command --flag1 my first argument --flag2 \'argument 2`\''
-                 ),
-                ('\u200b',
-                 '<:discord_info:1113421814132117545> **Important:**\n'
-                 'Do not type the arguments in brackets.\n'
-                 'Most of the Commands are **Hybrid Commands**, which means that you can use them as Slash Commands or Message Commands.'
-                 ),
-            )
-            for name, value in entries:
-                embed.add_field(name=name, value=value, inline=False)
-
+            for name, value in entries[0]:
+                embed.add_field(name=name, value=value.format(prefix=prefix), inline=False)
         elif self._current_page == 2:
-            embed.description = inspect.cleandoc(
-                f"""
-                ## License
-                Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
-                ## Source Code
-                You can obtain a copy of myself over at [GitHub](https://github.com/klappstuhlpy/Percy)
-                ## Credits
-                I was made by <@991398932397703238>.
-                
-                Any questions regarding licensing and credits can be directed to <@991398932397703238>.
-                """
-            )
+            embed.description = entries[0]
 
         embed.set_footer(text=f'I was created at')
-        embed.timestamp = self.ctx.client.user.created_at
-
         return embed
 
     @classmethod
@@ -297,39 +224,23 @@ class FrontHelpPaginator(BasePaginator[str]):
             **kwargs: Any,
     ) -> FrontHelpPaginator[str]:
         """Overwritten to add the SelectMenu"""
-        self = cls(entries=['', '', ''], per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
-
+        self = cls(entries=HELP_PAGES, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
-        self.groups = entries
+        self.extras.update(kwargs)
 
         page = await self.format_page(self.pages[0])
-        for index, groups in enumerate(WrapDict(self.groups, 24)):
-            self.add_item(CategorySelect(self.ctx.client, groups, with_index=index == 0))  # type: ignore
+        self.add_item(CategorySelect(self.ctx.client, entries))  # noqa
 
         self.update_buttons()
 
-        if kwargs.pop('edit', False):
-            await self._edit(context, embed=page, view=self)
-        else:
-            if self.total_pages <= 1:
-                await self._send(context, embed=page, ephemeral=ephemeral)
-            else:
-                await self._send(context, embed=page, view=self, ephemeral=ephemeral)
+        func = self._edit if kwargs.pop('edit', False) else self._send
+        await func(ctx=context, embed=page, view=self, ephemeral=ephemeral)
         return self
-
-    @classmethod
-    async def _edit(cls, context, **kwargs) -> discord.Message:
-        if isinstance(context, discord.Interaction):
-            if context.response.is_done():
-                msg = await context.edit_original_response(**kwargs)
-            else:
-                msg = await context.response.edit_message(**kwargs)
-        else:
-            msg = await context.message.edit(**kwargs)
-        return msg
 
 
 class PaginatedHelpCommand(commands.HelpCommand):
+    """A subclass of the default help command that implements support for Application/Hybrid Commands."""
+    
     context: Context
 
     def __init__(self):
@@ -345,10 +256,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             }
         )
 
-    # noinspection PyProtectedMember
-    @property
-    def all_commands(self) -> set[PartialCommand]:
-        return set(self.context.client.commands) | set(self.context.client.tree._get_all_commands())
+    def get_commands(self) -> set[PartialCommand]:
+        return set(self.context.client.commands) | set(self.context.client.tree.get_commands())
 
     @staticmethod
     def get_cog_commands(cog: commands.Cog) -> set[PartialCommand]:
@@ -390,7 +299,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         cmd = self.context.bot.resolve_command(command)
         if cmd is None:
-            # Maybe it's a SubCommand? Let the parent class deal with it
             return await super().command_callback(ctx, command=command)
 
         if isinstance(cmd, PartialCommandGroup):
@@ -398,125 +306,82 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
-    async def maybe_hidden(self, command: PartialCommand, user: Optional[discord.Member | discord.User] = None):
-        """|coro|
+    async def can_run(self, _cmd: PartialCommand) -> bool:
+        try:
+            if not isinstance(_cmd, App):
+                return await _cmd.can_run(self.context)
+            else:
+                return True
+        except:  # noqa
+            return False
 
-        Checks if a command is hidden for a user.
+    async def _get_all_subcommands(self, command: PartialCommand | PartialCommandGroup, names: set[str]) -> set[PartialCommand]:
+        """Returns all subcommands of a command."""
+        subcommands: set[PartialCommand] = set()
 
-        Parameters
-        ----------
-        command: :class:`.PartialCommand`
-            The command to check.
-        user: Union[:class:`.discord.Member`, :class:`.discord.User`]
-            The user to check for.
+        async def add_subcommand(cmd: PartialCommand):
+            nonlocal subcommands, names
+            if await self.can_run(cmd) and cmd.qualified_name not in names:
+                subcommands.add(cmd)
+                names.add(cmd.qualified_name)
 
-        Returns
-        -------
-        bool
-            Whether the command is hidden for the user.
-        """
-        if hasattr(command, 'hidden'):
-            if user is None:
-                return command.hidden
-            is_owner: bool = await self.context.bot.is_owner(user)
-            return command.hidden and not is_owner
-        return False
+        if isinstance(command, PartialCommandGroup):
+            for subcommand in command.walk_commands():
+                await add_subcommand(subcommand)
+        else:
+            await add_subcommand(command)
+
+        return subcommands
 
     async def filter_commands(
             self,
-            cmd_iter: Iterable[PartialCommand],
+            commands: Iterable[PartialCommand],  # noqa
             /,
             *,
             sort: bool = False,
-            key: Optional[Callable] = lambda c: c.name,
+            key: Optional[Callable[[PartialCommand], Any]] = None
     ) -> List[PartialCommand]:
         """|coro|
 
         This is a Helper Function to filter the bots Application Commands, Hybrid Commands and Core Commands.
 
         Parameters
-        ----------
-        cmd_iter: Iterable[PartialCommand]
-            The Iterable of Commands to filter.
-        sort: bool
-            Whether to sort the Commands by their name.
-        key: Optional[Callable]
-            The Key to sort the Commands by.
+        ------------
+        commands: Iterable[:class:`PartialCommand`]
+            An iterable of commands that are getting filtered.
+        sort: :class:`bool`
+            Whether to sort the result.
+        key: Optional[Callable[[`PartialCommand`], Any]]
+            An optional key function to pass to :func:`py:sorted` that
+            takes a :class:`Command` as its sole parameter. If ``sort`` is
+            passed as ``True`` then this will default as the command name.
 
         Returns
         -------
-        List[PartialCommand]
+        List[`PartialCommand`]
             The filtered Commands.
         """
-        resolved = []
-        resolved_names = set()
+        if sort and key is None:
+            key = lambda c: c.name  # noqa
 
-        if not hasattr(self.context, 'author'):
-            class FakeContext:
-                author = None
+        iterator = commands if self.show_hidden else filter(lambda c: not getattr(c, 'hidden', False), commands)
 
-            # We are doing this because on startup, the `filter_commands` method
-            # will be triggered without a context,
-            # which will result in an AttributeError because for the 
-            # `maybe_hidden` method, we need the author
-            # attribute of the context.
+        if getattr(self.context, 'guild', None) is None:
+            iterator = filter(lambda c: not getattr(c, 'guild_only', False), iterator)
 
-            self.context = FakeContext()  # noqa
-
-        for cmd in cmd_iter:
-            if isinstance(cmd, PartialCommandGroup):
-                if isinstance(cmd, (Hybrid, Core)):
-                    if await self.maybe_hidden(cmd, self.context.author):
-                        continue
-
-                for subcmd in cmd.commands:
-                    if (
-                            isinstance(subcmd, commands.hybrid.HybridAppCommand)
-                            or subcmd.qualified_name in resolved_names
-                            or subcmd.name in resolved_names
-                            or isinstance(subcmd, (Hybrid, Core)) and await self.maybe_hidden(subcmd,
-                                                                                              self.context.author)
-                    ):
-                        continue
-
-                    if isinstance(subcmd, PartialCommandGroup):
-                        for subsubcmd in subcmd.commands:
-                            if (
-                                    isinstance(subsubcmd, commands.hybrid.HybridAppCommand)
-                                    or subsubcmd.qualified_name in resolved_names
-                                    or subsubcmd.name in resolved_names
-                                    or isinstance(subsubcmd, (Hybrid, Core)) and await self.maybe_hidden(subsubcmd,
-                                                                                                         self.context.author)
-                            ):
-                                continue
-
-                            resolved.append(subsubcmd)
-                            resolved_names.add(subsubcmd.qualified_name)
-                    else:
-                        resolved.append(subcmd)
-                        resolved_names.add(subcmd.qualified_name)
-                else:
-                    resolved.append(cmd)
-                    resolved_names.add(cmd.qualified_name)
-            else:
-                if (
-                        isinstance(cmd, (Hybrid, Core)) and await self.maybe_hidden(cmd, self.context.author)
-                        or isinstance(cmd, commands.hybrid.HybridAppCommand)
-                        or cmd.qualified_name in resolved_names
-                        or cmd.name in resolved_names
-                ):
-                    continue
-
-                resolved.append(cmd)
-                resolved_names.add(cmd.name)
+        ret = []
+        used_names: set[str] = set()
+        for command in iterator:
+            ret.extend(await self._get_all_subcommands(command, used_names))
 
         if sort:
-            return sorted(resolved, key=key)
-        return resolved
+            ret.sort(key=key)
+        return ret
 
     def get_command_signature(
             self,
             command: PartialCommand,
+            *,
             no_signature: bool = False,
             shortened_signature: bool = False,
             with_prefix: bool = False
@@ -535,9 +400,13 @@ class PaginatedHelpCommand(commands.HelpCommand):
             Whether to return the command with a shortened_signature signature.
         with_prefix: :class:`bool`
             Whether to include the prefix in the signature.
+
+        Returns
+        -------
+        :class:`str`
+            The command signature.
         """
         is_app = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
-
         prefix = ('/' if is_app else self.context.clean_prefix) if with_prefix else ''
 
         if is_app:
@@ -569,17 +438,21 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if shortened_signature and len(flags) > 3:
             signature = f'<flags...>'
-        return f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', None) else "")
+        return f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', False) else '')
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
 
         Sends the help command for the whole bot.
-
         This is a modified version of the original send_bot_help.
-        """
 
-        def key(cmd: PartialCommand) -> str:
+        Parameters
+        ----------
+        mapping: Mapping[Union[:class:`.commands.Cog`, None], List[:class:`.commands.PartialCommand`]]
+            The mapping of the commands.
+        """
+        def _make_key(cmd: PartialCommand) -> str:
+            """Creates a key for the commands origin Cog."""
             try:
                 if isinstance(cmd, app_commands.commands.Group):
                     return cmd.parent.qualified_name
@@ -588,38 +461,42 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 else:
                     return cmd.cog.qualified_name
             except AttributeError:
-                # Escape if None but still not group to None
                 return '\U0010ffff'
 
-        entries: list[PartialCommand] = await self.filter_commands(
-            self.all_commands, sort=True, key=lambda cmd: key(cmd)
-        )
+        entries = await self.filter_commands(self.get_commands(), sort=True, key=lambda cmd: _make_key(cmd))
 
         grouped: dict[commands.Cog, list[PartialCommand]] = {}
-        for name, children in itertools.groupby(entries, key=lambda cmd: key(cmd)):
+        for name, children in itertools.groupby(entries, key=lambda cmd: _make_key(cmd)):
             if name == '\U0010ffff':
                 continue
 
             cog = self.context.bot.get_cog(name)
-            if cog is None or cog and all(getattr(_cmd, 'hidden', False) is True for _cmd in children):
+            if cog is None:
                 continue
 
             grouped[cog] = list(children)
 
-        await FrontHelpPaginator.start(self.context, entries=grouped, per_page=1)
+        await FrontHelpPaginator.start(self.context, entries=grouped, per_page=1, groups=grouped)
 
     async def send_cog_help(self, cog: commands.Cog):
         """|coro|
 
         Sends the help command for a cog.
-
         This is a modified version of the original send_cog_help.
+
+        Parameters
+        ----------
+        cog: :class:`.commands.Cog`
+            The cog to send the help for.
         """
         entries = await self.filter_commands(self.get_cog_commands(cog), sort=True)
-        await GroupHelpPaginator.start(self.context, entries=entries, group=cog)
+        if not entries:
+            return await self.context.send(self.command_not_found(cog.qualified_name), silent=True)
+
+        await GroupPaginator.start(self.context, entries=entries, group=cog)
 
     @staticmethod
-    def get_command_flag_formatting(command: PartialCommand, descripted: bool = False) -> str | list[dict]:  # noqa
+    def get_command_flag_formatting(command: PartialCommand, descripted: bool = False) -> str | list[dict]:
         """Returns a string with the command flag formatting.
 
         Parameters
@@ -635,13 +512,13 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The command flag formatting.
         """
         if isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
-            return [] if descripted else ""
+            return [] if descripted else ''
 
         flags = command.clean_params.get('flags')
         resolved: list[str] = []
 
         if not flags:
-            return [] if descripted else ""
+            return [] if descripted else ''
 
         if descripted:
             for flag in flags.converter.get_flags().values():
@@ -668,7 +545,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return ' '.join(resolved)
 
     @staticmethod
-    def get_command_permission_formatting(command: PartialCommand, stringified: bool = False) -> str | dict:  # noqa
+    def get_command_permission_formatting(command: PartialCommand, stringified: bool = False) -> str | dict:
         """Returns a string with the command permission formatting.
 
         Parameters
@@ -684,7 +561,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The command permission formatting as a string or a dict.
         """
         if isinstance(command, app_commands.commands.Group):
-            return "" if stringified else {}
+            return '' if stringified else {}
 
         user_permissions: dict[str, bool] = getattr(command.callback, '__user_permissions__', None)
         bot_permissions: dict[str, bool] = getattr(command.callback, '__bot_permissions__', None)
@@ -712,7 +589,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return resolved
 
-    async def command_formatting(self, command: PartialCommand) -> discord.Embed:  # noqa
+    async def command_formatting(self, command: PartialCommand) -> discord.Embed:
         """Returns an Embed with the command formatting.
 
         This is a modified version of the original command_formatting.
@@ -729,16 +606,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
             embed.add_field(name='**Aliases**', value=f'`{' '.join(command.aliases)}`', inline=False)
 
         if isinstance(command, commands.hybrid.HybridGroup):
-            embed.add_field(name='**Slash Command Fallback**', value='Commands can be used as a slash commands.',
-                            inline=False)
+            embed.add_field(
+                name='**Hybrid Command**', value='Command can be used as a slash and text command.', inline=False)
 
         if isinstance(command, App):
             embed.add_field(name='**Slash Command**', value='Can only be used as a slash command.', inline=False)
 
         if getattr(command, 'commands', None):
             resolved_sub_commands = [
-                f'* `{self.get_command_signature(cmd)}`' for cmd in command.commands
-                if not await self.maybe_hidden(cmd, self.context.author)
+                f'* `{self.get_command_signature(cmd)}`' for cmd in command.walk_commands()
+                if await self.can_run(cmd)
             ]
             if resolved_sub_commands:
                 subcommands = '\n'.join(resolved_sub_commands)
@@ -757,17 +634,19 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         return embed
 
-    async def send_command_help(self, command: PartialCommand):  # noqa
+    async def send_command_help(self, command: PartialCommand):
         """|coro|
 
         Sends the help command for a command.
-
         This is a modified version of the original send_command_help.
+
+        Parameters
+        ----------
+        command: :class:`.commands.PartialCommand`
+            The command to send the help for.
         """
-        # Checking for Application Commands or Groups because they can't be hidden
-        if not isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
-            if command.hidden and not await self.context.bot.is_owner(self.context.author):
-                return await self.context.send(self.command_not_found(command.name), silent=True)
+        if not isinstance(command, App) and not await self.can_run(command):
+            return await self.context.send(self.command_not_found(command.name), silent=True)
 
         embed = await self.command_formatting(command)
         await self.context.send(embed=embed, silent=True)
@@ -776,10 +655,13 @@ class PaginatedHelpCommand(commands.HelpCommand):
         """|coro|
 
         Sends the help command for a group.
-
         This is a modified version of the original send_group_help.
+
+        Parameters
+        ----------
+        group: :class:`.commands.PartialCommandGroup`
+            The group to send the help for.
         """
-        # Only need to do this because send_command_help handles subcommands on its own
         await self.send_command_help(group)
 
     @classmethod
@@ -787,6 +669,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
         """Returns a temporary instance of the help command.
 
         Useful for helper functions that require a help command instance.
+
+        Parameters
+        ----------
+        context: Union[:class:`Context`, :class:`discord.Interaction`]
+            The context to use for the temporary help command.
         """
         self = cls()
         self.context = context
@@ -802,8 +689,9 @@ class UserJoinView(discord.ui.View):
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         if interaction.user.id == self.author.id:
             return True
+
         await interaction.response.send_message(
-            '<:redTick:1079249771975413910> You are not the author of this interaction.', ephemeral=True)
+            f'{tick(False)} You are not the author of this interaction.', ephemeral=True)
         return False
 
     @discord.ui.button(label='Join Position', style=discord.ButtonStyle.blurple,
@@ -827,8 +715,9 @@ class UserJoinView(discord.ui.View):
             source.add_line(fmt(p, u, u.joined_at))
 
         embed = discord.Embed(title=f'Join Position in {interaction.guild}', color=0x2b2d31)
-        embed.add_field(name='Joined', value=f'{format_date(self.user.joined_at)}\n'
-                                             f'╰ **Join Position:** {author_index + 1}',
+        embed.add_field(name='Joined',
+                        value=f'{format_date(self.user.joined_at)}\n'
+                              f'╰ **Join Position:** {author_index + 1}',
                         inline=False)
         embed.add_field(name='Position', value=source.pages[0], inline=False)
         embed.set_author(name=self.user, icon_url=get_asset_url(self.user))
@@ -886,7 +775,8 @@ class GuildUserJoinView(discord.ui.View):
         self.stop()
 
 
-class CustomMessage(NamedTuple):
+@dataclass
+class SnipedMessage:
     message: discord.Message
     before: Optional[discord.Message]
     after: Optional[discord.Message]
@@ -899,12 +789,13 @@ class Meta(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
         self.process = psutil.Process()
+
         self.old_help_command: Optional[commands.HelpCommand] = bot.help_command
         bot.help_command = PaginatedHelpCommand()
         bot.help_command.cog = self
 
-        self.snipe_del_chache: Dict[int, Dict[int, List[CustomMessage]]] = LRU(128)  # noqa
-        self.snipe_edit_chache: Dict[int, Dict[int, List[CustomMessage]]] = LRU(128)  # noqa
+        self.snipe_del_chache: Dict[int, Dict[int, List[SnipedMessage]]] = LRU(1024)  # noqa
+        self.snipe_edit_chache: Dict[int, Dict[int, List[SnipedMessage]]] = LRU(1024)  # noqa
 
         if not hasattr(self, '_help_autocomplete_cache'):
             self.bot.loop.create_task(self._fill_autocomplete())
@@ -918,21 +809,21 @@ class Meta(commands.Cog):
 
     async def _fill_autocomplete(self) -> None:
         def key(command: PartialCommand) -> str:  # noqa
-            cog = command.cog
-            return cog.qualified_name if cog else '\U0010ffff'
+            return command.cog.qualified_name if command.cog else '\U0010ffff'
 
         entries: list[PartialCommand] = await self.bot.help_command.filter_commands(
             self.bot.commands, sort=True, key=key)
-        all_commands: dict[commands.Cog, list[PartialCommand]] = {}
+
+        _commands: dict[commands.Cog, list[PartialCommand]] = {}
         for name, children in itertools.groupby(entries, key=key):
             if name == '\U0010ffff':
                 continue
 
             cog = self.bot.get_cog(name)
             assert cog is not None
-            all_commands[cog] = sorted(children, key=lambda c: c.qualified_name)
+            _commands[cog] = sorted(children, key=lambda c: c.qualified_name)
 
-        self._help_autocomplete_cache: Dict[commands.Cog, List[PartialCommand]] = all_commands
+        self._help_autocomplete_cache: Dict[commands.Cog, List[PartialCommand]] = _commands
 
     @staticmethod
     async def mark_as_solved(thread: discord.Thread, user: discord.abc.User) -> None:
@@ -951,10 +842,10 @@ class Meta(commands.Cog):
     @commands.command(
         commands.hybrid_command,
         name='solved',
-        description='Marks a thread as solved.'
+        description='Marks a thread as solved.',
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=20.0, type=commands.BucketType.channel),
     )
-    @commands.guild_only()
-    @commands.cooldown(1, 20, commands.BucketType.channel)
     @is_help_thread()
     @commands.guilds(PH_GUILD_ID)
     async def solved(self, ctx: GuildContext):
@@ -962,8 +853,8 @@ class Meta(commands.Cog):
 
         assert isinstance(ctx.channel, discord.Thread)
 
-        if can_close_threads(ctx) and ctx.invoked_with == 'solved':
-            await ctx.message.add_reaction(ctx.tick(True))
+        if can_close_threads(ctx):
+            await ctx.message.add_reaction(tick(True))
             await self.mark_as_solved(ctx.channel, ctx.user)
         else:
             msg = f'<@!{ctx.channel.owner_id}>, would you like to mark this thread as solved? This has been requested by {ctx.author.mention}.'
@@ -977,11 +868,16 @@ class Meta(commands.Cog):
                     True,
                     f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `?solved`.'
                 )
-                await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)
+                await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)  # noqa
             elif confirm is None:
                 await ctx.stick(False, f'Timed out waiting for a response. Not marking as solved.')
             else:
                 await ctx.stick(False, f'Not marking as solved.')
+
+    @solved.error
+    async def solved_error(self, ctx: GuildContext, error: commands.CommandError):
+        if isinstance(error, AssertionError):
+            await ctx.stick(False, 'This command can only be used in help threads.')
 
     @commands.command(
         commands.core_command,
@@ -1047,11 +943,11 @@ class Meta(commands.Cog):
         module = interaction.namespace.module
         if module is not None:
             module_commands = self._help_autocomplete_cache.get(module, [])
-            commands = [c for c in module_commands if c.qualified_name == module]
+            cmds = [c for c in module_commands if c.qualified_name == module]
         else:
-            commands = list(itertools.chain.from_iterable(self._help_autocomplete_cache.values()))
+            cmds = list(itertools.chain.from_iterable(self._help_autocomplete_cache.values()))
 
-        results = fuzzy.finder(current, [c.qualified_name for c in commands])
+        results = fuzzy.finder(current, [c.qualified_name for c in cmds])
         choices = [app_commands.Choice(name=res, value=res) for res in results[:25]]
         return choices
 
@@ -1299,31 +1195,7 @@ class Meta(commands.Cog):
             else:
                 channel_info.append(f'{emoji} {total}')
 
-        info = []
-        features = set(guild.features)
-        all_features = {
-            'PARTNERED': 'Partnered',
-            'VERIFIED': 'Verified',
-            'DISCOVERABLE': 'Server Discovery',
-            'COMMUNITY': 'Community Server',
-            'FEATURABLE': 'Featured',
-            'WELCOME_SCREEN_ENABLED': 'Welcome Screen',
-            'INVITE_SPLASH': 'Invite Splash',
-            'VIP_REGIONS': 'VIP Voice Servers',
-            'VANITY_URL': 'Vanity Invite',
-            'COMMERCE': 'Commerce',
-            'LURKABLE': 'Lurkable',
-            'NEWS': 'News Channels',
-            'ANIMATED_ICON': 'Animated Icon',
-            'BANNER': 'Banner',
-        }
-
-        for feature, label in all_features.items():
-            if feature in features:
-                info.append(f'{ctx.tick(True)}: {label}')
-
-        if info:
-            embed.add_field(name='Features', value='\n'.join(info))
+        embed.add_field(name='Features', value=f'Use `{ctx.prefix}info features` to see the features of this server.')
 
         embed.add_field(name='Channels', value='\n'.join(channel_info))
 
@@ -1414,6 +1286,7 @@ class Meta(commands.Cog):
         name='prefix',
         description='Manages the server\'s custom prefixes.',
         invoke_without_command=True,
+        guild_only=True
     )
     async def prefix(self, ctx: Context):
         """Manages the server's custom prefixes.
@@ -1436,6 +1309,7 @@ class Meta(commands.Cog):
         name='add',
         description='Appends a prefix to the list of custom prefixes.',
         ignore_extra=False,
+        guild_only=True
     )
     @commands.permissions(user=['manage_guild'])
     async def prefix_add(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
@@ -1461,7 +1335,8 @@ class Meta(commands.Cog):
         prefix.command,
         name='remove',
         aliases=['delete'],
-        ignore_extra=False
+        ignore_extra=False,
+        guild_only=True
     )
     @commands.permissions(user=['manage_guild'])
     async def prefix_remove(self, ctx: GuildContext, prefix: Annotated[str, Prefix]):
@@ -1489,7 +1364,8 @@ class Meta(commands.Cog):
         prefix.command,
         name='reset',
         description='Removes all custom prefixes.',
-        ignore_extra=False
+        ignore_extra=False,
+        guild_only=True
     )
     @commands.permissions(user=['manage_guild'])
     async def prefix_reset(self, ctx: GuildContext):
@@ -1588,8 +1464,8 @@ class Meta(commands.Cog):
         commands.hybrid_group,
         name='permissions',
         description='Shows permissions for a member or the bot in a specific channel.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def permissions(self, ctx: Context):
         """Shows permissions for a member or the bot in a specific channel."""
         if ctx.invoked_subcommand is None:
@@ -1599,8 +1475,8 @@ class Meta(commands.Cog):
         permissions.command,
         name='user',
         description='Shows a member\'s permissions in a specific channel.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def user(
             self,
             ctx: GuildContext,
@@ -1622,8 +1498,8 @@ class Meta(commands.Cog):
         permissions.command,
         name='bot',
         description='Shows the bot\'s permissions in a specific channel.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def bot(self, ctx: GuildContext, *, channel: Union[discord.abc.GuildChannel, discord.Thread] = None):
         """Shows the bots permissions in a specific channel.
         If no channel is given then it uses the current one.
@@ -1639,8 +1515,8 @@ class Meta(commands.Cog):
         commands.core_command,
         name='debug',
         description='Shows permission resolution for a channel and an optional author.',
+        guild_only=True
     )
-    @commands.is_owner()
     async def debug(self, ctx: Context, guild_id: int, channel_id: int, author_id: int = None):
         """Shows permission resolution for a channel and an optional author."""
 
@@ -1666,8 +1542,8 @@ class Meta(commands.Cog):
         commands.hybrid_command,
         name='snipe',
         description='Snipes a deleted message.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def snipe(self, ctx: GuildContext, channel: discord.TextChannel = None):
         """Snipes a deleted message.
         If no channel is given, then it uses the current one.
@@ -1691,8 +1567,8 @@ class Meta(commands.Cog):
         commands.hybrid_command,
         name='esnipe',
         description='Snipes a deleted edited.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def esnipe(self, ctx: GuildContext, channel: discord.TextChannel = None):
         """Snipes a deleted edited.
         If no channel is given, then it uses the current one.
@@ -1724,7 +1600,7 @@ class Meta(commands.Cog):
         if message.channel.id not in self.snipe_del_chache[message.guild.id]:
             self.snipe_del_chache[message.guild.id][message.channel.id] = []
 
-        obj = CustomMessage(message=message, timestamp=discord.utils.utcnow(), after=None, before=None)
+        obj = SnipedMessage(message=message, timestamp=discord.utils.utcnow(), after=None, before=None)
 
         self.snipe_del_chache[message.guild.id][message.channel.id].append(obj)
 
@@ -1739,7 +1615,7 @@ class Meta(commands.Cog):
         if before.channel.id not in self.snipe_edit_chache[before.guild.id]:
             self.snipe_edit_chache[before.guild.id][before.channel.id] = []
 
-        obj = CustomMessage(message=after, timestamp=discord.utils.utcnow(), after=after, before=before)
+        obj = SnipedMessage(message=after, timestamp=discord.utils.utcnow(), after=after, before=before)
 
         self.snipe_edit_chache[before.guild.id][before.channel.id].append(obj)
 

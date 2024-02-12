@@ -5,7 +5,7 @@ import discord
 from bot import Percy
 from cogs.utils import commands, constants, helpers
 from cogs.utils.commands import PermissionTemplate
-from cogs.utils.context import Context
+from cogs.utils.context import Context, GuildContext
 from cogs.utils.converters import get_asset_url
 from cogs.utils.helpers import PostgresItem
 from cogs.utils.paginator import BasePaginator, T
@@ -88,11 +88,12 @@ class Economy(commands.Cog):
         name='set-money',
         aliases=['setbal', 'set-balance'],
         description='Sets a user\'s balance',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.admin)
     async def set_money(
             self,
-            ctx: Context,
+            ctx: GuildContext,
             user: Annotated[discord.User, commands.UserConverter],
             amount: int,
             to: Literal['bank', 'cash']
@@ -106,11 +107,12 @@ class Economy(commands.Cog):
         commands.core_command,
         name='add-money-role',
         description='Adds a certain amount of money to all users with the specified role.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.admin)
     async def add_money_role(
             self,
-            ctx: Context,
+            ctx: GuildContext,
             role: Annotated[discord.Role, commands.RoleConverter],
             amount: int,
             to: Literal['bank', 'cash']
@@ -127,11 +129,12 @@ class Economy(commands.Cog):
         name='remove-money',
         aliases=['rmbal', 'rm-money'],
         description='Removes from a user\'s balance',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.admin)
     async def remove_money(
             self,
-            ctx: Context,
+            ctx: GuildContext,
             user: Annotated[discord.User, commands.UserConverter],
             amount: int,
             to: Literal['bank', 'cash']
@@ -149,8 +152,9 @@ class Economy(commands.Cog):
         name='deposit',
         aliases=['dep'],
         description='Deposits money into your bank.',
+        guild_only=True
     )
-    async def deposit(self, ctx: Context, amount: int):
+    async def deposit(self, ctx: GuildContext, amount: int):
         """Deposits money into your bank."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.cash < amount:
@@ -163,8 +167,9 @@ class Economy(commands.Cog):
     @commands.command(
         name='withdraw',
         description='Withdraws money from your bank.',
+        guild_only=True
     )
-    async def withdraw(self, ctx: Context, amount: int):
+    async def withdraw(self, ctx: GuildContext, amount: int):
         """Withdraws money from your bank."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.bank < amount:
@@ -177,8 +182,9 @@ class Economy(commands.Cog):
     @commands.command(
         name='transfer',
         description='Transfers money to another user.',
+        guild_only=True
     )
-    async def transfer(self, ctx: Context, user: Annotated[discord.User, commands.UserConverter], amount: int):
+    async def transfer(self, ctx: GuildContext, user: Annotated[discord.User, commands.UserConverter], amount: int):
         """Transfers money to another user."""
         balance = await self.get_balance(ctx.author.id, ctx.guild.id)
         if balance.cash < amount:
@@ -192,8 +198,9 @@ class Economy(commands.Cog):
     @commands.command(
         name='leaderboard',
         description='Shows the leaderboard of the server',
+        guild_only=True
     )
-    async def leaderboard(self, ctx: Context):
+    async def leaderboard(self, ctx: GuildContext):
         """Shows the leaderboard of the server."""
         balances = await self.get_server_balances(ctx.guild.id)
         total = sum(balance.total for balance in balances)
@@ -218,8 +225,9 @@ class Economy(commands.Cog):
         name='balance',
         aliases=['bal'],
         description='Shows a user\'s balance',
+        guild_only=True
     )
-    async def balance(self, ctx: Context, user: Annotated[discord.User, commands.UserConverter] = None):
+    async def balance(self, ctx: GuildContext, user: Annotated[discord.User, commands.UserConverter] = None):
         """Shows your balance"""
         user = user or ctx.author
         balance = await self.get_balance(user.id, ctx.guild.id)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import types
 from dataclasses import dataclass
-from typing import List, Optional, Union, Dict, Any, Callable, TypeVar, ClassVar
+from typing import List, Optional, Union, Dict, Any, Callable, TypeVar, ClassVar, Coroutine
 
 import discord
 from discord import app_commands
@@ -11,7 +12,7 @@ from discord.ext.commands import *
 from discord.ext import commands
 from cogs.utils import checks, helpers
 from cogs.utils import errors as error_utils
-
+from cogs.utils.constants import App
 
 # Aliases
 core_command = commands.command
@@ -176,7 +177,7 @@ def command(
     extras: Dict[Any, Any]
         A dictionary of extra information to be stored in the command. Defaults to ``None``.
     perm_template: bool
-        Whether to or not to return the command with an applied :class:`PermissionTemplate`.
+        Whether to return the command with an applied :class:`PermissionTemplate`.
     guild_only: bool
         Whether the command can only be used in a guild.
     cooldown: CooldownMapping
@@ -197,25 +198,29 @@ def command(
     if not extras.get('examples'):
         extras['examples'] = examples
 
-    self = func(
-        name=name,
-        extras=extras,
-        description=description,
-        nsfw=nsfw,
-        **kwargs
-    )
+    def decorator(f: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
+        f = func(
+            name=name,
+            extras=extras,
+            description=description,
+            nsfw=nsfw,
+            **kwargs
+        )(f)
 
-    if func == app_commands.command:
-        if cooldown:
-            self = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(self)
-        if guild_only:
-            self = app_commands.guild_only(self)
-    else:
-        if cooldown:
-            self = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(self)
-        if guild_only:
-            self = commands.guild_only()(self)
+        # Wrap the command with the permission template and other check decorators
+        if perm_template:
+            f = permissions()(f)
 
-    if not perm_template:
-        return self
-    return permissions()(self)
+        if isinstance(f, App):
+            if cooldown:
+                f = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(f)
+            if guild_only:
+                f = app_commands.guild_only()(f)
+        else:
+            if cooldown:
+                f = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(f)
+            if guild_only:
+                f = commands.guild_only()(f)
+
+        return f
+    return decorator

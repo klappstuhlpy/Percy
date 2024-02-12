@@ -316,16 +316,23 @@ class Leveling(commands.Cog):
             await message.reply(
                 f'*Congratulations {message.author.mention}!* You leveled up to level **{config.level}**! <:oneup:1113286994378899516>')
 
-    @commands.command(commands.hybrid_group, name='level', description='Leveling purpose Commands.')
-    @commands.guild_only()
-    async def level(self, ctx: Context) -> None:
+    @commands.command(
+        commands.hybrid_group,
+        name='level',
+        description='Leveling purpose Commands.',
+        guild_only=True
+    )
+    async def level(self, ctx: GuildContext) -> None:
         """Leveling purpose Commands."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.command(level.command, description='Toggle leveling on or off.')
+    @commands.command(
+        level.command,
+        description='Toggle leveling on or off.',
+        guild_only=True
+    )
     @app_commands.describe(enabled='Boolean to enable or disable leveling. If not provided, it will toggle.')
-    @commands.guild_only()
     @commands.permissions(user=PermissionTemplate.manager)
     async def toggle(self, ctx: GuildContext, enabled: Optional[bool] = None) -> None:
         """Toggle leveling on or off."""
@@ -345,8 +352,12 @@ class Leveling(commands.Cog):
         fmt = '*enabled*' if enabled else '*disabled*'
         await ctx.stick(True, f'Leveling {fmt}.')
 
-    @commands.command(level.command, aliases=['top'], description='View the server leaderboard.')
-    @commands.guild_only()
+    @commands.command(
+        level.command,
+        aliases=['top'],
+        description='View the server leaderboard.',
+        guild_only=True
+    )
     async def leaderboard(self, ctx: GuildContext):
         """View the Top 3 active users of the server."""
         query = "SELECT * FROM levels WHERE guild_id = $1 AND messages > 0 ORDER BY messages DESC LIMIT 3;"
@@ -379,8 +390,11 @@ class Leveling(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands.command(level.command, description='View your level card.')
-    @commands.guild_only()
+    @commands.command(
+        level.command,
+        description='View your level card.',
+        guild_only=True
+    )
     @app_commands.describe(member='The member you want to see the rank card for.')
     async def rank(self, ctx: GuildContext, member: Optional[discord.Member] = None):
         """View yours or someone else's rank card."""

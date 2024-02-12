@@ -204,7 +204,6 @@ class Annotations(commands.Cog):
     @commands.command(app_commands.command, name='feedback', description='Sends feedback about the bot to the owner.')
     async def feedback_slash(self, interaction: discord.Interaction):
         """Sends feedback about the bot to the owner."""
-
         await interaction.response.send_modal(FeedbackModal(self))
 
     @commands.command(commands.core_command, hidden=True)

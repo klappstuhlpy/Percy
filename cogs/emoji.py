@@ -176,8 +176,6 @@ class Emoji(commands.Cog):
         description='Create/Show/Manage emojis in the server.',
         guild_only=True,
     )
-    @commands.guild_only()
-    @app_commands.guild_only()
     async def _emoji(self, ctx: GuildContext):
         """Emoji management commands."""
         await ctx.send_help(ctx.command)
@@ -186,7 +184,8 @@ class Emoji(commands.Cog):
         commands.core_command,
         aliases=['emojilist'],
         description='Fancy post all emojis in this server in a list.',
-        cooldown=commands.CooldownMap(rate=1, per=600, type=commands.BucketType.guild)
+        cooldown=commands.CooldownMap(rate=1, per=600, type=commands.BucketType.guild),
+        guild_only=True
     )
     @commands.permissions(user=['administrator'])
     async def emojipost(self, ctx: GuildContext):
@@ -218,7 +217,8 @@ class Emoji(commands.Cog):
         name='create',
         description='Create an emoji for the server under the given name.',
         aliases=['add'],
-        usage='<name> [file] [emoji]'
+        usage='<name> [file] [emoji]',
+        guild_only=True
     )
     @commands.permissions(user=['manage_emojis'], bot=['manage_emojis'])
     @app_commands.rename(emoji='emoji-or-url')
@@ -393,9 +393,9 @@ class Emoji(commands.Cog):
     @commands.command(
         _emoji.group,
         name='stats',
-        fallback='show'
+        fallback='show',
+        guild_only=True
     )
-    @commands.guild_only()
     @app_commands.describe(emoji='The emoji to show stats for. If not given then it shows server stats')
     async def emojistats(self, ctx: GuildContext, *, emoji: Annotated[Optional[int], partial_emoji] = None):
         """Shows you statistics about the emoji usage in this server."""
@@ -404,7 +404,12 @@ class Emoji(commands.Cog):
         else:
             await self.get_emoji_stats(ctx, emoji)
 
-    @commands.command(emojistats.command, name='server', aliases=['guild'])
+    @commands.command(
+        emojistats.command,
+        name='server',
+        aliases=['guild'],
+        guild_only=True
+    )
     async def emojistats_guild(self, ctx: GuildContext):
         """Shows you statistics about the local server emojis in this server."""
         emoji_ids = [e.id for e in ctx.guild.emojis]

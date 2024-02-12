@@ -957,8 +957,9 @@ class Polls(commands.Cog):
         polls.command,
         name='create',
         description='Creates a new poll with customizable settings.',
+        guild_only=True
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.describe(
         question='Main Poll Question to ask.',
         description='Additional notes/description about the question.',
@@ -1092,8 +1093,9 @@ class Polls(commands.Cog):
         polls.command,
         name='end',
         description='Ends the voting for a running question.',
+        guild_only=True
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(poll_id='5-digit ID of the poll to end.')
     async def polls_end(self, interaction: discord.Interaction, poll_id: int):
@@ -1114,8 +1116,9 @@ class Polls(commands.Cog):
         polls.command,
         name='delete',
         description='Deletes a poll question.',
+        guild_only=True
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(poll_id='5-digit ID of the poll to delete.')
     async def polls_delete(self, interaction: discord.Interaction, poll_id: int):
@@ -1131,8 +1134,9 @@ class Polls(commands.Cog):
         polls.command,
         name='edit',
         description='Edits a poll question. Type "-clear" to clear the current value.',
+        guild_only=True
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(
         poll_id='5-digit ID of the poll to search for.',
@@ -1289,6 +1293,7 @@ class Polls(commands.Cog):
         polls.command,
         name='search',
         description='Searches poll questions. Search by ID, keyword or flags.',
+        guild_only=True
     )
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(
@@ -1399,6 +1404,7 @@ class Polls(commands.Cog):
         polls.command,
         name='history',
         description='Shows the vote history of a user for polls.',
+        guild_only=True
     )
     @app_commands.describe(member='The Member to show the history for.')
     async def polls_history(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
@@ -1437,11 +1443,12 @@ class Polls(commands.Cog):
         polls.command,
         name='debug',
         description='Refactor all existing Polls in this guild and reattach the views.',
+        cooldown=commands.CooldownMap(rate=1, per=15.0, key=lambda i: i.guild_id),
+        guild_only=True
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)
     @app_commands.describe(poll_id='The ID of the Poll to debug.')
-    @app_commands.checks.cooldown(1, 15.0, key=lambda i: i.guild_id)
     async def polls_debug(self, interaction: discord.Interaction, poll_id: int):
         """Refactor all existing Polls in this guild and reattach the views."""
         poll = await self.get_guild_poll(interaction.guild.id, poll_id)
@@ -1465,6 +1472,7 @@ class Polls(commands.Cog):
         polls.command,
         name='config',
         description='Shows the current configuration for polls.',
+        guild_only=True
     )
     @app_commands.rename(
         reason_channel='reason-channel',
@@ -1476,7 +1484,7 @@ class Polls(commands.Cog):
         ping_role='The role to ping for polls.',
         reset='Whether to reset the configuration.'
     )
-    @commands.permissions(user=['ban_members', 'manage_messages'])
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     async def polls_config(
             self,
             interaction: discord.Interaction,

@@ -381,7 +381,6 @@ class AliasTag(PostgresItem):
 
 class Tags(commands.Cog):
     """Commands to fetch something by a tag name.
-
     ## Note
     If you want to create a Tag with not a Slash Commands, if you want to create a Tag with a name that is longer than one word,
     you need to wrap the name in double quotes, otherwise the command will only take the first word as the name and add the rest to the content.
@@ -738,7 +737,8 @@ class Tags(commands.Cog):
         name='alias',
         description='Creates a new alias for an existing tag.',
         examples=['new-alias original-tag',
-                  '\'new alias\' original tag']
+                  '\'new alias\' original tag'],
+        guild_only=True
     )
     @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
     @app_commands.describe(new_alias='The new alias to set', original_tag='The original tag to alias')
@@ -781,7 +781,8 @@ class Tags(commands.Cog):
         description='Creates a new tag in the server.',
         aliases=['add'],
         examples=['new-tag This is the content of the tag.',
-                  '\'new tag\' This is the content of the tag.']
+                  '\'new tag\' This is the content of the tag.'],
+        guild_only=True
     )
     @app_commands.describe(name='The tag name', content='The tag content')
     async def tag_create(
@@ -803,7 +804,8 @@ class Tags(commands.Cog):
         tag.command,
         name='make',
         description='Interactively create a Tag owned by yourself in this server.',
-        ignore_extra=True
+        ignore_extra=True,
+        guild_only=True
     )
     async def tag_make(self, ctx: GuildContext):
         """Interactively create a Tag owned by yourself in this server.
@@ -1000,6 +1002,7 @@ class Tags(commands.Cog):
         tag.command,
         name='stats',
         description='Shows Tag Statistics about the Server or a Member.',
+        guild_only=True
     )
     @app_commands.describe(
         member='The member to get tag statistics for. If not given, the server\'s tag statistics will be shown.')
@@ -1014,6 +1017,7 @@ class Tags(commands.Cog):
         tag.command,
         name='edit',
         description='Edit the content or name of a Tag.',
+        guild_only=True
     )
     @app_commands.describe(
         name_or_id='The Tag you want to edit. (Must be yours)',
@@ -1069,7 +1073,8 @@ class Tags(commands.Cog):
         tag.command,
         name='delete',
         description='Removes a Tag by Name or ID.',
-        aliases=['remove']
+        aliases=['remove'],
+        guild_only=True
     )
     @app_commands.describe(name_or_id='The assigned Tag to delete.')
     @app_commands.rename(name_or_id='name-or-id')
@@ -1105,6 +1110,7 @@ class Tags(commands.Cog):
         tag.command,
         name='info',
         description='Shows you Information about a Tag.',
+        guild_only=True
     )
     @app_commands.describe(name_or_id='The name or id of the tag to get info about.')
     @app_commands.rename(name_or_id='name-or-id')
@@ -1150,7 +1156,8 @@ class Tags(commands.Cog):
         tag.command,
         name='raw',
         description='This displays you the raw content of a tag.',
-        aliases=['content']
+        aliases=['content'],
+        guild_only=True
     )
     @app_commands.describe(name_or_id='The name or id of the tag to display the escaped markdown content.')
     @app_commands.rename(name_or_id='name-or-id')
@@ -1168,6 +1175,7 @@ class Tags(commands.Cog):
         tag.command,
         name='list',
         description='Shows a list of Tags owned by yourself or a given member.',
+        guild_only=True
     )
     @app_commands.describe(member='The member to list tags of, if not given then it defaults to you.')
     async def tag_list(self, ctx: GuildContext, *, flags: TagListFlags):
@@ -1225,6 +1233,7 @@ class Tags(commands.Cog):
         tag.command,
         name='purge',
         description='Bulk remove all Tags and assigned Aliases of a given User.',
+        guild_only=True
     )
     @commands.permissions(user=commands.PermissionTemplate.mod)
     @app_commands.describe(member='The member to remove all tags of')
@@ -1251,6 +1260,7 @@ class Tags(commands.Cog):
         tag.command,
         name='search',
         description='Search for tags matching the given query.',
+        guild_only=True
     )
     @app_commands.describe(query='The tag name to search for')
     @app_commands.choices(
@@ -1322,6 +1332,7 @@ class Tags(commands.Cog):
         tag.command,
         name='claim',
         description='Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.',
+        guild_only=True
     )
     @app_commands.describe(name_or_id='The tag to claim')
     @app_commands.rename(name_or_id='name-or-id')
@@ -1350,6 +1361,7 @@ class Tags(commands.Cog):
         tag.command,
         name='transfer',
         description='Transfer a tag owned by you to another member.',
+        guild_only=True
     )
     @app_commands.describe(member='The member to transfer the tag to', name_or_id='The tag to transfer')
     @app_commands.rename(name_or_id='name-or-id')
@@ -1377,7 +1389,8 @@ class Tags(commands.Cog):
         tag.command,
         name='export',
         description='Exports all your tags/server tags to a csv file.',
-        cooldown=commands.CooldownMap(rate=1, per=60, type=commands.BucketType.member)
+        cooldown=commands.CooldownMap(rate=1, per=60, type=commands.BucketType.member),
+        guild_only=True
     )
     @app_commands.describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')
     async def tag_export(

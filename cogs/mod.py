@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, Callable, Any, Union, Literal, List, TYPE_CHECKING, MutableMapping, Dict, Generic, TypeVar, \
     Sequence
 from collections.abc import Hashable
+from contextlib import suppress
 
 import asyncpg
 import discord
@@ -626,11 +627,6 @@ class GatekeeperSetupRoleView(discord.ui.View):
         cls=discord.ui.RoleSelect, min_values=1, max_values=1, placeholder='Choose the automatically assigned role'
     )
     async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
-        assert interaction.message is not None
-        assert interaction.guild is not None
-        assert isinstance(interaction.channel, discord.abc.Messageable)
-        assert isinstance(interaction.user, discord.Member)
-
         role = select.values[0]
         if role >= interaction.guild.me.top_role:
             return await interaction.response.send_message(
@@ -665,7 +661,6 @@ class GatekeeperSetupRoleView(discord.ui.View):
                     ),
                     colour=helpers.Colour.lime_green()
                 )
-                await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 async with interaction.channel.typing():
                     success, failure, skipped = await Mod.update_role_permissions(
@@ -681,20 +676,19 @@ class GatekeeperSetupRoleView(discord.ui.View):
                         ),
                         colour=helpers.Colour.lime_green()
                     )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await interaction.response.send_message(
                 f'{tick(True)} Successfully set the automatically assigned role to {role.mention}', ephemeral=True)
 
         self.selected_role = role
         self.stop()
-        await interaction.message.delete()
+
+        with suppress(discord.HTTPException):
+            await interaction.message.delete()
 
     @discord.ui.button(label='Create New Role', style=discord.ButtonStyle.blurple)
     async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
-        assert interaction.message is not None
-        assert isinstance(interaction.channel, discord.abc.Messageable)
-
         try:
             role = await self.parent.guild.create_role(name='Unverified')
         except discord.HTTPException as e:
@@ -724,29 +718,27 @@ class GatekeeperSetupRoleView(discord.ui.View):
                 ),
                 colour=helpers.Colour.lime_green()
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            self.stop()
-            await interaction.message.delete()
-            return
-
-        async with interaction.channel.typing():
-            success, failure, skipped = await Mod.update_role_permissions(
-                role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels
-            )
-            total = success + failure + skipped
-            embed = discord.Embed(
-                title='Gatekeeper Configuration - Role',
-                description=(
-                    f'{tick(True)} Successfully set the automatically assigned role to {role.mention}.\n\n'
-                    f'Attempted to update {total} channel permissions: '
-                    f'[Success: {success}, Failure: {failure}, Skipped (no permissions): {skipped}]'
-                ),
-                colour=helpers.Colour.lime_green()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            async with interaction.channel.typing():
+                success, failure, skipped = await Mod.update_role_permissions(
+                    role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels
+                )
+                total = success + failure + skipped
+                embed = discord.Embed(
+                    title='Gatekeeper Configuration - Role',
+                    description=(
+                        f'{tick(True)} Successfully set the automatically assigned role to {role.mention}.\n\n'
+                        f'Attempted to update {total} channel permissions: '
+                        f'[Success: {success}, Failure: {failure}, Skipped (no permissions): {skipped}]'
+                    ),
+                    colour=helpers.Colour.lime_green()
+                )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
         self.stop()
-        await interaction.message.delete()
+
+        with suppress(discord.HTTPException):
+            await interaction.message.delete()
 
 
 class GatekeeperRateLimitModal(discord.ui.Modal, title='Join Rate Trigger'):
@@ -2206,11 +2198,11 @@ class Mod(commands.Cog):
         if cached is not None:
             return cached
 
-        query = """SELECT * FROM guild_gatekeeper WHERE id=$1;"""
+        query = "SELECT * FROM guild_gatekeeper WHERE id=$1;"
         async with self.bot.pool.acquire(timeout=300.0) as con:
             record = await con.fetchrow(query, guild_id)
             if record is not None:
-                query = """SELECT * FROM guild_gatekeeper_members WHERE guild_id=$1"""
+                query = "SELECT * FROM guild_gatekeeper_members WHERE guild_id=$1;"
                 members = await con.fetch(query, guild_id)
                 self._gatekeepers[guild_id] = gatekeeper = Gatekeeper(members, self, record=record)
                 return gatekeeper
@@ -2369,7 +2361,6 @@ class Mod(commands.Cog):
                                     f'Detected {plural(len(spammers)):member} joining in rapid succession. '
                                     'The following actions have been automatically taken:\n'
                                     '- Enabled Gatekeeper to block them from participating.\n'
-                                    # '- Disabled invites for an hour to prevent any more users from joining\n'
                                 ),
                                 colour=helpers.Colour.light_orange()
                             )
@@ -2716,7 +2707,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='alerts',
-        description='Toggles alert message logging on the server.'
+        description='Toggles alert message logging on the server.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(
@@ -2772,7 +2764,6 @@ class Mod(commands.Cog):
                 flags = guild_config.flags & ~$2::SMALLINT
             WHERE id = $1;
         """
-
         await self.bot.pool.execute(query, guild_id, AutoModFlags.alerts.flag)
         self.get_guild_config.invalidate(self, guild_id)
 
@@ -2882,6 +2873,7 @@ class Mod(commands.Cog):
         moderation.command,
         name='disable',
         description='Disables Moderation on the server.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(protection='The protection to disable')
@@ -2978,7 +2970,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='gatekeeper',
-        description='Enables and shows the gatekeeper settings menu for the server.'
+        description='Enables and shows the gatekeeper settings menu for the server.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.mod)
     async def moderation_gatekeeper(self, ctx: GuildContext):
@@ -3043,6 +3036,7 @@ class Mod(commands.Cog):
         moderation.command,
         name='raid',
         description='Toggles raid protection on the server.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(enabled='Whether raid protection should be enabled or not, toggles if not given.')
@@ -3074,7 +3068,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='mentions',
-        description='Enables auto-banning accounts that spam more than \'count\' mentions.'
+        description='Enables auto-banning accounts that spam more than \'count\' mentions.',
+        guild_only=True
     )
     @commands.permissions(user=PermissionTemplate.mod)
     @app_commands.describe(count='The maximum amount of mentions before banning.')
@@ -3107,7 +3102,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='ignore',
-        description='Specifies what roles, members, or channels ignore Moderation Inspections.'
+        description='Specifies what roles, members, or channels ignore Moderation Inspections.',
+        guild_only=True
     )
     @commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to ignore')
@@ -3138,7 +3134,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='unignore',
-        description='Specifies what roles, members, or channels to take off the ignore list.'
+        description='Specifies what roles, members, or channels to take off the ignore list.',
+        guild_only=True
     )
     @commands.permissions(user=['ban_members'])
     @app_commands.describe(entities='Space separated list of roles, members, or channels to take off the ignore list')
@@ -3168,7 +3165,8 @@ class Mod(commands.Cog):
     @commands.command(
         moderation.command,
         name='ignored',
-        description='Lists what channels, roles, and members are in the Moderation ignore list.'
+        description='Lists what channels, roles, and members are in the Moderation ignore list.',
+        guild_only=True
     )
     async def moderation_ignored(self, ctx: GuildContext):
         """List all the channels, roles, and members that are in the Moderation ignore list."""
@@ -4226,6 +4224,7 @@ class Mod(commands.Cog):
         commands.core_command,
         name='unmute',
         description='Unmutes members using the configured mute role.',
+        guild_only=True
     )
     @checks.can_mute()
     @commands.permissions(bot=['manage_roles'])
@@ -4266,6 +4265,7 @@ class Mod(commands.Cog):
         commands.hybrid_command,
         name='tempmute',
         description='Temporarily mutes a member for the specified duration.',
+        guild_only=True
     )
     @checks.can_mute()
     @commands.permissions(bot=['manage_roles'])
@@ -4356,6 +4356,7 @@ class Mod(commands.Cog):
         _mute.group,
         name='role',
         description='Shows configuration of the mute role.',
+        guild_only=True
     )
     @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def _mute_role(self, ctx: GuildContext):
@@ -4378,7 +4379,8 @@ class Mod(commands.Cog):
         _mute_role.command,
         name='set',
         description='Sets the mute role to a pre-existing role.',
-        cooldown=commands.CooldownMap(rate=1, per=60.0, type=commands.BucketType.guild)
+        cooldown=commands.CooldownMap(rate=1, per=60.0, type=commands.BucketType.guild),
+        guild_only=True
     )
     @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_set(self, ctx: GuildContext, *, role: discord.Role):
@@ -4436,7 +4438,8 @@ class Mod(commands.Cog):
         _mute_role.command,
         name='update',
         description='Updates the permission overwrites of the mute role.',
-        aliases=['sync']
+        aliases=['sync'],
+        guild_only=True
     )
     @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_update(self, ctx: GuildContext):
@@ -4459,6 +4462,7 @@ class Mod(commands.Cog):
         _mute_role.command,
         name='create',
         description='Creates a mute role with the given name.',
+        guild_only=True
     )
     @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_create(self, ctx: GuildContext, *, name):
@@ -4506,6 +4510,7 @@ class Mod(commands.Cog):
         name='unbind',
         aliases=['delete'],
         description='Unbinds a mute role without deleting it.',
+        guild_only=True
     )
     @commands.permissions(user=['manage_roles', 'moderate_members'], bot=['manage_roles'])
     async def mute_role_unbind(self, ctx: GuildContext):
@@ -4534,8 +4539,8 @@ class Mod(commands.Cog):
         commands.core_command,
         name='selfmute',
         description='Temporarily mutes yourself for the specified duration.',
+        guild_only=True
     )
-    @commands.guild_only()
     @commands.permissions(bot=['manage_roles'])
     async def selfmute(
             self,
