@@ -151,6 +151,16 @@ def combine_permissions(
             setattr(overwrite, perm, value)
 
 
+def medal_emoji(n: int) -> str:
+    """Returns a medal emoji based on the position."""
+    LOOKUP = {
+        1: '\N{FIRST PLACE MEDAL}',
+        2: '\N{SECOND PLACE MEDAL}',
+        3: '\N{THIRD PLACE MEDAL}',
+    }
+    return LOOKUP.get(n, '\N{SPORTS MEDAL}')
+
+
 class Snowflake(commands.Converter[int]):
     """Basically a :class:`int` converter but with an argument type error."""
 
