@@ -426,7 +426,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE guild_id=$1
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -447,7 +447,7 @@ class Stats(commands.Cog):
             WHERE guild_id=$1
             AND used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -467,7 +467,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE guild_id=$1
             GROUP BY author_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -490,7 +490,7 @@ class Stats(commands.Cog):
             WHERE guild_id=$1
             AND used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY author_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -537,7 +537,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE guild_id=$1 AND author_id=$2
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -559,7 +559,7 @@ class Stats(commands.Cog):
             AND author_id=$2
             AND used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -789,7 +789,7 @@ class Stats(commands.Cog):
             SELECT command, COUNT(*) AS "uses"
             FROM commands
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -802,7 +802,7 @@ class Stats(commands.Cog):
             SELECT guild_id, COUNT(*) AS "uses"
             FROM commands
             GROUP BY guild_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -823,7 +823,7 @@ class Stats(commands.Cog):
             SELECT author_id, COUNT(*) AS "uses"
             FROM commands
             GROUP BY author_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -878,7 +878,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY command
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -892,7 +892,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY guild_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -913,7 +913,7 @@ class Stats(commands.Cog):
             FROM commands
             WHERE used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
             GROUP BY author_id
-            ORDER BY 'uses' DESC
+            ORDER BY "uses" DESC
             LIMIT 5;
         """
 
@@ -1364,7 +1364,7 @@ class Stats(commands.Cog):
 
             as_data = sorted(all_commands.items(), key=lambda t: t[1], reverse=True)
             table = formats.TabularData()
-            table.set_columns(['Command', 'Uses'])
+            table.set_columns(['Command', "uses"])
             table.add_rows(tup for tup in as_data)
             render = table.render()
 
