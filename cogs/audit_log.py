@@ -23,43 +23,57 @@ class AuditLog(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='log_all', id=1080194735932711042)
 
-    @staticmethod
-    def resolve_target(target: PossibleTarget) -> str:
+    @classmethod
+    def to_title(cls, string: str) -> str:
+        return string.replace('_', ' ').title()
+
+    @classmethod
+    def resolve_target(cls, target: PossibleTarget, *, raw: bool = False) -> str:
+        if isinstance(target, str):
+            return target
+
+        is_user = isinstance(target, (discord.User, discord.Member))
+
         attr = getattr(target, 'mention', None) or getattr(target, 'name', None) or getattr(target, 'id', None)
         if attr is None:
             return '<Not Found: />'
         elif isinstance(attr, int):
             return f'<Not Found: {attr}>'
         else:
+            if raw:
+                if is_user:
+                    return f'[{target}](https://discord.com/users/{target.id})'
             return attr
 
-    def get_permissions_changes(self, entry: discord.AuditLogEntry, change_type: str):
+    @classmethod
+    def get_permissions_changes(cls, entry: discord.AuditLogEntry, change_type: str):
         changes = []
         with suppress(AttributeError, TypeError):
             for b, a in zip(getattr(entry.before, change_type), getattr(entry.after, change_type)):
                 if b[1] != a[1]:
-                    changes.append(f'{self.resolve_target(entry.extra)}: **{b[0]}** `{b[1]}` -> `{a[1]}`')
+                    changes.append(f'{cls.resolve_target(entry.extra)}: **{b[0]}** `{b[1]}` -> `{a[1]}`')
         return '\n'.join(changes)
 
-    def get_change_value(self, entry: discord.AuditLogEntry, change_type: str) -> Optional[str]:
+    @classmethod
+    def get_change_value(cls, entry: discord.AuditLogEntry, change_type: str) -> Optional[str]:
         if change_type in ['overwrites', 'permissions', 'allow', 'deny']:
-            return self.get_permissions_changes(entry, change_type)
+            return cls.get_permissions_changes(entry, change_type)
         elif change_type == 'roles':
             message = ['### Updated Roles']
             role_removals = set(entry.before.roles) - set(entry.after.roles)
             role_additions = set(entry.after.roles) - set(entry.before.roles)
-            for role in role_removals | role_additions:  # type: discord.Role
+            for role in role_removals | role_additions:
                 sign = '-' if role in role_removals else '+'
                 message.append(f'{sign} {role.name} ({role.id})')
 
             message = '\n'.join(message)
             return f'```diff\n{message}```'
         elif hasattr(entry.before, change_type) and hasattr(entry.after, change_type):
-            return f'**{change_type.replace('_', ' ').title()}:** {getattr(entry.before, change_type)} -> {getattr(entry.after, change_type)}'
+            return f'**{cls.to_title(change_type)}:** {getattr(entry.before, change_type)} -> {getattr(entry.after, change_type)}'
         return None
 
-    @staticmethod
-    def get_flags(config: Any, only_active: bool = True) -> dict:
+    @classmethod
+    def get_flags(cls, config: Any, only_active: bool = True) -> dict:
         flags = config.audit_log_flags
         if not flags:
             return {}
@@ -69,8 +83,8 @@ class AuditLog(commands.Cog):
         else:
             return flags
 
-    @staticmethod
-    def get_action_color(action: discord.AuditLogAction) -> int:
+    @classmethod
+    def get_action_color(cls, action: discord.AuditLogAction) -> int:
         category = getattr(action, 'category', None)
         if category is None:
             return 0x2F3136
@@ -80,6 +94,8 @@ class AuditLog(commands.Cog):
             return 0xEC4245
         elif category.value == 3:
             return 0xFAA61A
+        else:
+            return 0x000000
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
@@ -102,8 +118,8 @@ class AuditLog(commands.Cog):
         emoji = ACTION_EMOJIS.get(entry.action)
         color = self.get_action_color(entry.action)
 
-        target_type = entry.action.target_type.title()
-        action_event_type = entry.action.name.replace('_', ' ').title()  # noqa
+        target_type = self.to_title(entry.action.target_type)
+        action_event_type = self.to_title(entry.action.name)  # type: ignore
 
         message = []
         for value in vars(entry.changes.before):
@@ -112,27 +128,24 @@ class AuditLog(commands.Cog):
                 message.append(changed)
 
         if not message:
-            message.append('*Nothing Mentionable*')
+            message.append('*No data provided.*')
 
-        target = self.resolve_target(entry.target)
-        by = getattr(entry, 'user', None) or 'N/A'
+        target = self.resolve_target(entry.target, raw=True)
+        by = self.resolve_target(getattr(entry, 'user', 'N/A'))
 
         embed = discord.Embed(
             title=f'{emoji} {action_event_type}',
             description='## Changes\n\n' + '\n'.join(message),
-            colour=color)
-
+            colour=color,
+            timestamp=entry.created_at
+        )
         embed.add_field(name='Performed by', value=by, inline=True)
         embed.add_field(name='Target', value=target, inline=True)
         embed.add_field(name='Reason', value=entry.reason, inline=False)
         embed.add_field(name='Category', value=f'{action_name} (Type: {target_type})', inline=False)
-
         embed.set_thumbnail(url=get_asset_url(entry.guild))
         embed.set_footer(text=f'Log: [{entry.id}]', icon_url=get_asset_url(entry.user))
-        embed.timestamp = entry.created_at
-
-        webhook = config.audit_log_webhook
-        await webhook.send(embed=embed)
+        await config.audit_log_webhook.send(embed=embed)
 
 
 async def setup(bot: Percy):
