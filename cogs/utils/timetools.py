@@ -5,7 +5,7 @@ import math
 import random
 import re
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Optional, Union, Collection, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Union, Collection, Tuple, ClassVar
 
 import discord
 import parsedatetime as pdt
@@ -21,12 +21,13 @@ units['seconds'].append('secs')
 
 if TYPE_CHECKING:
     from typing_extensions import Self
-    from ..utils.context import Context
+    from ..utils.context import Context, tick
 
 
 class InvalidTime(RuntimeError):
     """An invalid time was provided."""
-    pass
+    def __init__(self, message: str):
+        super().__init__(f'{tick(False)} {message}')
 
 
 class ShortTime:
@@ -38,10 +39,10 @@ class ShortTime:
     - 2 months
     - 4 weeks
     - 4min
-    - Unix Timestamps
+    - Unix Timestamps (<t:1620000000:f>)
     """
 
-    SHORT_TIME_COMPILED = re.compile(
+    SHORT_TIME_COMPILED: ClassVar[re.Pattern] = re.compile(
         r"""
            (?:(?P<years>[0-9])(\s+)?(?:years?|y))?
            (?:(?P<months>[0-9]{1,2})(\s+)?(?:months?|mon?))?
@@ -55,7 +56,7 @@ class ShortTime:
         re.VERBOSE,
     )
 
-    DISCORD_UNIX_TS = re.compile(r'<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>')
+    DISCORD_UNIX_TS: ClassVar[re.Pattern] = re.compile(r'<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>')
 
     dt: datetime.datetime
 
@@ -91,6 +92,15 @@ class ShortTime:
             tzinfo = config.tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
+    @classmethod
+    async def transform(cls, interaction: discord.Interaction, value: str) -> Self:
+        tzinfo = datetime.timezone.utc
+        config = await interaction.client.user_settings.get_user_config(interaction.user.id)
+        if config and config.timezone:
+            tzinfo = config.tzinfo
+        now = interaction.created_at.astimezone(tzinfo)
+        return cls(value, now=now, tzinfo=tzinfo)
+
 
 class HumanTime:
     """Time parser the uses pdt to parse short human times.
@@ -101,7 +111,7 @@ class HumanTime:
     - 3 days
     - 2 weeks
     """
-    calendar = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
+    CALENDER: ClassVar[pdt.Calendar] = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
 
     def __init__(
             self,
@@ -111,10 +121,10 @@ class HumanTime:
             tzinfo: datetime.tzinfo = datetime.timezone.utc,
     ):
         now = now or datetime.datetime.now(tzinfo)
-        dt, status = self.calendar.parseDT(argument, sourceTime=now, tzinfo=None)  # type: datetime.datetime, Any
+        dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: datetime.datetime, Any
 
         if not status.hasDateOrTime:  # If no date or time was provided, means it could not be parsed, raise an error
-            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days"')
+            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
         if not status.hasTime:  # If no time was provided, set it to the current time
             dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
@@ -130,7 +140,18 @@ class HumanTime:
         config = await ctx.bot.user_settings.get_user_config(ctx.author.id)
         if config and config.timezone:
             tzinfo = config.tzinfo
+
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
+
+    @classmethod
+    async def transform(cls, interaction: discord.Interaction, value: str) -> Self:
+        tzinfo = datetime.timezone.utc
+        config = await interaction.client.user_settings.get_user_config(interaction.user.id)
+        if config and config.timezone:
+            tzinfo = config.tzinfo
+
+        now = interaction.created_at.astimezone(tzinfo)
+        return cls(value, now=now, tzinfo=tzinfo)
 
 
 class Time(HumanTime):
@@ -145,7 +166,7 @@ class Time(HumanTime):
     ):
         try:
             time = ShortTime(argument, now=now, tzinfo=tzinfo)
-        except:  # noqa
+        except commands.BadArgument:
             super().__init__(argument, now=now, tzinfo=tzinfo)
         else:
             self.dt = time.dt
@@ -165,7 +186,7 @@ class FutureTime(Time):
         super().__init__(argument, now=now, tzinfo=tzinfo)
 
         if self._past:
-            raise commands.BadArgument('This time is in the past')
+            raise commands.BadArgument('This time is in the past.')
 
 
 class BadTimeTransform(app_commands.AppCommandError):
@@ -178,10 +199,7 @@ class TimeTransformer(app_commands.Transformer):
 
     Basically :class:`UserFriendlyTime` but with no context and just time parsing.
     """
-
-    def __init__(
-            self, future: bool = False, short: bool = False
-    ):
+    def __init__(self, future: bool = False, short: bool = False):
         self.future = future
         self.short = short
 
@@ -257,11 +275,11 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
         except ValueError:
             raise commands.BadArgument('Invalid time provided.') from None
 
-    async def transform(self, interaction, value: str) -> relativedelta:
+    async def transform(self, interaction: discord.Interaction, value: str) -> relativedelta:
         try:
             return self.__do_conversion(value)
         except ValueError:
-            raise app_commands.AppCommandError('<:redTick:1079249771975413910> Invalid time provided.') from None
+            raise app_commands.AppCommandError(f'{tick(False)} Invalid time provided.') from None
 
 
 class UserFriendlyTime(commands.Converter):
@@ -298,7 +316,7 @@ class UserFriendlyTime(commands.Converter):
         self.default: Any = default
 
     async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:
-        calendar = HumanTime.calendar
+        calendar = HumanTime.CALENDER
         regex = ShortTime.SHORT_TIME_COMPILED
 
         tzinfo = datetime.timezone.utc
@@ -411,7 +429,7 @@ def human_timedelta(
         delta = relativedelta(now, dt)
         output_suffix = ' ago' if suffix else ''
 
-    attrs = [
+    UNIT_MAP = [
         ('year', 'y'),
         ('month', 'mo'),
         ('day', 'd'),
@@ -421,7 +439,7 @@ def human_timedelta(
     ]
 
     output = []
-    for attr, brief_attr in attrs:
+    for attr, brief_attr in UNIT_MAP:
         elem = getattr(delta, attr + 's')
         if not elem:
             continue
@@ -460,7 +478,6 @@ def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
 
     Example: 'UTC +00:00'
     """
-
     offset = dt.utcoffset()
     if offset is None:
         offset_format = '+00:00'
@@ -477,7 +494,6 @@ def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
 
 def mean_stddev(collection: Collection[float]) -> Tuple[float, float]:
     """Takes a collection of floats and returns (mean, stddev) as a tuple."""
-
     average = sum(collection) / len(collection)
 
     if len(collection) > 1:
@@ -499,12 +515,11 @@ def ensure_future_time(
         converter = Time(argument, now=now, tzinfo=tzinfo)
     except commands.BadArgument:
         random_future = now + datetime.timedelta(days=random.randint(3, 60))
-        raise InvalidTime(
-            f'<:redTick:1079249771975413910> Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".')
+        raise InvalidTime(f'Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".')
 
     minimum_time = now + datetime.timedelta(minutes=5)
     if converter.dt < minimum_time:
-        raise InvalidTime('<:redTick:1079249771975413910> Due date must be at least 5 minutes in the future.')
+        raise InvalidTime('Due date must be at least 5 minutes in the future.')
 
     return converter.dt
 
