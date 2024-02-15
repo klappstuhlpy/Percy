@@ -10,6 +10,7 @@ from typing import Optional, TYPE_CHECKING, Union, Dict, Iterable, AsyncIterator
 import aiohttp
 import asyncpg
 import discord
+import wavelink
 from discord import app_commands
 from expiringdict import ExpiringDict
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -222,13 +223,19 @@ class Percy(commands.Bot):
         self.session = aiohttp.ClientSession()
 
         self.blacklist: Config[bool] = Config('blacklist.json')
+        self.track_blacklist: Config[list[str]] = Config('track_blacklist.json')
         self.prefixes: Config[list[str]] = Config('prefixes.json')
-
-        self.media_config: Config[Dict[str, Any]] = Config('media_config.json', encoder=BasicJSONEncoder, load_later=True)
+        self.temp_channels: Config[list[int]] = Config('temp_channels.json')
         self.data_storage: Config[Dict[dict, Any]] = Config('data_storage.json', encoder=BasicJSONEncoder)
 
         self.bot_app_info = await self.application_info()
         self.owner_id = self.bot_app_info.owner.id
+
+        try:
+            nodes = [wavelink.Node(uri=self.config.wavelink.uri, password=self.config.wavelink.password)]
+            await wavelink.Pool.connect(nodes=nodes, client=self, cache_capacity=100)
+        except Exception as exc:
+            log.error('Failed to establish a lavalink connection', exc_info=exc)
 
         for extension in self.initial_extensions:
             try:
@@ -251,16 +258,20 @@ class Percy(commands.Bot):
         else:
             await self.prefixes.put(guild.id, sorted(set(prefixes), reverse=True))
 
-    async def add_to_blacklist(self, object_id: int, *, duration: Optional[int] = None):
+    async def add_to_blacklist(self, obj: int | str, *, duration: Optional[int] = None):
         if duration is not None:
             when = datetime.datetime.now() + datetime.timedelta(seconds=duration)
-            await self.reminder.create_timer(when, 'blacklist', object_id=object_id)
+            await self.reminder.create_timer(when, 'blacklist', object_id=obj)
 
         await self.blacklist.put(object_id, True)
+        if isinstance(obj, int):
+            await self.blacklist.put(obj, True)
+        else:
+            await self.track_blacklist.put('URLS', obj)
 
-    async def remove_from_blacklist(self, object_id: int):
+    async def remove_from_blacklist(self, obj: int | str):
         try:
-            await self.blacklist.remove(object_id)
+            await self.blacklist.remove(obj)
         except KeyError:
             pass
 

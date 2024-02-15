@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import datetime
 import re
-from collections import Counter
 from typing import Any, Iterable, Optional, Sequence, Iterator, TypeVar, AsyncIterator, TYPE_CHECKING, Union
 
 import asyncpg
 import discord
 from discord.utils import TimestampStyle  # noqa
 
+from cogs.utils import converters
 from cogs.utils.constants import INVITE_REGEX
 
 if TYPE_CHECKING:
@@ -23,8 +23,8 @@ class plural:
     Credit: https://github.com/Rapptz/RoboDanny/blob/rewrite/cogs/utils/formats.py#L8-L18
     """
 
-    def __init__(self, sized: int, pass_content: bool = False):
-        self.sized: int = sized
+    def __init__(self, sized: int | float, pass_content: bool = False):
+        self.sized: int | float = sized
         self.pass_content: bool = pass_content
 
     def __format__(self, format_spec: str) -> str:
@@ -410,3 +410,30 @@ def get_shortened_string(length: int, start: int, string: str) -> str:
     if has_end:
         return f'[{_id}] …{string[start + excess + 1:end]}…'
     return f'[{_id}] …{string[start + excess:end]}'
+
+
+def VisualStamp(key_min: float, key_max: float, key_current: float, key_full: int = 32) -> str:
+    """
+    Example Output:
+    ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬🔘▬▬▬▬▬▬▬
+    """
+    if key_min == key_current:
+        before = key_max
+        after = key_min
+    else:
+        before = key_min + key_current
+        after = key_max - key_current
+    for i in range(int(key_min + 2), int(key_max)):
+        if len(int(before / i) * '▬' + '🔘' + int(
+                after / i) * '▬') <= key_full:
+            return str(int(before / i) * '▬' + '🔘' + int(
+                after / i) * '▬')
+
+
+def PlayerStamp(length: float, position: float) -> str:
+    convertable = [
+        converters.convert_duration(position if not position < 0 else 0.0),
+        VisualStamp(0, length, position),
+        converters.convert_duration(length)
+    ]
+    return ' '.join(convertable)

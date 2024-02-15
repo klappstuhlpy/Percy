@@ -1,23 +1,23 @@
 import datetime
 import inspect
 import os
-import random
 import sys
+import time
 from io import BufferedIOBase, BytesIO
 from types import ModuleType
-from typing import Any, List, Iterable, Sequence, overload, BinaryIO, Optional, Union, Set
+from typing import Any, List, Iterable, Sequence, overload, BinaryIO, Optional, Union, Iterator, TypeVar
 from urllib.parse import urlparse
 
 import aiohttp
 import discord
 from dateutil.parser import parse
-from discord import app_commands, Colour
+from discord import app_commands, Colour, AppCommandOptionType
 from discord.utils import MISSING
 
 from cogs.utils import fuzzy
 from . import commands
 from .constants import IgnoreableEntity, COLOUR_DICT, _TContext, URL_REGEX
-from ..utils.context import GuildContext
+from ..utils.context import GuildContext, Context
 
 
 def get_asset_url(obj: Union[discord.Guild, discord.User, discord.Member, discord.ClientUser]) -> str:
@@ -159,6 +159,28 @@ def medal_emoji(n: int) -> str:
         3: '\N{THIRD PLACE MEDAL}',
     }
     return LOOKUP.get(n, '\N{SPORTS MEDAL}')
+
+
+def convert_duration(milliseconds: float) -> time:
+    seconds = milliseconds / 1000
+    formaT = '%H:%M:%S' if seconds >= 3600 else '%M:%S'
+    return time.strftime(formaT, time.gmtime(seconds))
+
+
+T = TypeVar('T')
+
+
+def merge(*iterables: Iterable[T]) -> Iterator[T]:
+    """Merge multiple iterables into one.
+
+    Parameters
+    ----------
+    *iterables : `iterable` of `iterable`
+        The iterables to merge.
+    """
+
+    for iterable in iterables:
+        yield from iterable
 
 
 class Snowflake(commands.Converter[int]):
@@ -382,7 +404,6 @@ class IgnoreEntity(commands.Converter[str]):
 
 class ModuleConverter(commands.Converter[ModuleType]):
     """A converter interface to resolve imported modules."""
-
     async def convert(self, ctx: commands.Context, argument: str) -> ModuleType:
         """Converts a name into a :class:`ModuleType` object."""
         argument = argument.lower().strip()
@@ -395,19 +416,20 @@ class ModuleConverter(commands.Converter[ModuleType]):
         return module
 
 
-def can_execute_action(ctx: GuildContext, user: discord.Member, target: discord.Member) -> bool:
+def can_execute_action(ctx: Context, user: discord.Member, target: discord.Member) -> bool:
     return user.id == ctx.bot.owner_id or user == ctx.guild.owner or user.top_role > target.top_role
 
 
-class MemberID(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str):  # noqa
+class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
+    """A Hybrid Command Converter that supports App and Text Commands to resolve member (IDs)."""
+    async def convert(self, ctx: Context, argument: str) -> discord.Member:
         try:
             m = await commands.MemberConverter().convert(ctx, argument)
         except commands.BadArgument:
             try:
                 member_id = int(argument, base=10)
             except ValueError:
-                raise commands.BadArgument(f'{argument} is not a valid member or member ID.') from None
+                raise commands.BadArgument(f'{argument!r} is not a valid member or member ID.') from None
             else:
                 m = await ctx.bot.get_or_fetch_member(ctx.guild, member_id)
                 if m is None:
@@ -417,9 +439,14 @@ class MemberID(commands.Converter):
             raise commands.BadArgument('You cannot do this action on this user due to role hierarchy.')
         return m
 
+    @property
+    def type(self) -> AppCommandOptionType:
+        return AppCommandOptionType.user
 
-class BannedMember(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str):  # noqa
+
+class BannedMember(commands.Converter[discord.BanEntry], app_commands.Transformer):
+    """A Hybrid Command Converter that supports App and Text Commands to resolve banned members."""
+    async def convert(self, ctx: Context, argument: str) -> discord.BanEntry:
         if argument.isdigit():
             member_id = int(argument, base=10)
             try:
@@ -433,12 +460,31 @@ class BannedMember(commands.Converter):
             raise commands.BadArgument('This member has not been banned before.')
         return entity
 
+    async def transform(self, interaction: discord.Interaction, value: str) -> discord.BanEntry:
+        if value.isdigit():
+            member_id = int(value, base=10)
+            try:
+                return await interaction.guild.fetch_ban(discord.Object(id=member_id))
+            except discord.NotFound:
+                raise commands.BadArgument('This member has not been banned before.') from None
 
-class ActionReason(commands.Converter):
-    async def convert(self, ctx: GuildContext, argument: str) -> str:  # noqa
+        entity = await discord.utils.find(lambda u: str(u.user) == value, interaction.guild.bans(limit=None))
+
+        if entity is None:
+            raise commands.BadArgument('This member has not been banned before.')
+        return entity
+
+
+class ActionReason(commands.Converter[str], app_commands.Transformer):
+    """A Hybrid Command Converter that supports App and Text Commands to resolve action reasons."""
+    async def convert(self, ctx: Context, argument: str) -> str:
         ret = f'{ctx.author} (ID: {ctx.author.id}): {argument}'
 
         if len(ret) > 512:
             reason_max = 512 - len(ret) + len(argument)
             raise commands.BadArgument(f'Reason is too long ({len(argument)}/{reason_max})')
         return ret
+
+    @property
+    def max_value(self) -> Optional[Union[int, float]]:
+        return 512

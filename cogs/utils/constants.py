@@ -61,6 +61,8 @@ NonCoro = TypeVar('NonCoro', bound=Callable[..., Any])
 
 # REGEX
 
+VOLUME_REGEX = re.compile(r'^[+-]?\d+$')
+
 INVITE_REGEX = re.compile(r'(?:https?:)?discord(?:\.gg|\.com|app\.com(/invite)?)?[A-Za-z0-9]+')
 
 WORD_REGEX = re.compile(r'\W', re.IGNORECASE)
@@ -864,19 +866,14 @@ HANG_MAN = [
 HELP_PAGES = [
     inspect.cleandoc(
         """
-        ## Introduction
-        Here you can find all *Message-/Slash-Commands* for {name}.
+        ## Hello World!
+        Here you can find help for all Commands available to you based on your permissions for {name}.
         Try using the dropdown to navigate through the categories to get a list of all Commands.
-    
-        I'm open source! You can find my code on [GitHub](https://github.com/klappstuhlpy/Percy).
-        ## More Help
+        ### More Help
         Alternatively you can use the following Commands to get Information about a specific Command or Category:
         - `{prefix}help` *`command`*
         - `{prefix}help` *`category`*
-        ## Support
-        For more help, consider joining the official server over at
-        https://discord.com/invite/eKwMtGydqh.
-        ## Stats
+        ### Stats
         Total of **{command_runs}** command runs.
         Currently are **{commands}** commands loaded.
         """
@@ -914,11 +911,7 @@ HELP_PAGES = [
         ## License
         Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
         ## Source Code
-        You can obtain a copy of myself over at [GitHub](https://github.com/klappstuhlpy/Percy)
-        ## Credits
-        I was made by <@991398932397703238>.
-
-        Any questions regarding licensing and credits can be directed to <@991398932397703238>.
+        You can obtain a copy of me over at [GitHub](https://github.com/klappstuhlpy/Percy)
         """
     ),
 ]

@@ -1,13 +1,15 @@
 from __future__ import unicode_literals
 import functools
 import sys
+from contextlib import suppress
 from typing import Callable, TypeVar
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.utils import MISSING
 
-from ..utils.context import GuildContext
+from ..utils.context import GuildContext, Context
 from fuzzywuzzy.string_processing import StringProcessor
 
 T = TypeVar('T')
@@ -182,13 +184,104 @@ def can_mute():
         if ctx.guild is None:
             return False
 
-        if not ctx.author.guild_permissions.manage_roles and not is_owner:
-            return False
-
         ctx.guild_config = config = await ctx.cog.get_guild_config(ctx.guild.id)  # type: ignore
         role = config and config.mute_role
         if role is None:
             raise commands.BadArgument('This server does not have a mute role set up.')
         return ctx.author.top_role > role
+
+    return commands.check(predicate)
+
+
+# -- Music Checks --
+
+def is_player_connected():
+    async def predicate(ctx: Context) -> bool:
+        if not ctx.guild or (ctx.guild and not ctx.guild.me.voice):
+            return True
+
+        if not ctx.voice_client or not ctx.voice_client.channel:
+            await ctx.stick(False, "I'm not connected to a voice channel right now.", ephemeral=True)
+            return False
+
+        return True
+
+    return commands.check(predicate)
+
+
+def is_player_playing():
+    async def predicate(ctx: Context) -> bool:
+        if not ctx.guild or (ctx.guild and not ctx.guild.me.voice):
+            return True
+
+        if not ctx.voice_client or not ctx.voice_client.playing:  # noqa
+            await ctx.stick(False, "I'm not playing anything right now.", ephemeral=True)
+            return False
+        return True
+
+    return commands.check(predicate)
+
+
+def is_dj(member: discord.Member) -> bool:
+    """Checks if the Member has the DJ Role."""
+    role = discord.utils.get(member.guild.roles, name="DJ")
+    if role in member.roles:
+        return True
+    return False
+
+
+def is_listen_together():
+    """Checks if a listen together activity is active."""
+    async def predicate(ctx):
+        if ctx.voice_client:
+            if ctx.voice_client.queue.listen_together is not MISSING:
+                await ctx.stick(
+                    False, f'Please stop the listen-together activity before use this Command.', ephemeral=True)
+                return False
+        return True
+
+    return commands.check(predicate)
+
+
+def is_author_connected():
+    """Checks if the author is connected to a Voice Channel."""
+    async def predicate(ctx: Context) -> bool:
+        assert isinstance(ctx.user, discord.Member)
+
+        if not ctx.guild or (ctx.guild and not ctx.guild.me.voice):
+            return True
+
+        author_vc = ctx.user.voice and ctx.user.voice.channel
+        bot_vc = ctx.guild.me.voice and ctx.guild.me.voice.channel
+
+        if is_dj(ctx.user) and bot_vc and (not author_vc):
+            return True
+        if (author_vc and bot_vc) and (author_vc == bot_vc):
+            if ctx.user.voice.deaf or ctx.user.voice.self_deaf:
+                await ctx.stick(
+                    False, f'You are deafened, please undeafen yourself to use this command.', ephemeral=True)
+                return False
+            return True
+        if (not author_vc and bot_vc) or (author_vc and bot_vc):
+            await ctx.stick(False, f'You must be in {bot_vc.mention} to use this command.', ephemeral=True)
+            return False
+        if not author_vc:
+            await ctx.stick(False, f'You must be in a voice channel to use this command.', ephemeral=True)
+            return False
+        return True
+
+    return commands.check(predicate)
+
+
+def isDJorAdmin():
+    """Checks if the user has the DJ role or is an Admin."""
+    async def predicate(ctx):
+        with suppress(AttributeError, discord.Forbidden, discord.NotFound):
+            djRole = discord.utils.get(ctx.guild.roles, name="DJ")
+
+            if djRole in ctx.author.roles or ctx.author.guild_permissions.administrator:
+                return True
+            await ctx.stick(False, f'You need to be an Admin or DJ to use this Command.', ephemeral=True)
+            return False
 
     return commands.check(predicate)
