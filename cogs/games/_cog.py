@@ -15,7 +15,7 @@ from ._hangman import WaitforHangman
 from ._roulette import Space, SpaceConverter, Payout
 from ..economy import Economy
 from ..reminder import Timer
-from ..utils import helpers, commands, errors, fuzzy
+from ..utils import helpers, commands, fuzzy
 from ..utils.constants import cash_emoji, WORKING_RESPONSES, SUCCESSFULL_CRIME_RESPONSES, FAILED_CRIME_RESPONSES, \
     SUCCESSFULL_SLUT_RESPONSES, FAILED_SLUT_RESPONSES
 
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 class MinimumBet(enum.Enum):
     """Minimum Bets for Games."""
-
     BLACKJACK = 100
     ROULETTE = 100
     POKER = 1000
@@ -35,8 +34,7 @@ class MinimumBet(enum.Enum):
 async def roulette_space_autocomplete(
         interaction: discord.Interaction, current: str  # noqa
 ) -> list[app_commands.Choice[int]]:
-    results = fuzzy.finder(
-        current, [space for space in Space], key=lambda p: p.value)
+    results = fuzzy.finder(current, [space for space in Space], key=lambda p: p.value)
     return [
         app_commands.Choice(name=space.value, value=space.value) for space in results[:20]
     ]
@@ -85,10 +83,9 @@ class Games(commands.GroupCog):
         commands.hybrid_command,
         name='tictactoe',
         description='Play a TicTacToe party with another user.',
-        aliases=['ttt']
+        aliases=['ttt'],
+        guild_only=True
     )
-    @commands.guild_only()
-    @app_commands.guild_only()
     @app_commands.rename(other='with')
     @app_commands.describe(other='The opponent to play with')
     async def tictactoe(self, ctx: GuildContext, *, other: discord.Member):
@@ -213,10 +210,10 @@ class Games(commands.GroupCog):
             self.blackjack_tables[ctx.author.id] = blackjack
 
         # Shuffle cards ;)
-        # Note that this is just for aesthetics
+        # Note: that this is just for aesthetics
         embed = blackjack.build_embed(
             hand=blackjack.active_hand,
-            image_url='https://i.imgur.com/TXIT1Sr.gif',
+            image_url='https://images.klappstuhl.me/gallery/pIUNWdiMlF.gif',
             colour=discord.Colour.light_grey(),
             text='*Shuffling Cards...*'
         )
@@ -232,9 +229,9 @@ class Games(commands.GroupCog):
     @commands.command(
         name='work',
         description='Work for money.',
-        guild_only=True
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=Payouts.WORK_COODLWON.value, type=commands.BucketType.member)
     )
-    @commands.cooldown(1, Payouts.WORK_COODLWON.value, commands.BucketType.member)
     async def work(self, ctx: Context):
         """Work for money.
 
@@ -251,9 +248,9 @@ class Games(commands.GroupCog):
     @commands.command(
         name='crime',
         description='Commit a crime for money. Higher risk, higher reward.',
-        guild_only=True
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=Payouts.CRIME_COOLDOWN.value, type=commands.BucketType.member)
     )
-    @commands.cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
     async def crime(self, ctx: Context):
         """Commit a crime for money.
 
@@ -279,9 +276,9 @@ class Games(commands.GroupCog):
         name='slut',
         description='Whip it out, for a bit of cash. ;) (NSFW)',
         nsfw=True,
-        guild_only=True
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=Payouts.SLUT_COODLWON.value, type=commands.BucketType.member)
     )
-    @commands.cooldown(1, Payouts.SLUT_COODLWON.value, commands.BucketType.member)
     async def slut(self, ctx: Context):
         """Do some naughty work for cash. (NSFW)
 
@@ -306,10 +303,10 @@ class Games(commands.GroupCog):
     @commands.command(
         name='rob',
         description='Attempt to rob another user.',
-        guild_only=True
+        guild_only=True,
+        cooldown=commands.CooldownMap(rate=1, per=Payouts.CRIME_COOLDOWN.value, type=commands.BucketType.member)
     )
     @app_commands.describe(user='The user you want to rob.')
-    @commands.cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
     async def rob(self, ctx: Context, user: Annotated[discord.Member, commands.UserConverter]):
         """Rob another Users cash.
 
@@ -325,7 +322,7 @@ class Games(commands.GroupCog):
         robbed_balance = await self.economy.get_balance(user.id, ctx.guild.id)
 
         if robbed_balance.cash == 0:
-            raise errors.BadArgument('This player has no cash.')
+            raise commands.BadArgument('This player has no cash.')
 
         ROB_FAIL_PROBABILLITY = robber_balance.total / (robbed_balance.cash + robbed_balance.total)
         ROB_FAIL_RATE = max(0.2, min(0.8, ROB_FAIL_PROBABILLITY))
@@ -397,16 +394,66 @@ class Games(commands.GroupCog):
             )
         await ctx.message.add_reaction(ctx.tick(True))
 
+    @commands.command(
+        name='poker',
+        description='Play a game of Texas Hold\'em Poker.',
+        guild_only=True
+    )
+    @app_commands.describe(stack='The amount of coins to play with.')
+    async def poker(self, ctx: Context, stack: int):
+        """Play a game of Texas Hold'em Poker."""
+        if stack < 0:
+            return await ctx.stick(False, 'You cannot bet negative coins.', ephemeral=True)
+
+        if stack < MinimumBet.POKER.value:
+            return await ctx.stick(False, f'You must bet at least {cash_emoji} **{MinimumBet.POKER.value:,}**.',
+                                   ephemeral=True)
+
+        balance = await self.economy.get_balance(ctx.author.id, ctx.guild.id)
+
+        if stack > balance.cash:
+            return await ctx.stick(False, f'You do not have enough money to bet that amount.\n'
+                                          f'You currently have {cash_emoji} **{balance.cash:,}** in **cash**.',
+                                   ephemeral=True)
+
+        await balance.remove(stack, 'cash')
+
+        if ctx.channel.id in self.poker_tables:
+            poker = self.poker_tables[ctx.channel.id]
+            if len(poker.players) == 4:
+                return await ctx.stick(False, 'The table is full.', ephemeral=True)
+
+            if poker.state != _poker.TableState.STOPPED:
+                return await ctx.stick(False, 'The game is already running.\n'
+                                              'Please wait for the next round or open a new game in a different channel.', ephemeral=True)
+
+            if ctx.author in poker.players:
+                return await ctx.stick(False, 'You are already playing.', ephemeral=True)
+
+            poker.add_player(ctx.author, stack)
+            poker.view.update_buttons()
+            await poker.message.edit(embed=poker.build_embed(), view=poker.view)
+        else:
+            poker = _poker.Table(self, ctx, buy_in=stack)
+            poker.add_player(ctx.author, stack)
+            poker.view.update_buttons()
+
+            message = await ctx.send(embed=poker.build_embed(), view=poker.view)
+
+            poker.message = message
+            self.poker_tables[ctx.channel.id] = poker
+
     @commands.Cog.listener()
     async def on_roulette_timer_complete(self, timer: Timer):
-        channel_id = timer.kwargs['roulette_id']
+        channel_id = timer.kwargs.get('roulette_id')
 
         roulette = self.roulette_tables[channel_id]
         roulette.close()
 
         # Note this is just for aesthetics
         await roulette.message.edit(
-            embed=roulette.build_embed(image_url='https://i.giphy.com/26uf2YTgF5upXUTm0.gif'), view=roulette.view)
+            embed=roulette.build_embed(image_url='https://images.klappstuhl.me/gallery/skYCZMRFKQ.gif'),
+            view=roulette.view)
         await asyncio.sleep(5)
 
         result = random.randint(0, 36)
