@@ -10,10 +10,9 @@ from discord import Message, Interaction
 from bot import Percy
 from cogs.ai import _image
 from cogs.ai._image import TextToImageSettings, ImageJob, StabilityInterface, ImageFile
-from cogs.utils import commands
+from cogs.utils import commands, render
 from cogs.utils.context import Context
 from cogs.utils.lock import lock_arg
-from cogs.utils.render import Render
 
 
 class PromptFlags(commands.FlagConverter, prefix='--', delimiter=' '):
@@ -175,7 +174,6 @@ class AITools(commands.Cog):
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
 
-        self.render: Render = Render()
         self.interface = StabilityInterface(self.bot, key=self.bot.config.stability_key)
 
     @property
@@ -210,7 +208,7 @@ class AITools(commands.Cog):
 
         grid_image = ImageFile(
             requestor=job.author, prompt=job.prompt, id=uuid.uuid4(),
-            content=self.render.create_image_grid([Image.open(image.content) for image in result]).read()
+            content=render.create_image_grid([Image.open(image.content) for image in result]).read()
         )
 
         job.grid = grid_image.to_file()
