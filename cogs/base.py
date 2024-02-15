@@ -381,17 +381,6 @@ class Base(commands.Cog, name='Exclusives'):
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
-    async def on_member_join(self, member: discord.Member):
-        if member.guild.id != PH_GUILD_ID:
-            return
-
-        if member.bot:
-            await member.add_roles(discord.Object(id=PH_BOTS_ROLE))
-            return
-
-        await member.add_roles(discord.Object(id=PH_MEMBERS_ROLE))
-
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if not message.guild or message.guild.id not in (PH_GUILD_ID, PLAYGROUND_GUILD_ID):
             return

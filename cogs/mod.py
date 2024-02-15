@@ -275,13 +275,14 @@ class Gatekeeper(PostgresItem):
     started_at: Optional[datetime.datetime]
     channel_id: Optional[int]
     role_id: Optional[int]
+    starter_role_id: Optional[int]
     message_id: Optional[int]
     bypass_action: Literal['ban', 'kick']
     rate: Optional[tuple[int, int] | str]
 
     __slots__ = (
         'bot', 'cog', 'id', 'members', 'queue', 'task',
-        'started_at', 'role_id', 'channel_id', 'message_id', 'bypass_action', 'rate',
+        'started_at', 'role_id', 'starter_role_id', 'channel_id', 'message_id', 'bypass_action', 'rate',
     )
 
     def __init__(self, members: list[Any], cog: Mod, **kwargs) -> None:
@@ -311,6 +312,7 @@ class Gatekeeper(PostgresItem):
             ('members', len(self.members)),
             ('started_at', self.started_at),
             ('role_id', self.role_id),
+            ('starter_role_id', self.starter_role_id),
             ('channel_id', self.channel_id),
             ('message_id', self.message_id),
             ('bypass_action', self.bypass_action),
@@ -326,6 +328,7 @@ class Gatekeeper(PostgresItem):
             ('Blocked Members', f'**{len(self.members)}**'),
             ('Enabled', discord.utils.format_dt(self.started_at) if self.started_at is not None else 'False'),
             ('Role', self.role.mention if self.role is not None else 'N/A'),
+            ('Starter Role', self.starter_role.mention if self.starter_role is not None else 'N/A'),
             ('Channel', self.channel.mention if self.channel is not None else 'N/A'),
             ('Message', self.message.jump_url if self.message is not None else 'N/A'),
             ('Bypass Action', self.bypass_action.title()),
@@ -345,6 +348,7 @@ class Gatekeeper(PostgresItem):
             *,
             started_at: Optional[datetime.datetime] = MISSING,
             role_id: Optional[int] = MISSING,
+            starter_role_id: Optional[int] = MISSING,
             channel_id: Optional[int] = MISSING,
             message_id: Optional[int] = MISSING,
             bypass_action: Literal['ban', 'kick'] = MISSING,
@@ -360,6 +364,8 @@ class Gatekeeper(PostgresItem):
             The time when the gatekeeper was started.
         role_id : Optional[int]
             The role ID to add to members.
+        starter_role_id : Optional[int]
+            The role ID to add to members that bypass the gatekeeper.
         channel_id : Optional[int]
             The channel ID where the gatekeeper is active.
         message_id : Optional[int]
@@ -377,6 +383,8 @@ class Gatekeeper(PostgresItem):
             form['started_at'] = started_at
         if role_id is not MISSING:
             form['role_id'] = role_id
+        if starter_role_id is not MISSING:
+            form['starter_role_id'] = starter_role_id
         if channel_id is not MISSING:
             form['channel_id'] = channel_id
         if message_id is not MISSING:
@@ -412,6 +420,8 @@ class Gatekeeper(PostgresItem):
             self.started_at = started_at
         if role_id is not MISSING:
             self.role_id = role_id
+        if starter_role_id is not MISSING:
+            self.starter_role_id = starter_role_id
         if channel_id is not MISSING:
             self.channel_id = channel_id
         if message_id is not MISSING:
@@ -429,7 +439,6 @@ class Gatekeeper(PostgresItem):
         This is a bit of a weird loop because it's not really a loop.
         It's more of a queue that's being processed in the background.
         """
-
         while self.role_id is not None:
             member_id, action = await self.queue.get()
 
@@ -439,6 +448,10 @@ class Gatekeeper(PostgresItem):
                         self.id, member_id, self.role_id, reason='Completed Gatekeeper verification')
                     query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.pool.execute(query, self.id, member_id)
+
+                    if self.starter_role_id is not None:
+                        await self.bot.http.add_role(
+                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')
                 elif action is GatekeeperRoleState.pending_add:
                     await self.bot.http.add_role(
                         self.id, member_id, self.role_id, reason='Started Gatekeeper verification')
@@ -521,6 +534,12 @@ class Gatekeeper(PostgresItem):
         """The role that is being added to members."""
         guild = self.bot.get_guild(self.id)
         return guild and self.role_id and guild.get_role(self.role_id)
+
+    @property
+    def starter_role(self) -> Optional[discord.Role]:
+        """The role that is being added to members that bypass the gatekeeper."""
+        guild = self.bot.get_guild(self.id)
+        return guild and self.starter_role_id and guild.get_role(self.starter_role_id)
 
     @property
     def channel(self) -> Optional[discord.TextChannel]:
@@ -623,11 +642,12 @@ class GatekeeperSetupRoleView(discord.ui.View):
 
     def __init__(
             self, parent: GatekeeperSetUpView, selected_role: Optional[discord.Role],
-            created_role: Optional[discord.Role]
+            created_role: Optional[discord.Role], starter_role: Optional[discord.Role]
     ) -> None:
         super().__init__(timeout=300.0)
         self.selected_role: Optional[discord.Role] = selected_role
         self.created_role = created_role
+        self.starter_role: Optional[discord.Role] = starter_role
         self.parent = parent
         if selected_role is not None:
             self.role_select.default_values = [discord.SelectDefaultValue.from_role(selected_role)]
@@ -647,6 +667,10 @@ class GatekeeperSetupRoleView(discord.ui.View):
         if role >= interaction.user.top_role:
             return await interaction.response.send_message(
                 f'{tick(False)} Cannot use this role as it is higher than your role in the hierarchy.', ephemeral=True)
+
+        if role == self.starter_role:
+            return await interaction.response.send_message(
+                f'{tick(False)} Cannot use this role as it is the starter role.', ephemeral=True)
 
         channels = [ch for ch in interaction.guild.channels
                     if isinstance(ch, discord.abc.Messageable) and not ch.permissions_for(role).read_messages]
@@ -959,6 +983,7 @@ class GatekeeperSetUpView(discord.ui.View):
         self.gatekeeper = gatekeeper
         self.created_role: Optional[discord.Role] = None
         self.selected_role: Optional[discord.Role] = gatekeeper.role
+        self.selected_starter_role: Optional[discord.Role] = gatekeeper.starter_role
         self.selected_message_id: Optional[int] = gatekeeper.message_id
 
         guild = gatekeeper.bot.get_guild(gatekeeper.id)
@@ -1016,10 +1041,14 @@ class GatekeeperSetUpView(discord.ui.View):
         for option in self.setup_bypass_action.options:
             option.default = option.value == self.gatekeeper.bypass_action
 
+        if self.gatekeeper.starter_role:
+            self.starter_role_select.default_values = [discord.SelectDefaultValue.from_role(self.gatekeeper.starter_role)]
+
         # Initial state before editing it
         self.setup_message.disabled = False
         self.channel_select.disabled = False
         self.setup_role.disabled = False
+        self.starter_role_select.disabled = False
 
         channel_id = self.gatekeeper.channel_id
         if channel_id is None:
@@ -1032,6 +1061,7 @@ class GatekeeperSetUpView(discord.ui.View):
         if self.gatekeeper.started_at is not None:
             self.channel_select.disabled = True
             self.setup_role.disabled = True
+            self.starter_role_select.disabled = True
             self.setup_message.disabled = True
 
         if not enabled:
@@ -1053,7 +1083,49 @@ class GatekeeperSetUpView(discord.ui.View):
         super().stop()
         self.cog._gatekeeper_menus.pop(self.gatekeeper.id, None)  # noqa
 
-    @discord.ui.button(label='Set up Role', style=discord.ButtonStyle.blurple, row=2)
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect, min_values=1, max_values=1,
+        placeholder='Choose the automatically assigned starter role', row=1
+    )
+    async def starter_role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        role = select.values[0]
+        if role >= interaction.guild.me.top_role:
+            return await interaction.response.send_message(
+                f'{tick(False)} Cannot use this role as it is higher than my role in the hierarchy.', ephemeral=True)
+
+        if role >= interaction.user.top_role:
+            return await interaction.response.send_message(
+                f'{tick(False)} Cannot use this role as it is higher than your role in the hierarchy.', ephemeral=True)
+
+        if role == self.selected_role or role == self.created_role:
+            return await interaction.response.send_message(
+                f'{tick(False)} Cannot use the same role for both the starter and the main role.', ephemeral=True)
+
+        async with interaction.channel.typing():
+            embed = discord.Embed(
+                title='Gatekeeper Configuration - Starter Role',
+                description=(
+                    f'{tick(True)} Successfully set the automatically assigned starter role to {role.mention}.'
+                ),
+                colour=helpers.Colour.lime_green()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        self.selected_starter_role = role
+        if self.selected_starter_role is not None:
+            await self.gatekeeper.edit(starter_role_id=self.selected_starter_role.id)
+
+        self.update_state()
+        await interaction.message.edit(view=self)
+
+    @discord.ui.select(placeholder='Select a bypass action...', row=2, min_values=1, max_values=1, options=[])
+    async def setup_bypass_action(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        await interaction.response.defer(ephemeral=True)
+        value: Literal['ban', 'kick'] = select.values[0]  # type: ignore
+        await self.gatekeeper.edit(bypass_action=value)
+        await interaction.followup.send(f'{tick(True)} Successfully set bypass action to {value}', ephemeral=True)
+
+    @discord.ui.button(label='Set up Role', style=discord.ButtonStyle.blurple, row=3)
     async def setup_role(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         assert interaction.message is not None
 
@@ -1061,8 +1133,7 @@ class GatekeeperSetUpView(discord.ui.View):
             return await interaction.response.send_message(
                 f'{tick(False)} Bot requires Manage Roles permission for this to work.')
 
-        view = GatekeeperSetupRoleView(self, self.selected_role, self.created_role)
-
+        view = GatekeeperSetupRoleView(self, self.selected_role, self.created_role, self.selected_starter_role)
         embed = discord.Embed(
             title='Gatekeeper Configuration - Role',
             description=(
@@ -1084,7 +1155,7 @@ class GatekeeperSetUpView(discord.ui.View):
         self.update_state()
         await interaction.message.edit(view=self)
 
-    @discord.ui.button(label='Send Starter Message', style=discord.ButtonStyle.blurple, row=2)
+    @discord.ui.button(label='Send Starter Message', style=discord.ButtonStyle.blurple, row=3)
     async def setup_message(self, interaction: discord.Interaction, button: discord.ui.Button):  # noqa
         assert interaction.message is not None
 
@@ -1131,14 +1202,7 @@ class GatekeeperSetUpView(discord.ui.View):
         self.update_state()
         await interaction.message.edit(view=self)
 
-    @discord.ui.select(placeholder='Select a bypass action...', row=1, min_values=1, max_values=1, options=[])
-    async def setup_bypass_action(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
-        await interaction.response.defer(ephemeral=True)
-        value: Literal['ban', 'kick'] = select.values[0]  # type: ignore
-        await self.gatekeeper.edit(bypass_action=value)
-        await interaction.followup.send(f'{tick(True)} Successfully set bypass action to {value}', ephemeral=True)
-
-    @discord.ui.button(label='Auto', style=discord.ButtonStyle.blurple, row=3)
+    @discord.ui.button(label='Auto', style=discord.ButtonStyle.blurple, row=4)
     async def setup_auto(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         assert interaction.message is not None
 
@@ -1162,7 +1226,7 @@ class GatekeeperSetUpView(discord.ui.View):
         self.update_state()
         await interaction.message.edit(view=self)
 
-    @discord.ui.button(label='Enable', style=discord.ButtonStyle.green, row=3)
+    @discord.ui.button(label='Enable', style=discord.ButtonStyle.green, row=4)
     async def toggle_flag(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:  # noqa
         assert interaction.message is not None
 
@@ -3058,6 +3122,8 @@ class Mod(commands.Cog):
                 '- A channel that locked users will see but regular users will not.\n'
                 '- A role that is assigned when users join.\n'
                 '- A message that the bot sends in the channel with the verify button.\n\n'
+                'Optional things:\n'
+                '- A role that is assigned when users finish the verification. (Starter Role)\n\n'
                 'There are also settings to help configure some aspects of it:\n'
                 '- "Auto" automatically triggers the gatekeeper if N members join in a span of M seconds\n'
                 '- "Bypass Action" configures what action is taken when a user talks or joins voice before verifying\n\n'
