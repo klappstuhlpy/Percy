@@ -5,6 +5,7 @@ import random
 import re
 import traceback
 import warnings
+from operator import attrgetter
 from typing import TYPE_CHECKING, Any, Optional, Self, List, Dict, Literal, TypedDict, Tuple
 
 import discord
@@ -1072,6 +1073,10 @@ class Polls(commands.Cog):
         await message.edit(embed=poll.to_embed(), view=create_view(poll))
 
         if ping:
+            if not channel.permissions_for(interaction.guild.me).manage_roles:
+                return await interaction.followup.send(
+                    f'{tick(False)} I do not have the `Manage Roles` permission to manage the ping role for users.')
+
             view = discord.ui.View(timeout=None)
             view.add_item(PollRolePingButton(config.poll_ping_role_id))
             await ping_message.edit(
@@ -1443,7 +1448,7 @@ class Polls(commands.Cog):
         polls.command,
         name='debug',
         description='Refactor all existing Polls in this guild and reattach the views.',
-        cooldown=commands.CooldownMap(rate=1, per=15.0, key=lambda i: i.guild_id),
+        cooldown=commands.CooldownMap(rate=1, per=15.0, key=attrgetter('guild_id')),
         guild_only=True
     )
     @commands.permissions(user=commands.PermissionTemplate.mod)

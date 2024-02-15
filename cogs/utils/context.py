@@ -231,12 +231,12 @@ class Context(commands.Context):
         return ContextResponse(self)
 
     @property
-    def user(self) -> discord.User:
-        """Returns the author of the message as an :class:`discord.User`."""
-        return self.author._user  # noqa
+    def user(self) -> discord.Member:
+        """Alias to the author attribute."""
+        return self.author
 
     @property
-    def client(self) -> 'commands.Bot':
+    def client(self) -> Percy:
         """Returns the client."""
         return self.bot
 

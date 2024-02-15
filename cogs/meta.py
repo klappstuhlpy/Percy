@@ -23,7 +23,7 @@ from lru import LRU
 
 from .utils import fuzzy, helpers, commands
 from .utils.converters import Prefix, get_asset_url
-from .utils.formats import plural, format_date
+from .utils.formats import plural, format_date, truncate
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import (
     PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand,
@@ -38,19 +38,33 @@ if TYPE_CHECKING:
 COMMAND_ICON_URL = 'https://images.klappstuhl.me/gallery/rWgaVHMMpl.png'
 INFO_ICON_URL = 'https://images.klappstuhl.me/gallery/zxfezkjkSp.png'
 
+INLINE_DOCSTRING = re.compile(r'\n(#+)')
+
 
 def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
     if not s1 and not s2:
-        return '*No help found.*'
+        return '*Command undocumented.*'
+
+    if s1:
+        s1 = INLINE_DOCSTRING.sub(r'\1', s1)
+    if s2:
+        s2 = INLINE_DOCSTRING.sub(r'\1', s2)
 
     if s1 == s2:
         return inspect.cleandoc(s1)
-
+    if s1 and s2:
+        return inspect.cleandoc(f'{s1}\n\n{s2}')
     if s1 or s2:
         return inspect.cleandoc(s1 or s2)
 
-    if s1 and s2:
-        return inspect.cleandoc(f'{s1}\n\n{s2}')
+
+def cooldown_key(s: str) -> str:
+    try:
+        KEYWORD_REGEX = re.compile(r'(guild|user|member|author)')
+        matches = KEYWORD_REGEX.findall(s.lower())
+        return ', '.join(t.title() for t in sorted(matches)) or 'N/A'
+    except:  # noqa
+        return 'N/A'
 
 
 def can_close_threads(ctx: GuildContext) -> bool:
@@ -184,7 +198,7 @@ class CategorySelect(discord.ui.Select):
 
 
 class FrontHelpPaginator(BasePaginator[str]):
-
+    """A Paginator that is used for the Front Page of the Help Command."""
     async def format_page(self, entries: List, /) -> discord.Embed:
         prefix: str = getattr(self.ctx, 'safe_prefix', '/')
         embed = discord.Embed(
@@ -306,17 +320,78 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
-    async def can_run(self, _cmd: PartialCommand) -> bool:
+    async def app_command_can_run(self, cmd: app_commands.Command, /) -> bool:
+        """|coro|
+
+        Checks whether a slash command can run in the current context.
+        This checks the permissions the command requires.
+
+        Note
+        ----
+        This is very basic and only works for commands that use my own @command decorator to set permissions,
+        that implements an easy access and readable functionallity for the permissions.
+
+        Parameters
+        -----------
+        cmd: :class:`app_commands.Command`
+            The slash command to check.
+
+        Returns
+        --------
+        :class:`bool`
+            Whether the slash command can run or not.
+        """
+        command_permissions: Optional[list[str]] = getattr(cmd.callback, '__user_permissions__', None)
+        if command_permissions is None:
+            return True
+
+        channel_permissions = self.context.channel.permissions_for(self.context.author)
+
+        if all(getattr(channel_permissions, perm, False) for perm in command_permissions):
+            return True
+
+        return False
+
+    async def can_run(self, cmd: PartialCommand) -> bool:
+        """|coro|
+
+        Checks whether a command can run in the current context.
+
+        Parameters
+        -----------
+        cmd: :class:`.commands.PartialCommand`
+            The command to check.
+
+        Returns
+        --------
+        :class:`bool`
+            Whether the command can run or not.
+        """
         try:
-            if not isinstance(_cmd, App):
-                return await _cmd.can_run(self.context)
-            else:
-                return True
+            if isinstance(cmd, App):
+                return await self.app_command_can_run(cmd)
+            return await cmd.can_run(self.context)
         except:  # noqa
             return False
 
     async def _get_all_subcommands(self, command: PartialCommand | PartialCommandGroup, names: set[str]) -> set[PartialCommand]:
-        """Returns all subcommands of a command."""
+        """|coro|
+
+        Returns all subcommands of a command.
+
+        Parameters
+        -----------
+        command: Union[:class:`.commands.PartialCommand`, :class:`.commands.PartialCommandGroup`]
+            The command to get the subcommands from.
+        names: set[:class:`str`]
+            A set of already used command names.
+            This is essential to avoid duplicates with, for example, hybrid commands.
+
+        Returns
+        --------
+        set[:class:`.commands.PartialCommand`]
+            The subcommands of the command.
+        """
         subcommands: set[PartialCommand] = set()
 
         async def add_subcommand(cmd: PartialCommand):
@@ -474,6 +549,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if cog is None:
                 continue
 
+            if all(getattr(cmd, 'hidden', False) for cmd in children):
+                continue
+
             grouped[cog] = list(children)
 
         await FrontHelpPaginator.start(self.context, entries=grouped, per_page=1, groups=grouped)
@@ -511,7 +589,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         str
             The command flag formatting.
         """
-        if isinstance(command, (app_commands.commands.Command, app_commands.commands.Group)):
+        if isinstance(command, App):
             return [] if descripted else ''
 
         flags = command.clean_params.get('flags')
@@ -611,6 +689,19 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if isinstance(command, App):
             embed.add_field(name='**Slash Command**', value='Can only be used as a slash command.', inline=False)
+
+        if getattr(command, 'cooldown', None) is not None:
+            try:
+                # Hybrid/Text Commands
+                for_type = command._buckets._type.name.title()  # noqa
+            except AttributeError:
+                # App Commands
+                for_type = cooldown_key(str(command.cooldown.key))  # noqa
+            embed.add_field(
+                name='**Cooldown**',
+                value=f'**{command.cooldown.rate}x** per **{plural(command.cooldown.per):second}** for {for_type}',
+                inline=False
+            )
 
         if getattr(command, 'commands', None):
             resolved_sub_commands = [
@@ -777,10 +868,9 @@ class GuildUserJoinView(discord.ui.View):
 
 @dataclass
 class SnipedMessage:
-    message: discord.Message
-    before: Optional[discord.Message]
-    after: Optional[discord.Message]
     timestamp: datetime
+    before: Optional[discord.Message] = None
+    after: Optional[discord.Message] = None
 
 
 class Meta(commands.Cog):
@@ -850,12 +940,11 @@ class Meta(commands.Cog):
     @commands.guilds(PH_GUILD_ID)
     async def solved(self, ctx: GuildContext):
         """Marks a thread as solved."""
-
         assert isinstance(ctx.channel, discord.Thread)
 
         if can_close_threads(ctx):
             await ctx.message.add_reaction(tick(True))
-            await self.mark_as_solved(ctx.channel, ctx.user)
+            await self.mark_as_solved(ctx.channel, ctx.author._user)  # noqa
         else:
             msg = f'<@!{ctx.channel.owner_id}>, would you like to mark this thread as solved? This has been requested by {ctx.author.mention}.'
             confirm = await ctx.prompt(msg, author_id=ctx.channel.owner_id, timeout=300.0)
@@ -884,7 +973,7 @@ class Meta(commands.Cog):
         aliases=['src'],
         description='Shows parts of the Bots Source Command.'
     )
-    async def source(self, ctx: Context, *, command: Optional[str] = None):  # noqa
+    async def source(self, ctx: Context, *, command: Optional[str] = None):
         """Displays my full source code or for a specific command.
 
         To display the source code of a subcommand, you can separate it by
@@ -922,12 +1011,14 @@ class Meta(commands.Cog):
         embed.set_footer(text=f'{location}:{firstlineno}')
         await ctx.send(embed=embed)
 
-    @app_commands.command(name='help', description='Get help for a command or module.')
-    @app_commands.guild_only()
+    @commands.command(
+        app_commands.command,
+        name='help',
+        description='Get help for a command or module.',
+        guild_only=True
+    )
     @app_commands.describe(module='Get help for a module.', command='Get help for a command')
-    async def _help(
-            self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None
-    ):
+    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None):
         """Shows help for a command or module."""
         ctx: Context = await self.bot.get_context(interaction)
         await ctx.send_help(module or command)
@@ -948,8 +1039,7 @@ class Meta(commands.Cog):
             cmds = list(itertools.chain.from_iterable(self._help_autocomplete_cache.values()))
 
         results = fuzzy.finder(current, [c.qualified_name for c in cmds])
-        choices = [app_commands.Choice(name=res, value=res) for res in results[:25]]
-        return choices
+        return [app_commands.Choice(name=res, value=res) for res in results[:25]]
 
     @_help.autocomplete('module')
     async def help_cog_autocomplete(
@@ -974,9 +1064,9 @@ class Meta(commands.Cog):
     @commands.command(
         info.command,
         name='features',
-        description='Shows the features of a guild.'
+        description='Shows the features of a guild.',
+        guild_only=True
     )
-    @commands.guild_only()
     async def info_features(self, ctx: Context, guild_id: str = None):
         """Shows the features of a guild."""
 
@@ -999,13 +1089,12 @@ class Meta(commands.Cog):
     @commands.command(
         info.command,
         name='user',
-        description='Shows info about a user.'
+        description='Shows info about a user.',
+        guild_only=True
     )
-    @commands.guild_only()
     @app_commands.describe(user_id='The user ID to show info about. (Default: You)')
     async def info_user(self, ctx: Context, user_id: str = None):
         """Shows info about a user."""
-
         if ctx.interaction:
             await ctx.defer()
 
@@ -1135,9 +1224,9 @@ class Meta(commands.Cog):
     @commands.command(
         info.command,
         name='server',
-        description='Shows info about a server.'
+        description='Shows info about a server.',
+        guild_only=True
     )
-    @commands.guild_only()
     @app_commands.describe(guild_id='The ID of the server to show info about. (Default: Current server)')
     async def info_server(self, ctx: Context, guild_id: str = None):
         """Shows info about the current or a specified server."""
@@ -1237,7 +1326,11 @@ class Meta(commands.Cog):
         embed.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=embed, view=GuildUserJoinView(ctx.author))
 
-    @commands.command()
+    @commands.command(
+        description='Shows the avatar of a user.',
+        aliases=['av'],
+    )
+    @app_commands.describe(user='The user to show the avatar of. (Default: You)')
     async def avatar(self, ctx: Context, *, user: Union[discord.Member, discord.User] = None):
         """Shows a user's enlarged avatar (if possible)."""
         user = user or ctx.author
@@ -1284,16 +1377,12 @@ class Meta(commands.Cog):
     @commands.command(
         commands.group,
         name='prefix',
-        description='Manages the server\'s custom prefixes.',
+        description='Manages or show the server\'s custom prefixes.',
         invoke_without_command=True,
         guild_only=True
     )
     async def prefix(self, ctx: Context):
-        """Manages the server's custom prefixes.
-        If called without a subcommand, this will list the currently set
-        prefixes.
-        """
-
+        """Manages the server's custom prefixes."""
         prefixes = self.bot.get_guild_prefixes(ctx.guild)
         del prefixes[1]
 
@@ -1345,7 +1434,6 @@ class Meta(commands.Cog):
         use this to remove prefixes from the default set as well.
         You must have Manage Server permission to use this command.
         """
-
         current_prefixes = self.bot.get_raw_guild_prefixes(ctx.guild.id)
 
         try:
@@ -1373,7 +1461,6 @@ class Meta(commands.Cog):
         After this, the bot will listen to only mention prefixes.
         You must have Manage Server permission to use this command.
         """
-
         await self.bot.set_guild_prefixes(ctx.guild, [])
         await ctx.stick(True, 'Cleared all prefixes.')
 
@@ -1383,7 +1470,6 @@ class Meta(commands.Cog):
     )
     async def ping(self, ctx: Context):
         """Shows some Client and API latency information."""
-
         message = None
 
         def build_embed(content: str) -> discord.Embed:
@@ -1461,7 +1547,7 @@ class Meta(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(
-        commands.hybrid_group,
+        commands.group,
         name='permissions',
         description='Shows permissions for a member or the bot in a specific channel.',
         guild_only=True
@@ -1477,7 +1563,7 @@ class Meta(commands.Cog):
         description='Shows a member\'s permissions in a specific channel.',
         guild_only=True
     )
-    async def user(
+    async def permissions_user(
             self,
             ctx: GuildContext,
             member: discord.Member = None,
@@ -1500,42 +1586,14 @@ class Meta(commands.Cog):
         description='Shows the bot\'s permissions in a specific channel.',
         guild_only=True
     )
-    async def bot(self, ctx: GuildContext, *, channel: Union[discord.abc.GuildChannel, discord.Thread] = None):
+    async def permissions_bot(self, ctx: GuildContext, *, channel: Union[discord.abc.GuildChannel, discord.Thread] = None):
         """Shows the bots permissions in a specific channel.
         If no channel is given then it uses the current one.
         This is a good way of checking if the bot has the permissions needed
         to execute the commands it wants to execute.
         """
-
         channel = channel or ctx.channel
         member = ctx.guild.me
-        await self.say_permissions(ctx, member, channel)
-
-    @commands.command(
-        commands.core_command,
-        name='debug',
-        description='Shows permission resolution for a channel and an optional author.',
-        guild_only=True
-    )
-    async def debug(self, ctx: Context, guild_id: int, channel_id: int, author_id: int = None):
-        """Shows permission resolution for a channel and an optional author."""
-
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            raise commands.BadArgument('Guild not found.')
-
-        channel = guild.get_channel(channel_id)
-        if channel is None:
-            raise commands.BadArgument('Channel not found.')
-
-        if author_id is None:
-            member = guild.me
-        else:
-            member = await self.bot.get_or_fetch_member(guild, author_id)
-
-        if member is None:
-            raise commands.BadArgument('Member not found.')
-
         await self.say_permissions(ctx, member, channel)
 
     @commands.command(
@@ -1548,18 +1606,17 @@ class Meta(commands.Cog):
         """Snipes a deleted message.
         If no channel is given, then it uses the current one.
         """
-
         channel = channel or ctx.channel
         try:
-            obj = sorted(self.snipe_del_chache[ctx.guild.id][channel.id],
-                         key=lambda x: x.timestamp, reverse=True)[0]
-        except KeyError:
+            obj = self.snipe_del_chache[ctx.guild.id][channel.id][0]
+        except (IndexError, AttributeError, KeyError):
             raise commands.CommandError('I have not sniped any messages in this channel.')
 
-        embed = discord.Embed(description=obj.message.clean_content, color=self.bot.colour.darker_red(),
-                              timestamp=obj.timestamp)
-        embed.set_author(name=obj.message.author, icon_url=get_asset_url(obj.message.author))
-        embed.add_field(name='Message', value=obj.message.jump_url)
+        embed = discord.Embed(
+            description=f'### Content\n{truncate(str(obj.before.clean_content), 4000)}',
+            color=self.bot.colour.darker_red(),
+            timestamp=obj.timestamp)
+        embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))
         embed.set_footer(text='Deleted at')
         await ctx.send(embed=embed)
 
@@ -1573,19 +1630,22 @@ class Meta(commands.Cog):
         """Snipes a deleted edited.
         If no channel is given, then it uses the current one.
         """
-
         channel = channel or ctx.channel
         try:
-            obj = sorted(self.snipe_edit_chache[ctx.guild.id][channel.id],
-                         key=lambda x: x.timestamp, reverse=True)[0]
-        except KeyError:
+            obj = self.snipe_edit_chache[ctx.guild.id][channel.id][0]
+        except (IndexError, AttributeError, KeyError):
             raise commands.CommandError('I have not sniped any messages in this channel.')
 
-        embed = discord.Embed(color=self.bot.colour.darker_red(), timestamp=obj.timestamp)
-        embed.set_author(name=obj.message.author, icon_url=get_asset_url(obj.message.author))
-        embed.add_field(name='Message', value=obj.message.jump_url)
-        embed.add_field(name='Before', value=obj.before.clean_content, inline=False)
-        embed.add_field(name='After', value=obj.after.clean_content, inline=False)
+        embed = discord.Embed(
+            description=f'### Before\n'
+                        f'{truncate(str(obj.before.clean_content), 2000)}\n'
+                        f'### After\n'
+                        f'{truncate(str(obj.after.clean_content), 2000)}',
+            color=self.bot.colour.darker_red(),
+            timestamp=obj.timestamp
+        )
+        embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))
+        embed.add_field(name='Message', value=obj.before.jump_url)
         embed.set_footer(text='Edited at')
         await ctx.send(embed=embed)
 
@@ -1594,30 +1654,18 @@ class Meta(commands.Cog):
         if message.guild is None:
             return
 
-        if message.guild.id not in self.snipe_del_chache:
-            self.snipe_del_chache[message.guild.id] = {}
-
-        if message.channel.id not in self.snipe_del_chache[message.guild.id]:
-            self.snipe_del_chache[message.guild.id][message.channel.id] = []
-
-        obj = SnipedMessage(message=message, timestamp=discord.utils.utcnow(), after=None, before=None)
-
-        self.snipe_del_chache[message.guild.id][message.channel.id].append(obj)
+        cache = self.snipe_del_chache.setdefault(message.guild.id, {})
+        cache = cache.setdefault(message.channel.id, [])
+        cache.append(SnipedMessage(before=message, timestamp=discord.utils.utcnow()))
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if before.guild is None:
             return
 
-        if before.guild.id not in self.snipe_edit_chache:
-            self.snipe_edit_chache[before.guild.id] = {}
-
-        if before.channel.id not in self.snipe_edit_chache[before.guild.id]:
-            self.snipe_edit_chache[before.guild.id][before.channel.id] = []
-
-        obj = SnipedMessage(message=after, timestamp=discord.utils.utcnow(), after=after, before=before)
-
-        self.snipe_edit_chache[before.guild.id][before.channel.id].append(obj)
+        cache = self.snipe_edit_chache.setdefault(before.guild.id, {})
+        cache = cache.setdefault(before.channel.id, [])
+        cache.append(SnipedMessage(after=after, before=before, timestamp=discord.utils.utcnow()))
 
 
 async def setup(bot: Percy):

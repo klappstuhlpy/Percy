@@ -4,7 +4,7 @@ import types
 from collections import defaultdict
 from collections.abc import Awaitable, Hashable
 from functools import partial
-from typing import Any, Callable, Coroutine, TYPE_CHECKING
+from typing import Any, Callable, Coroutine, TYPE_CHECKING, ClassVar
 from weakref import WeakValueDictionary
 
 from cogs.utils import function
@@ -35,15 +35,13 @@ class LockedResourceError(RuntimeError):
         The id of the resource.
     """
 
+    BYPASS_LOGGING: ClassVar[bool] = True
+
     def __init__(self, namespace: str, resource_id: Hashable):
         self.namespace = namespace
         self.id = resource_id
 
-        # Do not log this error because we use this only to indicate
-        # if a resource is locked or not and handle it accordingly
-        self.bypass_log = True
-
-        super().__init__(f'Cannot operate on `{self.namespace.lower()}` [{self.id}] due to being locked.')
+        super().__init__(f'Cannot operate on `{self.namespace.lower()}` [{self.id}] due to being locked. Please wait and try again.')
 
 
 class SharedEvent:

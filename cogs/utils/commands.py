@@ -198,29 +198,30 @@ def command(
     if not extras.get('examples'):
         extras['examples'] = examples
 
-    def decorator(f: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
-        f = func(
+    def decorator(inner: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
+        inner = func(
             name=name,
             extras=extras,
             description=description,
             nsfw=nsfw,
             **kwargs
-        )(f)
+        )(inner)
 
         # Wrap the command with the permission template and other check decorators
         if perm_template:
-            f = permissions()(f)
+            inner = permissions()(inner)
 
-        if isinstance(f, App):
+        if isinstance(inner, App):
             if cooldown:
-                f = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(f)
+                inner.cooldown = cooldown
+                inner = app_commands.checks.cooldown(rate=cooldown.rate, per=cooldown.per, key=cooldown.key)(inner)
             if guild_only:
-                f = app_commands.guild_only()(f)
+                inner = app_commands.guild_only()(inner)
         else:
             if cooldown:
-                f = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(f)
+                inner = commands.cooldown(rate=cooldown.rate, per=cooldown.per, type=cooldown.type)(inner)
             if guild_only:
-                f = commands.guild_only()(f)
+                inner = commands.guild_only()(inner)
 
-        return f
+        return inner
     return decorator

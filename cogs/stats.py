@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import gc
 import io
@@ -19,6 +20,7 @@ import asyncpg
 import discord
 import psutil
 import pygit2
+from discord import app_commands
 from discord.ext import tasks
 from sqlalchemy import func, Integer, String, DateTime, Boolean, Column, select, join, case, BigInteger, Result
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,13 +30,12 @@ from typing_extensions import Annotated
 from cogs.utils.paginator import FilePaginator
 from launcher import get_logger
 from .meta import COMMAND_ICON_URL, INFO_ICON_URL
-from .utils import formats, timetools, helpers, commands
+from .utils import formats, timetools, helpers, commands, render
 from .utils.constants import BOT_BASE_FOLDER
 from .utils.converters import get_asset_url, medal_emoji
 from .utils.formats import censor_object
-from .utils.lock import lock
+from .utils.lock import lock, LockedResourceError
 from .utils.tasks import executor
-from .utils.render import Render
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -124,8 +125,6 @@ class Stats(commands.Cog):
 
         self._logging_queue = asyncio.Queue()
         self.logging_worker.start()
-
-        self.render: Render = Render  # type: ignore
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -262,7 +261,7 @@ class Stats(commands.Cog):
             common = counter.most_common()[limit:]
             title = f'Bottom `{limit}` Commands'
 
-        images = self.render.generate_bar_chart(
+        images = render.generate_bar_chart(
             dict(sorted({k: v for k, v in common}.items(), key=lambda item: item[1], reverse=True)),
             title=f'{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)')
         await ctx.send(f'## {title}')
@@ -278,7 +277,7 @@ class Stats(commands.Cog):
         minutes = delta.total_seconds() / 60
         total = sum(self.bot.socket_stats.values())
         cpm = total / minutes
-        images = self.render.generate_bar_chart(
+        images = render.generate_bar_chart(
             dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
             title=f'{total:,} socket events observed ({cpm:.2f}/minute)')
         await FilePaginator.start(ctx, entries=images, per_page=1)
@@ -1118,11 +1117,11 @@ class Stats(commands.Cog):
         table.add_rows(
             (strip_memory_id(str(task.get_coro())), task.get_name(), str(task.get_coro()).split(' ')[2]) for task in
             _tasks)
-        render = table.render()
-        render = re.sub(r'```\w?.*', '', render, re.RegexFlag.M)
+        rendered = table.render()
+        rendered = re.sub(r'```\w?.*', '', rendered, re.RegexFlag.M)
 
         pages = commands.Paginator(prefix='```ansi', suffix='```', max_size=2000)
-        for line in render.splitlines():
+        for line in rendered.splitlines():
             pages.add_line(line)
 
         for page in pages.pages:
@@ -1167,9 +1166,9 @@ class Stats(commands.Cog):
         table = formats.TabularData()
         table.set_columns(headers)
         table.add_rows(list(r.values()) for r in records)
-        render = table.render()
+        rendered = table.render()
 
-        fp = io.BytesIO(render.strip().encode('utf-8'))
+        fp = io.BytesIO(rendered.strip().encode('utf-8'))
         await ctx.send('Too many results...', file=discord.File(fp, 'results.sql'))
 
     @commands.command(
@@ -1306,7 +1305,7 @@ class Stats(commands.Cog):
             table = formats.TabularData()
             table.set_columns(['Command', "uses"])
             table.add_rows(tup for tup in as_data)
-            render = table.render()
+            rendered = table.render()
 
             embed = discord.Embed(title='Summary', colour=discord.Colour.green())
             embed.set_footer(text='Since').timestamp = discord.utils.utcnow() - datetime.timedelta(days=days)
@@ -1324,7 +1323,7 @@ class Stats(commands.Cog):
 
             await ctx.send(
                 embed=embed,
-                file=discord.File(io.BytesIO(render.encode()), filename='full_results.accesslog')
+                file=discord.File(io.BytesIO(rendered.encode()), filename='full_results.accesslog')
             )
 
     @commands.command(
@@ -1390,8 +1389,8 @@ class Stats(commands.Cog):
                 reverse=True
             )
             table.add_rows(data)
-            render = table.render()
-            await ctx.safe_send(f'```\n{render}\n```')
+            rendered = table.render()
+            await ctx.safe_send(f'```\n{rendered}\n```')
 
 
 old_on_error = commands.Bot.on_error
@@ -1402,8 +1401,7 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None: 
     if isinstance(exc, commands.CommandInvokeError):
         return
 
-    # Check if there is a 'bypass_log' attribute in the exception object
-    if hasattr(exc, 'bypass_log'):
+    if hasattr(exc, 'BYPASS_LOGGING'):
         return
 
     embed = discord.Embed(title='<:warning:1113421726861238363> Event Error', colour=0x99002b)
@@ -1430,23 +1428,24 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     command = interaction.command
     error = getattr(error, 'original', error)
 
-    if isinstance(error, (discord.Forbidden, discord.NotFound)):
-        return
-
-    hook: discord.Webhook = interaction.client.stats_webhook
     embed = discord.Embed(
         title='<:warning:1113421726861238363> App Command Error', timestamp=interaction.created_at, colour=0x99002b)
 
     if command is not None:
-        # Check if there is a 'bypass_log' attribute in the exception object
-        if to_bypass := command.extras.get('bypass_error', None):
-            if isinstance(error, to_bypass):
-                return
-
         if command._has_any_error_handlers():  # noqa
             return
 
         embed.add_field(name='Name', value=command.qualified_name)
+
+    # Check for errors we don't want to log
+    if isinstance(error, (discord.Forbidden, discord.NotFound)):
+        return
+    elif isinstance(error, (app_commands.CommandOnCooldown, app_commands.CommandInvokeError, app_commands.TransformerError,
+                            LockedResourceError, app_commands.BotMissingPermissions)):
+        sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        with contextlib.suppress(discord.HTTPException):
+            await sender(f'<:redTick:1079249771975413910> {str(error)}', ephemeral=True)
+        return
 
     embed.add_field(
         name='User',
@@ -1468,7 +1467,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     embed.set_footer(text='Occured at')
 
     try:
-        await hook.send(embed=embed)
+        await interaction.client.stats_webhook.send(embed=embed)
     except (discord.HTTPException, ValueError):
         pass
 

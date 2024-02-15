@@ -11,7 +11,6 @@ import aiohttp
 import discord
 from aiohttp import ClientConnectorError
 from discord import app_commands
-from discord.ext.commands._types import BotT
 from discord.utils import MISSING
 
 from bot import Percy
@@ -352,22 +351,6 @@ class Documentation(commands.Cog):
         self.inventory_scheduler.cancel_all()
         await self.item_fetcher.clear()
 
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        with contextlib.suppress(discord.HTTPException):
-            if isinstance(error.__cause__, LockedResourceError):
-                await interaction.response.send_message(
-                    '<:discord_info:1113421814132117545> The documentation inventory is currently being '
-                    'updated. Please try again later.'
-                )
-
-    async def cog_command_error(self, ctx: Context[BotT], error: Exception) -> None:
-        with contextlib.suppress(discord.HTTPException):
-            if isinstance(error.__cause__, LockedResourceError):
-                await ctx.send(
-                    '<:discord_info:1113421814132117545> The documentation inventory is currently being '
-                    'updated. Please try again later.'
-                )
-
     async def documentation_autocomplete(
             self, interaction: discord.Interaction, current: str  # noqa
     ) -> list[app_commands.Choice[str]]:
@@ -625,8 +608,7 @@ class Documentation(commands.Cog):
         invoke_without_command=True
     )
     @app_commands.describe(
-        symbol_name='The symbol to look up documentation for.',
-        package='The package to look up documentation for.')
+        symbol_name='The symbol to look up documentation for.', package='The package to look up documentation for.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
     @lock_func(refresh_inventories, raise_error=True)
     async def docs_group(
@@ -770,8 +752,8 @@ class Documentation(commands.Cog):
         aliases=['rtfd'],
         description='Searches some documentations for the given query. (Short)'
     )
-    @app_commands.describe(symbol_name='The object to search for',
-                           package='The package to search in.')
+    @app_commands.describe(
+        symbol_name='The object to search for', package='The package to search in.')
     @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
     @lock_func(refresh_inventories, raise_error=True)
     async def rtfm(

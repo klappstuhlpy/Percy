@@ -1,6 +1,6 @@
 from bot import Percy
-from cogs.comic._cog import ComicPulls
+from cogs.comic._cog import Comics
 
 
 async def setup(bot: Percy):
-    await bot.add_cog(ComicPulls(bot))
+    await bot.add_cog(Comics(bot))

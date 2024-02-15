@@ -14,7 +14,7 @@ def serialize_resource_id_from_brand(bound_args: dict) -> str:
 
 
 class ComicCache:
-    """Cache for the Comicpulls cog."""
+    """Cache for the Comics cog."""
 
     def __init__(self, namespace: str = 'comic'):
         self.namespace: str = namespace

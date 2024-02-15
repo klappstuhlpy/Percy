@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime
+import traceback
 from operator import attrgetter
 from typing import List, Optional, Union, Callable
 
@@ -14,6 +15,7 @@ from cogs.comic._cache import ComicCache
 from cogs.comic._client import Marvel
 from cogs.comic._data import ComicFeed, Brand, GenericComic, Format, GenericComicMessage
 from cogs.utils import cache, commands
+from cogs.utils.context import tick
 from cogs.utils.helpers import AcquireProtocol
 from cogs.utils.lock import lock_arg, lock_func, lock, LockedResourceError
 from cogs.comic._parser import Parser
@@ -26,7 +28,7 @@ log = get_logger(__name__)
 AnyComic = Union[GenericComic, GenericComicMessage]
 
 
-class ComicPulls(commands.Cog, name='Comic Feeds'):
+class Comics(commands.Cog):
     """Subscribe to weekly comic releases from Marvel and DC!
 
     Publishes lists of new releases at `6 AM`, publish days are configurable.
@@ -60,14 +62,6 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
     async def prev_schedule(self, brand: Brand) -> datetime.datetime:
         return max(i.date if i.date is not None else datetime.datetime.min for i in self.comic_cache.get(brand))
-
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        with contextlib.suppress(discord.HTTPException):
-            if isinstance(error.__cause__, LockedResourceError):
-                await interaction.response.send_message(
-                    '<:discord_info:1113421814132117545> The comic cache is currently being '
-                    'updated. Please try again later.'
-                )
 
     @tasks.loop(hours=6)
     async def auto_fetch_comics(self):
@@ -175,7 +169,6 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
     @lock_arg('Comic.publish', 'config', attrgetter('channel_id'), raise_error=True)
     async def publish_to_feed(self, config: ComicFeed):
         channel = self.bot.get_channel(config.channel_id)
-
         comics = self.comic_cache.get(config.brand)
 
         if comics:
@@ -201,7 +194,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                     msg = await channel.send(embed=embeds[entry.id])
                     instances[entry.id] = entry.to_instance(msg)
 
-            summary_embeds = await self.summary_embed(comics, config.brand, lead_msg)
+            summary_embeds = await self.build_summary_embeds(comics, config.brand, lead_msg)
             summ_msg = await channel.send(
                 embeds=summary_embeds, allowed_mentions=discord.AllowedMentions(roles=True))
             if config.pin and config.format == Format.SUMMARY:
@@ -215,7 +208,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
                 ).set_thumbnail(url=config.brand.icon_url)
             )
 
-    async def summary_embed(self, comics: List[AnyComic], brand: Brand, start: discord.Message = None):
+    async def build_summary_embeds(self, comics: List[AnyComic], brand: Brand, start: discord.Message = None):
         embed, embeds = discord.Embed(colour=brand.colour), []
 
         for fi, cid in enumerate(self.comic_cache.get(brand)):
@@ -270,31 +263,30 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         record = await self.bot.pool.fetchrow(query, guild_id, str(brand))
         return ComicFeed(self, record=record) if record else None
 
-    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True,
-                                extras=dict(bypass_error=app_commands.errors.CheckFailure))
+    comics = app_commands.Group(name='comics', description='Comic feed commands.', guild_only=True)
 
     @commands.command(
         comics.command,
         name='current',
-        description='Lists this week\'s/month\'s comics!',
-        cooldown=commands.CooldownMap(rate=2, per=15.0, key=attrgetter('guild_id'))
+        description='Shows you this week\'s/month\'s comics!',
+        cooldown=commands.CooldownMap(rate=1, per=30.0, key=attrgetter('guild_id'))
     )
-    @app_commands.describe(brand='The comic brand to receive a feed from.')
-    @commands.permissions(user=['manage_channels'])
+    @app_commands.describe(brand='The comic brand to receive the newest feed from.')
     @lock_func(refresh_comics, raise_error=True)
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
-        await interaction.response.defer(
-            ephemeral=not interaction.channel.permissions_for(interaction.user).embed_links)
-
-        embeds = await self.summary_embed(self.comic_cache.get(brand), brand)
-        await interaction.followup.send(embeds=embeds)
+        try:
+            await interaction.response.defer(ephemeral=True)
+            embeds = await self.build_summary_embeds(self.comic_cache.get(brand), brand)
+            await interaction.followup.send(embeds=embeds, ephemeral=True)
+        except:
+            traceback.print_exc()
 
     @commands.command(
         comics.command,
         name='push',
         description='Pushes the latest comic feed to a channel.',
-        cooldown=commands.CooldownMap(rate=2, per=15.0, key=attrgetter('guild_id'))
+        cooldown=commands.CooldownMap(rate=2, per=30.0, key=attrgetter('guild_id'))
     )
     @app_commands.describe(brand='The comic brand to receive a feed from.')
     @commands.permissions(user=['manage_channels'])
@@ -306,18 +298,15 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
 
         config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
-            return await interaction.followup.send(
-                f'<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!')
+            return await interaction.followup.send(f'{tick(False)} You have not set up a **{brand.name}** feed yet in this server!')
 
         if not config:
-            return await interaction.followup.send(
-                f'<:redTick:1079249771975413910> You have not set up a **{brand.name}** feed yet in this server!')
+            return await interaction.followup.send(f'{tick(False)} You have not set up a **{brand.name}** feed yet in this server!')
 
         await self.call_feed(config)
         self.MaybeSkipTask(True)
 
-        await interaction.followup.send(
-            f'<:greenTick:1079249732364406854> Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>')
+        await interaction.followup.send(f'{tick(True)} Feed successfully triggered for **{brand.name}** in <#{config.channel_id}>')
 
     @commands.command(
         comics.command,
@@ -345,8 +334,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         config = await self.get_comic_config(interaction.guild.id, brand)
 
         if config:
-            return await interaction.followup.send(
-                '<:redTick:1079249771975413910> You have already set up a feed for this brand in this server.')
+            return await interaction.followup.send(f'{tick(False)} You have already set up a feed for this brand in this server.')
 
         if channel is None:
             channel = interaction.channel
@@ -367,8 +355,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         self.MaybeSkipTask(True)
 
         await interaction.followup.send(
-            f'<:greenTick:1079249732364406854> Set up **{brand.name}** feed in Channel {channel.mention}.',
-            embed=new_config.to_embed())
+            f'{tick(True)} Set up **{brand.name}** feed in Channel {channel.mention}.', embed=new_config.to_embed())
 
     @commands.command(
         comics.command,
@@ -400,15 +387,13 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
         await interaction.response.defer(ephemeral=True)
         config: ComicFeed = await self.get_comic_config(interaction.guild_id, brand)
         if not config:
-            return await interaction.followup.send(
-                f'<:redTick:1079249771975413910> You have not set up a feed for **{brand.name}** yet in this server!')
+            return await interaction.followup.send(f'{tick(False)} You have not set up a feed for **{brand.name}** yet in this server!')
 
         if reset:
             await config.delete()
             self.MaybeSkipTask(config is not None and self._current_feed and self._current_feed.id == config.id)
             self.get_comic_config.invalidate_containing(str(interaction.guild_id))
-            return await interaction.followup.send(
-                f'<:greenTick:1079249732364406854> Reset the **{brand.name}** feed configuration.', ephemeral=True)
+            return await interaction.followup.send(f'{tick(False)} Reset the **{brand.name}** feed configuration.', ephemeral=True)
 
         if not any([channel, _format, ping, day, pin]):
             return await interaction.followup.send(embed=config.to_embed())
@@ -431,8 +416,7 @@ class ComicPulls(commands.Cog, name='Comic Feeds'):
             self.get_comic_config.invalidate_containing(str(interaction.guild_id))
             self.MaybeSkipTask(True)
 
-            await interaction.followup.send(
-                f'<:greenTick:1079249732364406854> Successfully modified **{brand.name}** feed configuration.')
+            await interaction.followup.send(f'{tick(True)} Successfully modified **{brand.name}** feed configuration.')
 
     @commands.Cog.listener()
     @lock_func(publish_to_feed, wait=True)
