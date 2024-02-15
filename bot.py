@@ -213,12 +213,14 @@ class Percy(commands.Bot):
     def __repr__(self) -> str:
         return (
             f'<Bot id={self.user.id} name={self.user.name!r} '
-            f'discriminator={self.user.discriminator!r} bot={self.user.bot}>')
+            f'discriminator={self.user.discriminator!r} bot={self.user.bot}>'
+        )
 
     @property
     def owner(self) -> discord.User:
         return self.bot_app_info.owner
 
+    # noinspection PyAttributeOutsideInit
     async def setup_hook(self) -> None:
         self.session = aiohttp.ClientSession()
 
@@ -263,7 +265,6 @@ class Percy(commands.Bot):
             when = datetime.datetime.now() + datetime.timedelta(seconds=duration)
             await self.reminder.create_timer(when, 'blacklist', object_id=obj)
 
-        await self.blacklist.put(object_id, True)
         if isinstance(obj, int):
             await self.blacklist.put(obj, True)
         else:
@@ -334,14 +335,15 @@ class Percy(commands.Bot):
         Args:
             timer (Timer): The Timer instance that completed.
         """
-
         object_id = timer.kwargs.get('object_id')
 
         if object_id:
             await self.remove_from_blacklist(object_id)
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
-        with suppress(discord.errors.Forbidden):
+        error = getattr(error, 'original', error)
+
+        with suppress(discord.Forbidden):
             if isinstance(error, commands.NoPrivateMessage):
                 await ctx.author.send('This command cannot be used in private messages.')
             elif isinstance(error, commands.DisabledCommand):
@@ -357,18 +359,15 @@ class Percy(commands.Bot):
                 await ctx.send(f'You are missing a required argument: `{error.param.name}`')
             elif isinstance(error, commands.TooManyArguments):
                 await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
-            elif isinstance(error, commands.CommandInvokeError):
-                original = error.__cause__
-                if not isinstance(original, discord.HTTPException):
-                    log.exception('In %s:', ctx.command.qualified_name, exc_info=original)
-                elif isinstance(original, LockedResourceError):
-                    await ctx.stick(False, str(error))
-                else:
-                    await ctx.send(str(error))
+            elif not isinstance(error, discord.HTTPException):
+                log.exception('In %s:', ctx.command.qualified_name, exc_info=error)
+            elif isinstance(error, LockedResourceError):
+                await ctx.stick(False, str(error))
             elif isinstance(error, (
                     commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
             )):
                 await ctx.send(str(error))
+
     # UTILS
 
     @staticmethod
@@ -424,7 +423,6 @@ class Percy(commands.Bot):
         Optional[Member]
             The member or None if not found.
         """
-
         member = guild.get_member(member_id)
         if member is not None:
             return member
@@ -461,7 +459,6 @@ class Percy(commands.Bot):
         Member
             The resolved members.
         """
-
         needs_resolution = []
         for member_id in member_ids:
             member = guild.get_member(member_id)
