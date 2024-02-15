@@ -36,9 +36,9 @@ class AuditLog(commands.Cog):
 
         attr = getattr(target, 'mention', None) or getattr(target, 'name', None) or getattr(target, 'id', None)
         if attr is None:
-            return '<Not Found: />'
+            return '<Unknown />'
         elif isinstance(attr, int):
-            return f'<Not Found: {attr}>'
+            return f'<Unknown {attr}>'
         else:
             if raw:
                 if is_user:

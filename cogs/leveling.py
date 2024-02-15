@@ -12,13 +12,12 @@ from discord.ext import tasks
 from bot import Percy
 from .utils.commands import PermissionTemplate
 from .mod import AutoModFlags
-from .utils import cache, commands
-from .utils.context import Context, GuildContext
+from .utils import cache, commands, render
+from .utils.context import GuildContext
 from .utils.converters import get_asset_url
 from .utils.formats import medal_emojize
 from .utils.helpers import PostgresItem
 from .utils.lock import lock
-from .utils.render import Render
 from launcher import get_logger
 
 
@@ -155,7 +154,6 @@ class Leveling(commands.Cog):
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
-        self.render: Render = Render()
 
         # Better for those two variables to be global, not private to
         # access them from the :class:`LevelConfig` class.
@@ -410,7 +408,7 @@ class Leveling(commands.Cog):
 
         config = await self.get_level_config(member.id, member.guild.id)
 
-        card = await self.render.generate_rank_card(
+        card = await render.generate_rank_card(
             avatar=await member.display_avatar.read(),
             user=member,
             level=config.level,

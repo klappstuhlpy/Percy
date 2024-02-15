@@ -21,6 +21,7 @@ from .utils import converters, commands
 from .utils.tasks import PerformanceMocker
 from .utils.context import Context
 from .utils.constants import PLAYGROUND_GUILD_ID, PH_GUILD_ID
+from .utils.formats import TabularData
 
 
 class Admin(commands.Cog, command_attrs=dict(hidden=True)):
@@ -66,12 +67,12 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
 
     @staticmethod
     def build_eval_embed(
-            user: discord.Member, time_taken: float, result: Optional[str] = None, trc: Optional[str] = None
+            user: discord.Member, time_taken: float, result: str = '', trc: Optional[str] = None
     ) -> discord.Embed:
         py_ver = '.'.join(map(str, sys.version_info[:3]))
 
         if trc:
-            description = f'```py\n{result or ""}{trc}\n```'
+            description = f'```py\n{result}{trc}\n```'
             embed = discord.Embed(title='Compiler Output', description=description, color=discord.Color.red())
         else:
             description = result or f'```py\n<No output>\n```'
@@ -337,8 +338,6 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
 
     @staticmethod
     async def send_sql_results(ctx: Context, records: list[Any]):
-        from .utils.formats import TabularData
-
         headers = list(records[0].keys())
         table = TabularData()
         table.set_columns(headers)
@@ -501,7 +500,7 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
         new_ctx = await self.bot.get_context(msg, cls=type(ctx))
         await self.bot.invoke(new_ctx)
 
-    @commands.command(commands.core_command, hidden=True)
+    @commands.command(commands.core_command, description="keep it low, will ya?", hidden=True)
     async def do(self, ctx: Context, times: int, *, command: str):  # noqa
         """Repeats a command a specified number of times."""
         msg = copy.copy(ctx.message)
@@ -515,7 +514,8 @@ class Admin(commands.Cog, command_attrs=dict(hidden=True)):
     @commands.command(
         commands.core_command,
         hidden=True,
-        description='Run git Commands in bots Directory in shell. (Shortcut to sh Command)'
+        description='Run git Commands in bots Directory in shell. (Shortcut to sh Command)',
+        examples=['pull']
     )
     async def git(self, ctx: Context, *, command: str):
         """Runs a shell command."""

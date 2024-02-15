@@ -442,7 +442,7 @@ class Giveaways(commands.Cog):
             *args: Any,
             **kwargs: Any,
     ) -> Giveaway:
-        """|coro|
+        r"""|coro|
 
         Creates a giveaway.
 

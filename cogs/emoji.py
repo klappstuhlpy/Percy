@@ -11,12 +11,11 @@ from discord import app_commands
 from discord.ext import tasks
 
 from bot import Percy
-from .utils import commands
+from .utils import commands, render
 from .utils.context import GuildContext, Context
 from .utils.converters import usage_per_day
 from .utils.lock import lock
 from .utils.paginator import TextSource
-from .utils.render import Render
 from .utils.constants import EMOJI_REGEX, EMOJI_NAME_REGEX
 
 
@@ -67,7 +66,6 @@ class Emoji(commands.Cog):
 
     def __init__(self, bot):
         self.bot: Percy = bot
-        self.render: Render = Render  # type: ignore
 
         self._emoji_data_batch: defaultdict[int, Counter[int]] = defaultdict(Counter)
 
@@ -274,7 +272,7 @@ class Emoji(commands.Cog):
                 raise commands.BadArgument('Image is too big.')
 
             data = await resp.read()
-            image_color = self.render.get_dominant_color(io.BytesIO(data))
+            image_color = render.get_dominant_color(io.BytesIO(data))
 
             coro = ctx.guild.create_custom_emoji(name=name, image=data, reason=reason)
             async with ctx.typing():
@@ -347,7 +345,8 @@ class Emoji(commands.Cog):
             f'{i}. {self.emoji_fmt(emoji, count, total)}' for i, (emoji, count) in enumerate(top, 1))
         await ctx.send(embed=embed)
 
-    async def get_emoji_stats(self, ctx: GuildContext, emoji_id: int) -> None:
+    @staticmethod
+    async def get_emoji_stats(ctx: GuildContext, emoji_id: int) -> None:
         embed = discord.Embed(title='Emoji Stats')
         cdn = f'https://cdn.discordapp.com/emojis/{emoji_id}.png'
 
@@ -358,12 +357,12 @@ class Emoji(commands.Cog):
                 embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/fNnccSNJon.jpeg')
                 await ctx.send(embed=embed)
                 return
-            embed.colour = discord.Colour.from_rgb(*self.render.get_dominant_color(io.BytesIO(await resp.read())))
+            embed.colour = discord.Colour.from_rgb(*render.get_dominant_color(io.BytesIO(await resp.read())))
 
         embed.set_thumbnail(url=cdn)
 
         query = """
-            SELECT guild_id, SUM(total) AS "Count"
+            SELECT guild_id, SUM(total) AS "count"
             FROM emoji_stats
             WHERE emoji_id=$1
             GROUP BY guild_id;

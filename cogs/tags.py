@@ -21,7 +21,7 @@ from .utils.helpers import PostgresItem
 
 if TYPE_CHECKING:
     from bot import Percy
-    from .utils.context import GuildContext, Context
+    from .utils.context import GuildContext, Context, tick
 
 
 class TagPageEntry(PostgresItem):
@@ -143,7 +143,7 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
         content = str(self.content)
         if len(content) > 2000:
             await interaction.response.send_message(
-                '<:redTick:1079249771975413910> Consider using a shorter description for your Tag. (2000 max characters)',
+                f'{tick(False)} Consider using a shorter description for your Tag. (2000 max characters)',
                 ephemeral=True)
         else:
             with self.cog.reserve_tag(interaction.guild_id, name):
@@ -409,7 +409,7 @@ class Tags(commands.Cog):
             self._temporary_reserved_tags[guild_id] = set()
 
         if name in self._temporary_reserved_tags[guild_id]:
-            raise commands.BadArgument('Hey, this name is temporarily reserved, try again later or use a different one.')
+            raise commands.BadArgument('This name is currently reserved, try again later or use a different one.')
 
         self._temporary_reserved_tags[guild_id].add(name)
         try:
@@ -553,7 +553,7 @@ class Tags(commands.Cog):
         escape_markdown: bool
             Whether to escape the markdown in the Tag content.
         """
-        tag: Union[list[AliasTag] | Tag] = await self.get_tag(
+        tag: Union[list[AliasTag], Tag] = await self.get_tag(
             name_or_id=name_or_id, location_id=ctx.guild.id, similarites=True)
 
         _aliases = getattr(tag, 'aliases', None)
@@ -809,9 +809,10 @@ class Tags(commands.Cog):
     )
     async def tag_make(self, ctx: GuildContext):
         """Interactively create a Tag owned by yourself in this server.
-        `Note:` May be useful for larger contents / bigger names.
-        """
 
+        ### Note
+        May be useful for larger contents / bigger names.
+        """
         if ctx.interaction is not None:
             modal = TagMakeModal(self, ctx)
             await ctx.interaction.response.send_modal(modal)

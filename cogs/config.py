@@ -463,6 +463,7 @@ class Config(commands.Cog):
         description='Disables a command for this channel.',
         guild_only=True
     )
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     async def channel_disable(self, ctx: GuildContext, *, command: CommandName):
         """Disables a command for this channel."""
 
@@ -479,6 +480,7 @@ class Config(commands.Cog):
         description='Enables a command for this channel.',
         guild_only=True
     )
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     async def channel_enable(self, ctx: GuildContext, *, command: CommandName):
         """Enables a command for this channel."""
 
@@ -495,6 +497,7 @@ class Config(commands.Cog):
         description='Disables a command for this server.',
         guild_only=True
     )
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     async def server_disable(self, ctx: GuildContext, *, command: CommandName):
         """Disables a command for this server."""
 
@@ -511,6 +514,7 @@ class Config(commands.Cog):
         description='Enables a command for this server.',
         guild_only=True
     )
+    @commands.permissions(user=commands.PermissionTemplate.mod)
     async def server_enable(self, ctx: GuildContext, *, command: CommandName):
         """Enables a command for this server."""
 

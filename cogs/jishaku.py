@@ -73,7 +73,6 @@ class Jishaku(*OPTIONAL_FEATURES, *STANDARD_FEATURES):
         """
         Sync global or guild application commands to Discord.
         """
-
         if not self.bot.application_id:
             raise commands.CommandError('Bot does not have an application ID.')
 

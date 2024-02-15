@@ -482,15 +482,13 @@ class Base(commands.Cog, name='Exclusives'):
 
         return out.rstrip()
 
-    async def send_raw_content(self, ctx: Context, message: discord.Message, json: bool = False) -> None:
+    async def send_raw_content(self, ctx: Context, message: discord.Message, json: bool = False):
         """Send information about the raw API response for a `discord.Message`.
 
         If `json` is True, send the information in a copy-pasteable Python format.
         """
-
         if not message.channel.permissions_for(ctx.author).read_messages:
-            await ctx.stick(False, 'You do not have permissions to see the channel this message is in.')
-            return
+            return await ctx.stick(False, 'You do not have permissions to see the channel this message is in.')
 
         raw_data = await ctx.bot.http.get_message(message.channel.id, message.id)
         paginator = TextSource(prefix='```json', suffix='```')
@@ -518,12 +516,19 @@ class Base(commands.Cog, name='Exclusives'):
         for page in paginator.pages:
             await ctx.send(page)
 
-    @commands.command(commands.core_command, description='Shows information about the raw API response for a message.')
+    @commands.command(
+        commands.core_command,
+        description='Shows information about the raw API response for a message.'
+    )
     async def raw(self, ctx: Context, message: discord.Message, to_json: bool = False) -> None:
         """Shows information about the raw API response."""
         await self.send_raw_content(ctx, message, json=to_json)
 
-    @commands.command(commands.core_command, aliases=('snf', 'snfl', 'sf'))
+    @commands.command(
+        commands.core_command,
+        aliases=['snf', 'snfl', 'sf'],
+        description='Get the creation time of discord snowflakes.'
+    )
     async def snowflake(self, ctx: Context, *snowflakes: Annotated[int, Snowflake]) -> None:
         """Get Discord snowflake creation time."""
         if not snowflakes:

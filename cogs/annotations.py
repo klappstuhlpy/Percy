@@ -8,8 +8,7 @@ import re
 
 from .base import PH_GUILD_ID
 from .utils.paginator import BasePaginator
-from .utils import commands
-from .utils.render import Render
+from .utils import commands, render
 from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
 
@@ -133,7 +132,6 @@ class Annotations(commands.Cog):
 
     def __init__(self, bot: Percy):
         self.bot: Percy = bot
-        self.render: Render = Render  # type: ignore
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
@@ -256,7 +254,7 @@ class Annotations(commands.Cog):
             embed.url = f"{url}?hex={color.value:0>6x}"
 
             message = js['name']['value']
-            api_img = self.render.generate_color_img((js['rgb']['r'], js['rgb']['g'], js['rgb']['b']), message)
+            api_img = render.generate_color_img((js['rgb']['r'], js['rgb']['g'], js['rgb']['b']), message)
 
             hsl = js["hsl"]["value"]
             hsv = js["hsv"]["value"]
