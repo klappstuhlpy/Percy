@@ -9,7 +9,7 @@ from textwrap import dedent
 from typing import Literal, NamedTuple, Annotated, Optional
 
 import discord
-from discord import AllowedMentions, HTTPException, Interaction, Message, NotFound, Reaction, User, enums
+from discord import AllowedMentions, HTTPException, Interaction, Message, NotFound, Reaction, User, enums, app_commands
 
 from bot import Percy
 from cogs.base import TrashView
@@ -182,7 +182,7 @@ class Snekbox(commands.Cog):
         """
         data = job.to_dict()
 
-        async with self.bot.session.post('http://localhost:8060/eval', json=data, raise_for_status=True) as resp:
+        async with self.bot.session.post('https://snekbox.klappstuhl.me/eval', json=data, raise_for_status=True) as resp:
             return EvalResult.from_dict(await resp.json())
 
     async def upload_output(self, output: str) -> Optional[str]:
@@ -514,6 +514,10 @@ class Snekbox(commands.Cog):
         usage='[python_version] <code...>',
         guild_only=True
     )
+    @app_commands.describe(
+        python_version='The version of Python to run the code on.',
+        code='The Python code to run.'
+    )
     async def eval_command(
         self,
         ctx: EvalContext,
@@ -547,6 +551,10 @@ class Snekbox(commands.Cog):
         aliases=['ti'],
         usage='[python_version] [setup_code] <code...>',
         guild_only=True
+    )
+    @app_commands.describe(
+        python_version='The version of Python to run the code on.',
+        code='The Python code to run.'
     )
     async def timeit_command(
         self,
