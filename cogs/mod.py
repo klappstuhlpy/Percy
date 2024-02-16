@@ -2365,6 +2365,9 @@ class Mod(commands.Cog):
         ):
             return
 
+        if message.is_system():
+            return
+
         guild_id = message.guild.id
         config = await self.get_guild_config(guild_id)
         if config is None:
