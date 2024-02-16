@@ -341,8 +341,6 @@ class Percy(commands.Bot):
             await self.remove_from_blacklist(object_id)
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
-        error = getattr(error, 'original', error)
-
         with suppress(discord.Forbidden):
             if isinstance(error, commands.NoPrivateMessage):
                 await ctx.author.send('This command cannot be used in private messages.')
@@ -359,10 +357,12 @@ class Percy(commands.Bot):
                 await ctx.send(f'You are missing a required argument: `{error.param.name}`')
             elif isinstance(error, commands.TooManyArguments):
                 await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
-            elif not isinstance(error, discord.HTTPException):
-                log.exception('In %s:', ctx.command.qualified_name, exc_info=error)
-            elif isinstance(error, LockedResourceError):
-                await ctx.stick(False, str(error))
+            elif isinstance(error, commands.CommandInvokeError):
+                error = getattr(error, 'original', error)
+                if not isinstance(error, discord.HTTPException):
+                    log.exception('In %s:', ctx.command.qualified_name, exc_info=error)
+                elif isinstance(error, LockedResourceError):
+                    await ctx.stick(False, str(error))
             elif isinstance(error, (
                     commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
             )):
