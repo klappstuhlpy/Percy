@@ -395,7 +395,7 @@ class Tags(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='navigate', id=1103420880056488038)
+        return discord.PartialEmoji(name='tag', id=1208000728128553001)
 
     @contextlib.contextmanager
     def reserve_tag(self, guild_id: int, name: str) -> None:

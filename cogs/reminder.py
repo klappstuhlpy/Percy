@@ -139,7 +139,7 @@ class Reminder(commands.Cog):
 
     @property
     def display_emoji(self) -> discord.PartialEmoji:
-        return discord.PartialEmoji(name='sleep', id=1087490868660928683)
+        return discord.PartialEmoji(name='clock', id=1208000018976612352, animated=True)
 
     def cog_unload(self) -> None:
         self._task.cancel()
