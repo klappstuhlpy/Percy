@@ -507,12 +507,17 @@ class Snekbox(commands.Cog):
                 break
             log.info(f'Re-evaluating code from message {ctx.message.id}:\n{job}')
 
-    @commands.command(name='eval', aliases=['e'], usage='[python_version] <code...>')
-    @commands.guild_only()
+    @commands.command(
+        name='eval',
+        description='Run Python code and get the results.',
+        aliases=['e'],
+        usage='[python_version] <code...>',
+        guild_only=True
+    )
     async def eval_command(
         self,
         ctx: EvalContext,
-        python_version: Optional[SupportedPythonVersions],
+        python_version: SupportedPythonVersions = '3.11',
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
@@ -533,16 +538,20 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or '3.11'
         job = EvalJob.from_code('\n'.join(code)).as_version(python_version)  # type: ignore[arg-type]
         await self.run_job(ctx, job)
 
-    @commands.command(name='timeit', aliases=['ti'], usage='[python_version] [setup_code] <code...>')
-    @commands.guild_only()
+    @commands.command(
+        name='timeit',
+        description='Profile Python Code to find execution time.',
+        aliases=['ti'],
+        usage='[python_version] [setup_code] <code...>',
+        guild_only=True
+    )
     async def timeit_command(
         self,
         ctx: EvalContext,
-        python_version: Optional[SupportedPythonVersions],
+        python_version: SupportedPythonVersions = '3.11',
         *,
         code: Annotated[list[str], CodeblockConverter]
     ) -> None:
@@ -560,7 +569,6 @@ class Snekbox(commands.Cog):
         We've done our best to make this sandboxed, but do let us know if you manage to find an
         issue with it!
         """
-        python_version = python_version or '3.11'
         args = self.prepare_timeit_input(code)
         job = EvalJob(args, version=python_version, name='timeit')  # type: ignore[arg-type]
         await self.run_job(ctx, job)

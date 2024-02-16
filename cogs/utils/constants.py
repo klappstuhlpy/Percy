@@ -893,7 +893,7 @@ HELP_PAGES = [
             'Flags are prefixed with `--` and can be used like this:\n'
             '- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
             '- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
-            'Some **first** flag may be used without the `--` prefix:'
+            'Some **first** flag may be used without the `--` prefix:\n'
             '- `{prefix}command argument1 --flag2 argument2`\n'
             '\n'
             'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
