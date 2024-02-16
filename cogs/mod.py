@@ -6,6 +6,7 @@ import enum
 import io
 import random
 import re
+import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Optional, Callable, Any, Union, Literal, List, TYPE_CHECKING, MutableMapping, Dict, Generic, TypeVar, \
@@ -1288,8 +1289,6 @@ class GatekeeperVerifyButton(
         self.config = config
         self.gatekeeper = gatekeeper
 
-        self.cooldown = commands.CooldownMapping.from_cooldown(1, 5.0, commands.BucketType.user)
-
     @classmethod
     async def from_custom_id(
             cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
@@ -1309,12 +1308,6 @@ class GatekeeperVerifyButton(
 
     async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:
         if interaction.guild_id is None:
-            return False
-
-        if retry_after := self.cooldown.update_rate_limit(interaction):
-            await interaction.response.send_message(
-                f'{tick(False)} You are being rate limited. Try again in **{retry_after:.2f}** seconds.',
-                ephemeral=True)
             return False
 
         if self.config is None or not self.config.flags.gatekeeper:
