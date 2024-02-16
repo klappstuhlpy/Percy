@@ -233,6 +233,8 @@ class Gatekeeper(PostgresItem):
         The time when the gatekeeper was started.
     role_id : Optional[int]
         The role ID to add to members.
+    starter_role_id : Optional[int]
+        The role ID to add to members that bypass the gatekeeper.
     channel_id : Optional[int]
         The channel ID where the gatekeeper is active.
     message_id : Optional[int]
@@ -418,8 +420,6 @@ class Gatekeeper(PostgresItem):
 
         if started_at is not MISSING:
             self.started_at = started_at
-        if role_id is not MISSING:
-            self.role_id = role_id
         if starter_role_id is not MISSING:
             self.starter_role_id = starter_role_id
         if channel_id is not MISSING:
@@ -449,7 +449,7 @@ class Gatekeeper(PostgresItem):
                     query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.pool.execute(query, self.id, member_id)
 
-                    if self.starter_role_id is not None:
+                    if self.starter_role:
                         await self.bot.http.add_role(
                             self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')
                 elif action is GatekeeperRoleState.pending_add:
@@ -1288,6 +1288,8 @@ class GatekeeperVerifyButton(
         self.config = config
         self.gatekeeper = gatekeeper
 
+        self.cooldown = commands.CooldownMapping.from_cooldown(1, 5.0, commands.BucketType.user)
+
     @classmethod
     async def from_custom_id(
             cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
@@ -1309,6 +1311,12 @@ class GatekeeperVerifyButton(
         if interaction.guild_id is None:
             return False
 
+        if retry_after := self.cooldown.update_rate_limit(interaction):
+            await interaction.response.send_message(
+                f'{tick(False)} You are being rate limited. Try again in **{retry_after:.2f}** seconds.',
+                ephemeral=True)
+            return False
+
         if self.config is None or not self.config.flags.gatekeeper:
             await interaction.response.send_message(f'{tick(False)} Gatekeeper is not enabled.', ephemeral=True)
             return False
@@ -1317,7 +1325,8 @@ class GatekeeperVerifyButton(
             await interaction.response.send_message(f'{tick(False)} Gatekeeper is not enabled.', ephemeral=True)
             return False
 
-        if not self.gatekeeper.queue.is_pending(interaction.user.id):
+        if interaction.user.id not in self.gatekeeper.members:
+            await interaction.response.send_message(f'{tick(False)} You are already verified.', ephemeral=True)
             return False
 
         return True
@@ -2373,14 +2382,15 @@ class Mod(commands.Cog):
         if config.flags.gatekeeper:
             gatekeeper = await self.get_guild_gatekeeper(guild_id)
             if gatekeeper is not None and gatekeeper.is_bypassing(author):
-                reason = 'Bypassing gatekeeper by messaging early'
-                coro = author.ban if gatekeeper.bypass_action == 'ban' else author.kick
-                try:
-                    await coro(reason=reason)
-                except discord.HTTPException:
-                    pass
-                else:
-                    return
+                if message.channel.id != gatekeeper.channel_id:
+                    reason = 'Bypassing gatekeeper by messaging early'
+                    coro = author.ban if gatekeeper.bypass_action == 'ban' else author.kick
+                    try:
+                        await coro(reason=reason)
+                    except discord.HTTPException:
+                        pass
+                    else:
+                        return
 
         if not config.mention_count:
             return
