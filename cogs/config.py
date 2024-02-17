@@ -7,7 +7,7 @@ import asyncpg
 import discord
 
 from .utils.paginator import BasePaginator, LinePaginator
-from .utils import cache, commands
+from .utils import cache, commands, helpers
 from .utils.converters import aenumerate, get_asset_url
 from .utils.formats import plonk_iterator
 from itertools import accumulate
@@ -311,10 +311,9 @@ class Config(commands.Cog):
             raise commands.CommandError('There are no ignored channels or members in this server.')
 
         class PlonkedPaginator(BasePaginator[asyncpg.Record]):
-
             async def format_page(self, entries: List[asyncpg.Record], /) -> discord.Embed:
                 entries = plonk_iterator(ctx.bot, ctx.guild, entries)
-                embed = discord.Embed(timestamp=discord.utils.utcnow(), colour=0x2b2d31)
+                embed = discord.Embed(timestamp=discord.utils.utcnow(), colour=helpers.Colour.white())
                 embed.set_footer(text=f'Requested by {ctx.author}', icon_url=get_asset_url(ctx.author))
                 embed.set_author(name=f'Ignored Channels/Members', icon_url=get_asset_url(ctx.guild))
                 pages = []
@@ -591,7 +590,7 @@ class Config(commands.Cog):
             raise commands.CommandError('There are no disabled commands for this channel.')
 
         embed = discord.Embed(timestamp=discord.utils.utcnow(),
-                              color=self.bot.colour.darker_red())
+                              color=self.bot.colour.white())
         embed.set_author(name=f'Disabled Commands', icon_url=get_asset_url(ctx.guild))
         await LinePaginator.start(ctx, entries=disabled, per_page=15, embed=embed, location='description')
 

@@ -361,7 +361,7 @@ class Leveling(commands.Cog):
         query = "SELECT * FROM levels WHERE guild_id = $1 AND messages > 0 ORDER BY messages DESC LIMIT 3;"
         records = [LevelConfig(self, record=record) for record in await self.bot.pool.fetch(query, ctx.guild.id)]
 
-        e = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Level Statistics for {ctx.guild.name}')
+        e = discord.Embed(colour=self.bot.colour.white(), title=f'Level Statistics for {ctx.guild.name}')
         e.set_thumbnail(url=get_asset_url(ctx.guild))
         e.set_footer(text='Level Statistics for this Server.')
 

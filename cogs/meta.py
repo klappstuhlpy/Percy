@@ -7,7 +7,6 @@ import itertools
 import os
 import re
 import time
-import traceback
 from collections import Counter
 from dataclasses import dataclass
 from typing import (
@@ -114,7 +113,7 @@ class HelpPaginator(BasePaginator[PartialCommand]):
         embed = discord.Embed(
             title=f'{emoji} {group.qualified_name}',
             description=group.description,
-            colour=helpers.Colour.coral()
+            colour=helpers.Colour.white()
         )
 
         for cmd in entries:
@@ -572,7 +571,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed = discord.Embed(
             title=f'{self.context.client.user.name} Help',
             description='**```\nPlease use the Select Menu below to explore the corresponding category.```**',
-            colour=helpers.Colour.coral()
+            colour=helpers.Colour.white()
         )
         embed.set_thumbnail(url=get_asset_url(self.context.guild))
         embed.add_field(
@@ -611,7 +610,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed = discord.Embed(
             title='Command Argument Overview',
             description='**```\nType command arguments without the brackets shown here!```**',
-            colour=helpers.Colour.coral()
+            colour=helpers.Colour.white()
         )
         embed.set_thumbnail(url=get_asset_url(self.context.guild))
         embed.add_field(name='`<argument>`', value='This argument is **required**.', inline=False)
@@ -767,7 +766,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         :class:`discord.Embed`
             The formatted command.
         """
-        embed = discord.Embed(colour=helpers.Colour.coral())
+        embed = discord.Embed(colour=helpers.Colour.white())
         embed.set_author(name='Command Help', icon_url=COMMAND_ICON_URL)
 
         embed.description = (
@@ -971,7 +970,7 @@ class GuildUserJoinView(discord.ui.View):
         class EmbedPaginator(BasePaginator[str]):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(title=f'Join List in {interaction.guild}', color=helpers.Colour.coral())
+                embed = discord.Embed(title=f'Join List in {interaction.guild}', color=helpers.Colour.white())
                 embed.set_author(name=interaction.guild, icon_url=get_asset_url(interaction.guild))
                 embed.set_footer(text=f'{plural(len(chunked_users)):entry|entries}')
 
@@ -1204,7 +1203,7 @@ class Meta(commands.Cog):
             map(lambda e: f'**{e[0]}** - {e[1]}', list(self.bot.get_guild_features(guild.features, only_current=True))))
         embed = discord.Embed(title='Guild Features',
                               timestamp=discord.utils.utcnow(),
-                              color=self.bot.colour.coral())
+                              color=self.bot.colour.white())
         embed.set_footer(text=f'{plural(len(features)):feature|features}')
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location='description')
 
@@ -1489,7 +1488,7 @@ class Meta(commands.Cog):
             return info, u_code
 
         char_list, raw_list = zip(*(char_info(c) for c in characters), strict=True)
-        embed = discord.Embed(title='Char Info', colour=self.bot.colour.coral())
+        embed = discord.Embed(title='Char Info', colour=self.bot.colour.white())
 
         if len(characters) > 1:
             embed.add_field(name='Full Text', value=f'`{''.join(raw_list)}`', inline=False)
@@ -1508,7 +1507,7 @@ class Meta(commands.Cog):
         prefixes = self.bot.get_guild_prefixes(ctx.guild)
         del prefixes[1]
 
-        embed = discord.Embed(title='Prefix List', colour=self.bot.colour.coral())
+        embed = discord.Embed(title='Prefix List', colour=self.bot.colour.white())
         embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
         embed.set_thumbnail(url=get_asset_url(ctx.guild))
         embed.set_footer(text=f'{len(prefixes)} prefixes')
@@ -1597,7 +1596,7 @@ class Meta(commands.Cog):
         def build_embed(content: str) -> discord.Embed:
             return discord.Embed(
                 title='Pong!',
-                colour=helpers.Colour.coral(),
+                colour=helpers.Colour.white(),
                 description=content
             )
 
@@ -1737,7 +1736,7 @@ class Meta(commands.Cog):
 
         embed = discord.Embed(
             description=f'### Content\n{truncate(str(obj.before.clean_content), 4000)}',
-            color=self.bot.colour.coral(),
+            color=self.bot.colour.white(),
             timestamp=obj.timestamp)
         embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))
         embed.set_footer(text='Deleted at')
@@ -1764,7 +1763,7 @@ class Meta(commands.Cog):
                         f'{truncate(str(obj.before.clean_content), 2000)}\n'
                         f'### After\n'
                         f'{truncate(str(obj.after.clean_content), 2000)}',
-            color=self.bot.colour.coral(),
+            color=self.bot.colour.white(),
             timestamp=obj.timestamp
         )
         embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))

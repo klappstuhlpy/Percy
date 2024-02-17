@@ -130,7 +130,7 @@ class AniListEmbedBuilder:
         embed = AniListEmbed(
             title=format_name(data.get('name').get('full'), data.get('name').get('native')),
             description=sanitize_description(data.get('description'), 1000),
-            color=self.bot.colour.darker_red(),
+            color=self.bot.colour.white(),
             url=data.get('siteUrl'),
         )
 
@@ -165,7 +165,7 @@ class AniListEmbedBuilder:
         embed = AniListEmbed(
             title=f'{data.get('name')} (ID: {data.get('id')})',
             description=f'**About:**\n{data.get('about') or '*No description set.*'}',
-            color=self.bot.colour.darker_red(),
+            color=self.bot.colour.white(),
             url=data.get('siteUrl'),
         )
         embed.set_thumbnail(url=data.get('avatar', {}).get('large'))

@@ -1024,7 +1024,7 @@ class Table:
 
     def build_embed(self, with_autoplay: bool = False) -> discord.Embed:
         """Builds the embed for the table"""
-        embed = discord.Embed(title='Poker • Texas Hold\'em', color=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Poker • Texas Hold\'em', color=helpers.Colour.white())
         embed.description = (
             '*Waiting for players to join...*\n\n' if self.state == TableState.PREPARED else ''
         )
@@ -1517,7 +1517,7 @@ class AnalysisButton(discord.ui.Button):
                 ephemeral=True)
             return
 
-        embed = discord.Embed(title='Game Odds Analysis', color=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Game Odds Analysis', color=helpers.Colour.white())
         data: list[tuple[dict[str, float], dict[int, dict[str, float]]]] = self.table.analysis
 
         embeds, files = [], []

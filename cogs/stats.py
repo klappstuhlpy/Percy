@@ -343,7 +343,7 @@ class Stats(commands.Cog):
         embed = discord.Embed(description='Latest Changes:\n' + revision)
         embed.title = 'Official Bot Server Invite'
         embed.url = 'https://discord.gg/eKwMtGydqh'
-        embed.colour = self.bot.colour.darker_red()
+        embed.colour = self.bot.colour.white()
 
         embed.set_author(name=str(self.bot.owner), icon_url=get_asset_url(self.bot.owner))
         embed.set_thumbnail(url=get_asset_url(self.bot.user))
@@ -398,7 +398,7 @@ class Stats(commands.Cog):
 
     @staticmethod
     async def show_guild_stats(ctx: GuildContext) -> None:
-        embed = discord.Embed(title='Server Command Stats', colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Server Command Stats', colour=helpers.Colour.white())
 
         query = "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1;"
         count: tuple[int, datetime.datetime] = await ctx.db.fetchrow(query, ctx.guild.id)  # type: ignore
@@ -684,7 +684,7 @@ class Stats(commands.Cog):
                 # didn't find a better way to do this because rows returns only the values,
                 # what's a bit heavy to deal with on changes, so we use a mapping
 
-            embed = discord.Embed(colour=helpers.Colour.darker_red())
+            embed = discord.Embed(colour=helpers.Colour.white())
             embed.set_author(name='Command Statistic', icon_url=INFO_ICON_URL)
 
             resolved = self.bot.resolve_command(command)
@@ -743,7 +743,7 @@ class Stats(commands.Cog):
         query = "SELECT COUNT(*) FROM commands;"
         total: tuple[int] = await ctx.db.fetchrow(query)  # type: ignore
 
-        embed = discord.Embed(title='Command Stats', colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Command Stats', colour=helpers.Colour.white())
         embed.description = f'`{total[0]}` commands used.'
 
         query = """
@@ -816,7 +816,7 @@ class Stats(commands.Cog):
                 case _:
                     question += count
 
-        embed = discord.Embed(title='Last 24 Hour Command Stats', colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Last 24 Hour Command Stats', colour=helpers.Colour.white())
         embed.description = (
             f'`{failed + success + question}` commands used today. '
             f'(`{success}` succeeded, `{failed}` failed, `{question}` unknown)'
@@ -918,7 +918,7 @@ class Stats(commands.Cog):
         if isinstance(error, (discord.Forbidden, discord.NotFound)):
             return
 
-        embed = discord.Embed(title='<:warning:1113421726861238363> Command Error', colour=0x99002b)
+        embed = discord.Embed(title='<:warning:1113421726861238363> Command Error', colour=helpers.Colour.burgundy())
         embed.add_field(name='Name', value=ctx.command.qualified_name)
         embed.add_field(name='Author',
                         value=f'[{ctx.author}](https://discord.com/users/{ctx.author.id}) (ID: {ctx.author.id})')
@@ -1098,7 +1098,7 @@ class Stats(commands.Cog):
         else:
             colour = 0xF04947"""
 
-        embed = discord.Embed(colour=0x43B581, title='Gateway (last 24 hours)')
+        embed = discord.Embed(colour=helpers.Colour.white(), title='Gateway (last 24 hours)')
         embed.description = '\n'.join(builder)
         embed.set_footer(text=f'None warnings')
         await ctx.send(embed=embed)
@@ -1404,7 +1404,7 @@ async def on_error(self: Percy, event: str, *args: Any, **kwargs: Any) -> None: 
     if hasattr(exc, 'BYPASS_LOGGING'):
         return
 
-    embed = discord.Embed(title='<:warning:1113421726861238363> Event Error', colour=0x99002b)
+    embed = discord.Embed(title='<:warning:1113421726861238363> Event Error', colour=helpers.Colour.burgundy())
     embed.add_field(name='Event', value=event)
     trace = "".join(traceback.format_exception(exc_type, exc, tb))
     embed.description = f'```py\n{trace}\n```'

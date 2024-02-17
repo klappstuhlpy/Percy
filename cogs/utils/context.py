@@ -16,7 +16,7 @@ from discord import Message, Embed, File, GuildSticker, StickerItem, AllowedMent
 from discord.context_managers import Typing
 from discord.ext import commands
 from discord.utils import MISSING
-from discord.ext.commands.context import DeferTyping
+from discord.ext.commands.context import DeferTyping  # noqa
 
 if TYPE_CHECKING:
     from bot import Percy
@@ -245,11 +245,6 @@ class Context(commands.Context):
         """Returns the guild ID of the message."""
         return self.guild.id
 
-    @property
-    def safe_prefix(self) -> str:
-        """Returns the command prefix properly escaped."""
-        return self.prefix if not self.prefix.startswith('<@') else f'@{self.bot.user.name} '
-
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:
             raise ValueError('No results found.')
@@ -298,17 +293,10 @@ class Context(commands.Context):
             ``False`` if explicit deny,
             ``None`` if deny due to timeout
         """
-
         author_id = author_id or self.author.id
-        view = ConfirmationView(
-            timeout=timeout,
-            delete_after=delete_after,
-            author_id=author_id,
-        )
-        view.message = await self.send(embed=discord.Embed(title='Are you sure?',
-                                                           description=message,
-                                                           colour=discord.Colour(0xF8DB5E)),
-                                       view=view, ephemeral=ephemeral)
+        view = ConfirmationView(timeout=timeout, delete_after=delete_after, author_id=author_id)
+        embed = discord.Embed(title='Are you sure?', description=message, colour=self.bot.colour.energy_yellow())
+        view.message = await self.send(embed=embed, view=view, ephemeral=ephemeral)
         await view.wait()
         return view.value
 

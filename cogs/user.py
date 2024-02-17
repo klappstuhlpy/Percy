@@ -198,7 +198,7 @@ class UserSettings(commands.Cog, name='User Settings'):
     async def timezone_info(self, ctx: Context, *, tz: TimeZone):
         """Retrieves info about a timezone."""
 
-        embed = discord.Embed(title=f'ID: {tz.key}', colour=helpers.Colour.darker_red())
+        embed = discord.Embed(title=f'ID: {tz.key}', colour=helpers.Colour.white())
         dt = discord.utils.utcnow().astimezone(dateutil.tz.gettz(tz.key))
         time = dt.strftime('%Y-%m-%d %I:%M %p')
 

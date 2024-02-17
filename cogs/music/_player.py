@@ -237,7 +237,7 @@ class Player(wavelink.Player):
             title='Track Enqueued',
             description=f'`🎶` Added [{track.title}]({track.uri}) to the queue.\n'
                         f'`🎵` Track at Position **#{self.queue.all.index(track) + 1}/{len(self.queue.all)}**',
-            color=helpers.Colour.darker_red()
+            color=helpers.Colour.white()
         )
 
         if track.artwork:
@@ -265,7 +265,7 @@ class Player(wavelink.Player):
                         '*Once you play a new track, this message is going to be the new player panel if it\'s not deleted, '
                         'otherwise I\'m going to create a new panel.*',
             timestamp=discord.utils.utcnow(),
-            color=helpers.Colour.darker_red())
+            color=helpers.Colour.white())
         embed.set_footer(text='last updated')
         embed.set_thumbnail(url=guild.icon.url if not None else None)
         return embed
@@ -308,7 +308,7 @@ class PlayerPanel(discord.ui.View):
         embed = discord.Embed(
             title='Music Player Panel',
             timestamp=discord.utils.utcnow(),
-            color=self.bot.colour.darker_red()
+            color=self.bot.colour.white()
         )
 
         if self.state == PlayerState.PLAYING:
@@ -730,7 +730,7 @@ class TrackDisambiguatorView(discord.ui.View, Generic[T]):
             title='Choose a Track',
             description=description,
             timestamp=datetime.datetime.now(datetime.UTC),
-            color=helpers.Colour.darker_red())
+            color=helpers.Colour.white())
         embed.set_footer(text=context.user, icon_url=context.user.avatar.url)
 
         self.message = await context.send(embed=embed, view=self)

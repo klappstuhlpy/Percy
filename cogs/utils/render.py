@@ -5,7 +5,7 @@ import discord
 from PIL import Image, ImageDraw, ImageFont
 from PIL.ImageFont import FreeTypeFont
 
-from cogs.utils import cache
+from cogs.utils import cache, helpers
 from cogs.utils.constants import BOT_BASE_FOLDER
 from cogs.utils.tasks import executor
 from cogs.utils.formats import shorten_number
@@ -168,7 +168,7 @@ def generate_bar_chart(
         end_index = start_index + max_keys_per_chart
         subset_data = dict(list(data.items())[start_index:end_index])
 
-        image = Image.new('RGB', (int(chart_width), int(chart_height)), color=0x1A1A1A)
+        image = Image.new('RGB', (int(chart_width), int(chart_height)), color=helpers.Colour.lighter_black())
         draw = ImageDraw.Draw(image)
 
         font = GINTO_BOLD(int(LABEL_FONT_SIZE * scale_factor))

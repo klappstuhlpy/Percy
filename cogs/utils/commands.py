@@ -120,15 +120,11 @@ def permissions(
 
         if _bot_permissions:
             func = checks.hybrid_bot_permissions_check(**_bot_permissions)(func)
+            func.__bot_permissions__ = _bot_permissions
 
         if _user_permissions:
             func = checks.hybrid_user_permissions_check(**_user_permissions)(func)
-
-        # This is used to determine the bot and user
-        # permissions wherever you like,
-        # for example, in the help command.
-        func.__bot_permissions__ = _bot_permissions
-        func.__user_permissions__ = _user_permissions
+            func.__user_permissions__ = _user_permissions
 
         return func
 

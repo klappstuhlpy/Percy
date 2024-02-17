@@ -515,10 +515,6 @@ class Colour(discord.Colour):
         return cls(0xE32636)
 
     @classmethod
-    def transparent(cls) -> Self:
-        return cls(0x2b2d31)
-
-    @classmethod
     def lime_green(cls) -> Self:
         return cls(0x3AFF76)
 
@@ -541,6 +537,47 @@ class Colour(discord.Colour):
     @classmethod
     def black(cls) -> Self:
         return cls(0x000000)
+
+    @classmethod
+    def coral(cls) -> Self:
+        return cls(0xFF7F50)
+
+    @classmethod
+    def mirage(cls) -> Self:
+        # A darker blue
+        return cls(0x1d2439)
+
+    @classmethod
+    def di_sierra(cls) -> Self:
+        # A sandy
+        return cls(0xDDA453)
+
+    @classmethod
+    def transparent(cls) -> Self:
+        # Discord background
+        return cls(0x2b2d31)
+
+    @classmethod
+    def white(cls) -> Self:
+        return cls(0xFFFFFF)
+
+    @classmethod
+    def burgundy(cls) -> Self:
+        # A dark red
+        return cls(0x99002b)
+
+    @classmethod
+    def ocean_green(cls) -> Self:
+        return cls(0x43B581)
+
+    @classmethod
+    def energy_yellow(cls) -> Self:
+        # Lighter yellow
+        return cls(0xF8DB5E)
+
+    @classmethod
+    def lighter_black(cls) -> Self:
+        return cls(0x1A1A1A)
 
 
 class BasicJSONEncoder(json.JSONEncoder):

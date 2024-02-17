@@ -352,7 +352,7 @@ class PlaylistTools(commands.Cog):
             embed = discord.Embed(
                 title='Your Playlists',
                 description='Here are your playlists, use the buttons and view to navigate',
-                color=self.bot.colour.teal())
+                color=helpers.Colour.white())
             embed.set_author(name=ctx.author, icon_url=ctx.author.avatar.url)
             embed.set_footer(text=f'{plural(len(playlists)):playlist}')
             for name, value in field[index:index + 12]:

@@ -6,7 +6,7 @@ import re
 from typing_extensions import Annotated
 from typing import TYPE_CHECKING, Optional
 
-from .utils import fuzzy, commands
+from .utils import fuzzy, commands, helpers
 from .utils.constants import LANGUAGES
 from .utils.translation import translate
 
@@ -92,7 +92,7 @@ class Random(commands.Cog):
         except Exception as e:
             return await ctx.stick(False, f'An error occurred: {e.__class__.__name__}: {e}')
 
-        embed = discord.Embed(title='Translator', colour=self.bot.colour.darker_red())
+        embed = discord.Embed(title='Translator', colour=self.bot.colour.white())
         embed.add_field(name=f'Original: {result.source_language} (Auto)', value=result.original, inline=False)
         embed.add_field(name=f'Translated: {result.target_language}', value=result.translated, inline=False)
         await ctx.send(embed=embed)
@@ -111,7 +111,7 @@ class Random(commands.Cog):
         random_meme = res['data']['children'][random.randint(0, len(res['data']['children']) - 1)]['data']
         embed = discord.Embed(title=random_meme['title'], url=random_meme['url'],
                               timestamp=await ctx.timestamp(),
-                              colour=0x2b2d31)
+                              colour=helpers.Colour.white())
         embed.set_image(url=random_meme['url'])
         embed.add_field(name='Rating', value=f'\N{THUMBS UP SIGN} **{random_meme["ups"]}** \N{SPEECH BALLOON} **{random_meme["num_comments"]}**', inline=False)
         await ctx.send(embed=embed)
@@ -127,7 +127,7 @@ class Random(commands.Cog):
             if r.status != 200:
                 return await ctx.stick(False, 'Could not fetch fact :(')
             res = await r.json()
-        embed = discord.Embed(title='Random Fact', description=res['text'], colour=0x2b2d31)
+        embed = discord.Embed(title='Random Fact', description=res['text'], colour=helpers.Colour.white())
         await ctx.send(embed=embed)
 
 

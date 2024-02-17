@@ -275,12 +275,9 @@ class Comics(commands.Cog):
     @lock_func(refresh_comics, raise_error=True)
     async def comics_current(self, interaction: discord.Interaction, brand: Brand):
         """Lists this week's/month's comics!"""
-        try:
-            await interaction.response.defer(ephemeral=True)
-            embeds = await self.build_summary_embeds(self.comic_cache.get(brand), brand)
-            await interaction.followup.send(embeds=embeds, ephemeral=True)
-        except:
-            traceback.print_exc()
+        await interaction.response.defer(ephemeral=True)
+        embeds = await self.build_summary_embeds(self.comic_cache.get(brand), brand)
+        await interaction.followup.send(embeds=embeds, ephemeral=True)
 
     @commands.command(
         comics.command,

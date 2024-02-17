@@ -8,7 +8,7 @@ import re
 
 from .base import PH_GUILD_ID
 from .utils.paginator import BasePaginator
-from .utils import commands, render
+from .utils import commands, render, helpers
 from .utils.constants import HEX_REGEX, RGB_REGEX, CMYK_REGEX
 
 
@@ -73,7 +73,7 @@ class UrbanDictionaryPaginator(BasePaginator[dict]):
 
         embed = discord.Embed(
             title=f'"{entry["word"]}": {self.current_page} of {self.total_pages}',
-            colour=0x1d2439,
+            colour=helpers.Colour.mirage(),
             url=entry['permalink']
         )
         embed.set_thumbnail(url='https://images.klappstuhl.me/gallery/qLxbrWeWaR.png')
@@ -152,7 +152,7 @@ class Annotations(commands.Cog):
             summary: str,
             details: Optional[str] = None,
     ) -> discord.Embed:
-        e = discord.Embed(title='Feedback', colour=0x738BD7)
+        e = discord.Embed(title='Feedback', colour=helpers.Colour.white())
 
         if details is not None:
             e.description = details

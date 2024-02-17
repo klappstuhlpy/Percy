@@ -156,7 +156,7 @@ class Table:
     def build_embed(
             self,
             hand: Hand,
-            colour: discord.Colour = helpers.Colour.darker_red(),
+            colour: discord.Colour = helpers.Colour.white(),
             text: str = None,
             image_url: str = None
     ) -> discord.Embed:
@@ -249,7 +249,7 @@ class TableView(discord.ui.View):
             color = helpers.Colour.light_grey()
         else:
             result = 'Something went wrong.'
-            color = helpers.Colour.darker_red()
+            color = helpers.Colour.white()
 
         if amount:
             user_balance = await self.economy.get_balance(interaction.user.id, interaction.guild_id)

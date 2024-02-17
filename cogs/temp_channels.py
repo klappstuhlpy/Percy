@@ -7,7 +7,7 @@ from discord import app_commands
 
 from bot import Percy
 from .utils.context import Context
-from .utils import fuzzy, commands
+from .utils import fuzzy, commands, helpers
 from .utils.formats import plural
 from .utils.helpers import PostgresItem
 
@@ -86,7 +86,7 @@ class TempChannels(commands.Cog):
         items = [f'- {temp.choice_text}' for index, temp in enumerate(temp_channels, 1)]
         embed = discord.Embed(title='Temporary Voice Hubs',
                               description='\n'.join(items),
-                              color=self.bot.colour.teal())
+                              color=helpers.Colour.white())
         embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
         embed.set_footer(text=f'{plural(len(temp_channels)):channel}')
         await ctx.send(embed=embed)

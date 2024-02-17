@@ -41,7 +41,7 @@ from .utils.timetools import ShortTime
 
 if TYPE_CHECKING:
     class ModGuildContext(GuildContext):
-        cog: Mod
+        cog: Moderation
         guild_config: GuildConfig
 
 log = get_logger(__name__)
@@ -287,9 +287,9 @@ class Gatekeeper(PostgresItem):
         'started_at', 'role_id', 'starter_role_id', 'channel_id', 'message_id', 'bypass_action', 'rate',
     )
 
-    def __init__(self, members: list[Any], cog: Mod, **kwargs) -> None:
+    def __init__(self, members: list[Any], cog: Moderation, **kwargs) -> None:
         self.bot: Percy = cog.bot
-        self.cog: Mod = cog
+        self.cog: Moderation = cog
         self.members: set[int] = {r['user_id'] for r in members if r['state'] == 'added'}
         super().__init__(**kwargs)
 
@@ -975,7 +975,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect['GatekeeperSetUpView']):
 class GatekeeperSetUpView(discord.ui.View):
     message: discord.Message
 
-    def __init__(self, cog: Mod, user: discord.abc.User, config: GuildConfig, gatekeeper: Gatekeeper) -> None:
+    def __init__(self, cog: Moderation, user: discord.abc.User, config: GuildConfig, gatekeeper: Gatekeeper) -> None:
         super().__init__(timeout=900.0)
         self.user = user
         self.cog = cog
@@ -1445,13 +1445,13 @@ class GatekeeperAlertResolveButton(discord.ui.DynamicItem[discord.ui.Button], te
 
 
 class GatekeeperAlertMassbanButton(discord.ui.DynamicItem[discord.ui.Button], template='gatekeeper:alert:massban'):
-    def __init__(self, cog: Mod) -> None:
+    def __init__(self, cog: Moderation) -> None:
         super().__init__(
             discord.ui.Button(
                 label='Ban Raiders', style=discord.ButtonStyle.red, custom_id='gatekeeper:alert:massban'
             )
         )
-        self.cog: Mod = cog
+        self.cog: Moderation = cog
 
     @classmethod
     async def from_custom_id(
@@ -2130,7 +2130,7 @@ class LockdownTimer(Timer):
     pass
 
 
-class Mod(commands.Cog):
+class Moderation(commands.Cog):
     """Utility commands for moderation."""
 
     def __init__(self, bot: Percy):
@@ -2733,7 +2733,7 @@ class Mod(commands.Cog):
                 'You can use the commands in this category to modify these settings.'
             ),
             timestamp=discord.utils.utcnow(),
-            color=helpers.Colour.darker_red())
+            color=helpers.Colour.white())
         embed.set_thumbnail(url=get_asset_url(ctx.guild))
 
         enabled = 0
@@ -3292,7 +3292,7 @@ class Mod(commands.Cog):
         entities = [resolve_entity_id(x) for x in config.safe_automod_entity_ids]
 
         class EmbedPaginator(BasePaginator[str]):
-            colour = self.bot.colour.darker_red()
+            colour = self.bot.colour.white()
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
                 embed = discord.Embed(timestamp=discord.utils.utcnow(), color=self.colour)
@@ -4680,4 +4680,4 @@ class Mod(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Mod(bot))
+    await bot.add_cog(Moderation(bot))

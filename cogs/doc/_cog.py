@@ -57,7 +57,7 @@ class PackageName(commands.Converter):
             cog: Documentation = ctx.bot.get_cog('Documentation')  # type: ignore
             if argument not in cog.doc_symbols:
                 if cog.base_urls:
-                    embed = discord.Embed(color=helpers.Colour.darker_red())
+                    embed = discord.Embed(color=helpers.Colour.white())
                     embed.set_footer(text=f'{plural(len(cog.base_urls)):inventory|invetories} found.')
                     results = [f'• [`{entry[0]}`]({entry[1]})' for entry in [(k, v) for k, v in cog.base_urls.items()]]
                     await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
@@ -773,7 +773,7 @@ class Documentation(commands.Cog):
         if len(matches) == 0:
             return await ctx.send(f'{ctx.tick(False)} The symbol `{symbol_name}` was not found.')
 
-        e = discord.Embed(title=f'{package} Search', colour=helpers.Colour.darker_red())
+        e = discord.Embed(title=f'{package} Search', colour=helpers.Colour.white())
         e.description = '\n'.join(
             f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url})'
             for doc_item in matches)

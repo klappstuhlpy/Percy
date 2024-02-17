@@ -212,7 +212,11 @@ class BasePaginator(discord.ui.View, Generic[T]):
         self.extras: dict[str, Any] = {}
 
         self._current_page = 0
-        self.pages = [entries[i: i + per_page] for i in range(0, len(entries), per_page)]
+
+        try:
+            self.pages = [entries[i: i + per_page] for i in range(0, len(entries), per_page)]
+        except KeyError:
+            self.pages = [entries]
 
         self.msg: discord.Message = MISSING
         self.ctx: Context | discord.Interaction = MISSING
@@ -420,11 +424,12 @@ class BasePaginator(discord.ui.View, Generic[T]):
 
         page = await self.format_page(self.pages[0])
         object_kwargs = self._message_kwargs(page)
-        if self.total_pages <= 1:
-            object_kwargs.pop('view')
 
         if search_for and self.total_pages > 5:
             self.add_item(SearchForButton(self))
+
+        if self.total_pages <= 1:
+            object_kwargs.pop('view')
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
@@ -564,7 +569,7 @@ class LinePaginator(BasePaginator[List[Any]]):
         self.ctx = context
 
         if not kwargs.get('embed'):
-            kwargs['embed'] = discord.Embed(colour=helpers.Colour.darker_red())
+            kwargs['embed'] = discord.Embed(colour=helpers.Colour.white())
 
         self.embed = kwargs.pop('embed')
         self.location = kwargs.pop('location', 'field')

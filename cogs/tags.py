@@ -563,7 +563,7 @@ class Tags(commands.Cog):
             if tag is None or len(tag) == 0:
                 raise commands.BadArgument(f'No Tag with the name or ID `{name_or_id}` found.')
             else:
-                embed = discord.Embed(title='*Did you mean ...*', colour=self.bot.colour.darker_red())
+                embed = discord.Embed(title='*Did you mean ...*', colour=self.bot.colour.white())
                 await LinePaginator.start(
                     ctx, entries=[f'* **{r.name}** [`{r.id}`]' for r in tag], embed=embed, per_page=20
                 )
@@ -874,7 +874,7 @@ class Tags(commands.Cog):
             pass
 
     async def guild_tag_stats(self, ctx: GuildContext):
-        embed = discord.Embed(colour=self.bot.colour.darker_red(), title=f'Tag Statistics for {ctx.guild.name}')
+        embed = discord.Embed(colour=self.bot.colour.white(), title=f'Tag Statistics for {ctx.guild.name}')
         embed.set_thumbnail(url=get_asset_url(ctx.guild))
         embed.set_footer(text='Tag Statistics for this Server.')
 
@@ -953,7 +953,7 @@ class Tags(commands.Cog):
         await ctx.send(embed=embed)
 
     async def member_tag_stats(self, ctx: GuildContext, member: discord.Member | discord.User):
-        embed = discord.Embed(color=self.bot.colour.darker_red())
+        embed = discord.Embed(color=self.bot.colour.white())
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_thumbnail(url=get_asset_url(member))
         embed.set_footer(text='Tag Stats for this Member.')
@@ -1218,7 +1218,7 @@ class Tags(commands.Cog):
             else:
                 embed = discord.Embed(title='Tag Search',
                                       description=f'**{member}\'s** Tags in {ctx.guild.name}',
-                                      colour=helpers.Colour.darker_red(),
+                                      colour=helpers.Colour.white(),
                                       timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f'{plural(len(rows)):entry|entries}')
 
@@ -1319,7 +1319,7 @@ class Tags(commands.Cog):
                 embed = discord.Embed(
                     title='Tag Search',
                     description=f'Sorted by: **{flags.sort}**',
-                    colour=helpers.Colour.darker_red(),
+                    colour=helpers.Colour.white(),
                     timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f'{plural(len(rows)):entry|entries}')
 

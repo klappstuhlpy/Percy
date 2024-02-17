@@ -232,7 +232,7 @@ class AniListSearch(commands.Cog, name="Media"):
                 You will then be redirected to our site. Copy the code our site gives you and use the second button below to pas
                 it to us. Once you've done that, you're all set!
             """),
-            color=self.bot.colour.darker_red(),
+            color=self.bot.colour.white(),
             url="https://anilist.co/",
         )
         embed.set_thumbnail(url=ANILIST_ICON)

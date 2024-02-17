@@ -212,7 +212,7 @@ class Economy(commands.Cog):
             async def format_page(self, entries: List[T], /) -> discord.Embed:
                 embed = discord.Embed(
                     description='This is the server\'s leaderboard.\n\n',
-                    colour=helpers.Colour.darker_red()
+                    colour=helpers.Colour.white()
                 )
                 embed.description += '\n'.join(entries)
                 embed.set_author(name=f'{ctx.guild.name}\'s Economy Leaderboard', icon_url=get_asset_url(ctx.guild))
@@ -233,7 +233,7 @@ class Economy(commands.Cog):
         balance = await self.get_balance(user.id, ctx.guild.id)
         embed = discord.Embed(
             description='Server Leaderboard Rank: x',
-            colour=self.bot.colour.darker_red()
+            colour=self.bot.colour.white()
         )
         embed.set_author(name=f'{user.display_name}\'s Balance', icon_url=get_asset_url(user))
         embed.add_field(name='Cash', value=f'{cash_emoji} **{balance.cash:,}**')

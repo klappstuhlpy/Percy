@@ -26,14 +26,16 @@ from cogs.utils.lock import LockedResourceError
 
 if TYPE_CHECKING:
     from cogs.reminder import Reminder, Timer
-    from cogs.mod import Mod as ModCog
+    from cogs.mod import Moderation as ModCog
     from cogs.config import Config as ConfigCog
     from discord.types.guild import GuildFeature
+    from cogs.meta import PaginatedHelpCommand
     from launcher import get_logger
 
     log = get_logger(__name__)
     GuildFeatureA = tuple[GuildFeature, str]
 else:
+    PaginatedHelpCommand = commands.HelpCommand
     GuildFeatureA = tuple[str, str]
     log = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ class SpamControl:
         if not autoblock:
             return
 
-        embed = discord.Embed(title='Auto-Blocked Member', colour=0xDDA453)
+        embed = discord.Embed(title='Auto-Blocked Member', colour=helpers.Colour.di_sierra())
         embed.add_field(name='Member', value=f'{message.author} (ID: {message.author.id})', inline=False)
         embed.add_field(name='Guild Info', value=f'{guild_name} (ID: {guild_id})', inline=False)
         embed.add_field(name='Channel Info', value=f'{message.channel} (ID: {message.channel.id}', inline=False)
@@ -169,6 +171,7 @@ class Percy(commands.Bot):
     session: aiohttp.ClientSession
     config: Config
     old_tree_error = Callable[[discord.Interaction, discord.app_commands.AppCommandError], Coroutine[Any, Any, None]]
+    help_command: PaginatedHelpCommand
 
     def __init__(self) -> None:
         allowed_mentions = discord.AllowedMentions(roles=False, everyone=False, users=True)
@@ -513,7 +516,7 @@ class Percy(commands.Bot):
 
     @property
     def moderation(self) -> Optional[ModCog]:
-        return self.get_cog('Mod')
+        return self.get_cog('Moderation')
 
     @property
     def user_settings(self) -> Optional[UserSettings]:

@@ -864,20 +864,6 @@ HANG_MAN = [
 ]
 
 HELP_PAGES = [
-    inspect.cleandoc(
-        """
-        ## Hello World!
-        Here you can find help for all Commands available to you based on your permissions for {name}.
-        Try using the dropdown to navigate through the categories to get a list of all Commands.
-        ### More Help
-        Alternatively you can use the following Commands to get Information about a specific Command or Category:
-        - `{prefix}help` *`command`*
-        - `{prefix}help` *`category`*
-        ### Stats
-        Total of **{command_runs}** command runs.
-        Currently are **{commands}** commands loaded.
-        """
-    ),
     (
         ('<argument>', 'This argument is **required**.'),
         ('[argument]', 'This argument is **optional**.'),
@@ -898,20 +884,6 @@ HELP_PAGES = [
             '\n'
             'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
             '- `{prefix}command --flag1 my first argument --flag2 \'argument 2`\''
-        ),
-        (
-            '\u200b',
-            '<:discord_info:1113421814132117545> **Important:**\n'
-            'Do not type the arguments in brackets.\n'
-            'Most of the Commands are **Hybrid Commands**, which means that you can use them as Slash Commands or Message Commands.'
         )
-    ),
-    inspect.cleandoc(
-        """
-        ## License
-        Percy is licensed and underlying the [MPL-2.0 License](https://www.tldrlegal.com/license/mozilla-public-license-2-0-mpl-2) and Guidelines.
-        ## Source Code
-        You can obtain a copy of me over at [GitHub](https://github.com/klappstuhlpy/Percy)
-        """
-    ),
+    )
 ]

@@ -60,7 +60,7 @@ class Payouts(enum.Enum):
     SLUT_COODLWON = 14400.0  # 4 hours
 
 
-class Games(commands.GroupCog):
+class Games(commands.Cog):
     """Play games against the bot or other players to earn money."""
 
     def __init__(self, bot: Percy):
@@ -76,11 +76,7 @@ class Games(commands.GroupCog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='\N{VIDEO GAME}')
 
-    def __repr__(self) -> str:
-        return '<cogs.Games>'
-
     @commands.command(
-        commands.hybrid_command,
         name='tictactoe',
         description='Play a TicTacToe party with another user.',
         aliases=['ttt'],
@@ -106,7 +102,6 @@ class Games(commands.GroupCog):
         await msg.delete(delay=1)
 
     @commands.command(
-        commands.hybrid_command,
         name='minesweeper',
         aliases=['ms'],
         description='Play a Minesweeper game.',
@@ -123,7 +118,6 @@ class Games(commands.GroupCog):
         await ctx.send(embed=ms.build_embed(), view=ms)
 
     @commands.command(
-        commands.hybrid_command,
         name='hangman',
         description='Play a Hangman game.',
         guild_only=True
@@ -179,7 +173,6 @@ class Games(commands.GroupCog):
                     break  # Break out to prevent the bot from sending multiple messages
 
     @commands.command(
-        commands.hybrid_command,
         name='blackjack',
         description='Play a Blackjack game.',
         aliases=['bj'],

@@ -258,7 +258,7 @@ class Table:
 
     def build_embed(self, winning_spaces: list[Space] = [], image_url: str = None, result: int = None) -> discord.Embed:  # noqa
         """Build the embed for the roulette table."""
-        embed = discord.Embed(title='Roulette Table', color=helpers.Colour.darker_red())
+        embed = discord.Embed(title='Roulette Table', color=helpers.Colour.white())
         embed.set_image(url='https://images.klappstuhl.me/gallery/uzWbgjgCOj.png')
         embed.set_footer(text=f'Total of {plural(len(self.bets)):bet} placed.')
 

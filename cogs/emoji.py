@@ -308,7 +308,7 @@ class Emoji(commands.Cog):
         return f'{name}: {count} uses ({p:.1%}), {per_day:.1f} uses/day.'
 
     async def get_guild_stats(self, ctx: GuildContext):
-        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
+        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.white())
 
         query = """
             SELECT
@@ -423,7 +423,7 @@ class Emoji(commands.Cog):
             ORDER BY total DESC
         """
 
-        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.darker_red())
+        embed = discord.Embed(title='Emoji Leaderboard', colour=ctx.bot.colour.white())
         records = await ctx.db.fetch(query, ctx.guild.id, emoji_ids)
 
         total = sum(a for _, a in records)

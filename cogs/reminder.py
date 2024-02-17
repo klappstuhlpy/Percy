@@ -254,7 +254,7 @@ class Reminder(commands.Cog):
         self.bot.dispatch(event_name, timer)
 
     async def get_timer(self, event: str, /, **kwargs: Any) -> Optional[Timer]:
-        """|coro|
+        r"""|coro|
 
         Gets a timer from the database.
         Note: you cannot find a timer by its expiry or creation time.
@@ -481,7 +481,7 @@ class Reminder(commands.Cog):
 
         embed = discord.Embed(title='Your Reminders',
                               description='Here is a list of the last **reminders** you\'ve set.',
-                              color=self.bot.colour.darker_red())
+                              color=self.bot.colour.white())
         embed.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
         embed.set_footer(text=f'Showing {plural(len(records)):Reminder}')
 

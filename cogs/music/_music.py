@@ -1001,7 +1001,7 @@ class Music(commands.Cog):
                 embed = discord.Embed(title=data['full_title'],
                                       url=song_url,
                                       description=entries[0],
-                                      colour=helpers.Colour.teal())
+                                      colour=helpers.Colour.white())
                 embed.set_thumbnail(url=data['header_image_url'])
                 return embed
 

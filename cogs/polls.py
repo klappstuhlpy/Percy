@@ -86,7 +86,7 @@ class PollReasonModal(discord.ui.Modal, title='The Reason for you choice.'):
                                   style=discord.TextStyle.long, min_length=1, max_length=200)
 
     async def on_submit(self, interaction: Interaction) -> None:
-        embed = discord.Embed(title='New Poll Reason', color=self.bot.colour.darker_red())
+        embed = discord.Embed(title='New Poll Reason', color=self.bot.colour.white())
         embed.set_thumbnail(url=get_asset_url(interaction.guild))
         embed.set_author(name=interaction.user, icon_url=get_asset_url(interaction.user))
         embed.add_field(name='Poll', value=f'{self.poll.question}\n{self.poll.jump_url}', inline=False)
@@ -981,7 +981,7 @@ class Polls(commands.Cog):
             question: str,
             when: app_commands.Transform[datetime.datetime, timetools.TimeTransformer],
             description: str = None,
-            color: app_commands.Transform[discord.Colour, converters.ColorTransformer] = helpers.Colour.darker_red(),
+            color: app_commands.Transform[discord.Colour, converters.ColorTransformer] = helpers.Colour.white(),
             channel: discord.TextChannel = None,
             thread_question: str = None,
             ping: bool = False,
@@ -1397,7 +1397,7 @@ class Polls(commands.Cog):
             embed = discord.Embed(
                 title='Poll Search',
                 description='\n'.join(text),
-                colour=helpers.Colour.darker_red(),
+                colour=helpers.Colour.white(),
                 timestamp=discord.utils.utcnow()
             )
             embed.set_thumbnail(url=get_asset_url(interaction.guild))
@@ -1428,7 +1428,7 @@ class Polls(commands.Cog):
             async def format_page(self, entries: List[Poll], /) -> discord.Embed:
                 embed = discord.Embed(
                     title=f'Poll History for {member}',
-                    colour=helpers.Colour.darker_red(),
+                    colour=helpers.Colour.white(),
                     timestamp=discord.utils.utcnow())
                 embed.set_footer(text=f'{plural(len(polls)):entry|entries}')
 
@@ -1508,7 +1508,7 @@ class Polls(commands.Cog):
 
         if all(i is None for i in [channel, reason_channel, ping_role]):
             embed = discord.Embed(title='Poll Configuration',
-                                  colour=helpers.Colour.darker_red(),
+                                  colour=helpers.Colour.white(),
                                   timestamp=discord.utils.utcnow())
             embed.add_field(name='Poll Channel',
                             value=f'<#{config.poll_channel_id}>' if config.poll_channel_id else 'N/A')
