@@ -44,7 +44,7 @@ def get_arg_value(name_or_pos: Argument, arguments: BoundArgs) -> Any:
 def get_arg_value_wrapper(
         decorator_func: Callable[[ArgValGetter], Decorator],
         name_or_pos: Argument,
-        func: Callable[[Any], Any] = None,
+        func: Callable[[Any], Any] | None = None,
 ) -> Decorator:
     """Call `decorator_func` with the value of the arg at the given name/position.
 

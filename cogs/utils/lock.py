@@ -236,7 +236,7 @@ def lock_func(
 def lock_arg(
         namespace: Hashable,
         name_or_pos: function.Argument,
-        func: Callable[[Any], _IdCallableReturn] = None,
+        func: Callable[[Any], _IdCallableReturn] | None = None,
         *,
         raise_error: bool = False,
         wait: bool = False,
