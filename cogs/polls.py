@@ -881,7 +881,7 @@ class Polls(commands.Cog):
         return Poll(self, record=record) if record else None
 
     @cache.cache()
-    async def get_guild_polls(self, guild_id: int) -> List[Poll]:
+    async def get_guild_polls(self, guild_id: int, /) -> List[Poll]:
         """|coro| @cached
 
         Parameters
@@ -1014,7 +1014,7 @@ class Polls(commands.Cog):
         if ping:
             ping_message = await channel.send(f'*...*')
 
-        new_index = len(await self.get_guild_polls(guild_id=interaction.guild.id)) + 1
+        new_index = len(await self.get_guild_polls(interaction.guild.id)) + 1
         unique_id = uuid([rec[0] for rec in await self.bot.pool.fetch('SELECT id FROM polls')])
 
         if thread_question:
@@ -1414,17 +1414,18 @@ class Polls(commands.Cog):
     @app_commands.describe(member='The Member to show the history for.')
     async def polls_history(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
         """Shows the vote history of a user for polls."""
-        polls = await self.get_guild_polls(guild_id=interaction.guild.id)
+        await interaction.response.defer()
+
+        polls = await self.get_guild_polls(interaction.guild.id)
 
         if not polls:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 f'{tick(False)} You haven\'t voted in this guild yet.', ephemeral=True)
 
         member = member or interaction.user
-        user_polls = list(filter(lambda poll: any(x[0] == member.id for x in poll.users), polls))
+        user_polls = list(filter(lambda poll: any(x[0] == member.id for x in poll.entries), polls))
 
         class FieldPaginator(BasePaginator[Poll]):
-
             async def format_page(self, entries: List[Poll], /) -> discord.Embed:
                 embed = discord.Embed(
                     title=f'Poll History for {member}',
