@@ -21,8 +21,7 @@ from .utils import commands
 from .utils.converters import Snowflake
 from .utils.lock import lock
 from .utils.paginator import TextSource
-from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_BOTS_ROLE, PH_HELP_FORUM, TOKEN_REGEX, \
-    PLAYGROUND_GUILD_ID, PH_MEMBERS_ROLE
+from .utils.constants import GITHUB_RE, GITHUB_GIST_RE, PH_GUILD_ID, PH_HELP_FORUM, TOKEN_REGEX, PLAYGROUND_GUILD_ID
 from launcher import get_logger
 
 if TYPE_CHECKING:
