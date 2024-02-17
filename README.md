@@ -49,6 +49,7 @@ from types import SimpleNamespace
 
 client_id = ''  # Your Bots Client ID
 token = ''  # Your Bots Token
+
 debug = False
 
 mystbin_key = ''  # Mystbin API Key
@@ -64,9 +65,10 @@ stat_webhook = ('', '')  # ID, Code
 
 anilist = SimpleNamespace(client_id=0, client_secret='', redirect_uri='https://anilist.co/api/v2/oauth/pin')  # Anilist API Keys
 marvel = SimpleNamespace(public_key='', private_key='')  # Marvel API Keys
+genius = SimpleNamespace(access_token='')  # Genius API Key
+wavelink = SimpleNamespace(uri='', password='')  # Lavalink Server
 ```
 
 ## License
 
 This project is licensed under the MPL License. See the LICENSE file for details.
-This Project utilizes Code from [R. Danny](https://github.com/Rapptz/RoboDanny)
