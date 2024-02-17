@@ -7,6 +7,7 @@ import itertools
 import os
 import re
 import time
+import traceback
 from collections import Counter
 from dataclasses import dataclass
 from typing import (
@@ -27,7 +28,7 @@ from .utils.formats import plural, format_date, truncate
 from .utils.paginator import BasePaginator, TextSource, LinePaginator
 from .utils.constants import (
     PH_HELP_FORUM, PH_SOLVED_TAG, PartialCommand,
-    PartialCommandGroup, App, PH_GUILD_ID, HELP_PAGES
+    PartialCommandGroup, App, PH_GUILD_ID
 )
 from .utils.timetools import mean_stddev, RelativeDelta
 
@@ -53,6 +54,11 @@ def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
     if s1 == s2:
         return inspect.cleandoc(s1)
     if s1 and s2:
+        # Check if there are duplicate lines and remove them
+        s1 = s1.split('\n')
+        s2 = s2.split('\n')
+        s1 = '\n'.join([line for line in s1 if line not in s2])
+        s2 = '\n'.join([line for line in s2 if line not in s1])
         return inspect.cleandoc(f'{s1}\n\n{s2}')
     if s1 or s2:
         return inspect.cleandoc(s1 or s2)
@@ -94,72 +100,95 @@ class UnsolvedFlags(commands.FlagConverter, delimiter=' ', prefix='--'):
         converter=RelativeDelta())
 
 
-class GroupPaginator(BasePaginator[PartialCommand]):
+class HelpPaginator(BasePaginator[PartialCommand]):
+    async def format_page(self, entries: List[PartialCommand]) -> discord.Embed:
+        _temp = PaginatedHelpCommand.temporary(self.ctx)
 
-    async def format_page(self, entries: List[commands.Command]) -> discord.Embed:
-        group = self.extras.get('group')
-        if not group:
+        if self.current_page == 1 and isinstance(self.entries, dict):
+            return await _temp.get_front_page_embed()
+
+        if not (group := self.extras.get('group')):
             raise commands.CommandError('The group attribute is missing.')
 
         emoji = getattr(group, 'display_emoji', None) or ''
         embed = discord.Embed(
-            title=f'{emoji} {group.qualified_name} Commands',
+            title=f'{emoji} {group.qualified_name}',
             description=group.description,
-            colour=helpers.Colour.darker_red()
+            colour=helpers.Colour.coral()
         )
 
-        _temp = PaginatedHelpCommand.temporary(self.ctx)
         for cmd in entries:
+            prefix = f'{_temp.locked_emoji} | ' if getattr(cmd, 'is_locked', False) else ''
             signature = _temp.get_command_signature(cmd, shortened_signature=True, with_prefix=False)
-            embed.add_field(name=signature, value=cmd.description or '…', inline=False)
+            embed.add_field(name=f'{prefix}**`{signature}`**', value=cmd.description or '…', inline=False)
+
+        if any(getattr(cmd, 'is_locked', False) is True for cmd in entries):
+            embed.add_field(
+                name='\u200b',
+                value=f'{_temp.locked_emoji} » This command expects certain permissions from the user to be run.',
+                inline=False
+            )
 
         embed.set_author(name=f'{plural(len(self.entries)):command}', icon_url=COMMAND_ICON_URL)
 
-        if all(isinstance(cmd, app_commands.AppCommand) for cmd in self.entries):
-            text = 'Those Commands are only available as Slash Commands.'
-        else:
-            text = f'Use "{getattr(self.ctx, 'safe_prefix', '/')}help command" for more info on a command.'
-        embed.set_footer(text=text)
+        embed.set_footer(
+            text=f'{self.ctx.user} | Use the components below for navigation. '
+                 f'This menu shows only the available commands and categories.')
         return embed
 
     @classmethod
     async def start(
-            cls: Type[GroupPaginator],
+            cls: Type[HelpPaginator],
             context: Context | discord.Interaction,
             /,
             *,
-            entries: List[PartialCommand],
+            entries: List[PartialCommand] | Dict[commands.Cog, list[PartialCommand]],
             per_page: int = 6,
             clamp_pages: bool = True,
             timeout: int = 180,
             search_for: bool = False,
             ephemeral: bool = False,
             **kwargs: Any,
-    ) -> GroupPaginator[PartialCommand]:
+    ) -> HelpPaginator[PartialCommand]:
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
+
+        if kwargs.get('extras', None):
+            self.extras.update(kwargs.pop('extras'))
         self.extras.update(kwargs)
 
-        groups: Optional[Dict] = self.extras.get('groups', None)
-        if groups is not None:
-            self.add_item(CategorySelect(getattr(context, 'bot', context.client), groups))
+        if len(self.pages) == 1:
+            self.clear_items()
+
+        def prepare_select(items: Union[dict[commands.Cog, list[PartialCommand]], list[PartialCommand]]):
+            return CategorySelect(context.client, entries=items, with_index=self.extras.get('with_index', True))
+
+        if isinstance(entries, dict):
+            self.extras['groups'] = entries
+            self.add_item(prepare_select(entries))
+        elif isinstance(entries, list):
+            if (groups := self.extras.get('groups')) is not None:
+                self.add_item(prepare_select(groups))
+        else:
+            raise commands.CommandError('The entries attribute is missing.')
 
         page: discord.Embed = await self.format_page(self.pages[0])
         self.update_buttons()
 
         func = self._edit if kwargs.pop('edit', False) else self._send
-        view = None if self.total_pages <= 1 and func == self._send else self
+        view = None if (self.total_pages <= 1 and not self.current_page == 1) and func == self._send else self
         await func(ctx=context, embed=page, view=view, ephemeral=ephemeral)
         return self
 
 
 class CategorySelect(discord.ui.Select):
+    """A select menu for the HelpPaginator to navigate through categories."""
 
     def __init__(self, bot: Percy, entries: dict[commands.Cog, list[commands.Command]], with_index: bool = True):
         super().__init__(placeholder='Select a category to view...')
-        self.commands: dict[commands.Cog, list[commands.Command] | list[app_commands.AppCommand]] = entries
         self.bot: Percy = bot
+        self.entries: dict[commands.Cog, list[commands.Command] | list[app_commands.AppCommand]] = entries
         self.with_index: bool = with_index
 
         self.__fill_options()
@@ -173,88 +202,33 @@ class CategorySelect(discord.ui.Select):
                 description='The front page of the Help Menu.',
             )
 
-        for cog, cmds in filter(lambda x: x[1], self.commands.items()):
+        for cog, cmds in filter(lambda x: x[1], self.entries.items()):
             description = cog.description.split('\n', 1)[0] or None
             emoji = getattr(cog, 'display_emoji', None)
             self.add_option(label=cog.qualified_name, value=cog.qualified_name, description=description, emoji=emoji)
 
-    async def callback(self, ctx: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         assert self.view is not None
+        await interaction.response.defer()
+
         value = self.values[0]
         if value == '__index':
-            await FrontHelpPaginator.start(
-                ctx, entries=self.commands, edit=True, groups=self.view.extras.get('groups', {}))
+            await HelpPaginator.start(interaction, entries=self.entries, edit=True, extras=self.view.extras)
         else:
             cog = self.bot.get_cog(value)
             if cog is None:
-                return await ctx.response.send_message('Somehow this category does not exist?', ephemeral=True)
+                return await interaction.response.send_message('Somehow this category does not exist?', ephemeral=True)
 
-            cmds = self.commands[cog]
+            cmds = self.entries[cog]
             if not cmds:
-                return await ctx.response.send_message('This category has no commands for you', ephemeral=True)
+                return await interaction.response.send_message('This category has no commands for you', ephemeral=True)
 
-            await GroupPaginator.start(
-                ctx, entries=cmds, edit=True, group=cog, groups=self.view.extras.get('groups', {}))
-
-
-class FrontHelpPaginator(BasePaginator[str]):
-    """A Paginator that is used for the Front Page of the Help Command."""
-    async def format_page(self, entries: List, /) -> discord.Embed:
-        prefix: str = getattr(self.ctx, 'safe_prefix', '/')
-        embed = discord.Embed(
-            title=f'{self.ctx.client.user.name}\'s Help Page',
-            colour=helpers.Colour.darker_red(),
-            timestamp=self.ctx.client.user.created_at
-        )
-        embed.set_thumbnail(url=get_asset_url(self.ctx.client.user))
-
-        pag_help: PaginatedHelpCommand = self.ctx.client.help_command.temporary(self.ctx)  # type: ignore
-        if self._current_page == 0:
-            embed.description = entries[0].format(
-                name=self.ctx.client.user.name, prefix=prefix,
-                command_runs=await pag_help.total_commands_invoked(), commands=len(pag_help.get_commands())
-            )
-        elif self._current_page == 1:
-            for name, value in entries[0]:
-                embed.add_field(name=name, value=value.format(prefix=prefix), inline=False)
-        elif self._current_page == 2:
-            embed.description = entries[0]
-
-        embed.set_footer(text=f'I was created at')
-        return embed
-
-    @classmethod
-    async def start(
-            cls: Type[FrontHelpPaginator],
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: Dict,
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 180,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: Any,
-    ) -> FrontHelpPaginator[str]:
-        """Overwritten to add the SelectMenu"""
-        self = cls(entries=HELP_PAGES, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
-        self.ctx = context
-        self.extras.update(kwargs)
-
-        page = await self.format_page(self.pages[0])
-        self.add_item(CategorySelect(self.ctx.client, entries))  # noqa
-
-        self.update_buttons()
-
-        func = self._edit if kwargs.pop('edit', False) else self._send
-        await func(ctx=context, embed=page, view=self, ephemeral=ephemeral)
-        return self
+            await HelpPaginator.start(interaction, entries=cmds, edit=True, group=cog, extras=self.view.extras)
 
 
 class PaginatedHelpCommand(commands.HelpCommand):
     """A subclass of the default help command that implements support for Application/Hybrid Commands."""
-    
+
     context: Context
 
     def __init__(self):
@@ -270,18 +244,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
             }
         )
 
+    @property
+    def locked_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name='locked', id=1208405196334567474)
+
     def get_commands(self) -> set[PartialCommand]:
+        """Returns all commands of the bot."""
         return set(self.context.client.commands) | set(self.context.client.tree.get_commands())
 
     @staticmethod
     def get_cog_commands(cog: commands.Cog) -> set[PartialCommand]:
+        """Returns all commands of a cog."""
         return set(cog.get_commands()) | set(cog.get_app_commands())
 
     async def total_commands_invoked(self) -> int:
+        """Returns the total amount of commands invoked."""
         query = "SELECT COUNT(*) as total FROM commands;"
         return await self.context.client.pool.fetchval(query)  # type: ignore
 
-    async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):  # noqa
+    async def command_callback(self, ctx: Context, /, *, command: Optional[str] = None):
         """|coro|
 
         The actual implementation of the help command.
@@ -307,6 +288,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             mapping = self.get_bot_mapping()
             return await self.send_bot_help(mapping)
 
+        if command == 'flags':
+            return await self.context.send(embed=self.get_flag_help_embed(), silent=True)
+
         cog = ctx.bot.get_cog(command)
         if cog is not None:
             return await self.send_cog_help(cog)
@@ -320,61 +304,83 @@ class PaginatedHelpCommand(commands.HelpCommand):
         else:
             return await self.send_command_help(cmd)
 
-    async def app_command_can_run(self, cmd: app_commands.Command, /) -> bool:
-        """|coro|
+    @staticmethod
+    def command_permissions_can_run(command: PartialCommand, /) -> bool:
+        """Checks if a command can be executed by checking if a command has set required permissions for the user.
 
-        Checks whether a slash command can run in the current context.
-        This checks the permissions the command requires.
-
-        Note
-        ----
-        This is very basic and only works for commands that use my own @command decorator to set permissions,
-        that implements an easy access and readable functionallity for the permissions.
+        Returns `True` if the command has no permission set, otherwise `False`.
 
         Parameters
         -----------
-        cmd: :class:`app_commands.Command`
-            The slash command to check.
-
-        Returns
-        --------
-        :class:`bool`
-            Whether the slash command can run or not.
-        """
-        command_permissions: Optional[list[str]] = getattr(cmd.callback, '__user_permissions__', None)
-        if command_permissions is None:
-            return True
-
-        channel_permissions = self.context.channel.permissions_for(self.context.author)
-
-        if all(getattr(channel_permissions, perm, False) for perm in command_permissions):
-            return True
-
-        return False
-
-    async def can_run(self, cmd: PartialCommand) -> bool:
-        """|coro|
-
-        Checks whether a command can run in the current context.
-
-        Parameters
-        -----------
-        cmd: :class:`.commands.PartialCommand`
+        command: :class:`.commands.PartialCommand`
             The command to check.
 
         Returns
         --------
         :class:`bool`
-            Whether the command can run or not.
+            Whether the command can be executed or not.
+        """
+        if isinstance(command, app_commands.Group):
+            return True
+
+        command_permissions: Optional[list[str]] = getattr(command.callback, '__user_permissions__', None)
+        if command_permissions is None:
+            return True
+
+        # channel_permissions = self.context.channel.permissions_for(self.context.author)
+        #
+        # if all(getattr(channel_permissions, perm, False) is True for perm in command_permissions):
+        #     return True
+
+        return False
+
+    async def command_is_locked(self, command: PartialCommand, /) -> bool:
+        """|coro|
+
+        Checks whether a command is locked or not.
+
+        Parameters
+        -----------
+        command: :class:`.commands.PartialCommand`
+            The command to check.
+
+        Returns
+        --------
+        :class:`bool`
+            Whether the command is locked or not.
+        """
+        perms_can_run = self.command_permissions_can_run(command)
+        try:
+            context_can_run = await command.can_run(self.context)
+        except AttributeError:
+            context_can_run = True
+
+        return not (perms_can_run and context_can_run)
+
+    @staticmethod
+    def command_is_hidden(command: PartialCommand) -> bool:
+        """Checks whether a command can run in the current context.
+
+        Returns `True` if the command is hidden, otherwise `False`.
+
+        Parameters
+        -----------
+        command: :class:`.commands.PartialCommand`
+            The command to check.
+
+        Returns
+        --------
+        :class:`bool`
+            Whether the command is hidden or not.
         """
         try:
-            if isinstance(cmd, App):
-                return await self.app_command_can_run(cmd)
-            return await cmd.can_run(self.context)
-        except:  # noqa
+            return command.hidden
+        except AttributeError:
             return False
 
-    async def _get_all_subcommands(self, command: PartialCommand | PartialCommandGroup, names: set[str]) -> set[PartialCommand]:
+    async def _get_all_subcommands(
+            self, command: PartialCommand | PartialCommandGroup, names: set[str]
+    ) -> set[PartialCommand]:
         """|coro|
 
         Returns all subcommands of a command.
@@ -396,7 +402,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         async def add_subcommand(cmd: PartialCommand):
             nonlocal subcommands, names
-            if await self.can_run(cmd) and cmd.qualified_name not in names:
+            if not self.command_is_hidden(cmd) and cmd.qualified_name not in names:
+                setattr(cmd, 'is_locked', await self.command_is_locked(cmd))
+
                 subcommands.add(cmd)
                 names.add(cmd.qualified_name)
 
@@ -439,7 +447,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if sort and key is None:
             key = lambda c: c.name  # noqa
 
-        iterator = commands if self.show_hidden else filter(lambda c: not getattr(c, 'hidden', False), commands)
+        iterator = commands if self.show_hidden else filter(lambda c: not self.command_is_hidden(c), commands)
 
         if getattr(self.context, 'guild', None) is None:
             iterator = filter(lambda c: not getattr(c, 'guild_only', False), iterator)
@@ -481,19 +489,18 @@ class PaginatedHelpCommand(commands.HelpCommand):
         :class:`str`
             The command signature.
         """
-        is_app = isinstance(command, (app_commands.commands.Command, app_commands.commands.Group))
-        prefix = ('/' if is_app else self.context.clean_prefix) if with_prefix else ''
+        prefix = ('/' if isinstance(command, App) else self.context.clean_prefix) if with_prefix else ''
 
-        if is_app:
+        if isinstance(command, App):
             if no_signature:
-                return f'{prefix}{command.qualified_name}'
+                return f'{prefix}{command.qualified_name}'.strip()
 
             if isinstance(command, app_commands.commands.Group):
-                return f'{prefix}{command.qualified_name} <subcommand>'
+                return f'{prefix}{command.qualified_name} <subcommand>'.strip()
 
             signature = ' '.join(
                 f'<{option.name}>' if option.required else f'[{option.name}]' for option in command.parameters)
-            return f'{prefix}{command.qualified_name} {signature}'
+            return f'{prefix}{command.qualified_name} {signature}'.strip()
 
         signature = command.signature
 
@@ -509,11 +516,13 @@ class PaginatedHelpCommand(commands.HelpCommand):
         alias = f'{parent} {command.name}' if parent else command.name
 
         if no_signature:
-            return f'{prefix}{alias}'
+            return f'{prefix}{alias}'.strip()
 
         if shortened_signature and len(flags) > 3:
             signature = f'<flags...>'
-        return f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', False) else '')
+
+        final = f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', False) else '')
+        return final.strip()
 
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
@@ -526,8 +535,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
         mapping: Mapping[Union[:class:`.commands.Cog`, None], List[:class:`.commands.PartialCommand`]]
             The mapping of the commands.
         """
-        def _make_key(cmd: PartialCommand) -> str:
-            """Creates a key for the commands origin Cog."""
+
+        def key(cmd: PartialCommand) -> str:
             try:
                 if isinstance(cmd, app_commands.commands.Group):
                     return cmd.parent.qualified_name
@@ -535,26 +544,100 @@ class PaginatedHelpCommand(commands.HelpCommand):
                     return cmd.binding.qualified_name
                 else:
                     return cmd.cog.qualified_name
-            except AttributeError:
-                return '\U0010ffff'
+            except (AttributeError, IndexError):
+                return 'No Category'
 
-        entries = await self.filter_commands(self.get_commands(), sort=True, key=lambda cmd: _make_key(cmd))
+        entries = await self.filter_commands(self.get_commands(), sort=True, key=key)
 
         grouped: dict[commands.Cog, list[PartialCommand]] = {}
-        for name, children in itertools.groupby(entries, key=lambda cmd: _make_key(cmd)):
-            if name == '\U0010ffff':
-                continue
+        for command in entries:
+            cog = self.context.bot.get_cog(key(command))
+            if cog and not self.command_is_hidden(command):
+                grouped.setdefault(cog, []).append(command)
 
-            cog = self.context.bot.get_cog(name)
-            if cog is None:
-                continue
+        grouped = {cog: cmds for cog, cmds in sorted(grouped.items(), key=lambda x: x[0].qualified_name)}
+        await HelpPaginator.start(self.context, entries=grouped, per_page=1)
 
-            if all(getattr(cmd, 'hidden', False) for cmd in children):
-                continue
+    async def get_front_page_embed(self) -> discord.Embed:
+        """|coro|
 
-            grouped[cog] = list(children)
+        Returns the front page of the help command.
 
-        await FrontHelpPaginator.start(self.context, entries=grouped, per_page=1, groups=grouped)
+        Returns
+        -------
+        :class:`discord.Embed`
+            The front page of the help command.
+        """
+        prefix = getattr(self.context, 'clean_prefix', '/')
+        embed = discord.Embed(
+            title=f'{self.context.client.user.name} Help',
+            description='**```\nPlease use the Select Menu below to explore the corresponding category.```**',
+            colour=helpers.Colour.coral()
+        )
+        embed.set_thumbnail(url=get_asset_url(self.context.guild))
+        embed.add_field(
+            name='More Help',
+            value=(
+                'Alternatively you can use the following commands to get information about a specific command or category:\n'
+                f'- `{prefix}help <command>`\n'
+                f'- `{prefix}help <category>`\n\n'
+                f'You can also use `{prefix}help flags` to get an overview of how to use flags *(special command arguments)*.'
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name='Stats',
+            value=(
+                f'**Total Commands:** `{len(self.get_commands())}`\n'
+                f'**Total Commands Invoked:** `{await self.total_commands_invoked()}`'
+            ),
+        )
+        embed.set_author(name=self.context.client.user, icon_url=get_asset_url(self.context.client.user))
+        embed.set_footer(text='I was created at')
+        embed.timestamp = self.context.client.user.created_at
+        return embed
+
+    def get_flag_help_embed(self) -> discord.Embed:
+        """|coro|
+
+        Returns the flag help page of the help command.
+
+        Returns
+        -------
+        :class:`discord.Embed`
+            The front page of the help command.
+        """
+        prefix = getattr(self.context, 'clean_prefix', '/')
+        embed = discord.Embed(
+            title='Command Argument Overview',
+            description='**```\nType command arguments without the brackets shown here!```**',
+            colour=helpers.Colour.coral()
+        )
+        embed.set_thumbnail(url=get_asset_url(self.context.guild))
+        embed.add_field(name='`<argument>`', value='This argument is **required**.', inline=False)
+        embed.add_field(name='`[argument]`', value='This argument is **optional**.', inline=False)
+        embed.add_field(name='`<A|B>`',
+                        value='This means **multiple choice**, you can choose by using one. Although it must be A or B.', inline=False)
+        embed.add_field(name='`<argument...>`', value='There are multiple arguments.', inline=False)
+        embed.add_field(name='`<"argument">`',
+                        value='This argument is case-sensitive and should be typed exactly as shown.', inline=False)
+        embed.add_field(name='`<argument="A">`',
+                        value='The default value if you dont provide one of this argument is **A**.', inline=False)
+
+        embed.add_field(
+            name='**Command Flags**',
+            value='Flags are mostly available for commands with many arguments.\n'
+                  'They can provide a better overview and are not required to be typed in.\n\n'
+                  'Flags are prefixed with `--` and can be used like this:\n'
+                  f'- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
+                  f'- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
+                  'Some **first** flag may be used without the `--` prefix:\n'
+                  f'- `{prefix}command argument1 --flag2 argument2`\n\n'
+                  'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
+                  f'- `{prefix}command --flag1 my first argument --flag2 \"argument 2\"`', inline=False)
+
+        embed.set_author(name=self.context.client.user, icon_url=get_asset_url(self.context.client.user))
+        return embed
 
     async def send_cog_help(self, cog: commands.Cog):
         """|coro|
@@ -571,7 +654,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if not entries:
             return await self.context.send(self.command_not_found(cog.qualified_name), silent=True)
 
-        await GroupPaginator.start(self.context, entries=entries, group=cog)
+        await HelpPaginator.start(self.context, entries=entries, group=cog, with_index=False)
 
     @staticmethod
     def get_command_flag_formatting(command: PartialCommand, descripted: bool = False) -> str | list[dict]:
@@ -593,10 +676,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return [] if descripted else ''
 
         flags = command.clean_params.get('flags')
-        resolved: list[str] = []
 
         if not flags:
             return [] if descripted else ''
+
+        resolved: list[str] = []
 
         if descripted:
             for flag in flags.converter.get_flags().values():
@@ -668,11 +752,22 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return resolved
 
     async def command_formatting(self, command: PartialCommand) -> discord.Embed:
-        """Returns an Embed with the command formatting.
+        """|coro|
 
+        Returns an Embed with the command formatting.
         This is a modified version of the original command_formatting.
+
+        Parameters
+        ----------
+        command: :class:`.commands.PartialCommand`
+            The command to format.
+
+        Returns
+        -------
+        :class:`discord.Embed`
+            The formatted command.
         """
-        embed = discord.Embed(colour=helpers.Colour.darker_red())
+        embed = discord.Embed(colour=helpers.Colour.coral())
         embed.set_author(name='Command Help', icon_url=COMMAND_ICON_URL)
 
         embed.description = (
@@ -681,14 +776,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
         )
 
         if getattr(command, 'aliases', None):
-            embed.add_field(name='**Aliases**', value=f'`{' '.join(command.aliases)}`', inline=False)
+            embed.add_field(
+                name='<:equal:1208433651868504085> | **Aliases**',
+                value=' '.join(f'`{alias}`' for alias in command.aliases),
+                inline=False
+            )
 
         if isinstance(command, commands.hybrid.HybridGroup):
             embed.add_field(
-                name='**Hybrid Command**', value='Command can be used as a slash and text command.', inline=False)
+                name='<:very_cool:1208430876069724230> | **Hybrid Command**',
+                value='Command can be used as a slash and text command.',
+                inline=False
+            )
 
         if isinstance(command, App):
-            embed.add_field(name='**Slash Command**', value='Can only be used as a slash command.', inline=False)
+            embed.add_field(
+                name='<:ad:1072925284300496946> | **Slash Command**',
+                value='Can only be used as a slash command.',
+                inline=False
+            )
 
         if getattr(command, 'cooldown', None) is not None:
             try:
@@ -698,27 +804,37 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 # App Commands
                 for_type = cooldown_key(str(command.cooldown.key))  # noqa
             embed.add_field(
-                name='**Cooldown**',
+                name='\N{HOURGLASS} | **Cooldown**',
                 value=f'**{command.cooldown.rate}x** per **{plural(command.cooldown.per):second}** for {for_type}',
                 inline=False
             )
 
         if getattr(command, 'commands', None):
             resolved_sub_commands = [
-                f'* `{self.get_command_signature(cmd)}`' for cmd in command.walk_commands()
-                if await self.can_run(cmd)
+                f'- `{self.get_command_signature(cmd)}`' for cmd in command.walk_commands() if
+                not self.command_is_hidden(cmd)
             ]
             if resolved_sub_commands:
-                subcommands = '\n'.join(resolved_sub_commands)
-                embed.add_field(name='**Subcommands**', value=subcommands, inline=False)
+                embed.add_field(
+                    name='<:command:1116734689999343637> | **Subcommands**',
+                    value='\n'.join(resolved_sub_commands),
+                    inline=False
+                )
 
         if permissions := self.get_command_permission_formatting(command, stringified=True):
-            embed.add_field(name='**Required Permissions**', value=permissions, inline=False)
+            embed.add_field(
+                name=f'{self.locked_emoji} | **Required Permissions**',
+                value=permissions,
+                inline=False
+            )
 
         if examples := command.extras.get('examples'):
-            text = '\n'.join(
-                f'* `{self.get_command_signature(command, no_signature=True)} {example}`' for example in examples)
-            embed.add_field(name='**Examples**', value=text, inline=False)
+            command_signature = self.get_command_signature(command, no_signature=True)
+            embed.add_field(
+                name='<:script:1208429751027372103> | **Examples**',
+                value='\n'.join(f'* `{command_signature} {example}`' for example in examples),
+                inline=False
+            )
 
         for field in self.get_command_flag_formatting(command, descripted=True):
             embed.add_field(**field)
@@ -736,7 +852,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         command: :class:`.commands.PartialCommand`
             The command to send the help for.
         """
-        if not isinstance(command, App) and not await self.can_run(command):
+        if self.command_is_hidden(command):
             return await self.context.send(self.command_not_found(command.name), silent=True)
 
         embed = await self.command_formatting(command)
@@ -765,6 +881,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
         ----------
         context: Union[:class:`Context`, :class:`discord.Interaction`]
             The context to use for the temporary help command.
+
+        Returns
+        -------
+        :class:`PaginatedHelpCommand`
+            The temporary help command instance.
         """
         self = cls()
         self.context = context
@@ -850,7 +971,7 @@ class GuildUserJoinView(discord.ui.View):
         class EmbedPaginator(BasePaginator[str]):
 
             async def format_page(self, entries: List[str], /) -> discord.Embed:
-                embed = discord.Embed(title=f'Join List in {interaction.guild}', color=helpers.Colour.darker_red())
+                embed = discord.Embed(title=f'Join List in {interaction.guild}', color=helpers.Colour.coral())
                 embed.set_author(name=interaction.guild, icon_url=get_asset_url(interaction.guild))
                 embed.set_footer(text=f'{plural(len(chunked_users)):entry|entries}')
 
@@ -1018,7 +1139,8 @@ class Meta(commands.Cog):
         guild_only=True
     )
     @app_commands.describe(module='Get help for a module.', command='Get help for a command')
-    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None, command: Optional[str] = None):
+    async def _help(self, interaction: discord.Interaction, module: Optional[str] = None,
+                    command: Optional[str] = None):
         """Shows help for a command or module."""
         ctx: Context = await self.bot.get_context(interaction)
         await ctx.send_help(module or command)
@@ -1082,7 +1204,7 @@ class Meta(commands.Cog):
             map(lambda e: f'**{e[0]}** - {e[1]}', list(self.bot.get_guild_features(guild.features, only_current=True))))
         embed = discord.Embed(title='Guild Features',
                               timestamp=discord.utils.utcnow(),
-                              color=self.bot.colour.darker_red())
+                              color=self.bot.colour.coral())
         embed.set_footer(text=f'{plural(len(features)):feature|features}')
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location='description')
 
@@ -1367,7 +1489,7 @@ class Meta(commands.Cog):
             return info, u_code
 
         char_list, raw_list = zip(*(char_info(c) for c in characters), strict=True)
-        embed = discord.Embed(title='Char Info', colour=self.bot.colour.darker_red())
+        embed = discord.Embed(title='Char Info', colour=self.bot.colour.coral())
 
         if len(characters) > 1:
             embed.add_field(name='Full Text', value=f'`{''.join(raw_list)}`', inline=False)
@@ -1386,7 +1508,7 @@ class Meta(commands.Cog):
         prefixes = self.bot.get_guild_prefixes(ctx.guild)
         del prefixes[1]
 
-        embed = discord.Embed(title='Prefix List', colour=self.bot.colour.darker_red())
+        embed = discord.Embed(title='Prefix List', colour=self.bot.colour.coral())
         embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
         embed.set_thumbnail(url=get_asset_url(ctx.guild))
         embed.set_footer(text=f'{len(prefixes)} prefixes')
@@ -1475,7 +1597,7 @@ class Meta(commands.Cog):
         def build_embed(content: str) -> discord.Embed:
             return discord.Embed(
                 title='Pong!',
-                colour=helpers.Colour.darker_red(),
+                colour=helpers.Colour.coral(),
                 description=content
             )
 
@@ -1586,7 +1708,8 @@ class Meta(commands.Cog):
         description='Shows the bot\'s permissions in a specific channel.',
         guild_only=True
     )
-    async def permissions_bot(self, ctx: GuildContext, *, channel: Union[discord.abc.GuildChannel, discord.Thread] = None):
+    async def permissions_bot(self, ctx: GuildContext, *,
+                              channel: Union[discord.abc.GuildChannel, discord.Thread] = None):
         """Shows the bots permissions in a specific channel.
         If no channel is given then it uses the current one.
         This is a good way of checking if the bot has the permissions needed
@@ -1614,7 +1737,7 @@ class Meta(commands.Cog):
 
         embed = discord.Embed(
             description=f'### Content\n{truncate(str(obj.before.clean_content), 4000)}',
-            color=self.bot.colour.darker_red(),
+            color=self.bot.colour.coral(),
             timestamp=obj.timestamp)
         embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))
         embed.set_footer(text='Deleted at')
@@ -1641,7 +1764,7 @@ class Meta(commands.Cog):
                         f'{truncate(str(obj.before.clean_content), 2000)}\n'
                         f'### After\n'
                         f'{truncate(str(obj.after.clean_content), 2000)}',
-            color=self.bot.colour.darker_red(),
+            color=self.bot.colour.coral(),
             timestamp=obj.timestamp
         )
         embed.set_author(name=obj.before.author, icon_url=get_asset_url(obj.before.author))
