@@ -1,4 +1,3 @@
-import inspect
 import re
 from pathlib import Path
 from typing import Callable, Dict, Any, Union, TypeVar, Coroutine
@@ -19,20 +18,11 @@ PH_GUILD_ID = 1066703165669515264
 PH_BOTS_ROLE = 1066703165669515266
 PH_HELP_FORUM = 1079786704862445668
 PH_SOLVED_TAG = 1079787335803207701
-PH_MEMBERS_ROLE = 1066703165669515267
 PLAYGROUND_GUILD_ID = 1062074624935993424
 
-PH_LOGGING_CHANNEL = 1085947081094594693
-
-PH_VOICE_ROOM_ID = 1077008868187578469
-PH_GENERAL_VOICE_ID = 1079788410220322826
-
-DSTATUS_CHANNEL_ID = 1066703170409070666
-PH_HEAD_DEV_ROLE_ID = 1101538861663911986
+# TYPE ALIASES
 
 ObjectHook = Callable[[Dict[str, Any]], Any]
-
-COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
 
 PartialCommandGroup = Union[
     commands.Group | commands.hybrid.HybridGroup | commands.hybrid.Group | app_commands.commands.Group]
@@ -56,10 +46,12 @@ IgnoreableEntity = Union[discord.TextChannel, discord.VoiceChannel, discord.Thre
 
 _TContext = Union[Context, GuildContext]
 
+# TYPE VARS
+
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
 NonCoro = TypeVar('NonCoro', bound=Callable[..., Any])
 
-# REGEX
+# REGEXES
 
 VOLUME_REGEX = re.compile(r'^[+-]?\d+$')
 
@@ -130,6 +122,10 @@ GITHUB_GIST_RE = re.compile(
 )
 
 PACKAGE_NAME_RE = re.compile(r'[^a-zA-Z0-9_.]')
+
+# DICTS/LISTS
+
+COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),
@@ -861,29 +857,4 @@ HANG_MAN = [
     'https://images.klappstuhl.me/gallery/LDuaOZqsHe.png',
     'https://images.klappstuhl.me/gallery/RdZkqyntSS.png',
     'https://images.klappstuhl.me/gallery/PncSvIxMJI.png'
-]
-
-HELP_PAGES = [
-    (
-        ('<argument>', 'This argument is **required**.'),
-        ('[argument]', 'This argument is **optional**.'),
-        ('<A|B>', 'This means **multiple choice**, you can choose by using one. Although it must be A or B.'),
-        ('<argument...>', 'There are multiple Arguments.'),
-        ('<\'argument\'>', 'This argument is case-sensitive and should be typed exaclty as shown.'),
-        ('<argument=A>', 'The default value if you dont provide one of this argument is A.'),
-        (
-            'Flags',
-            'Flags are mostly available for commands with many arguments.\n'
-            'They can provide a better overview and are not required to be typed in.\n'
-            '\n'
-            'Flags are prefixed with `--` and can be used like this:\n'
-            '- `{prefix}command --flag1 argument1 --flag2 argument2`\n'
-            '- `{prefix}command --flag1 argument1 --flag2 argument2 --flag3 argument3`\n'
-            'Some **first** flag may be used without the `--` prefix:\n'
-            '- `{prefix}command argument1 --flag2 argument2`\n'
-            '\n'
-            'Flag values can also be more than one word long, they end with the next flag you type (`--`):\n'
-            '- `{prefix}command --flag1 my first argument --flag2 \'argument 2`\''
-        )
-    )
 ]
