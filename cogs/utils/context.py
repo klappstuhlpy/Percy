@@ -25,9 +25,10 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
-def tick(_: Optional[bool], label: Optional[str] = None) -> str:
+def tick(_: Optional[bool | Callable], label: Optional[str] = None) -> str:
     """Returns a tick or cross emoji based on the value of `opt`."""
     lookup = {
+        help: '<:discord_info:1113421814132117545>',
         True: '<:greenTick:1079249732364406854>',
         False: '<:redTick:1079249771975413910>',
         None: '<:greyTick:1079250082819477634>',
@@ -273,6 +274,7 @@ class Context(commands.Context):
             ephemeral: bool = False,
     ) -> Optional[bool]:
         """An interactive reaction confirmation dialog.
+
         Parameters
         -----------
         message: str
@@ -286,6 +288,7 @@ class Context(commands.Context):
             Context's message.
         ephemeral: bool
             Whether the prompt should be ephemeral.
+
         Returns
         --------
         Optional[bool]
@@ -327,7 +330,7 @@ class Context(commands.Context):
 
         return f'<{posted_gist_url}>'
 
-    async def stick(self, _: Optional[bool], content: Optional[str] = None, **kwargs: Any) -> Message:
+    async def stick(self, _: Optional[bool | Callable], content: Optional[str] = None, **kwargs: Any) -> Message:
         """Sends a tick or cross emoji based on the value of `x` with an optional message."""
         return await self.send(f'{self.tick(_)} {content or ''}', **kwargs)
 

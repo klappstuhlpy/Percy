@@ -22,7 +22,6 @@ class plural:
 
     Credit: https://github.com/Rapptz/RoboDanny/blob/rewrite/cogs/utils/formats.py#L8-L18
     """
-
     def __init__(self, sized: int | float, pass_content: bool = False):
         self.sized: int | float = sized
         self.pass_content: bool = pass_content
@@ -40,16 +39,28 @@ class plural:
 
 
 def censor_invite(obj: Any, *, _regex=INVITE_REGEX) -> str:
+    """Censors an invite link."""
     return _regex.sub('[censored-invite]', str(obj))
 
 
 def censor_object(iterable: list[int] | Any, obj: str | discord.abc.Snowflake) -> str:
+    """Censors an object if it's in the iterable."""
     if not isinstance(obj, str) and obj.id in iterable:
         return '[censored]'
     return censor_invite(obj)
 
 
+def resolve_entity_id(x: int, *, guild: discord.Guild):
+    """Resolves an entity ID to a mention or a name."""
+    if guild.get_role(x):
+        return f'<@&{x}>'
+    if guild.get_channel_or_thread(x):
+        return f'<#{x}>'
+    return f'<@{x}>'
+
+
 def valid_filename(sentence: str):
+    """Returns a valid filename from a sentence."""
     disallowed_chars_pattern = re.compile(r'[^\w.-]')
     filename = sentence.replace(' ', '_')
     return re.sub(disallowed_chars_pattern, '', filename)
@@ -58,9 +69,11 @@ def valid_filename(sentence: str):
 def betterget(obj: Any, attr: Union[str, Any], default: Any = None):
     """Gets a nested attribute from a dictionary/object and formats the output accordingly.
 
-    Resolves, for example, isoformatted datetimes etc.
+    Resolves
+    --------
+    - `dict` objects to the value of the attribute.
+    - `str` objects to a `datetime` object if it's in ISO format.
     """
-
     if isinstance(obj, dict):
         obj = obj.get(attr, default)
     else:
@@ -101,6 +114,7 @@ def find_nth_occurrence(string: str, substring: str, n: int) -> int | None:
 
 
 async def plonk_iterator(bot: Percy, guild: discord.Guild, records: list[asyncpg.Record]) -> AsyncIterator[str]:
+    """Iterates over a list of records and resolves them to a mention or a name."""
     for record in records:
         entity_id = record[0]
         resolved = guild.get_channel(entity_id) or await bot.get_or_fetch_member(guild, entity_id)
@@ -110,6 +124,7 @@ async def plonk_iterator(bot: Percy, guild: discord.Guild, records: list[asyncpg
 
 
 def remove_html_tags(content: str) -> str:
+    """Removes HTML tags from a string."""
     clean_text = re.sub('<.*?>', '', content)  # Remove HTML tags
     clean_text = re.sub(r'\s+', ' ', clean_text)  # Remove extra whitespace
     return clean_text
@@ -229,7 +244,6 @@ def pagify(
     ------
     `str`
         Pages of the given text.
-
     """
     page_length -= shorten_by
     start = 0
@@ -260,12 +274,14 @@ def pagify(
 
 
 def format_date(dt: Optional[datetime.datetime], style: TimestampStyle = 'f') -> str:
+    """Format a date in a human-readable format."""
     if dt is None:
         return 'N/A'
     return f'{discord.utils.format_dt(dt, style)} ({discord.utils.format_dt(dt, style='R')})'
 
 
 def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:
+    """Join a sequence of strings in a human-readable format."""
     size = len(seq)
     if size == 0:
         return ''
@@ -280,6 +296,20 @@ def human_join(seq: Sequence[str], delim: str = ', ', final: str = 'or') -> str:
 
 
 class TabularData:
+    """A class to create a table in rST format.
+
+    Example
+    -------
+
+        .. code-block:: rst
+
+            +-------+-----+
+            | Name  | Age |
+            +-------+-----+
+            | Alice | 24  |
+            |  Bob  | 19  |
+            +-------+-----+
+    """
     def __init__(self):
         self._widths: list[int] = []
         self._columns: list[str] = []
@@ -302,16 +332,7 @@ class TabularData:
             self.add_row(row)
 
     def render(self) -> str:
-        """Renders a table in rST format.
-        Example:
-        +-------+-----+
-        | Name  | Age |
-        +-------+-----+
-        | Alice | 24  |
-        |  Bob  | 19  |
-        +-------+-----+
-        """
-
+        """Renders a table in rST format."""
         sep = '+'.join('-' * w for w in self._widths)
         sep = f'+{sep}+'
 
@@ -414,8 +435,11 @@ def get_shortened_string(length: int, start: int, string: str) -> str:
 
 def VisualStamp(key_min: float, key_max: float, key_current: float, key_full: int = 32) -> str:
     """
-    Example Output:
-    ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬🔘▬▬▬▬▬▬▬
+    Example
+    -------
+
+    .. code-block:: python
+        ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬🔘▬▬▬▬▬▬▬
     """
     if key_min == key_current:
         before = key_max
@@ -431,6 +455,7 @@ def VisualStamp(key_min: float, key_max: float, key_current: float, key_full: in
 
 
 def PlayerStamp(length: float, position: float) -> str:
+    """Converts a position and length to a human-readable format."""
     convertable = [
         converters.convert_duration(position if not position < 0 else 0.0),
         VisualStamp(0, length, position),

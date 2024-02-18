@@ -178,7 +178,7 @@ def has_manage_roles_overwrite(member: discord.Member, channel: discord.abc.Guil
 
 
 def can_mute():
-    """Check if the author can mute someone in the current context."""
+    """Check if the author can mute someone in the current context and adds support for the :class:`ModGuildContext`."""
     async def predicate(ctx: GuildContext) -> bool:
         is_owner = await ctx.bot.is_owner(ctx.author)  # noqa
         if ctx.guild is None:
