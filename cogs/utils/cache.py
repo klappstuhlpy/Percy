@@ -5,7 +5,7 @@ import enum
 import functools
 import time
 
-from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol, Generic, Generator
+from typing import Any, Callable, Coroutine, MutableMapping, TypeVar, Protocol, Generic, Generator, Optional, overload
 from lru import LRU
 
 from cogs.utils.constants import Coro, NonCoro
@@ -31,6 +31,30 @@ Parameters
 T = TypeVar('T')
 
 
+def execute_methods_from_string(obj: Callable[..., Any], method_string: str) -> None:
+    """Execute a method from a string.
+
+    The method can be nested, for example: ``'a.b.c()'`` or directly called ``'a()'``.
+    """
+    parts = method_string.split('.')
+    current_obj = obj
+
+    for part in parts:
+        if '(' in part:
+            # If the part contains a method call
+            method_name = part.split('(', 1)[0]
+            method_name = method_name.strip()  # Remove leading/trailing spaces
+
+            # Get the method from the current object
+            method = getattr(current_obj, method_name)
+
+            # Call the method
+            method()
+        else:
+            # If the part is an attribute
+            current_obj = getattr(current_obj, part)
+
+
 class AwaitableObj(Generic[T]):
     def __init__(self, value: T):
         self.value: T = value
@@ -48,7 +72,15 @@ class CacheProtocol(Protocol[R]):
     def get_key(self, *args: Any, **kwargs: Any) -> str:
         ...
 
+    @overload
     def invalidate(self, *args: Any, **kwargs: Any) -> bool:
+        ...
+
+    @overload
+    def invalidate(self, *args: Any, __call__: str, **kwargs: Any) -> bool:
+        ...
+
+    def invalidate(self, *args: Any, __call__: Optional[str] = None, **kwargs: Any) -> bool:
         ...
 
     def invalidate_containing(self, key: str) -> None:
@@ -183,13 +215,19 @@ def cache(
             else:
                 return task
 
-        def _invalidate(*args: Any, **kwargs: Any) -> bool:
-            """Invalidate a cache entry."""
+        def _invalidate(*args: Any, __call__: Optional[str] = None, **kwargs: Any) -> bool:
+            """Invalidate a cache entry.
+
+            If a call is provided, execute the method from the cached object.
+            The call should be a string representing the method to call, for example: ``'a.b.c()'``.
+            """
             try:
-                del _internal_cache[_make_key(args, kwargs)]
+                item = _internal_cache.pop(_make_key(args, kwargs))
             except KeyError:
                 return False
             else:
+                if __call__ is not None:
+                    execute_methods_from_string(item, __call__)
                 return True
 
         def _invalidate_containing(key: str) -> None:
@@ -246,8 +284,7 @@ def cache(
         wrapper.invalidate_containing = _invalidate_containing
 
         if strategy == Strategy.ADDITIVE:
-            # Adds the ability to replace a cache entry with the given value.
-            # TODO: overwork strategy to be more efficient
+            # Those methods can replace the cache entries with the given value.
             wrapper.refactor = _refactor
             wrapper.refactor_containing = _refactor_containing
         return wrapper

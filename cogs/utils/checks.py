@@ -184,7 +184,7 @@ def can_mute():
         if ctx.guild is None:
             return False
 
-        ctx.guild_config = config = await ctx.cog.get_guild_config(ctx.guild.id)  # type: ignore
+        config = await ctx.cog.get_guild_config(ctx.guild.id)  # type: ignore
         role = config and config.mute_role
         if role is None:
             raise commands.BadArgument('This server does not have a mute role set up.')

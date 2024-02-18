@@ -168,7 +168,7 @@ def generate_bar_chart(
         end_index = start_index + max_keys_per_chart
         subset_data = dict(list(data.items())[start_index:end_index])
 
-        image = Image.new('RGB', (int(chart_width), int(chart_height)), color=helpers.Colour.lighter_black())
+        image = Image.new('RGB', (int(chart_width), int(chart_height)), color=helpers.Colour.lighter_black().to_rgb())
         draw = ImageDraw.Draw(image)
 
         font = GINTO_BOLD(int(LABEL_FONT_SIZE * scale_factor))
