@@ -380,11 +380,11 @@ class Reminder(commands.Cog):
         name='reminder',
         aliases=['timer', 'remindme', 'remind'],
         description="Reminds you of something after a certain amount of timetools.",
-        examples=['next thursday at 3pm do something funny',
-                  'do the dishes tomorrow',
-                  'in 3 days do the thing',
-                  '2d unmute someone'],
-        usage='<when...>'
+        examples=[
+            'next thursday at 3pm do something funny',
+            'do the dishes tomorrow',
+            'in 3 days do the thing',
+            '2d unmute someone']
     )
     async def reminder(
             self,
@@ -398,10 +398,13 @@ class Reminder(commands.Cog):
 
         Times are in UTC unless a timezone is specified using the "timezone set" command.
         """
-
         if len(when.arg) > 1500:
             return await ctx.stick(
                 False, 'The reminder message is too long. Please keep it under **1500** characters.')
+
+        # Check if time is too close to the current time
+        if when.dt < discord.utils.utcnow() + datetime.timedelta(seconds=15):
+            raise commands.BadArgument('This time is too close to the current time. Try a time at least 15 seconds in the future.')
 
         to_remind = when.arg
         if ctx.replied_message is not None and ctx.replied_message.content:
@@ -420,7 +423,8 @@ class Reminder(commands.Cog):
             timezone=zone or 'UTC',
         )
         await ctx.stick(
-            True, f'Okay {ctx.author.mention}, I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{to_remind}*'
+            True,
+            f'Okay {ctx.author.mention}, I\'ll remind you *{discord.utils.format_dt(when.dt, 'R')}* for *{to_remind}*'
         )
 
     @commands.command(
@@ -439,6 +443,12 @@ class Reminder(commands.Cog):
             prompt: app_commands.Range[str, 1, 1500] = '…',
     ):
         """Sets a reminder to remind you of something at a specific timetools."""
+
+        # Check if time is too close to the current time
+        if when < discord.utils.utcnow() + datetime.timedelta(seconds=15):
+            raise commands.BadArgument(
+                'This time is too close to the current time. Try a time at least 15 seconds in the future.')
+
         config = await self.bot.user_settings.get_user_config(interaction.user.id)
         zone = config.timezone if config else None
 
