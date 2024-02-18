@@ -40,6 +40,8 @@ INFO_ICON_URL = 'https://images.klappstuhl.me/gallery/zxfezkjkSp.png'
 
 INLINE_DOCSTRING = re.compile(r'\n(#+)')
 
+AnyParameter = Union[app_commands.commands.Parameter, commands.Parameter]
+
 
 def cleanup_docstring(s1: Optional[str], s2: Optional[str]) -> str:
     if not s1 and not s2:
@@ -117,14 +119,30 @@ class HelpPaginator(BasePaginator[PartialCommand]):
         )
 
         for cmd in entries:
-            prefix = f'{_temp.locked_emoji} | ' if getattr(cmd, 'is_locked', False) else ''
-            signature = _temp.get_command_signature(cmd, shortened_signature=True, with_prefix=False)
+            prefixes = []
+            if getattr(cmd, 'is_locked', False):
+                prefixes.append(str(_temp.locked_emoji))
+
+            signature = _temp.get_command_signature(cmd, shortened_signature=True, with_prefix=True)
+
+            if getattr(cmd, 'has_more_help', False):
+                prefixes.append(str(_temp.pin_emoji))
+
+            prefix = (' '.join(prefixes) + ' | ') if prefixes else ''
             embed.add_field(name=f'{prefix}**`{signature}`**', value=cmd.description or '…', inline=False)
 
+        text = ''
         if any(getattr(cmd, 'is_locked', False) is True for cmd in entries):
+            text += f'{_temp.locked_emoji} » This command expects certain permissions from the user to be run.\n'
+
+        if any(getattr(cmd, 'has_more_help', None) for cmd in entries):
+            prefix = getattr(self.ctx, 'clean_prefix', '/')
+            text += f'{_temp.pin_emoji} » This command has more detailed help available with `{prefix}help <command>`.\n'
+
+        if text != '':
             embed.add_field(
                 name='\u200b',
-                value=f'{_temp.locked_emoji} » This command expects certain permissions from the user to be run.',
+                value=text,
                 inline=False
             )
 
@@ -246,6 +264,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
     @property
     def locked_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='locked', id=1208405196334567474)
+
+    @property
+    def pin_emoji(self) -> discord.PartialEmoji:
+        return discord.PartialEmoji(name='pin', id=1208849937383821353)
 
     def get_commands(self) -> set[PartialCommand]:
         """Returns all commands of the bot."""
@@ -460,69 +482,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
             ret.sort(key=key)
         return ret
 
-    def get_command_signature(
-            self,
-            command: PartialCommand,
-            *,
-            no_signature: bool = False,
-            shortened_signature: bool = False,
-            with_prefix: bool = False
-    ) -> str:
-        """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
-
-        This is a modified version of the original get_command_signature.
-
-        Parameters
-        ----------
-        command: :class:`.PartialCommand`
-            The command to get the signature for.
-        no_signature: :class:`bool`
-            Whether to return only the command name without signature.
-        shortened_signature: :class:`bool`
-            Whether to return the command with a shortened_signature signature.
-        with_prefix: :class:`bool`
-            Whether to include the prefix in the signature.
-
-        Returns
-        -------
-        :class:`str`
-            The command signature.
-        """
-        prefix = ('/' if isinstance(command, App) else self.context.clean_prefix) if with_prefix else ''
-
-        if isinstance(command, App):
-            if no_signature:
-                return f'{prefix}{command.qualified_name}'.strip()
-
-            if isinstance(command, app_commands.commands.Group):
-                return f'{prefix}{command.qualified_name} <subcommand>'.strip()
-
-            signature = ' '.join(
-                f'<{option.name}>' if option.required else f'[{option.name}]' for option in command.parameters)
-            return f'{prefix}{command.qualified_name} {signature}'.strip()
-
-        signature = command.signature
-
-        flags = self.get_command_flag_formatting(command)
-        if flags:
-            # If we have flags, we need to remove the flags from the signature
-            # because this might be confusing for the user
-            signature = re.sub(r'(.)flags(.)', '', signature).strip()
-            # Also sub the multiple spaces with one space
-            signature = re.sub(r'\s+', ' ', f'{signature} {flags}')
-
-        parent = command.full_parent_name if command.parent else None
-        alias = f'{parent} {command.name}' if parent else command.name
-
-        if no_signature:
-            return f'{prefix}{alias}'.strip()
-
-        if shortened_signature and len(flags) > 3:
-            signature = f'<flags...>'
-
-        final = f'{prefix}{alias} {signature}' + (' [!]' if getattr(command, 'hidden', False) else '')
-        return final.strip()
-
     async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[PartialCommand]]):
         """|coro|
 
@@ -556,6 +515,53 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         grouped = {cog: cmds for cog, cmds in sorted(grouped.items(), key=lambda x: x[0].qualified_name)}
         await HelpPaginator.start(self.context, entries=grouped, per_page=1)
+
+    async def send_cog_help(self, cog: commands.Cog):
+        """|coro|
+
+        Sends the help command for a cog.
+        This is a modified version of the original send_cog_help.
+
+        Parameters
+        ----------
+        cog: :class:`.commands.Cog`
+            The cog to send the help for.
+        """
+        entries = await self.filter_commands(self.get_cog_commands(cog), sort=True)
+        if not entries:
+            return await self.context.send(self.command_not_found(cog.qualified_name), silent=True)
+
+        await HelpPaginator.start(self.context, entries=entries, group=cog, with_index=False)
+
+    async def send_command_help(self, command: PartialCommand):
+        """|coro|
+
+        Sends the help command for a command.
+        This is a modified version of the original send_command_help.
+
+        Parameters
+        ----------
+        command: :class:`.commands.PartialCommand`
+            The command to send the help for.
+        """
+        if self.command_is_hidden(command):
+            return await self.context.send(self.command_not_found(command.name), silent=True)
+
+        embed = await self.command_formatting(command)
+        await self.context.send(embed=embed, silent=True)
+
+    async def send_group_help(self, group: PartialCommandGroup):
+        """|coro|
+
+        Sends the help command for a group.
+        This is a modified version of the original send_group_help.
+
+        Parameters
+        ----------
+        group: :class:`.commands.PartialCommandGroup`
+            The group to send the help for.
+        """
+        await self.send_command_help(group)
 
     async def get_front_page_embed(self) -> discord.Embed:
         """|coro|
@@ -616,12 +622,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed.add_field(name='`<argument>`', value='This argument is **required**.', inline=False)
         embed.add_field(name='`[argument]`', value='This argument is **optional**.', inline=False)
         embed.add_field(name='`<A|B>`',
-                        value='This means **multiple choice**, you can choose by using one. Although it must be A or B.', inline=False)
+                        value='This means **multiple choice**, you can choose by using one. Although it must be A or B.',
+                        inline=False)
         embed.add_field(name='`<argument...>`', value='There are multiple arguments.', inline=False)
         embed.add_field(name='`<"argument">`',
                         value='This argument is case-sensitive and should be typed exactly as shown.', inline=False)
         embed.add_field(name='`<argument="A">`',
                         value='The default value if you dont provide one of this argument is **A**.', inline=False)
+        embed.add_field(name='`[--name] or [--name <argument>] or [--name <argument="A">]`',
+                        value='This argument is a **flag**. See below for more information on flags.', inline=False)
 
         embed.add_field(
             name='**Command Flags**',
@@ -638,25 +647,148 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed.set_author(name=self.context.client.user, icon_url=get_asset_url(self.context.client.user))
         return embed
 
-    async def send_cog_help(self, cog: commands.Cog):
-        """|coro|
+    @staticmethod
+    def param_to_signature(param: AnyParameter, ansi: bool = False) -> str:
+        """Returns a POSIX-like signature for a parameter."""
+        ansi = helpers.ANSI(ansi)
 
-        Sends the help command for a cog.
-        This is a modified version of the original send_cog_help.
+        name = getattr(param, 'displayed_name', None) or param.name
+
+        is_app_param = isinstance(param, app_commands.commands.Parameter)
+        optional = not param.required
+
+        if not is_app_param:
+            greedy = isinstance(param.converter, commands.Greedy)
+            annotation: Any = param.converter.converter if greedy else param.converter
+        else:
+            greedy = False
+            _parent = getattr(param, '__parent', None)
+            annotation = getattr(_parent, '_annotation', None)
+
+        origin = getattr(annotation, '__origin__', None)
+        if not greedy and origin is Union:
+            none_cls = type(None)
+            union_args = annotation.__args__
+            optional = union_args[-1] is none_cls
+            if len(union_args) == 2 and optional:
+                annotation = union_args[0]
+                origin = getattr(annotation, '__origin__', None)
+
+        if annotation is discord.Attachment:
+            file = 'file' if not greedy else 'files'
+            return ansi.param(file, not optional) + ansi.text('...') if greedy else ''
+
+        default = getattr(param, 'displayed_default', param.default)
+
+        if origin is Literal:
+            name = '|'.join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)
+
+        greedy = '...' if greedy else ''
+
+        if not param.required:
+            if default:
+                return ansi.param(f'{name}{ansi.sign("=")}{ansi.value(default)}' + greedy, False)
+            else:
+                return ansi.param(name + greedy, False)
+
+        elif not is_app_param and (param.kind == param.VAR_POSITIONAL):
+            return ansi.param(f'{name}...', param.require_var_positional)  # noqa
+
+        return ansi.param(name + greedy, not optional)
+
+    def get_command_signature(
+            self,
+            command: PartialCommand,
+            *,
+            ansi: bool = False,
+            descripted: bool = False,
+            no_signature: bool = False,
+            shortened_signature: bool = False,
+            with_prefix: bool = False
+    ) -> list[dict[str, str | bool]] | str:
+        """Takes an :class:`.PartialCommand` and returns a POSIX-like signature useful for help command output.
+
+        This is a modified version of the original get_command_signature.
 
         Parameters
         ----------
-        cog: :class:`.commands.Cog`
-            The cog to send the help for.
-        """
-        entries = await self.filter_commands(self.get_cog_commands(cog), sort=True)
-        if not entries:
-            return await self.context.send(self.command_not_found(cog.qualified_name), silent=True)
+        command: :class:`.PartialCommand`
+            The command to get the signature for.
+        ansi: :class:`bool`
+            Whether to display the output in ANSI colored code block.
+        descripted: :class:`bool`
+            Whether to return the commands as formatted embed fields with description.
+        no_signature: :class:`bool`
+            Whether to return only the command name without signature.
+        shortened_signature: :class:`bool`
+            Whether to return the command with a shortened_signature signature.
+        with_prefix: :class:`bool`
+            Whether to include the prefix in the signature.
 
-        await HelpPaginator.start(self.context, entries=entries, group=cog, with_index=False)
+        Returns
+        -------
+        :class:`str`
+            The command signature.
+        """
+        _prefix = getattr(self.context, 'clean_prefix', '/')
+        prefix = _prefix if with_prefix else ''
+        name = command.qualified_name
+
+        parameters = (
+            command.parameters if isinstance(command, app_commands.commands.Command) else
+            [] if isinstance(command, app_commands.commands.Group) else
+            command.clean_params.values()
+        )
+
+        if descripted:
+            resolved: list[str] = []
+            for argument in parameters:
+                if argument.name == 'flags':
+                    continue
+
+                description = getattr(command.callback, '__discord_app_commands_param_description__', argument.description)
+                if isinstance(description, dict):
+                    description = description.get(argument.name, 'Argument undocumented.')
+
+                fmt = f'- `{argument.name}`: {description}'
+                resolved.append(fmt)
+
+            chunked = list(discord.utils.as_chunks(resolved, 15))
+            to_fields = []
+            for i, chunk in enumerate(chunked):
+                to_fields.append({'name': 'Arguments' if i == 0 else '\u200b', 'value': '\n'.join(chunk), 'inline': False})
+            return to_fields
+
+        if no_signature:
+            return f'{prefix}{name}'
+
+        flags = self.get_command_flag_formatting(command, ansi=ansi)
+        if flags:
+            parameters = filter(lambda p: p.name != 'flags', parameters)
+
+        parameters = ' '.join(self.param_to_signature(p, ansi) for p in parameters)
+
+        ansi = helpers.ANSI(ansi)
+
+        if shortened_signature and len(flags) > 30:  # 30 characters
+            parameters += f' {ansi.param(f'flags{ansi.text(f'...')}', False)}'
+            setattr(command, 'has_more_help', True)
+        else:
+            parameters += f' {flags}'
+
+        if parameters.startswith(' '):
+            parameters = parameters[1:]
+
+        hidden_tag = ansi.error('[!]') if self.command_is_hidden(command) else ''
+        return f'{ansi.prefix(prefix)}{ansi.command(name)} {parameters} {hidden_tag}'.strip()
 
     @staticmethod
-    def get_command_flag_formatting(command: PartialCommand, descripted: bool = False) -> str | list[dict]:
+    def get_command_flag_formatting(
+            command: PartialCommand,
+            *,
+            descripted: bool = False,
+            ansi: bool = False
+    ) -> str | list[dict]:
         """Returns a string with the command flag formatting.
 
         Parameters
@@ -665,12 +797,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The command to get the flag formatting from.
         descripted: bool
             Whether to include the flag description or not.
+        ansi: bool
+            Whether to display the output in ASCII colored code block.
 
         Returns
         -------
         str
             The command flag formatting.
         """
+        ansi = helpers.ANSI(ansi)
+
         if isinstance(command, App):
             return [] if descripted else ''
 
@@ -683,25 +819,28 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if descripted:
             for flag in flags.converter.get_flags().values():
-                fmt = f'`--{flag.name}` - {flag.description}'
+                fmt = f'- `--{flag.name}`: {flag.description}'
                 resolved.append(fmt)
 
             chunked = list(discord.utils.as_chunks(resolved, 15))
             to_fields = []
             for i, chunk in enumerate(chunked):
-                to_fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': chunk, 'inline': False})
+                to_fields.append({'name': 'Flags' if i == 0 else '\u200b', 'value': '\n'.join(chunk), 'inline': False})
             return to_fields
         else:
-            for flag in flags.converter.get_flags().values():
-                default = ""
-                if flag.default is not None:
-                    default = ' ' + (
-                        f'{flag.default!r}' if (flag.annotation is str or Literal or Optional[str])
-                        else str(flag.default)
-                    )
+            len_flags = len(flags.converter.get_flags())
 
-                fmt = f'<--{flag.name}{default}>' if flag.required else f'[--{flag.name}{default}]'
-                resolved.append(fmt)
+            for flag in flags.converter.get_flags().values():
+                # Need to check if there are more than 10 flags the ansi code
+                # block will be too long and not supported by discords markdown
+                if len_flags > 10 and ansi:
+                    default = ''
+                else:
+                    default_value = ansi.value(flag.default) if flag.default is not None else ''
+                    seperator = ansi.sign('=') if flag.default is not None else ''
+                    default = ' ' + ansi.param(f'{flag.name}{seperator}{default_value}', True, color=35)
+
+                resolved.append(ansi.param(f'--{flag.name}{default}', flag.required))
 
             return ' '.join(resolved)
 
@@ -770,9 +909,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed.set_author(name='Command Help', icon_url=COMMAND_ICON_URL)
 
         embed.description = (
-            f'**```py\n{self.get_command_signature(command)}```**\n'
+            f'```ansi\n{self.get_command_signature(command, ansi=True, with_prefix=True)}```\n'
             f'{cleanup_docstring(command.description, getattr(command, 'help', None))}'
         )
+
+        for field in self.get_command_signature(command, descripted=True):
+            embed.add_field(**field)
+
+        for field in self.get_command_flag_formatting(command, descripted=True):
+            embed.add_field(**field)
 
         if getattr(command, 'aliases', None):
             embed.add_field(
@@ -835,40 +980,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 inline=False
             )
 
-        for field in self.get_command_flag_formatting(command, descripted=True):
-            embed.add_field(**field)
-
         return embed
-
-    async def send_command_help(self, command: PartialCommand):
-        """|coro|
-
-        Sends the help command for a command.
-        This is a modified version of the original send_command_help.
-
-        Parameters
-        ----------
-        command: :class:`.commands.PartialCommand`
-            The command to send the help for.
-        """
-        if self.command_is_hidden(command):
-            return await self.context.send(self.command_not_found(command.name), silent=True)
-
-        embed = await self.command_formatting(command)
-        await self.context.send(embed=embed, silent=True)
-
-    async def send_group_help(self, group: PartialCommandGroup):
-        """|coro|
-
-        Sends the help command for a group.
-        This is a modified version of the original send_group_help.
-
-        Parameters
-        ----------
-        group: :class:`.commands.PartialCommandGroup`
-            The group to send the help for.
-        """
-        await self.send_command_help(group)
 
     @classmethod
     def temporary(cls, context: Context | discord.Interaction) -> 'PaginatedHelpCommand':

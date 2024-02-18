@@ -4,7 +4,7 @@ import datetime
 import enum
 import json
 import time
-from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type, Protocol, List, Dict
+from typing import TypeVar, Self, Callable, Optional, Any, overload, TYPE_CHECKING, Type, Protocol, List, Dict, Literal
 
 import asyncpg
 import discord
@@ -578,6 +578,115 @@ class Colour(discord.Colour):
     @classmethod
     def lighter_black(cls) -> Self:
         return cls(0x1A1A1A)
+
+
+class ANSI:
+    """A class to handle the ANSI escape codes for code block formatting."""
+    def __init__(self, ansi: bool):
+        self.ansi = ansi
+
+    def param(self, string: str, required: bool, *, color: Literal[35] | None = None) -> str:
+        """Returns a string with ANSI escape codes.
+
+        Parameters
+        ----------
+        string : str
+            The string to format.
+        required : bool
+            Whether the string is required or not.
+        color : int
+            An overwriting for the color of the string.
+
+            Possible colors:
+            - 35: Magenta
+        """
+        if not self.ansi:
+            return f'<{string}>' if required else f'[{string}]'
+
+        COLOR = ('\u001b[0;33m' if required else '\u001b[0;34m') if color is None else f'\u001b[0;{color}m'
+        OPENING_BRACKET = '\u001b[30;1m<' if required else '\u001b[30;1m['
+        CLOSING_BRACKET = '\u001b[30;1m>' if required else '\u001b[30;1m]'
+        return f'{OPENING_BRACKET}{COLOR}{string}{CLOSING_BRACKET}'
+
+    def value(self, string: Any) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[0;36m{string}'
+
+    def sign(self, string: str) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[0;30m{string}'
+
+    def text(self, string: str) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[0;37m{string}'
+
+    def error(self, string: str) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[31;1m{string}'
+
+    def command(self, string: str) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[32m{string}'
+
+    def prefix(self, string: str) -> str:
+        if not self.ansi:
+            return string
+        return f'\u001b[37;1m{string}'
+
+    # COLORS
+
+    def black(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}30m{string}'
+
+    def red(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}31m{string}'
+
+    def green(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}32m{string}'
+
+    def yellow(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}33m{string}'
+
+    def blue(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}34m{string}'
+
+    def magenta(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}35m{string}'
+
+    def cyan(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}36m{string}'
+
+    def white(self, string: str, bold: bool = False) -> str:
+        bold = '1;' if bold else '0;'
+        if not self.ansi:
+            return string
+        return f'\u001b[{bold}37m{string}'
 
 
 class BasicJSONEncoder(json.JSONEncoder):
