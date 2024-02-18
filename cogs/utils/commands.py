@@ -18,8 +18,8 @@ from cogs.utils.constants import App
 core_command = commands.command
 FlagConverter = helpers.FlagConverter
 
-BadArgument = error_utils.BadArgument
-CommandError = error_utils.CommandError
+# BadArgument = error_utils.BadArgument
+# CommandError = error_utils.CommandError
 
 
 AnyCommand = Union[app_commands.command, command, group, hybrid_command, hybrid_group]

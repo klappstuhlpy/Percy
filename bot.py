@@ -20,6 +20,7 @@ from cogs.user import UserSettings
 from cogs.utils import helpers, commands
 from cogs.utils.config import Config
 from cogs.utils.context import Context
+from cogs.utils.errors import send_error
 from cogs.utils.helpers import BasicJSONEncoder
 from cogs.utils.constants import GUILD_FEATURES
 from cogs.utils.lock import LockedResourceError
@@ -354,10 +355,7 @@ class Percy(commands.Bot):
                 await ctx.send(f'I don\'t have the permissions to perform this action.\n'
                                f'Missing: `{", ".join(missing)}`')
             elif isinstance(error, commands.CommandOnCooldown):
-                await ctx.send(
-                    f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
-            elif isinstance(error, commands.MissingRequiredArgument):
-                await ctx.send(f'You are missing a required argument: `{error.param.name}`')
+                await ctx.send(f'<:warning:1113421726861238363> Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
             elif isinstance(error, commands.TooManyArguments):
                 await ctx.stick(False, f'You called {ctx.command.name!r} command with too many arguments.')
             elif isinstance(error, commands.CommandInvokeError):
@@ -367,9 +365,10 @@ class Percy(commands.Bot):
                 elif isinstance(error, LockedResourceError):
                     await ctx.stick(False, str(error))
             elif isinstance(error, (
-                    commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError
+                    commands.ArgumentParsingError, commands.FlagError, commands.BadArgument, commands.CommandError,
+                    commands.MissingRequiredArgument, commands.errors.ConversionError
             )):
-                await ctx.send(str(error))
+                await send_error(ctx, error)
 
     # UTILS
 

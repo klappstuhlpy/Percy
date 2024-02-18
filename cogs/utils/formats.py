@@ -38,6 +38,18 @@ class plural:
         return f'{s} {singular}'
 
 
+def find_word(text: str, word: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Finds a word in a string and returns its line, start column, and end column."""
+    lines = text.split('\n')
+    for line_num, line in enumerate(lines):
+        index = line.find(word)
+        if index != -1:
+            start_column = index + 1
+            end_column = start_column + len(word) - 1
+            return line_num + 1, start_column, end_column
+    return None, None, None
+
+
 def censor_invite(obj: Any, *, _regex=INVITE_REGEX) -> str:
     """Censors an invite link."""
     return _regex.sub('[censored-invite]', str(obj))
