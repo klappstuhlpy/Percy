@@ -564,6 +564,10 @@ class Gatekeeper(PostgresItem):
         """Whether the user is blocked from participating in the server."""
         return user_id in self.members
 
+    def has_role(self, member: discord.Member, /) -> bool:
+        """Checks if a user has the gatekeeper role."""
+        return self.role_id is not None and self.role_id in member._roles  # noqa
+
     def is_bypassing(self, member: discord.Member) -> bool:
         """Whether the member is bypassing the gatekeeper."""
         if self.started_at is None:
@@ -1316,7 +1320,12 @@ class GatekeeperVerifyButton(
             await interaction.response.send_message(f'{tick(False)} Gatekeeper is not enabled.', ephemeral=True)
             return False
 
-        if interaction.user.id not in self.gatekeeper.members:
+        if not self.gatekeeper.is_blocked(interaction.user.id):
+            if self.gatekeeper.has_role(interaction.user):
+                # Add the user manually to the queue
+                # This is used if the member somehow still has the gatekeeper role but is not in the queue
+                await self.gatekeeper.block(interaction.user)
+
             await interaction.response.send_message(f'{tick(False)} You are already verified.', ephemeral=True)
             return False
 
