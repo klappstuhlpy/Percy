@@ -1291,12 +1291,12 @@ class GatekeeperVerifyButton(
     async def from_custom_id(
             cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
     ):
-        cog: Optional[Mod] = interaction.client.get_cog('Mod')  # type: ignore
+        cog: Optional[Moderation] = interaction.client.get_cog('Moderation')  # type: ignore
         if cog is None:
             await interaction.response.send_message(
                 f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
             )
-            raise AssertionError(f'{tick(False)} Mod cog is not loaded')
+            raise AssertionError(f'{tick(False)} Moderation cog is not loaded')
 
         config = await cog.get_guild_config(interaction.guild_id)
         if config is None:
@@ -1392,12 +1392,12 @@ class GatekeeperAlertResolveButton(discord.ui.DynamicItem[discord.ui.Button], te
     async def from_custom_id(
             cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
     ):
-        cog: Optional[Mod] = interaction.client.get_cog('Mod')  # type: ignore
+        cog: Optional[Moderation] = interaction.client.get_cog('Moderation')  # type: ignore
         if cog is None:
             await interaction.response.send_message(
                 f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
             )
-            raise AssertionError(f'{tick(False)} Mod cog is not loaded')
+            raise AssertionError(f'{tick(False)} Moderation cog is not loaded')
 
         gatekeeper = await cog.get_guild_gatekeeper(interaction.guild_id)
         return cls(gatekeeper)
@@ -1456,12 +1456,12 @@ class GatekeeperAlertMassbanButton(discord.ui.DynamicItem[discord.ui.Button], te
     async def from_custom_id(
             cls, interaction: discord.Interaction[Percy], item: discord.ui.Button, match: re.Match[str], /  # noqa
     ):
-        cog: Optional[Mod] = interaction.client.get_cog('Mod')  # type: ignore
+        cog: Optional[Moderation] = interaction.client.get_cog('Moderation')  # type: ignore
         if cog is None:
             await interaction.response.send_message(
                 f'{tick(False)} Sorry, this button does not work at the moment. Try again later', ephemeral=True
             )
-            raise AssertionError(f'{tick(False)} Mod cog is not loaded')
+            raise AssertionError(f'{tick(False)} Moderation cog is not loaded')
         return cls(cog)
 
     async def interaction_check(self, interaction: discord.Interaction[Percy], /) -> bool:  # noqa
