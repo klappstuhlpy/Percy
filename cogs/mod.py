@@ -1325,6 +1325,7 @@ class GatekeeperVerifyButton(
                 # Add the user manually to the queue
                 # This is used if the member somehow still has the gatekeeper role but is not in the queue
                 await self.gatekeeper.block(interaction.user)
+                return True
 
             await interaction.response.send_message(f'{tick(False)} You are already verified.', ephemeral=True)
             return False
