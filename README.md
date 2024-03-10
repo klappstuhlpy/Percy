@@ -1,5 +1,7 @@
 # Percy Project
 
+# !! This Project is outdated and currently getting rewritten. Once I've finished, the new Code will be published to a new Repository !!
+
 This project is a Discord bot written in Python using the discord.py library. The bot is designed to perform various tasks and enhance the functionality of Discord servers.
 
 I would prefer if you not run an instance of my bot, just invite Percy to your Discord but clicking [this](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) link. :)
