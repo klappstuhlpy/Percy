@@ -1,0 +1,104 @@
+[tool.poetry]
+name = "percy-v2"
+version = "2.0.0"
+description = "A multipurpose Discord Bot for moderation and more."
+authors = ["Klappstuhl"]
+license = "MPL-2.0"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+jishaku = {git = "https://github.com/Gorialis/jishaku"}
+aiohttp = "^3.9.3"
+beautifulsoup4 = "^4.12.3"
+dateparser = "^1.2.0"
+asyncpg = "^0.30.0"
+wavelink = ">=3.2.0"
+python-dotenv = "^1.0.1"
+pillow = ">=10.0.0"
+psutil = "^6.1.1"
+lxml = "^5.1.0"
+pytz = "^2024.1"
+click = "^8.1.7"
+expiringdict = "^1.2.2"
+lru-dict = "^1.3.0"
+captcha = "^0.6.0"
+parsedatetime = "^2.6"
+python-dateutil = "^2.9.0.post0"
+matplotlib = "^3.8.3"
+python-levenshtein = "^0.26.1"
+fuzzywuzzy = "^0.18.0"
+numpy = "^2.2.1"  # 1.26.4
+joblib = "^1.3.2"
+scipy = "^1.12.0"
+typing-extensions = "^4.10.0"
+yarl = "^1.9.4"
+levenshtein = "^0.26.1"
+pygit2 = "^1.14.1"
+markdownify = "^0.14.1"
+regex = "^2024.11.6"
+pilmoji = {git = "https://github.com/jay3332/pilmoji", branch = "2.0"}
+fonttools = "^4.50.0"
+discord-py = "^2.4.0"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 125
+
+[tool.ruff.lint]
+select = [
+    "C4",
+    "F",
+    "G",
+    "I",
+    "PTH",
+    "RUF",
+    "SIM",
+    "TCH",
+    "UP",
+    "W",
+    "PERF",
+    "ANN",
+]
+ignore = [
+    "F401",
+    "F402",
+    "F403",
+    "F405",
+    "PERF203",
+    "PLR2004",
+    "RUF001",
+    "RUF009",
+    "SIM105",
+    "S101",
+    "UP034",
+    "UP038",
+    "ANN101",
+    "ANN102",
+    "ANN401",
+]
+
+[tool.pyright]
+useLibraryCodeForTypes = true
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+strictParameterNoneValue = true
+reportMissingImports = "error"
+reportUnusedImport = "error"
+reportUnusedClass = "error"
+reportUnusedFunction = "error"
+reportUnusedVariable = "error"
+reportUnusedExpression = "error"
+reportGeneralTypeIssues = "error"
+reportDuplicateImport = "error"
+reportUntypedFunctionDecorator = "error"
+reportUnnecessaryTypeIgnoreComment = "warning"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

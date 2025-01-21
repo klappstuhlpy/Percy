@@ -1,0 +1,9 @@
+.venv/
+.idea/
+__pycache__/
+ruff_cache/
+migrations/revisions.json
+percy.log
+.env
+*.json
+poetry.lock
