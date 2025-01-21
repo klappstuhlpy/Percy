@@ -3,7 +3,7 @@ FROM python:3.12-slim
 # Set environment to suppress debconf warnings
 ENV DEBIAN_FRONTEND=noninteractive
 
-LABEL org.opencontainers.image.source=https://github.com/klappstuhlpy/percy-v2
+LABEL org.opencontainers.image.source=https://github.com/klappstuhlpy/percy
 LABEL org.opencontainers.image.description="Percy Discord Bot"
 LABEL org.opencontainers.image.licenses=MPL-2
 
