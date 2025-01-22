@@ -12,7 +12,7 @@ services:
     volumes:
       - percy-db:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5422:5432"
     networks:
       - bot
 
