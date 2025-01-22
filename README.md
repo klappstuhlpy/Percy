@@ -48,7 +48,7 @@ To configure the PostgreSQL database for use by the bot, go to the directory whe
 ```env
 DISCORD_TOKEN=
 DISCORD_BETA_TOKEN=
-DISCORD_CLIENT_SECRET=-
+DISCORD_CLIENT_SECRET=
 
 DATABASE_PASSWORD=
 DATABASE_HOST=
