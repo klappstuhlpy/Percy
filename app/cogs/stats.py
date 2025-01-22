@@ -500,7 +500,7 @@ class Stats(Cog):
     @staticmethod
     def _format_commit(commit: pygit2.Commit) -> str:
         short, _, _ = commit.message.partition('\n')
-        short_sha2 = commit.hex[0:6]
+        short_sha2 = str(commit)[0:6]
         commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 

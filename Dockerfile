@@ -62,4 +62,4 @@ COPY poetry.lock pyproject.toml ./
 RUN poetry install -n --only main --no-root
 
 COPY . /app/
-ENTRYPOINT poetry run python -O main.py
+ENTRYPOINT ["poetry", "run", "python", "-O", "main.py"]
