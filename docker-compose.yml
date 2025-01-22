@@ -16,6 +16,17 @@ services:
     networks:
       - bot
 
+  snekbox:
+    container_name: snekbox
+    image: ghcr.io/python-discord/snekbox
+    restart: unless-stopped
+    ipc: none
+    privileged: true
+    ports:
+      - "8060:8060"
+    networks:
+      - bot
+
   bot:
     container_name: percy
     image: klappstuhl/percy
@@ -37,6 +48,9 @@ services:
       ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET}
       MARVEL_API_PUBLIC_KEY: ${MARVEL_API_PUBLIC_KEY}
       MARVEL_API_PRIVATE_KEY: ${MARVEL_API_PRIVATE_KEY}
+    depends_on:
+      - db
+      - snekbox
     networks:
       - bot
 
