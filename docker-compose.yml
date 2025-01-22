@@ -17,7 +17,7 @@ services:
       - bot
 
   snekbox:
-    container_name: snekbox
+    container_name: percy-snekbox
     image: ghcr.io/python-discord/snekbox
     restart: unless-stopped
     ipc: none
@@ -50,7 +50,6 @@ services:
       MARVEL_API_PRIVATE_KEY: ${MARVEL_API_PRIVATE_KEY}
     depends_on:
       - db
-      - snekbox
     networks:
       - bot
 
