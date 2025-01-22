@@ -10,6 +10,7 @@ Before running the bot, make sure you have the following installed:
 
 - Python =3.12: [Download Python](https://www.python.org/downloads/)
 - PostgreSQL: [Download PostgreSQL](https://www.postgresql.org/download/)
+- Poetry: [Download Poetry](https://python-poetry.org/docs/)
 
 ## Installation
 
@@ -19,10 +20,10 @@ Before running the bot, make sure you have the following installed:
 git clone https://github.com/klappstuhlpy/Percy.git
 ```
 
-2. **Install the required Python packages:**
+2. **Install the required Python dependencies with poetry:**
 
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
 
 3. **Create a PostgreSQL database for the bot:**
@@ -38,17 +39,14 @@ CREATE EXTENSION pg_trgm;
 
 3.5 **Configuration of database**
 
-To configure the PostgreSQL database for use by the bot, go to the directory where `main.py` is located, and run the script by doing `python3.8 main.py db init`
+To configure the PostgreSQL database for use by the bot, go to the directory where `main.py` is located, and run the script by doing `python3.12 main.py db init`
 
 4**Configure the bot:**
 
-- Set up a ``.env`` file in the root directory of the project with the following content:
+- Set up a ``docker-compose.yml`` file in the root directory of the project.
+- This will store your docker image settings and **important** environment variables that *need* to be defined!
 
-```env
-DISCORD_TOKEN=your_discord_bot_token
-DISCORD_BETA_TOKEN=your_discord_beta_bot_token
-DISCORD_CLIENT_SECRET=your_discord_client_secret
-```
+You can find an example here: [docker-compose.yml](https://gist.github.com/klappstuhlpy/92e2e5d857458af46feb91ab4cf88fb4)
 
 ## License
 

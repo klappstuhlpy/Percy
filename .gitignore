@@ -7,3 +7,4 @@ percy.log
 .env
 *.json
 poetry.lock
+docker-compose.yml
