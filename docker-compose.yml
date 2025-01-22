@@ -1,0 +1,48 @@
+version: "3"
+
+services:
+  bot:
+    container_name: percy
+    image: klappstuhl/percy
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_BETA_TOKEN: ${DISCORD_BETA_TOKEN}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_HOST: ${DATABASE_HOST}
+      LAVALINK_NODE_1_PASSWORD: ${LAVALINK_NODE_1_PASSWORD}
+      STATS_WEBHOOK_TOKEN: ${STATS_WEBHOOK_TOKEN}
+      GENIUS_TOKEN: ${GENIUS_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      DBOTS_TOKEN: ${DBOTS_TOKEN}
+      TOPGG_TOKEN: ${TOPGG_TOKEN}
+      IMAGES_API_TOKEN: ${IMAGES_API_TOKEN}
+      ANILIST_CLIENT_ID: ${ANILIST_CLIENT_ID}
+      ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET}
+      MARVEL_API_PUBLIC_KEY: ${MARVEL_API_PUBLIC_KEY}
+      MARVEL_API_PRIVATE_KEY: ${MARVEL_API_PRIVATE_KEY}
+    networks:
+      - bot
+
+  db:
+    container_name: percy-db
+    image: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: percy
+      POSTGRES_USER: percy
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - percy-db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - bot
+
+volumes:
+  percy-db:
+
+networks:
+  bot:
+    driver: bridge

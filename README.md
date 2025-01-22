@@ -43,10 +43,31 @@ To configure the PostgreSQL database for use by the bot, go to the directory whe
 
 4**Configure the bot:**
 
-- Set up a ``docker-compose.yml`` file in the root directory of the project.
-- This will store your docker image settings and **important** environment variables that *need* to be defined!
+- Set up a ``.env`` file in the root directory of the project that will store your sensitive data.
 
-You can find an example here: [docker-compose.yml](https://gist.github.com/klappstuhlpy/92e2e5d857458af46feb91ab4cf88fb4)
+```env
+DISCORD_TOKEN=
+DISCORD_BETA_TOKEN=
+DISCORD_CLIENT_SECRET=-
+
+DATABASE_PASSWORD=
+DATABASE_HOST=
+
+LAVALINK_NODE_1_PASSWORD=
+
+STATS_WEBHOOK_TOKEN=
+GENIUS_TOKEN=
+GITHUB_TOKEN=
+DBOTS_TOKEN=
+TOPGG_TOKEN=
+IMAGES_API_TOKEN=
+
+ANILIST_CLIENT_ID=
+ANILIST_CLIENT_SECRET=
+
+MARVEL_API_PUBLIC_KEY=
+MARVEL_API_PRIVATE_KEY=
+```
 
 ## License
 
