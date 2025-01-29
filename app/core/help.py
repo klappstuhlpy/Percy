@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Type, Any, Callable, Mapping, TYPE_CHECKING
+from typing import Type, Any, Callable, Mapping, TYPE_CHECKING, Generator
 
 import discord
 from discord.ext import commands
@@ -33,7 +33,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             prefixes.append(Emojis.Command.more_info)
         return prefixes
 
-    def create_text(self, is_any_locked: bool, any_has_more_help: bool) -> str:
+    def create_text(self, is_any_locked: bool, any_has_more_help: bool) -> Generator[str, Any, None]:
         if is_any_locked:
             yield f'{Emojis.Command.locked} » This command expects certain permissions from the user to be run.'
         if any_has_more_help:
@@ -512,12 +512,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         embed = discord.Embed(
             title=f'{ctx.bot.user.name} Help',
-            description='**```\nPlease use the Select Menu below to explore the corresponding category.```**'
-                        '\n'  # TODO: Percy-v2 Release Note
-                        f'## {Emojis.very_cool} Percy-v2 has been released and is online.\n'
-                        f'{Emojis.info} *`If you encounter any issues or have any suggestions, '
-                        f'please let me know by using the "{prefix}feedback" command!`*\n\n'
-                        f'Use `{prefix}v2` to get more information about the Percy-v2 Release.\n\n'
+            description=f'Use `{prefix}v2` to get more information about the Percy-v2 Release.\n\n'
                         f'**Privacy Policy**: [Click here](https://t.ly/vAhUk)\n'
                         f'**Terms of Service**: [Click here](https://t.ly/8V2D4)',
             colour=helpers.Colour.white()
@@ -525,20 +520,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed.set_thumbnail(url=get_asset_url(ctx.guild))
         embed.add_field(
             name='More Help',
-            value=(
-                'Alternatively you can use the following commands to get information about a specific command or category:\n'
-                f'- `{prefix}help <command>`\n'
-                f'- `{prefix}help <category>`\n\n'
-                f'You can also use `{prefix}help flags` to get an overview of how to use flags *(special command arguments)*.'
-            ),
+            value='Alternatively you can use the following commands to get information about a specific command or category:\n'
+                  f'- `{prefix}help <command>`\n'
+                  f'- `{prefix}help <category>`\n\n'
+                  f'You can also use `{prefix}help flags` to get an overview of how to use flags.',
             inline=False
         )
         embed.add_field(
             name='Stats',
-            value=(
-                f'**Total Commands:** `{len(ctx.bot.commands)}`\n'
-                f'**Total Commands Invoked:** `{await self.total_commands_invoked()}`'
-            ),
+            value=f'**Total Commands:** `{len(ctx.bot.commands)}`\n'
+                  f'**Total Commands Invoked:** `{await self.total_commands_invoked()}`',
         )
         embed.set_author(name=ctx.client.user, icon_url=get_asset_url(ctx.client.user))
         embed.set_footer(text='I was created at')
