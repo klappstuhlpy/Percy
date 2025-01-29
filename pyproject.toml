@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "percy-v2"
-version = "2.0.0"
+version = "2.0.3"
 description = "A multipurpose Discord Bot for moderation and more."
 authors = ["Klappstuhl"]
 license = "MPL-2.0"
