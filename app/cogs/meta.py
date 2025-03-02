@@ -9,7 +9,6 @@ import logging
 import pprint
 import re
 import textwrap
-import traceback
 from urllib.parse import urljoin
 
 import aiohttp
