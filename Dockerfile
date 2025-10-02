@@ -29,11 +29,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /project
 
-# System dependencies
+# System dependencies (added build-essential + python dev headers!)
 RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y \
     locales \
     git \
     curl \
+    build-essential \
+    gcc \
+    python3-dev \
     && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen \
     && update-locale LANG=en_US.UTF-8 \
