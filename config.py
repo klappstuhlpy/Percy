@@ -89,7 +89,7 @@ top_gg_key: str = env('TOPGG_TOKEN')
 images_key: str = env('IMAGES_API_TOKEN')
 anilist = SimpleNamespace(client_id=int(env('ANILIST_CLIENT_ID')), client_secret=str(env('ANILIST_CLIENT_SECRET')),
                           redirect_uri='https://anilist.co/api/v2/oauth/pin')
-marvel = SimpleNamespace(public_key=str(env('MARVEL_API_PUBLIC_KEY')), private_key=(env('MARVEL_API_PRIVATE_KEY')))
+marvel = SimpleNamespace(public_key=str(env('MARVEL_API_PUBLIC_KEY')), private_key=str(env('MARVEL_API_PRIVATE_KEY')))
 
 
 class Emojis:

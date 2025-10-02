@@ -533,7 +533,7 @@ class PollRolePingButton(
 
 def create_view(poll: Poll) -> discord.ui.View:
     view = View(timeout=None)
-    if poll.kwargs.get('running') is True:
+    if poll.kwargs.get('running'):
         if len(poll.options) <= 5:
             for option in poll.options:
                 view.add_item(PollEnterButton(poll, option['index']))

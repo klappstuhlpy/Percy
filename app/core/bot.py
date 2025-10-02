@@ -7,7 +7,8 @@ import sys
 import traceback
 from collections import defaultdict, Counter
 from contextlib import suppress
-from typing import Final, ClassVar, Dict, Type, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable
+from typing import Final, ClassVar, Dict, Type, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, \
+    Generator
 
 import discord
 import datetime
@@ -109,7 +110,7 @@ class Bot(commands.Bot):
     to and from Discord's API.
     """
 
-    log: Final[ClassVar[logging.Logger]] = LOG
+    log: Final[logging.Logger] = LOG
 
     bypass_checks: bool
     bot_app_info: discord.AppInfo
@@ -130,7 +131,7 @@ class Bot(commands.Bot):
         doc_links: Config[str, dict[str, str | list[str]] | list[str]]
 
     # final due to no use being changed on runtime
-    INTENTS: Final[ClassVar[discord.Intents]] = discord.Intents(
+    INTENTS: Final[discord.Intents] = discord.Intents(
         emojis_and_stickers=True,
         guilds=True,
         bans=True,
@@ -538,7 +539,7 @@ class Bot(commands.Bot):
     @staticmethod
     def get_guild_features(
             features: list[GuildFeatureT], *, only_current: bool = False, emojize: bool = True
-    ) -> GuildFeatureT:
+    ) -> Generator[tuple[str, Any] | tuple[GuildFeatureT, Any], Any, None]:
         """Returns a list of tuples containing all guild features if ``only_current`` is False or enabled features if True.
 
         Parameters

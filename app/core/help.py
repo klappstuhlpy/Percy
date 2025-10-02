@@ -190,6 +190,7 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
             extras = self.view.extras
             extras.pop('group', None)
             await HelpPaginator.start(interaction, entries=_commands, edit=True, group=cog, **self.view.extras)
+        return None
 
 
 class PaginatedHelpCommand(commands.HelpCommand):

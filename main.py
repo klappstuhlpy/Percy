@@ -4,7 +4,7 @@ import logging
 import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Any, Generator
 
 import asyncpg
 import click
@@ -47,7 +47,7 @@ class RemoveNoise(logging.Filter):
 
 
 class _ColourFormatter(logging.Formatter):
-    LEVEL_COLOURS: ClassVar[tuple[int, str, int]] = [
+    LEVEL_COLOURS: ClassVar[list[tuple[int, str, int]]] = [
         (logging.DEBUG, '\x1b[40;1m', 5),
         (logging.INFO, '\x1b[34;1m', 4),
         (logging.WARNING, '\x1b[33;1m', 7),
@@ -79,7 +79,7 @@ class _ColourFormatter(logging.Formatter):
 
 
 @contextlib.contextmanager
-def setup_logging() -> None:
+def setup_logging() -> Generator[None, Any, None]:
     root_log = logging.getLogger()
 
     try:

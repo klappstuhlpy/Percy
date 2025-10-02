@@ -1,13 +1,12 @@
 import re
 from ssl import CertificateError
 from textwrap import dedent
-from typing import Any, TypeVar, ClassVar, NamedTuple, TYPE_CHECKING
+from typing import Any, TypeVar, ClassVar, Coroutine
 
 import discord
 from aiohttp import ClientConnectorError
 from discord import app_commands, AppCommandOptionType
 from discord.ext import commands
-from discord.ext.commands._types import BotT
 
 from app.core.models import Context
 from app.utils import Colour, COLOUR_DICT, fuzzy
@@ -131,7 +130,7 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
         results = fuzzy.extract(current, COLOUR_DICT, limit=20)
         return [app_commands.Choice(name=f'{result[0]} ({result[2]})', value=result[2]) for result in results]
 
-    async def convert(self, ctx: Context, argument: str) -> str | Colour:
+    async def convert(self, ctx: Context, argument: str) -> Colour | None:
         """Converts a color HEX to the matching :class:``Colour` if possible else return None."""
         try:
             if isinstance(argument, Colour):
@@ -196,7 +195,7 @@ class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
         return m
 
     @property
-    def type(self) -> AppCommandOptionType:
+    def type(self) -> int:
         return AppCommandOptionType.user
 
 

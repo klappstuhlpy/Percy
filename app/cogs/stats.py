@@ -500,12 +500,12 @@ class Stats(Cog):
     @staticmethod
     def _format_commit(commit: pygit2.Commit) -> str:
         short, _, _ = commit.message.partition('\n')
-        short_sha2 = str(commit)[0:6]
+        short_sha2 = str(commit.id)[0:6]
         commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), 'R')
-        return f'[`{short_sha2}`]({repo_url}commit/{commit.hex}) {short} ({offset})'
+        return f'[`{short_sha2}`]({repo_url}commit/{str(commit.id)}) {short} ({offset})'
 
     def get_last_commits(self, count: int = 4, repo_path: str = path) -> str:
         repo = pygit2.Repository(Path(repo_path, '.git'))

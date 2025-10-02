@@ -242,7 +242,7 @@ class store_true_dummy_converter(commands.Converter[bool], app_commands.Transfor
         return value
 
     @property
-    def type(self) -> AppCommandOptionType:
+    def type(self) -> int:
         return AppCommandOptionType.boolean
 
 
