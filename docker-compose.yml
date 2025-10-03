@@ -26,7 +26,7 @@ services:
       - bot
 
   bot:
-    container_name: percy
+    container_name: percy-bot
     #image: klappstuhl/percy
     build: .
     restart: unless-stopped
