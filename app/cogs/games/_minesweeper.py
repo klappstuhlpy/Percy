@@ -121,17 +121,23 @@ class Minesweeper(View):
         return [(field.x + i, field.y + j) for i, j in neighbors if (0 <= field.x + i < 5) and (0 <= field.y + j < 5)]
 
     def mark(self, field: MSField) -> bool:
-        """Mark a cell as selected."""
-        from_board = self.board[field.x][field.y]
-        from_board.revealed = True
+        """Mark a cell as selected, iterative flood-fill to avoid RecursionError."""
+        stack = [field]
 
-        if from_board.mine:
-            return False
-        elif from_board.value == 0:
-            for i, j in self.get_neighbours(field):
-                neighbour = self.board[i][j]
-                if not neighbour.revealed:
-                    self.mark(neighbour)
+        while stack:
+            current = stack.pop()
+            if current.revealed:
+                continue
+            current.revealed = True
+
+            if current.mine:
+                return False  # hit a mine
+
+            if current.value == 0:
+                for i, j in self.get_neighbours(current):
+                    neighbour = self.board[i][j]
+                    if not neighbour.revealed:
+                        stack.append(neighbour)
 
         return True
 
@@ -163,8 +169,11 @@ class MinesweeperButton(discord.ui.Button['Minesweeper']):
         self.view.moves += 1
         self.cell = self.view.board[self.position[0]][self.position[1]]
 
-        if not self.view.mark(*self.position):
-            return await self.view.end(interaction, field=self.cell)
+        x, y = self.position
+        field = self.view.board[x][y]
+
+        if not self.view.mark(field):
+            return await self.view.end(interaction, field=field)
 
         if self.cell.value == 0:
             for button in self.view.children:
