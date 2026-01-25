@@ -306,7 +306,7 @@ class BasePaginator(View, Generic[T], metaclass=ABCMeta):
     async def to_array(self) -> np.ndarray:
         """Returns a 2D array of the pages, their index and the page content."""
 
-        def resolve_entries(e: T) -> list[str]:
+        def resolve_entries(e: T) -> Generator[str | Any, Any, None]:
             if isinstance(e, discord.Embed):
                 if e.fields:
                     for field in e.fields:
@@ -401,7 +401,7 @@ class BasePaginator(View, Generic[T], metaclass=ABCMeta):
         page = await self.format_page(entries)
         return await interaction.response.edit_message(**self.resolve_msg_kwargs(page))
 
-    def update_buttons(self) -> None:
+    def update_buttons(self):
         self.on_middle.label = self.middle
 
     async def _paged_embeds(self) -> AsyncGenerator[discord.Embed, None]:
