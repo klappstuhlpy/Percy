@@ -57,7 +57,7 @@ class CommandTree(app_commands.CommandTree):
             discord.Forbidden, discord.NotFound
         )
         if isinstance(error, blacklist):
-            return
+            return None
 
         embed = discord.Embed(
             title=f'{Emojis.warning} App Command Error',
@@ -68,7 +68,7 @@ class CommandTree(app_commands.CommandTree):
         command = interaction.command
         if command is not None:
             if command._has_any_error_handlers():  # noqa
-                return
+                return None
 
             embed.add_field(name='Name', value=command.qualified_name)
 
@@ -78,7 +78,7 @@ class CommandTree(app_commands.CommandTree):
         )
         if isinstance(error, handle_elsewhere):
             interaction.client.dispatch('command_error', interaction._baton, error)  # noqa
-            return
+            return None
 
         embed.add_field(
             name='User',
@@ -276,13 +276,13 @@ class Bot(commands.Bot):
         ctx = await self.get_context(message)
 
         if ctx.command is None:
-            return
+            return None
 
         if ctx.author.id in self.blacklist:
-            return
+            return None
 
         if ctx.guild is not None and ctx.guild.id in self.blacklist:
-            return
+            return None
 
         if await self.spam_control.is_spam(ctx, message):
             return
@@ -341,9 +341,9 @@ class Bot(commands.Bot):
         embed.add_field(name='Args', value=args_str.pages[0], inline=False)
 
         with suppress(discord.HTTPException, ValueError):
-            ctx: Context | discord.Message = args[0]
+            ctx: Context | discord.Message | discord.Member = args[0]
             author = ctx if isinstance(ctx, discord.Member) else ctx.author
-            send = ctx.send if isinstance(ctx, Context) else ctx.channel.send
+            send = (ctx.send if isinstance(ctx, Context) else ctx.channel.send) if not isinstance(ctx, discord.Member) else ctx.dm_channel
             if self.is_owner(author):
                 await send(embed=embed)
                 return
@@ -379,20 +379,20 @@ class Bot(commands.Bot):
             commands.CommandNotFound, commands.CheckFailure, discord.Forbidden
         )
         if isinstance(error, blacklist):
-            return
+            return None
 
         if isinstance(error, commands.CommandOnCooldown):
             if not ctx.guild and ctx.bot_permissions.add_reactions:
                 return await ctx.message.add_reaction('\U000023f3')
 
-            await ctx.send_warning(f'Slow down, you\'re on cooldown. Retry again in **{error.retry_after:.2f}s**.')
-            return
+            await ctx.send_warning(f'Slow down, you\'re on cooldown. Retry again in **{humanize_duration(error.retry_after)}**.')
+            return None
         if isinstance(error, commands.NSFWChannelRequired):
             await ctx.send(
                 '\N{NO ENTRY SIGN} This command can only be run in channels that are marked **NSFW**.',
                 reference=ctx.message, delete_after=15, ephemeral=True,
             )
-            return
+            return None
 
         if isinstance(error, (commands.MissingPermissions, commands.BotMissingPermissions)):
             if isinstance(error, commands.MissingPermissions):
@@ -408,14 +408,14 @@ class Bot(commands.Bot):
                     permissions.administrator or permissions.send_messages and permissions.read_message_history
             ):
                 await ctx.send(message, reference=ctx.message, ephemeral=True)
-                return
+                return None
 
             if permissions.administrator or permissions.add_reactions:
                 await ctx.message.add_reaction('\U000026a0')
 
             with suppress(discord.HTTPException):
                 await ctx.author.send(message)
-            return
+            return None
 
         # Look for errors we send directly into the channel.
         to_send_error_lookup = deep_to_with(error, '__cause__')
