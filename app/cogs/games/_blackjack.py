@@ -246,8 +246,15 @@ class Blackjack:
         if len(self.player_hands) > 1:
             name += f' #{self.player_hands.index(hand) + 1}'
 
-        embed.add_field(name=name, value=hand.display_text)
-        embed.add_field(name='Dealer Hand', value=self.dealer.display_text)
+        p_blocks = hand.display_blocks
+        embed.add_field(name=name, value=p_blocks[0], inline=True)
+        for block in p_blocks[1:]:
+            embed.add_field(name='\u200b', value=block, inline=True)
+
+        d_blocks = self.dealer.display_blocks
+        embed.add_field(name='Dealer Hand', value=d_blocks[0], inline=True)
+        for block in d_blocks[1:]:
+            embed.add_field(name='\u200b', value=block, inline=True)
 
         if colour == discord.Colour.blurple():
             embed.set_footer(text=f'Cards remaining: {len(self.deck)}')
@@ -335,8 +342,12 @@ class TableView(View):
     async def check_for_winner(self, interaction: discord.Interaction | Context) -> bool:
         """Checks if there is a winner and updates the embed accordingly"""
         if not self.table.active_hand.finished:
-            if self.table.playing_players and self.table.active_hand.value >= 21:
-                # If the player has over 21 or a blackjack, stand automatically
+            if (
+                    self.table.playing_players and self.table.active_hand.value >= 21
+            ) or (
+                    self.table.dealer.value == 21 and len(self.table.dealer) == 2
+            ):
+                # If the player has over 21 or a blackjack, or the dealer has a blackjack, stand automatically
                 self.table.stand()
                 await self.check_for_winner(interaction)
                 return True
@@ -505,3 +516,4 @@ class NewGameButton(discord.ui.Button):
             await interaction.message.edit(embed=table.build_embed(table.active_hand), view=table.view)
 
         table.ctx.bot.get_cog('Games').blackjack_tables[table.ctx.user.id] = table  # noqa
+
