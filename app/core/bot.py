@@ -479,6 +479,9 @@ class Bot(commands.Bot):
         builder.extend(signature)
         signature = signature.raw
 
+        # list that could be filled with required flags
+        required_flags: list[str] = []
+
         FLAG_PARAM_REGEX = re.compile(
             fr'[<\[](--)?{re.escape(param.name)}((=.*)?| [<\[]\w+(\.{{3}})?[>\]])(\.{{3}})?[>\]](\.{{3}})?')
         if match := FLAG_PARAM_REGEX.search(signature):
@@ -506,7 +509,14 @@ class Bot(commands.Bot):
         offset = len(ctx.clean_prefix) + len(str(invoked_with))
         content = f'{" " * (lower + offset + 5)}{"^" * (upper - lower)} Error occurred here'
         builder.append(content, color=AnsiColor.gray, bold=True).newline(2)
-        builder.append(str(error), color=AnsiColor.red, bold=True)
+
+        # check if the missing argument is the flags builder
+        if isinstance(error, commands.MissingRequiredArgument) and isinstance(param.annotation, FlagMeta):
+            # we want to give a hint, that displays the flags that are required and display them
+            flags = [flag for flag in param.annotation.walk_flags() if flag.required is True]
+            builder.append('Missing required flags: ' + ', '.join(flag.name for flag in flags), color=AnsiColor.red, bold=True)
+        else:
+            builder.append(str(error), color=AnsiColor.red, bold=True)
 
         if invoked_with != ctx.command.qualified_name:
             builder.newline(2)
