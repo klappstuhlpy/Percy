@@ -58,15 +58,31 @@ class Hand(BaseHand[Card]):
         self.finished: bool = False
         self.splitted: bool = False
 
+    def get_real_card_values(self, include_hidden: bool = False) -> list[int]:
+        """Because the card values for Jack, King Queen and Ace are 11, 12, 13 and 14, we now need to
+        translate them for the blackjack game into the actual values they represent."""
+        values = []
+        for card in self.cards:
+            if card.hidden and not include_hidden:
+                continue
+            if card.value >= 10:
+                if card.value == 14:
+                    values.append(11)  # Ace
+                else:
+                    values.append(10)  # Face cards
+            else:
+                values.append(card.value)
+        return values
+
     @property
     def value(self) -> int:
         """Gets the value of the hand"""
-        _sum = sum([card.value for card in self.cards if not card.hidden])
+        _sum = sum(self.get_real_card_values())
 
         # Check and adjust for aces
         if _sum > 21:
             for card in self.cards:
-                if card.value == 11:
+                if card.value == 14:  # Ace
                     card.value = 1
                 if _sum <= 21:
                     break
@@ -74,10 +90,10 @@ class Hand(BaseHand[Card]):
         # Check and adjust for aces after a split
         if len(self) == 2 and _sum < 21:
             for card in self.cards:
-                if card.value == 1:
-                    card.value = 11
+                if card.value == 1:  # Ace
+                    card.value = 14
 
-        return sum([card.value for card in self.cards if not card.hidden])
+        return sum(self.get_real_card_values())
 
     @property
     def display_text(self) -> str:
@@ -91,6 +107,47 @@ class Hand(BaseHand[Card]):
             for elems in zip_longest(*card_list, fillvalue='')
         ]
         return '\n'.join(results) + f'\n\nValue: `{self.value}`'
+
+    @property
+    def display_blocks(self) -> list[str]:
+        """Returns display text split by whole cards (safe chunks).
+        The hand value is appended ONLY to the first block.
+        """
+        card_blocks = [
+            card.display('large', formatted=True).split('\n')
+            for card in self.cards
+        ]
+
+        value_suffix = f'\n\nValue: `{self.value}`'
+        value_len = len(value_suffix)
+
+        blocks: list[str] = []
+        current_cards: list[list[str]] = []
+
+        def render(cards: list[list[str]]) -> str:
+            return '\n'.join(
+                ' '.join(row) for row in zip(*cards)
+            )
+
+        for card in card_blocks:
+            rendered = render(current_cards + [card]) if current_cards else render([card])
+
+            # only reserve space for the value in the FIRST block
+            limit = 1024 - value_len if not blocks else 1024
+
+            if len(rendered) > limit:
+                blocks.append(render(current_cards))
+                current_cards = [card]
+            else:
+                current_cards.append(card)
+
+        if current_cards:
+            blocks.append(render(current_cards))
+
+        # append value ONLY to first block
+        blocks[0] += value_suffix
+
+        return blocks
 
 
 class Blackjack:
