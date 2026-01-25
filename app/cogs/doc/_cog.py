@@ -150,27 +150,27 @@ DocItemT = TypeVar('DocItemT', bound=DocItem | discord.Embed)
 
 class DocSelect(discord.ui.Select):
     def __init__(self, parent: BasePaginator[DocItemT]) -> None:
-        self.parent = parent
         super().__init__(
             placeholder='Select a similar Documentation...',
             max_values=1,
             row=1,
         )
+        self.super_parent: BasePaginator[DocItemT] = parent  # created seperate attribute due to dpy changing "parent" logic
 
-        for item in self.parent.entries:
+        for item in self.super_parent.entries:
             self.add_option(
                 label=item.symbol_id,
                 description=item.group,
-                value=str(self.parent.entries.index(item)),
+                value=str(self.super_parent.entries.index(item)),
             )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
-        self.parent._current_page = int(self.values[0])
-        entries = self.parent.switch_page(0)
-        page = await self.parent.format_page(entries)
-        await self.parent._edit(interaction, **self.parent.resolve_msg_kwargs(page))
+        self.super_parent._current_page = int(self.values[0])
+        entries = self.super_parent.switch_page(0)
+        page = await self.super_parent.format_page(entries)
+        await interaction.message.edit(**self.super_parent.resolve_msg_kwargs(page))
 
 
 class DocPaginator(BasePaginator[DocItemT]):
@@ -216,6 +216,7 @@ class DocPaginator(BasePaginator[DocItemT]):
             ephemeral: bool = False,
             **kwargs: Any
     ) -> BasePaginator[DocItemT]:
+        """Starts documentation paginator with optional selection menu"""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
         self.extras.update(kwargs)
@@ -247,7 +248,7 @@ class Documentation(Cog):
         self.doc_symbols: dict[str, dict[str, DocItem]] = {}
         self.item_fetcher = _batch_parser.BatchParser(bot)
 
-        self.inventory_scheduler = Scheduler('Documentation')
+        self.inventory_scheduler: Scheduler = Scheduler('Documentation')
         self.symbol_get_event: SharedEvent = SharedEvent()
 
         self.inv_retries: dict[str, int] = {}
