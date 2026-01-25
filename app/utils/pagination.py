@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Collection, AsyncGenerator
-from typing import TYPE_CHECKING, Any, AnyStr, Generic, Literal, NamedTuple, Self, TypeVar, overload, override
+from typing import TYPE_CHECKING, Any, AnyStr, Generic, Literal, NamedTuple, Self, TypeVar, overload, override, \
+    Generator
 
 import discord
 import numpy as np
 from discord.ext import commands
+from discord.ui import Item
+from discord.ui.view import BaseView
 from discord.utils import MISSING
 
 from app.core.models import Context
 from app.core.views import View
-from app.utils import aenumerate, fuzzy, helpers
+from app.utils import aenumerate, fuzzy, helpers, Coro
 from config import Emojis
 
 __all__ = (
@@ -376,6 +379,7 @@ class BasePaginator(View, Generic[T], metaclass=ABCMeta):
         self._current_page += count
 
         if self.clamp_pages:
+            # Wraps page to beginning/end if clamping and out of bounds
             if count < 0:
                 if self._current_page < 0:
                     self._current_page = self.total_pages - 1

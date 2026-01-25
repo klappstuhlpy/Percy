@@ -23,7 +23,7 @@ from typing import (
     override,
     Type,
     Union,
-    runtime_checkable
+    runtime_checkable, Dict
 )
 
 import aiohttp
@@ -1148,7 +1148,7 @@ def _resolve_command_kwargs(
         brief: str = MISSING,
         help: str = MISSING,
 ) -> dict[str, Any]:
-    kwargs = {'cls': cls}
+    kwargs: Dict[str, Any] = {'cls': cls}
 
     if name is not MISSING:
         kwargs['name'] = name

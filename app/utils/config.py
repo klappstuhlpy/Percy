@@ -183,7 +183,7 @@ class Config(Generic[K, V]):
         keys = [key.strip("'") for key in re.findall(r"[^\s.']+|'(?:\\.|[^'])*'", str(key))]
         if len(keys) == 1:
             await self.put(key, value)
-            return
+            return None
 
         temp = self._db
         for key in keys[:-1]:
@@ -228,7 +228,7 @@ class Config(Generic[K, V]):
         keys = [key.strip("'") for key in re.findall(r"[^\s.']+|'(?:\\.|[^'])*'", str(key))]
         if len(keys) == 1:
             await self.remove(key)
-            return
+            return None
 
         temp = self._db
         for key in keys[:-1]:
@@ -277,7 +277,7 @@ class Config(Generic[K, V]):
         keys = [key.strip("'") for key in re.findall(r"[^\s.']+|'(?:\\.|[^'])*'", str(key))]
         if len(keys) == 1:
             await self.add(key, value)
-            return
+            return None
 
         temp = self._db
         for key in keys[:-1]:

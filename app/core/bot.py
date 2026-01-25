@@ -7,7 +7,7 @@ import sys
 import traceback
 from collections import defaultdict, Counter
 from contextlib import suppress
-from typing import Final, ClassVar, Dict, Type, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, \
+from typing import Final, Dict, Type, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, \
     Generator
 
 import discord
@@ -28,7 +28,8 @@ from app.core.flags import FlagMeta
 from app.core.timer import TimerManager, Timer
 from app.core.models import PermissionSpec, Context, Command, GroupCommand, AppBadArgument
 from app.database.base import Database
-from app.utils import AnsiColor, AnsiStringBuilder, helpers, cache, GUILD_FEATURES, deep_to_with, Config
+from app.utils import AnsiColor, AnsiStringBuilder, helpers, cache, GUILD_FEATURES, deep_to_with, Config, \
+    humanize_duration
 from app.utils.lock import LockedResourceError
 from app.utils.pagination import TextSource
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
@@ -195,6 +196,7 @@ class Bot(commands.Bot):
 
         DoNotLoadOnBeta = (
             'app.cogs.web_utils',
+            'app.cogs.comic'
         )
         for extension in self.initial_extensions:
             if beta and extension in DoNotLoadOnBeta:

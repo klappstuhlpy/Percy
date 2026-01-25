@@ -37,7 +37,7 @@ __all__ = (
 
 class RemoveNoise(logging.Filter):
     """A filter to remove noise from the logs."""
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__(name='discord.state')
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -110,7 +110,7 @@ def setup_logging() -> Generator[None, Any, None]:
             root_log.removeHandler(hdlr)
 
 
-async def run_bot() -> None:
+async def run_bot():
     discord.VoiceClient.warn_nacl = False
 
     async with Bot() as bot:
@@ -161,7 +161,7 @@ def migrate(reason: str) -> None:
             'An unapplied migration for the next version already exists. Please apply pending migrations before creating a new one.',
             fg='yellow')
         click.secho('Hint: Apply pending migrations with the `upgrade` command.', fg='yellow', bold=True)
-        return
+        return None
 
     revision = migrations.create_revision(reason)
     click.secho(f'Successfully created revision V{revision.version}.', fg='green')
@@ -181,14 +181,14 @@ def upgrade(revision: str, sql: bool) -> None:
 
     if sql:
         migrations.display()
-        return
+        return None
 
     if revision:
         try:
             revision = int(revision)
         except ValueError:
             click.secho('The revision number must be a valid integer.', fg='red')
-            return
+            return None
 
     try:
         applied = asyncio.run(run_migration_upgrade(migrations, revision))

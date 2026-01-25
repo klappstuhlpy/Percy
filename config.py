@@ -49,7 +49,7 @@ token: str = env('DISCORD_TOKEN')
 beta_token: str = env('DISCORD_BETA_TOKEN')
 client_secret: str = env('DISCORD_CLIENT_SECRET')
 
-resolved_token: str = token# if not beta else beta_token
+resolved_token: str = token  # if not beta else beta_token
 
 lavalink_nodes: Collection[SimpleNamespace] = [
     SimpleNamespace(uri='https://lavalink.klappstuhl.me/', password=env('LAVALINK_NODE_1_PASSWORD')),

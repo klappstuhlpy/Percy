@@ -125,7 +125,7 @@ class FeedbackModal(discord.ui.Modal, title='Submit Feedback'):
         if channel is None:
             await interaction.response.send_message(
                 f'{Emojis.error} Could not submit your feedback, sorry about this', ephemeral=True)
-            return
+            return None
 
         embed = self.cog.get_feedback_embed(interaction, summary=str(self.summary), details=self.details.value)
         await channel.send(embed=embed)
@@ -194,7 +194,7 @@ class Gimmicks(Cog):
         """
         channel = self.feedback_channel
         if channel is None:
-            return
+            return None
 
         embed = self.get_feedback_embed(ctx, summary=content)
         await channel.send(embed=embed)
@@ -281,7 +281,7 @@ class Gimmicks(Cog):
         async with self.bot.session.get('https://www.reddit.com/r/dankmemes/new.json?sort=hot') as r:
             if r.status != 200:
                 await ctx.send_error('Could not fetch memes :(')
-                return
+                return None
             res = await r.json()
         random_meme = res['data']['children'][random.randint(0, len(res['data']['children']) - 1)]['data']
         embed = discord.Embed(title=random_meme['title'], url=random_meme['url'],
@@ -303,7 +303,7 @@ class Gimmicks(Cog):
         async with self.bot.session.get('https://uselessfacts.jsph.pl/random.json?language=en') as r:
             if r.status != 200:
                 await ctx.send_error('Could not fetch fact :(')
-                return
+                return None
             res = await r.json()
         embed = discord.Embed(title='Random Fact', description=res['text'], colour=helpers.Colour.white())
         await ctx.send(embed=embed)

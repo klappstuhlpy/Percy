@@ -225,9 +225,9 @@ class Stats(Cog):
             The context of the invoked command.
         """
         if ctx is MISSING:
-            return
+            return None
         if ctx.command is None:
-            return
+            return None
 
         command = ctx.command.qualified_name
         is_app_command = ctx.interaction is not None
@@ -337,14 +337,14 @@ class Stats(Cog):
             The member that joined.
         """
         if member.bot:
-            return
+            return None
 
         if len(member.mutual_guilds) > 1:
-            return
+            return None
 
         avatar: bytes | None = await self._read_avatar(member)
         if avatar is None:
-            return
+            return None
 
         scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
         self._avatar_data_batch.append(
@@ -367,12 +367,12 @@ class Stats(Cog):
             The member after the update.
         """
         if before.bot:
-            return
+            return None
 
         if before.display_avatar != after.display_avatar:
             avatar: bytes | None = await self._read_avatar(after)
             if avatar:
-                return
+                return None
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
             self._avatar_data_batch.append(
@@ -412,7 +412,7 @@ class Stats(Cog):
         if before.avatar != after.avatar:
             avatar: bytes | None = await self._read_avatar(after)
             if avatar is None:
-                return
+                return None
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
             self._avatar_data_batch.append(
@@ -441,17 +441,17 @@ class Stats(Cog):
             The member after the update.
         """
         if before.bot:
-            return
+            return None
 
         if (await self.bot.db.get_user_config(after.id)).track_presence is False:
-            return
+            return None
 
         def _make_key(member: discord.Member) -> str:
             return f'status:{member.id}:{member.status}'
 
         if before.status != after.status:
             if self._presence_cache.get(_make_key(after)):
-                return
+                return None
 
             self._presence_cache[_make_key(after)] = True
 
@@ -483,7 +483,7 @@ class Stats(Cog):
             avatar: bytes = await member.display_avatar.read()
         except discord.HTTPException as exc:
             if exc.status in (403, 404):
-                return
+                return None
             if exc.status >= 500:
                 await asyncio.sleep(15.0)
                 await self._read_avatar(member)

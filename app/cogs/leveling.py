@@ -606,7 +606,7 @@ class LevelConfig(BaseRecord):
 class Leveling(Cog):
     """Leveling system, commands and utilities."""
 
-    emoji = '<:oneup:1322338839909634118>'
+    emoji = Emojis.level_up
 
     @cache.cache()
     async def get_guild_level_config(self, guild_id: int, /) -> GuildLevelConfig | None:

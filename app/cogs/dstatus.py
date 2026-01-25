@@ -5,7 +5,7 @@ import dataclasses
 import datetime
 import enum
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Type
 
 import asyncpg
 import discord
@@ -59,7 +59,7 @@ class IncidentItem(BaseRecord):
     id: str
     name: str
     status: str
-    started_at: datetime
+    started_at: Type[datetime]
     guild_id: int
     channel_id: int
     message_id: int | None
@@ -93,8 +93,8 @@ class Component:
     id: str
     name: str
     status: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: Type[datetime]
+    updated_at: Type[datetime]
     position: int
     description: str
     showcase: bool
@@ -115,9 +115,9 @@ class Update:
     status: str
     body: str
     incident_id: str
-    created_at: datetime
-    updated_at: datetime
-    display_at: datetime
+    created_at: Type[datetime]
+    updated_at: Type[datetime]
+    display_at: Type[datetime]
     affected_components: list[ShortComponent]
     deliver_notifications: bool
     custom_tweet: str
@@ -138,13 +138,13 @@ class Incident:
     id: str
     name: str
     status: str
-    created_at: datetime
-    updated_at: datetime
-    monitoring_at: datetime
-    resolved_at: datetime
+    created_at: Type[datetime]
+    updated_at: Type[datetime]
+    monitoring_at: Type[datetime]
+    resolved_at: Type[datetime]
     impact: str
     shortlink: str
-    started_at: datetime
+    started_at: Type[datetime]
     page_id: str
     incident_updates: list[Update]
     components: list[Component]
@@ -364,6 +364,7 @@ class DiscordStatus(Cog):
 
         check = await self.bot.db.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
                                           latest.id, ctx.guild.id)
+
         if check.endswith('0'):
             query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
             values = (latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)

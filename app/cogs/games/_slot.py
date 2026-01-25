@@ -115,11 +115,11 @@ class SlotMachine(View):
 
         val_arr = ['═' * (self.columns * self.rows)] * self.rows
         start = Emojis.empty * 6
-        sep = Emojis.empty + '`║`' + Emojis.empty
+        sep = Emojis.empty + ' `║` ' + Emojis.empty
 
         parts = [
             start + '`╔' + '╦'.join(val_arr) + '╗`' + Emojis.empty,
-            '\n'.join(start + '`║`' + Emojis.empty + sep.join(row) + sep for row in arr.tolist()),
+            '\n'.join(start + '`║` ' + Emojis.empty + sep.join(row) + sep for row in arr.tolist()),
             start + '`╚' + '╩'.join(val_arr) + '╝`' + Emojis.empty
         ]
 

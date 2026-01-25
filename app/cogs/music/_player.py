@@ -4,11 +4,12 @@ import datetime
 import enum
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Coroutine
 
 import discord
 import wavelink
 import yarl
+from discord import Message
 from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import QueueMode
@@ -698,7 +699,7 @@ class PlayerPanel(View):
         disabled=True
     )
     async def on_like(self, interaction: discord.Interaction, _) -> None:
-        playlist_tools: CogT = self.bot.get_cog('PlaylistTools')
+        playlist_tools: CogT[Any] = self.bot.get_cog('PlaylistTools')
         if not playlist_tools:
             return await interaction.response.send_message('This feature is currently disabled.', ephemeral=True)
 

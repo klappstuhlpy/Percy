@@ -11,8 +11,7 @@ from config import Emojis
 DisplayCard = namedtuple('DisplayCard', ['top', 'middle', 'bottom'])
 
 _BASE_CARDS: dict[str, int] = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10}
-POKER_NUM: dict[str, int] = _BASE_CARDS | {'J': 11, 'Q': 12, 'K': 13, 'A': 14}
-BJ_NUM: dict[str, int] = _BASE_CARDS | {'J': 10, 'Q': 10, 'K': 10, 'A': 11}
+FULL_CARD_DECK: dict[str, int] = _BASE_CARDS | {'J': 11, 'Q': 12, 'K': 13, 'A': 14}
 
 SUITS: dict[str, int] = {'diamonds': 0, 'clubs': 1, 'spades': 2, 'hearts': 3}
 NAMED_HAND: dict[int, str] = {
@@ -166,12 +165,10 @@ class Deck(Generic[CardT]):
         return f'Deck(decks={self.decks} cards={len(self.cards)})'
 
     def _build_deck(self) -> None:
-        _card_deck = POKER_NUM if self.game == 'poker' else BJ_NUM
-
         for _ in range(self.decks):
             self.cards = np.concatenate([
                 self.cards,
-                np.array([[value, suit] for value in _card_deck.values() for suit in SUITS.values()])
+                np.array([[value, suit] for value in FULL_CARD_DECK.values() for suit in SUITS.values()])
             ], axis=0)
 
         self.shuffle()
