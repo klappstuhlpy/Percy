@@ -44,8 +44,8 @@ If you accidentally deleted the message, you have to redo the setup with </music
 
 class PlayFlags(Flags):
     """Flags for the music commands."""
-    source: Literal['sp', 'sc'] = flag(
-        name='source', description='What source to search for your query.', aliases=['s'], default='sc')
+    source: Literal['yt', 'sp', 'sc'] = flag(
+        name='source', description='What source to search for your query.', aliases=['s'], default='yt')
     force: bool = store_true(
         name='force', description='Whether to force play the track/playlist.', aliases=['f'])
     recommendations: bool = store_true(
@@ -269,7 +269,7 @@ class Music(Cog):
         if not player:
             player = await Player.join(ctx)
 
-        # Note: Due to Discords ToS, we can't use YouTube as our source of music.
+        # Note: Due to Discords ToS, we can't use YouTube as our source of music
         SOURCE_LOOKUP = {
             # 'yt': wavelink.TrackSource.YouTubeMusic,
             'sp': 'spsearch',
@@ -285,6 +285,7 @@ class Music(Cog):
 
         result = await player.search(query, source=source, ctx=ctx,
                                      return_first=not hasattr(flags, '__with_search__'))
+
         if isinstance(result, SearchReturn):
             if result == SearchReturn.NO_RESULTS:
                 await ctx.send_error('Sorry! No results found matching your query.')
