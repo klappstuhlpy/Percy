@@ -508,7 +508,7 @@ class GatekeeperSetUpView(View):
         await interaction.followup.send(f'{Emojis.success} Successfully set bypass action to {value}', ephemeral=True)
 
     @discord.ui.button(label='Set up Role', style=discord.ButtonStyle.blurple, row=3)
-    async def setup_role(self, interaction: discord.Interaction, _) -> None:
+    async def setup_role(self, interaction: discord.Interaction, _):
         if not interaction.app_permissions.manage_roles:
             return await interaction.response.send_message(
                 f'{Emojis.error} Bot requires Manage Roles permission for this to work.')

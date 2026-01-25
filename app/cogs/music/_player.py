@@ -767,13 +767,15 @@ class AdjustVolumeModal(discord.ui.Modal, title='Volume Adjuster'):
         super().__init__(timeout=30)
         self._view: PlayerPanel = _view
 
-    async def on_submit(self, interaction: discord.Interaction, /) -> None:
+    async def on_submit(self, interaction: discord.Interaction, /) -> Message | Any:
+        await interaction.response.defer()
+
         if not self.number.value.isdigit():
-            return await interaction.response.send_message('Please enter a valid number.', ephemeral=True)
+            return await interaction.followup.send('Please enter a valid number.', ephemeral=True)
 
         value = int(self.number.value)
         await self._view.player.set_volume(value)
-        return await interaction.response.edit_message(embed=self._view.build_embed(), view=self._view)
+        return await interaction.message.edit(embed=self._view.build_embed(), view=self._view)
 
 
 class TrackDisambiguatorView(View, Generic[T]):
