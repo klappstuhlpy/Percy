@@ -196,6 +196,11 @@ def fnumb(number: int | float, *, _locale: str = 'en_US.UTF-8') -> str:
     return locale.format_string('%.2f', number, grouping=True)
 
 
+def humanize_bool(value: bool) -> str:
+    """Converts a boolean to a human-readable string."""
+    return 'Yes' if value else 'No'
+
+
 def pagify(
         text: str,
         delims: Sequence[str] = ['\n'],

@@ -27,7 +27,7 @@ from app.core.models import PermissionSpec, command, cooldown, describe, group, 
 from app.core.views import View, TrashView
 from app.rendering import get_dominant_color, Quote
 from app.utils import AnsiColor, AnsiStringBuilder, Timer, get_asset_url, helpers, humanize_small_duration, pluralize, \
-    format_fields, RelativeDelta
+    format_fields, RelativeDelta, humanize_bool
 from app.utils.lock import lock
 from app.utils.pagination import LinePaginator, TextSource, TextSourcePaginator
 from config import main_guild_id, Emojis, github_key, default_prefix, test_guild_id
@@ -796,7 +796,7 @@ class Meta(Cog):
         embed = discord.Embed(
             title=guild.name,
             description=(
-                f'**Name:** {guild.name}'
+                f'**Name:** {guild.name}\n'
                 f'**ID:** {guild.id}\n'
                 f'**Owner:** {guild.owner}\n'
                 f'**Auth:** {str(guild.verification_level).title()}\n'
@@ -917,9 +917,9 @@ class Meta(Cog):
             embed.set_thumbnail(url=application.icon.url)
 
         bot_info = (
-            f'App is public: `{application.bot_public}`\n'
-            f'App requires code grant: `{application.bot_require_code_grant}`\n'
-            f'Is monetized: `{application.is_monetized}`\n'
+            f'Public App: `{humanize_bool(application.bot_public)}`\n'
+            f'Requires code grant: `{humanize_bool(application.bot_require_code_grant)}`\n'
+            f'Monetized: `{humanize_bool(application.is_monetized)}`\n'
         )
         if application.guild_id:
             bot_info += f'Guild ID: `{application.guild_id}`\n'
