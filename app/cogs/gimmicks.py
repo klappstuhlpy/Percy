@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import re
-from typing import Annotated, ClassVar, Final
+from typing import Annotated, Final
 
 import discord
 from discord.ext import commands
@@ -25,10 +25,10 @@ def cmyk_to_rgb(c: int, m: int, y: int, k: int) -> tuple[int, int, int]:
 class ColourConverter(commands.clean_content):
     """Converts a string to a discord.Colour."""
 
-    CMYK_REGEX: Final[ClassVar[re.Pattern]] = re.compile(
+    CMYK_REGEX: Final[re.Pattern] = re.compile(
         r'^\(?(?P<c>[0-9]{1,3})%?\s*,?\s*(?P<m>[0-9]{1,3})%?\s*,?\s*(?P<y>[0-9]{1,3})%?\s*,?\s*(?P<k>[0-9]{1,3})%?\)?$')
-    HEX_REGEX: Final[ClassVar[re.Pattern]] = re.compile(r'^(#|0x)?(?P<hex>[a-fA-F0-9]{6})$')
-    RGB_REGEX: Final[ClassVar[re.Pattern]] = re.compile(r'^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$')
+    HEX_REGEX: Final[re.Pattern] = re.compile(r'^(#|0x)?(?P<hex>[a-fA-F0-9]{6})$')
+    RGB_REGEX: Final[re.Pattern] = re.compile(r'^\(?(?P<red>[0-9]+),?\s*(?P<green>[0-9]+),?\s*(?P<blue>[0-9]+)\)?$')
 
     async def convert(self, ctx: Context, argument: str) -> discord.Colour:
         converted = await super().convert(ctx, argument)
