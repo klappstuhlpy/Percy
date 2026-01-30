@@ -5,7 +5,7 @@ import re
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, TypeVar, overload, AsyncGenerator
 
 from app.utils.tasks import executor
 from config import path
@@ -129,7 +129,7 @@ class Config(Generic[K, V]):
         return self._db.get(str(key), default)
 
     @contextlib.asynccontextmanager
-    async def aquire(self) -> None:
+    async def aquire(self) -> AsyncGenerator[None, Any]:
         """A context manager to aquire the lock.
 
         Example
