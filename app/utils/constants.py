@@ -11,8 +11,8 @@ T = TypeVar('T')
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
 NCoro = TypeVar('NCoro', bound=Callable[..., Any])
 
-type AsyncCallable[T] = Callable[P, Awaitable[T] | AsyncIterable[T]] | Callable[..., Any]
-type AsyncCallableDecorator[T] = Callable[[AsyncCallable[P, T]], AsyncCallable[P, T]]
+type AsyncCallable[P, T] = (Callable[P, Awaitable[T] | AsyncIterable[T]] | Callable[P, Any])
+type AsyncCallableDecorator[P, T] = Callable[[AsyncCallable[P, T]], AsyncCallable[P, T]]
 
 # REGEX
 
