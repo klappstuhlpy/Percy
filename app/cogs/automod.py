@@ -1,4 +1,4 @@
-from typing import TypedDict, Required, Sequence, NotRequired, ClassVar
+from typing import TypedDict, Required, Sequence, NotRequired, ClassVar, cast
 
 import discord
 from discord import AutoModRuleEventType, AutoModRuleTriggerType, AutoModRuleActionType, Interaction
@@ -49,7 +49,7 @@ class AutoModPresets:
 
     __PREFIX__ = 'Percy Rule'
 
-    links: ClassVar[AutoModRulePreset] = {
+    links: AutoModRulePreset = {
         'id': 0,
         'name': f'{__PREFIX__} Links',
         'event_type': AutoModRuleEventType.message_send,
@@ -68,7 +68,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    capital_spam: ClassVar[AutoModRulePreset] = {
+    capital_spam: AutoModRulePreset = {
         'id': 0,
         'name': f'{__PREFIX__} Capital Spam',
         'event_type': AutoModRuleEventType.message_send,
@@ -86,7 +86,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    invites_spam: ClassVar[AutoModRulePreset] = {
+    invites_spam: AutoModRulePreset = {
         'id': 0,
         'name': f'{__PREFIX__} Invites Spam',
         'event_type': AutoModRuleEventType.message_send,
@@ -104,7 +104,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    bad_words: ClassVar[AutoModRulePreset] = {
+    bad_words: AutoModRulePreset = {
         'id': 0,
         'name': f'{__PREFIX__} Bad Words',
         'event_type': AutoModRuleEventType.message_send,
