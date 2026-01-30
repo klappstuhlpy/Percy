@@ -1,11 +1,11 @@
 import re
 from ssl import CertificateError
 from textwrap import dedent
-from typing import Any, TypeVar, ClassVar, Coroutine
+from typing import Any, TypeVar, ClassVar, Coroutine, Literal
 
 import discord
 from aiohttp import ClientConnectorError
-from discord import app_commands, AppCommandOptionType
+from discord import app_commands, AppCommandOptionType, Colour
 from discord.ext import commands
 
 from app.core.models import Context
@@ -101,7 +101,7 @@ class CodeblockConverter(commands.Converter[list[str]]):
 
 class ColorTransformer(commands.Converter[Colour | str], app_commands.Transformer):
     """A color converter that will try to match a color HEX or name to a :class:``discord.Color``."""
-    async def transform(self, interaction: discord.Interaction, value: str) -> Colour | str:
+    async def transform(self, interaction: discord.Interaction, value: str) -> Colour | None:
         """Transform a color HEX to the matching :class:``discord.Color` if possible else return None."""
         try:
             value = value.strip()
@@ -195,7 +195,7 @@ class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
         return m
 
     @property
-    def type(self) -> int:
+    def type(self) -> Literal[AppCommandOptionType.user]:
         return AppCommandOptionType.user
 
 

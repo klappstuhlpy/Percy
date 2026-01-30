@@ -199,14 +199,14 @@ class ConfirmationView(View):
             timeout: float = None,
             defer: bool = False,
             delete_after: bool = False,
-            hook: AsyncCallable[[discord.Interaction], None] = None,
+            hook: AsyncCallable[discord.Interaction, None] = None,
     ) -> None:
         self.value: bool | None = None
         self.hook_value: Any = None
 
         self._defer: bool = defer
         self._delete_after: bool = delete_after
-        self._hook: AsyncCallable[[discord.Interaction], None] = hook
+        self._hook: AsyncCallable[discord.Interaction, None] = hook
         super().__init__(timeout=timeout, members=user)
 
         self._true_button = discord.ui.Button(style=discord.ButtonStyle.green, label=true)
