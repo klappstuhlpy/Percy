@@ -559,7 +559,7 @@ def humanize_small_duration(seconds: float) -> str:
     return '<1 ps'
 
 
-def convert_duration(milliseconds: float) -> time:
+def convert_duration(milliseconds: float) -> str:
     seconds = milliseconds / 1000
     formaT = '%H:%M:%S' if seconds >= 3600 else '%M:%S'
     return time.strftime(formaT, time.gmtime(seconds))

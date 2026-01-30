@@ -447,7 +447,7 @@ def get_asset_url(obj: discord.Guild | discord.User | discord.Member | discord.C
         return obj.display_avatar.url
 
 
-def tail(f: BinaryIO, n: int = 10) -> list[bytes]:
+def tail(f: BinaryIO, n: int = 10) -> list[Any] | None:
     """Reads 'n' lines from f with buffering"""
     assert n >= 0
     pos, lines = n + 1, []
@@ -645,7 +645,7 @@ def txt(path: str | Path) -> str:
         return file.read()
 
 
-def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: int = 32) -> str:
+def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: int = 32) -> str | None:
     """
     Example
     -------
