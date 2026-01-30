@@ -167,8 +167,8 @@ class Bot(commands.Bot):
         self.command_error_cache: Dict[str, str] = ExpiringDict(
             max_len=1000, max_age_seconds=60)
 
-        self.resumes: defaultdict[int, list[datetime]] = defaultdict(list)
-        self.identifies: defaultdict[int, list[datetime]] = defaultdict(list)
+        self.resumes: defaultdict[int, list[datetime.datetime]] = defaultdict(list)
+        self.identifies: defaultdict[int, list[datetime.datetime]] = defaultdict(list)
 
         self.context: Type[Context] = Context
         self.spam_control: SpamControl = SpamControl(self)
@@ -344,8 +344,18 @@ class Bot(commands.Bot):
 
         with suppress(discord.HTTPException, ValueError):
             ctx: Context | discord.Message | discord.Member = args[0]
-            author = ctx if isinstance(ctx, discord.Member) else ctx.author
-            send = (ctx.send if isinstance(ctx, Context) else ctx.channel.send) if not isinstance(ctx, discord.Member) else ctx.dm_channel
+
+            if isinstance(ctx, Context):
+                author = ctx.author
+                send = ctx.send
+            elif isinstance(ctx, discord.Message):
+                author = ctx.author
+                send = ctx.channel.send
+            else:  # discord.Member
+                author = ctx
+                await ctx.create_dm()
+                send = ctx.dm_channel.send
+
             if self.is_owner(author):
                 await send(embed=embed)
                 return
@@ -478,9 +488,6 @@ class Bot(commands.Bot):
         signature = Command.ansi_signature_of(command)
         builder.extend(signature)
         signature = signature.raw
-
-        # list that could be filled with required flags
-        required_flags: list[str] = []
 
         FLAG_PARAM_REGEX = re.compile(
             fr'[<\[](--)?{re.escape(param.name)}((=.*)?| [<\[]\w+(\.{{3}})?[>\]])(\.{{3}})?[>\]](\.{{3}})?')
