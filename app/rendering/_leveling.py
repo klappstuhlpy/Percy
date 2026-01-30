@@ -51,7 +51,7 @@ class LevelCard:
         self.get_font = partial(self._fonts.get, ASSETS / FONT_MAPPING[self.font.value])
 
     @property
-    def base_image(self) -> Image:
+    def base_image(self) -> Image.Image:
         """:class:`Image` : The base image of the level card."""
         return Image.open(ASSETS / 'rank_card.png')
 
@@ -124,7 +124,7 @@ class LevelCard:
 
         return tuple(color)
 
-    def format_round_avatar(self) -> Image:
+    def format_round_avatar(self) -> Image.Image:
         """Formats the avatar to a round image."""
         avatar = Image.open(BytesIO(self.avatar)).resize((196, 196), Image.Resampling.BOX)
 
