@@ -443,7 +443,7 @@ class Stats(Cog):
         if before.bot:
             return None
 
-        if (await self.bot.db.get_user_config(after.id)).track_presence is False:
+        if not (await self.bot.db.get_user_config(after.id)).track_presence:
             return None
 
         def _make_key(member: discord.Member) -> str:
