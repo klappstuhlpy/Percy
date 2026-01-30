@@ -93,7 +93,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             search_for: bool = False,
             ephemeral: bool = False,
             **kwargs: Any,
-    ) -> HelpPaginator[AnyCommand]:
+    ) -> HelpPaginator:
         """Overwritten to add the view to the message and edit message, not send new."""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
