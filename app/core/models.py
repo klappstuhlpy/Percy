@@ -735,7 +735,7 @@ class Context(commands.Context, Generic[CogT]):
     if TYPE_CHECKING:
         bot: Bot
         cog: CogT
-        command: Command | GroupCommand
+        command: type[Command | GroupCommand]
         invoked_subcommand: Command | GroupCommand | None
 
     def __init__(self, **attrs) -> None:
@@ -824,7 +824,7 @@ class Context(commands.Context, Generic[CogT]):
             true: str = 'Yes',
             false: str = 'No',
             interaction: discord.Interaction = None,
-            hook: AsyncCallable[[discord.Interaction], None] = None,
+            hook: AsyncCallable[discord.Interaction, None] = None,
             **kwargs,
     ) -> bool | None:
         """|coro|
