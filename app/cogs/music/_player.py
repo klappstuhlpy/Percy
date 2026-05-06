@@ -12,7 +12,7 @@ import yarl
 from discord import Message
 from discord.ext import commands
 from discord.utils import MISSING
-from wavelink import QueueMode
+from wavelink import QueueMode, ChannelTimeoutException
 
 from app.cogs.music._queue import Queue, ShuffleMode
 from app.core import Bot, Context, View
@@ -165,7 +165,10 @@ class Player(wavelink.Player):
         if not channel:
             raise commands.BadArgument('You need to be in a voice channel or provide one to connect to.')
 
-        self = await channel.connect(cls=cls, self_deaf=True)
+        try:
+            self = await channel.connect(cls=cls, self_deaf=True)
+        except ChannelTimeoutException:
+            raise commands.BadArgument('I currently am unable to join your voice channel :/') from None
         await obj.guild.me.edit(suppress=False if isinstance(channel, discord.StageChannel) else MISSING, deafen=True)
 
         disabled: bool = False

@@ -265,6 +265,8 @@ class Music(Cog):
     @checks.is_listen_together()
     async def play(self, ctx: Context, *, query: str, flags: PlayFlags) -> None:
         """Play Music in a voice channel by searching for a track/playlist."""
+        await ctx.defer()
+
         player: Player = cast(Player, ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
