@@ -1,18 +1,18 @@
 services:
-  db:
-    container_name: percy-db
-    image: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: percy
-      POSTGRES_USER: percy
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-    volumes:
-      - percy-db:/var/lib/postgresql/data
-    ports:
-      - "5422:5432"
-    networks:
-      - bot
+#  db:
+#    container_name: percy-db
+#    image: postgres
+#    restart: unless-stopped
+#    environment:
+#      POSTGRES_DB: percy
+#      POSTGRES_USER: percy
+#      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+#    volumes:
+#      - percy-db:/var/lib/postgresql/data
+#    ports:
+#      - "5422:5432"
+#    networks:
+#      - bot
 
   snekbox:
     container_name: percy-snekbox
