@@ -47,8 +47,8 @@ services:
       ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET}
       MARVEL_API_PUBLIC_KEY: ${MARVEL_API_PUBLIC_KEY}
       MARVEL_API_PRIVATE_KEY: ${MARVEL_API_PRIVATE_KEY}
-    depends_on:
-      - db
+#    depends_on:
+#      - db
     networks:
       - bot
 
