@@ -7,6 +7,7 @@ import json
 import logging
 import random
 from abc import ABC
+from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, ParamSpec, TypeVar, overload, Type
 
 import asyncpg
@@ -123,10 +124,14 @@ class _Database:
         return self
 
     @overload
+    def acquire(self, *, timeout: float | None = None) -> asyncpg.pool.PoolAcquireContext:
+        ...
+
+    @overload
     def acquire(self, *, timeout: float | None = None) -> Awaitable[asyncpg.Connection]:
         ...
 
-    def acquire(self, *, timeout: float | None = None) -> asyncpg.pool.PoolAcquireContext | Awaitable[None]:
+    def acquire(self, *, timeout: float | None = None) -> AbstractAsyncContextManager | asyncpg.pool.PoolAcquireContext | Awaitable[None]:
         return self._internal_pool.acquire(timeout=timeout)
 
     def release(self, conn: asyncpg.Connection, *, timeout: float | None = None) -> Awaitable[None]:
