@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS levels
     PRIMARY KEY (guild_id, user_id)
 );
 
-CREATE TABLE level_config
+CREATE TABLE IF NOT EXISTS level_config
 (
     id                        BIGINT           NOT NULL PRIMARY KEY,
     enabled                   BOOLEAN          NOT NULL DEFAULT FALSE,

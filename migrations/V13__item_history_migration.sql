@@ -11,12 +11,19 @@ CREATE TABLE IF NOT EXISTS item_history
     changed_at TIMESTAMP WITH TIME ZONE DEFAULT (now() AT TIME ZONE 'UTC') NOT NULL
 );
 
-ALTER TABLE item_history
-    ADD CONSTRAINT item_history_item_type_check CHECK (
-        item_type IN (
-                      'avatar', 'nickname', 'name'
-            )
-        );
+DO
+$$
+    BEGIN
+        IF NOT EXISTS (SELECT 1
+                       FROM pg_constraint
+                       WHERE conname = 'item_history_item_type_check') THEN
+            ALTER TABLE item_history
+                ADD CONSTRAINT item_history_item_type_check CHECK (
+                    item_type IN ('avatar', 'nickname', 'name')
+                    );
+        END IF;
+    END
+$$;
 
 
 CREATE TABLE IF NOT EXISTS avatar_history

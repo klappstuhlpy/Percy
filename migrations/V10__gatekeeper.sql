@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS guild_gatekeeper
 DO
 $$
     BEGIN
-        CREATE TYPE gatekeeper_role_state AS ENUM ('added', 'pending_add', 'pending_remove');
+        IF NOT EXISTS (SELECT 1
+                       FROM pg_type
+                       WHERE typname = 'poll_entry') THEN
+            CREATE TYPE gatekeeper_role_state AS ENUM ('added', 'pending_add', 'pending_remove');
+        END IF;
     EXCEPTION
         WHEN duplicate_object THEN NULL;
     END
