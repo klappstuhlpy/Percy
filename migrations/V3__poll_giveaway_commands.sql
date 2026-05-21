@@ -2,11 +2,20 @@
 -- Creation Date: 2023-03-28 13:20:17.941295 UTC
 -- Reason: poll_giveaway_commands
 
-CREATE TYPE poll_entry AS
-(
-    user_id bigint,
-    vote    smallint
-);
+DO
+$$
+    BEGIN
+        IF NOT EXISTS (SELECT 1
+                       FROM pg_type
+                       WHERE typname = 'poll_entry') THEN
+            CREATE TYPE poll_entry AS
+            (
+                user_id bigint,
+                vote    smallint
+            );
+        END IF;
+    END
+$$;
 
 CREATE TABLE IF NOT EXISTS polls
 (
