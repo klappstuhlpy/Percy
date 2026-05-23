@@ -84,7 +84,7 @@ class CommandTree(app_commands.CommandTree):
             name='User',
             value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
 
-        fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url}) (ID: {interaction.channel_id})\n'
+        fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url if interaction.channel else ''}) (ID: {interaction.channel_id})\n'
         if interaction.guild:
             fmt += f'Guild: {interaction.guild} (ID: {interaction.guild.id})'
         else:
@@ -100,7 +100,7 @@ class CommandTree(app_commands.CommandTree):
         embed.set_footer(text='occurred at')
 
         with suppress(discord.HTTPException, ValueError):
-            await interaction.client.stats_webhook.send(embed=embed)
+            await interaction.client.stats_webhook.send(embed=embed)  # type: ignore[attr-defined]
 
 
 class Bot(commands.Bot):
@@ -117,7 +117,7 @@ class Bot(commands.Bot):
     db: Database
     session: ClientSession
     startup_timestamp: datetime.datetime
-    context: Context
+    context: type[Context]
     timers: TimerManager
     spam_control: SpamControl
     command_stats: Counter[str]
@@ -146,7 +146,7 @@ class Bot(commands.Bot):
     def __init__(self) -> None:
         key = 'owner_id' if isinstance(owners, int) else 'owner_ids'
 
-        super().__init__(
+        super().__init__(  # type: ignore[call-arg]
             command_prefix=self.__class__.resolve_command_prefix,  # noqa
             help_command=PaginatedHelpCommand(),
             description=description,
@@ -177,11 +177,11 @@ class Bot(commands.Bot):
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
         if not message.guild:
-            return commands.when_mentioned_or(default_prefix)(self, message)
+            return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
 
-        config = await self.db.get_guild_config(message.guild.id)
+        config = await self.db.get_guild_config(message.guild.id)  # type: ignore[misc]
         if config is None:
-            return commands.when_mentioned_or(default_prefix)(self, message)
+            return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
 
         if not config.prefixes:
             return commands.when_mentioned(self, message)
@@ -212,7 +212,7 @@ class Bot(commands.Bot):
         await super().reload_extension(name, package=package)
         self.prepare_jishaku_flags()
 
-    def add_command(self, command: Command, /) -> None:
+    def add_command(self, command: Command, /) -> None:  # type: ignore[override]
         # Resolves custom flags to work with the command.
         if isinstance(command, Command):
             command.transform_flag_parameters()
@@ -264,7 +264,7 @@ class Bot(commands.Bot):
         if test_guild_id is not None:
             self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
 
-    async def get_context(
+    async def get_context(  # type: ignore[override]
             self,
             origin: discord.Message | discord.Interaction,
             /,
@@ -295,6 +295,7 @@ class Bot(commands.Bot):
         self.resumes[shard_id].append(discord.utils.utcnow())
 
     async def on_ready(self) -> None:
+        assert self.user is not None
         if not hasattr(self, 'startup_timestamp'):
             self.startup_timestamp = discord.utils.utcnow()
 
@@ -313,7 +314,7 @@ class Bot(commands.Bot):
             await guild.leave()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
-        if await self.db.get_guild_config(guild.id):
+        if await self.db.get_guild_config(guild.id):  # type: ignore[misc]
             await self.db.execute("DELETE FROM guild_config WHERE id = $1;", guild.id)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
@@ -353,15 +354,16 @@ class Bot(commands.Bot):
             else:  # discord.Member
                 author = ctx
                 await ctx.create_dm()
+                assert ctx.dm_channel is not None
                 send = ctx.dm_channel.send
 
-            if self.is_owner(author):
+            if self.is_owner(author):  # type: ignore[arg-type]
                 await send(embed=embed)
                 return
 
             await self.stats_webhook.send(embed=embed)
 
-    async def on_command_error(self, ctx: Context, error: Exception) -> Any:
+    async def on_command_error(self, ctx: Context, error: Exception) -> Any:  # type: ignore[override]
         """|coro|
 
         The default command error handler provided by the bot.
@@ -444,19 +446,21 @@ class Bot(commands.Bot):
 
         # Parameter-based errors.
 
+        command: Command = ctx.command  # type: ignore[assignment]
+
         if isinstance(error, (commands.BadArgument, AppBadArgument)):
-            ctx.command.reset_cooldown(ctx)
+            command.reset_cooldown(ctx)
             param = ctx.current_parameter
             # Search for a given "namespace" parameter in the :class:`.BadArgument`. -> See /app/core/models.py
             if hasattr(error, 'namespace'):
-                _namespace = error.namespace  # type: ignore
-                if _namespace in ctx.command.clean_params:
-                    param = ctx.command.clean_params[_namespace]
+                _namespace = error.namespace  # type: ignore[attr-defined]
+                if _namespace in command.clean_params:
+                    param = command.clean_params[_namespace]
         elif hasattr(error, 'param'):
-            param = error.param
+            param = error.param  # type: ignore[attr-defined]
         else:
             if not self.is_owner(ctx.author):
-                self.log.critical('Uncaught error when invoking %s: %s', ctx.command.name, error, exc_info=error)
+                self.log.critical('Uncaught error when invoking %s: %s', command.name, error, exc_info=error)
 
                 builder = AnsiStringBuilder()
                 builder.append(f'panic!({error})', color=AnsiColor.red, bold=True)
@@ -469,25 +473,24 @@ class Bot(commands.Bot):
         builder.append((' ' * 4) + ctx.clean_prefix, color=AnsiColor.white, bold=True)
 
         if ctx.interaction:
-            invoked_with = ctx.command.qualified_name + ' ' + ctx.invoked_with
+            invoked_with = command.qualified_name + ' ' + (ctx.invoked_with or '')
         else:
             if ctx.invoked_parents and ctx.invoked_subcommand:
-                invoked_with = ' '.join((*ctx.invoked_parents, ctx.invoked_with))
+                invoked_with = ' '.join([*ctx.invoked_parents, ctx.invoked_with or ''])
             elif ctx.invoked_parents:
                 invoked_with = ' '.join(ctx.invoked_parents)
             else:
-                invoked_with = ctx.invoked_with
+                invoked_with = ctx.invoked_with or ''
 
         builder.append(invoked_with + ' ', color=AnsiColor.green, bold=True)
 
-        command = ctx.command
         signature = Command.ansi_signature_of(command)
         builder.extend(signature)
-        signature = signature.raw
+        signature_raw = signature.raw
 
         FLAG_PARAM_REGEX = re.compile(
             fr'[<\[](--)?{re.escape(param.name)}((=.*)?| [<\[]\w+(\.{{3}})?[>\]])(\.{{3}})?[>\]](\.{{3}})?')
-        if match := FLAG_PARAM_REGEX.search(signature):
+        if match := FLAG_PARAM_REGEX.search(signature_raw):
             lower, upper = match.span()
         elif isinstance(param.annotation, FlagMeta):
             stored_params = command.params
@@ -521,14 +524,14 @@ class Bot(commands.Bot):
         else:
             builder.append(str(error), color=AnsiColor.red, bold=True)
 
-        if invoked_with != ctx.command.qualified_name:
+        if invoked_with != command.qualified_name:
             builder.newline(2)
             builder.append('Hint: ', color=AnsiColor.white, bold=True)
 
             builder.append('command alias ')
             builder.append(repr(invoked_with), color=AnsiColor.cyan, bold=True)
             builder.append(' points to ')
-            builder.append(ctx.command.qualified_name, color=AnsiColor.green, bold=True)
+            builder.append(command.qualified_name, color=AnsiColor.green, bold=True)
             builder.append(', is this correct?')
 
         ansi = builder.ensure_codeblock().dynamic(ctx)
@@ -574,13 +577,13 @@ class Bot(commands.Bot):
         for feature in features:
             if only_current:
                 if feature in GUILD_FEATURES:
-                    fmt = GUILD_FEATURES[feature]
+                    fmt = GUILD_FEATURES[feature]  # type: ignore[index]
                     if emojize:
                         yield f'{fmt[0]} {feature}', fmt[1]
                     else:
                         yield feature, fmt[1]
             else:
-                fmt = GUILD_FEATURES[feature]
+                fmt = GUILD_FEATURES[feature]  # type: ignore[index]
                 if emojize:
                     yield f'{fmt[0]} {feature}', fmt[1]
                 else:

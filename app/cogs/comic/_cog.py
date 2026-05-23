@@ -39,12 +39,13 @@ class ComicsEditFlags(Flags):
     day: commands.Range[int, 1, 7] = flag(description='Day of the week to send the feed.')
     ping: discord.Role = flag(description='Role to ping when the feed is sent.')
     format: Format = flag(description='Feed format. Use /formats to view options.')
-    pin: bool = store_true(description='Whether to pin the feed message.')
-    reset: bool = store_true(description='Reset the configuration.', short='r')
+    pin: bool = store_true(description='Whether to pin the feed message.')  # type: ignore[assignment]
+    reset: bool = store_true(description='Reset the configuration.', short='r')  # type: ignore[assignment]
 
 
 class JumpToTopButton(discord.ui.Button):
     def __init__(self, message: discord.Message) -> None:
+        assert message.guild is not None
         super().__init__(
             label='Jump to the Top',
             style=discord.ButtonStyle.link,
@@ -100,7 +101,8 @@ class Comics(Cog):
         self.reset_cache()
 
     def prev_schedule(self, brand: Brand) -> datetime.datetime:
-        return max(i.date if i.date is not None else datetime.datetime.min for i in self.comic_cache.get(brand))
+        comics = self.comic_cache.get(brand) or []
+        return max(i.date if i.date is not None else datetime.datetime.min for i in comics)
 
     @scheduled_coroutine
     @lock(comic_cache_refresh_task_id, 'comic refresh task', wait=True, raise_error=True)
@@ -132,7 +134,7 @@ class Comics(Cog):
             else:
                 log.debug('Fetched %s inventory.', brand.name)
 
-    @refresh_inventories.after_task
+    @refresh_inventories.after_task  # type: ignore[arg-type]
     async def after_refresh_inventories(self) -> None:
         if not self.__dispatching_task:
             self.__dispatching_task = self.bot.loop.create_task(self.dispatch_feeds())
@@ -175,8 +177,8 @@ class Comics(Cog):
         :class:`ComicFeed`
             The next feed to be dispatched.
         """
-        async with (connection or self.bot.db).acquire(timeout=500.0) as con:
-            feed = await self.get_earliest_feed(connection=con, days=days)
+        async with self.bot.db.acquire(timeout=500.0) as con:  # type: ignore[union-attr]
+            feed = await self.get_earliest_feed(connection=con, days=days)  # type: ignore[arg-type]
             if feed is not None:
                 log.debug('Loaded next feed %r to fire at %s.', feed.id, feed.next_pull)
                 self.__event.set()
@@ -187,7 +189,7 @@ class Comics(Cog):
             log.debug('No feed ready, waiting for next feed...')
             await self.__event.wait()
 
-            return await self.get_earliest_feed(connection=con, days=days)
+            return await self.get_earliest_feed(connection=con, days=days)  # type: ignore[arg-type, return-value]
 
     async def dispatch_feeds(self) -> None:
         """|coro|
@@ -262,7 +264,7 @@ class Comics(Cog):
             pins = list(reversed(await msg.channel.pins()))
             if len(pins) >= 50:
                 try:
-                    p = next(i for i in pins if i.author.id == self.bot.user.id)
+                    p = next(i for i in pins if self.bot.user and i.author.id == self.bot.user.id)
                     await p.unpin()
                 except StopIteration:
                     return
@@ -286,6 +288,7 @@ class Comics(Cog):
         """
         try:
             channel = self.bot.get_channel(config.channel_id)
+            assert isinstance(channel, discord.TextChannel)
             comics = self.comic_cache.get(config.brand)
 
             if comics:
@@ -335,7 +338,7 @@ class Comics(Cog):
                     ).set_thumbnail(url=config.brand.icon_url)
                 )
         except discord.Forbidden:
-            guild_config: GuildConfig = await self.bot.db.get_guild_config(config.guild_id)
+            guild_config: GuildConfig = await self.bot.db.get_guild_config(config.guild_id)  # type: ignore[misc]
             await guild_config.send_alert(
                 f'I don\'t have permission to send messages in the configured channel for the **{config.brand.name}** feed.\n'
                 f'Please adjust the permissions and try by using `{default_prefix}comics push {config.brand.name}`.',
@@ -362,13 +365,15 @@ class Comics(Cog):
         embed = discord.Embed(colour=brand.colour)
         embeds: list[discord.Embed] = []
 
-        for fi, cid in enumerate(self.comic_cache.get(brand)):
+        for fi, cid in enumerate(self.comic_cache.get(brand) or []):
             if not fi % 25 and fi != 0:
                 embeds.append(embed)
                 embed = discord.Embed(colour=brand.colour)
 
             if cid in comics:
                 cs_cm = discord.utils.get(comics, id=cid.id)
+                if cs_cm is None:
+                    continue
 
                 info = [f'{cs_cm.writer}'] if cs_cm.writer else []
                 if cs_cm.url:
@@ -427,7 +432,7 @@ class Comics(Cog):
     async def comics(self, ctx: Context, brand: Brand) -> None:
         """Lists this week's/month's comics!"""
         await ctx.defer(ephemeral=True)
-        embeds = await self.build_summary_embeds(self.comic_cache.get(brand), brand)
+        embeds = await self.build_summary_embeds(self.comic_cache.get(brand) or [], brand)
         await ctx.send(embeds=embeds, ephemeral=True)
 
     @_comics.command(
@@ -443,7 +448,7 @@ class Comics(Cog):
         """Triggers your current feed configuration."""
         await ctx.defer()
 
-        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)
+        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)  # type: ignore[misc]
         if config is None:
             await ctx.send_error(f'You have not set up a **{brand.name}** feed yet in this server!')
             return
@@ -470,21 +475,22 @@ class Comics(Cog):
             self,
             ctx: Context,
             brand: Brand,
-            channel: discord.TextChannel = None,
+            channel: discord.TextChannel | None = None,
             _format: Format = Format.SUMMARY
     ) -> None:
         """Sets up a comic pulls feed."""
         await ctx.defer()
+        assert ctx.guild is not None
 
-        config = await self.get_comic_config(ctx.guild.id, brand)
+        config = await self.get_comic_config(ctx.guild.id, brand)  # type: ignore[misc]
         if config is not None:
             await ctx.send_error('You have already set up a feed for this brand in this server.')
             return
 
         if channel is None:
-            channel = ctx.channel
+            channel = ctx.channel  # type: ignore[assignment]
 
-        new_config = ComicFeed.temporary(
+        new_config = ComicFeed.temporary(  # type: ignore[call-arg]
             guild_id=ctx.guild.id,
             brand=brand,
             channel_id=channel.id,
@@ -493,18 +499,18 @@ class Comics(Cog):
             ping=None,
             pin=False
         )
-        new_config.next_pull = new_config.next_scheduled()
+        new_config.next_pull = new_config.next_scheduled()  # type: ignore[union-attr]
 
         query = """
             INSERT INTO comic_config (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
         """
-        await self.bot.db.execute(query, *new_config.to_dict().values())
+        await self.bot.db.execute(query, *new_config.to_dict().values())  # type: ignore[union-attr]
 
         self.get_comic_config.invalidate_containing(str(ctx.guild.id))
         self.reset_task()
 
-        await ctx.send_success(f'Set **{brand.name}** feed in Channel {channel.mention}.', embed=new_config.to_embed())
+        await ctx.send_success(f'Set **{brand.name}** feed in Channel {channel.mention}.', embed=new_config.to_embed())  # type: ignore[union-attr]
 
     @_comics.command(
         'config',
@@ -522,7 +528,7 @@ class Comics(Cog):
         """Show/Edit the current configuration for comic feeds."""
         await ctx.defer(ephemeral=True)
 
-        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)
+        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)  # type: ignore[misc]
         if config is None:
             await ctx.send_error(f'You have not set up a feed for **{brand.name}** yet in this server!')
             return

@@ -347,7 +347,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect['GatekeeperSetUpView']):
         except discord.HTTPException as e:
             await interaction.followup.send(f'{Emojis.error} Could not edit permissions: {e}', ephemeral=True)
 
-    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
+    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:  # type: ignore[override]
         assert self.view is not None
         channel = self.values[0].resolve()
         if channel is None:
@@ -790,7 +790,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
                 timeout=90.0
             )
         except TimeoutError:
-            await message.edit(
+            await message.edit(  # type: ignore[union-attr]
                 content=f'{Emojis.error} You took too long to enter the captcha, please try again.',
                 embed=None,
                 attachments=[])
@@ -805,7 +805,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
             )
 
         if msg.content != captcha.text:
-            await message.edit(
+            await message.edit(  # type: ignore[union-attr]
                 content=f'{Emojis.error} The captcha you entered is incorrect, please try again.',
                 embed=None,
                 attachments=[])
@@ -1152,7 +1152,7 @@ class SpamChecker:
             flagged.messages += 1
             spammers = self.hit_and_run.is_ratelimited(message)
             if spammers:
-                return SpammerSequence(spammers)
+                return SpammerSequence(spammers)  # type: ignore[arg-type]
 
             if (
                     flagged.messages <= 10
@@ -1162,7 +1162,7 @@ class SpamChecker:
             ):
                 return SpamCheckerResult.flagged_mention()
 
-        if self.is_new(message.author) and self.new_user.is_ratelimited(message):
+        if self.is_new(message.author) and self.new_user.is_ratelimited(message):  # type: ignore[arg-type]
             return SpamCheckerResult.spammer()
 
         if self.by_user.is_ratelimited(message):
@@ -1293,8 +1293,8 @@ class SpamChecker:
 
         if rate != self._join_rate:
             # Might be worth considering swapping over the tat/member list? Probably complicated though
-            self.auto_gatekeeper = ListedRateLimit(rate[0], rate[1], key=attrgetter('joined_at'))
-            self._join_rate = rate
+            self.auto_gatekeeper = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter('joined_at'))
+            self._join_rate = rate  # type: ignore[assignment]
 
         if self.auto_gatekeeper is not None:
             return self.auto_gatekeeper.is_ratelimited(member)
@@ -2138,12 +2138,13 @@ class Moderation(Cog):
             else:
                 raise commands.BadArgument(f'Unknown flag **{flag}**')
 
+        assert ctx.guild is not None
         query = "UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;"
         await ctx.db.execute(query, ctx.guild.id, ctx.guild_config.audit_log_flags)
         self.bot.db.get_guild_config.invalidate(ctx.guild.id)
         await ctx.send_success(content)
 
-    @moderation_auditlog_alter.autocomplete('flag')
+    @moderation_auditlog_alter.autocomplete('flag')  # type: ignore[attr-defined]
     async def moderation_auditlog_alter_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
@@ -2213,6 +2214,7 @@ class Moderation(Cog):
 
         query = f"UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url, alert_webhook_url;"
 
+        assert ctx.guild is not None
         guild_id = ctx.guild.id
         records = await self.bot.db.fetchrow(query, guild_id)
         self._spam_check.pop(guild_id, None)
@@ -2234,7 +2236,7 @@ class Moderation(Cog):
                     warnings.append(f'The webhook `{record[1]}` could not be deleted for some reason.')
 
         if protection in ('all', 'gatekeeper'):
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)  # type: ignore[misc]
             if gatekeeper is not None and gatekeeper.started_at is not None:
                 await gatekeeper.disable()
                 warnings.append('Gatekeeper was previously running and has been forcibly disabled.')
@@ -2265,12 +2267,13 @@ class Moderation(Cog):
         them from participating in the server until they verify themselves by
         pressing a button.
         """
+        assert ctx.guild is not None
         previous = self._gatekeeper_menus.pop(ctx.guild.id, None)
         if previous is not None:
             await previous.on_timeout()
             previous.stop()
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[misc]
         async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
             if gatekeeper is None:
                 query = "INSERT INTO guild_gatekeeper(id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *;"
@@ -2309,9 +2312,9 @@ class Moderation(Cog):
             ),
             colour=helpers.Colour.white()
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
 
-        self._gatekeeper_menus[ctx.guild.id] = view = GatekeeperSetUpView(self, ctx.author, config, gatekeeper)
+        self._gatekeeper_menus[ctx.guild.id] = view = GatekeeperSetUpView(self, ctx.author, config, gatekeeper)  # type: ignore[arg-type]
         view.message = await ctx.send(embed=embed, view=view)
 
     @moderation.command(
@@ -2337,6 +2340,7 @@ class Moderation(Cog):
             RETURNING COALESCE($3, (flags & $2 = $2));
         """
 
+        assert ctx.guild is not None
         enabled = await self.bot.db.fetchval(query, ctx.guild.id, AutoModFlags.raid.flag, enabled)
         self.bot.db.get_guild_config.invalidate(ctx.guild.id)
         fmt = '*enabled*' if enabled else '*disabled*'
@@ -2365,11 +2369,12 @@ class Moderation(Cog):
             ON CONFLICT (id)
                 DO UPDATE SET mention_count = $2;
         """
+        assert ctx.guild is not None
         await ctx.db.execute(query, ctx.guild.id, count)
         self.bot.db.get_guild_config.invalidate(ctx.guild.id)
         await ctx.send_success(f'Mention spam protection threshold set to `{count}`.')
 
-    @moderation_mentions.error
+    @moderation_mentions.error  # type: ignore[attr-defined]
     async def moderation_mentions_error(self, ctx: ModGuildContext, error: commands.BadArgument) -> None:
         if isinstance(error, commands.RangeError):
             await ctx.send_error('Mention spam protection threshold must be greater than **3**.')
@@ -2396,6 +2401,7 @@ class Moderation(Cog):
                     ARRAY(SELECT DISTINCT * FROM unnest(COALESCE(safe_automod_entity_ids, '{}') || $2::bigint[]))
             WHERE id = $1;
         """
+        assert ctx.guild is not None
         ids = [c.id for c in entities]
         await ctx.db.execute(query, ctx.guild.id, ids)
         self.bot.db.get_guild_config.invalidate(ctx.guild.id)
@@ -2429,6 +2435,7 @@ class Moderation(Cog):
             WHERE id = $1;
         """
 
+        assert ctx.guild is not None
         await ctx.db.execute(query, ctx.guild.id, [c.id for c in entities])
         self.bot.db.get_guild_config.invalidate(ctx.guild.id)
         embed = discord.Embed(title='Removed Ignored Entities', color=helpers.Colour.white())
@@ -2446,6 +2453,7 @@ class Moderation(Cog):
         if ctx.guild_config is None or not ctx.guild_config.safe_automod_entity_ids:
             return await ctx.send_error('This server does not have any ignored entities.')
 
+        assert ctx.guild is not None
         entities = [resolve_entity_id(x, guild=ctx.guild) for x in ctx.guild_config.safe_automod_entity_ids]
         entities = [f'- {e}' for e in entities]
         await LinePaginator.start(ctx, entries=entities, per_page=15, location='description')
@@ -2545,7 +2553,7 @@ class Moderation(Cog):
 
             try:
                 deleted = await asyncio.wait_for(
-                    ctx.channel.purge(limit=search, before=before, after=after, check=predicate), timeout=100
+                    ctx.channel.purge(limit=search, before=before, after=after, check=predicate), timeout=100  # type: ignore[union-attr]
                 )
             except discord.Forbidden:
                 return await ctx.send_error('I do not have permissions to delete messages.')
@@ -2585,7 +2593,7 @@ class Moderation(Cog):
             channels: commands.Greedy[discord.TextChannel | discord.VoiceChannel]
     ) -> Any:
         """Locks down channels by denying the default role to send messages or connect to voice channels."""
-        if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):
+        if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):  # type: ignore[arg-type]
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
                 return await ctx.send(embed=self._build_lockdown_error_embed())
@@ -2628,7 +2636,7 @@ class Moderation(Cog):
             channels: commands.Greedy[discord.TextChannel | discord.VoiceChannel]
     ) -> Any:
         """Locks down specific channels for a specified amount of time."""
-        if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):
+        if ctx.channel in channels and self.is_potential_lockout(ctx.me, ctx.channel):  # type: ignore[arg-type]
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
                 return await ctx.send(embed=self._build_lockdown_error_embed())
@@ -2639,6 +2647,7 @@ class Moderation(Cog):
             if not confirm:
                 return
 
+        assert ctx.guild is not None
         success, failures = await self.start_lockdown(ctx, channels)
         timer = await self.bot.timers.create(
             duration.dt,
@@ -2677,7 +2686,8 @@ class Moderation(Cog):
         To use this command, you must have Manage Roles and Ban Members permissions.
         The bot must also have Manage Members permissions.
         """
-        if not await self.is_cooldown_active(ctx.guild, ctx.channel):
+        assert ctx.guild is not None
+        if not await self.is_cooldown_active(ctx.guild, ctx.channel):  # type: ignore[arg-type]
             return await ctx.send_error('There is no active lockdown.')
 
         reason = f'Lockdown ended by {ctx.author} (ID: {ctx.author.id})'
@@ -2758,6 +2768,7 @@ class Moderation(Cog):
             self, ctx: ModGuildContext, channels: list[discord.TextChannel | discord.VoiceChannel]
     ) -> tuple[list[discord.TextChannel | discord.VoiceChannel], list[discord.TextChannel | discord.VoiceChannel]]:
         """Starts a lockdown in the given channels."""
+        assert ctx.guild is not None
         guild_id = ctx.guild.id
 
         records = []
@@ -2770,7 +2781,7 @@ class Moderation(Cog):
                 overwrites.update(
                     send_messages=False,
                     add_reactions=False,
-                    use_slash_commands=False,
+                    use_application_commands=False,
                     create_public_threads=False,
                     create_private_threads=False,
                     send_messages_in_threads=False
@@ -2892,6 +2903,7 @@ class Moderation(Cog):
             reason: Annotated[str | None, ActionReason] = None,
     ):
         """Kicks a member from the server."""
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -2902,10 +2914,10 @@ class Moderation(Cog):
             return await ctx.send_error('You cannot kick the server owner.')
 
         if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:
+            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
                 return await ctx.send_error('You cannot kick a member with a role equal to or higher than yours.')
 
-            if ctx.me.top_role < member.top_role:
+            if ctx.guild.me.top_role < member.top_role:
                 return await ctx.send_error('I cannot kick a member with a role equal to or higher than mine.')
 
         await ctx.guild.kick(member, reason=reason)
@@ -2933,6 +2945,7 @@ class Moderation(Cog):
         You can also ban from ID to ban regardless of whether they're
         in the server or not.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -2943,10 +2956,10 @@ class Moderation(Cog):
             return await ctx.send_error('You cannot ban the server owner.')
 
         if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:
+            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
                 return await ctx.send_error('You cannot ban a member with a role equal to or higher than yours.')
 
-            if ctx.me.top_role < member.top_role:
+            if ctx.guild.me.top_role < member.top_role:
                 return await ctx.send_error('I cannot ban a member with a role equal to or higher than mine.')
 
         await ctx.guild.ban(member, reason=reason)
@@ -2973,6 +2986,7 @@ class Moderation(Cog):
         """Bans multiple members from the server.
         This only works through banning via ID.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -3018,6 +3032,7 @@ class Moderation(Cog):
         then unbanning the member as well. This allows you to essentially
         kick the member while removing their messages.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -3028,10 +3043,10 @@ class Moderation(Cog):
             return await ctx.send_error('You cannot soft-ban the server owner.')
 
         if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:
+            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
                 return await ctx.send_error('You cannot soft-ban a member with a role equal to or higher than yours.')
 
-            if ctx.me.top_role < member.top_role:
+            if ctx.guild.me.top_role < member.top_role:
                 return await ctx.send_error('I cannot soft-ban a member with a role equal to or higher than mine.')
 
         await ctx.guild.ban(member, reason=reason)
@@ -3060,6 +3075,7 @@ class Moderation(Cog):
         You can pass either the ID of the banned member or the Name#Discrim
         combination/Global Name of the member. Typically, the ID is easiest to use.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -3104,6 +3120,7 @@ class Moderation(Cog):
         If you want to ban a member by ID, consider using the text version of this command.
         The App Commands version of this command does not support banning by ID.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
@@ -3114,16 +3131,16 @@ class Moderation(Cog):
             return await ctx.send_error('You cannot ban the server owner.')
 
         if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:
+            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
                 return await ctx.send_error('You cannot ban a member with a role equal to or higher than yours.')
 
-            if ctx.me.top_role < member.top_role:
+            if ctx.guild.me.top_role < member.top_role:
                 return await ctx.send_error('I cannot ban a member with a role equal to or higher than mine.')
 
         until = f'until {discord.utils.format_dt(duration.dt, 'F')}'
 
         try:
-            await member.send(f'{Emojis.info} You have been banned from {ctx.guild.name} {until}. Reason: {reason}')
+            await member.send(f'{Emojis.info} You have been banned from {ctx.guild.name} {until}. Reason: {reason}')  # type: ignore[union-attr]
         except (AttributeError, discord.HTTPException):
             pass
 
@@ -3190,15 +3207,17 @@ class Moderation(Cog):
         To use this command, you need to be higher than the
         mute role in the hierarchy.
         """
+        assert ctx.guild is not None
         if (total := len(members)) == 0:
             raise BadArgument('Missing members to mute.', 'members')
 
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
+        assert ctx.guild_config.mute_role_id is not None
         role = discord.Object(id=ctx.guild_config.mute_role_id)
 
-        if ctx.me.top_role < role:
+        if ctx.guild.me.top_role < role:
             return await ctx.send_error('I cannot mute a member with a role equal to or higher than the mute role.')
 
         failed = 0
@@ -3232,15 +3251,17 @@ class Moderation(Cog):
         To use this command, you need to be higher than the
         mute role in the hierarchy.
         """
+        assert ctx.guild is not None
         if (total := len(members)) == 0:
             raise BadArgument('Missing members to unmute.', 'members')
 
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
+        assert ctx.guild_config.mute_role_id is not None
         role = discord.Object(id=ctx.guild_config.mute_role_id)
 
-        if ctx.me.top_role < role:
+        if ctx.guild.me.top_role < role:
             return await ctx.send_error('I cannot mute a member with a role equal to or higher than the mute role.')
 
         failed = 0
@@ -3287,21 +3308,23 @@ class Moderation(Cog):
         If you want to ban a member by ID, consider using the text version of this command.
         The App Commands version of this command does not support banning by ID.
         """
+        assert ctx.guild is not None
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot mute yourself.')
 
-        if ctx.author.top_role < member.top_role:
+        if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
             return await ctx.send_error('You cannot mute a member with a role equal to or higher than yours.')
 
-        if ctx.me.top_role < member.top_role:
+        if ctx.guild.me.top_role < member.top_role:
             return await ctx.send_error('I cannot mute a member with a role equal to or higher than mine.')
 
         role_id = ctx.guild_config.mute_role_id
+        assert role_id is not None
 
-        if ctx.me.top_role < discord.Object(id=role_id):
+        if ctx.guild.me.top_role < discord.Object(id=role_id):
             return await ctx.send_error('I cannot mute a member with a role equal to or higher than the mute role.')
 
         await member.add_roles(discord.Object(id=role_id), reason=reason)
@@ -3364,7 +3387,7 @@ class Moderation(Cog):
     )
     async def _mute_role(self, ctx: ModGuildContext) -> None:
         """Shows configuration of the mute role."""
-        role = ctx.guild_config and ctx.guild_config.mute_role
+        role = ctx.guild_config.mute_role if ctx.guild_config else None
         total = 0
         if role is not None:
             members = ctx.guild_config.muted_members.copy()
@@ -3385,20 +3408,21 @@ class Moderation(Cog):
     @describe(role='The role to set as the mute role.')
     async def mute_role_set(self, ctx: ModGuildContext, *, role: discord.Role) -> None:
         """Sets the mute role to a pre-existing role."""
+        assert ctx.guild is not None
         if role.is_default():
             raise commands.BadArgument('You cannot set the default role as the mute role.')
 
-        if role > ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        if role > ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:  # type: ignore[union-attr]
             raise commands.BadArgument('You cannot set a role higher than your top role as the mute role.')
 
-        if role > ctx.me.top_role:
+        if role > ctx.guild.me.top_role:
             raise commands.BadArgument('I cannot set a role higher than my top role as the mute role.')
 
         has_pre_existing = ctx.guild_config is not None and ctx.guild_config.mute_role is not None
         merge: bool = False
 
         if has_pre_existing:
-            view = PreExistingMuteRoleView(ctx.author)
+            view = PreExistingMuteRoleView(ctx.author)  # type: ignore[arg-type]
             view.message = await ctx.send_warning(
                 '**There seems to be a pre-existing mute role set up.**\n\n'
                 'If you want to merge the pre-existing member data with the new member data press the Merge button.\n'
@@ -3424,7 +3448,7 @@ class Moderation(Cog):
             if ctx.guild_config and merge:
                 members |= ctx.guild_config.muted_members
                 reason = f'Action done by {ctx.author} (ID: {ctx.author.id}): Merging mute roles'
-                async for member in self.bot.resolve_member_ids(ctx.guild, members):
+                async for member in self.bot.resolve_member_ids(ctx.guild, members):  # type: ignore[arg-type]
                     if not member._roles.has(role.id):
                         try:
                             await member.add_roles(role, reason=reason)
@@ -3457,9 +3481,12 @@ class Moderation(Cog):
     @checks.can_mute()
     async def mute_role_update(self, ctx: ModGuildContext) -> None:
         """Automatically updates the permission overwrites of the mute role on the server."""
+        assert ctx.guild is not None
+        assert ctx.guild_config is not None
+        assert ctx.guild_config.mute_role is not None
         async with ctx.typing():
             success, failure, skipped = await self.update_role_permissions(
-                role, ctx.guild, ctx.author._user  # noqa
+                ctx.guild_config.mute_role, ctx.guild, ctx.author
             )
             total = success + failure + skipped
             await ctx.send_info(f'Attempted to update {total} channel permissions. '
@@ -3477,6 +3504,7 @@ class Moderation(Cog):
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly if needed.
         """
+        assert ctx.guild is not None
         guild_id = ctx.guild.id
         if ctx.guild_config is not None and ctx.guild_config.mute_role is not None:
             return await ctx.send_error('A mute role has already been set up.')
@@ -3502,7 +3530,7 @@ class Moderation(Cog):
 
         async with ctx.typing():
             success, failure, skipped = await self.update_role_permissions(
-                role, ctx.guild, ctx.author._user)
+                role, ctx.guild, ctx.author)
             await ctx.send_success(f'Mute role successfully created. Overwrites: '
                                    f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
 
@@ -3515,6 +3543,7 @@ class Moderation(Cog):
     )
     async def mute_role_unbind(self, ctx: ModGuildContext) -> None:
         """Unbinds a mute role without deleting it."""
+        assert ctx.guild is not None
         guild_id = ctx.guild.id
         if ctx.guild_config is None or ctx.guild_config.mute_role is None:
             raise commands.BadArgument('This server does not have a mute role set up.')
@@ -3548,14 +3577,16 @@ class Moderation(Cog):
 
         **Don't ask a moderator to unmute you.**
         """
-        role_id = ctx.guild_config and ctx.guild_config.mute_role_id
+        assert ctx.guild is not None
+        assert isinstance(ctx.author, discord.Member)
+        role_id = ctx.guild_config.mute_role_id if ctx.guild_config else None
         if role_id is None:
             raise commands.BadArgument('This server does not have a mute role set up.')
 
         if ctx.author._roles.has(role_id):
             return await ctx.send_error('You are already muted.')
 
-        if ctx.me.top_role < discord.Object(id=role_id):
+        if ctx.guild.me.top_role < discord.Object(id=role_id):
             return await ctx.send_error('I cannot mute you with a role equal to or higher than the mute role.')
 
         created_at = ctx.message.created_at
@@ -3626,16 +3657,18 @@ class Moderation(Cog):
         """
         success, failure, skipped = 0, 0, 0
         reason = f'Action done by {invoker} (ID: {invoker.id})'
-        channels: list[discord.abc.GuildChannel | discord.abc.Messageable] | None
+        effective_channels: list[discord.abc.GuildChannel | discord.abc.Messageable]
         if channels is None:
-            channels = [ch for ch in guild.channels if isinstance(ch, discord.abc.Messageable)]
+            effective_channels = [ch for ch in guild.channels if isinstance(ch, discord.abc.Messageable)]
+        else:
+            effective_channels = list(channels)
 
         guild_perms = guild.me.guild_permissions
-        for channel in channels:
-            perms = channel.permissions_for(guild.me)
+        for channel in effective_channels:
+            perms = channel.permissions_for(guild.me)  # type: ignore[union-attr]
             if perms.manage_roles:
-                overwrite = channel.overwrites_for(role)
-                perms = {
+                overwrite = channel.overwrites_for(role)  # type: ignore[union-attr]
+                channel_perms = {
                     'send_messages': False,
                     'add_reactions': False,
                     'use_application_commands': False,
@@ -3646,14 +3679,14 @@ class Moderation(Cog):
                     'speak': False,
                 }
                 if update_read_permissions:
-                    perms['read_messages'] = False
+                    channel_perms['read_messages'] = False
 
                 if permissions:
-                    merge_perms(overwrite, guild_perms, **permissions)
+                    merge_perms(overwrite, guild_perms, **permissions)  # type: ignore[arg-type]
 
-                merge_perms(overwrite, guild_perms, **perms)
+                merge_perms(overwrite, guild_perms, **channel_perms)
                 try:
-                    await channel.set_permissions(role, overwrite=overwrite, reason=reason)
+                    await channel.set_permissions(role, overwrite=overwrite, reason=reason)  # type: ignore[union-attr]
                 except discord.HTTPException:
                     failure += 1
                 else:

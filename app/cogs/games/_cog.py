@@ -4,7 +4,7 @@ import asyncio
 import datetime
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 from discord import app_commands
@@ -32,10 +32,10 @@ if TYPE_CHECKING:
     from app.core.timer import Timer
 
 
-async def roulette_space_autocomplete(_, current: str) -> list[app_commands.Choice[int]]:
-    results = fuzzy.finder(current, list(Space), key=lambda p: p.value)
+async def roulette_space_autocomplete(_, current: str) -> list[app_commands.Choice[str]]:
+    results = fuzzy.finder(current, list(Space), key=lambda p: str(p.value))
     return [
-        app_commands.Choice(name=space.value, value=space.value) for space in results[:20]
+        app_commands.Choice(name=str(space.value), value=str(space.value)) for space in results[:20]
     ]
 
 
@@ -75,8 +75,7 @@ class Games(Cog):
             await ctx.send_error('You cannot play against a bot')
             return
 
-        # noinspection PyProtectedMember
-        prompt = _tictactoe.Prompt(ctx.author._user, other._user)
+        prompt = _tictactoe.Prompt(ctx.author, other)
         embed = discord.Embed(
             title='TicTacToe',
             description=f'{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n'
@@ -129,7 +128,7 @@ class Games(Cog):
             return
 
         word = random.choice(filtered_words)
-        hangman = _short_games.Hangman(ctx.author, word)
+        hangman = _short_games.Hangman(cast(discord.Member, ctx.author), word)
 
         origin = await ctx.send(embed=hangman.build_embed())
 
@@ -210,7 +209,9 @@ class Games(Cog):
             await ctx.send_error('You cannot bet negative coins.')
             return
 
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
 
         if bet > balance.cash:
             await ctx.send_error(
@@ -220,7 +221,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        tower = _short_games.Tower(ctx.author, bet)
+        tower = _short_games.Tower(cast(discord.Member, ctx.author), bet)
         await ctx.send(embed=tower.build_embed(), view=tower)
 
     @command(
@@ -242,7 +243,9 @@ class Games(Cog):
                 f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.')
             return
 
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
 
         if bet > balance.cash:
             await ctx.send_error(
@@ -252,7 +255,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        slots = _slot.SlotMachine(ctx.author, bet)
+        slots = _slot.SlotMachine(cast(discord.Member, ctx.author), bet)
         await ctx.send(embed=slots.build_embed(), view=slots)
 
     @command(
@@ -272,7 +275,9 @@ class Games(Cog):
             await ctx.send_error(f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.')
             return
 
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
 
         if bet > balance.cash:
             await ctx.send_error(
@@ -324,7 +329,9 @@ class Games(Cog):
         Maximum Payout: `250`
         Cooldown: `2 hours`
         """
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
         amount = round(random.randint(Payouts.WORK_PAYOUT_MIN.value, Payouts.WORK_PAYOUT_MAX.value))
         await balance.add(cash=amount)
         await ctx.send_success(random.choice(WORKING_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
@@ -344,7 +351,9 @@ class Games(Cog):
         Maximum Payout: `700`
         Cooldown: `1 day`
         """
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
         amount = round(random.randint(Payouts.CRIME_PAYOUT_MIN.value, Payouts.CRIME_PAYOUT_MAX.value))
 
         rate = random.uniform(0, 1)
@@ -374,7 +383,9 @@ class Games(Cog):
         Maximum Payout: `400`
         Cooldown: `4 hours`
         """
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
         amount = round(random.randint(Payouts.SLUT_PAYOUT_MIN.value, Payouts.SLUT_PAYOUT_MAX.value))
 
         rate = random.uniform(0, 1)
@@ -408,20 +419,26 @@ class Games(Cog):
         Failing penalty is the same as with command `crime`
         """
         if user.bot:
-            ctx.command.reset_cooldown(ctx)
+            if ctx.command is not None:
+                ctx.command.reset_cooldown(ctx)
             await ctx.send_error('Cannot rob a bot.')
             return
 
         if user == ctx.author:
-            ctx.command.reset_cooldown(ctx)
+            if ctx.command is not None:
+                ctx.command.reset_cooldown(ctx)
             await ctx.send_error('You cannot rob yourself.')
             return
 
+        assert ctx.guild is not None
         robber_balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         robbed_balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)
+        assert robber_balance is not None
+        assert robbed_balance is not None
 
         if robbed_balance.cash == 0:
-            ctx.command.reset_cooldown(ctx)
+            if ctx.command is not None:
+                ctx.command.reset_cooldown(ctx)
             await ctx.send_error(f'**{user.display_name}** has no cash to rob.')
             return
 
@@ -467,7 +484,9 @@ class Games(Cog):
                 f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.')
             return
 
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
 
         if bet > balance.cash:
             await ctx.send_error(
@@ -484,11 +503,11 @@ class Games(Cog):
                 await ctx.send_error('**Bets are closed.** *Rien ne va plus*')
                 return
 
-            roulette.place(_roulette.Bet(ctx.author, space, bet))
+            roulette.place(_roulette.Bet(cast(discord.Member, ctx.author), space, bet))
             await ctx.maybe_edit(roulette.message, embed=roulette.build_embed())
         else:
             roulette = _roulette.Table(ctx)
-            roulette.place(_roulette.Bet(ctx.author, space, bet))
+            roulette.place(_roulette.Bet(cast(discord.Member, ctx.author), space, bet))
 
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
 
@@ -520,7 +539,9 @@ class Games(Cog):
             await ctx.send_error('You cannot bet negative coins.')
             return
 
+        assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
 
         if stack > balance.cash:
             await ctx.send_error(
@@ -551,12 +572,12 @@ class Games(Cog):
                     f'The buy-in range for this table is {Emojis.Economy.cash} **{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**.')
                 return
 
-            poker.add_player(ctx.author, stack)
+            poker.add_player(cast(discord.Member, ctx.author), stack)
             poker.view.update_buttons()
             await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
         else:
             poker = _poker.TexasHoldem(self, ctx, first_buy_in=stack)
-            poker.add_player(ctx.author, stack)
+            poker.add_player(cast(discord.Member, ctx.author), stack)
             poker.view.update_buttons()
 
             message = await ctx.send(embed=poker.build_embed(), view=poker.view)
@@ -577,12 +598,15 @@ class Games(Cog):
 
         if not roulette.message:
             channel = self.bot.get_channel(channel_id)
+            assert isinstance(channel, discord.abc.Messageable)
             try:
                 roulette.message = await channel.fetch_message(message_id)
             except discord.HTTPException:
+                assert roulette.ctx.guild is not None
                 for bet in roulette.bets:
                     balance = await self.bot.db.get_user_balance(bet.placed_by.id, roulette.ctx.guild.id)
-                    await balance.add(cash=bet.amount)
+                    if balance is not None:
+                        await balance.add(cash=bet.amount)
                 # give people their money back
                 await channel.send(f'{Emojis.warning} The roulette game message has not been found. *Returning bets.*')
                 self.roulette_tables.pop(channel_id)
@@ -600,11 +624,13 @@ class Games(Cog):
         winning_bets = [bet for bet in roulette.bets if bet.space in winning_spaces]
 
         if winning_bets:
+            assert roulette.ctx.guild is not None
             # Calculate the payout for each bet.
             for bet in winning_bets:
                 balance = await self.bot.db.get_user_balance(bet.placed_by.id, roulette.ctx.guild.id)
                 payout = round(bet.amount * Payout.by_space(bet.space))
-                await balance.add(cash=payout)
+                if balance is not None:
+                    await balance.add(cash=payout)
 
         try:
             await roulette.message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)

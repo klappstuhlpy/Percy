@@ -187,7 +187,7 @@ class Stats(Cog):
             await self.bot.db.execute(query, data['user_id'], data['name'], data['image'])
         self._avatar_data_batch.clear()
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore[override]
         for _task in self.__LOOPS:
             _task.cancel()
 
@@ -229,9 +229,9 @@ class Stats(Cog):
         if ctx.command is None:
             return None
 
-        command = ctx.command.qualified_name
+        cmd_name: str = ctx.command.qualified_name
         is_app_command = ctx.interaction is not None
-        self.bot.command_stats[command] += 1
+        self.bot.command_stats[cmd_name] += 1
         self.bot.command_types_used[is_app_command] += 1
         message = ctx.message
         if ctx.guild is None:
@@ -241,7 +241,7 @@ class Stats(Cog):
             destination = f'#{message.channel} ({message.guild})'
             guild_id = ctx.guild.id
 
-        if ctx.is_interaction and ctx.interaction.command:
+        if ctx.is_interaction and ctx.interaction is not None and ctx.interaction.command:
             content = f'/{ctx.interaction.command.qualified_name}'
         else:
             content = message.content
@@ -253,8 +253,8 @@ class Stats(Cog):
                 channel=ctx.channel.id,
                 author=ctx.author.id,
                 used=ctx.now.isoformat(),
-                prefix=ctx.prefix,
-                command=command,
+                prefix=ctx.prefix or '',
+                command=cmd_name,
                 failed=ctx.command_failed,
                 app_command=is_app_command,
                 error=self.bot.command_error_cache.pop(self.bot.make_command_cache_key(ctx), None)
@@ -443,7 +443,7 @@ class Stats(Cog):
         if before.bot:
             return None
 
-        if not (await self.bot.db.get_user_config(after.id)).track_presence:
+        if not (await self.bot.db.get_user_config(after.id)).track_presence:  # type: ignore[misc]
             return None
 
         def _make_key(member: discord.Member) -> str:
@@ -507,9 +507,9 @@ class Stats(Cog):
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), 'R')
         return f'[`{short_sha2}`]({repo_url}commit/{str(commit.id)}) {short} ({offset})'
 
-    def get_last_commits(self, count: int = 4, repo_path: str = path) -> str:
+    def get_last_commits(self, count: int = 4, repo_path: str = str(path)) -> str:
         repo = pygit2.Repository(Path(repo_path, '.git'))
-        commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
+        commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))  # type: ignore[arg-type]
         return '\n'.join(self._format_commit(c) for c in commits)
 
     @executor
@@ -617,7 +617,7 @@ class Stats(Cog):
             data=dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
             title=f'{total} socket events observed ({cpm:.2f}/minute)')
         images = [chart.create(merge=True)]
-        await FilePaginator.start(ctx, entries=images, per_page=1)
+        await FilePaginator.start(ctx, entries=images, per_page=1)  # type: ignore[arg-type]
 
     @command(description='Tells you how long the bot has been up for.')
     async def uptime(self, ctx: Context) -> None:
@@ -635,6 +635,7 @@ class Stats(Cog):
         except pygit2.GitError:
             revision = '*Not available.*'
 
+        assert ctx.bot.user is not None
         url = discord.utils.oauth_url(
             client_id=ctx.bot.user.id,
             permissions=discord.Permissions(8),
@@ -652,8 +653,8 @@ class Stats(Cog):
         assert isinstance(config.owners, int)
         owner = ctx.bot.get_user(config.owners)
 
-        embed.set_author(name=owner, icon_url=get_asset_url(owner))
-        embed.set_thumbnail(url=get_asset_url(self.bot.user))
+        embed.set_author(name=str(owner), icon_url=get_asset_url(owner) if owner else None)
+        embed.set_thumbnail(url=get_asset_url(self.bot.user) if self.bot.user else None)
 
         embed.add_field(name='Version', value=version, inline=False)
 
@@ -679,7 +680,7 @@ class Stats(Cog):
         embed.add_field(name='Channels', value=f'`{text + voice}` total\n`{text}` text\n`{voice}` voice')
 
         memory_usage = self.process.memory_full_info().uss / 1024 ** 2
-        cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
+        cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
 
         embed.add_field(name='Guilds', value=guilds)
         embed.add_field(name='Commands run since last reboot', value=sum(self.bot.command_stats.values()))
@@ -714,6 +715,7 @@ class Stats(Cog):
     @describe(member='The member to show stats for.')
     async def stats(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Tells you command usage stats for the server or a member."""
+        assert ctx.guild is not None
         async with ctx.typing():
             embed = discord.Embed()
 
@@ -726,14 +728,14 @@ class Stats(Cog):
                     ctx.guild.id
                 )
 
-                top_commands = await self.get_commands_stats(ctx.guild.id)
+                top_commands = await self.get_commands_stats(ctx.guild.id) or []
                 value = '\n'.join(
                     f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
                     enumerate(top_commands)
                 ) or '*No Command Usages available.*'
                 embed.add_field(name='Top Commands', value=value, inline=True)
 
-                top_commands_today = await self.get_commands_stats(ctx.guild.id, days=1)
+                top_commands_today = await self.get_commands_stats(ctx.guild.id, days=1) or []
                 value = '\n'.join(
                     f'{medal_emoji(index)}: {cmd} (`{uses}` uses)' for (index, (cmd, uses)) in
                     enumerate(top_commands_today)
@@ -743,14 +745,14 @@ class Stats(Cog):
                 # placeholder
                 embed.add_field(name='\u200b', value='\u200b', inline=True)
 
-                top_users = await self.get_commands_stats(ctx.guild.id, group_by='author_id')
+                top_users = await self.get_commands_stats(ctx.guild.id, group_by='author_id') or []
                 value = '\n'.join(
                     f'{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)' for i, record in
                     enumerate(top_users)
                 ) or '*No Command Bot Users available.*'
                 embed.add_field(name='Top Command Users', value=value, inline=True)
 
-                top_users_today = await self.get_commands_stats(ctx.guild.id, group_by='author_id', days=1)
+                top_users_today = await self.get_commands_stats(ctx.guild.id, group_by='author_id', days=1) or []
                 value = '\n'.join(
                     f'{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)' for i, record in
                     enumerate(top_users_today)
@@ -768,7 +770,7 @@ class Stats(Cog):
                     ctx.guild.id, member.id
                 )
 
-                most_used = await self.get_commands_stats(ctx.guild.id, member.id)
+                most_used = await self.get_commands_stats(ctx.guild.id, member.id) or []
                 value = '\n'.join(
                     f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
                     enumerate(most_used)
@@ -776,7 +778,7 @@ class Stats(Cog):
 
                 embed.add_field(name='Most Used Commands', value=value, inline=False)
 
-                most_used_today = await self.get_commands_stats(ctx.guild.id, member.id, days=1)
+                most_used_today = await self.get_commands_stats(ctx.guild.id, member.id, days=1) or []
                 value = '\n'.join(
                     f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
                     enumerate(most_used_today)
@@ -803,14 +805,14 @@ class Stats(Cog):
         embed = discord.Embed(title='Command Stats', colour=helpers.Colour.white())
         embed.description = f'`{total}` commands used.'
 
-        top_commands = await self.get_commands_stats()
+        top_commands = await self.get_commands_stats() or []
         value = '\n'.join(
             f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
             enumerate(top_commands)
         ) or '*No Command Usages available.*'
         embed.add_field(name='Top Commands', value=value, inline=False)
 
-        top_guilds = await self.get_commands_stats(group_by='guild_id')
+        top_guilds = await self.get_commands_stats(group_by='guild_id') or []
         value = []
         for i, record in enumerate(top_guilds):
             if record['guild_id'] is None:
@@ -822,7 +824,7 @@ class Stats(Cog):
 
         value.clear()
 
-        top_users = await self.get_commands_stats(group_by='author_id')
+        top_users = await self.get_commands_stats(group_by='author_id') or []
         for i, record in enumerate(top_users):
             user = censor_object(self.bot.blacklist, self.bot.get_user(record['author_id']) or f'<Unknown {record['author_id']}>')
             value.append(f'{medal_emoji(i)}: {user} (`{record['uses']}` uses)')
@@ -862,14 +864,14 @@ class Stats(Cog):
             f'(`{success}` succeeded, `{failed}` failed, `{question}` unknown)'
         )
 
-        top_commands = await self.get_commands_stats(days=1)
+        top_commands = await self.get_commands_stats(days=1) or []
         value = '\n'.join(
             f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
             enumerate(top_commands)
         ) or '*No Command Usages available.*'
         embed.add_field(name='Top Commands', value=value, inline=False)
 
-        top_guilds = await self.get_commands_stats(group_by='guild_id', days=1)
+        top_guilds = await self.get_commands_stats(group_by='guild_id', days=1) or []
         value = []
         for i, record in enumerate(top_guilds):
             if record['guild_id'] is None:
@@ -880,7 +882,7 @@ class Stats(Cog):
             value.append(f'{medal_emoji(i)}: {guild} (`{record['uses']}` uses)')
         embed.add_field(name='Top Guilds', value='\n'.join(value), inline=False)
 
-        top_users = await self.get_commands_stats(group_by='author_id', days=1)
+        top_users = await self.get_commands_stats(group_by='author_id', days=1) or []
         for i, record in enumerate(top_users):
             user = censor_object(self.bot.blacklist,
                                  self.bot.get_user(record['author_id']) or f'<Unknown {record['author_id']}>')
@@ -980,7 +982,7 @@ class Stats(Cog):
     )
     @describe(member='The member to show the username history for.')
     async def names(self, ctx: Context, *, member: discord.Member | None = None) -> None:
-        user: discord.Member = member or ctx.author
+        user: discord.Member | discord.User = member or ctx.author
 
         usernames: list[asyncpg.Record] = await self.get_item_history(user.id, 'name')
         nicknames: list[asyncpg.Record] = await self.get_item_history(user.id, 'nickname')
@@ -1008,7 +1010,7 @@ class Stats(Cog):
     )
     @describe(member='The member to show the last seen for.')
     async def last_seen(self, ctx: Context, *, member: discord.Member | None = None) -> None:
-        user: discord.Member = member or ctx.author
+        user: discord.Member | discord.User = member or ctx.author
         records = await self.get_presence_history(user.id, days=30)
 
         if not records:
@@ -1017,8 +1019,8 @@ class Stats(Cog):
 
         last_seen = records[0]['changed_at']
 
-        member = 'You were' if user == ctx.author else f'{user} was'
-        await ctx.send(f'{member} last seen *{discord.utils.format_dt(last_seen, 'R')}*')
+        subject = 'You were' if user == ctx.author else f'{user} was'
+        await ctx.send(f'{subject} last seen *{discord.utils.format_dt(last_seen, 'R')}*')
 
     @command(
         'avatarhistory',
@@ -1030,7 +1032,7 @@ class Stats(Cog):
     @describe(member='The member to show the avatar history for.')
     async def avatar_history(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Shows the avatar history of a user."""
-        user: discord.Member = member or ctx.author
+        user: discord.Member | discord.User = member or ctx.author
         await ctx.defer(typing=True)
 
         async with ctx.channel.typing():
@@ -1073,7 +1075,7 @@ class Stats(Cog):
     )
     @describe(member='The member to show the presence history for.')
     async def presence(self, ctx: Context, *, member: discord.Member | None = None) -> None:
-        user: discord.Member = member or ctx.author
+        user: discord.Member | discord.User = member or ctx.author
         query_days = 30
 
         async with ctx.channel.typing():
@@ -1146,7 +1148,8 @@ class Stats(Cog):
     )
     @describe(member='The member to show information for.')
     async def userinfo(self, ctx: Context, *, member: discord.Member | None = None) -> None:
-        user = member or ctx.author
+        assert isinstance(ctx.author, discord.Member)
+        user: discord.Member = member or ctx.author
         await ctx.defer()
 
         embed = discord.Embed(colour=helpers.Colour.white())
@@ -1170,8 +1173,8 @@ class Stats(Cog):
 
         embed.add_field(name='User Information', value='\n'.join(informations), inline=False)
 
-        guild_related.append(f'**Joined:** {discord.utils.format_dt(user.joined_at, 'R')}')
-        guild_related.append(f'**Join Position:** `{sum(m.joined_at < user.joined_at for m in user.guild.members) + 1}/{len(user.guild.members)}`')
+        guild_related.append(f'**Joined:** {discord.utils.format_dt(user.joined_at, 'R') if user.joined_at else "Unknown"}')
+        guild_related.append(f'**Join Position:** `{sum(m.joined_at < user.joined_at for m in user.guild.members if m.joined_at and user.joined_at) + 1}/{len(user.guild.members)}`')
         guild_related.append(f'**Top Role:** {user.top_role.mention}')
         guild_related.append(f'**Colour:** `{user.colour}`')
 
@@ -1318,13 +1321,13 @@ class Stats(Cog):
         embed = discord.Embed(title='Bot Health Report', colour=HEALTHY)
 
         db = self.bot.db._internal_pool
-        total_waiting = len(db._queue._getters)
+        total_waiting = len(db._queue._getters)  # type: ignore[union-attr]
         current_generation = db._generation
 
         description = [
             f'Total `Pool.acquire` Waiters: {total_waiting}',
             f'Current Pool Generation: {current_generation}',
-            f'Connections In Use: {len(db._holders) - db._queue.qsize()}']
+            f'Connections In Use: {len(db._holders) - db._queue.qsize()}']  # type: ignore[union-attr]
 
         questionable_connections = 0
         connection_value = []
@@ -1368,7 +1371,7 @@ class Stats(Cog):
         description.append(f'Avatars Waiting: {avatar_waiters}')
 
         memory_usage = self.process.memory_full_info().uss / 1024 ** 2
-        cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
+        cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
         embed.add_field(name='Process', value=f'{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU', inline=False)
 
         global_rate_limit = not self.bot.http._global_over.is_set()
@@ -1510,7 +1513,7 @@ class Stats(Cog):
             title=f'{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)')
         images = [chart.create(merge=True)]
         await ctx.send(f'## {title}')
-        await FilePaginator.start(ctx, entries=images, per_page=1)
+        await FilePaginator.start(ctx, entries=images, per_page=1)  # type: ignore[arg-type]
 
     @_cmd.group(
         name='history',
@@ -1625,7 +1628,7 @@ class Stats(Cog):
         """Command history log for the last N days."""
         async with ctx.channel.typing():
             all_commands = {c.qualified_name: 0 for c in self.bot.walk_commands()}
-            records = await self.get_commands_stats(days=days)
+            records = await self.get_commands_stats(days=days) or []
             for record in records:
                 if record['command'] in all_commands:
                     all_commands[record['command']] = record['uses']
@@ -1728,7 +1731,7 @@ async def setup(bot: Bot) -> None:
     cog = Stats(bot)
     await bot.add_cog(cog)
 
-    bot.logging_handler = handler = LoggingHandler(cog)
+    bot.log_handler = handler = LoggingHandler(cog)
     logging.getLogger().addHandler(handler)
 
 

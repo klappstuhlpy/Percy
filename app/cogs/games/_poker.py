@@ -8,26 +8,25 @@ import random
 from contextlib import suppress
 from dataclasses import dataclass
 from itertools import chain, combinations, zip_longest
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
 import discord
 import numpy as np
 from joblib import Parallel, delayed
-from numpy import ndarray
 from scipy.special import comb
 
-from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck, MinimumBet
+from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck, MinimumBet, DisplayCard
 from app.core.views import View
 from app.rendering import BarChart
 from app.utils import RevDict, helpers, number_suffix, fnumb
 from config import Emojis
 
 if TYPE_CHECKING:
-    from PIL import Image
+    import PIL.Image
 
     from app.cogs.economy import Economy
     from app.cogs.games import Games
-    from app.core import Context
+    from app.core import Bot, Context
     from app.database.base import Balance
 
 
@@ -56,19 +55,19 @@ class Card(BaseCard):
         return cls(value=card_arr[0], suit=int(card_arr[1]))
 
 
-def item_by_count(array: np.ndarray, n: int) -> ndarray[int]:
+def item_by_count(array: np.ndarray, n: int) -> np.ndarray[Any, np.dtype[Any]]:
     """Returns the `n` common element from an iterable."""
     counts = np.bincount(array.flatten())
     if n not in counts:
         # placeholder
-        return np.zeros(10, dtype=int)  # type: ignore
-    return np.argwhere(counts == n).flatten()  # type: ignore
+        return np.zeros(10, dtype=int)  # type: ignore[return-value]
+    return np.argwhere(counts == n).flatten()  # type: ignore[return-value]
 
 
 def comb_index(n: int, k: int) -> np.ndarray:
     """Returns the index of all combinations of k elements from n elements."""
     count = comb(n, k, exact=True)
-    index = np.fromiter(chain.from_iterable(combinations(range(n), k)), int, count=count * k)
+    index = np.fromiter(chain.from_iterable(combinations(range(n), k)), dtype=int, count=int(count * k))  # type: ignore[call-overload]
     return index.reshape(-1, k) if k > 1 else index[:, np.newaxis]
 
 
@@ -126,7 +125,8 @@ class Hand(BaseHand[Card]):
 
         player_valid_hand = np.concatenate([self.card_arr, community_arr], axis=0)
         all_combos = np.expand_dims(player_valid_hand, axis=0)[:, comb_index(len(player_valid_hand), 5), :]
-        ranking: np.ndarray[RankingItem] = Ranker.rank_all_hands(all_combos, return_all=True)
+        ranking: np.ndarray[Any, np.dtype[Any]] = cast(
+            'np.ndarray[Any, np.dtype[Any]]', Ranker.rank_all_hands(all_combos, return_all=True))
         return CombResult(all_combos=all_combos, ranking=ranking)
 
 
@@ -137,12 +137,12 @@ class CombResult(NamedTuple):
     ----------
     all_combos : np.ndarray
         An array of all combinations of cards.
-    ranking : np.ndarray[RankingItem]
+    ranking : np.ndarray[Any, np.dtype[Any]]
         An array of the ranking of each combination of cards.
     """
 
     all_combos: np.ndarray
-    ranking: np.ndarray[RankingItem]
+    ranking: np.ndarray[Any, np.dtype[Any]]
 
 
 class HandResult(NamedTuple):
@@ -157,7 +157,7 @@ class RankingItem:
     """Represents the ranking of a hand of cards"""
     rank: int
     cards: np.ndarray
-    name: str = None
+    name: str | None = None
 
     def __ge__(self, other: RankingItem) -> bool:
         if not isinstance(other, RankingItem):
@@ -181,7 +181,7 @@ class RankingItem:
         if not isinstance(other, (int, np.ndarray)):
             raise TypeError(f'unsupported operand type(s) for *: {type(self)} and {type(other)}')
 
-        self.rank *= other
+        self.rank = int(self.rank * other)
         return self
 
 
@@ -189,9 +189,9 @@ class Ranker:
     """Represents the ranking of a hand of cards"""
 
     @classmethod
-    def rank_all_hands(cls, hand_combos: np.ndarray, return_all: bool = False) -> RankingItem | np.ndarray[RankingItem]:
+    def rank_all_hands(cls, hand_combos: np.ndarray, return_all: bool = False) -> RankingItem | np.ndarray[Any, np.dtype[Any]]:
         """Returns the rank of all combinations of cards."""
-        rank_res_arr: np.ndarray[RankingItem] = np.zeros(  # type: ignore
+        rank_res_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(  # type: ignore
             shape=(hand_combos.shape[1], hand_combos.shape[0]), dtype=RankingItem)
 
         for scenario in range(hand_combos.shape[1]):
@@ -203,7 +203,7 @@ class Ranker:
             return np.max(rank_res_arr, axis=0)
 
     @classmethod
-    def rank_one_hand(cls, hand_combos: np.ndarray, group_by: bool = False) -> np.ndarray[RankingItem]:
+    def rank_one_hand(cls, hand_combos: np.ndarray, group_by: bool = False) -> np.ndarray[Any, np.dtype[Any]]:
         """Returns the rank of a combination of cards.
 
         The rank is calculated by checking the combination of cards for a straight flush, four of a kind, full house,
@@ -218,7 +218,7 @@ class Ranker:
 
         Returns
         -------
-        np.ndarray[RankingItem]
+        np.ndarray[Any, np.dtype[Any]]
             The rank of the combination of cards.
         """
         num_combos = hand_combos[:, :, 0]
@@ -229,7 +229,7 @@ class Ranker:
         is_suit_arr = cls.is_suit_arr(suit_combos)
         is_straight_arr = cls.is_straight_arr(num_combos)
 
-        rank_arr: np.ndarray[RankingItem] = np.zeros(num_combos.shape[0], dtype=RankingItem)  # type: ignore
+        rank_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(num_combos.shape[0], dtype=RankingItem)  # type: ignore
 
         cls.straight_flush_check(num_combos, rank_arr, is_straight_arr, is_suit_arr)
         cls.four_of_a_kind_check(num_combos, rank_arr)
@@ -245,7 +245,8 @@ class Ranker:
             return np.array(
                 [x.rank for x in rank_arr]) * (16 ** 5) + np.sum(num_combos * np.power(16, np.arange(0, 5)), axis=1)
 
-        for i, ranking in enumerate(rank_arr):  # type: int, RankingItem
+        for i, ranking in enumerate(rank_arr):  # noqa: B007
+            ranking = cast(RankingItem, ranking)
             # Example: Implement the logic for each RankingItem
             rank_arr[i] = RankingItem(
                 name=ranking.name, cards=ranking.cards,
@@ -273,7 +274,7 @@ class Ranker:
         return np.max(suit_combos, axis=1) == np.min(suit_combos, axis=1)
 
     @staticmethod
-    def straight_flush_check(num_combos: np.ndarray, rank_arr: np.ndarray, straight_arr: bool, suit_arr: bool) -> None:
+    def straight_flush_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool, suit_arr: bool) -> None:
         """Checks if the combination of cards is a straight flush."""
         ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
         straight_label = 'Low' if ace_low_straight else 'High'
@@ -286,7 +287,7 @@ class Ranker:
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
 
     @staticmethod
-    def four_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def four_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a four of a kind."""
         small = np.all(num_combos[:, 0:4] == num_combos[:, :1], axis=1)  # 22223
         large = np.all(num_combos[:, 1:] == num_combos[:, 4:], axis=1)  # 24444
@@ -300,7 +301,7 @@ class Ranker:
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
 
     @staticmethod
-    def full_house_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def full_house_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a full house."""
         small = np.all(
             (num_combos[:, 0:3] == num_combos[:, :1])
@@ -320,13 +321,13 @@ class Ranker:
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 3:], num_combos[reorder_idx, :3]], axis=1)
 
     @staticmethod
-    def flush_check(num_combos: np.ndarray, suit_combos: np.ndarray, rank_arr: np.ndarray, suit_arr: bool) -> None:
+    def flush_check(num_combos: np.ndarray, suit_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], suit_arr: bool) -> None:
         """Checks if the combination of cards is a flush."""
         rank_arr[(rank_arr == 0) & suit_arr] = RankingItem(
             rank=5, name=RevDict(SUITS)[np.max(suit_combos, axis=1)[0]].title(), cards=num_combos[0, :5])
 
     @staticmethod
-    def straight_check(num_combos: np.ndarray, rank_arr: np.ndarray, straight_arr: bool) -> None:
+    def straight_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool) -> None:
         """Checks if the combination of cards is a straight."""
         ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
         straight_label = 'Low' if ace_low_straight else 'High'
@@ -339,7 +340,7 @@ class Ranker:
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
 
     @staticmethod
-    def three_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def three_of_a_kind_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a three of a kind."""
         small = np.all((num_combos[:, 0:3] == num_combos[:, :1]), axis=1)  # 22235
         middle = np.all((num_combos[:, 1:4] == num_combos[:, 1:2]), axis=1)  # 23335
@@ -362,7 +363,7 @@ class Ranker:
         ], axis=1)
 
     @staticmethod
-    def two_pairs_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def two_pairs_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a two pairs."""
         small = np.all(
             (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1)  # 2233A
@@ -392,7 +393,7 @@ class Ranker:
         ], axis=1)
 
     @staticmethod
-    def one_pair_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def one_pair_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a one pair."""
         small = np.all((num_combos[:, 0:2] == num_combos[:, :1]), axis=1)  # 22345
         mid_small = np.all((num_combos[:, 1:3] == num_combos[:, 1:2]), axis=1)  # 23345
@@ -422,7 +423,7 @@ class Ranker:
         ], axis=1)
 
     @staticmethod
-    def high_card_check(num_combos: np.ndarray, rank_arr: np.ndarray) -> None:
+    def high_card_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a high card."""
         rank_arr[(rank_arr == 0)] = RankingItem(
             rank=0, name=f'{UNAMED[np.max(num_combos[:, 4])]} High', cards=num_combos[0, :5])
@@ -545,14 +546,14 @@ class TexasHoldem:
         self.state: TableState = TableState.STOPPED
 
         # Utils
-        self.economy: Economy | None = ctx.bot.get_cog('Economy')
+        self.economy: Economy | None = cast('Economy | None', ctx.bot.get_cog('Economy'))
         self.message: discord.Message | None = None
 
         self.community_arr: np.ndarray = np.zeros(shape=(0, 2), dtype=int)
         self.players: list[Player] = []
 
         # Initialize game settings
-        self.host: discord.Member = self.players[0].member if self.players else ctx.author
+        self.host: discord.Member = self.players[0].member if self.players else cast(discord.Member, ctx.author)
         self.max_players: int = max_players
         self.player_index: int = 0
 
@@ -689,7 +690,7 @@ class TexasHoldem:
 
         self.pot.amount = self.small_blind + self.big_blind
 
-        self.analysis.append(self.simulate(final_hand=True))
+        self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
 
         self.running_autoplay_loop = self.loop.create_task(self.start_timer(self.players[self.player_index]))
 
@@ -748,10 +749,12 @@ class TexasHoldem:
             The member to remove from the table
         """
         player = discord.utils.get(self.players, member=member)
+        assert player is not None
         self.players.remove(player)
         stack_left = player.stack
         if stack_left > 0:
             query = "UPDATE economy SET cash = cash + $1 WHERE user_id = $2 AND guild_id = $3;"
+            assert self.ctx.guild is not None
             await self.ctx.bot.db.execute(query, stack_left, member.id, self.ctx.guild.id)
 
     async def prepare_next_game(self) -> None:
@@ -762,8 +765,9 @@ class TexasHoldem:
         for player in self.players:
             if player.stack <= 0:
                 await self.remove_player(player.member)
-                await self.message.reply(
-                    f'\N{LEAF FLUTTERING IN WIND} {player.member.mention} has been removed from the game because they ran out of chips.')
+                if self.message is not None:
+                    await self.message.reply(
+                        f'\N{LEAF FLUTTERING IN WIND} {player.member.mention} has been removed from the game because they ran out of chips.')
             else:
                 player.reset()
 
@@ -772,6 +776,7 @@ class TexasHoldem:
 
         self.reset()
 
+        assert self.blind_index is not None
         self.blind_index = (
             (self.blind_index[0] + 1) % len(self.players), (self.blind_index[1] + 1) % len(self.players))
         self.player_index = (self.blind_index[1] + 1) % len(self.players)
@@ -781,7 +786,7 @@ class TexasHoldem:
         while len(self.community_arr) < 5:
             if len(self.community_arr) in (3, 4):
                 # add analysis data for the flop and turn
-                self.analysis.append(self.simulate(final_hand=True))
+                self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
 
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
 
@@ -815,6 +820,7 @@ class TexasHoldem:
         else:
             if all(player.checked for player in self.playing_players):
                 # Next street
+                assert self.blind_index is not None
                 self.player_index = (self.blind_index[1] + 1) % len(self.players)
 
                 for player in self.playing_players:
@@ -832,7 +838,7 @@ class TexasHoldem:
 
                 if len(self.community_arr) != 5:
                     # Only calculate the odds if the game is not over
-                    self.analysis.append(self.simulate(final_hand=True))
+                    self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
 
         self.running_autoplay_loop = self.loop.create_task(self.start_timer(current_player))
 
@@ -857,7 +863,8 @@ class TexasHoldem:
 
         self.switch_player()
         self.view.update_buttons()
-        await self.message.edit(embed=self.build_embed(), view=self.view)
+        if self.message is not None:
+            await self.message.edit(embed=self.build_embed(), view=self.view)
 
     async def start_timer(self, player: Player) -> None:
         """A timer that runs out if the current player takes too long. (130 seconds)"""
@@ -872,7 +879,7 @@ class TexasHoldem:
             if self.players[self.player_index] != player:
                 return
 
-            if timer == 100:
+            if timer == 100 and self.message is not None:
                 await self.message.edit(embed=self.build_embed(with_autoplay=True))
 
         await self.autoplay(player)
@@ -932,7 +939,7 @@ class TexasHoldem:
             community_cards = None
         return community_cards, undrawn_combos
 
-    def _hand_strength_analysis(self, res_arr: np.ndarray[RankingItem]) -> dict:
+    def _hand_strength_analysis(self, res_arr: np.ndarray) -> dict:  # type: ignore[type-var]
         """Returns the hand strength of each player
 
         Parameters
@@ -947,13 +954,13 @@ class TexasHoldem:
         """
         final_hand_dict = {}
         for player in range(len(self.players)):
-            hand_type, hand_freq = np.unique((res_arr // 16 ** 5)[:, player], return_counts=True)
+            hand_type, hand_freq = np.unique((res_arr // 16 ** 5)[:, player], return_counts=True)  # type: ignore[operator]
             final_hand_dict[player + 1] = dict(
                 zip(np.vectorize(NAMED_HAND.get)(hand_type),
                     np.round(hand_freq / hand_freq.sum() * 100, 2).astype(float)))
         return final_hand_dict
 
-    def _simulation_analysis(self, odds_type: Literal['win_any', 'tiw_win', 'precise'], res_arr: np.ndarray) -> dict:
+    def _simulation_analysis(self, odds_type: Literal['win_any', 'tie_win', 'precise'], res_arr: np.ndarray[Any, np.dtype[Any]]) -> dict:
         outcome_arr = (res_arr == np.expand_dims(np.max(res_arr, axis=1), axis=1))
         num_outcomes = len(outcome_arr)  # type: ignore # lying
         outcome_dict = {}
@@ -994,7 +1001,7 @@ class TexasHoldem:
                     outcome_dict[outcome_key] = np.round(temp_arr.sum() / num_outcomes * 100, 2)
         return outcome_dict
 
-    def _simulate_calculation(self, community_cards: np.ndarray, undrawn_combos: np.ndarray) -> np.ndarray[RankingItem]:
+    def _simulate_calculation(self, community_cards: np.ndarray | None, undrawn_combos: np.ndarray) -> np.ndarray[Any, np.dtype[Any]]:
         """Simulates the game by calculating the hand strength of each player
 
         Parameters
@@ -1009,7 +1016,7 @@ class TexasHoldem:
         np.ndarray
             The result array.
         """
-        res_arr: np.ndarray[RankingItem] = np.zeros(  # type: ignore
+        res_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(  # type: ignore
             shape=(len(undrawn_combos), len(self.players)), dtype=RankingItem)
 
         if len(self.players) >= 2:
@@ -1023,10 +1030,10 @@ class TexasHoldem:
 
     def gen_single_hand(
             self,
-            community_cards: np.ndarray,
+            community_cards: np.ndarray | None,
             player: int,
             undrawn_combos: np.ndarray,
-            res_arr: np.ndarray[RankingItem]
+            res_arr: np.ndarray[Any, np.dtype[Any]]
     ) -> None:
         """Generates a single hand
 
@@ -1059,7 +1066,7 @@ class TexasHoldem:
     def simulate(
             self,
             num_scenarios: int | Literal['all'] = 150000,
-            odds_type: Literal['win_any', 'tiw_win', 'precise'] = 'tie_win',
+            odds_type: Literal['win_any', 'tie_win', 'precise'] = 'tie_win',
             final_hand: bool = False
     ) -> tuple[dict, dict] | dict:
         """Simulates the game
@@ -1133,6 +1140,7 @@ class TexasHoldem:
                 if index - 1 == self.player_index:
                     name_parts.insert(0, Emojis.Arrows.right)
 
+                assert self.blind_index is not None
                 blind = 'BB' if index == self.blind_index[1] + 1 else 'SB' if index == self.blind_index[0] + 1 else None
                 if blind is not None:
                     name_parts.append(blind)
@@ -1176,8 +1184,11 @@ class TexasHoldem:
 
     def _append_finished_embed_text(self, player: Player, text: str) -> str:
         if self.state == TableState.FINISHED:
-            cards = [card.display('small') for card in player.hand.cards]
-            _, hand = discord.utils.find(lambda x: x[0] == player, self.ranks)  # type: _, HandResult
+            raw_cards = [card.display('small') for card in player.hand.cards]
+            cards = [cast(DisplayCard, c) for c in raw_cards]
+            found = discord.utils.find(lambda x: x[0] == player, self.ranks)
+            assert found is not None
+            _, hand = found
             position = self.ranks.index((player, hand)) + 1
 
             hand_suffix = (
@@ -1194,7 +1205,7 @@ class TexasHoldem:
         cards = [Card.from_arr(arr) for arr in self.community_arr]
         if len(cards) >= 3:
             card_list = [f'{elem1} {elem2} {elem3}' for elem1, elem2, elem3 in zip(
-                *[card.display('large', formatted=True).split('\n') for card in cards[:3]])]
+                *[cast(str, card.display('large', formatted=True)).split('\n') for card in cards[:3]])]
             embed.add_field(
                 name='The Flop',
                 value='\n'.join(card_list)
@@ -1258,14 +1269,15 @@ class TableView(View):
         for player in self.table.players:
             await self.table.remove_player(player.member)
 
-        try:
-            del self.table.cog.poker_tables[self.table.message.channel.id]
-        except KeyError:
-            pass
+        if self.table.message is not None:
+            try:
+                del self.table.cog.poker_tables[self.table.message.channel.id]
+            except KeyError:
+                pass
 
-        with suppress(discord.HTTPException):
-            await self.table.message.reply(f'{Emojis.error} The table has been closed due to inactivity.')
-            await self.table.message.delete()
+            with suppress(discord.HTTPException):
+                await self.table.message.reply(f'{Emojis.error} The table has been closed due to inactivity.')
+                await self.table.message.delete()
 
     # Button Updating
 
@@ -1335,7 +1347,7 @@ class TableView(View):
         self.start_next_round.disabled = True
 
         # Big/Small Blind can't raise/bet in the first round
-        is_first_round_and_blind = len(table.community_arr) == 0 and table.player_index in table.blind_index
+        is_first_round_and_blind = len(table.community_arr) == 0 and table.blind_index is not None and table.player_index in table.blind_index
         self.raise_bet.disabled = is_first_round_and_blind
         self.raise_bet.label = 'Bet' if all(player.bet <= table.big_blind for player in table.playing_players) else 'Raise'
 
@@ -1358,10 +1370,12 @@ class TableView(View):
     async def join(self, interaction: discord.Interaction, _) -> None:
         """Joins the table"""
         if self.table.state != TableState.STOPPED:
-            return await interaction.response.send_message(f'{Emojis.error} The table is already running.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} The table is already running.', ephemeral=True)
+            return
 
         if interaction.user in [player.member for player in self.table.players]:
-            return await interaction.response.send_message(f'{Emojis.error} You are already in the game.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} You are already in the game.', ephemeral=True)
+            return
 
         modal = BuyInModal(table=self.table)
         await interaction.response.send_modal(modal)
@@ -1372,17 +1386,19 @@ class TableView(View):
         try:
             amount = int(modal.amount.value)
         except ValueError:
-            return await interaction.response.send_message(f'{Emojis.error} Invalid amount.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} Invalid amount.', ephemeral=True)
+            return
 
-        balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
+        balance: Balance = await cast('Bot', interaction.client).db.get_user_balance(interaction.user.id, interaction.guild_id)
         if balance.cash < amount:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} You don\'t have enough **cash** money to buy yourself in.\n'
                 f'You need at least {Emojis.Economy.coin} **{fnumb(self.table.min_buy_in)}**.',
                 ephemeral=True)
+            return
 
         await balance.remove(cash=amount)
-        self.table.add_player(interaction.user, stack=amount)
+        self.table.add_player(cast(discord.Member, interaction.user), stack=amount)
 
         if len(self.table.players) == 4:
             self.table.start()
@@ -1396,23 +1412,25 @@ class TableView(View):
         """Shows the player's hand"""
         player = discord.utils.get(self.table.players, member=interaction.user)
         if not player:
-            return await interaction.response.send_message(f'{Emojis.error} You are not in the game.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} You are not in the game.', ephemeral=True)
+            return
 
         if self.table.state != TableState.RUNNING:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} The game has not started yet.', ephemeral=True)
+            return
 
         embed = discord.Embed(title='Your Cards', color=discord.Color.blurple())
 
         card_list = [f'{elem1} {elem2}' for elem1, elem2 in zip(
-            *[card.display('large', formatted=True).split('\n') for card in player.hand.cards])]
+            *[cast(str, card.display('large', formatted=True)).split('\n') for card in player.hand.cards])]
         embed.description = '\n'.join(card_list)
 
         # Returns your best hand
         hand = player.hand.evaluate(self.table.community_arr)
 
         card_list = [
-            card.display('large', formatted=True).split('\n') for card in hand.cards
+            cast(str, card.display('large', formatted=True)).split('\n') for card in hand.cards
         ]
         # Use zip_longest to handle different lengths of display elements in each card
         results = [
@@ -1430,16 +1448,19 @@ class TableView(View):
         await interaction.response.defer()
 
         if self.table.state == TableState.RUNNING:
-            return await interaction.followup.send(f'{Emojis.error} The table is already running.', ephemeral=True)
+            await interaction.followup.send(f'{Emojis.error} The table is already running.', ephemeral=True)
+            return
 
         if interaction.user != self.table.host:
-            return await interaction.followup.send(
+            await interaction.followup.send(
                 f'{Emojis.error} You are not the host of this table.\n'
                 f'Please aks {self.table.host.mention} to start the game!', ephemeral=True)
+            return
 
         if len(self.table.players) < 2:
-            return await interaction.followup.send(
+            await interaction.followup.send(
                 f'{Emojis.error} You need at least 2 players to start the game.', ephemeral=True)
+            return
 
         if self.start_next_round.label == 'Next Round':
             await self.table.prepare_next_game()
@@ -1481,8 +1502,9 @@ class TableView(View):
             self.table.Check()
         else:
             if player.stack < max_bet - player.bet:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     f'{Emojis.error} You don\'t have enough chips. You\'ll need to go **All-In**!', ephemeral=True)
+                return
 
             self.table.Call()
 
@@ -1508,28 +1530,33 @@ class TableView(View):
         try:
             amount = int(modal.amount.value)
         except ValueError:
-            return await interaction.response.send_message(f'{Emojis.error} Invalid amount.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} Invalid amount.', ephemeral=True)
+            return
 
         if amount > player.stack:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} You don\'t have enough chips.', ephemeral=True)
+            return
 
         is_bet = all(player.bet <= self.table.big_blind for player in self.table.playing_players)
         if is_bet:
             if amount < self.table.big_blind:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     f'You have to raise by at least the big blind (**{self.table.big_blind}** Chips).', ephemeral=True)
+                return
         else:
             # Raise must be at least twice the current bet
             previous_bet = max([player.bet for player in self.table.players])
             if amount < previous_bet * 2:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     f'You have to raise by at least twice the current bet (**{previous_bet * 2}** Chips).',
                     ephemeral=True)
+                return
 
             if (previous_bet + amount) > player.stack:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     f'{Emojis.error} You don\'t have enough chips.', ephemeral=True)
+                return
 
         # check if its all-in
         if amount == player.stack:
@@ -1576,9 +1603,10 @@ class TableView(View):
         await interaction.response.defer()
 
         if self.table.state != TableState.FINISHED:
-            return await interaction.followup.send(
+            await interaction.followup.send(
                 f'{Emojis.error} The table is currently running, please wait till the game is finished.',
                 ephemeral=True)
+            return
 
         embed = discord.Embed(title='Game Odds Analysis', color=helpers.Colour.white())
         data: list[tuple[dict[str, float], dict[int, dict[str, float]]]] = self.table.analysis
@@ -1612,13 +1640,13 @@ class TableView(View):
                 1: 'Flop',
                 2: 'Turn'
             }
-            images: list[Image] = []
+            images: list[PIL.Image.Image] = []
             for i in range(len(data)):
                 chart = BarChart(
                     data=dict(dict((data[i][1][d_index]).items()).items()),
                     title=TITLE_MAP.get(i, '---'),
                 )
-                images.extend(chart.render(byted=False))
+                images.extend(cast('list[PIL.Image.Image]', chart.render(byted=False)))
 
             image = BarChart._merge_and_render(images)
 
@@ -1632,14 +1660,16 @@ class TableView(View):
     async def leave_button(self, interaction: discord.Interaction, _) -> None:
         """Callback for the leave button"""
         if self.table.state == TableState.RUNNING:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} The table is currently running, please wait till the game is finished.',
                 ephemeral=True)
+            return
 
         if interaction.user not in [player.member for player in self.table.players]:
-            return await interaction.response.send_message(f'{Emojis.error} You are not in the game.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} You are not in the game.', ephemeral=True)
+            return
 
-        await self.table.remove_player(interaction.user)
+        await self.table.remove_player(cast(discord.Member, interaction.user))
 
         if len(self.table.players) == 1:
             self.table.state = TableState.STOPPED
@@ -1648,29 +1678,34 @@ class TableView(View):
                 del self.table.cog.poker_tables[self.table.ctx.channel.id]
             except KeyError:
                 pass
-            await self.table.message.delete()
+            if self.table.message is not None:
+                await self.table.message.delete()
 
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 '\N{LEAF FLUTTERING IN WIND} The Poker Table has been closed due to all players leaving.',
                 delete_after=10)
+            return
 
         self.update_buttons()
         await interaction.response.edit_message(embed=self.table.build_embed(), view=self)
-        await self.table.message.reply(
-            f'\N{LEAF FLUTTERING IN WIND} {interaction.user.mention} has left the table.', delete_after=10)
+        if self.table.message is not None:
+            await self.table.message.reply(
+                f'\N{LEAF FLUTTERING IN WIND} {interaction.user.mention} has left the table.', delete_after=10)
 
     @discord.ui.button(label='Set Blinds', style=discord.ButtonStyle.blurple, row=1)
     async def set_blinds_button(self, interaction: discord.Interaction, _) -> None:
         """Callback for the set blinds button"""
         if self.table.state == TableState.RUNNING:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} The table is currently running, please wait till the game is finished.',
                 ephemeral=True)
+            return
 
         if interaction.user != self.table.host:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} You are not the host of this table.\n'
                 f'Please ask {self.table.host.mention} to set the blinds!', ephemeral=True)
+            return
 
         min_blind = max(1, int(self.table.first_buy_in * 0.005))  # 0.5% of the buy-in
         max_blind = int(self.table.first_buy_in * 0.05)  # 5% of the buy-in
@@ -1683,11 +1718,13 @@ class TableView(View):
         try:
             big_blind = int(modal.big_blind.value)
         except ValueError:
-            return await interaction.response.send_message(f'{Emojis.error} Invalid bid/small blind.', ephemeral=True)
+            await interaction.response.send_message(f'{Emojis.error} Invalid bid/small blind.', ephemeral=True)
+            return
 
         if big_blind < min_blind or big_blind > max_blind:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f'{Emojis.error} The big blind must be between **{min_blind}** and **{max_blind}**.', ephemeral=True)
+            return
 
         self.table.big_blind = big_blind
         self.table.small_blind = big_blind // 2

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, Generator
+from typing import TYPE_CHECKING, NamedTuple, TypeAlias, Generator, Any
 
 from discord import User
 
@@ -82,7 +82,7 @@ class AnsiChunk(NamedTuple):
     bold: bool = INHERIT
     underline: bool = INHERIT
 
-    def to_text(self, previous_specs: AnsiChunkSpecs, /) -> Generator[str, AnsiChunkSpecs, None]:
+    def to_text(self, previous_specs: AnsiChunkSpecs, /) -> Generator[str | AnsiChunkSpecs, None, None]:
         """Returns a version of the text with ANSI formatting.
 
         This method is used to format the text inline with other text.
@@ -259,8 +259,8 @@ class AnsiStringBuilder:
             /,
             *,
             inherit: bool = False,
-            color: AnsiColor = None,
-            background_color: AnsiBackgroundColor = None,
+            color: AnsiColor | None = None,
+            background_color: AnsiBackgroundColor | None = None,
             bold: bool | None = None,
             underline: bool | None = None,
     ) -> AnsiStringBuilder:
@@ -362,7 +362,7 @@ class AnsiStringBuilder:
         """
         return self.append('\n' * count)
 
-    def bold(self, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def bold(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text in bold.
 
         Parameters
@@ -378,7 +378,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def no_bold(self, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def no_bold(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text without bold.
 
         Parameters
@@ -394,7 +394,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def underline(self, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def underline(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text in underline.
 
         Parameters
@@ -410,7 +410,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def no_underline(self, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def no_underline(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text without underline.
 
         Parameters
@@ -426,7 +426,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def color(self, color: AnsiColor, /, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def color(self, color: AnsiColor, /, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text in the given color.
 
         Parameters
@@ -444,7 +444,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def no_color(self, text: str | None = None, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def no_color(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text without color.
 
         Parameters
@@ -464,7 +464,7 @@ class AnsiStringBuilder:
             background_color: AnsiBackgroundColor,
             /,
             text: str | None = None,
-            **kwargs: AnsiIdentifierKwargs,
+            **kwargs: Any,
     ) -> AnsiStringBuilder:
         """Appends text in the given background color.
 
@@ -483,7 +483,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def no_background_color(self, text: str | None = None, /, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def no_background_color(self, text: str | None = None, /, **kwargs: Any) -> AnsiStringBuilder:
         """Appends text without a background color.
 
         Parameters
@@ -526,9 +526,11 @@ class AnsiStringBuilder:
 
         If the first one is blank, overwrite second with first.
         """
-        chunks: list[AnsiChunk | None] = self._chunks
+        chunks: list[AnsiChunk | None] = list(self._chunks)  # type: ignore[assignment]
 
         for i, chunk in enumerate(chunks, -1):
+            if chunk is None:
+                continue
             previous = chunks[i] if i >= 0 else None
 
             if not previous:
@@ -556,7 +558,7 @@ class AnsiStringBuilder:
             # Merge the two if the first one is blank
             if not previous.text:
                 previous_dict.update(chunk_dict)
-                chunks[i] = AnsiChunk(chunk.text, **previous_dict)
+                chunks[i] = AnsiChunk(chunk.text, **previous_dict)  # type: ignore[arg-type]
                 chunks[i + 1] = None
 
         self._chunks = [chunk for chunk in chunks if chunk is not None]
@@ -596,7 +598,7 @@ class AnsiStringBuilder:
         return self.build()
 
     @classmethod
-    def from_string(cls, string: str, /, **kwargs: AnsiIdentifierKwargs) -> AnsiStringBuilder:
+    def from_string(cls, string: str, /, **kwargs: Any) -> AnsiStringBuilder:
         """Creates an :class:`AnsiStringBuilder` from a string."""
         builder = cls()
         builder.append(string, **kwargs)

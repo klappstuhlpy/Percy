@@ -11,7 +11,8 @@ from urllib.parse import urljoin
 
 import discord
 import wavelink
-from bs4 import BeautifulSoup, NavigableString, PageElement, Tag
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 from discord import app_commands
 from discord.ext import commands
 from discord.utils import MISSING
@@ -46,9 +47,9 @@ class PlayFlags(Flags):
     """Flags for the music commands."""
     source: Literal['yt', 'sp', 'sc'] = flag(
         name='source', description='What source to search for your query.', aliases=['s'], default='yt')
-    force: bool = store_true(
+    force: bool = store_true(  # type: ignore[assignment]
         name='force', description='Whether to force play the track/playlist.', aliases=['f'])
-    recommendations: bool = store_true(
+    recommendations: bool = store_true(  # type: ignore[assignment]
         name='recommendations',
         short='r',
         description='Whether to auto-fill the queue with recommended tracks if the queue is empty.')
@@ -128,27 +129,36 @@ class Music(Cog):
             return
 
         if player.queue.listen_together is not MISSING:
+            assert player.guild is not None
             member = await self.bot.get_or_fetch_member(
                 player.guild, player.queue.listen_together)
-            if (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)) is None:
-                return await player.disconnect()
+            if member is None or (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)) is None:
+                await player.disconnect()
+                return
 
             try:
                 track = await player.search(activity.track_url)
             except Exception as exc:
                 log.debug('Error while searching for track: %s', exc)
                 await player.panel.channel.send('I couldn\'t find the track you were listening to on Spotify.')
-                return await player.disconnect()
+                await player.disconnect()
+                return
+
+            if not isinstance(track, (wavelink.Playable, wavelink.Playlist)):
+                await player.disconnect()
+                return
 
             player.queue.reset()
             await player.queue.put_wait(track)
             await player.play(player.queue.get())
-            return await player.send_track_add(track)
+            await player.send_track_add(track)
+            return
 
         if player.autoplay != wavelink.AutoPlayMode.enabled and player.queue.is_empty:
             # we gracefully disconnect if there are no tracks left
             # in the queue and autoplay is disabled/partial enabled
-            return await player.disconnect()
+            await player.disconnect()
+            return
 
         # This is a custom shuffle to preserve
         # insert order of the tracks to the queue
@@ -162,6 +172,7 @@ class Music(Cog):
             next_random_track = queue[random.randint(0, len(queue) - 1)]
 
             # Add all tracks that are before the next random track to the history
+            assert player.queue.history is not None
             player.queue.history.clear()
             player.queue.history.put(queue[:queue.index(next_random_track)])
 
@@ -175,7 +186,8 @@ class Music(Cog):
         if not player:
             return
 
-        if player.current.recommended:
+        if player.current is not None and player.current.recommended:
+            assert player.queue.history is not None
             player.queue.history.put(player.current)
 
         while not player.queue.all or player.current not in player.queue.all:
@@ -184,6 +196,7 @@ class Music(Cog):
 
         channel = player.channel
         if isinstance(channel, discord.StageChannel):
+            assert player.current is not None
             intance = channel.instance or await channel.fetch_instance()
             if not intance:
                 await channel.create_instance(topic=player.current.title)
@@ -228,6 +241,10 @@ class Music(Cog):
                 else:
                     player.queue.reset()
 
+                    if new_activity is None:
+                        await player.disconnect()
+                        return
+
                     try:
                         track = await player.search(new_activity.track_url)
                     except Exception as exc:
@@ -235,7 +252,12 @@ class Music(Cog):
                         await player.panel.channel.send(
                             f'{Emojis.error} I couldn\'t find the track <@{user_id}> was listening to on spotify.',
                             delete_after=10)
-                        return await player.disconnect()
+                        await player.disconnect()
+                        return
+
+                    if not isinstance(track, (wavelink.Playable, wavelink.Playlist)):
+                        await player.disconnect()
+                        return
 
                     await player.queue.put_wait(track)
                     await player.send_track_add(track)
@@ -346,6 +368,7 @@ class Music(Cog):
         `Note:` Only supported for Spotify Music."""
         await ctx.defer()
 
+        assert ctx.guild is not None
         if not ctx.guild.voice_client:
             await Player.join(ctx)
 
@@ -354,7 +377,11 @@ class Music(Cog):
             return
 
         # We need to fetch the member to get the current activity
-        member = await self.bot.get_or_fetch_member(ctx.guild, member.id)
+        fetched_member = await self.bot.get_or_fetch_member(ctx.guild, member.id)
+        if fetched_member is None:
+            await ctx.send_error(f'**{member.display_name}** could not be found.')
+            return
+        member = fetched_member
 
         if not (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)):
             await ctx.send_error(f'**{member.display_name}** is not currently listening to Spotify.')
@@ -371,7 +398,12 @@ class Music(Cog):
         except Exception as exc:
             log.debug('Error while searching for track: %s', exc)
             await ctx.send_error(f'I couldn\'t find the track <@{member.id}> was listening to on Spotify.')
-            return await player.disconnect()
+            await player.disconnect()
+            return
+
+        if not isinstance(track, (wavelink.Playable, wavelink.Playlist)):
+            await ctx.send_error('Sorry! No results found matching your query.')
+            return
 
         await player.queue.put_wait(track)
         player.queue.listen_together = member.id
@@ -390,6 +422,7 @@ class Music(Cog):
     )
     async def listen_together_stop(self, ctx: Context) -> None:
         """Stops the current listen-together activity."""
+        assert ctx.guild is not None
         player: Player = cast(Player, ctx.guild.voice_client)
         if not player:
             return
@@ -458,6 +491,7 @@ class Music(Cog):
             return
 
         await player.pause(not player.paused)
+        assert player.current is not None
         await ctx.send_success(
             f'{'Paused' if player.paused else 'Resumed'} Track [{player.current.title}]({player.current.uri})',
             delete_after=10, suppress_embeds=True)
@@ -481,7 +515,10 @@ class Music(Cog):
         if not player:
             return
 
-        player.queue.mode = {'normal': 0, 'track': 1, 'queue': 2}.get(mode)
+        from wavelink import QueueMode as _QueueMode
+        player.queue.mode = {  # type: ignore[assignment]
+            'normal': _QueueMode.normal, 'track': _QueueMode.loop, 'queue': _QueueMode.loop_all
+        }.get(mode, _QueueMode.normal)
 
         await player.panel.update()
         await ctx.send_success(f'Loop Mode changed to `{mode}`', delete_after=10)
@@ -512,6 +549,7 @@ class Music(Cog):
         if not player:
             return
 
+        assert player.current is not None
         if player.current.is_stream:
             await ctx.send_error('Cannot seek if track is a stream.')
             return
@@ -540,6 +578,7 @@ class Music(Cog):
 
     @seek.autocomplete('position')
     async def seek_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        assert interaction.guild is not None
         player: Player = cast(Player, interaction.guild.voice_client)
         if not player:
             return []
@@ -551,6 +590,7 @@ class Music(Cog):
             seconds = sum(int(x.strip('""')) * 60 ** inT for inT, x in enumerate(reversed(current.split(':'))))
         except ValueError:
             # Return a list of 3 choice timestamps -> track length, 1/3, 2/3
+            assert player.current is not None
             length = player.current.length / 1000  # Convert to seconds
             return [
                 app_commands.Choice(name=_timestamp(int(length / 3)), value=str(int(length / 3))),
@@ -627,8 +667,8 @@ class Music(Cog):
     async def filter_equalizer(
             self,
             ctx: Context,
-            band: app_commands.Range[int, 1, 15] = None,
-            gain: app_commands.Range[float, -0.25, +1.0] = None
+            band: app_commands.Range[int, 1, 15] | None = None,
+            gain: app_commands.Range[float, -0.25, +1.0] | None = None
     ) -> None:
         """Set a custom Equalizer for the current Track.
 
@@ -828,6 +868,7 @@ class Music(Cog):
         if not player:
             return
 
+        assert player.queue.history is not None
         if player.queue.history.is_empty:
             await ctx.send_error('There are no tracks in the history.')
             return
@@ -838,6 +879,7 @@ class Music(Cog):
     @command(description='Display the active queue.', hybrid=True, guild_only=True)
     async def queue(self, ctx: Context) -> None:
         """Display the active queue."""
+        assert ctx.guild is not None
         player: Player = cast(Player, ctx.voice_client)
         if not player:
             return
@@ -857,8 +899,12 @@ class Music(Cog):
                 )
 
             async def format_page(self, entries: list, /) -> discord.Embed:
+                assert ctx.guild is not None
+                assert player.current is not None
+                assert player.queue.history is not None
                 embed = discord.Embed(color=helpers.Colour.white())
-                embed.set_author(name=f'{ctx.guild.name}\'s Current Queue', icon_url=ctx.guild.icon.url)
+                icon_url = ctx.guild.icon.url if ctx.guild.icon else None
+                embed.set_author(name=f'{ctx.guild.name}\'s Current Queue', icon_url=icon_url)
 
                 embed.description = (
                     '**╔ Now Playing:**\n'
@@ -886,14 +932,14 @@ class Music(Cog):
     # Lyrics Stuff
 
     @classmethod
-    def _get_text(cls, element: Tag | PageElement) -> str:
+    def _get_text(cls, element: NavigableString | Tag) -> str:
         """Recursively parse an element and its children into a markdown string."""
         if isinstance(element, NavigableString):
             return element.strip()
         elif element.name == 'br':
             return '\n'
         else:
-            return ''.join(cls._get_text(child) for child in element.contents)
+            return ''.join(cls._get_text(child) for child in element.contents)  # type: ignore[arg-type]
 
     @classmethod
     def _extract_lyrics(cls, html: str) -> str | None:
@@ -923,7 +969,10 @@ class Music(Cog):
             await ctx.send_error('Please provide a song to search for.')
             return
 
-        song = song or player.current.title
+        song = song or (player.current.title if player and player.current else None)
+        if not song:
+            await ctx.send_error('Please provide a song to search for.')
+            return
 
         async with ctx.channel.typing():
             headers = {
@@ -996,6 +1045,9 @@ class Music(Cog):
 
         If no DJ role exists, the bot will create a new one.
         """
+        assert ctx.guild is not None
+        assert ctx.guild.me is not None
+        assert isinstance(ctx.author, discord.Member)
         dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
         if dj_role is None:
             dj_role = await ctx.guild.create_role(name='DJ')
@@ -1025,6 +1077,9 @@ class Music(Cog):
     @describe(member='The member you want to remove the DJ Role from.')
     async def dj_remove(self, ctx: Context, member: discord.Member) -> None:
         """Removes the DJ Role with which you have extended control rights from a member."""
+        assert ctx.guild is not None
+        assert ctx.guild.me is not None
+        assert isinstance(ctx.author, discord.Member)
         dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
         if not dj_role:
             await ctx.send_error('There is currently no existing DJ role.')
@@ -1071,15 +1126,18 @@ class Music(Cog):
         """
         await ctx.defer()
 
-        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
         if config.music_panel_channel_id and config.music_panel_message_id:
             await ctx.send_error('There is already a music configuration setup.')
             return
 
         if not channel:
+            assert isinstance(ctx.channel, discord.TextChannel)
             parent = ctx.channel.category or ctx.guild
             channel = await parent.create_text_channel(name='🎶percy-music')
 
+        assert self.bot.user is not None
         await channel.edit(
             slowmode_delay=3,
             topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
@@ -1099,7 +1157,8 @@ class Music(Cog):
     )
     async def setup_reset(self, ctx: Context) -> None:
         """Reset the Music configuration setup."""
-        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
         if not config.music_panel_channel_id or not config.music_panel_message_id:
             await ctx.send_error('There is currently no music configuration.')
             return
@@ -1115,7 +1174,8 @@ class Music(Cog):
     async def setup_panel(self, ctx: Context) -> None:
         """This toggles the use of the music panel.
         If disabled, the bot won't send a player panel regardless of the setup."""
-        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
         if not config.music_panel_channel_id or not config.music_panel_message_id:
             await ctx.send_error('There is currently no music configuration.')
             return
@@ -1130,7 +1190,7 @@ class Music(Cog):
         if message.guild is None:
             return
 
-        config = await self.bot.db.get_guild_config(message.guild.id)
+        config = await self.bot.db.get_guild_config(message.guild.id)  # type: ignore[misc]
         if not (config.music_panel_channel_id and config.music_panel_message_id):
             return
 

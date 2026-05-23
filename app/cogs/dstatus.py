@@ -5,7 +5,7 @@ import dataclasses
 import datetime
 import enum
 from dataclasses import dataclass
-from typing import Any, TypeVar, Type
+from typing import Any
 
 import asyncpg
 import discord
@@ -30,7 +30,7 @@ class Status(enum.Enum):
 
     @property
     def emoji(self) -> str:
-        return {
+        return {  # type: ignore[return-value]
             'resolved': Emojis.Status.online,
             'investigating': Emojis.Status.idle,
             'monitoring': Emojis.Status.idle,
@@ -40,16 +40,13 @@ class Status(enum.Enum):
 
     @property
     def color(self) -> int:
-        return {
+        return {  # type: ignore[return-value]
             'resolved': 0x7BCBA7,
             'investigating': 0xFCC25E,
             'monitoring': 0xFCC25E,
             'identified': 0xF57E7E,
             'update': 0xFCC25E
         }.get(self.value)
-
-
-T = TypeVar('T')
 
 
 class IncidentItem(BaseRecord):
@@ -59,7 +56,7 @@ class IncidentItem(BaseRecord):
     id: str
     name: str
     status: str
-    started_at: Type[datetime]
+    started_at: datetime.datetime
     guild_id: int
     channel_id: int
     message_id: int | None
@@ -68,8 +65,11 @@ class IncidentItem(BaseRecord):
 
     def get_channel(self) -> discord.TextChannel | None:
         guild = self.bot.get_guild(self.guild_id)
-        if self.channel_id:
-            return guild.get_channel(self.channel_id)
+        if guild is None or not self.channel_id:
+            return None
+        channel = guild.get_channel(self.channel_id)
+        if isinstance(channel, discord.TextChannel):
+            return channel
         return None
 
     async def get_message(self) -> discord.Message | None:
@@ -93,8 +93,8 @@ class Component:
     id: str
     name: str
     status: str
-    created_at: Type[datetime]
-    updated_at: Type[datetime]
+    created_at: datetime.datetime | None
+    updated_at: datetime.datetime | None
     position: int
     description: str
     showcase: bool
@@ -105,8 +105,8 @@ class Component:
     only_show_if_degraded: bool
 
     def __post_init__(self) -> None:
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
+        self.created_at = utcparse(self.created_at)  # type: ignore[arg-type]
+        self.updated_at = utcparse(self.updated_at)  # type: ignore[arg-type]
 
 
 @dataclass
@@ -115,18 +115,18 @@ class Update:
     status: str
     body: str
     incident_id: str
-    created_at: Type[datetime]
-    updated_at: Type[datetime]
-    display_at: Type[datetime]
+    created_at: datetime.datetime | None
+    updated_at: datetime.datetime | None
+    display_at: datetime.datetime | None
     affected_components: list[ShortComponent]
     deliver_notifications: bool
     custom_tweet: str
     tweet_id: str
 
     def __post_init__(self) -> None:
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
-        self.display_at = utcparse(self.display_at)
+        self.created_at = utcparse(self.created_at)  # type: ignore[arg-type]
+        self.updated_at = utcparse(self.updated_at)  # type: ignore[arg-type]
+        self.display_at = utcparse(self.display_at)  # type: ignore[arg-type]
 
         if self.affected_components:
             self.affected_components = [
@@ -138,24 +138,24 @@ class Incident:
     id: str
     name: str
     status: str
-    created_at: Type[datetime]
-    updated_at: Type[datetime]
-    monitoring_at: Type[datetime]
-    resolved_at: Type[datetime]
+    created_at: datetime.datetime | None
+    updated_at: datetime.datetime | None
+    monitoring_at: datetime.datetime | None
+    resolved_at: datetime.datetime | None
     impact: str
     shortlink: str
-    started_at: Type[datetime]
+    started_at: datetime.datetime | None
     page_id: str
     incident_updates: list[Update]
     components: list[Component]
     reminder_intervals: Any
 
     def __post_init__(self) -> None:
-        self.created_at = utcparse(self.created_at)
-        self.updated_at = utcparse(self.updated_at)
-        self.monitoring_at = utcparse(self.monitoring_at)
-        self.resolved_at = utcparse(self.resolved_at)
-        self.started_at = utcparse(self.started_at)
+        self.created_at = utcparse(self.created_at)  # type: ignore[arg-type]
+        self.updated_at = utcparse(self.updated_at)  # type: ignore[arg-type]
+        self.monitoring_at = utcparse(self.monitoring_at)  # type: ignore[arg-type]
+        self.resolved_at = utcparse(self.resolved_at)  # type: ignore[arg-type]
+        self.started_at = utcparse(self.started_at)  # type: ignore[arg-type]
 
         self.components = [Component(**component_data) for component_data in self.components]  # type: ignore
 
@@ -169,7 +169,7 @@ class Incident:
 
         embed = discord.Embed(
             title=self.name,
-            timestamp=self.started_at,
+            timestamp=self.started_at,  # type: ignore[arg-type]
             url=self.shortlink,
             colour=Status(updates[-1].status).color)
         embed.set_author(name='Discord Status', url='https://discordstatus.com/', icon_url=DISCORD_ICON_URL)
@@ -178,7 +178,7 @@ class Incident:
         for update in updates:
             embed.add_field(
                 name=f'{Status(update.status).emoji} {update.status.title()} '
-                     f'({discord.utils.format_dt(update.created_at, 'R')})',
+                     f'({discord.utils.format_dt(update.created_at, 'R')})',  # type: ignore[arg-type]
                 value=update.body,
                 inline=False)
 
@@ -253,7 +253,7 @@ class DiscordStatus(Cog):
         if bypass:
             return [Incident(**data) for data in data['incidents']]
 
-        return [Incident(**data) for data in data['incidents'] if utcparse(data['updated_at']) >
+        return [Incident(**data) for data in data['incidents'] if (utcparse(data['updated_at']) or discord.utils.utcnow()) >
                 discord.utils.utcnow() - datetime.timedelta(minutes=10)]
 
     async def _compare_changes_and_update(self, incident: Incident, saved: IncidentItem) -> discord.Message | None:
@@ -288,8 +288,9 @@ class DiscordStatus(Cog):
         channel = saved.get_channel()
         message = await saved.get_message()
         if not message:
-            with contextlib.suppress(discord.HTTPException):
-                message = await channel.send(embed=incident.build_embed())
+            if channel is not None:
+                with contextlib.suppress(discord.HTTPException):
+                    message = await channel.send(embed=incident.build_embed())
 
             if message:
                 query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
@@ -352,15 +353,17 @@ class DiscordStatus(Cog):
     )
     async def dstatus_release(self, ctx: Context) -> None:
         """Releases the last incident again."""
-        subscriber = await self.get_subscriber(ctx.guild.id)
+        assert ctx.guild is not None
+        subscriber = await self.get_subscriber(ctx.guild.id)  # type: ignore[misc]
         if not subscriber:
             await ctx.send_error('This guild is not subscribed to the Discord Status Feed.')
             return
 
-        latest = (await self.fetch_unresolved_incidents(bypass=True))[0]
-        if not latest:
+        incidents = await self.fetch_unresolved_incidents(bypass=True)
+        if not incidents:
             await ctx.send_error('No incidents found. *There should be though?* Contact the developer!')
             return
+        latest = incidents[0]
 
         check = await self.bot.db.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
                                           latest.id, ctx.guild.id)
@@ -378,11 +381,13 @@ class DiscordStatus(Cog):
             await ctx.send_error('This incident is already released.')
             return
 
-        message = await incident.get_channel().send(embed=latest.build_embed())
+        incident_channel = incident.get_channel()
+        if incident_channel is not None:
+            message = await incident_channel.send(embed=latest.build_embed())
 
-        if message:
-            query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
-            await self.bot.db.execute(query, message.id, incident.id, ctx.guild.id)
+            if message:
+                query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
+                await self.bot.db.execute(query, message.id, incident.id, ctx.guild.id)
 
         self.get_subscribers.invalidate()
         self.get_subscriber.invalidate(ctx.guild.id)
@@ -396,6 +401,7 @@ class DiscordStatus(Cog):
     @describe(channel='The channel to subscribe to.')
     async def dstatus_subscribe(self, ctx: Context, channel: discord.TextChannel) -> None:
         """Subscribes to Discord Status updates."""
+        assert ctx.guild is not None
         query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2) RETURNING *;"
         async with ctx.db.acquire() as connection:
             tr = connection.transaction()
@@ -431,6 +437,7 @@ class DiscordStatus(Cog):
     )
     async def dstatus_unsubscribe(self, ctx: Context) -> None:
         """Unsubscribes from Discord Status updates."""
+        assert ctx.guild is not None
         query = "DELETE FROM discord_incidents WHERE guild_id = $1;"
         await ctx.db.execute(query, ctx.guild.id)
 
@@ -454,7 +461,7 @@ class DiscordStatus(Cog):
         if not incidents:
             return
 
-        subscribers = await self.get_subscribers()
+        subscribers = await self.get_subscribers()  # type: ignore[misc]
 
         if not subscribers:
             return
