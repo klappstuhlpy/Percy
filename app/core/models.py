@@ -21,7 +21,6 @@ from typing import (
     overload,
     Protocol,
     override,
-    Type,
     Union,
     runtime_checkable,
 )
@@ -84,7 +83,7 @@ class AppBadArgument(app_commands.AppCommandError):
     """The base exception for all application command argument errors."""
 
     def __init__(self, message: str, namespace: str | None = None, /) -> None:
-        self.namespace: str = namespace
+        self.namespace: str | None = namespace
         super().__init__(message)
 
 
@@ -100,7 +99,7 @@ class BadArgument(commands.BadArgument):
     """
 
     def __init__(self, message: str, namespace: str | None = None, /) -> None:
-        self.namespace: str = namespace
+        self.namespace: str | None = namespace
         super().__init__(message)
 
 
@@ -123,7 +122,8 @@ class EmbedBuilder(discord.Embed):
         if fields:
             self.add_fields(fields)
 
-        self.description: str = kwargs.get('description', '')
+        if 'description' in kwargs:
+            self.description = kwargs['description']
 
     @staticmethod
     def _resolve_field_dicts(
@@ -131,8 +131,9 @@ class EmbedBuilder(discord.Embed):
     ) -> Iterable[tuple[str, str, bool]]:
         first_item_checker = type(next(iter(fields), None))
         if first_item_checker is dict:
-            return [(field['name'], field['value'], field['inline']) for field in fields]
-        return fields
+            dict_fields: list[dict[str, str | bool]] = fields  # type: ignore[assignment]
+            return [(str(f['name']), str(f['value']), bool(f['inline'])) for f in dict_fields]
+        return fields  # type: ignore[return-value]
 
     def add_fields(self, fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]]) -> EmbedBuilder:
         """Adds multiple fields to the embed.
@@ -152,7 +153,7 @@ class EmbedBuilder(discord.Embed):
         return self
 
     @classmethod
-    def to_factory(cls: Type[Self], embed: discord.Embed, **kwargs: Any) -> Self:
+    def to_factory(cls, embed: discord.Embed, **kwargs: Any) -> Self:
         """Create a new embed from an existing embed.
 
         Parameters
@@ -168,7 +169,8 @@ class EmbedBuilder(discord.Embed):
             The new embed builder.
         """
         copied_embed = copy.copy(embed)
-        copied_embed.colour = helpers.Colour(copied_embed.colour.value)
+        if copied_embed.colour is not None:
+            copied_embed.colour = helpers.Colour(copied_embed.colour.value)
 
         return cls.from_dict(copied_embed.to_dict(), **kwargs)
 
@@ -224,10 +226,13 @@ class EmbedBuilder(discord.Embed):
         `EmbedBuilder`
             The new embed builder.
         """
-        if ctx.is_interaction:
-            _origin = ctx.interaction.message.embeds[0] if ctx.interaction.message.embeds else None
+        if isinstance(ctx, discord.Interaction):
+            _origin = ctx.message.embeds[0] if ctx.message and ctx.message.embeds else None
         else:
-            _origin = ctx.message.embeds[0] if ctx.message.embeds else None
+            if ctx.is_interaction and ctx.interaction and ctx.interaction.message:
+                _origin = ctx.interaction.message.embeds[0] if ctx.interaction.message.embeds else None
+            else:
+                _origin = ctx.message.embeds[0] if ctx.message.embeds else None
 
         if _origin:
             return cls.to_factory(_origin)
@@ -334,7 +339,7 @@ class PermissionSpec(NamedTuple):
         )
 
     @staticmethod
-    def _is_owner(bot: Bot, user: discord.User) -> bool:
+    def _is_owner(bot: Bot, user: discord.User | discord.Member) -> bool:
         """Checks if the given user is the owner of the bot."""
         if bot.owner_id:
             return user.id == bot.owner_id
@@ -426,22 +431,22 @@ class Command(commands.Command):
 
         self.custom_flags: FlagMeta[Any] | None = None
 
-        super().__init__(func, **kwargs)
-        self.add_check(self._permissions.check)
+        super().__init__(func, **kwargs)  # type: ignore[arg-type]
+        self.add_check(self._permissions.check)  # type: ignore[arg-type]
 
     @property
     def permissions(self) -> PermissionSpec:
         """:class:`PermissionSpec` : Return the permission specification for this command."""
         return self._permissions
 
-    def _ensure_assignment_on_copy(self, other: Command) -> Command:
-        super()._ensure_assignment_on_copy(other)
+    def _ensure_assignment_on_copy(self, other: Command) -> Command:  # type: ignore[override]
+        super()._ensure_assignment_on_copy(other)  # type: ignore[arg-type]
 
         other._permissions = self._permissions
         other.custom_flags = self.custom_flags
         return other
 
-    async def can_run(self, ctx: Context, /) -> bool:
+    async def can_run(self, ctx: Context, /) -> bool:  # type: ignore[override]
         """Checks if the command can be run in the given context.
 
         This overrides the default implementation to support early command abortion
@@ -456,7 +461,7 @@ class Command(commands.Command):
         return await super().can_run(ctx)
 
     @property
-    def parents(self) -> list[GroupMixin[Any]]:
+    def parents(self) -> list[GroupMixin[Any]]:  # type: ignore[override]
         """list[GroupMixin[Any]] : Returns all parent commands of this command.
 
         This is sorted by the length of :attr:`.qualified_name` from highest to lowest.
@@ -466,8 +471,8 @@ class Command(commands.Command):
         entries = []
         while cmd is not None:
             entries.append(cmd)
-            cmd = cmd.parent
-        return sorted(entries, key=lambda x: len(x.qualified_name), reverse=True)
+            cmd = getattr(cmd, 'parent', None)
+        return sorted(entries, key=lambda x: len(x.qualified_name), reverse=True)  # type: ignore[attr-defined]
 
     def transform_flag_parameters(self) -> None:
         """Transforms a with a subclass of `Flags` annotated parameter
@@ -494,6 +499,7 @@ class Command(commands.Command):
 
             if is_flags:
                 self.custom_flags = param.annotation
+                assert self.custom_flags is not None
                 try:
                     default = self.custom_flags.default
                 except ValueError:
@@ -509,7 +515,7 @@ class Command(commands.Command):
                 annotation = None if target.annotation is param.empty else target.annotation
 
                 self.params[first_consume_rest] = target.replace(
-                    annotation=ConsumeUntilFlag(annotation, default),
+                    annotation=ConsumeUntilFlag(annotation, default),  # type: ignore[arg-type]
                     kind=param.POSITIONAL_OR_KEYWORD,
                 )
                 break
@@ -544,7 +550,8 @@ class Command(commands.Command):
             return command.ansi_signature  # type: ignore
 
         with TemporaryAttribute(command, attr='custom_flags', value=None):
-            return cls.ansi_signature.fget(command)
+            assert cls.ansi_signature.fget is not None
+            return cls.ansi_signature.fget(command)  # type: ignore[arg-type]
 
     @staticmethod
     def _disect_param(param: commands.Parameter) -> tuple:
@@ -612,7 +619,7 @@ class Command(commands.Command):
                     )
                 continue
 
-            choices = annotation.__args__ if origin is Literal else None
+            choices = annotation.__args__ if origin is Literal else None  # type: ignore[attr-defined]
 
             if default is not param.empty:
                 show_default = bool(default) if isinstance(default, str) else default is not None
@@ -686,7 +693,7 @@ class Command(commands.Command):
                 continue
 
             if origin is Literal:
-                name = '|'.join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)
+                name = '|'.join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)  # type: ignore[attr-defined]
 
             if param.default is not param.empty:
                 # We don't want None or '' to trigger the [name=value] case, and instead it should
@@ -734,9 +741,9 @@ class Context(commands.Context, Generic[CogT]):
 
     if TYPE_CHECKING:
         bot: Bot
-        cog: CogT
-        command: type[Command | GroupCommand]
-        invoked_subcommand: Command | GroupCommand | None
+        cog: CogT  # type: ignore[override]
+        command: type[Command | GroupCommand]  # type: ignore[assignment]
+        invoked_subcommand: Command | GroupCommand | None  # type: ignore[assignment]
 
     def __init__(self, **attrs) -> None:
         self._message: discord.Message | None = None
@@ -748,7 +755,7 @@ class Context(commands.Context, Generic[CogT]):
         return self.bot.session
 
     @property
-    def user(self) -> discord.Member:
+    def user(self) -> discord.User | discord.Member:
         """Alias for :attr:`author`."""
         return self.author
 
@@ -758,9 +765,9 @@ class Context(commands.Context, Generic[CogT]):
         return self.bot
 
     @property
-    def guild_id(self) -> int:
+    def guild_id(self) -> int | None:
         """Alias for :attr:`guild.id`."""
-        return self.guild.id
+        return self.guild.id if self.guild else None
 
     @property
     def db(self) -> Database:
@@ -773,7 +780,7 @@ class Context(commands.Context, Generic[CogT]):
         return self.message.created_at
 
     @cached_property
-    def flags(self) -> Flags:
+    def flags(self) -> Flags | None:
         """The flag arguments passed.
 
         Only available if the flags were a keyword argument.
@@ -792,6 +799,8 @@ class Context(commands.Context, Generic[CogT]):
             return ''
 
         user = self.bot.user
+        if user is None:
+            return self.prefix or ''
         MENTIONED_REGEX = re.compile(rf'<@!?{user.id}>')
         return MENTIONED_REGEX.sub(f'@{user.name}', self.prefix)
 
@@ -816,16 +825,16 @@ class Context(commands.Context, Generic[CogT]):
 
     async def confirm(
             self,
-            content: str = None,
+            content: str | None = None,
             *,
-            view: ConfirmationView = None,
-            user: discord.Member | discord.User = None,
+            view: ConfirmationView | None = None,
+            user: discord.Member | discord.User | None = None,
             timeout: float = 60.,
             true: str = 'Yes',
             false: str = 'No',
-            interaction: discord.Interaction = None,
-            hook: AsyncCallable[discord.Interaction, None] = None,
-            **kwargs,
+            interaction: discord.Interaction | None = None,
+            hook: AsyncCallable[discord.Interaction, None] | None = None,
+            **kwargs: Any,
     ) -> bool | None:
         """|coro|
 
@@ -935,7 +944,7 @@ class Context(commands.Context, Generic[CogT]):
             await self.maybe_edit(content, **kwargs)
             return self._message
 
-        if self.is_interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
+        if self.is_interaction and self.interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
             # If there is a pending interaction from maybe a hybrid app command left, we should use that instead
             kwargs.pop('reference', None)
             kwargs.pop('mention_author', None)
@@ -967,7 +976,7 @@ class Context(commands.Context, Generic[CogT]):
 
     async def defer(self, *, ephemeral: bool = False, typing: bool = False) -> None:
         """Defers the response of the interaction or starts typing if it's a regular message."""
-        if self.is_interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
+        if self.is_interaction and self.interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
             await self.interaction.response.defer(ephemeral=ephemeral)
         else:
             if typing:

@@ -6,7 +6,7 @@ import logging
 import math
 import random
 from contextlib import suppress
-from typing import Annotated, Any, NamedTuple, TypeVar
+from typing import Annotated, Any, NamedTuple
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
 import discord
@@ -36,7 +36,7 @@ class LevelSetFlags(Flags):
 
 
 class AnyLevelChannel(commands.Converter, app_commands.Transformer):
-    async def convert(self, ctx: Context, argument: str) -> discord.TextChannel | str:
+    async def convert(self, ctx: Context, argument: str) -> discord.TextChannel | str:  # type: ignore[override]
         if argument.lower() in ('dm', 'channel'):
             return argument.lower()
         return await commands.TextChannelConverter().convert(ctx, argument)
@@ -64,7 +64,8 @@ class AddLevelRoleModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         level = int(self.level.value)
         if not 1 <= level <= _MAX_LEVEL:
-            return await interaction.response.send_message(f'Level must be between 1 and {_MAX_LEVEL}.', ephemeral=True)
+            await interaction.response.send_message(f'Level must be between 1 and {_MAX_LEVEL}.', ephemeral=True)
+            return
 
         self.view._roles[self.role.id] = level
         self.view.remove_select.update()
@@ -72,17 +73,18 @@ class AddLevelRoleModal(discord.ui.Modal):
 
 
 class RemoveLevelRolesSelect(discord.ui.RoleSelect['InteractiveLevelRolesView']):
-    def __init__(self, roles_ref: dict[SnowflakeT, int], ctx: Context) -> None:
+    def __init__(self, roles_ref: dict[int, int], ctx: Context) -> None:
         self._roles_ref = roles_ref
         self._ctx = ctx
         super().__init__(placeholder='Remove level roles...', row=1, max_values=25)
         self.update()
 
     def update(self) -> None:
+        assert self._ctx.guild is not None
         self.options = [
             discord.SelectOption(
                 label=f'Level {level}',
-                description=f'@{self._ctx.guild.get_role(role_id)}',
+                description=f'@{self._ctx.guild.get_role(int(role_id))}',
                 value=str(role_id),
                 emoji=Emojis.trash,
             )
@@ -94,6 +96,7 @@ class RemoveLevelRolesSelect(discord.ui.RoleSelect['InteractiveLevelRolesView'])
         self.max_values = len(self.options)
 
     async def callback(self, interaction: discord.Interaction) -> Any:
+        assert self.view is not None
         try:
             for value in self.values:
                 self._roles_ref.pop(int(value))  # type: ignore
@@ -113,6 +116,7 @@ class RoleStackToggle(discord.ui.Button['InteractiveLevelRolesView']):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
         self.view._role_stack = new = not self.view._role_stack
         self.label = f'{'Disable' if new else 'Enable'} Role Stack'
         await interaction.response.edit_message(embed=self.view.make_embed(), view=self.view)
@@ -132,7 +136,7 @@ class InteractiveLevelRolesView(View):
 
     def make_embed(self) -> discord.Embed:
         embed = discord.Embed(color=helpers.Colour.white(), timestamp=self.ctx.now)
-        embed.set_author(name=f'{self.ctx.guild} Level Role Rewards', icon_url=self.ctx.guild.icon.url)
+        embed.set_author(name=f'{self.ctx.guild} Level Role Rewards', icon_url=self.ctx.guild.icon.url if self.ctx.guild.icon else None)
         embed.set_footer(text='Make sure to save your changes by pressing the Save button!')
 
         indicator = 'Users can accumulate multiple level roles.' if self._role_stack else 'Users can only have the highest level role.'
@@ -163,26 +167,29 @@ class InteractiveLevelRolesView(View):
     async def add_level_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect) -> None:
         role = select.values[0]
         if role.is_default() or role.managed:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 'That role is a default role or managed role, which means I am unable to assign it.\n'
                 'Try using a different role or creating a new one.',
                 ephemeral=True,
             )
+            return
 
+        assert self.ctx.guild is not None
         if not role.is_assignable():
-            return await interaction.response.send_message(
-                f'That role is lower than or equal to my top role ({self.ctx.me.top_role.mention}) in the role hierarchy, '
-                f'which means I am unable to assign it.\nTry moving the role to be lower than {self.ctx.me.top_role.mention}, '
+            await interaction.response.send_message(
+                f'That role is lower than or equal to my top role ({self.ctx.guild.me.top_role.mention}) in the role hierarchy, '
+                f'which means I am unable to assign it.\nTry moving the role to be lower than {self.ctx.guild.me.top_role.mention}, '
                 'and then try again.',
                 ephemeral=True,
             )
+            return
         await interaction.response.send_modal(AddLevelRoleModal(self, role=role))
 
     @discord.ui.button(label='Save', style=discord.ButtonStyle.success, row=2)
     async def save(self, interaction: discord.Interaction, _) -> None:
         await self.config.update(level_roles=self._roles, role_stack=self._role_stack)
         for child in self.children:
-            child.disabled = True
+            child.disabled = True  # type: ignore[misc]
 
         embed = self.make_embed()
         embed.colour = helpers.Colour.yellow()
@@ -197,7 +204,7 @@ class InteractiveLevelRolesView(View):
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger, row=2)
     async def cancel(self, interaction: discord.Interaction, _) -> None:
         for child in self.children:
-            child.disabled = True
+            child.disabled = True  # type: ignore[misc]
 
         embed = self.make_embed()
         embed.colour = helpers.Colour.light_red()
@@ -222,7 +229,7 @@ class InteractiveMultiplierView(View):
 
     def make_embed(self) -> discord.Embed:
         embed = discord.Embed(color=helpers.Colour.white(), timestamp=self.ctx.now)
-        embed.set_author(name=f'{self.ctx.guild} Level Role Rewards', icon_url=self.ctx.guild.icon.url)
+        embed.set_author(name=f'{self.ctx.guild} Level Role Rewards', icon_url=self.ctx.guild.icon.url if self.ctx.guild.icon else None)
         embed.set_footer(text='Make sure to save your changes by pressing the Save button!')
 
         indicator = 'Users can accumulate multiple level roles.' if self._role_stack else 'Users can only have the highest level role.'
@@ -250,8 +257,8 @@ class InteractiveMultiplierView(View):
 class CooldownManager:
     """A class to manage cooldowns for the leveling system."""
 
-    def __init__(self, guild_id: SnowflakeT, *, rate: int, per: float) -> None:
-        self.guild_id: SnowflakeT = guild_id
+    def __init__(self, guild_id: int, *, rate: int, per: float) -> None:
+        self.guild_id: int = guild_id
 
         self.rate: int = rate
         self.per: float = per
@@ -262,6 +269,8 @@ class CooldownManager:
         assert message.guild is not None
         current = message.created_at.timestamp()
         bucket = self._cooldown.get_bucket(message, current=current)
+        if bucket is None:
+            return None
         return bucket.update_rate_limit(current)
 
     def can_gain(self, message: discord.Message) -> bool:
@@ -275,7 +284,7 @@ class GainConfig(NamedTuple):
 
 class LevelingSpec(NamedTuple):
     """Represents the leveling configuration for a guild."""
-    guild_id: SnowflakeT
+    guild_id: int
     base: int
     factor: float
     gain: GainConfig
@@ -292,10 +301,6 @@ class LevelingSpec(NamedTuple):
 
     def get_xp_gain(self, multiplier: float = 1.0) -> int:
         return round(random.randint(*self.gain) * multiplier)
-
-
-T = TypeVar('T')
-SnowflakeT = TypeVar('SnowflakeT', bound=discord.abc.Snowflake | int)
 
 
 class GuildLevelConfig(BaseRecord):
@@ -347,9 +352,9 @@ class GuildLevelConfig(BaseRecord):
             per=self.cooldown_per
         )
 
-        self.level_roles: dict[SnowflakeT, int] = sanitize_snowflakes(self.level_roles)
-        self.multiplier_roles: dict[SnowflakeT, int] = sanitize_snowflakes(self.multiplier_roles)
-        self.multiplier_channels: dict[SnowflakeT, int] = sanitize_snowflakes(self.multiplier_channels)
+        self.level_roles = sanitize_snowflakes(self.level_roles)  # type: ignore[assignment]
+        self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)  # type: ignore[assignment]
+        self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)  # type: ignore[assignment]
 
     def __bool__(self):
         return self.enabled
@@ -444,18 +449,22 @@ class LevelConfig(BaseRecord):
         return not self.config.cooldown_manager.can_gain(message)
 
     def can_gain(self, message: discord.Message) -> bool:
+        user = self.user
+        if user is None:
+            return False
         return (
-                self.user.id not in self.config.blacklisted_users
+                user.id not in self.config.blacklisted_users
                 and message.channel.id not in self.config.blacklisted_channels
-                and not any(self.user._roles.has(role) for role in self.config.blacklisted_roles)
+                and not any(user._roles.has(role) for role in self.config.blacklisted_roles)
                 and not self.is_ratelimited(message)
         )
 
     def get_multiplier(self, message: discord.Message) -> float:
         multiplier = 1.0
+        user = self.user
 
         for role_id, multi in self.config.multiplier_roles.items():
-            if self.user._roles.has(role_id):
+            if user is not None and user._roles.has(role_id):
                 multiplier += multi
 
         if message.channel.id in self.config.multiplier_channels:
@@ -474,10 +483,16 @@ class LevelConfig(BaseRecord):
             case 1:
                 func = message.reply
             case 2:
-                dm_channel = await self.user.create_dm()
+                user = self.user
+                if user is None:
+                    return
+                dm_channel = await user.create_dm()
                 func = dm_channel.send
             case custom:
-                func = self.cog.bot.get_channel(custom).send
+                channel = self.cog.bot.get_channel(custom)
+                if not isinstance(channel, discord.abc.Messageable):
+                    return
+                func = channel.send
 
         content = self.config.special_level_up_messages.get(
             level,
@@ -495,6 +510,10 @@ class LevelConfig(BaseRecord):
         await self.add_xp(gain, message=message)
 
     async def update_roles(self, level: int) -> None:
+        user = self.user
+        if user is None:
+            return
+
         roles = self.config.level_roles
         if not roles:
             return
@@ -503,18 +522,18 @@ class LevelConfig(BaseRecord):
         if _new:
             _new = max(_new, key=lambda r: r[1]),
 
-        _new = {k for k, v in _new}
-        _old = set(self.user._roles)
+        _new_ids: set[int] = {int(k) for k, v in _new}
+        _old: set[int] = set(user._roles)
 
-        new = _old | _new
-        new.difference_update(role for role in roles if role not in _new)
+        new: set[int] = _old | _new_ids
+        new.difference_update(int(role) for role in roles if role not in _new_ids)
 
-        if new == self.user.roles:
+        if new == {r.id for r in user.roles}:
             return
 
         reason = f'Overwrting roles for level {level}.'
         with suppress(discord.HTTPException):
-            await self.user.edit(roles=list(map(discord.Object, new)), reason=reason)
+            await user.edit(roles=list(map(discord.Object, new)), reason=reason)
 
     async def add_xp(self, xp: int, *, message: discord.Message) -> tuple[int, int]:
         self.xp += xp
@@ -566,7 +585,7 @@ class LevelConfig(BaseRecord):
             LIMIT 1;
         """
         record = await (connection or self.cog.bot.db).fetchval(query, self.user_id, self.guild_id)
-        return record
+        return int(record) if record is not None else 0
 
     async def _update(
             self,
@@ -652,7 +671,7 @@ class Leveling(Cog):
         if not record:
             query = "INSERT INTO levels (user_id, guild_id) VALUES ($1, $2) RETURNING *;"
             record: asyncpg.Record = await self.bot.db.fetchrow(query, user_id, guild_id)
-        return LevelConfig(cog=self, config=await self.get_guild_level_config(guild_id), record=record)
+        return LevelConfig(cog=self, config=await self.get_guild_level_config(guild_id), record=record)  # type: ignore[misc]
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -662,7 +681,7 @@ class Leveling(Cog):
         if message.author.bot:
             return
 
-        guild_config: GuildLevelConfig = await self.get_guild_level_config(message.guild.id)
+        guild_config: GuildLevelConfig = await self.get_guild_level_config(message.guild.id)  # type: ignore[misc]
 
         if guild_config is None:
             return
@@ -682,7 +701,7 @@ class Leveling(Cog):
 
     @Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
-        guild_config = await self.get_guild_level_config(member.guild.id)
+        guild_config = await self.get_guild_level_config(member.guild.id)  # type: ignore[misc]
         if guild_config is None:
             return
 
@@ -711,7 +730,10 @@ class Leveling(Cog):
 
         await ctx.defer(typing=True)
 
-        config: LevelConfig = await self.get_level_config(user.id, user.guild.id)
+        config: LevelConfig | None = await self.get_level_config(user.id, user.guild.id)
+        if config is None:
+            await ctx.send_error(f'**{user}** has not gained any XP yet.')
+            return
 
         if config.xp == 0:
             await ctx.send_error(f'**{user}** has not gained any XP yet.')
@@ -732,6 +754,7 @@ class Leveling(Cog):
     )
     async def leaderboard(self, ctx: Context) -> None:
         """View the Top 10 users of the server."""
+        assert ctx.guild is not None
         query = "SELECT user_id, level, xp, messages FROM levels WHERE guild_id = $1 AND messages > 0 ORDER BY messages DESC LIMIT 10;"
         records = await ctx.db.fetch(query, ctx.guild.id)
 
@@ -765,7 +788,8 @@ class Leveling(Cog):
             flags: LevelSetFlags
     ) -> None:
         """Set a users experience/level."""
-        guild_config: GuildLevelConfig = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        guild_config: GuildLevelConfig | None = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if guild_config is None or (guild_config and not guild_config.enabled):
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -778,7 +802,8 @@ class Leveling(Cog):
             await ctx.send_error('You need to provide either a level or xp to set.')
             return
 
-        config: LevelConfig = await self.get_level_config(target.id, target.guild.id)
+        config: LevelConfig | None = await self.get_level_config(target.id, target.guild.id)
+        assert config is not None
 
         if flags.level:
             if flags.level > _MAX_LEVEL:
@@ -808,7 +833,8 @@ class Leveling(Cog):
     )
     async def level_config(self, ctx: Context) -> None:
         """Leveling Configuration Commands."""
-        config: GuildLevelConfig = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config: GuildLevelConfig | None = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -872,7 +898,8 @@ class Leveling(Cog):
                                      config.multiplier_channels.items()) or default, 1024),
             inline=False)
 
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        if ctx.guild is not None:
+            embed.set_thumbnail(url=get_asset_url(ctx.guild))
         embed.set_footer(text='Leveling Configuration for this Server.')
         await ctx.send(embed=embed)
 
@@ -885,7 +912,8 @@ class Leveling(Cog):
     @describe(enabled='Boolean to enable or disable leveling. If not provided, it will toggle.')
     async def level_config_toggle(self, ctx: Context, enabled: bool) -> None:
         """Toggle leveling on or off."""
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if enabled:
             if config is not None:
                 await config.update(enabled=True)
@@ -912,7 +940,8 @@ class Leveling(Cog):
     @describe(delete='Boolean to enable or disable deleting user data after leave.')
     async def level_config_delete_after_leave(self, ctx: Context, delete: bool) -> None:
         """Toggle deleting user data after leave."""
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -929,7 +958,8 @@ class Leveling(Cog):
     )
     async def level_config_roles(self, ctx: Context) -> None:
         """Set the level up message for the server."""
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -949,7 +979,8 @@ class Leveling(Cog):
 
         Use {level} for the level and {user} for the user.
         """
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -964,7 +995,7 @@ class Leveling(Cog):
         user_permissions=PermissionTemplate.manager
     )
     @describe(channel='The channel to set the level up channel to.')
-    async def level_config_channel(self, ctx: Context, channel: AnyLevelChannel = None) -> None:
+    async def level_config_channel(self, ctx: Context, channel: AnyLevelChannel | None = None) -> None:
         """Set the level up channel for the server.
 
         Leave `channel` empty to don't send level up messages, use `dm` for DMs
@@ -972,22 +1003,25 @@ class Leveling(Cog):
 
         Note: To set the channel to dm or current channel, please use the text command version of this command.
         """
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
 
         if channel is None:
             channel_id = 0
-        else:
-            assert isinstance(channel, (discord.TextChannel, str))
+        elif isinstance(channel, str):
             match channel:
                 case 'dm':
                     channel_id = 2
                 case 'channel':
                     channel_id = 1
                 case _:
-                    channel_id = channel.id
+                    channel_id = 0
+        else:
+            assert isinstance(channel, discord.TextChannel)
+            channel_id = channel.id
 
         await config.update(level_up_channel=channel_id)
         await ctx.send_success('Level up channel has been updated.')
@@ -1005,7 +1039,8 @@ class Leveling(Cog):
 
         You can ignore roles, channels and users from the leveling system.
         """
-        config: GuildLevelConfig = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config: GuildLevelConfig | None = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -1039,7 +1074,8 @@ class Leveling(Cog):
     async def level_config_unignore(
             self, ctx: Context, entities: Annotated[list[IgnoreableEntity], commands.Greedy[IgnoreEntity]]) -> None:
         """Unset ignored entities for the leveling system."""
-        config: GuildLevelConfig = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config: GuildLevelConfig | None = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return
@@ -1071,7 +1107,8 @@ class Leveling(Cog):
     )
     async def level_config_multipliers(self, ctx: Context) -> None:
         """Set the multiplier roles for the server."""
-        config = await self.get_guild_level_config(ctx.guild.id)
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
         if not config:
             await ctx.send_error('Leveling is not enabled in this server.')
             return

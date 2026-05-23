@@ -5,7 +5,7 @@ import csv
 import datetime
 import io
 import re
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 import asyncpg
 import discord
@@ -29,7 +29,7 @@ from app.utils.pagination import LinePaginator
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
 
 class TagPageEntry(BaseRecord):
@@ -50,7 +50,7 @@ class TagNameOrID(commands.clean_content):
         self.with_id: bool = with_id
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str | int:
+    async def convert(self, ctx: Context, argument: str) -> str | int:  # type: ignore[override]
         converted = await super().convert(ctx, argument)
         lower = converted.lower().strip()
 
@@ -61,9 +61,12 @@ class TagNameOrID(commands.clean_content):
             raise BadArgument(
                 f'Tag names must be 100 characters or less. (You have *{len(lower)}* characters)')
 
-        cog: Tags | None = ctx.bot.get_cog('Tags')
+        cog: Tags | None = cast('Tags | None', ctx.bot.get_cog('Tags'))
         if cog is None:
             raise BadArgument('Tags are currently unavailable.')
+
+        if ctx.guild is None:
+            raise BadArgument('This command can only be used in a server.')
 
         if cog.is_tag_reserved(ctx.guild.id, argument):
             raise BadArgument('Hey, that\'s a reserved tag name. Choose another one.')
@@ -81,7 +84,7 @@ class TagContent(commands.clean_content):
         self.required = required
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str:
+    async def convert(self, ctx: Context, argument: str) -> str:  # type: ignore[override]
         if not argument and not self.required:
             return argument
 
@@ -98,7 +101,7 @@ class TagSearchFlags(Flags):
     query: str | None = flag(description='The query to search for', aliases=['q'])
     sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
         description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
+    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])  # type: ignore[assignment]
 
 
 class TagListFlags(Flags):
@@ -107,7 +110,7 @@ class TagListFlags(Flags):
     query: str | None = flag(description='The query to search for', aliases=['q'])
     sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
         description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
+    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])  # type: ignore[assignment]
 
 
 class TagTransferConfirmButton(
@@ -127,10 +130,10 @@ class TagTransferConfirmButton(
         )
 
     @classmethod
-    async def from_custom_id(
-            cls, interaction: discord.Interaction[Bot], _, match: re.Match[str], /
+    async def from_custom_id(  # type: ignore[override]
+            cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> TagTransferConfirmButton:
-        cog: Tags | None = interaction.client.get_cog('Tags')
+        cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
         if cog is None:
             await interaction.response.send_message(
                 f'{Emojis.error} Sorry, this button does not work at the moment. Try again later', ephemeral=True
@@ -141,11 +144,13 @@ class TagTransferConfirmButton(
         from_id = int(match['from_id'])
         tag = await cog.get_tag(tag_id, owner_id=from_id)
         if tag is None:
-            await interaction.message.delete()
+            if interaction.message is not None:
+                await interaction.message.delete()
             raise AppBadArgument(f'{Emojis.error} Tag was not found')
 
-        if tag.owner_id != -1:
-            await interaction.message.delete()
+        if not isinstance(tag, Tag) or tag.owner_id != -1:
+            if interaction.message is not None:
+                await interaction.message.delete()
             raise AppBadArgument(f'{Emojis.error} Tag is not pending for transfer.')
 
         return cls(tag, from_id)
@@ -157,8 +162,10 @@ class TagTransferConfirmButton(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        assert isinstance(interaction.user, discord.Member)
         await self.tag.transfer(interaction.user, only_parent=True)
-        await interaction.message.delete()
+        if interaction.message is not None:
+            await interaction.message.delete()
         await interaction.response.send_message(
             f'{Emojis.success} Tag **{self.tag.name}** [`{self.tag.id}`] was successfully transferred to you.',
             ephemeral=True)
@@ -181,10 +188,10 @@ class TagTransferDeclineButton(
         )
 
     @classmethod
-    async def from_custom_id(
-            cls, interaction: discord.Interaction[Bot], _, match: re.Match[str], /
-    ) -> TagTransferConfirmButton:
-        cog: Tags | None = interaction.client.get_cog('Tags')
+    async def from_custom_id(  # type: ignore[override]
+            cls, interaction: discord.Interaction, _, match: re.Match[str], /
+    ) -> TagTransferDeclineButton:
+        cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
         if cog is None:
             await interaction.response.send_message(
                 f'{Emojis.error} Sorry, this button does not work at the moment. Try again later', ephemeral=True
@@ -195,11 +202,13 @@ class TagTransferDeclineButton(
         from_id = int(match['from_id'])
         tag = await cog.get_tag(tag_id, owner_id=from_id)
         if tag is None:
-            await interaction.message.delete()
+            if interaction.message is not None:
+                await interaction.message.delete()
             raise AppBadArgument(f'{Emojis.error} Tag was not found')
 
-        if tag.owner_id != -1:
-            await interaction.message.delete()
+        if not isinstance(tag, Tag) or tag.owner_id != -1:
+            if interaction.message is not None:
+                await interaction.message.delete()
             raise AppBadArgument(f'{Emojis.error} Tag is not pending for transfer.')
 
         return cls(tag, from_id)
@@ -212,7 +221,8 @@ class TagTransferDeclineButton(
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await self.tag.update(owner_id=self.from_id)
-        await interaction.message.delete()
+        if interaction.message is not None:
+            await interaction.message.delete()
         await interaction.response.send_message(f'{Emojis.success} Tag transfer was declined.', ephemeral=True)
 
 
@@ -257,6 +267,11 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
                 f'{Emojis.error} Consider using a shorter description for your Tag. (2000 max characters)',
                 ephemeral=True)
         else:
+            if interaction.guild_id is None:
+                await interaction.response.send_message(
+                    f'{Emojis.error} This command can only be used in a server.', ephemeral=True)
+                return
+            assert isinstance(name, str)
             with self.cog.reserve_tag(interaction.guild_id, name):
                 await self.cog.create_tag(self.ctx, name, content)
 
@@ -386,8 +401,8 @@ class Tag(BaseRecord):
         only_parent: bool
             Whether to only transfer the parent tag or all aliases as well.
         """
-        async with self.bot.db.acquire() as conn, conn.transaction():
-            await self.update(owner_id=to.id, connection=conn)
+        async with self.bot.db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
+            await self.update(owner_id=to.id, connection=conn)  # type: ignore[arg-type]
             if not only_parent:
                 query = "UPDATE tag_lookup SET owner_id=$1 WHERE parent_id=$2;"
                 await conn.execute(query, to.id, self.id)
@@ -425,7 +440,7 @@ class AliasTag(BaseRecord):
 
         """
         con = self.parent.bot.db if self.parent else connection
-        async with con.acquire() as conn, conn.transaction():
+        async with con.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             query = "UPDATE tag_lookup SET owner_id=$1 WHERE id=$2;"
             await conn.execute(query, to.id, self.id)
 
@@ -435,6 +450,7 @@ class AliasTag(BaseRecord):
         Deletes the alias.
         """
         query = "DELETE FROM tag_lookup WHERE id=$1;"
+        assert self.parent is not None, "AliasTag.delete requires a parent tag with a bot reference"
         await self.parent.bot.db.execute(query, self.id)
 
 
@@ -453,7 +469,7 @@ class Tags(Cog):
         self._temporary_reserved_tags: dict[int, set[str]] = {}
 
     @contextlib.contextmanager
-    def reserve_tag(self, guild_id: int, name: str, /) -> None:
+    def reserve_tag(self, guild_id: int, name: str, /) -> Generator[None, None, None]:
         """Reserves a tag name for a guild.
 
         This is to avoid two users creating a tag with the same name at the same time.
@@ -517,7 +533,7 @@ class Tags(Cog):
         """
         form: dict[str, Any] = {}
         parent_form: dict[str, Any] = {}
-        is_id: bool = isinstance(name_or_id, int) or name_or_id.isdigit()
+        is_id: bool = isinstance(name_or_id, int) or (isinstance(name_or_id, str) and name_or_id.isdigit())
 
         if is_id:
             parent_form['tags.id'] = name_or_id
@@ -599,28 +615,31 @@ class Tags(Cog):
         escape_markdown: bool
             Whether to escape the markdown in the Tag content.
         """
-        tag: list[AliasTag] | Tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, similarites=True)
+        assert ctx.guild is not None
+        result = await self.get_tag(name_or_id, location_id=ctx.guild.id, similarites=True)
 
-        if isinstance(tag, list):
+        if isinstance(result, list):
             # Assuming no tags were found and similarites are returned instead
-            if len(tag) == 0:
+            if len(result) == 0:
                 raise BadArgument(f'No Tag with the name or ID `{name_or_id}` found.', 'name_or_id')
             else:
                 embed = discord.Embed(title='*Did you mean ...*', colour=helpers.Colour.white())
                 await LinePaginator.start(
-                    ctx, entries=[f'* **{r.name}** [`{r.id}`]' for r in tag], embed=embed, per_page=20)
+                    ctx, entries=[f'* **{r.name}** [`{r.id}`]' for r in result], embed=embed, per_page=20)
             return
 
-        if not tag:
+        if not result:
             raise BadArgument(f'No Tag with the name or ID `{name_or_id}` found.', 'name_or_id')
 
+        tag: Tag = result  # type: ignore[assignment]
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
         else:
             await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
 
         _aliases = getattr(tag, 'aliases', None)
-        tag = await tag.add(uses=1)
+        updated = await tag.add(uses=1)  # type: ignore[union-attr]
+        tag = updated  # type: ignore[assignment]
         if _aliases:
             tag.aliases = _aliases
 
@@ -657,7 +676,11 @@ class Tags(Cog):
             await tr.start()
 
             try:
+                assert ctx.guild is not None
                 await connection.execute(query, name, content, ctx.author.id, ctx.guild.id)
+            except AssertionError:
+                await tr.rollback()
+                raise BadArgument('This command can only be used in a server.', 'name')
             except Exception as e:
                 await tr.rollback()
                 match e:
@@ -697,7 +720,7 @@ class Tags(Cog):
 
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
+    ) -> list[app_commands.Choice[str]]:
         query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses;"
         tags: list[Tag] = [
             Tag(bot=self.bot, record=record) for record in await self.bot.db.fetch(query, interaction.guild_id)]
@@ -710,7 +733,7 @@ class Tags(Cog):
 
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
+    ) -> list[app_commands.Choice[str]]:
         query = """
             SELECT tag_lookup.*
             FROM tag_lookup
@@ -729,7 +752,7 @@ class Tags(Cog):
 
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
+    ) -> list[app_commands.Choice[str]]:
         query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses;"
         tags: list[Tag] = [
             Tag(bot=self.bot, record=record) for record in await
@@ -792,6 +815,7 @@ class Tags(Cog):
             WHERE tag_lookup.location_id = $3
               AND LOWER(tag_lookup.name) = $2;
         """
+        assert ctx.guild is not None
         try:
             status = await ctx.db.execute(query, new_alias, original_tag.lower(), ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
@@ -824,6 +848,7 @@ class Tags(Cog):
         The tag content must be less than 2000 characters long.
         `Note:` You can create aliases for Tags using `tags alias <alias-name> <original-name>`
         """
+        assert ctx.guild is not None
         with self.reserve_tag(ctx.guild.id, name):
             await self.create_tag(ctx, name, content)
 
@@ -870,10 +895,12 @@ class Tags(Cog):
         finally:
             ctx.message = original
 
-        tag = self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True, exact_match=True)
+        assert ctx.guild is not None
+        tag = await self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True, exact_match=True)
         if tag is not None:
             raise BadArgument('A Tag with this name already exists.')
 
+        assert isinstance(name, str)
         with self.reserve_tag(ctx.guild.id, name):
             content_prompt = (
                 f'The new Tags name is **{name}**.\n'
@@ -894,13 +921,15 @@ class Tags(Cog):
                 await self.create_tag(ctx, name, clean_content)
 
         try:
-            await ctx.channel.delete_messages(messages)
+            if hasattr(ctx.channel, 'delete_messages'):
+                await ctx.channel.delete_messages(messages)  # type: ignore[union-attr]
         except discord.HTTPException:
             pass
 
     async def guild_tag_stats(self, ctx: Context) -> None:
+        assert ctx.guild is not None
         embed = discord.Embed(colour=helpers.Colour.white(), title=f'Tag Statistics for {ctx.guild.name}')
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.set_footer(text='Tag Statistics for this Server.')
 
         total_tags_query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
@@ -912,11 +941,12 @@ class Tags(Cog):
             total_uses_query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag';"
             total_uses = await self.bot.db.fetchval(total_uses_query, ctx.guild.id)
 
+            joined_at = ctx.me.joined_at if isinstance(ctx.me, discord.Member) else None
             embed.add_field(
                 name='**Guild Stats**',
                 value=f'Total Tags: **{total_tags}**\n'
                       f'Total Uses: **{total_uses}**\n\n'
-                      f'*with **{usage_per_day(ctx.me.joined_at, total_uses):.2f}** tag uses per day*',
+                      f'*with **{usage_per_day(joined_at, total_uses):.2f}** tag uses per day*',  # type: ignore[arg-type]
                 inline=False
             )
 
@@ -976,6 +1006,7 @@ class Tags(Cog):
 
     @staticmethod
     async def member_tag_stats(ctx: Context, member: discord.Member | discord.User) -> None:
+        assert ctx.guild is not None
         query = """
             SELECT COUNT(*) OVER ()  AS "count",
                    SUM(uses) OVER () AS "total_uses"
@@ -997,7 +1028,7 @@ class Tags(Cog):
         embed.set_footer(text='Tag Stats for this Member.')
 
         query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag' AND author_id=$2;"
-        count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore
+        count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore[assignment]
 
         embed.add_field(name='**Tag Command invoked**', value=f'**{count[0]}** times', inline=False)
         embed.add_field(name='**Owned Tags**', value=records['count'])
@@ -1069,14 +1100,16 @@ class Tags(Cog):
 
         You can only edit the name of the tag in within the modal.
         """
+        assert ctx.guild is not None
         await ctx.defer()
 
-        tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
-        if not tag:
+        if not raw_tag or not isinstance(raw_tag, Tag):
             raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
                               'name_or_id')
 
+        tag: Tag = raw_tag
         name = tag.name
         if content is None and use_embed is None:
             if ctx.interaction is None:
@@ -1115,20 +1148,25 @@ class Tags(Cog):
         Your Tags can also be removed by Moderators if they have the `MANAGE MESSAGES` permission.
         `Note:` This will also remove all aliases of the tag.
         """
+        assert ctx.guild is not None
         form = {
             'location_id': ctx.guild.id,
             'only_parent': True,
         }
-        if not (ctx.author.id == self.bot.owner_id or ctx.author.guild_permissions.manage_messages):
+        can_manage = (
+            ctx.author.id == self.bot.owner_id
+            or (isinstance(ctx.author, discord.Member) and ctx.author.guild_permissions.manage_messages)
+        )
+        if not can_manage:
             form['owner_id'] = ctx.author.id
 
-        tag = await self.get_tag(name_or_id, **form)
+        raw_tag = await self.get_tag(name_or_id, **form)
 
-        if not tag:
+        if not raw_tag or isinstance(raw_tag, list):
             raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
                               'name_or_id')
 
-        await tag.delete()
+        await raw_tag.delete()
 
     @tag.command(
         'info',
@@ -1145,12 +1183,14 @@ class Tags(Cog):
             name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
     ) -> None:
         """Shows you Information about a Tag."""
-        tag = await self.get_tag(name_or_id, location_id=ctx.guild.id)
+        assert ctx.guild is not None
+        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id)
 
-        if tag is None:
+        if raw_tag is None or isinstance(raw_tag, list) or not isinstance(raw_tag, Tag):
             raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
                               'name_or_id')
 
+        tag: Tag = raw_tag
         embed = discord.Embed(title='Tag Info', description=f'**```{tag.name}```**\n')
         embed.add_field(name='**Owner**', value=f'<@{tag.owner_id}>')
 
@@ -1168,7 +1208,7 @@ class Tags(Cog):
 
         if tag.aliases:
             aliases_info = [
-                f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})'
+                f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})'
                 for alias in tag.aliases
             ]
             embed.add_field(name=f'**Aliases ({len(tag.aliases)})**', value='\n'.join(aliases_info), inline=False)
@@ -1212,6 +1252,7 @@ class Tags(Cog):
         list[asyncpg.Record]
             The list of Tags that were found.
         """
+        assert ctx.guild is not None
         SORT = {
             'id': 'id',
             'newest': 'created_at DESC',
@@ -1220,8 +1261,9 @@ class Tags(Cog):
         }.get(flags.sort, 'name')
 
         member: discord.Member | None = None
-        if hasattr(flags, 'member'):
-            member = flags.member or ctx.author
+        if isinstance(flags, TagListFlags):
+            raw_member = flags.member or ctx.author
+            member = raw_member if isinstance(raw_member, discord.Member) else None  # type: ignore[assignment]
 
         if not flags.query:
             query = """
@@ -1273,9 +1315,10 @@ class Tags(Cog):
         if flags.to_text:
             return await self.send_tags_to_text(ctx, rows)
 
+        guild_name = ctx.guild.name if ctx.guild is not None else 'this server'
         embed = discord.Embed(
             title='Tag Search',
-            description=f'**{member}\'s** Tags in {ctx.guild.name}\n'
+            description=f'**{member}\'s** Tags in {guild_name}\n'
                         f'Sorted by: **{flags.sort}**',
             colour=helpers.Colour.white(),
             timestamp=discord.utils.utcnow())
@@ -1338,6 +1381,7 @@ class Tags(Cog):
     @describe(member='The member to remove all tags of')
     async def tag_purge(self, ctx: Context, member: discord.User) -> None:
         """Bulk remove all Tags and assigned Aliases of a given User."""
+        assert ctx.guild is not None
         query = "SELECT COUNT(*) FROM tags WHERE location_id=$1 AND owner_id=$2;"
         count: int = await self.bot.db.fetchval(query, ctx.guild.id, member.id)
 
@@ -1351,7 +1395,7 @@ class Tags(Cog):
             return
 
         query = "DELETE FROM tags WHERE location_id=$1 AND owner_id=$2;"
-        await ctx.db.execute(query, ctx.guild.id, member.id)
+        await ctx.db.execute(query, ctx.guild.id, member.id)  # guild already asserted above
 
         await ctx.send_success(f'Successfully removed all **{count}** tags that belong to **{member}**.')
 
@@ -1370,15 +1414,21 @@ class Tags(Cog):
             name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
     ) -> None:
         """Claim a tag by yourself if the User is not in this server anymore or the tag has no owner."""
-        tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, exact_match=True)
+        assert ctx.guild is not None
+        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, exact_match=True)
 
+        if raw_tag is None or isinstance(raw_tag, list):
+            raise BadArgument('Could not find a tag with that name.', 'name_or_id')
+
+        tag: Tag | AliasTag = raw_tag
         member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
         if member is not None:
             await ctx.send_error(f'Tag **{tag.name}** is already owned by **{member}**.')
             return
 
+        assert isinstance(ctx.author, discord.Member)
         if isinstance(tag, AliasTag):
-            await tag.transfer(ctx.author, connection=self.bot.db)  # type: ignore
+            await tag.transfer(ctx.author, connection=self.bot.db)  # type: ignore[arg-type]
         else:
             await tag.transfer(ctx.author, only_parent=True)
 
@@ -1400,17 +1450,19 @@ class Tags(Cog):
             name_or_id: Annotated[str, TagNameOrID(with_id=True)]  # type: ignore
     ) -> None:
         """Transfer a tag owned by you to another member."""
+        assert ctx.guild is not None
         if member.bot:
             await ctx.send_error('You cannot transfer tags to bots.')
             return
 
-        tag = await self.get_tag(
+        raw_tag = await self.get_tag(
             name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
-        if tag is None:
+        if raw_tag is None or not isinstance(raw_tag, Tag):
             raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
                               'name_or_id')
 
+        tag: Tag = raw_tag
         view = View.from_items(TagTransferConfirmButton(tag, ctx.author.id),
                                TagTransferDeclineButton(tag, ctx.author.id), timeout=None)
         embed = discord.Embed(
@@ -1437,6 +1489,7 @@ class Tags(Cog):
             which: Literal['server', 'personal'] = 'personal',
     ) -> None:
         """Exports all your tags/server tags to a csv file."""
+        assert ctx.guild is not None
         form = {
             'location_id': ctx.guild.id,
         }

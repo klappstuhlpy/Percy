@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Self, TypedDict, NotRequired
 
+import discord
 from discord import Asset as _Asset, AppInfo
 from discord import Permissions
 from discord.http import Route
@@ -7,7 +8,17 @@ from discord.state import ConnectionState
 from discord.types.appinfo import AppInfo as AppInfoPayload
 from discord.webhook.async_ import _WebhookState
 
+if TYPE_CHECKING:
+    from app.core.bot import Bot
+
 _State = ConnectionState | _WebhookState
+
+# Type alias for Interaction where client is the custom Bot class.
+# At runtime this is just discord.Interaction; for type-checkers it's Interaction[Bot].
+if TYPE_CHECKING:
+    BotInteraction = discord.Interaction['Bot']
+else:
+    BotInteraction = discord.Interaction
 
 
 class Asset(_Asset):
