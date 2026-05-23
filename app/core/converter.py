@@ -5,7 +5,7 @@ from typing import Any, TypeVar, ClassVar, Coroutine, Literal
 
 import discord
 from aiohttp import ClientConnectorError
-from discord import app_commands, AppCommandOptionType, Colour
+from discord import app_commands, AppCommandOptionType, Colour, Member, User
 from discord.ext import commands
 
 from app.core.models import Context
@@ -34,7 +34,7 @@ class ValidURL(commands.Converter):
     Otherwise, it simply passes through the given URL.
     """
 
-    async def convert(self, ctx: Context, url: str) -> str:
+    async def convert(self, ctx: Context, url: str) -> str:  # type: ignore[override]
         """This converter checks whether the given URL can be reached with a status code of 200."""
         try:
             async with ctx.bot.session.get(url) as resp:
@@ -76,7 +76,7 @@ class CodeblockConverter(commands.Converter[list[str]]):
     )
 
     @classmethod
-    async def convert(cls, ctx: Context, code: str) -> list[str]:
+    async def convert(cls, ctx: Context, code: str) -> list[str]:  # type: ignore[override]
         """Extract code from the Markdown, format it, and insert it into the code template.
 
         If there is any code block, ignore text outside the code block.
@@ -126,7 +126,7 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
         else:
             return result
 
-    async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[Colour]]:
+    async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[Colour]]:  # type: ignore[arg-type]
         results = fuzzy.extract(current, COLOUR_DICT, limit=20)
         return [app_commands.Choice(name=f'{result[0]} ({result[2]})', value=result[2]) for result in results]
 
@@ -190,7 +190,7 @@ class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
                 if m is None:
                     return type('_Hackban', (), {'id': member_id, '__str__': lambda s: f'Member ID {s.id}'})()
 
-        if not can_execute_action(ctx, ctx.author, m):
+        if not can_execute_action(ctx, ctx.author, m):    # type: ignore[arg-type]
             raise commands.BadArgument('You cannot do this action on this user due to role hierarchy.')
         return m
 
@@ -248,7 +248,7 @@ class ActionReason(commands.Converter[str], app_commands.Transformer):
 class UserConverter(commands.UserConverter):
     """A UserConverter that allows the use of 'me' to refer to the command invoker."""
 
-    async def convert(self, ctx: Context, argument: str) -> discord.User:
+    async def convert(self, ctx: Context, argument: str) -> User | Member:
         if argument.lower() == 'me':
             return ctx.author
         return await super().convert(ctx, argument)
@@ -257,7 +257,7 @@ class UserConverter(commands.UserConverter):
 class MemberConverter(commands.MemberConverter):
     """A MemberConverter that allows the use of 'me' to refer to the command invoker."""
 
-    async def convert(self, ctx: Context, argument: str) -> discord.Member:
+    async def convert(self, ctx: Context, argument: str) -> User | Member:
         if argument.lower() == 'me':
             return ctx.author
         return await super().convert(ctx, argument)

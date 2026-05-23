@@ -242,7 +242,7 @@ class store_true_dummy_converter(commands.Converter[bool], app_commands.Transfor
         return value
 
     @property
-    def type(self) -> int:
+    def type(self) -> Literal[AppCommandOptionType.boolean]:
         return AppCommandOptionType.boolean
 
 
@@ -320,7 +320,7 @@ class ConsumeUntilFlag(Converter[T]):
         if not self.converter:
             return argument
 
-        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)
+        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)  # type: ignore[override]
 
 
 def _get_namespaces(attrs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -588,7 +588,7 @@ class FlagMeta(type, Generic[T]):
 
     def inject(cls, command: Command) -> None:
         """Injects the flags into the command."""
-        command.custom_flags = cls.__commands_flags__
+        command.custom_flags = cls.__commands_flags__  # type: ignore[override]
 
 
 class FlagNamespace(Generic[T]):
@@ -669,17 +669,17 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
         return f'<{self.__class__.__name__} {pairs}>'
 
     def __iter__(self) -> Iterator[tuple[str, Any]]:
-        for flag in self.__class__.__commands_flags__.values():
+        for flag in self.__class__.__commands_flags__.values():  # type: ignore[access]
             yield flag.name, getattr(self, flag.attribute)
 
     @classmethod
     def get_flags(cls) -> dict[str, Flag]:
         """Dict[:class:`str`, :class:`Flag`]: A mapping of flag name to flag object this converter has."""
-        return cls.__commands_flags__.copy()
+        return cls.__commands_flags__.copy()  # type: ignore[access]
 
     @classmethod
     def _can_be_constructible(cls) -> bool:
-        return all(not flag.required for flag in cls.__commands_flags__.values())
+        return all(not flag.required for flag in cls.__commands_flags__.values())  # type: ignore[access]
 
     @classmethod
     async def _construct_default(cls, ctx: Context) -> Flags[T]:
@@ -724,7 +724,7 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
             The namespace of flags.
         """
         try:
-            flags: FlagMeta[T] = ctx.command.custom_flags
+            flags: FlagMeta[T] = ctx.command.custom_flags    # type: ignore[arg-defined]
         except Exception as exc:
             raise TypeError(f'bad flag annotation: {exc}')
 

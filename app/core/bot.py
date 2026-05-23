@@ -77,7 +77,7 @@ class CommandTree(app_commands.CommandTree):
             LockedResourceError, app_commands.BotMissingPermissions, AppBadArgument
         )
         if isinstance(error, handle_elsewhere):
-            interaction.client.dispatch('command_error', interaction._baton, error)  # noqa
+            interaction.client.dispatch('command_error', interaction._baton, error)
             return None
 
         embed.add_field(
@@ -146,8 +146,8 @@ class Bot(commands.Bot):
     def __init__(self) -> None:
         key = 'owner_id' if isinstance(owners, int) else 'owner_ids'
 
-        super().__init__(  # type: ignore[call-arg]
-            command_prefix=self.__class__.resolve_command_prefix,  # noqa
+        super().__init__(
+            command_prefix=self.__class__.resolve_command_prefix,
             help_command=PaginatedHelpCommand(),
             description=description,
             case_insensitive=True,
@@ -212,7 +212,7 @@ class Bot(commands.Bot):
         await super().reload_extension(name, package=package)
         self.prepare_jishaku_flags()
 
-    def add_command(self, command: Command, /) -> None:  # type: ignore[override]
+    def add_command(self, command: Command, /) -> None:
         # Resolves custom flags to work with the command.
         if isinstance(command, Command):
             command.transform_flag_parameters()
@@ -264,7 +264,7 @@ class Bot(commands.Bot):
         if test_guild_id is not None:
             self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
 
-    async def get_context(  # type: ignore[override]
+    async def get_context(
             self,
             origin: discord.Message | discord.Interaction,
             /,
@@ -357,13 +357,13 @@ class Bot(commands.Bot):
                 assert ctx.dm_channel is not None
                 send = ctx.dm_channel.send
 
-            if self.is_owner(author):  # type: ignore[arg-type]
+            if await self.is_owner(author):
                 await send(embed=embed)
                 return
 
             await self.stats_webhook.send(embed=embed)
 
-    async def on_command_error(self, ctx: Context, error: Exception) -> Any:  # type: ignore[override]
+    async def on_command_error(self, ctx: Context, error: Exception) -> Any:
         """|coro|
 
         The default command error handler provided by the bot.
@@ -453,13 +453,13 @@ class Bot(commands.Bot):
             param = ctx.current_parameter
             # Search for a given "namespace" parameter in the :class:`.BadArgument`. -> See /app/core/models.py
             if hasattr(error, 'namespace'):
-                _namespace = error.namespace  # type: ignore[attr-defined]
+                _namespace = error.namespace
                 if _namespace in command.clean_params:
-                    param = command.clean_params[_namespace]
+                    param = command.clean_params[_namespace]  # type: ignore[arg-type]
         elif hasattr(error, 'param'):
-            param = error.param  # type: ignore[attr-defined]
+            param = error.param
         else:
-            if not self.is_owner(ctx.author):
+            if not await self.is_owner(ctx.author):
                 self.log.critical('Uncaught error when invoking %s: %s', command.name, error, exc_info=error)
 
                 builder = AnsiStringBuilder()
@@ -577,13 +577,13 @@ class Bot(commands.Bot):
         for feature in features:
             if only_current:
                 if feature in GUILD_FEATURES:
-                    fmt = GUILD_FEATURES[feature]  # type: ignore[index]
+                    fmt = GUILD_FEATURES[feature]
                     if emojize:
                         yield f'{fmt[0]} {feature}', fmt[1]
                     else:
                         yield feature, fmt[1]
             else:
-                fmt = GUILD_FEATURES[feature]  # type: ignore[index]
+                fmt = GUILD_FEATURES[feature]
                 if emojize:
                     yield f'{fmt[0]} {feature}', fmt[1]
                 else:
@@ -597,7 +597,7 @@ class Bot(commands.Bot):
         Returns ``None`` if the user is not in any mutual guilds.
         """
         if isinstance(user, discord.Member):
-            return user  # type: ignore
+            return user
 
         for guild in self.guilds:
             if member := guild.get_member(user.id):
@@ -693,7 +693,7 @@ class Bot(commands.Bot):
         Returns ``None`` if the user is not in any mutual guilds.
         """
         if isinstance(user, discord.Member):
-            return user  # type: ignore
+            return user
 
         for guild in self.guilds:
             if member := guild.get_member(user.id):
@@ -908,9 +908,9 @@ class SpamControl:
             if self._auto_spam_count[author_id] >= 5:
                 await self.apply_penalty(message.author)
                 del self._auto_spam_count[author_id]
-                await self.log_spammer(ctx, message, retry_after, autoblock=True)
+                await self.log_spammer(ctx, message, retry_after, autoblock=True)  # type: ignore[arg-type]
             else:
-                await self.log_spammer(ctx, message, retry_after)
+                await self.log_spammer(ctx, message, retry_after)  # type: ignore[arg-type]
             return True
         else:
             self._auto_spam_count.pop(author_id, None)

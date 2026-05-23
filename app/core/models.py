@@ -172,7 +172,7 @@ class EmbedBuilder(discord.Embed):
         if copied_embed.colour is not None:
             copied_embed.colour = helpers.Colour(copied_embed.colour.value)
 
-        return cls.from_dict(copied_embed.to_dict(), **kwargs)
+        return cls.from_dict(copied_embed.to_dict(), **kwargs)  # type: ignore[arg-type]
 
     @classmethod
     def from_message(
@@ -421,7 +421,7 @@ class Command(commands.Command):
         The custom flags class for the command.
     """
 
-    def __init__(self, func: AsyncCallable[..., Any], **kwargs: Any) -> None:
+    def __init__(self, func: AsyncCallable[Any, Any], **kwargs: Any) -> None:
         self._permissions: PermissionSpec = PermissionSpec.new()
         if user_permissions := kwargs.pop('user_permissions', {}):
             self._permissions.update(user_permissions, 'user')
@@ -1059,13 +1059,13 @@ def define_app_command_impl(
         source: HybridCommand | HybridGroupCommand,
         cls: type[app_commands.Command | app_commands.Group],
         **kwargs: Any,
-) -> Callable[[AsyncCallable[..., Any]], None]:
-    def decorator(func: AsyncCallable | AsyncCallable[..., Any]) -> None:
+) -> Callable[[AsyncCallable[..., Any]], None]:  # type: ignore[arg-type]
+    def decorator(func: AsyncCallable | AsyncCallable[..., Any]) -> None:  # type: ignore[arg-type]
         @functools.wraps(func)
         async def wrapper(self: Cog, inter: discord.Interaction, *args: Any, **kwds: Any) -> Any:
             source.cog = self
             ctx = await self.bot.get_context(inter)
-            ctx.command = source
+            ctx.command = source  # type: ignore[arg-type]
 
             async def invoker(*iargs: P.args, **ikwargs: P.kwargs) -> Any:
                 ctx.args = [ctx.cog, ctx, *iargs]
@@ -1075,11 +1075,11 @@ def define_app_command_impl(
                     return await ctx.bot.invoke(ctx)
 
             ctx.full_invoke = invoker
-            ctx.interaction = inter
+            ctx.interaction = inter  # type: ignore[arg-type]
             return await func(self, ctx, *args, **kwds)
 
         wrapper.__globals__.update(func.__globals__)  # type: ignore
-        source.app_command = cls(
+        source.app_command = cls(  # type: ignore[arg-type]
             name=source.name,
             # description cant be none!
             description=source.short_doc or truncate(source.description, 100),
@@ -1106,7 +1106,7 @@ class HybridCommand(Command, commands.HybridCommand):
 class GroupCommand(commands.Group, Command):
     @discord.utils.copy_doc(commands.Group.command)
     def command(self, *args: Any, **kwargs: Any) -> Callable[..., Command]:
-        def decorator(func: AsyncCallable[..., Any]) -> Command:
+        def decorator(func: AsyncCallable[..., Any]) -> Command:  # type: ignore[arg-type]
             _resolve_kwargs_inheritance(kwargs, self)
             result = command(*args, **kwargs)(func)
             self.add_command(result)  # type: ignore
@@ -1116,7 +1116,7 @@ class GroupCommand(commands.Group, Command):
 
     @discord.utils.copy_doc(commands.Group.group)
     def group(self, *args: Any, **kwargs: Any) -> Callable[..., GroupCommand]:
-        def decorator(func: AsyncCallable[..., Any]) -> GroupCommand:
+        def decorator(func: AsyncCallable[..., Any]) -> GroupCommand:  # type: ignore[arg-type]
             _resolve_kwargs_inheritance(kwargs, self)
             result = group(*args, **kwargs)(func)
             self.add_command(result)  # type: ignore
@@ -1191,42 +1191,6 @@ def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand):
     return new
 
 
-@overload
-def command(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        examples: list[str] = MISSING,
-        hybrid: Literal[True] = False,
-        guild_only: Literal[True] = False,
-        nsfw: Literal[True] = False,
-        **other_kwargs: Any,
-) -> Callable[..., HybridCommand]:
-    ...
-
-
-@overload
-def command(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        examples: list[str] = MISSING,
-        hybrid: Literal[False] = False,
-        guild_only: Literal[False] = False,
-        nsfw: Literal[False] = False,
-        **other_kwargs: Any,
-) -> Callable[..., Command]:
-    ...
-
-
 def command(
         name: str = MISSING,
         *,
@@ -1258,7 +1222,7 @@ def command(
     other_kwargs.setdefault('nsfw', nsfw)
 
     # Apply decorators
-    def decorator(func: AsyncCallable[..., Any]) -> Command:
+    def decorator(func: AsyncCallable[..., Any]) -> Command:  # type: ignore[arg-type]
         func = commands.command(**kwargs, **other_kwargs)(func)
 
         if nsfw:
@@ -1268,38 +1232,6 @@ def command(
         return func
 
     return decorator
-
-
-@overload
-def group(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        hybrid: Literal[True] = False,
-        iwc: bool = True,
-        **other_kwargs: Any,
-) -> Callable[..., HybridGroupCommand]:
-    ...
-
-
-@overload
-def group(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        hybrid: Literal[False] = False,
-        iwc: bool = True,
-        **other_kwargs: Any,
-) -> Callable[..., GroupCommand]:
-    ...
 
 
 def group(
@@ -1325,7 +1257,7 @@ def group(
 
     other_kwargs.setdefault('invoke_without_command', iwc)
 
-    return commands.group(**kwargs, **other_kwargs)
+    return commands.group(**kwargs, **other_kwargs)  # type: ignore[arg-type]
 
 
 @discord.utils.copy_doc(commands.cooldown)

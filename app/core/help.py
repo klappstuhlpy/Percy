@@ -41,7 +41,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             yield f'{Emojis.Command.more_info} » This command has more detailed help available with `{prefix}help <command>`.'
 
     async def format_page(self, entries: list[AnyCommand]) -> discord.Embed:
-        helper = PaginatedHelpCommand.temporary(self.extras.get('origin'))
+        helper = PaginatedHelpCommand.temporary(self.extras.get('origin'))  # type: ignore[arg-type]
 
         if self.current_page == 1 and isinstance(self.entries, dict):
             return await helper.get_front_page_embed()
@@ -95,7 +95,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             **kwargs: Any,
     ) -> HelpPaginator:
         """Overwritten to add the view to the message and edit message, not send new."""
-        self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
+        self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)  # type: ignore[arg-type]
         self.ctx = context
 
         edit = kwargs.pop('edit', False)
@@ -105,14 +105,14 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             self.clear_items()
 
         def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]):
-            return CategorySelect(context.client, mapping=items, with_index=self.extras.get('with_index', True))
+            return CategorySelect(context.client, mapping=items, with_index=self.extras.get('with_index', True))  # type: ignore[arg-type]
 
         if isinstance(entries, dict):
             self.extras['groups'] = entries
             self.add_item(prepare_select(entries))
         elif isinstance(entries, list):
             if (groups := self.extras.get('groups')) is not None:
-                self.add_item(prepare_select(groups))
+                self.add_item(prepare_select(groups))  # type: ignore[arg-type]
         else:
             raise commands.BadArgument('The entries attribute is missing.')
 
@@ -208,7 +208,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 'aliases': ['h'],
                 'description': 'Get help for a module or a command.'
             },
-            **kwargs
+            **kwargs  # type: ignore[arg-type]
         )
 
     def get_bot_mapping(self) -> dict[Cog, list[Command]]:
@@ -337,7 +337,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         :class:`str`
             The command signature.
         """
-        flags: FlagMeta = getattr(command, 'custom_flags', None)
+        flags: FlagMeta = getattr(command, 'custom_flags', None)  # type: ignore[arg-type]
 
         if not flags:
             return [] if descripted else ''
@@ -441,7 +441,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         grouped: dict[Cog, list[AnyCommand]] = {}
         for command in entries:
-            cog: Cog = self.context.bot.get_cog(key(command))
+            cog: Cog = self.context.bot.get_cog(key(command))  # type: ignore[arg-type]
             if getattr(cog, '__hidden__', False):
                 continue
 
@@ -532,7 +532,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             value=f'**Total Commands:** `{len(ctx.bot.commands)}`\n'
                   f'**Total Commands Invoked:** `{await self.total_commands_invoked()}`',
         )
-        embed.set_author(name=ctx.client.user, icon_url=get_asset_url(ctx.client.user))
+        embed.set_author(name=ctx.client.user, icon_url=get_asset_url(ctx.client.user))  # type: ignore[arg-type]
         embed.set_footer(text='I was created at')
         embed.timestamp = ctx.client.user.created_at
         return embed
@@ -555,7 +555,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             description='**```\nType command arguments without the brackets shown here!```**',
             colour=helpers.Colour.white()
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.add_field(name='`<argument>`', value='This argument is **required**.', inline=False)
         embed.add_field(name='`[argument]`', value='This argument is **optional**.', inline=False)
         embed.add_field(name='`<A|B>`',
@@ -585,7 +585,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                   f'E.g. `{prefix}command -ab` is equal to `{prefix}command --a --b`.\n\n'
                   f'{escaped_asterisk} The last flag in the short-hand combination can take an argument.', inline=False)
 
-        embed.set_author(name=ctx.bot.user, icon_url=get_asset_url(ctx.bot.user))
+        embed.set_author(name=ctx.bot.user, icon_url=get_asset_url(ctx.bot.user))  # type: ignore[arg-type]
         return embed
 
     async def command_formatting(self, command: AnyCommand) -> discord.Embed:
@@ -620,8 +620,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
         signature = signature.ensure_codeblock(fallback='md').dynamic(ctx)
         embed.description = f'{signature}\n{description}'
 
-        embed.add_fields(self.get_command_signature(command, descripted=True))
-        embed.add_fields(self.get_command_flag_signature(command, descripted=True))
+        embed.add_fields(self.get_command_signature(command, descripted=True))  # type: ignore[arg-type]
+        embed.add_fields(self.get_command_flag_signature(command, descripted=True))  # type: ignore[arg-type]
 
         if getattr(command, 'aliases', None):
             embed.add_field(name=f'{Emojis.Command.alias} | **Aliases**',
@@ -683,5 +683,5 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The temporary help command instance.
         """
         self = cls()
-        self.context = context
+        self.context = context  # type: ignore[arg-type]
         return self

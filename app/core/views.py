@@ -72,7 +72,7 @@ class View(discord.ui.View):
 
         is_iterable = isinstance(self.members, Iterable)
         if (
-                is_iterable and not discord.utils.get(self.members, id=interaction.user.id)
+                is_iterable and not discord.utils.get(self.members, id=interaction.user.id)  # type: ignore[arg-type]
                 or not is_iterable and interaction.user.id != self.members.id
         ):
             await interaction.response.send_message(
@@ -196,7 +196,7 @@ class ConfirmationView(View):
             *,
             true: str = 'Confirm',
             false: str = 'Cancel',
-            timeout: float = None,
+            timeout: float | None = None,
             defer: bool = False,
             delete_after: bool = False,
             hook: AsyncCallable[discord.Interaction, None] = None,

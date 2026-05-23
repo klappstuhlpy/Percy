@@ -8,11 +8,12 @@ import logging
 import random
 from abc import ABC
 from contextlib import AbstractAsyncContextManager
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, ParamSpec, TypeVar, overload, Type
+from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, ParamSpec, TypeVar, Type
 
 import asyncpg
 import dateutil.tz
 import discord
+from PIL.SpiderImagePlugin import isInt
 from captcha.image import ImageCaptcha
 from discord.utils import MISSING
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
@@ -102,7 +103,7 @@ class _Database:
                 format='text',
             )
 
-        return await asyncpg.create_pool(
+        return await asyncpg.create_pool(  # type: ignore
             **DatabaseConfig.to_kwargs(),
             init=init,
             command_timeout=300,
@@ -123,19 +124,11 @@ class _Database:
         await self._connect_task
         return self
 
-    @overload
-    def acquire(self, *, timeout: float | None = None) -> asyncpg.pool.PoolAcquireContext:
-        ...
-
-    @overload
-    def acquire(self, *, timeout: float | None = None) -> Awaitable[asyncpg.Connection]:
-        ...
-
     def acquire(self, *, timeout: float | None = None) -> AbstractAsyncContextManager | asyncpg.pool.PoolAcquireContext | Awaitable[None]:
-        return self._internal_pool.acquire(timeout=timeout)
+        return self._internal_pool.acquire(timeout=timeout)  # type: ignore[arg-type]
 
     def release(self, conn: asyncpg.Connection, *, timeout: float | None = None) -> Awaitable[None]:
-        return self._internal_pool.release(conn, timeout=timeout)
+        return self._internal_pool.release(conn, timeout=timeout)  # type: ignore[arg-type]
 
     def execute(self, query: str, *args: Any, timeout: float | None = None) -> Awaitable[str]:
         return self._internal_pool.execute(query, *args, timeout=timeout)
@@ -229,7 +222,7 @@ class Database(_Database):
             record = await self.fetchrow(query, user_id)
         return UserConfig(bot=self.bot, record=record)
 
-    async def get_user_timezone(self, user_id: int, /) -> str | None:
+    async def get_user_timezone(self, user_id: int, /) -> str:
         """|coro|
 
         Retrieves the user's timezone.
@@ -247,7 +240,7 @@ class Database(_Database):
         query = "SELECT timezone FROM user_settings WHERE id = $1;"
         return await self.fetchval(query, user_id, column='timezone')
 
-    async def get_user_balance(self, user_id: int, guild_id: int) -> Balance | None:
+    async def get_user_balance(self, user_id: int, guild_id: int) -> Balance:
         """|coro|
 
         A coroutine that gets the balance of a user in a guild.
@@ -350,7 +343,7 @@ class BaseRecord(ABC):
             If a subclass of `BaseRecord` is instantiated without providing a `record` keyword argument, and the
             class does not specify to ignore the record.
         """
-        self.__record = record = kwargs.pop('record', None)
+        self.__record = record = kwargs.pop('record', None)  # type: ignore
         if record is None and not self.__class__.__ignore_record__:
             raise TypeError('Subclasses of `BaseRecord` must provide a `record` keyword-only argument.')
 
@@ -681,7 +674,7 @@ class GuildConfig(BaseRecord):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        self.flags = self.AutoModFlags(self.flags or 0)
+        self.flags = self.AutoModFlags(self.flags or 0)   # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])
         self.muted_members = set(self.muted_members or [])
         self.prefixes = set(self.prefixes or [])
@@ -723,25 +716,25 @@ class GuildConfig(BaseRecord):
         return self.bot.get_guild(self.id)
 
     @property
-    def poll_channel(self) -> discord.TextChannel | None:
+    def poll_channel(self) -> discord.TextChannel | discord.ForumChannel | None:
         """:class:`discord.TextChannel`: The poll channel."""
         guild = self.bot.get_guild(self.id)
         if guild:
-            return guild.get_channel(self.poll_channel_id)
+            return guild.get_channel(self.poll_channel_id)  # type: ignore
 
     @property
     def poll_reason_channel(self) -> discord.TextChannel | None:
         """:class:`discord.TextChannel`: The poll reason channel."""
         guild = self.bot.get_guild(self.id)
         if guild:
-            return guild.get_channel(self.poll_reason_channel_id)
+            return guild.get_channel(self.poll_reason_channel_id)  # type: ignore
 
     @property
     def music_panel_channel(self) -> discord.TextChannel | None:
         """:class:`discord.TextChannel`: The music panel channel."""
         guild = self.bot.get_guild(self.id)
         if guild:
-            return guild.get_channel(self.music_panel_channel_id)
+            return guild.get_channel(self.music_panel_channel_id)  # type: ignore
 
     @discord.utils.cached_slot_property('_cs_audit_log_webhook')
     def audit_log_webhook(self) -> discord.Webhook | None:
@@ -761,7 +754,9 @@ class GuildConfig(BaseRecord):
     def mute_role(self) -> discord.Role | None:
         """:class:`discord.Role`: The mute role."""
         guild = self.bot.get_guild(self.id)
-        return guild and self.mute_role_id and guild.get_role(self.mute_role_id)
+        if guild and self.mute_role_id:
+            return guild.get_role(self.mute_role_id)
+        return None
 
     async def fetch_automod_rules(self) -> list[discord.AutoModRule]:
         """|coro|
@@ -954,8 +949,8 @@ class Gatekeeper(BaseRecord):
         text: str
         image: Image.Image
 
-    __CAPTCHA_CHARS: Final[ClassVar[str]] = 'abcdefghijklmnopqrstuvwxyz1234567890'  # ABCDEFGHIJKLMNOPQRSTUVWXYZ
-    __image_captcha: Final[ClassVar[ImageCaptcha]] = ImageCaptcha(
+    __CAPTCHA_CHARS: Final[str] = 'abcdefghijklmnopqrstuvwxyz1234567890'  # ABCDEFGHIJKLMNOPQRSTUVWXYZ
+    __image_captcha: Final[ImageCaptcha] = ImageCaptcha(
         width=300, height=100, fonts=[str(ASSETS / 'fonts/helvetica.ttf')])
 
     log = logging.getLogger('mod')
@@ -981,6 +976,7 @@ class Gatekeeper(BaseRecord):
         self.members: set[int] = {r['user_id'] for r in members if r['state'] == 'added'}
 
         if self.rate is not None:
+            assert isinstance(self.rate, str)
             rate, per = self.rate.split('/')
             self.rate = (int(rate), int(per))
 
@@ -1175,7 +1171,7 @@ class Gatekeeper(BaseRecord):
 
                     if self.starter_role:
                         await self.bot.http.add_role(
-                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')
+                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')  # type: ignore
                 elif action is self.GatekeeperRoleState.pending_add:
                     await self.bot.http.add_role(
                         self.id, member_id, self.role_id, reason='Started Gatekeeper verification')
@@ -1188,7 +1184,7 @@ class Gatekeeper(BaseRecord):
                     break
                 if e.code == 10011:
                     # Unknown role, disable the gatekeeper.
-                    config = await self.bot.db.get_guild_config(self.id)
+                    config = await self.bot.db.get_guild_config(self.id)  # type: ignore
                     await config.send_alert(
                         'A Role you\'ve set up for the gatekeeper was not found, please review! Disabling the gatekeeper.'
                     )
@@ -1264,19 +1260,25 @@ class Gatekeeper(BaseRecord):
     def role(self) -> discord.Role | None:
         """The role that is being added to members."""
         guild = self.bot.get_guild(self.id)
-        return guild and self.role_id and guild.get_role(self.role_id)
+        if guild and self.role_id:
+            return guild.get_role(self.role_id)
+        return None
 
     @property
     def starter_role(self) -> discord.Role | None:
         """The role that is being added to members that bypass the gatekeeper."""
         guild = self.bot.get_guild(self.id)
-        return guild and self.starter_role_id and guild.get_role(self.starter_role_id)
+        if guild and self.starter_role_id:
+            return guild.get_role(self.starter_role_id)
+        return None
 
     @property
     def channel(self) -> discord.TextChannel | None:
         """The channel where the gatekeeper is active."""
         guild = self.bot.get_guild(self.id)
-        return guild and guild.get_channel(self.channel_id)
+        if guild:
+            return guild.get_channel(self.channel_id)  # type: ignore
+        return None
 
     @property
     def message(self) -> discord.PartialMessage | None:
