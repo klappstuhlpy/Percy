@@ -187,7 +187,7 @@ class Stats(Cog):
             await self.bot.db.execute(query, data['user_id'], data['name'], data['image'])
         self._avatar_data_batch.clear()
 
-    def cog_unload(self) -> None:  # type: ignore[override]
+    def cog_unload(self) -> None:
         for _task in self.__LOOPS:
             _task.cancel()
 

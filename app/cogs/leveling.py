@@ -36,7 +36,7 @@ class LevelSetFlags(Flags):
 
 
 class AnyLevelChannel(commands.Converter, app_commands.Transformer):
-    async def convert(self, ctx: Context, argument: str) -> discord.TextChannel | str:  # type: ignore[override]
+    async def convert(self, ctx: Context, argument: str) -> discord.TextChannel | str:
         if argument.lower() in ('dm', 'channel'):
             return argument.lower()
         return await commands.TextChannelConverter().convert(ctx, argument)
@@ -352,9 +352,9 @@ class GuildLevelConfig(BaseRecord):
             per=self.cooldown_per
         )
 
-        self.level_roles = sanitize_snowflakes(self.level_roles)  # type: ignore[assignment]
-        self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)  # type: ignore[assignment]
-        self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)  # type: ignore[assignment]
+        self.level_roles = sanitize_snowflakes(self.level_roles)
+        self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)
+        self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)
 
     def __bool__(self):
         return self.enabled

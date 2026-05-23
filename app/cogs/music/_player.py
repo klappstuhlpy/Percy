@@ -76,7 +76,7 @@ class Player(wavelink.Player):
         super().__init__(client, channel)
 
         self.panel: PlayerPanel = MISSING
-        self.queue: Queue = Queue()  # type: ignore[override]
+        self.queue: Queue = Queue()
 
     @property
     def djs(self) -> list[discord.Member]:
@@ -363,7 +363,7 @@ class PlayerPanel(View):
 
     def __init__(self, *, player: Player, state: PlayerState, disabled: bool) -> None:
         super().__init__(timeout=None)
-        self.bot: Bot = player.client  # type: ignore[assignment]
+        self.bot: Bot = player.client
 
         self.player: Player = player
         self.state: PlayerState = state
@@ -490,7 +490,7 @@ class PlayerPanel(View):
 
     def update_buttons(self) -> None:
         """Updates the buttons of the panel."""
-        button_updates: list[tuple[discord.Button, bool, str | None]] = [  # type: ignore[assignment]
+        button_updates: list[tuple[discord.Button, bool, str | None]] = [
             (self.on_shuffle, self.disabled_state(), EMOJI_KEYS['shuffle'][self.player.queue.shuffle]),
             (self.on_back, self.disabled_state(self.player.queue.history_is_empty), None),
             (self.on_pause_play, self.disabled_state(), EMOJI_KEYS['pause_play'][
@@ -505,9 +505,9 @@ class PlayerPanel(View):
         for button, disabled, emoji in button_updates:
             button.disabled = disabled
             if emoji is not None:
-                button.emoji = emoji  # type: ignore[assignment]
+                button.emoji = emoji
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         assert isinstance(interaction.user, discord.Member)
         assert interaction.guild is not None
         assert interaction.guild.me is not None
@@ -565,7 +565,7 @@ class PlayerPanel(View):
         if not channel and not config.music_panel_channel:
             raise ValueError('No channel provided and no music channel set in the guild configuration.')
 
-        self.channel = config.music_panel_channel or channel  # type: ignore[assignment]
+        self.channel = config.music_panel_channel or channel
         self.__is_temporary__ = not config.music_panel_channel
         return self.channel
 
@@ -627,7 +627,7 @@ class PlayerPanel(View):
 
         return self.msg
 
-    async def stop(self) -> None:  # type: ignore[override]
+    async def stop(self) -> None:
         """Stops the player and resets the queue."""
         self.player.queue.reset()
         await self.update(PlayerState.STOPPED)
@@ -644,7 +644,7 @@ class PlayerPanel(View):
             ShuffleMode.off: ShuffleMode.on,
             ShuffleMode.on: ShuffleMode.off
         }
-        self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)  # type: ignore[assignment]
+        self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)
 
         self.update_buttons()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
@@ -688,7 +688,7 @@ class PlayerPanel(View):
             QueueMode.loop: QueueMode.loop_all,
             QueueMode.loop_all: QueueMode.normal,
         }
-        self.player.queue.mode = TRANSITIONS.get(self.player.queue.mode)  # type: ignore[assignment]
+        self.player.queue.mode = TRANSITIONS.get(self.player.queue.mode)
 
         self.update_buttons()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
@@ -776,7 +776,7 @@ class PlayerPanel(View):
 
         await self.fetch_player_channel(channel)
 
-        self.msg = await self.update(state=state)  # type: ignore[assignment]
+        self.msg = await self.update(state=state)
         return self
 
 
@@ -790,7 +790,7 @@ class AdjustVolumeModal(discord.ui.Modal, title='Volume Adjuster'):
         super().__init__(timeout=30)
         self._view: PlayerPanel = _view
 
-    async def on_submit(self, interaction: discord.Interaction, /) -> None:  # type: ignore[override]
+    async def on_submit(self, interaction: discord.Interaction, /) -> None:
         await interaction.response.defer()
 
         if not self.number.value.isdigit():
@@ -804,7 +804,7 @@ class AdjustVolumeModal(discord.ui.Modal, title='Volume Adjuster'):
 
 
 class TrackDisambiguatorView(View, Generic[T]):
-    message: discord.Message  # type: ignore[override]
+    message: discord.Message
     selected: T
 
     def __init__(self, ctx: Context | discord.Interaction, tracks: list[T]) -> None:
@@ -825,18 +825,18 @@ class TrackDisambiguatorView(View, Generic[T]):
         ]
 
         select = discord.ui.Select(options=options)
-        select.callback = self.on_select_submit  # type: ignore[assignment]
+        select.callback = self.on_select_submit
         self.select = select
         self.add_item(select)
 
     async def on_select_submit(self, _) -> None:
         index = int(self.select.values[0])
-        self.selected = self.tracks[index]  # type: ignore[assignment]
+        self.selected = self.tracks[index]
         self.stop()
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, row=1)
     async def cancel(self, _, __) -> None:
-        self.selected = None  # type: ignore[assignment]
+        self.selected = None
         self.stop()
 
     @classmethod

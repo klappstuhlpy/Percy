@@ -34,7 +34,7 @@ class ValidURL(commands.Converter):
     Otherwise, it simply passes through the given URL.
     """
 
-    async def convert(self, ctx: Context, url: str) -> str:  # type: ignore[override]
+    async def convert(self, ctx: Context, url: str) -> str:
         """This converter checks whether the given URL can be reached with a status code of 200."""
         try:
             async with ctx.bot.session.get(url) as resp:
@@ -76,7 +76,7 @@ class CodeblockConverter(commands.Converter[list[str]]):
     )
 
     @classmethod
-    async def convert(cls, ctx: Context, code: str) -> list[str]:  # type: ignore[override]
+    async def convert(cls, ctx: Context, code: str) -> list[str]:
         """Extract code from the Markdown, format it, and insert it into the code template.
 
         If there is any code block, ignore text outside the code block.

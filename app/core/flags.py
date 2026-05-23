@@ -320,7 +320,7 @@ class ConsumeUntilFlag(Converter[T]):
         if not self.converter:
             return argument
 
-        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)  # type: ignore[override]
+        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)
 
 
 def _get_namespaces(attrs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -588,7 +588,7 @@ class FlagMeta(type, Generic[T]):
 
     def inject(cls, command: Command) -> None:
         """Injects the flags into the command."""
-        command.custom_flags = cls.__commands_flags__  # type: ignore[override]
+        command.custom_flags = cls.__commands_flags__
 
 
 class FlagNamespace(Generic[T]):

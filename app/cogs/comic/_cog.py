@@ -39,8 +39,8 @@ class ComicsEditFlags(Flags):
     day: commands.Range[int, 1, 7] = flag(description='Day of the week to send the feed.')
     ping: discord.Role = flag(description='Role to ping when the feed is sent.')
     format: Format = flag(description='Feed format. Use /formats to view options.')
-    pin: bool = store_true(description='Whether to pin the feed message.')  # type: ignore[assignment]
-    reset: bool = store_true(description='Reset the configuration.', short='r')  # type: ignore[assignment]
+    pin: bool = store_true(description='Whether to pin the feed message.')
+    reset: bool = store_true(description='Reset the configuration.', short='r')
 
 
 class JumpToTopButton(discord.ui.Button):
@@ -488,7 +488,7 @@ class Comics(Cog):
             return
 
         if channel is None:
-            channel = ctx.channel  # type: ignore[assignment]
+            channel = ctx.channel
 
         new_config = ComicFeed.temporary(  # type: ignore[call-arg]
             guild_id=ctx.guild.id,

@@ -207,7 +207,7 @@ class PollClearVoteButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> PollClearVoteButton:
         cog: Polls | None = interaction.client.get_cog('Polls')  # type: ignore[attr-defined]  # interaction.client is Bot
@@ -224,7 +224,7 @@ class PollClearVoteButton(
 
         return cls(poll)
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
 
@@ -270,7 +270,7 @@ class PollInfoButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> PollInfoButton:
         cog: Polls | None = interaction.client.get_cog('Polls')  # type: ignore[attr-defined]  # interaction.client is Bot
@@ -287,7 +287,7 @@ class PollInfoButton(
 
         return cls(poll)
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
 
@@ -333,7 +333,7 @@ class PollEnterButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> PollEnterButton:
         cog: Polls | None = interaction.client.get_cog('Polls')  # type: ignore[attr-defined]  # interaction.client is Bot
@@ -350,7 +350,7 @@ class PollEnterButton(
 
         return cls(poll, int(match['index']))
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
 
@@ -420,7 +420,7 @@ class PollEnterSelect(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> PollEnterSelect:
         cog: Polls | None = interaction.client.get_cog('Polls')  # type: ignore[attr-defined]  # interaction.client is Bot
@@ -437,7 +437,7 @@ class PollEnterSelect(
 
         return cls(poll)
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
 
@@ -502,7 +502,7 @@ class PollRolePingButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> PollRolePingButton:
         cog: Polls | None = interaction.client.get_cog('Polls')  # type: ignore[attr-defined]  # interaction.client is Bot
@@ -514,7 +514,7 @@ class PollRolePingButton(
 
         return cls(int(match['role_id']))
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.guild_id is None:
             return False
 
@@ -560,7 +560,7 @@ class PollEntry(BaseRecord):
 
     __slots__ = ('user_id', 'vote')
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self):
         return iter((self.user_id, self.vote))
 
 
@@ -602,11 +602,11 @@ class Poll(BaseRecord):
         self.message: discord.Message = MISSING
         self.ping_message: discord.Message = MISSING
 
-        self.question: str = self.kwargs.get('question')  # type: ignore[assignment]
-        self.votes: int = self.kwargs.get('votes', 0)  # type: ignore[assignment]
-        self.description: str = self.kwargs.get('description')  # type: ignore[assignment]
-        self.options: list[VoteOption] = self.kwargs.get('options', [])  # type: ignore[assignment]
-        self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get('color') or '#ffffff')  # type: ignore[assignment]
+        self.question: str = self.kwargs.get('question')
+        self.votes: int = self.kwargs.get('votes', 0)
+        self.description: str = self.kwargs.get('description')
+        self.options: list[VoteOption] = self.kwargs.get('options', [])
+        self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get('color') or '#ffffff')
 
         self.entries = {PollEntry(record=entry).__iter__() for entry in self.entries or []}
 
@@ -946,7 +946,7 @@ class Polls(Cog):
         """
         published = discord.utils.utcnow()
 
-        poll: Poll = Poll.temporary(  # type: ignore[assignment]
+        poll: Poll = Poll.temporary(
             cog=self,
             channel_id=channel_id,
             message_id=message_id,

@@ -514,7 +514,7 @@ class BasePaginator(View, Generic[T], metaclass=ABCMeta):
         elif isinstance(ctx, discord.Message):
             message = await ctx.channel.send(**kwargs)
         else:
-            interaction: discord.Interaction = ctx  # type: ignore[assignment]
+            interaction: discord.Interaction = ctx
             if interaction.response.is_done():
                 await interaction.followup.send(**kwargs, ephemeral=ephemeral)
             else:

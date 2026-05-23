@@ -131,7 +131,7 @@ class EmbedBuilder(discord.Embed):
     ) -> Iterable[tuple[str, str, bool]]:
         first_item_checker = type(next(iter(fields), None))
         if first_item_checker is dict:
-            dict_fields: list[dict[str, str | bool]] = fields  # type: ignore[assignment]
+            dict_fields: list[dict[str, str | bool]] = fields
             return [(str(f['name']), str(f['value']), bool(f['inline'])) for f in dict_fields]
         return fields  # type: ignore[return-value]
 
@@ -439,14 +439,14 @@ class Command(commands.Command):
         """:class:`PermissionSpec` : Return the permission specification for this command."""
         return self._permissions
 
-    def _ensure_assignment_on_copy(self, other: Command) -> Command:  # type: ignore[override]
+    def _ensure_assignment_on_copy(self, other: Command) -> Command:
         super()._ensure_assignment_on_copy(other)  # type: ignore[arg-type]
 
         other._permissions = self._permissions
         other.custom_flags = self.custom_flags
         return other
 
-    async def can_run(self, ctx: Context, /) -> bool:  # type: ignore[override]
+    async def can_run(self, ctx: Context, /) -> bool:
         """Checks if the command can be run in the given context.
 
         This overrides the default implementation to support early command abortion
@@ -461,7 +461,7 @@ class Command(commands.Command):
         return await super().can_run(ctx)
 
     @property
-    def parents(self) -> list[GroupMixin[Any]]:  # type: ignore[override]
+    def parents(self) -> list[GroupMixin[Any]]:
         """list[GroupMixin[Any]] : Returns all parent commands of this command.
 
         This is sorted by the length of :attr:`.qualified_name` from highest to lowest.
@@ -741,9 +741,9 @@ class Context(commands.Context, Generic[CogT]):
 
     if TYPE_CHECKING:
         bot: Bot
-        cog: CogT  # type: ignore[override]
-        command: type[Command | GroupCommand]  # type: ignore[assignment]
-        invoked_subcommand: Command | GroupCommand | None  # type: ignore[assignment]
+        cog: CogT
+        command: type[Command | GroupCommand]
+        invoked_subcommand: Command | GroupCommand | None
 
     def __init__(self, **attrs) -> None:
         self._message: discord.Message | None = None

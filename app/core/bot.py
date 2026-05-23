@@ -446,7 +446,7 @@ class Bot(commands.Bot):
 
         # Parameter-based errors.
 
-        command: Command = ctx.command  # type: ignore[assignment]
+        command: Command = ctx.command
 
         if isinstance(error, (commands.BadArgument, AppBadArgument)):
             command.reset_cooldown(ctx)

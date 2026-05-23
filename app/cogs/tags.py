@@ -50,7 +50,7 @@ class TagNameOrID(commands.clean_content):
         self.with_id: bool = with_id
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str | int:  # type: ignore[override]
+    async def convert(self, ctx: Context, argument: str) -> str | int:
         converted = await super().convert(ctx, argument)
         lower = converted.lower().strip()
 
@@ -84,7 +84,7 @@ class TagContent(commands.clean_content):
         self.required = required
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str:  # type: ignore[override]
+    async def convert(self, ctx: Context, argument: str) -> str:
         if not argument and not self.required:
             return argument
 
@@ -101,7 +101,7 @@ class TagSearchFlags(Flags):
     query: str | None = flag(description='The query to search for', aliases=['q'])
     sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
         description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])  # type: ignore[assignment]
+    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
 
 
 class TagListFlags(Flags):
@@ -110,7 +110,7 @@ class TagListFlags(Flags):
     query: str | None = flag(description='The query to search for', aliases=['q'])
     sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
         description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])  # type: ignore[assignment]
+    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
 
 
 class TagTransferConfirmButton(
@@ -130,7 +130,7 @@ class TagTransferConfirmButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> TagTransferConfirmButton:
         cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
@@ -188,7 +188,7 @@ class TagTransferDeclineButton(
         )
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction, _, match: re.Match[str], /
     ) -> TagTransferDeclineButton:
         cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
@@ -631,7 +631,7 @@ class Tags(Cog):
         if not result:
             raise BadArgument(f'No Tag with the name or ID `{name_or_id}` found.', 'name_or_id')
 
-        tag: Tag = result  # type: ignore[assignment]
+        tag: Tag = result
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
         else:
@@ -639,7 +639,7 @@ class Tags(Cog):
 
         _aliases = getattr(tag, 'aliases', None)
         updated = await tag.add(uses=1)  # type: ignore[union-attr]
-        tag = updated  # type: ignore[assignment]
+        tag = updated
         if _aliases:
             tag.aliases = _aliases
 
@@ -1028,7 +1028,7 @@ class Tags(Cog):
         embed.set_footer(text='Tag Stats for this Member.')
 
         query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag' AND author_id=$2;"
-        count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)  # type: ignore[assignment]
+        count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)
 
         embed.add_field(name='**Tag Command invoked**', value=f'**{count[0]}** times', inline=False)
         embed.add_field(name='**Owned Tags**', value=records['count'])
@@ -1263,7 +1263,7 @@ class Tags(Cog):
         member: discord.Member | None = None
         if isinstance(flags, TagListFlags):
             raw_member = flags.member or ctx.author
-            member = raw_member if isinstance(raw_member, discord.Member) else None  # type: ignore[assignment]
+            member = raw_member if isinstance(raw_member, discord.Member) else None
 
         if not flags.query:
             query = """

@@ -23,7 +23,6 @@ from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, Ign
 from app.core.models import AppBadArgument, BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
 from app.core.timer import Timer
 from app.core.views import ConfirmationView, View
-from app.utils.constants import Coro
 from app.database.base import Gatekeeper, GuildConfig
 from app.utils import (
     ListedRateLimit,
@@ -119,7 +118,7 @@ class GatekeeperSetupRoleView(View):
                 f'{Emojis.error} Cannot use this role as it is higher than your role in the hierarchy.', ephemeral=True)
             return
 
-        if role == self.starter_role:
+        if role == self.starter_role:  # type: ignore[union-attr]
             await interaction.response.send_message(
                 f'{Emojis.error} Cannot use this role as it is the starter role.', ephemeral=True)
             return
@@ -157,7 +156,7 @@ class GatekeeperSetupRoleView(View):
                 assert isinstance(interaction.channel, discord.abc.Messageable)
                 async with interaction.channel.typing():  # type: ignore[union-attr]
                     success, failure, skipped = await Moderation.update_role_permissions(
-                        role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels
+                        role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels  # type: ignore[arg-type]
                     )
                     total = success + failure + skipped
                     embed = discord.Embed(
@@ -240,7 +239,7 @@ class GatekeeperRateLimitModal(discord.ui.Modal, title='Join Rate Trigger'):
         super().__init__(custom_id='gatekeeper-rate-limit-modal')
         self.final_rate: tuple[int, int] | None = None
 
-    async def on_submit(self, interaction: discord.Interaction, /) -> None:  # type: ignore[override]
+    async def on_submit(self, interaction: discord.Interaction, /) -> None:
         try:
             rate = int(self.rate.value)
         except ValueError:
@@ -277,7 +276,7 @@ class GatekeeperMessageModal(discord.ui.Modal, title='Starter Message'):
         super().__init__()
         self.message.default = default
 
-    async def on_submit(self, interaction: discord.Interaction, /) -> None:  # type: ignore[override]
+    async def on_submit(self, interaction: discord.Interaction, /) -> None:
         await interaction.response.defer()
         self.stop()
 
@@ -286,7 +285,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect['GatekeeperSetUpView']):
     def __init__(self, gatekeeper: Gatekeeper) -> None:
         channel = gatekeeper.channel_id
         default_values = [
-            discord.SelectDefaultValue(id=channel, type=discord.SelectDefaultValueType.channel)
+            discord.SelectDefaultValue(id=channel, type=discord.SelectDefaultValueType.channel)  # type: ignore[arg-type]
         ] if channel else []
 
         super().__init__(
@@ -347,7 +346,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect['GatekeeperSetUpView']):
         except discord.HTTPException as e:
             await interaction.followup.send(f'{Emojis.error} Could not edit permissions: {e}', ephemeral=True)
 
-    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:  # type: ignore[override]
+    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
         assert self.view is not None
         channel = self.values[0].resolve()
         if channel is None:
@@ -456,7 +455,7 @@ class GatekeeperSetUpView(View):
 
         if self.gatekeeper.starter_role:
             self.starter_role_select.default_values = [
-                discord.SelectDefaultValue.from_role(self.gatekeeper.starter_role)]
+                discord.SelectDefaultValue.from_role(self.gatekeeper.starter_role)]  # type: ignore[arg-type]
 
         self.setup_message.disabled = False
         self.channel_select.disabled = False
@@ -501,7 +500,7 @@ class GatekeeperSetUpView(View):
                 f'{Emojis.error} Cannot use this role as it is higher than your role in the hierarchy.', ephemeral=True)
             return
 
-        if role == self.selected_role or role == self.created_role:
+        if role == self.selected_role or role == self.created_role:  # type: ignore[arg-type]
             await interaction.response.send_message(
                 f'{Emojis.error} Cannot use the same role for both the starter and the main role.', ephemeral=True)
             return
@@ -514,8 +513,8 @@ class GatekeeperSetUpView(View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
         self.selected_starter_role = role
-        if self.selected_starter_role is not None:
-            await self.gatekeeper.edit(starter_role_id=self.selected_starter_role.id)
+        if self.selected_starter_role is not None:  # type: ignore[arg-type]
+            await self.gatekeeper.edit(starter_role_id=self.selected_starter_role.id)  # type: ignore[arg-type]
 
         self.update_state()
         if interaction.message is not None:
@@ -524,7 +523,7 @@ class GatekeeperSetUpView(View):
     @discord.ui.select(placeholder='Select a bypass action...', row=2, min_values=1, max_values=1, options=[])
     async def setup_bypass_action(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
         await interaction.response.defer(ephemeral=True)
-        value: Literal['ban', 'kick'] = select.values[0]  # type: ignore
+        value: Literal['ban', 'kick'] = select.values[0]  # type: ignore[arg-type]
         await self.gatekeeper.edit(bypass_action=value)
         await interaction.followup.send(f'{Emojis.success} Successfully set bypass action to {value}', ephemeral=True)
 
@@ -535,14 +534,14 @@ class GatekeeperSetUpView(View):
                 f'{Emojis.error} Bot requires Manage Roles permission for this to work.')
             return
 
-        view = GatekeeperSetupRoleView(self, self.selected_role, self.created_role, self.selected_starter_role)
+        view = GatekeeperSetupRoleView(self, self.selected_role, self.created_role, self.selected_starter_role)  # type: ignore[arg-type]
         embed = discord.Embed(
             title='Gatekeeper Configuration - Role',
             description='Please either select a pre-existing role or create a new role to automatically assign to new members.',
             colour=helpers.Colour.light_grey()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        view.message = await interaction.original_response()  # type: ignore[assignment]
+        view.message = await interaction.original_response()
         await view.wait()
         self.created_role = view.created_role
         self.selected_role = view.selected_role
@@ -555,10 +554,12 @@ class GatekeeperSetUpView(View):
 
         with suppress(discord.HTTPException):
             if view.message is not None:
-                await view.message.delete()  # type: ignore[union-attr]
+                await view.message.delete()
+                
         self.update_state()
+        
         if interaction.message is not None:
-            await interaction.message.edit(view=self)
+            await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
     @discord.ui.button(label='Send Starter Message', style=discord.ButtonStyle.blurple, row=3)
     async def setup_message(self, interaction: discord.Interaction, _) -> None:
@@ -601,8 +602,9 @@ class GatekeeperSetUpView(View):
             await interaction.followup.send(f'{Emojis.success} Starter message successfully sent', ephemeral=True)
 
         self.update_state()
+        
         if interaction.message is not None:
-            await interaction.message.edit(view=self)
+            await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
     @staticmethod
     async def __rate_limit_modal_response(
@@ -627,7 +629,7 @@ class GatekeeperSetUpView(View):
                 interaction.user,
                 true='Update',
                 false='Remove',
-                hook=partial(self.__rate_limit_modal_response, rate),  # type: ignore[arg-type]
+                hook=partial(self.__rate_limit_modal_response, rate),
                 delete_after=True
             )
             await interaction.response.send_message(
@@ -646,14 +648,15 @@ class GatekeeperSetUpView(View):
                 await self.gatekeeper.edit(rate=modal.final_rate)
 
         self.update_state()
+        
         if interaction.message is not None:
-            await interaction.message.edit(view=self)
+            await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
     @discord.ui.button(label='Enable', style=discord.ButtonStyle.green, row=4)
     async def toggle_flag(self, interaction: discord.Interaction, _) -> None:
         enabled = self.gatekeeper.started_at is not None
         if enabled:
-            newest = await self.cog.bot.db.get_guild_gatekeeper(self.gatekeeper.id)  # type: ignore[misc]  # cached method
+            newest = await self.cog.bot.db.get_guild_gatekeeper(self.gatekeeper.id)  # type: ignore[arg-type]
             if newest is not None:
                 self.gatekeeper = newest
 
@@ -671,7 +674,7 @@ class GatekeeperSetUpView(View):
                     colour=helpers.Colour.light_grey()
                 )
                 await interaction.response.send_message(embed=embed, view=confirm, ephemeral=True)
-                confirm.message = await interaction.original_response()  # type: ignore[assignment]
+                confirm.message = await interaction.original_response()
                 await confirm.wait()
                 if not confirm.value:
                     return
@@ -693,8 +696,9 @@ class GatekeeperSetUpView(View):
                 await interaction.response.send_message(f'{Emojis.success} Successfully enabled gatekeeper.')
 
         self.update_state()
+        
         if interaction.message is not None:
-            await interaction.message.edit(view=self)
+            await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
 
 class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template='gatekeeper:verify:captcha'):
@@ -708,7 +712,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
         self.gatekeeper = gatekeeper
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction[Bot], _, __, /
     ) -> GatekeeperVerifyButton | None:
         _cog = interaction.client.get_cog('Moderation')
@@ -718,11 +722,11 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
             raise AppBadArgument(f'{Emojis.error} Moderation cog is not loaded')
         cog = cast('Moderation', _cog)
 
-        config = await cog.bot.db.get_guild_config(interaction.guild_id)  # type: ignore[misc]  # cached method
+        config = await cog.bot.db.get_guild_config(interaction.guild_id)
         if config is None:
             return cls(None, None)
 
-        gatekeeper = await cog.bot.db.get_guild_gatekeeper(interaction.guild_id)  # type: ignore[misc]  # cached method
+        gatekeeper = await cog.bot.db.get_guild_gatekeeper(interaction.guild_id)
         return cls(config, gatekeeper)
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
@@ -752,7 +756,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
 
         return True
 
-    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:  # type: ignore[override]
+    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
         assert self.gatekeeper is not None
         assert isinstance(interaction.user, discord.Member)
         assert isinstance(interaction.channel, discord.abc.GuildChannel)
@@ -761,7 +765,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
 
         captcha = self.gatekeeper.generate_captcha()
 
-        await interaction.channel.set_permissions(  # type: ignore[union-attr]
+        await interaction.channel.set_permissions(
             interaction.user,
             reason=f'Gaktekeeper User Verification (ID: {interaction.user.id})',
             send_messages=True
@@ -786,11 +790,11 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
         try:
             msg = await interaction.client.wait_for(
                 'message',
-                check=lambda m: m.author.id == interaction.user.id and m.channel.id == interaction.channel.id,  # type: ignore[union-attr]
+                check=lambda m: m.author.id == interaction.user.id and m.channel.id == interaction.channel.id,
                 timeout=90.0
             )
         except TimeoutError:
-            await message.edit(  # type: ignore[union-attr]
+            await message.edit(
                 content=f'{Emojis.error} You took too long to enter the captcha, please try again.',
                 embed=None,
                 attachments=[])
@@ -798,14 +802,14 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
         else:
             await msg.delete()
         finally:
-            await interaction.channel.set_permissions(  # type: ignore[union-attr]
+            await interaction.channel.set_permissions(
                 interaction.user,
                 reason=f'Gaktekeeper User Verification (ID: {interaction.user.id})',
                 send_messages=False
             )
 
         if msg.content != captcha.text:
-            await message.edit(  # type: ignore[union-attr]
+            await message.edit(
                 content=f'{Emojis.error} The captcha you entered is incorrect, please try again.',
                 embed=None,
                 attachments=[])
@@ -829,7 +833,7 @@ class GatekeeperAlertResolveButton(discord.ui.DynamicItem[discord.ui.Button], te
         self.gatekeeper = gatekeeper
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction[Bot], _, __, /
     ) -> GatekeeperAlertResolveButton | None:
         _cog = interaction.client.get_cog('Moderation')
@@ -840,10 +844,10 @@ class GatekeeperAlertResolveButton(discord.ui.DynamicItem[discord.ui.Button], te
             raise AppBadArgument(f'{Emojis.error} Moderation cog is not loaded')
         cog = cast('Moderation', _cog)
 
-        gatekeeper = await cog.bot.db.get_guild_gatekeeper(interaction.guild_id)  # type: ignore[misc]  # cached method
+        gatekeeper = await cog.bot.db.get_guild_gatekeeper(interaction.guild_id)  # type: ignore[arg-type]
         return cls(gatekeeper)
 
-    async def interaction_check(self, interaction: discord.Interaction[Bot], /) -> bool:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction[Bot], /) -> bool:
         if interaction.guild_id is None:
             return False
         if self.gatekeeper is None or self.gatekeeper.started_at is None:
@@ -852,7 +856,7 @@ class GatekeeperAlertResolveButton(discord.ui.DynamicItem[discord.ui.Button], te
             return False
         return True
 
-    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:  # type: ignore[override]
+    async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
         assert self.gatekeeper is not None
         members = self.gatekeeper.pending_members
         if members:
@@ -896,7 +900,7 @@ class GatekeeperAlertMassbanButton(discord.ui.DynamicItem[discord.ui.Button], te
         self.cog: Moderation = cog
 
     @classmethod
-    async def from_custom_id(  # type: ignore[override]
+    async def from_custom_id(
             cls, interaction: discord.Interaction[Bot], _, __, /
     ) -> GatekeeperAlertMassbanButton | None:
         _cog = interaction.client.get_cog('Moderation')
@@ -921,7 +925,7 @@ class GatekeeperAlertMassbanButton(discord.ui.DynamicItem[discord.ui.Button], te
 
         return True
 
-    async def callback(self, interaction: discord.Interaction[Bot]) -> None:  # type: ignore[override]
+    async def callback(self, interaction: discord.Interaction[Bot]) -> None:
         assert interaction.guild_id is not None
         assert interaction.guild is not None
         assert interaction.message is not None
@@ -965,13 +969,13 @@ class PurgeFlags(Flags):
                              default=None)
     before: int | None = flag(description='Search for messages that come before this message ID',
                               default=None)
-    delete_pinned: bool = store_true(description='Whether to delete messages that are pinned. Defaults to True.')  # type: ignore[assignment]
-    bot: bool = store_true(description='Remove messages from bots (not webhooks!)')  # type: ignore[assignment]
-    webhooks: bool = store_true(description='Remove messages from webhooks')  # type: ignore[assignment]
-    embeds: bool = store_true(description='Remove messages that have embeds')  # type: ignore[assignment]
-    files: bool = store_true(description='Remove messages that have attachments')  # type: ignore[assignment]
-    emoji: bool = store_true(description='Remove messages that have custom emoji')  # type: ignore[assignment]
-    reactions: bool = store_true(description='Remove messages that have reactions')  # type: ignore[assignment]
+    delete_pinned: bool = store_true(description='Whether to delete messages that are pinned. Defaults to True.')
+    bot: bool = store_true(description='Remove messages from bots (not webhooks!)')
+    webhooks: bool = store_true(description='Remove messages from webhooks')
+    embeds: bool = store_true(description='Remove messages that have embeds')
+    files: bool = store_true(description='Remove messages that have attachments')
+    emoji: bool = store_true(description='Remove messages that have custom emoji')
+    reactions: bool = store_true(description='Remove messages that have reactions')
     require: Literal['any', 'all'] = flag(
         description='Whether any or all of the flags should be met before deleting messages. Defaults to "all"',
         default='all')
@@ -1294,7 +1298,7 @@ class SpamChecker:
         if rate != self._join_rate:
             # Might be worth considering swapping over the tat/member list? Probably complicated though
             self.auto_gatekeeper = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter('joined_at'))
-            self._join_rate = rate  # type: ignore[assignment]
+            self._join_rate = rate  # type: ignore[arg-type]
 
         if self.auto_gatekeeper is not None:
             return self.auto_gatekeeper.is_ratelimited(member)
@@ -1333,16 +1337,16 @@ class Moderation(Cog):
 
         bot.add_dynamic_items(GatekeeperVerifyButton, GatekeeperAlertMassbanButton, GatekeeperAlertResolveButton)
 
-    def cog_unload(self) -> None:  # type: ignore[override]
+    def cog_unload(self) -> None:
         self.bulk_mute_insert.stop()
 
-    async def cog_before_invoke(self, ctx: commands.Context) -> None:  # type: ignore[override]
+    async def cog_before_invoke(self, ctx: commands.Context) -> None:
         guild_ctx = cast('ModGuildContext', ctx)
         if ctx.guild is None:
             return
-        guild_ctx.guild_config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]  # cached method
+        guild_ctx.guild_config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[arg-type]
 
-    async def bot_check(self, ctx: commands.Context) -> bool:  # type: ignore[override]
+    async def bot_check(self, ctx: commands.Context) -> bool:
         if ctx.guild is None:
             return True
 
@@ -1351,7 +1355,7 @@ class Moderation(Cog):
             return True
 
         guild_id = ctx.guild.id
-        config = await self.bot.db.get_guild_config(guild_id)  # type: ignore[misc]  # cached method
+        config = await self.bot.db.get_guild_config(guild_id)  # type: ignore[arg-type]
         if config is None or not config.flags.value:
             return True
 
@@ -1376,7 +1380,7 @@ class Moderation(Cog):
 
         final_data = []
         for guild_id, data in self._mute_data_batch.items():
-            config = await self.bot.db.get_guild_config(guild_id)  # type: ignore[misc]  # cached method
+            config = await self.bot.db.get_guild_config(guild_id)  # type: ignore[arg-type]
 
             if config is None:
                 continue
@@ -1384,7 +1388,7 @@ class Moderation(Cog):
             as_set: set[int] = config.muted_members
             for member_id, insertion in data:
                 func = as_set.add if insertion else as_set.discard
-                func(member_id)
+                func(member_id)  # type: ignore[arg-type]
 
             final_data.append({'guild_id': guild_id, 'result_array': list(as_set)})
             self.bot.db.get_guild_config.invalidate(guild_id)
@@ -1483,7 +1487,7 @@ class Moderation(Cog):
         """
         author = message.author
         if (
-                author.id in (self.bot.user.id if self.bot.user else None, self.bot.owner_id)  # type: ignore[operator]
+                author.id in (self.bot.user.id if self.bot.user else None, self.bot.owner_id)
                 or message.guild is None
                 or not isinstance(author, discord.Member)
                 or author.bot
@@ -1494,21 +1498,21 @@ class Moderation(Cog):
         if message.is_system():
             return
 
-        config: GuildConfig = await self.bot.db.get_guild_config(message.guild.id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(message.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
         if (
                 message.channel.id in config.safe_automod_entity_ids
                 or author.id in config.safe_automod_entity_ids
-                or any(i in config.safe_automod_entity_ids for i in author._roles)
+                or any(i in config.safe_automod_entity_ids for i in author._roles)  # type: ignore[arg-type]
         ):
             return
 
         await self.check_raid(config, message.guild, author, message)
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(message.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(message.guild.id)  # type: ignore[arg-type]
             if (
                     gatekeeper is not None and gatekeeper.is_bypassing(author)
                     and message.channel.id != gatekeeper.channel_id
@@ -1558,7 +1562,7 @@ class Moderation(Cog):
         if member.bot:
             return
 
-        config = await self.bot.db.get_guild_config(member.guild.id)  # type: ignore[misc]  # cached method
+        config = await self.bot.db.get_guild_config(member.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1572,7 +1576,7 @@ class Moderation(Cog):
         checker = self._spam_check[member.guild.id]
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None:
                 if gatekeeper.started_at is not None:
                     await gatekeeper.block(member)
@@ -1642,7 +1646,7 @@ class Moderation(Cog):
         if before.roles == after.roles:
             return
 
-        config = await self.bot.db.get_guild_config(after.guild.id)  # type: ignore[misc]  # cached method
+        config = await self.bot.db.get_guild_config(after.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1669,7 +1673,7 @@ class Moderation(Cog):
         role: :class:`discord.Role`
             The role that has been deleted.
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(role.guild.id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(role.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1684,7 +1688,7 @@ class Moderation(Cog):
             return
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(role.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(role.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.role_id == role.id:
                 if gatekeeper.started_at is not None:
                     await config.send_alert(
@@ -1706,7 +1710,7 @@ class Moderation(Cog):
         channel: :class:`discord.abc.GuildChannel`
             The channel that has been created.
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1721,7 +1725,7 @@ class Moderation(Cog):
                 )
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.role_id:
                 role = channel.guild.get_role(gatekeeper.role_id)
                 if role is not None:
@@ -1745,7 +1749,7 @@ class Moderation(Cog):
         channel: :class:`discord.abc.GuildChannel`
             The channel that has been deleted.
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1774,7 +1778,7 @@ class Moderation(Cog):
             return
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.channel_id == channel.id:
                 if gatekeeper.started_at is not None:
                     await config.send_alert(
@@ -1799,7 +1803,7 @@ class Moderation(Cog):
         """
         if payload.guild_id is None:
             return
-        config: GuildConfig = await self.bot.db.get_guild_config(payload.guild_id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(payload.guild_id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1810,7 +1814,7 @@ class Moderation(Cog):
             return
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.message_id == payload.message_id:
                 if gatekeeper.started_at is not None:
                     await config.send_alert(
@@ -1835,7 +1839,7 @@ class Moderation(Cog):
         """
         if payload.guild_id is None:
             return
-        config: GuildConfig = await self.bot.db.get_guild_config(payload.guild_id)  # type: ignore[misc]  # cached method
+        config: GuildConfig = await self.bot.db.get_guild_config(payload.guild_id)  # type: ignore[arg-type]
         if config is None:
             return
 
@@ -1846,7 +1850,7 @@ class Moderation(Cog):
             return
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.message_id in payload.message_ids:
                 if gatekeeper.started_at is not None:
                     await config.send_alert(
@@ -1881,14 +1885,14 @@ class Moderation(Cog):
         if not joined_voice:
             return
 
-        config = await self.bot.db.get_guild_config(member.guild.id)  # type: ignore[misc]  # cached method
+        config = await self.bot.db.get_guild_config(member.guild.id)  # type: ignore[arg-type]
         if config is None:
             return
 
         if not config.flags.gatekeeper:
             return
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[misc]  # cached method
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[arg-type]
         # Joined VC and is bypassing gatekeeper
         if gatekeeper is not None and gatekeeper.is_bypassing(member):
             reason = 'Bypassing gatekeeper by joining a voice channel early'
@@ -1984,7 +1988,7 @@ class Moderation(Cog):
 
         if ctx.guild_config.flags.gatekeeper:
             enabled += 1
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[misc]  # cached method
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None:
                 gatekeeper_status = gatekeeper.status
             else:

@@ -47,9 +47,9 @@ class PlayFlags(Flags):
     """Flags for the music commands."""
     source: Literal['yt', 'sp', 'sc'] = flag(
         name='source', description='What source to search for your query.', aliases=['s'], default='yt')
-    force: bool = store_true(  # type: ignore[assignment]
+    force: bool = store_true(
         name='force', description='Whether to force play the track/playlist.', aliases=['f'])
-    recommendations: bool = store_true(  # type: ignore[assignment]
+    recommendations: bool = store_true(
         name='recommendations',
         short='r',
         description='Whether to auto-fill the queue with recommended tracks if the queue is empty.')
@@ -516,7 +516,7 @@ class Music(Cog):
             return
 
         from wavelink import QueueMode as _QueueMode
-        player.queue.mode = {  # type: ignore[assignment]
+        player.queue.mode = {
             'normal': _QueueMode.normal, 'track': _QueueMode.loop, 'queue': _QueueMode.loop_all
         }.get(mode, _QueueMode.normal)
 

@@ -526,7 +526,7 @@ class AnsiStringBuilder:
 
         If the first one is blank, overwrite second with first.
         """
-        chunks: list[AnsiChunk | None] = list(self._chunks)  # type: ignore[assignment]
+        chunks: list[AnsiChunk | None] = list(self._chunks)
 
         for i, chunk in enumerate(chunks, -1):
             if chunk is None:
