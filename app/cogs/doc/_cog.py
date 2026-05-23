@@ -155,7 +155,7 @@ class DocSelect(discord.ui.Select):
             max_values=1,
             row=1,
         )
-        self.super_parent: BasePaginator[DocItemT] = parent  # created seperate attribute due to dpy changing "parent" logic
+        self.super_parent: BasePaginator[DocItemT] = parent  # separate attribute — dpy overrides "parent" internally
 
         for item in self.super_parent.entries:
             self.add_option(

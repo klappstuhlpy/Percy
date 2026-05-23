@@ -7,8 +7,7 @@ import sys
 import traceback
 from collections import defaultdict, Counter
 from contextlib import suppress
-from typing import Final, Dict, Type, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, \
-    Generator
+from typing import Final, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, Generator
 
 import discord
 import datetime
@@ -105,7 +104,7 @@ class CommandTree(app_commands.CommandTree):
 
 
 class Bot(commands.Bot):
-    """Represents Lambda as a bot.
+    """Represents Percy as a bot.
 
     At its core, this handles and/or sends all events and payloads
     to and from Discord's API.
@@ -164,20 +163,20 @@ class Bot(commands.Bot):
             return f'{ctx.now.timestamp()}:{ctx.author.id}:{ctx.command}'
 
         self.make_command_cache_key: Callable[[Context], str] = _make_command_cache_key
-        self.command_error_cache: Dict[str, str] = ExpiringDict(
+        self.command_error_cache: dict[str, str] = ExpiringDict(
             max_len=1000, max_age_seconds=60)
 
         self.resumes: defaultdict[int, list[datetime.datetime]] = defaultdict(list)
         self.identifies: defaultdict[int, list[datetime.datetime]] = defaultdict(list)
 
-        self.context: Type[Context] = Context
+        self.context: type[Context] = Context
         self.spam_control: SpamControl = SpamControl(self)
 
         self.initial_extensions: list[str] = EXTENSIONS
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
-        """Resolves a command prefix from a message."""
-        if message.guild:
+        """Resolves the command prefix for a message, respecting per-guild configuration."""
+        if not message.guild:
             return commands.when_mentioned_or(default_prefix)(self, message)
 
         config = await self.db.get_guild_config(message.guild.id)
@@ -204,9 +203,9 @@ class Bot(commands.Bot):
             try:
                 await self.load_extension(extension)
             except Exception as exc:
-                self.log.critical(f'Failed to load extension {extension}: {exc}', exc_info=True)
+                self.log.critical('Failed to load extension %s: %s', extension, exc, exc_info=True)
             else:
-                self.log.debug(f'Loaded extension: {extension}')
+                self.log.debug('Loaded extension: %s', extension)
 
     async def reload_extension(self, name: str, *, package: str | None = None) -> None:
         """Reloads an extension."""
@@ -240,7 +239,7 @@ class Bot(commands.Bot):
         self.session = ClientSession()
         self.timers = TimerManager(self)
 
-        self.loop.create_task(self._setup_hook_task())  # noqa
+        asyncio.ensure_future(self._setup_hook_task())
 
     @staticmethod
     def prepare_jishaku_flags() -> None:
@@ -270,7 +269,7 @@ class Bot(commands.Bot):
             origin: discord.Message | discord.Interaction,
             /,
             *,
-            cls: Type[Context] = Context,
+            cls: type[Context] = Context,
     ) -> Context:
         return await super().get_context(origin, cls=cls)
 
@@ -305,9 +304,9 @@ class Bot(commands.Bot):
             print(format(center, f'=^{len(text)}'))
             print(text)
 
-            self.log.info(f'Gateway received READY @ {self.startup_timestamp}')
+            self.log.info('Gateway received READY @ %s', self.startup_timestamp)
         else:
-            self.log.info(f'Ready as {self.user} (ID: {self.user.id})')
+            self.log.info('Ready as %s (ID: %s)', self.user, self.user.id)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if guild.id in self.blacklist:
@@ -380,9 +379,7 @@ class Bot(commands.Bot):
         error = getattr(error, 'original', error)
 
         if ctx is MISSING:  # currently for user installed app commands cause ctx is not passed here
-            self.log.critical(
-                f'`ctx` is MISSING: Uncaught error occurred when trying to invoke a command: {error}',
-                exc_info=error)
+            self.log.critical('`ctx` is MISSING: Uncaught error when invoking a command: %s', error, exc_info=error)
             return
 
         self.command_error_cache[self.make_command_cache_key(ctx)] = f'{error.__class__.__name__}: {error}'
@@ -459,8 +456,7 @@ class Bot(commands.Bot):
             param = error.param
         else:
             if not self.is_owner(ctx.author):
-                self.log.critical(
-                    f'Uncaught error occurred when trying to invoke {ctx.command.name}: {error}', exc_info=error)
+                self.log.critical('Uncaught error when invoking %s: %s', ctx.command.name, error, exc_info=error)
 
                 builder = AnsiStringBuilder()
                 builder.append(f'panic!({error})', color=AnsiColor.red, bold=True)
@@ -819,7 +815,7 @@ class SpamControl:
         The bot instance.
     spam_counter: CooldownMapping
         The cooldown mapping.
-    spam_details: Dict[int, List[float]]
+    spam_details: dict[int, list[float]]
         The details of the spam.
     """
 
@@ -827,7 +823,7 @@ class SpamControl:
         bot: Bot
         spam_counter: commands.CooldownMapping
         _auto_spam_count: Counter[int]
-        spam_details: Dict[int, list[float]]
+        spam_details: dict[int, list[float]]
 
     def __init__(self, bot: Bot):
         self.bot: Bot = bot
@@ -835,7 +831,7 @@ class SpamControl:
             10, 12.0, commands.BucketType.user
         )
         self._auto_spam_count: Counter[int] = Counter()
-        self.spam_details: Dict[int, list[float]] = defaultdict(list)
+        self.spam_details: dict[int, list[float]] = defaultdict(list)
 
     @property
     def current_spammers(self) -> list[int]:

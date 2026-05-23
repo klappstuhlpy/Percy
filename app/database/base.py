@@ -65,7 +65,7 @@ class _Database:
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self.bot = bot
-        self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
+        self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_running_loop()
         self._connect_task: asyncio.Task = self.loop.create_task(self._connect())
 
     async def _connect(self) -> None:
@@ -76,7 +76,7 @@ class _Database:
                 migrator = Migrations()
                 await migrator.upgrade(conn)
         except (asyncpg.PostgresError, OSError, TimeoutError) as e:
-            logging.error(f'Failed to connect to the PostgreSQL database: {e}')
+            logging.error('Failed to connect to the PostgreSQL database: %s', e)
             logging.critical('Shutting down the bot due to database connection failure.')
             await self.bot.close()
 

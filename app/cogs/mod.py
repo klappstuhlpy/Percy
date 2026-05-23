@@ -1417,7 +1417,7 @@ class Moderation(Cog):
 
         try:
             await member.ban(reason=reason)
-        except:
+        except discord.HTTPException:
             log.info('[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s', member, member.id, guild_id)
         else:
             yield f'{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions.'
@@ -3087,7 +3087,7 @@ class Moderation(Cog):
         if moderator is None:
             try:
                 moderator = await self.bot.fetch_user(mod_id)
-            except:
+            except discord.HTTPException:
                 moderator = f'Mod ID {mod_id}'
             else:
                 moderator = f'{moderator} (ID: {mod_id})'
@@ -3271,7 +3271,7 @@ class Moderation(Cog):
             if moderator is None:
                 try:
                     moderator = await self.bot.fetch_user(mod_id)
-                except:
+                except discord.HTTPException:
                     moderator = f'Mod ID {mod_id}'
                 else:
                     moderator = f'{moderator} (ID: {mod_id})'

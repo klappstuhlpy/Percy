@@ -480,8 +480,8 @@ class Config(Cog):
         """Disables a command for this channel."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, ctx.channel.id, command, whitelist=False)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
             await ctx.send_success('Command successfully disabled for this channel.')
 
@@ -496,8 +496,8 @@ class Config(Cog):
         """Enables a command for this channel."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, ctx.channel.id, command, whitelist=True)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
             await ctx.send_success('Command successfully enabled for this channel.')
 
@@ -523,10 +523,10 @@ class Config(Cog):
         """Disables a command for this server."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, None, command, whitelist=False)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
-            await ctx.send_success('Command successfully disabled for this server')
+            await ctx.send_success('Command successfully disabled for this server.')
 
     @server.command(
         'enable',
@@ -539,8 +539,8 @@ class Config(Cog):
         """Enables a command for this server."""
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, None, command, whitelist=True)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
             await ctx.send_success('Command successfully enabled for this server.')
 
@@ -560,8 +560,8 @@ class Config(Cog):
         human_friendly = channel.mention if channel else 'the server'
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, channel_id, command, whitelist=True)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
             await ctx.send_success(f'Command successfully enabled for {human_friendly}.')
 
@@ -581,8 +581,8 @@ class Config(Cog):
         human_friendly = channel.mention if channel else 'the server'
         try:
             await self.command_toggle(ctx.db, ctx.guild.id, channel_id, command, whitelist=False)
-        except:
-            pass
+        except commands.BadArgument as e:
+            await ctx.send_error(str(e))
         else:
             await ctx.send_success(f'Command successfully disabled for {human_friendly}.')
 

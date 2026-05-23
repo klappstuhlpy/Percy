@@ -36,8 +36,9 @@ __all__ = (
 
 
 class RemoveNoise(logging.Filter):
-    """A filter to remove noise from the logs."""
-    def __init__(self):
+    """Suppresses discord.state warnings about unknown references."""
+
+    def __init__(self) -> None:
         super().__init__(name='discord.state')
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -64,16 +65,13 @@ class _ColourFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        formatter = self.FORMATS.get(record.levelno)
-        if formatter is None:
-            formatter = self.FORMATS[logging.DEBUG]
+        formatter = self.FORMATS.get(record.levelno, self.FORMATS[logging.DEBUG])
 
         if record.exc_info:
             text = formatter.formatException(record.exc_info)
             record.exc_text = f'\x1b[31m{text}\x1b[0m'
 
         output = formatter.format(record)
-
         record.exc_text = None
         return output
 
@@ -97,20 +95,22 @@ def setup_logging() -> Generator[None, Any, None]:
         root_log.setLevel(logging.INFO)
         handler = RotatingFileHandler(
             filename=Path(path, 'percy.log'),
-            encoding='utf-8', mode='w', maxBytes=max_bytes, backupCount=5
+            encoding='utf-8',
+            mode='w',
+            maxBytes=max_bytes,
+            backupCount=5,
         )
         handler.setFormatter(fmt)
         root_log.addHandler(handler)
 
         yield
     finally:
-        handlers = root_log.handlers[:]
-        for hdlr in handlers:
+        for hdlr in root_log.handlers[:]:
             hdlr.close()
             root_log.removeHandler(hdlr)
 
 
-async def run_bot():
+async def run_bot() -> None:
     discord.VoiceClient.warn_nacl = False
 
     async with Bot() as bot:
@@ -122,31 +122,31 @@ async def run_bot():
 
 @click.group(invoke_without_command=True, options_metavar='[options]')
 @click.pass_context
-def main(ctx) -> None:
+def main(ctx: click.Context) -> None:
     """Launches the bot."""
     if ctx.invoked_subcommand is None:
         with setup_logging():
             asyncio.run(run_bot())
 
 
-@main.group(short_help='Database Configuration', options_metavar='[options]')
+@main.group(short_help='Database configuration', options_metavar='[options]')
 def db() -> None:
     """Manages the database."""
-    pass
 
 
 @db.command()
 def init() -> None:
-    """Initializes the database and creates the initial revision."""
+    """Initializes the database and applies all pending migrations."""
     migrations = Migrations()
 
     try:
         applied = asyncio.run(run_migration_upgrade(migrations))
-    except:
+    except Exception:
         traceback.print_exc()
         click.secho(
-            'Failed to initialize and apply migrations. Please check your database configuration and migration scripts.',
-            fg='red')
+            'Failed to initialize and apply migrations. Check your database configuration and migration scripts.',
+            fg='red',
+        )
     else:
         click.secho(f'Successfully initialized the database and applied {applied} migration(s).', fg='green')
 
@@ -154,14 +154,15 @@ def init() -> None:
 @db.command()
 @click.option('--reason', '-r', help='The reason for this revision.', required=True)
 def migrate(reason: str) -> None:
-    """Creates a new revision for you to edit."""
+    """Creates a new revision file for you to edit."""
     migrations = Migrations()
     if migrations.is_next_revision_taken:
         click.secho(
-            'An unapplied migration for the next version already exists. Please apply pending migrations before creating a new one.',
-            fg='yellow')
-        click.secho('Hint: Apply pending migrations with the `upgrade` command.', fg='yellow', bold=True)
-        return None
+            'An unapplied migration for the next version already exists. Apply pending migrations before creating a new one.',
+            fg='yellow',
+        )
+        click.secho('Hint: Use the `upgrade` command to apply pending migrations.', fg='yellow', bold=True)
+        return
 
     revision = migrations.create_revision(reason)
     click.secho(f'Successfully created revision V{revision.version}.', fg='green')
@@ -173,42 +174,45 @@ async def run_migration_upgrade(migrations: Migrations, revision: int | None = N
 
 
 @db.command()
-@click.option('--revision', '-r', help='The revision number to upgrade. Default is latest.')
-@click.option('--sql', help='Print the SQL instead of executing it', is_flag=True)
-def upgrade(revision: str, sql: bool) -> None:
-    """Upgrades the database at the given revision (if any)."""
+@click.option('--revision', '-r', help='The revision number to upgrade to. Defaults to latest.')
+@click.option('--sql', help='Print the SQL instead of executing it.', is_flag=True)
+def upgrade(revision: str | None, sql: bool) -> None:
+    """Upgrades the database to the given revision (or latest if not specified)."""
     migrations = Migrations()
 
     if sql:
         migrations.display()
-        return None
+        return
 
+    revision_number: int | None = None
     if revision:
         try:
-            revision = int(revision)
+            revision_number = int(revision)
         except ValueError:
             click.secho('The revision number must be a valid integer.', fg='red')
-            return None
+            return
 
     try:
-        applied = asyncio.run(run_migration_upgrade(migrations, revision))
-    except:
+        applied = asyncio.run(run_migration_upgrade(migrations, revision_number))
+    except Exception:
         traceback.print_exc()
-        click.secho('An error occurred while applying the database migrations. Please check your migration scripts.',
-                    fg='red')
+        click.secho(
+            'An error occurred while applying the database migrations. Check your migration scripts.',
+            fg='red',
+        )
     else:
         click.secho(f'Successfully applied {applied} migration(s) to the database.', fg='green')
 
 
-@db.command()
+@db.command(name='log')
 @click.option('--reverse', help='Print in reverse order (oldest first).', is_flag=True)
 def log(reverse: bool) -> None:
-    """Displays the revision history."""
+    """Displays the migration revision history."""
     migrations = Migrations()
-    revs = reversed(migrations.ordered_revisions) if not reverse else migrations.ordered_revisions
+    revs = migrations.ordered_revisions if reverse else reversed(migrations.ordered_revisions)
     for rev in revs:
         as_yellow = click.style(f'V{rev.version:>03}', fg='yellow')
-        click.echo(f'{as_yellow} {rev.description.replace('_', ' ')}')
+        click.echo(f'{as_yellow} {rev.description.replace("_", " ")}')
 
 
 if __name__ == '__main__':

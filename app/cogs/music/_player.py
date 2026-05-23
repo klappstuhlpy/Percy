@@ -433,11 +433,11 @@ class PlayerPanel(View):
                                 value=f'{EMOJI_KEYS[track.source]} **`{track.source.title()}`**',
                                 inline=False)
 
-            if not self.player.queue.is_empty and (upcomming := self.player.queue.peek(0)):
+            if not self.player.queue.is_empty and (upcoming := self.player.queue.peek(0)):
                 eta = discord.utils.utcnow() + datetime.timedelta(
                     milliseconds=(self.player.current.length - self.player.position))
                 embed.add_field(name='╠ Next Track:',
-                                value=f'[{upcomming.title}]({upcomming.uri}) {discord.utils.format_dt(eta, 'R')}')
+                                value=f'[{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, "R")}')
 
             if artwork := self.player.current.artwork:
                 embed.set_thumbnail(url=artwork)

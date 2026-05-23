@@ -869,7 +869,7 @@ class Music(Cog):
                 tracks = '\n'.join(
                     self.fmt(track, i) for i, track in enumerate(entries, (self._current_page * self.per_page) + 1)
                 ) if not isinstance(entries[0], str) else (
-                    '*It seems like there are currently not upcomming tracks.*\n'
+                    '*It seems like there are currently no upcoming tracks.*\n'
                     'Add one with </play:1207828024037216283>.'
                 )
 

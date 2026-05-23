@@ -53,7 +53,7 @@ async def send_to_paste_service(bot: Bot, contents: str, *, extension: str = "",
                 'trying again (%r/%r).', paste_url, attempt, FAILED_REQUEST_ATTEMPTS
             )
             continue
-        except:
+        except Exception:
             log.exception(
                 'An unexpected error has occurred during handling of the request, '
                 'trying again (%r/%r).', attempt, FAILED_REQUEST_ATTEMPTS

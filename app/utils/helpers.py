@@ -351,7 +351,7 @@ class CancellableQueue(Generic[T, V]):
 
             try:
                 await getter
-            except:
+            except BaseException:
                 getter.cancel()
                 try:
                     self._waiters.remove(getter)

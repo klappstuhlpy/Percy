@@ -101,7 +101,7 @@ class Admin(Cog):
         )
         try:
             await user.send(message)
-        except:
+        except discord.HTTPException:
             await ctx.send_error(f'Could not send a DM to {user}.')
         else:
             await ctx.send_success('PM successfully sent.')
@@ -225,7 +225,7 @@ class Admin(Cog):
             start = time.perf_counter()
             results = await strategy(query)
             dt = (time.perf_counter() - start) * 1000.0
-        except:
+        except Exception:
             await ctx.send(f'```py\n{traceback.format_exc()}\n```')
             return
 

@@ -1,3 +1,4 @@
+import datetime
 import json
 import re
 import uuid
@@ -6,11 +7,8 @@ from typing import ClassVar, TypedDict
 
 import asyncpg
 import click
-import discord
 
-__all__ = (
-    'Migrations'
-)
+__all__ = ('Migrations',)
 
 
 class Revisions(TypedDict):
@@ -100,7 +98,7 @@ class Migrations:
         with Path(file_path).open('w', encoding='utf-8', newline='\n') as fp:
             fp.write((
                 f'-- Revises: V{self.version}\n'
-                f'-- Creation Date: {discord.utils.utcnow()} UTC\n'
+                f'-- Creation Date: {datetime.datetime.now(datetime.timezone.utc)} UTC\n'
                 f'-- Reason: {reason}'
             ))
 
@@ -111,7 +109,7 @@ class Migrations:
         successes = 0
         async with connection.transaction():
             if revision_number is not None:
-                revision = self.revisions.get(revision_number, None)
+                revision = self.revisions.get(revision_number)
                 if revision is None:
                     raise ValueError(f'No such revision `{revision_number}`')
 

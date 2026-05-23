@@ -42,6 +42,10 @@ pilmoji = {git = "https://github.com/jay3332/pilmoji", branch = "2.0"}
 fonttools = "^4.50.0"
 discord-py = {extras = ["voice"], version = "^2.7.1"}
 
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.8.0"
+pyright = ">=1.1.0"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 125

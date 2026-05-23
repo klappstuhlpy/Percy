@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-class version_info(NamedTuple):
+class VersionInfo(NamedTuple):
     """Represents versioning information"""
 
     major: int
@@ -32,10 +32,10 @@ beta: bool = system() != 'Linux'
 path: Path = Path(__file__).parent
 
 name: str = 'Percy'
-version: version_info = version_info(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
+version: VersionInfo = VersionInfo(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
 description: str = 'A multipurpose bot for Discord'
 support_server: str = 'https://discord.com/eKwMtGydqh'
-website: str = 'https://percy.klappstuhl.me/'  # comming soon
+website: str = 'https://percy.klappstuhl.me/'
 repo_url: str = 'https://github.com/klappstuhlpy/Percy-v2/'
 
 owners: Collection[int] | int = 991398932397703238
@@ -49,7 +49,7 @@ token: str = env('DISCORD_TOKEN')
 beta_token: str = env('DISCORD_BETA_TOKEN')
 client_secret: str = env('DISCORD_CLIENT_SECRET')
 
-resolved_token: str = token  # if not beta else beta_token
+resolved_token: str = beta_token if beta else token
 
 lavalink_nodes: Collection[SimpleNamespace] = [
     SimpleNamespace(uri='https://lavalink.klappstuhl.me/', password=env('LAVALINK_NODE_1_PASSWORD')),

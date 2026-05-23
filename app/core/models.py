@@ -23,7 +23,7 @@ from typing import (
     override,
     Type,
     Union,
-    runtime_checkable, Dict
+    runtime_checkable,
 )
 
 import aiohttp
@@ -408,7 +408,7 @@ class Command(commands.Command):
 
     This supports custom permission specifications and extended flag parameters to support
     the :class:`app.core.flags.Flags` class with special consume until flag keyword-only parameters
-    and store-true flags for text commands (this supports a boolean typed parameter implemention for app_commands).
+    and store-true flags for text commands (this supports a boolean typed parameter implementation for app_commands).
 
     Attributes
     ----------
@@ -550,7 +550,7 @@ class Command(commands.Command):
     def _disect_param(param: commands.Parameter) -> tuple:
         """Disects a parameter into it's annotation, greedy, optional, and origin.
 
-        This is basically a separate implemention of the original method in the `commands.Command` class
+        This is basically a separate implementation of the original method in the `commands.Command` class
         to support the `app.core.flags.Flags` class and it's special parameters.
         """
         greedy = isinstance(param.annotation, commands.Greedy)
@@ -986,7 +986,7 @@ class Context(commands.Context, Generic[CogT]):
 
 
 class _app_command_override(app_commands.Command):
-    """An override for the application command class to support the hybrid command implemention.
+    """An override for the application command class to support the hybrid command implementation.
 
     This is used to ensure that the application command is properly copied over to the hybrid command.
     """
@@ -1008,7 +1008,7 @@ ContextT = TypeVar('ContextT', bound=Context)
 
 @runtime_checkable
 class HybridContextProtocol(Protocol[ContextT]):
-    """Protocol to match the :class:`.Context` class for hybrid command implementions."""
+    """Protocol to match the :class:`.Context` class for hybrid command implementations."""
 
     async def full_invoke(self, *args: P.args, **kwargs: P.kwargs) -> Any:
         """|coro|
@@ -1017,7 +1017,7 @@ class HybridContextProtocol(Protocol[ContextT]):
 
         Notes
         -----
-        The full invoke function for the command, used to invoke the parent command implemention.
+        The full invoke function for the command, used to invoke the parent command implementation.
         The passed arguments must follow exactly the same signature as the command's hybrid callback.
 
         `self` and `ctx` parameter are automatically added to the arguments.
@@ -1033,10 +1033,10 @@ class HybridContextProtocol(Protocol[ContextT]):
 
 
 class HybridContext(Context, HybridContextProtocol):
-    """A Context type especially for application command implementions
+    """A Context type especially for application command implementations
     that were defined by using the :func:`.define_app_command()` decorator.
 
-    This can only be used on application commands that derive from hybrid commands and are defined seperately.
+    This can only be used on application commands that derive from hybrid commands and are defined separately.
 
     Attributes
     ----------
@@ -1148,7 +1148,7 @@ def _resolve_command_kwargs(
         brief: str = MISSING,
         help: str = MISSING,
 ) -> dict[str, Any]:
-    kwargs: Dict[str, Any] = {'cls': cls}
+    kwargs: dict[str, Any] = {'cls': cls}
 
     if name is not MISSING:
         kwargs['name'] = name
