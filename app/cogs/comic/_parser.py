@@ -4,7 +4,8 @@ from typing import ClassVar
 from urllib.parse import urljoin
 
 import aiohttp
-from bs4 import BeautifulSoup, NavigableString, PageElement, Tag
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 
 from app.cogs.comic._client import Comic as MarvelComic
 from app.cogs.comic._client import Marvel
@@ -23,7 +24,7 @@ def extract_authors(text: str) -> dict[str, list[str]]:
     return author_dict
 
 
-def from_destination(c: str, details: dict[str, list]) -> str:
+def from_destination(c: str, details: dict[str, list]) -> str | None:
     return str(details[c][0]) if c in details else None
 
 
@@ -50,11 +51,12 @@ class Parser:
             return None
 
         title = remove_html_tags(base_prd.text)
-        image_url = soup.find('div', class_='product-image mar-x-auto mar-b-lg pad-x-md').find('img').get('src')
+        _img_tag = soup.find('div', class_='product-image mar-x-auto mar-b-lg pad-x-md')
+        image_url: str | None = str(_img_tag.find('img').get('src')) if _img_tag else None  # type: ignore[union-attr]
 
         store_table = soup.find('table', class_='purchase-table')
         try:
-            price = store_table.find('span').text[1:]
+            price = store_table.find('span').text[1:]  # type: ignore[union-attr]
         except (KeyError, AttributeError):
             price = 'N/A'
         if price.endswith('*'):
@@ -65,23 +67,23 @@ class Parser:
 
         base_obj = soup.find('div', class_='o_geo-block')
         if base_obj:
-            price_note: str | None = base_obj.find(
+            price_note: str | None = base_obj.find(  # type: ignore[union-attr]
                 'p', class_='mar-t-rg').text if base_obj.find('p', class_='mar-t-rg') else None
         else:
             price_note = 'N/A'
 
         info_table = soup.find('div', class_='row pad-b-xl')
-        desc = remove_html_tags(info_table.find('p').text.strip())
-        authors = extract_authors(info_table.find('div', class_='mar-b-md').text)
-        release_date = info_table.find('div', class_='o_release-date mar-b-md').text.replace('Release', '')
-        isbn = info_table.find('div', class_='o_isbn13 mar-b-md').text if info_table.find(
+        desc = remove_html_tags(info_table.find('p').text.strip())  # type: ignore[union-attr]
+        authors = extract_authors(info_table.find('div', class_='mar-b-md').text)  # type: ignore[union-attr]
+        release_date = info_table.find('div', class_='o_release-date mar-b-md').text.replace('Release', '')  # type: ignore[union-attr]
+        isbn = info_table.find('div', class_='o_isbn13 mar-b-md').text if info_table.find(  # type: ignore[union-attr]
             'div', class_='o_isbn13 mar-b-md') else None
-        trim_size = info_table.find('div', class_='o_trimsize mar-b-md').text if info_table.find(
+        trim_size = info_table.find('div', class_='o_trimsize mar-b-md').text if info_table.find(  # type: ignore[union-attr]
             'div', class_='o_trimsize mar-b-md') else None
 
         spec_table = soup.find('div', class_='g-6--md g-omega--md')
         result = {}
-        for i in spec_table.find_all('div', class_='mar-b-md'):
+        for i in spec_table.find_all('div', class_='mar-b-md'):  # type: ignore[union-attr]
             clean_text = remove_html_tags(i.text.strip())
             spec_map = ['Length', 'Series', 'Category', 'Age Rating']
             for spec in spec_map:
@@ -119,15 +121,15 @@ class Parser:
     async def bs4_viz(cls) -> list[GenericComic]:
         ref = cls.VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
 
-        elements = []
-        async with aiohttp.ClientSession() as session, session.get(ref) as resp:
-            soup = BeautifulSoup(await resp.text(), 'html.parser')
-            for i in soup.find_all('a', class_='product-thumb ar-inner type-center'):
-                href = i.get('href')
-                elements.append(urljoin(cls.RAW_VIZ_ENDPOINT, href))
-
         mangas = []
         async with aiohttp.ClientSession() as session:
+            async with session.get(ref) as resp:
+                soup = BeautifulSoup(await resp.text(), 'html.parser')
+                elements = [
+                    urljoin(cls.RAW_VIZ_ENDPOINT, i.get('href'))  # type: ignore[arg-type]
+                    for i in soup.find_all('a', class_='product-thumb ar-inner type-center')
+                ]
+
             for index, element in enumerate(elements):
                 async with session.get(element) as resp:
                     _cs_manga = await cls._bs4_parse_dc(await resp.text(), index=index, element=element)
@@ -147,10 +149,10 @@ class Parser:
 
             soup = BeautifulSoup(page, 'html.parser')
             comics = []
-            links: Tag = soup.find('ul', class_='react-multi-carousel-track content-tray-slider')
+            links: Tag = soup.find('ul', class_='react-multi-carousel-track content-tray-slider')  # type: ignore[assignment]
 
             for item in links.contents:
-                branch = item.findNext(class_='card-button usePointer').get('href')
+                branch = item.findNext(class_='card-button usePointer').get('href')  # type: ignore[union-attr]
                 link = cls.DC_ENDPOINT + branch
 
                 async with session.get(link) as resp:
@@ -167,11 +169,11 @@ class Parser:
                 if not txt:
                     continue
 
-                c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()
+                c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()  # type: ignore[union-attr, arg-type]
                 if c_type != 'COMIC BOOK':
                     continue
 
-                title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()
+                title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()  # type: ignore[union-attr, arg-type]
 
                 desc = None
                 if len(txt) > 1 and txt[1].find('p'):
@@ -182,7 +184,7 @@ class Parser:
                 details = {}
                 for d in details_list:
                     for dd in d:
-                        d_id = dd['id'][len('page151-band11690-Subitem2847'):]
+                        d_id = dd['id'][len('page151-band11690-Subitem2847'):]  # type: ignore[index]
                         x = None
                         if '-' in d_id:
                             d_id, x = d_id.split('-')
@@ -190,7 +192,8 @@ class Parser:
                         if d_id not in details:
                             details[d_id] = []
                         details[d_id] += [
-                            i.contents[0].contents[0] if x else i.contents[0] for i in dd.contents if type(i) is Tag]
+                            i.contents[0].contents[0] if x else i.contents[0]  # type: ignore[union-attr]
+                            for i in dd.contents if type(i) is Tag]
 
                 creators = {}
                 if '24' in details:
@@ -207,8 +210,7 @@ class Parser:
                 page_count = from_destination('48', details)
 
                 img = soup.find('img', id='page151-band11672-Card11673-img')
-                image = img['src'].split('?')[0]
-                image = image if image else None
+                image = img['src'].split('?')[0] if img else None  # type: ignore[index]
 
                 _copyright = str(
                     soup.find('div', class_='small legal d-inline-block').contents[0].contents[0]  # type: ignore
@@ -233,40 +235,40 @@ class Parser:
 
     @classmethod
     async def bs4_marvel(cls) -> dict[int, str]:
-        async with aiohttp.ClientSession() as session, session.get('https://marvel.com/comics/calendar/') as resp:
-            if resp.status != 200:
-                resp.raise_for_status()
+        descs: dict[int, str] = {}
 
-            page = await resp.text()
-
-        soup = BeautifulSoup(page, 'html.parser')
-        descs = {}
-
-        for link in soup.find_all('a', class_='meta-title'):
-            plink = 'https:' + link.get('href').strip()
-            _id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
-
-            page = None
-            for i in range(10):
-                try:
-                    async with aiohttp.ClientSession() as session, session.get(plink) as resp:
-                        if resp.status != 200:
-                            resp.raise_for_status()
-
-                        page = await resp.text()
-                    break
-                except aiohttp.ClientPayloadError:
-                    pass
-            if page is None:
-                continue
+        async with aiohttp.ClientSession() as session:
+            async with session.get('https://marvel.com/comics/calendar/') as resp:
+                if resp.status != 200:
+                    resp.raise_for_status()
+                page = await resp.text()
 
             soup = BeautifulSoup(page, 'html.parser')
-            try:
-                desc = next(i for i in soup.find_all('p') if 'data-blurb' in i.attrs).get_text().strip()
-            except StopIteration:
-                continue
 
-            descs[_id] = desc
+            for link in soup.find_all('a', class_='meta-title'):
+                plink = 'https:' + link.get('href').strip()  # type: ignore[operator, union-attr]
+                _id = int(plink.strip('https://www.marvel.com/comics/issue/').split('/')[0])
+
+                page = None
+                for _ in range(10):
+                    try:
+                        async with session.get(plink) as resp:
+                            if resp.status != 200:
+                                resp.raise_for_status()
+                            page = await resp.text()
+                        break
+                    except aiohttp.ClientPayloadError:
+                        pass
+                if page is None:
+                    continue
+
+                soup = BeautifulSoup(page, 'html.parser')
+                try:
+                    desc = next(i for i in soup.find_all('p') if 'data-blurb' in i.attrs).get_text().strip()
+                except StopIteration:
+                    continue
+
+                descs[_id] = desc
 
         return descs
 
@@ -284,8 +286,6 @@ class Parser:
 
     @classmethod
     def _to_comic(cls, data: MarvelComic) -> GenericComic:
-        from ._cog import GenericComic
-
         _cs_comic = GenericComic(
             _id=data.id,
             title=data.title,
@@ -298,7 +298,7 @@ class Parser:
             data.images[0].path + '/clean.jpg'
             if data.images else 'https://klappstuhl.me/gallery/hrFFAQFMlL.jpeg')
 
-        _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), None)
+        _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), '') or ''
         _cs_comic.price = next((i.price for i in data.prices if i.type == 'printPrice'), None)
         _cs_comic.date = next((i.date for i in data.dates if i.type == 'onsaleDate'), None)
 
@@ -311,7 +311,7 @@ class Parser:
         return _cs_comic
 
     @classmethod
-    def _get_desc(cls, tag: Tag | PageElement) -> list[str]:
+    def _get_desc(cls, tag: Tag) -> list[str]:
         strings = []
         for i in tag.contents:
             if isinstance(i, Tag):
@@ -328,13 +328,11 @@ class Parser:
 
     @classmethod
     async def fetch_marvel_lookup_table(cls, client: Marvel) -> list[GenericComic]:
-        from ._cog import GenericComic
-
         comics: list[GenericComic] = await cls.marvel_from_api(client)
         descs: dict[int, str] = await cls.bs4_marvel()
 
         for c in comics:
-            if description := descs.get(c.id, None):
+            if description := descs.get(c.id):
                 c.description = description
 
         return comics

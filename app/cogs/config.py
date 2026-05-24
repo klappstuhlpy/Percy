@@ -593,7 +593,7 @@ class Config(Cog):
         user_permissions=PermissionTemplate.mod
     )
     @describe(channel='The channel to show the disabled commands for.')
-    async def config_disabled(  # noqa: ANN201
+    async def config_disabled(
             self, ctx: Context, *, channel: discord.TextChannel | discord.VoiceChannel | None = None
     ):
         """Shows the disabled commands for the channel given."""

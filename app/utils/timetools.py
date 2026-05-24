@@ -4,7 +4,7 @@ import datetime
 import random
 import re
 import time
-from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 import discord
 import parsedatetime as pdt
@@ -19,7 +19,7 @@ from config import Emojis
 if TYPE_CHECKING:
     from app.core import Context
 else:
-    Context: TypeAlias = commands.Context
+    type Context = commands.Context
 
 units = pdt.pdtLocales['en_US'].units
 units['minutes'].append('mins')
@@ -78,17 +78,17 @@ class ShortTime:
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         now = now or datetime.datetime.now(datetime.UTC)
 
-        self.dt = now + relativedelta(**data)
+        self.dt = now + relativedelta(**data)  # type: ignore[arg-type]
         if tzinfo is not datetime.UTC:
             self.dt = self.dt.astimezone(tzinfo)
 
         if as_timedelta:
-            self.dt = self.dt - now  # type: ignore
+            self.dt = self.dt - now  # type: ignore[assignment]
 
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
         tzinfo = datetime.UTC
-        config = await ctx.bot.db.get_user_config(ctx.author.id)
+        config = await ctx.bot.db.get_user_config(ctx.author.id)  # type: ignore[union-attr]
         if config and config.timezone:
             tzinfo = config.tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
@@ -96,7 +96,7 @@ class ShortTime:
     @classmethod
     async def transform(cls, interaction: discord.Interaction, value: str) -> Self:
         tzinfo = datetime.UTC
-        config = await interaction.client.db.get_user_config(interaction.user.id)
+        config = await interaction.client.db.get_user_config(interaction.user.id)  # type: ignore[union-attr]
         if config and config.timezone:
             tzinfo = config.tzinfo
         now = interaction.created_at.astimezone(tzinfo)
@@ -150,7 +150,7 @@ class HumanTime:
             tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         now = now or datetime.datetime.now(tzinfo)
-        dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: datetime.datetime, Any
+        dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: ignore[assignment]
 
         if not status.hasDateOrTime:  # If no date or time was provided, means it could not be parsed, raise an error
             raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
@@ -166,7 +166,7 @@ class HumanTime:
     @classmethod
     async def convert(cls, ctx: Context, argument: str) -> Self:
         tzinfo = datetime.UTC
-        config = await ctx.bot.db.get_user_config(ctx.author.id)
+        config = await ctx.bot.db.get_user_config(ctx.author.id)  # type: ignore[union-attr]
         if config and config.timezone:
             tzinfo = config.tzinfo
         return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
@@ -174,7 +174,7 @@ class HumanTime:
     @classmethod
     async def transform(cls, interaction: discord.Interaction, value: str) -> Self:
         tzinfo = datetime.UTC
-        config = await interaction.client.db.get_user_config(interaction.user.id)
+        config = await interaction.client.db.get_user_config(interaction.user.id)  # type: ignore[union-attr]
         if config and config.timezone:
             tzinfo = config.tzinfo
         return cls(value, now=interaction.created_at.astimezone(tzinfo), tzinfo=tzinfo)
@@ -228,9 +228,9 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
             raise ValueError
 
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
-        return relativedelta(**data)
+        return relativedelta(**data)  # type: ignore[arg-type]
 
-    async def convert(self, ctx: Context, argument: str) -> relativedelta:
+    async def convert(self, ctx: Context, argument: str) -> relativedelta:  # type: ignore[override]
         try:
             return self.__do_conversion(argument)
         except ValueError:
@@ -249,7 +249,7 @@ class FriendlyTimeResult:
     dt: datetime.datetime
     arg: str
 
-    __slots__ = ('dt', 'arg')
+    __slots__ = ('arg', 'dt')
 
     def __init__(self, dt: datetime.datetime) -> None:
         self.dt: datetime.datetime = dt
@@ -302,15 +302,15 @@ class UserFriendlyTime(commands.Converter):
         if converter is not None and not isinstance(converter, commands.Converter):
             raise TypeError('Object `converter` needs to be subclass of commands.Converter.')
 
-        self.converter: commands.Converter = converter
+        self.converter: commands.Converter = converter  # type: ignore[assignment]
         self.default: Any = default
 
-    async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:
+    async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:  # type: ignore[override]
         calendar = HumanTime.CALENDER
         regex = ShortTime.SHORT_TIME_COMPILED
 
         tzinfo = datetime.UTC
-        config = await ctx.bot.db.get_user_config(ctx.author.id)
+        config = await ctx.bot.db.get_user_config(ctx.author.id)  # type: ignore[union-attr]
         if config and config.timezone:
             tzinfo = config.tzinfo
 
@@ -320,7 +320,7 @@ class UserFriendlyTime(commands.Converter):
         if match is not None and match.group(0):
             data = {k: int(v) for k, v in match.groupdict(default=0).items()}
             remaining = argument[match.end():].strip()
-            dt = now + relativedelta(**data)
+            dt = now + relativedelta(**data)  # type: ignore[arg-type]
             result = FriendlyTimeResult(dt.astimezone(tzinfo))
             await result.ensure_constraints(ctx, self, now, remaining)
             return result
@@ -346,7 +346,7 @@ class UserFriendlyTime(commands.Converter):
         if elements is None or len(elements) == 0:
             raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
-        dt, status, begin, end, dt_string = elements[0]
+        dt, status, begin, end, _dt_string = elements[0]
 
         if not status.hasDateOrTime:
             raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')

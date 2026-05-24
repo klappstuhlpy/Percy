@@ -73,7 +73,7 @@ class Quote:
         center_x = left_boundary + (right_boundary - left_boundary) // 2
 
         for i, line in enumerate(lines):
-            line_width, line_height = get_text_dimensions(line, quote_font)
+            _line_width, line_height = get_text_dimensions(line, quote_font)
             y = start_y + i * line_height
             if i == len(lines) - 1:
                 y += total_text_height - len(lines) * line_height

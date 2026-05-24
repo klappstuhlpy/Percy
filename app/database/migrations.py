@@ -17,7 +17,7 @@ class Revisions(TypedDict):
 
 
 class Revision:
-    __slots__ = ('kind', 'version', 'description', 'file')
+    __slots__ = ('description', 'file', 'kind', 'version')
 
     def __init__(self, *, kind: str, version: int, description: str, file: Path) -> None:
         self.kind: str = kind
@@ -96,11 +96,11 @@ class Migrations:
         file_path = self.root / filename
 
         with Path(file_path).open('w', encoding='utf-8', newline='\n') as fp:
-            fp.write((
+            fp.write(
                 f'-- Revises: V{self.version}\n'
-                f'-- Creation Date: {datetime.datetime.now(datetime.timezone.utc)} UTC\n'
+                f'-- Creation Date: {datetime.datetime.now(datetime.UTC)} UTC\n'
                 f'-- Reason: {reason}'
-            ))
+            )
 
         self.save()
         return Revision(kind=kind, description=reason, version=self.version + 1, file=file_path)

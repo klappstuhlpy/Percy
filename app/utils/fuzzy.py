@@ -51,7 +51,7 @@ def quick_ratio(string1: str, string2: str) -> int:
     string1, string2 = checks.make_type_consistent(string1, string2)
 
     m = SequenceMatcher(None, string1, string2)
-    return int(round(100 * m.quick_ratio()))
+    return round(100 * m.quick_ratio())
 
 
 @checks.check_for_none
@@ -121,7 +121,7 @@ def _extraction_generator(
 
 
 @overload
-def _extraction_generator(
+def _extraction_generator[T](
         query: str,
         choices: dict[str, T],
         scorer: Callable[[str, str], int] = ...,
@@ -130,7 +130,7 @@ def _extraction_generator(
     ...
 
 
-def _extraction_generator(
+def _extraction_generator[T](
         query: str,
         choices: Sequence[str] | dict[str, T],
         scorer: Callable[[str, str], int] = quick_ratio,
@@ -161,7 +161,7 @@ def extract(
 
 
 @overload
-def extract(
+def extract[T](
         query: str,
         choices: dict[str, T],
         *,
@@ -172,7 +172,7 @@ def extract(
     ...
 
 
-def extract(
+def extract[T](
         query: str,
         choices: dict[str, T] | Sequence[str],
         *,
@@ -201,7 +201,7 @@ def extract_one(
 
 
 @overload
-def extract_one(
+def extract_one[T](
         query: str,
         choices: dict[str, T],
         *,
@@ -211,7 +211,7 @@ def extract_one(
     ...
 
 
-def extract_one(
+def extract_one[T](
         query: str,
         choices: dict[str, T] | Sequence[str],
         *,
@@ -241,7 +241,7 @@ def extract_or_exact(
 
 
 @overload
-def extract_or_exact(
+def extract_or_exact[T](
         query: str,
         choices: dict[str, T],
         *,
@@ -252,7 +252,7 @@ def extract_or_exact(
     ...
 
 
-def extract_or_exact(
+def extract_or_exact[T](
         query: str,
         choices: dict[str, T] | Sequence[str],
         *,
@@ -289,7 +289,7 @@ def extract_matches(
 
 
 @overload
-def extract_matches(
+def extract_matches[T](
         query: str,
         choices: dict[str, T],
         *,
@@ -299,7 +299,7 @@ def extract_matches(
     ...
 
 
-def extract_matches(
+def extract_matches[T](
         query: str,
         choices: dict[str, T] | Sequence[str],
         *,
@@ -329,7 +329,7 @@ def extract_matches(
 
 
 @overload
-def finder(
+def finder[T](
         text: str,
         collection: Iterable[T],
         *,
@@ -341,7 +341,7 @@ def finder(
 
 
 @overload
-def finder(
+def finder[T](
         text: str,
         collection: Iterable[T],
         *,
@@ -353,7 +353,7 @@ def finder(
 
 
 @overload
-def finder(
+def finder[T](
         text: str,
         collection: Iterable[T],
         *,
@@ -364,7 +364,7 @@ def finder(
     ...
 
 
-def finder(
+def finder[T](
         text: str,
         collection: Iterable[T],
         *,

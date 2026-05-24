@@ -5,7 +5,7 @@ import re
 from enum import Enum
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeAlias, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageSequence
@@ -16,24 +16,24 @@ from config import path
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from PIL.ImageDraw import Draw
+    from PIL.ImageDraw import ImageDraw as Draw
     from pilmoji.core import ColorT, FontT
 
-    ImageSize: TypeAlias = tuple[int, int]
+    type ImageSize = tuple[int, int]
 
 __all__ = (
     'ASSETS',
-    'Font',
     'FONT_MAPPING',
-    'wrap_text',
-    'alpha_paste',
-    'rounded_mask',
-    'FontManager',
     'FallbackFont',
     'FallbackFontSession',
-    'get_text_dimensions',
+    'Font',
+    'FontManager',
+    'alpha_paste',
     'get_dominant_color',
+    'get_text_dimensions',
     'resize_to_limit',
+    'rounded_mask',
+    'wrap_text',
 )
 
 
@@ -254,7 +254,7 @@ class FallbackFont:
         self.fallback_scale: float = fallback_scale
         self.fallback_offset: tuple[int, int] = fallback_offset
 
-        self._size: int | float = font.size
+        self._size: int | float = font.size  # type: ignore[union-attr]
         self._fallback_size: int = round(self._size * fallback_scale)
 
         self._fallback: FontT | None = None
@@ -269,32 +269,32 @@ class FallbackFont:
 
     @property
     def path(self) -> str:
-        return self.font.path
+        return self.font.path  # type: ignore[union-attr]
 
     @property
-    def size(self) -> int:
+    def size(self) -> int | float:
         return self._size
 
     def _load_font_regex(self) -> None:
-        with TTFont(self.font.path) as font:
+        with TTFont(self.font.path) as font:  # type: ignore[union-attr]
             characters = (chr(code) for table in font["cmap"].tables for code, _ in table.cmap.items())
 
-        self._regex = re.compile('([^%s]+)' % ''.join(map(re.escape, characters)))
+        self._regex = re.compile('([^{}]+)'.format(''.join(map(re.escape, characters))))
 
     def _split_text(self, text: str) -> Iterator[list[str]]:
-        yield from (self._regex.split(line) for line in text.split('\n'))
+        yield from (self._regex.split(line) for line in text.split('\n'))  # type: ignore[union-attr]
 
-    def variant(self, *, font: FontT = None, size: int | None = None) -> FallbackFont:
+    def variant(self, *, font: FontT = None, size: int | None = None) -> FallbackFont:  # type: ignore[assignment]
         if font is not None:
-            font = font.path
+            font = font.path  # type: ignore[assignment, union-attr]
             size = size or getattr(font, 'size', self._size)
 
         new = self.__class__.__new__(self.__class__)
         new._prepare(
-            self.font.font_variant(font=font, size=size), self.fallback_loader, self.fallback_scale, self.fallback_offset
+            self.font.font_variant(font=font, size=size), self.fallback_loader, self.fallback_scale, self.fallback_offset  # type: ignore[union-attr, arg-type]
         )
 
-        new._fallback = self.fallback and self.fallback.font_variant(size=round(size * self.fallback_scale))
+        new._fallback = self.fallback and self.fallback.font_variant(size=round(size * self.fallback_scale))  # type: ignore[union-attr, operator]
         new._regex = self._regex
 
         if font is not None or not new._regex:
@@ -303,20 +303,20 @@ class FallbackFont:
         return new
 
     def inject(self, draw: Draw) -> None:
-        self.font.getsize, self.__font_getsize = self.getsize, get_text_dimensions
-        draw.text, self.__draw_text = partial(self.text, draw), draw.text
+        self.font.getsize, self.__font_getsize = self.getsize, get_text_dimensions  # type: ignore[union-attr, assignment]
+        draw.text, self.__draw_text = partial(self.text, draw), draw.text  # type: ignore[method-assign]
 
     def eject(self, draw: Draw) -> None:
-        self.font.getsize = self.__font_getsize
+        self.font.getsize = self.__font_getsize  # type: ignore[union-attr, assignment]
         del self.__font_getsize
 
-        draw.text = self.__draw_text
+        draw.text = self.__draw_text  # type: ignore[method-assign]
         del self.__draw_text
 
     def session(self, draw: Draw) -> FallbackFontSession:
         return FallbackFontSession(self, draw)
 
-    def getsize(self, text: str) -> tuple[int, int]:
+    def getsize(self, text: str) -> tuple[int, int | float]:
         width = height = 0
 
         for line in self._split_text(text):
@@ -327,7 +327,7 @@ class FallbackFont:
                     continue
 
                 font = self.fallback if i % 2 else self.font
-                current += get_text_dimensions(chunk, font)[0]
+                current += get_text_dimensions(chunk, font)[0]  # type: ignore[arg-type]
 
             if current > width:
                 width = current
@@ -336,8 +336,8 @@ class FallbackFont:
 
         return width, height - 4
 
-    def text(self, draw: Draw, xy: tuple[int, int], text: str, fill: ColorT = None, font: FontT = None, *args: Any, **kwargs: Any) -> None:
-        if font is not None and (font.path, font.size) != (self.font.path, self.font.size) and font is not self:
+    def text(self, draw: Draw, xy: tuple[int, int], text: str, fill: ColorT = None, font: FontT = None, *args: Any, **kwargs: Any) -> None:  # type: ignore[assignment]
+        if font is not None and (font.path, font.size) != (self.font.path, self.font.size) and font is not self:  # type: ignore[union-attr]
             return self.variant(font=font).text(draw, xy, text, fill, *args, **kwargs)
 
         x, y = xy
@@ -357,19 +357,20 @@ class FallbackFont:
                     position = x, y
                 draw_text(position, chunk, fill, font, *args, **kwargs)
 
-                width, _ = get_text_dimensions(chunk, font)
+                width, _ = get_text_dimensions(chunk, font)  # type: ignore[arg-type]
                 x += width
 
             y += 4 + self._size
             x = xy[0]
 
 
-def get_text_dimensions(text_string: str, font: ImageFont) -> tuple[int, int]:
+def get_text_dimensions(text_string: str, font: ImageFont.FreeTypeFont) -> tuple[int, int]:
     # https://stackoverflow.com/a/46220683/9263761
-    ascent, descent = font.getmetrics()
+    _ascent, descent = font.getmetrics()
 
-    text_width = font.getmask(text_string).getbbox()[2]
-    text_height = font.getmask(text_string).getbbox()[3] + descent
+    mask_bbox = font.getmask(text_string).getbbox()
+    text_width = mask_bbox[2]
+    text_height = mask_bbox[3] + descent
 
     return text_width, text_height
 
@@ -398,10 +399,14 @@ def rounded_mask(size: ImageSize, radius: int, *, alpha: int = 255, quality: int
         draw.pieslice((0, 0, radius * 2, radius * 2), 180, 270, fill=(50, 50, 50, alpha + 55))  # type: ignore
         mx, my = (size[0] * quality, size[1] * quality)
 
+        corner_90 = corner.rotate(90)
+        corner_180 = corner.rotate(180)
+        corner_270 = corner.rotate(270)
+
         image.paste(corner, (0, 0), corner)
-        image.paste(corner.rotate(90), (0, my - radius), corner.rotate(90))
-        image.paste(corner.rotate(180), (mx - radius, my - radius), corner.rotate(180))
-        image.paste(corner.rotate(270), (mx - radius, 0), corner.rotate(270))
+        image.paste(corner_90, (0, my - radius), corner_90)
+        image.paste(corner_180, (mx - radius, my - radius), corner_180)
+        image.paste(corner_270, (mx - radius, 0), corner_270)
 
     draw = ImageDraw.Draw(image)
     draw.rectangle(((radius, 0), (mx - radius, my)), fill=(50, 50, 50, alpha))
@@ -422,15 +427,17 @@ def alpha_paste(background: Image.Image, foreground: Image.Image, box: ImageSize
 
 def get_dominant_color(image: Image.Image | io.BytesIO, palette_size: int = 16) -> tuple:
     if isinstance(image, io.BytesIO):
-        image = Image.open(image)
+        with Image.open(image) as opened:
+            image = opened.copy()
+    else:
+        image = image.copy()
 
-    img = image.copy()
-    img.thumbnail((100, 100))
+    image.thumbnail((100, 100))
 
-    paletted = img.convert('P', palette=Image.Palette.ADAPTIVE, colors=palette_size)
+    paletted = image.convert('P', palette=Image.Palette.ADAPTIVE, colors=palette_size)
 
     palette = paletted.getpalette()
-    color_counts = sorted(paletted.getcolors(), reverse=True)
+    color_counts = sorted(paletted.getcolors() or [], reverse=True)  # type: ignore[arg-type]
     palette_index = color_counts[0][1]
     dominant_color = palette[palette_index * 3: palette_index * 3 + 3]  # type: ignore
 

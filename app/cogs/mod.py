@@ -555,9 +555,9 @@ class GatekeeperSetUpView(View):
         with suppress(discord.HTTPException):
             if view.message is not None:
                 await view.message.delete()
-                
+
         self.update_state()
-        
+
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
@@ -602,7 +602,7 @@ class GatekeeperSetUpView(View):
             await interaction.followup.send(f'{Emojis.success} Starter message successfully sent', ephemeral=True)
 
         self.update_state()
-        
+
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
@@ -648,7 +648,7 @@ class GatekeeperSetUpView(View):
                 await self.gatekeeper.edit(rate=modal.final_rate)
 
         self.update_state()
-        
+
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
@@ -696,7 +696,7 @@ class GatekeeperSetUpView(View):
                 await interaction.response.send_message(f'{Emojis.success} Successfully enabled gatekeeper.')
 
         self.update_state()
-        
+
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
@@ -1009,7 +1009,7 @@ class PreExistingMuteRoleView(View):
 
 
 class FlaggedMember:
-    __slots__ = ('id', 'joined_at', 'display_name', 'messages')
+    __slots__ = ('display_name', 'id', 'joined_at', 'messages')
 
     def __init__(self, user: discord.abc.User | discord.Member, joined_at: datetime.datetime) -> None:
         self.id = user.id
@@ -1159,8 +1159,8 @@ class SpamChecker:
                 return SpammerSequence(spammers)  # type: ignore[arg-type]
 
             if (
-                    flagged.messages <= 10
-                    and message.raw_mentions
+                    (flagged.messages <= 10
+                    and message.raw_mentions)
                     or '@everyone' in message.content
                     or '@here' in message.content
             ):
@@ -2855,9 +2855,7 @@ class Moderation(Cog):
         """Checks if the given channel is currently in a lockdown."""
         query = "SELECT * FROM guild_lockdowns WHERE guild_id=$1 AND channel_id=$2;"
         record = await self.bot.db.fetchrow(query, guild.id, channel.id)
-        if record:
-            return True
-        return False
+        return bool(record)
 
     @staticmethod
     def is_potential_lockout(
@@ -3395,7 +3393,7 @@ class Moderation(Cog):
         total = 0
         if role is not None:
             members = ctx.guild_config.muted_members.copy()
-            members.update((r.id for r in role.members))
+            members.update(r.id for r in role.members)
             total = len(members)
             role = f'{role} (ID: {role.id})'
 
@@ -3454,12 +3452,10 @@ class Moderation(Cog):
                 reason = f'Action done by {ctx.author} (ID: {ctx.author.id}): Merging mute roles'
                 async for member in self.bot.resolve_member_ids(ctx.guild, members):  # type: ignore[arg-type]
                     if not member._roles.has(role.id):
-                        try:
+                        with suppress(discord.HTTPException):
                             await member.add_roles(role, reason=reason)
-                        except discord.HTTPException:
-                            pass
 
-            members.update((m.id for m in role.members))
+            members.update(m.id for m in role.members)
             query = """
                 INSERT INTO guild_config (id, mute_role_id, muted_members)
                 VALUES ($1, $2, $3::bigint[])

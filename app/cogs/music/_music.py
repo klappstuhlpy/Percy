@@ -217,7 +217,7 @@ class Music(Cog):
             return
 
         user_id = player.queue.listen_together
-        if user_id is MISSING or user_id and before.id != user_id:
+        if user_id is MISSING or (user_id and before.id != user_id):
             return
 
         before_activity = self._get_spotify_activity(before)

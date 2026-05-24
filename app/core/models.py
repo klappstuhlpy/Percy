@@ -9,21 +9,17 @@ from contextlib import suppress
 from functools import wraps
 from typing import (
     Any,
-    Callable,
     ClassVar,
-    Generic,
     Literal,
     NamedTuple,
-    ParamSpec,
     TYPE_CHECKING,
     TypeVar,
-    Iterable,
-    overload,
     Protocol,
     override,
     Union,
     runtime_checkable,
 )
+from collections.abc import Callable, Iterable
 
 import aiohttp
 import discord
@@ -40,42 +36,40 @@ from config import Emojis
 
 if TYPE_CHECKING:
     from datetime import datetime
-    from typing_extensions import Self
+    from typing import Self
 
     from app.core import Bot, FlagNamespace
     from app.database import Database
 
-    P = ParamSpec('P')
-    R = TypeVar('R')
 
 CogT = TypeVar('CogT', bound='Cog')
 T = TypeVar('T')
 
 __all__ = (
-    'HybridContext',
-    'BadArgument',
     'AppBadArgument',
-    'EmbedBuilder',
+    'BadArgument',
     'Cog',
     'CogT',
     'Command',
-    'HybridCommand',
-    'HybridGroupCommand',
-    'GroupCommand',
     'Context',
+    'EmbedBuilder',
+    'GroupCommand',
+    'HybridCommand',
+    'HybridContext',
+    'HybridGroupCommand',
     'PermissionSpec',
     'PermissionTemplate',
     'command',
-    'group',
     'cooldown',
-    'user_max_concurrency',
+    'describe',
+    'group',
     'guild_max_concurrency',
     'guilds',
-    'describe',
+    'user_max_concurrency',
 )
 
 
-async def _dummy_context(ctx: Context) -> None:  # noqa
+async def _dummy_context(ctx: Context) -> None:
     pass
 
 
@@ -455,9 +449,8 @@ class Command(commands.Command):
         This still calls the original implementation to check if the command can be run.
         """
         guild_ids_check = getattr(self.callback, '__guild_ids__', None)
-        if guild_ids_check:
-            if ctx.guild and ctx.guild.id not in guild_ids_check:
-                return False
+        if guild_ids_check and ctx.guild and ctx.guild.id not in guild_ids_check:
+            return False
         return await super().can_run(ctx)
 
     @property
@@ -603,7 +596,7 @@ class Command(commands.Command):
                     name = '--' + flag.name
                     default = param.empty
 
-                    if not flag.store_true and flag.default or flag.default is False:
+                    if (not flag.store_true and flag.default) or flag.default is False:
                         default = flag.default
                         optional = True
 
@@ -737,7 +730,7 @@ class Command(commands.Command):
 
 
 @discord.utils.copy_doc(commands.Context)
-class Context(commands.Context, Generic[CogT]):
+class Context[CogT: 'Cog'](commands.Context):
 
     if TYPE_CHECKING:
         bot: Bot
@@ -950,16 +943,16 @@ class Context(commands.Context, Generic[CogT]):
             kwargs.pop('mention_author', None)
             kwargs.pop('nonce', None)
             kwargs.pop('stickers', None)
-            self._message = result = await self.interaction.response.send_message(content, **kwargs)
+            self._message = result = await self.interaction.response.send_message(content, **kwargs)  # type: ignore[assignment]
         else:
             self._message = result = await super().send(content, **kwargs)
-        return result
+        return result  # type: ignore[return-value]
 
     async def maybe_edit(self, message: discord.Message | None = None, content: Any = None, **kwargs: Any) -> discord.Message | None:
         """Edits the message silently."""
         message = message or self._message
         try:
-            await message.edit(content=content, **kwargs)
+            await message.edit(content=content, **kwargs)  # type: ignore[union-attr]
         except (AttributeError, discord.NotFound):
             if not message or message.channel == self.channel:
                 return await self.send(content, **kwargs)
@@ -969,10 +962,8 @@ class Context(commands.Context, Generic[CogT]):
     async def maybe_delete(self, message: discord.Message | None = None, *args: Any, **kwargs: Any) -> None:
         """Deletes the message silently if it exists."""
         message = message or self._message
-        try:
-            await message.delete(*args, **kwargs)
-        except (AttributeError, discord.NotFound, discord.Forbidden):
-            pass
+        with suppress(AttributeError, discord.NotFound, discord.Forbidden):
+            await message.delete(*args, **kwargs)  # type: ignore[union-attr]
 
     async def defer(self, *, ephemeral: bool = False, typing: bool = False) -> None:
         """Defers the response of the interaction or starts typing if it's a regular message."""
@@ -1004,7 +995,7 @@ class _app_command_override(app_commands.Command):
         bindings = {
             self.binding: self.binding,
         }
-        return self._copy_with(
+        return self._copy_with(  # type: ignore[return-value]
             parent=self.parent,
             binding=self.binding,
             bindings=bindings,
@@ -1012,14 +1003,14 @@ class _app_command_override(app_commands.Command):
         )
 
 
-ContextT = TypeVar('ContextT', bound=Context)
+ContextT = TypeVar('ContextT', bound=Context, covariant=True)  # type: ignore[misc]
 
 
 @runtime_checkable
-class HybridContextProtocol(Protocol[ContextT]):
+class HybridContextProtocol(Protocol[ContextT]):  # type: ignore[misc]
     """Protocol to match the :class:`.Context` class for hybrid command implementations."""
 
-    async def full_invoke(self, *args: P.args, **kwargs: P.kwargs) -> Any:
+    async def full_invoke(self, *args: Any, **kwargs: Any) -> Any:
         """|coro|
 
         Fully invokes the command with the given arguments and keyword arguments.
@@ -1052,7 +1043,7 @@ class HybridContext(Context, HybridContextProtocol):
     interaction: discord.Interaction
         The interaction that triggered the command.
     """
-    interaction: discord.Interaction
+    interaction: discord.Interaction  # type: ignore[override]
 
 
 def define_app_command_impl(
@@ -1067,36 +1058,36 @@ def define_app_command_impl(
             ctx = await self.bot.get_context(inter)
             ctx.command = source  # type: ignore[arg-type]
 
-            async def invoker(*iargs: P.args, **ikwargs: P.kwargs) -> Any:
+            async def invoker(*iargs: Any, **ikwargs: Any) -> Any:
                 ctx.args = [ctx.cog, ctx, *iargs]
                 ctx.kwargs = ikwargs
 
                 with TemporaryAttribute(ctx.command, '_parse_arguments', _dummy_context):
                     return await ctx.bot.invoke(ctx)
 
-            ctx.full_invoke = invoker
+            ctx.full_invoke = invoker  # type: ignore[method-assign]
             ctx.interaction = inter  # type: ignore[arg-type]
             return await func(self, ctx, *args, **kwds)
 
         wrapper.__globals__.update(func.__globals__)  # type: ignore
-        source.app_command = cls(  # type: ignore[arg-type]
+        source.app_command = cls(  # type: ignore[arg-type, call-arg]
             name=source.name,
             # description cant be none!
             description=source.short_doc or truncate(source.description, 100),
-            parent=source.parent.app_command if isinstance(source.parent, HybridGroupCommand) else None,
+            parent=source.parent.app_command if isinstance(source.parent, HybridGroupCommand) else None,  # type: ignore[arg-type]
             callback=wrapper,
             **kwargs,
         )
 
         @source.app_command.error
-        async def on_error(_, interaction: discord.Interaction, error: BaseException) -> None:
+        async def on_error(_, interaction: discord.Interaction, error: BaseException) -> None:  # type: ignore[arg-type]
             interaction.client.dispatch('command_error', interaction._baton, error)
 
     return decorator
 
 
 @discord.utils.copy_doc(commands.HybridCommand)
-class HybridCommand(Command, commands.HybridCommand):
+class HybridCommand(Command, commands.HybridCommand):  # type: ignore[misc]
     def define_app_command(self, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], None]:
         """Define an application command for this hybrid command."""
         return define_app_command_impl(self, _app_command_override, **kwargs)
@@ -1126,7 +1117,7 @@ class GroupCommand(commands.Group, Command):
 
 
 @discord.utils.copy_doc(commands.HybridGroup)
-class HybridGroupCommand(GroupCommand, commands.HybridGroup):
+class HybridGroupCommand(GroupCommand, commands.HybridGroup):  # type: ignore[misc]
     def define_app_command(self, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], None]:
         return define_app_command_impl(self, app_commands.Group, **kwargs)
 
@@ -1223,15 +1214,15 @@ def command(
 
     # Apply decorators
     def decorator(func: AsyncCallable[..., Any]) -> Command:  # type: ignore[arg-type]
-        func = commands.command(**kwargs, **other_kwargs)(func)
+        func = commands.command(**kwargs, **other_kwargs)(func)  # type: ignore[assignment]
 
         if nsfw:
-            func = commands.is_nsfw()(func)
+            func = commands.is_nsfw()(func)  # type: ignore[assignment]
         if guild_only:
-            func = commands.guild_only()(func)
-        return func
+            func = commands.guild_only()(func)  # type: ignore[assignment]
+        return func  # type: ignore[return-value]
 
-    return decorator
+    return decorator  # type: ignore[return-value]
 
 
 def group(
@@ -1261,32 +1252,32 @@ def group(
 
 
 @discord.utils.copy_doc(commands.cooldown)
-def cooldown(rate: int, per: float, bucket: commands.BucketType = commands.BucketType.user) -> T:
-    return commands.cooldown(rate, per, bucket)
+def cooldown(rate: int, per: float, bucket: commands.BucketType = commands.BucketType.user) -> Any:
+    return commands.cooldown(rate, per, bucket)  # type: ignore[return-value]
 
 
 @discord.utils.copy_doc(commands.max_concurrency)
-def user_max_concurrency(count: int, *, wait: bool = False) -> T:
-    return commands.max_concurrency(count, commands.BucketType.user, wait=wait)
+def user_max_concurrency(count: int, *, wait: bool = False) -> Any:
+    return commands.max_concurrency(count, commands.BucketType.user, wait=wait)  # type: ignore[return-value]
 
 
 @discord.utils.copy_doc(commands.max_concurrency)
-def guild_max_concurrency(count: int, *, wait: bool = False) -> T:
-    return commands.max_concurrency(count, commands.BucketType.guild, wait=wait)
+def guild_max_concurrency(count: int, *, wait: bool = False) -> Any:
+    return commands.max_concurrency(count, commands.BucketType.guild, wait=wait)  # type: ignore[return-value]
 
 
-def guilds(*guild_ids: int) -> T:
+def guilds(*guild_ids: int) -> Any:
     """A decorator that adds guild specification for an (app)command."""
 
     def decorator(func: T) -> T:
-        func.__guild_ids__ = guild_ids
+        func.__guild_ids__ = guild_ids  # type: ignore[attr-defined]
         func = app_commands.guilds(*guild_ids)(func)
         return func
 
     return decorator
 
 
-def describe(**parameters: str) -> T:
+def describe(**parameters: str) -> Any:
     """A decorator that adds description to the parameters of a command.
 
     This also descripting app commands if the command is an instance of `CommandInstance`.
@@ -1298,7 +1289,7 @@ def describe(**parameters: str) -> T:
                 if param.name in parameters and param.description is None:
                     param._description = parameters[param.name]
         else:
-            func = app_commands.describe(**parameters)(func)
+            func = app_commands.describe(**parameters)(func)  # type: ignore[assignment]
         return func
 
     return decorator

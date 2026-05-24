@@ -328,10 +328,29 @@ class GuildLevelConfig(BaseRecord):
     delete_after_leave: bool
 
     __slots__ = (
-        'id', 'enabled', 'role_stack', 'base', 'factor', 'min_gain', 'max_gain', 'cooldown_rate',
-        'cooldown_per', 'level_up_message', 'level_up_channel', 'special_level_up_messages', 'blacklisted_roles', 'blacklisted_channels',
-        'blacklisted_users', 'level_roles', 'multiplier_roles', 'multiplier_channels', 'delete_after_leave',
-        'bot', 'cog', 'spec', 'cooldown_manager'
+        'base',
+        'blacklisted_channels',
+        'blacklisted_roles',
+        'blacklisted_users',
+        'bot',
+        'cog',
+        'cooldown_manager',
+        'cooldown_per',
+        'cooldown_rate',
+        'delete_after_leave',
+        'enabled',
+        'factor',
+        'id',
+        'level_roles',
+        'level_up_channel',
+        'level_up_message',
+        'max_gain',
+        'min_gain',
+        'multiplier_channels',
+        'multiplier_roles',
+        'role_stack',
+        'spec',
+        'special_level_up_messages'
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -421,7 +440,7 @@ class LevelConfig(BaseRecord):
     xp: int
     messages: int
 
-    __slots__ = ('cog', 'config', 'user_id', 'guild_id', 'messages', 'level', 'xp')
+    __slots__ = ('cog', 'config', 'guild_id', 'level', 'messages', 'user_id', 'xp')
 
     def __len__(self) -> int:
         return self.messages

@@ -29,8 +29,8 @@ __all__ = (
     'LockedResourceError',
     'SharedEvent',
     'lock',
-    'lock_from',
     'lock_arg',
+    'lock_from',
 )
 
 log = logging.getLogger(__name__)

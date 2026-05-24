@@ -4,7 +4,7 @@ import datetime
 import inspect
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urljoin
 
 import aiohttp

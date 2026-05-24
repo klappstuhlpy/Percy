@@ -4,12 +4,11 @@ import datetime
 import enum
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Coroutine
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import discord
 import wavelink
 import yarl
-from discord import Message
 from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import QueueMode, ChannelTimeoutException
@@ -22,7 +21,6 @@ from config import Emojis
 if TYPE_CHECKING:
     from discord.abc import Connectable
 
-    from app.core.models import CogT
     from app.database import GuildConfig
 
 log = logging.getLogger(__name__)
@@ -803,7 +801,7 @@ class AdjustVolumeModal(discord.ui.Modal, title='Volume Adjuster'):
             await interaction.message.edit(embed=self._view.build_embed(), view=self._view)
 
 
-class TrackDisambiguatorView(View, Generic[T]):
+class TrackDisambiguatorView[T](View):
     message: discord.Message
     selected: T
 

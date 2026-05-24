@@ -1,8 +1,9 @@
-from typing import TypedDict, Required, Sequence, NotRequired, ClassVar, cast
+from typing import TypedDict, Required, NotRequired
+from collections.abc import Sequence
 
 import discord
 from discord import AutoModRuleEventType, AutoModRuleTriggerType, AutoModRuleActionType, Interaction
-from discord.automod import *
+from discord.automod import AutoModRule, AutoModRuleAction, AutoModTrigger
 from discord.ext import commands
 from discord.utils import MISSING
 
@@ -141,7 +142,8 @@ class AutoModPresets:
 
         embed.add_field(name='Event Type', value=preset['event_type'].name, inline=False)
 
-        trigger = format_fields(preset['trigger'].to_metadata_dict()) if preset['trigger'].to_metadata_dict() else '...'
+        _trigger_meta = preset['trigger'].to_metadata_dict()
+        trigger = format_fields(_trigger_meta) if _trigger_meta else '...'
         embed.add_field(name='Trigger', value=f'```py\n{trigger}```', inline=False)
 
         actions = [
@@ -152,10 +154,12 @@ class AutoModPresets:
                         value=f'```py\n{'\n'.join(actions)}```', inline=False)
         embed.add_field(name='Enabled', value=preset['enabled'], inline=False)
 
-        roles = ', '.join(f'<@&{role.id}>' for role in preset['exempt_roles']) if preset['exempt_roles'] else '...'
+        exempt_roles = preset.get('exempt_roles')  # type: ignore[misc]
+        roles = ', '.join(f'<@&{role.id}>' for role in exempt_roles) if exempt_roles else '...'
         embed.add_field(name='Exempt Roles', value=roles, inline=False)
 
-        channels = ', '.join(f'<#{channel.id}>' for channel in preset['exempt_channels']) if preset['exempt_channels'] else '...'
+        exempt_channels = preset.get('exempt_channels')  # type: ignore[misc]
+        channels = ', '.join(f'<#{channel.id}>' for channel in exempt_channels) if exempt_channels else '...'
         embed.add_field(name='Exempt Channels', value=channels, inline=False)
 
         embed.set_footer(text=f'ID: {preset['id']} (ID = 0 means that the rule is not created yet.)')
@@ -188,7 +192,7 @@ class AutoModPresets:
         list[AutoModRulePreset]
             The presets.
         """
-        presets = list(filter(lambda preset: preset['name'] not in existing, cls.to_list()))
+        presets = [preset for preset in cls.to_list() if preset['name'] not in existing]
         return [  # type: ignore
             {
                 'id': rule.id,
@@ -223,7 +227,7 @@ class AlertChannelSelect(View):
 
     def __init__(self) -> None:
         super().__init__(timeout=60., delete_on_timeout=True)
-        self.channel: discord.TextChannel | None = None
+        self.channel: discord.app_commands.AppCommandChannel | discord.app_commands.AppCommandThread | None = None
 
     @discord.ui.select(
         cls=discord.ui.ChannelSelect, placeholder='Select a channel...', min_values=1, max_values=1,
@@ -291,11 +295,11 @@ class InteractiveAutoModRuleSetupView(View):
 
         self.select_exempt_channels.default_values = [
             discord.SelectDefaultValue.from_channel(channel)
-            for channel in self.selected_preset['exempt_channels'] or []
+            for channel in self.selected_preset.get('exempt_channels') or []  # type: ignore[misc]
         ]
         self.select_exempt_roles.default_values = [
             discord.SelectDefaultValue.from_role(role)
-            for role in self.selected_preset['exempt_roles'] or []
+            for role in self.selected_preset.get('exempt_roles') or []  # type: ignore[misc]
         ]
 
     @discord.ui.select(placeholder='Select a preset...', row=0, min_values=1, max_values=1, options=[])
@@ -335,17 +339,17 @@ class InteractiveAutoModRuleSetupView(View):
                     if not view.channel:
                         continue
 
-                    interaction = view.interaction
+                    interaction = view.interaction  # type: ignore[assignment]
 
                     preset['actions'].append(AutoModRuleAction(
                         type=action,
-                        channel_id=view.channel.id
+                        channel_id=view.channel.id  # type: ignore[union-attr]
                     ))
                 case AutoModRuleActionType.timeout:
                     modal = BasicTextInputModal(placeholder='Enter the duration of the timeout in seconds...')
                     await interaction.response.send_modal(modal)
                     await modal.wait()
-                    interaction = modal.interaction
+                    interaction = modal.interaction  # type: ignore[assignment]
 
                     try:
                         resolved = await TimeDelta.transform(interaction, modal.text_input.value)
@@ -369,7 +373,7 @@ class InteractiveAutoModRuleSetupView(View):
         cls=discord.ui.ChannelSelect, placeholder='Select exempt channels...', row=2, min_values=0, max_values=25,
         channel_types=[_t for _t in discord.ChannelType if 'voice' not in _t.name]
     )
-    async def select_exempt_channels(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+    async def select_exempt_channels(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect) -> None:
         """Select exempt channels."""
         preset = self.selected_preset
         if preset is None:
@@ -389,7 +393,7 @@ class InteractiveAutoModRuleSetupView(View):
     @discord.ui.select(
         cls=discord.ui.RoleSelect, placeholder='Select exempt roles...', row=3, min_values=0, max_values=25
     )
-    async def select_exempt_roles(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+    async def select_exempt_roles(self, interaction: discord.Interaction, select: discord.ui.RoleSelect) -> None:
         """Select exempt roles."""
         preset = self.selected_preset
         if preset is None:
@@ -414,10 +418,7 @@ class InteractiveAutoModRuleSetupView(View):
             await interaction.response.send_message('You must select a preset first.', ephemeral=True)
             return
 
-        if self.enable_disable.label == 'Enable':
-            preset['enabled'] = True
-        else:
-            preset['enabled'] = False
+        preset['enabled'] = self.enable_disable.label == 'Enable'
 
         if preset['name'] in self.linked_rules:
             self.to_update.add(preset['name'])
@@ -439,9 +440,9 @@ class InteractiveAutoModRuleSetupView(View):
             placeholder='Enter keywords to filter messages. E.g. bad; ...',
             default='; '.join(preset['trigger'].keyword_filter)
         )
-        await interaction.response.send_message('Please enter the trigger:', view=modal)
+        await interaction.response.send_message('Please enter the trigger:', view=modal)  # type: ignore[arg-type]
         await modal.wait()
-        interaction = modal.interaction
+        interaction = modal.interaction  # type: ignore[assignment]
 
         if not modal.text_input.value:
             await interaction.response.send_message('You must provide a trigger.', ephemeral=True)
@@ -470,10 +471,13 @@ class InteractiveAutoModRuleSetupView(View):
     @discord.ui.button(label='Save', style=discord.ButtonStyle.success, row=4)
     async def save(self, interaction: discord.Interaction, _) -> None:
         """Finish the setup."""
+        guild = interaction.guild
+        assert guild is not None
         for name in self.to_create:
             preset = discord.utils.find(lambda x: x['name'] == name, self.presets)
+            assert preset is not None
             rule = await interaction.client.http.create_auto_moderation_rule(
-                guild_id=interaction.guild.id,
+                guild_id=guild.id,
                 reason=f'AutoMod Rule created by {interaction.user} (ID: {interaction.user.id}).',
                 # payload
                 name=preset['name'],
@@ -482,20 +486,21 @@ class InteractiveAutoModRuleSetupView(View):
                 trigger_metadata=preset['trigger'].to_metadata_dict() or None,
                 actions=[a.to_dict() for a in preset['actions']],
                 enabled=preset['enabled'],
-                exempt_roles=[str(r.id) for r in preset['exempt_roles']] if preset['exempt_roles'] else None,
-                exempt_channels=[str(c.id) for c in preset['exempt_channels']] if preset['exempt_channels'] else None
+                exempt_roles=[str(r.id) for r in preset['exempt_roles']] if preset.get('exempt_roles') else None,  # type: ignore[misc]
+                exempt_channels=[str(c.id) for c in preset['exempt_channels']] if preset.get('exempt_channels') else None  # type: ignore[misc]
             )
             preset['id'] = rule['id']
 
         if self.to_create:
-            config: GuildConfig = await interaction.client.db.get_guild_config(interaction.guild.id)
+            config: GuildConfig = await interaction.client.db.get_guild_config(guild.id)  # type: ignore[misc, attr-defined]
             await config.update(
                 linked_automod_rules=config.linked_automod_rules | self.to_create)
 
         for name in self.to_update:
             preset = discord.utils.find(lambda x: x['name'] == name, self.presets)
+            assert preset is not None
             await interaction.client.http.edit_auto_moderation_rule(
-                guild_id=interaction.guild.id,
+                guild_id=guild.id,
                 rule_id=preset['id'],
                 reason=f'AutoMod Rule updated by {interaction.user} (ID: {interaction.user.id}).',
                 # payload
@@ -504,8 +509,8 @@ class InteractiveAutoModRuleSetupView(View):
                 trigger_metadata=preset['trigger'].to_metadata_dict(),
                 actions=[a.to_dict() for a in preset['actions']],
                 enabled=preset['enabled'],
-                exempt_roles=[str(r.id) for r in preset['exempt_roles']] if preset['exempt_roles'] else None,
-                exempt_channels=[str(c.id) for c in preset['exempt_channels']] if preset['exempt_channels'] else None
+                exempt_roles=[str(r.id) for r in preset['exempt_roles']] if preset.get('exempt_roles') else None,  # type: ignore[misc]
+                exempt_channels=[str(c.id) for c in preset['exempt_channels']] if preset.get('exempt_channels') else None  # type: ignore[misc]
             )
 
         await interaction.response.send_message(f'{Emojis.success} AutoMod rules have been successfully updated.', ephemeral=True)
@@ -540,14 +545,14 @@ class AutoMod(Cog):
             ),
             colour=helpers.Colour.white()
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
 
-        rules = await ctx.guild.fetch_automod_rules()
-        config: GuildConfig = await ctx.db.get_guild_config(ctx.guild.id)
+        rules = await ctx.guild.fetch_automod_rules()  # type: ignore[union-attr]
+        config: GuildConfig = await ctx.db.get_guild_config(ctx.guild.id)  # type: ignore[misc, union-attr]
         linked_rules = config.linked_automod_rules
 
         presets = AutoModPresets.from_rules(
-            list(filter(lambda rule: rule.creator_id == ctx.me.id, rules)), linked_rules)
+            [rule for rule in rules if rule.creator_id == ctx.me.id], linked_rules)
 
         view = InteractiveAutoModRuleSetupView(ctx, presets=presets, linked_rules=linked_rules)
         view.message = await ctx.send(embed=embed, view=view)

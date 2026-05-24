@@ -57,7 +57,7 @@ class AvatarBatchEntry(TypedDict):
 class CommandUsageCount:
     """A counter for command usage by :class:`asyncpg.Record`s."""
 
-    __slots__ = ('success', 'failed', 'total')
+    __slots__ = ('failed', 'success', 'total')
 
     def __init__(self) -> None:
         self.success = 0
@@ -505,7 +505,7 @@ class Stats(Cog):
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), 'R')
-        return f'[`{short_sha2}`]({repo_url}commit/{str(commit.id)}) {short} ({offset})'
+        return f'[`{short_sha2}`]({repo_url}commit/{commit.id!s}) {short} ({offset})'
 
     def get_last_commits(self, count: int = 4, repo_path: str = str(path)) -> str:
         repo = pygit2.Repository(Path(repo_path, '.git'))

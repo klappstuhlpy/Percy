@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import re
 import sys
 import traceback
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 from contextlib import suppress
-from typing import Final, Any, TypeVar, Iterable, AsyncIterator, TYPE_CHECKING, Callable, Generator
+from typing import TYPE_CHECKING, Any, Final, TypeVar
+from collections.abc import AsyncIterator, Callable, Generator, Iterable
 
 import discord
-import datetime
-
 import jishaku
 import wavelink
 from aiohttp import ClientSession
@@ -22,19 +22,30 @@ from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
 from app.cogs import EXTENSIONS
-from app.core.help import PaginatedHelpCommand
 from app.core.flags import FlagMeta
-from app.core.timer import TimerManager, Timer
-from app.core.models import PermissionSpec, Context, Command, GroupCommand, AppBadArgument
+from app.core.help import PaginatedHelpCommand
+from app.core.models import AppBadArgument, Command, Context, GroupCommand, PermissionSpec
+from app.core.timer import Timer, TimerManager
 from app.database.base import Database
-from app.utils import AnsiColor, AnsiStringBuilder, helpers, cache, GUILD_FEATURES, deep_to_with, Config, \
-    humanize_duration
+from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
 from app.utils.lock import LockedResourceError
 from app.utils.pagination import TextSource
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
-    owners, description, allowed_mentions, default_prefix, test_guild_id, name as bot_name, version, stats_webhook,
-    Emojis, resolved_token, beta, lavalink_nodes,
+    Emojis,
+    allowed_mentions,
+    beta,
+    default_prefix,
+    description,
+    lavalink_nodes,
+    owners,
+    resolved_token,
+    stats_webhook,
+    test_guild_id,
+    version,
+)
+from config import (
+    name as bot_name,
 )
 
 GuildFeatureT = TypeVar('GuildFeatureT', bound=list[tuple[str, str]] | Any)
@@ -67,7 +78,7 @@ class CommandTree(app_commands.CommandTree):
 
         command = interaction.command
         if command is not None:
-            if command._has_any_error_handlers():  # noqa
+            if command._has_any_error_handlers():
                 return None
 
             embed.add_field(name='Name', value=command.qualified_name)
@@ -416,7 +427,7 @@ class Bot(commands.Bot):
 
             permissions = ctx.bot_permissions
             if ctx.guild and (
-                    permissions.administrator or permissions.send_messages and permissions.read_message_history
+                    permissions.administrator or (permissions.send_messages and permissions.read_message_history)
             ):
                 await ctx.send(message, reference=ctx.message, ephemeral=True)
                 return None
@@ -781,10 +792,8 @@ class Bot(commands.Bot):
         obj: Snowflake
             The object to remove.
         """
-        try:
+        with suppress(KeyError):
             await self.blacklist.remove(obj)
-        except KeyError:
-            pass
 
     async def close(self) -> None:
         """Closes this bot and it's aiohttp ClientSession."""

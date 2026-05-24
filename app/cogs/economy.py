@@ -1,16 +1,13 @@
-import logging
 from typing import Annotated, Literal
 
 import discord
 from discord.ext import commands
 
-from app.core import Cog, converter
+from app.core import Bot, Cog, converter
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.utils import get_asset_url, helpers, fnumb
 from app.utils.pagination import LinePaginator
 from config import Emojis
-
-log = logging.getLogger(__name__)
 
 
 class Economy(Cog):
@@ -42,7 +39,7 @@ class Economy(Cog):
             await ctx.send_error('Cannot set a bot\'s balance.')
             return
 
-        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
         if to == 'bank':
             await balance.update(bank=amount)
         else:
@@ -73,7 +70,7 @@ class Economy(Cog):
             if member.bot:
                 continue
 
-            balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)
+            balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
             if to == 'bank':
                 await balance.add(bank=amount)
             else:
@@ -105,7 +102,7 @@ class Economy(Cog):
             await ctx.send_error('Cannot remove from a bot\'s balance.')
             return
 
-        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
 
         if (to == 'bank' and balance.bank < amount) or (to == 'cash' and balance.cash < amount):
             await ctx.send_error('Cannot remove more than the user\'s balance.')
@@ -128,7 +125,7 @@ class Economy(Cog):
     @describe(amount='The amount to deposit.')
     async def deposit(self, ctx: Context, amount: int) -> None:
         """Deposits money into your bank."""
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
         if balance.cash < amount:
             await ctx.send_error('Cannot deposit more than your balance.')
             return
@@ -146,7 +143,7 @@ class Economy(Cog):
     @describe(amount='The amount to withdraw.')
     async def withdraw(self, ctx: Context, amount: int) -> None:
         """Withdraws money from your bank."""
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
         if balance.bank < amount:
             await ctx.send_error('Cannot withdraw more than your bank balance.')
             return
@@ -171,13 +168,13 @@ class Economy(Cog):
             await ctx.send_error('Cannot transfer to a bot.')
             return
 
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
         if balance.cash < amount:
             await ctx.send_error('Cannot transfer more than your balance.')
             return
 
         await balance.remove(cash=amount)
-        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
         await balance.add(cash=amount)
         await ctx.send_success(f'Successfully transferred {Emojis.Economy.cash} **{fnumb(amount)}** to **{member.display_name}**.')
 
@@ -189,14 +186,14 @@ class Economy(Cog):
         hybrid=True
     )
     @describe(user='The user to show the balance for.')
-    async def balance(self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter] = None) -> None:
+    async def balance(self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None) -> None:
         """Shows your balance"""
         if member and member.bot:
             await ctx.send_error('Cannot get a bot\'s balance.')
             return
 
         user = member or ctx.author
-        balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)
+        balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)  # type: ignore[union-attr]
         embed = discord.Embed(
             description='Server Leaderboard Rank: x',
             colour=helpers.Colour.white()
@@ -215,11 +212,12 @@ class Economy(Cog):
     )
     async def leaderboard(self, ctx: Context) -> None:
         """Shows the leaderboard of the server."""
+        assert ctx.guild is not None
         balances = await ctx.db.get_guild_balances(ctx.guild.id)
         total = sum(balance.total for balance in balances)
 
         users = [
-            f'**{index}.** {self.bot.get_user(balance.user_id).mention} • {Emojis.Economy.cash} **{fnumb(balance.total)}**'
+            f'**{index}.** {self.bot.get_user(balance.user_id).mention} • {Emojis.Economy.cash} **{fnumb(balance.total)}**'  # type: ignore[union-attr]
             for index, balance in enumerate(balances, 1)]
 
         embed = discord.Embed(
@@ -227,11 +225,11 @@ class Economy(Cog):
             description='This is the server\'s leaderboard.\n\n',
             colour=helpers.Colour.white()
         )
-        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
+        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.set_footer(text=f'Total Server Money: {fnumb(total)}',
                          icon_url=discord.PartialEmoji.from_str(Emojis.Economy.cash).url)
         await LinePaginator.start(ctx, entries=users, embed=embed, location='description')
 
 
-async def setup(bot) -> None:
+async def setup(bot: Bot) -> None:
     await bot.add_cog(Economy(bot))

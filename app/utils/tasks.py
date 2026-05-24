@@ -7,7 +7,7 @@ import warnings
 from abc import ABC
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Hashable
 from contextlib import suppress
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, ParamSpec, Protocol, TypeVar
 
@@ -17,15 +17,15 @@ T = TypeVar('T')
 P = ParamSpec('P')
 
 __all__ = (
+    'Scheduler',
     'executor',
     'scheduled_coroutine',
-    'Scheduler',
 )
 
 _background_tasks: set[asyncio.Task] = set()
 
 
-def executor(sync_function: Callable[P, T]) -> Callable[..., Awaitable[T]] | Callable[P, Awaitable[T]] | Callable[..., Awaitable[T]]:
+def executor[**P, T](sync_function: Callable[P, T]) -> Callable[..., Awaitable[T]] | Callable[P, Awaitable[T]] | Callable[..., Awaitable[T]]:
     """A decorator that wraps a sync function in an executor, changing it into an async function.
 
     This allows processing functions to be wrapped and used immediately as an async function.

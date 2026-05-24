@@ -29,7 +29,7 @@ class TempChannel(BaseRecord):
     channel_id: int
     format: str
 
-    __slots__ = ('bot', 'guild_id', 'channel_id', 'format')
+    __slots__ = ('bot', 'channel_id', 'format', 'guild_id')
 
     async def _update(
             self,

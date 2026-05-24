@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Any, cast
+import datetime
+from typing import Annotated, Any, cast
 
 import discord
 import wavelink
@@ -16,9 +17,6 @@ from app.utils import cache, checks, fuzzy, get_shortened_string, helpers, plura
 from app.utils.pagination import BasePaginator, TextSource
 from config import Emojis
 
-if TYPE_CHECKING:
-    import datetime
-
 
 class PlaylistNameOrID(commands.clean_content):
     """Converts the content to either an integer or string."""
@@ -28,7 +26,7 @@ class PlaylistNameOrID(commands.clean_content):
         self.with_id: bool = with_id
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str | int:
+    async def convert(self, ctx: Context, argument: str) -> str | int:  # type: ignore[override]
         converted = await super().convert(ctx, argument)
         lower = converted.lower().strip()
 
@@ -39,7 +37,7 @@ class PlaylistNameOrID(commands.clean_content):
             raise commands.BadArgument(
                 f'Playlist names must be 100 characters or less. (You have *{len(lower)}* characters)')
 
-        cog: PlaylistTools | None = ctx.bot.get_cog('PlaylistTools')
+        cog: PlaylistTools | None = ctx.bot.get_cog('PlaylistTools')  # type: ignore[assignment]
         if cog is None:
             raise commands.BadArgument('Playlist tools are currently unavailable.')
 
@@ -66,10 +64,10 @@ class PlaylistSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> Any:
         if self.values[0] == '__index':
-            self.paginator.pages = self.paginator.start_pages
+            self.paginator.pages = self.paginator.start_pages  # type: ignore[assignment]
         else:
             playlist = self.paginator.playlists[int(self.values[0]) - 1]
-            self.paginator.pages = playlist.to_embeds()
+            self.paginator.pages = playlist.to_embeds()  # type: ignore[assignment]
 
         self.paginator._current_page = 0
         self.paginator.update_buttons()
@@ -125,9 +123,9 @@ class Playlist(BaseRecord):
     id: int
     name: str
     owner_id: int
-    created: datetime
+    created: datetime.datetime
 
-    __slots__ = ('cog', 'id', 'name', 'owner_id', 'created', 'tracks')
+    __slots__ = ('cog', 'created', 'id', 'name', 'owner_id', 'tracks')
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -183,9 +181,9 @@ class Playlist(BaseRecord):
         query = "INSERT INTO playlist_lookup (playlist_id, name, url) VALUES ($1, $2, $3) RETURNING *;"
         record = await self.cog.bot.db.fetchrow(query, self.id, track.title, track.uri)
 
-        track = PlaylistTrack(record=record)
-        self.tracks.append(track)
-        return track
+        playlist_track = PlaylistTrack(record=record)
+        self.tracks.append(playlist_track)
+        return playlist_track
 
     async def remove_track(self, track: PlaylistTrack) -> None:
         """Remove a track from the playlist.
@@ -261,7 +259,7 @@ class PlaylistTools(Cog):
 
     emoji = '\N{GUITAR}'
 
-    async def cog_before_invoke(self, ctx: Context) -> None:
+    async def cog_before_invoke(self, ctx: Context) -> None:  # type: ignore[override]
         await self.initizalize_user(ctx.author)
 
     async def initizalize_user(self, user: discord.abc.User | discord.Member) -> int | None:
@@ -271,7 +269,7 @@ class PlaylistTools(Cog):
 
         # The User can store Liked Songs using the Button the Player Control Panel
 
-        playlists = await self.get_playlists(user.id)
+        playlists = await self.get_playlists(user.id)  # type: ignore[misc]
         if any(playlist.is_liked_songs for playlist in playlists):
             return None
 
@@ -284,10 +282,13 @@ class PlaylistTools(Cog):
     async def playlist_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        playlists = await self.get_playlists(interaction.user.id)
+        playlists = await self.get_playlists(interaction.user.id)  # type: ignore[misc]
 
         def key(p: Playlist) -> str:
-            return p.choice_text if interaction.command.name == 'play' else p.choice_text and p.name != 'Liked Songs'
+            cmd = interaction.command
+            if cmd is not None and cmd.name == 'play':
+                return p.choice_text
+            return p.choice_text if p.name != 'Liked Songs' else ''
 
         results = fuzzy.finder(current, playlists, key=key, raw=True)
 
@@ -389,10 +390,11 @@ class PlaylistTools(Cog):
     )
     async def playlist_show(self, ctx: Context) -> None:
         """Display all your playlists and tracks."""
-        playlists = await self.get_playlists(ctx.author.id)
+        playlists = await self.get_playlists(ctx.author.id)  # type: ignore[misc]
         if not playlists:
-            return await ctx.send_error(
+            await ctx.send_error(
                 f'You don\'t have any playlists. You can create a playlist using `{ctx.prefix}playlist create`.')
+            return
 
         items = [playlist.field_tuple for playlist in playlists]
 
@@ -422,16 +424,19 @@ class PlaylistTools(Cog):
     @app_commands.describe(name='The name of your new playlist.')
     async def playlist_create(self, ctx: Context, name: str) -> None:
         """Create a new playlist."""
-        playlists = await self.get_playlists(ctx.author.id)
+        playlists = await self.get_playlists(ctx.author.id)  # type: ignore[misc]
 
-        if len(playlists) == 3 and not await self.bot.is_owner(ctx.author._user):
-            return await ctx.send_error('You can only have `3` playlists at the same time.')
+        if len(playlists) == 3 and not await self.bot.is_owner(ctx.author):  # type: ignore[arg-type]
+            await ctx.send_error('You can only have `3` playlists at the same time.')
+            return
 
         if any(playlist.name == name for playlist in playlists):
-            return await ctx.send_error('There is already a playlist with this name, please choose another name.')
+            await ctx.send_error('There is already a playlist with this name, please choose another name.')
+            return
 
         if len(name) > 100:
-            return await ctx.send_error('The name of the playlist must be 100 characters or less.')
+            await ctx.send_error('The name of the playlist must be 100 characters or less.')
+            return
 
         query = "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;"
         playlist_id = await self.bot.db.fetchval(query, ctx.author.id, name, discord.utils.utcnow())
@@ -457,32 +462,35 @@ class PlaylistTools(Cog):
         """Add the songs from you playlist to the plugins queue and play them."""
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
-            return await ctx.send_error('There is no playlist with this id.')
+            await ctx.send_error('There is no playlist with this id.')
+            return
 
         if len(playlist) == 0:
-            return await ctx.send_error('There are no tracks in this playlist, please add some using `/playlist add`.')
+            await ctx.send_error('There are no tracks in this playlist, please add some using `/playlist add`.')
+            return
 
         player: Player = cast(Player, ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
-        old_stamp = len(player.queue.all) if not None else 0
+        old_stamp = len(player.queue.all)
         wait_message = await ctx.send(f'*{Emojis.loading} adding tracks from your playlist to the queue... please wait...*')
 
         for track in playlist.tracks:
-            resolved: Playable = await player.search(track.url, ctx=ctx)
-            if not track:
+            resolved: Playable = await player.search(track.url, ctx=ctx)  # type: ignore[assignment]
+            if not resolved:
                 continue
             await player.queue.put_wait(resolved)
 
         new_queue = len(player.queue.all) - old_stamp
         succeeded = bool(new_queue == len(playlist.tracks))
 
-        embed = discord.Embed(
-            description=f'`🎶` Successfully added **{new_queue}/{len(playlist.tracks)}** tracks from your playlist to the queue.',
-            color=helpers.Colour.teal())
+        description = f'`🎶` Successfully added **{new_queue}/{len(playlist.tracks)}** tracks from your playlist to the queue.'
         if not succeeded:
-            embed.description += f'\n{Emojis.warning} *Some tracks may not have been added due to unexpected issues.*'
+            description += f'\n{Emojis.warning} *Some tracks may not have been added due to unexpected issues.*'
+        embed = discord.Embed(
+            description=description,
+            color=helpers.Colour.teal())
         embed.set_author(name=f'[{playlist.id}] • {playlist.name}', icon_url=ctx.author.display_avatar.url)
         embed.set_footer(text='Now Playing')
         await wait_message.delete()
@@ -512,18 +520,20 @@ class PlaylistTools(Cog):
     ) -> None:
         """Adds the current playing track or a track via a direct-url to your playlist."""
         if not query and not (ctx.voice_client and ctx.voice_client.channel):
-            return await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
+            await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
+            return
 
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
-            return await ctx.send_error('There is no playlist with that name.')
+            await ctx.send_error('There is no playlist with that name.')
+            return
 
-        if not query and ctx.guild.voice_client:
+        if not query and ctx.guild and ctx.guild.voice_client:  # type: ignore[union-attr]
             player: Player = cast(Player, ctx.voice_client)
 
             if not player.current:
-                return await ctx.send_error(
-                    'You have to provide either the `link` parameter or a current playing track.')
+                await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
+                return
 
             await playlist.add_track(player.current)
             embed = discord.Embed(
@@ -536,7 +546,7 @@ class PlaylistTools(Cog):
             embed.set_footer(text=f'[{playlist.id}] • {playlist.name}')
             await ctx.send(embed=embed, ephemeral=True)
         else:
-            result = await Player.search(query, ctx=ctx)
+            result = await Player.search(query, ctx=ctx)  # type: ignore[arg-type]
             if isinstance(result, SearchReturn):
                 if result == SearchReturn.NO_RESULTS:
                     await ctx.send_error('Sorry! No results found matching your query.')
@@ -563,7 +573,8 @@ class PlaylistTools(Cog):
                 await ctx.send(embed=embed, ephemeral=True)
             else:
                 if result.uri in added:
-                    return await ctx.send_error('This Track is already in your playlist.')
+                    await ctx.send_error('This Track is already in your playlist.')
+                    return
                 await playlist.add_track(result)
 
                 embed = discord.Embed(
@@ -594,10 +605,12 @@ class PlaylistTools(Cog):
         """Delete a playlist."""
         playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
         if playlist is None:
-            return await ctx.send_error('No playlist was found matching your query.')
+            await ctx.send_error('No playlist was found matching your query.')
+            return
 
         if playlist.name == 'Liked Songs':
-            return await ctx.send_error('You cannot delete the Liked Songs playlist.')
+            await ctx.send_error('You cannot delete the Liked Songs playlist.')
+            return
 
         await playlist.delete()
         await ctx.send_success(
@@ -623,7 +636,8 @@ class PlaylistTools(Cog):
         """Clear all Items in a playlist."""
         playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
         if playlist is None:
-            return await ctx.send_error('No playlist was found matching your query.')
+            await ctx.send_error('No playlist was found matching your query.')
+            return
 
         await playlist.clear()
         await ctx.send_success(
@@ -651,11 +665,13 @@ class PlaylistTools(Cog):
         """Remove a track from your playlist."""
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
-            return await ctx.send_error('No playlist was found matching your query.')
+            await ctx.send_error('No playlist was found matching your query.')
+            return
 
         track = discord.utils.get(playlist.tracks, id=track_id)
         if not track:
-            return await ctx.send_error('No track was found matching your query.')
+            await ctx.send_error('No track was found matching your query.')
+            return
 
         await playlist.remove_track(track)
         await ctx.send_success(

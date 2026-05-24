@@ -1,71 +1,44 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import enum
-import threading
 from collections import OrderedDict, deque
-from collections.abc import Hashable, MutableMapping
+from collections.abc import Callable, Hashable, MutableMapping
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any, Generic, Protocol, Self, TypeVar, overload, Type, Callable
+from typing import TYPE_CHECKING, Any, Self, TypeVar, overload
 
 import discord
 from discord.ext import commands
 from lru import LRU
 
 T = TypeVar('T')
-V = TypeVar('V')
 
 __all__ = (
-    'ListedRateLimit',
-    'RateLimit',
-    'CancellableQueue',
-    'Timer',
-    'Colour',
-    'TemporaryAttribute',
     'BaseFlags',
-    'flag_value',
-    'NotCaseSensitiveEnum',
+    'CancellableQueue',
+    'Colour',
+    'HashableT',
     'HealthBarBuilder',
-    'HashableT'
+    'ListedRateLimit',
+    'NotCaseSensitiveEnum',
+    'RateLimit',
+    'TemporaryAttribute',
+    'Timer',
+    'flag_value'
 )
 
 
-def find_method_in_class_hierarchy(cls: object | Type[object], method_name: str) -> Callable[[Any], ...] | None:
-    """Finds a method in a class hierarchy.
-
-    This function is used to find a method in a class hierarchy. It will search for the method in the class and its
-    bases. If the method is not found, it will return None.
-
-    Parameters
-    ----------
-    cls : object | Type[object]
-        The class to search in.
-    method_name : str
-        The name of the method to search for.
-    """
-    if hasattr(cls, method_name):
-        return getattr(cls, method_name)
-
-    if hasattr(cls, '__bases__') and cls.__bases__:
-        for base_cls in cls.__bases__:
-            if issubclass(cls, base_cls):
-                method = find_method_in_class_hierarchy(base_cls, method_name)
-                if method is not None:
-                    return method
-
-    return None
+C = TypeVar('C', bound=type[object])
 
 
-C = TypeVar('C', bound=Type[object])
-
-
-def copy_dict(cls: Type[object]) -> Callable[[Type[object]], C]:
+def copy_dict(cls: type[object]) -> Callable[[C], C]:
     """Copies the dictionary of a class to another class."""
 
-    def decorator(subclass: Type[object]) -> C:
+    def decorator(subclass: C) -> C:
         for key, value in cls.__dict__.items():
-            if key not in subclass.__dict__ and not key.startswith('__'):
+            if key not in subclass.__dict__ and not key.startswith('__'):  # type: ignore[operator]
                 setattr(subclass, key, value)
         return subclass
 
@@ -75,7 +48,7 @@ def copy_dict(cls: Type[object]) -> Callable[[Type[object]], C]:
 HashableT = TypeVar('HashableT', bound=Hashable)
 
 
-class RateLimit(Generic[V, HashableT]):
+class RateLimit[V, HashableT: Hashable]:
     """A rate limit implementation.
 
     This is a simple rate limit implementation that uses an LRU cache to store
@@ -152,72 +125,6 @@ class RateLimit(Generic[V, HashableT]):
         return False
 
 
-class TTLCache(Generic[T, V]):
-    """A simple TTL cache implementation."""
-
-    def __init__(self, *, ttl: int = 0) -> None:
-        self.ttl: int = ttl
-        self._internal_cache: dict[T, V] = {}
-
-    def set(self, key: T, value: V) -> None:
-        """Sets a value in the cache with a TTL thats set in the constructor.
-
-        Parameters
-        ----------
-        key: :class:`T`
-            The key to set.
-        value: :class:`V`
-            The value to set.
-        """
-        self._internal_cache[key] = value
-        if self.ttl > 0:
-            ttl_timeout = threading.Timer(self.ttl, self.delete, (key,))
-            ttl_timeout.start()
-
-    def get(self, key: T, fallback: Any | None = None) -> V | None:
-        """Gets a value from the cache.
-
-        Parameters
-        ----------
-        key: :class:`T`
-            The key to get.
-        fallback: Any | None
-            The fallback value to return if the key is not found.
-
-        Returns
-        -------
-        :class:`V` | Any | None
-            The value found in the cache or the fallback value.
-        """
-        return self._internal_cache.get(key, fallback)
-
-    def delete(self, key: T) -> None:
-        """Deletes a value from the cache.
-
-        Parameters
-        ----------
-        key: :class:`T`
-            The key to delete.
-
-        Raises
-        ------
-        KeyError
-            The key was not found in the cache.
-        """
-        self._internal_cache.pop(key)
-
-    @property
-    def size(self) -> int:
-        """Returns the size of the cache.
-
-        Returns
-        -------
-        :class:`int`
-            The size of the cache.
-        """
-        return len(self._internal_cache.keys())
-
-
 class NotCaseSensitiveEnum(enum.Enum):
     """Supports a non-case-insensitive enum converter for discord.py commands.
 
@@ -243,7 +150,7 @@ class NotCaseSensitiveEnum(enum.Enum):
             str(m.value).title() if by_value else m.name.title() for m in cls.__members__.values())}.")
 
 
-class ListedRateLimit(Generic[V]):
+class ListedRateLimit[V]:
     """A rate limit implementation that uses a set to store the keys.
 
     Parameters
@@ -278,7 +185,7 @@ class ListedRateLimit(Generic[V]):
     def ratio(self) -> float:
         return self.per / self.rate
 
-    def is_ratelimited(self, obj: Any) -> list[discord.Member]:
+    def is_ratelimited(self, obj: Any) -> list[V]:
         now = self.key(obj) or discord.utils.utcnow()
         if not isinstance(now, datetime.datetime):
             raise TypeError(f'Key function must return a datetime object, not {now.__class__.__name__!r}')
@@ -302,7 +209,7 @@ class ListedRateLimit(Generic[V]):
         return []
 
 
-class CancellableQueue(Generic[T, V]):
+class CancellableQueue[T, V]:
     """A queue that lets you cancel the items pending for work by a provided unique ID."""
 
     if TYPE_CHECKING:
@@ -345,7 +252,7 @@ class CancellableQueue(Generic[T, V]):
         """Removes and returns an item from the queue.
         If the queue is empty then it waits until one is available.
         """
-        while self.is_empty() and not self._hook_check():
+        while self.is_empty() and not (self._hook_check and self._hook_check()):
             getter = self._loop.create_future()
             self._waiters.append(getter)
 
@@ -353,10 +260,8 @@ class CancellableQueue(Generic[T, V]):
                 await getter
             except BaseException:
                 getter.cancel()
-                try:
+                with contextlib.suppress(ValueError):
                     self._waiters.remove(getter)
-                except ValueError:
-                    pass
 
                 if not self.is_empty() and not getter.cancelled():
                     self.__wakeup_next()
@@ -382,11 +287,11 @@ class CancellableQueue(Generic[T, V]):
 class Timer:
     """A context manager that measures the time it takes to execute a block of code."""
 
-    __slots__ = ('start', 'end')
+    __slots__ = ('end', 'start')
 
     def __init__(self) -> None:
-        self.start = None
-        self.end = None
+        self.start: int | None = None
+        self.end: int | None = None
 
     def __enter__(self) -> Timer:
         self.start = perf_counter_ns()
@@ -413,7 +318,7 @@ class Timer:
     @property
     def _time(self) -> float:
         """:class:`float`: Returns the time it took to execute the block of code."""
-        if self.end is None:
+        if self.end is None or self.start is None:
             raise ValueError('Timer has not ended yet.')
         return self.end - self.start
 
@@ -439,6 +344,8 @@ class Timer:
 
     def reset(self) -> float:
         """Resets the timer and returns the time it took."""
+        if self.start is None:
+            raise ValueError('Timer has not started yet.')
         time = (perf_counter_ns() - self.start) / 1_000_000_000
         self.start = perf_counter_ns()
         return time
@@ -563,16 +470,16 @@ class Colour(discord.Colour):
 _ATTR_MISSING = object()
 
 
-class TemporaryAttribute(Generic[T, V]):
+class TemporaryAttribute[T, V]:
     """Supports adding a temporary attribute to an object by using a context manager."""
 
-    __slots__ = ('obj', 'attr', 'value', 'original')
+    __slots__ = ('attr', 'obj', 'original', 'value')
 
     def __init__(self, obj: T, attr: str, value: V) -> None:
         self.obj: T = obj
         self.attr: str = attr
         self.value: V = value
-        self.original: V = getattr(obj, attr, _ATTR_MISSING)
+        self.original: V = getattr(obj, attr, _ATTR_MISSING)  # type: ignore[assignment]
 
     def __enter__(self) -> T:
         setattr(self.obj, self.attr, self.value)
@@ -657,26 +564,27 @@ class BaseFlags:
             raise TypeError(f'Value to set for {self.__class__.__name__} must be a bool.')
 
 
-class flag_value(Protocol[T]):
+class flag_value:
     """A descriptor that returns whether the flag is set or not.
 
     This is used to create a descriptor that returns a boolean value for a flag.
 
     Can be used in combination with `BaseFlags` to create a flag that can be toggled on and off.
     """
+
+    flag: int
+
     def __init__(self, func: Callable[[Any], int]) -> None:
-        self.flag: int = func(None)
-        self.__doc__: str | None = func.__doc__
+        self.flag = func(None)
+        self.__doc__ = func.__doc__
 
     @overload
-    def __get__(self, instance: None, owner: type[Any]) -> Self:
-        ...
+    def __get__(self, instance: None, owner: type[Any]) -> Self: ...
 
     @overload
-    def __get__(self, instance: T, owner: type[T]) -> bool:
-        ...
+    def __get__(self, instance: BaseFlags, owner: type[BaseFlags]) -> bool: ...
 
-    def __get__(self, instance: T | None, owner: type[T]) -> Any:
+    def __get__(self, instance: BaseFlags | None, owner: type[BaseFlags]) -> Any:
         if instance is None:
             return self
         return instance.has_flag(self.flag)

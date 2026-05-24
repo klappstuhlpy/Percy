@@ -7,15 +7,14 @@ import logging
 import asyncpg
 from typing import (
     Any,
-    Callable,
     ClassVar,
     Concatenate,
     Literal,
     ParamSpec,
     TYPE_CHECKING,
-    TypeVar,
-    Sequence, override
+    TypeVar, override
 )
+from collections.abc import Callable, Sequence
 
 import discord
 from discord.utils import format_dt, utcnow
@@ -42,7 +41,7 @@ class Timer(BaseRecord):
     timezone: str
     metadata: dict[str, Any]
 
-    __slots__ = ('bot', 'id', 'args', 'kwargs', 'metadata', 'event', 'created', 'expires', 'timezone')
+    __slots__ = ('args', 'bot', 'created', 'event', 'expires', 'id', 'kwargs', 'metadata', 'timezone')
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -85,7 +84,7 @@ class Timer(BaseRecord):
             *args: Any,
             **kwargs: Any
     ):
-        """|coro|
+        r"""|coro|
 
         Reruns a timer with a new expiry time.
         You can override the `timer`s kwargs and args with the new ones provided.
@@ -327,7 +326,7 @@ class TimerManager:
             timer.id = key = await self.decrement_atomic_key()
             self._short_timers[key] = timer
 
-            self._loop.create_task(self.start_short_timer(seconds, timer))  # noqa
+            self._loop.create_task(self.start_short_timer(seconds, timer))
             log.debug(f'Short timer {timer.id} will fire in {seconds} seconds.')
             return timer
 

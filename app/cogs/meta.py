@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 import aiohttp
 import unicodedata
 from collections import Counter
-from typing import TYPE_CHECKING, ClassVar, Final, Any, Literal
+from typing import TYPE_CHECKING, ClassVar, Any, Literal
 
 import discord
 from dateutil.relativedelta import relativedelta
@@ -46,7 +46,9 @@ class GuildUserJoinView(View):
 
     @discord.ui.button(label='Join List', style=discord.ButtonStyle.blurple, emoji=Emojis.join)
     async def join_list(self, interaction: discord.Interaction, _) -> None:
-        chunked_users = sorted(await interaction.guild.chunk(), key=lambda m: m.joined_at)
+        guild = interaction.guild
+        assert guild is not None
+        chunked_users = sorted(await guild.chunk(), key=lambda m: m.joined_at or guild.created_at)
         chunked = [[position, user, user.joined_at]
                    for position, user in enumerate(chunked_users, start=1)]
 
@@ -57,8 +59,8 @@ class GuildUserJoinView(View):
         for line in chunked:
             source.add_line(fmt(*line))
 
-        embed = discord.Embed(title=f'Join List in {interaction.guild}', colour=helpers.Colour.white())
-        embed.set_author(name=interaction.guild, icon_url=get_asset_url(interaction.guild))
+        embed = discord.Embed(title=f'Join List in {guild}', colour=helpers.Colour.white())
+        embed.set_author(name=guild, icon_url=get_asset_url(guild))
         embed.set_footer(text=f'{pluralize(len(chunked_users)):entry|entries}')
 
         self.disable_all()
@@ -71,14 +73,13 @@ help_forum_id = 1079786704862445668
 solved_tag_id = 1079787335803207701
 
 TOKEN_REGEX = re.compile(r'[a-zA-Z0-9_-]{23,28}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,}')
-GITHUB_URL_REGEX = re.compile(r'https?://(?:www\.)?github\.com/[^/\s]+/[^/\s]+(?:/[^/\s]+)*/?')
 
 
 class UnsolvedFlags(Flags):
     messages: int = flag(
         default=5, description='The maximum number of messages the thread needs to be considered active. Defaults to 5.'
     )
-    threshold: relativedelta = flag(
+    threshold: relativedelta | RelativeDelta = flag(
         default=relativedelta(minutes=5),
         description='How old the thread needs to be (e.g. "10m" or "22m"). Defaults to 5 minutes.',
         converter=RelativeDelta,
@@ -105,11 +106,11 @@ def can_close_threads(ctx: Context) -> bool:
     if not isinstance(ctx.channel, discord.Thread):
         return False
 
-    permissions = ctx.channel.permissions_for(ctx.author)
+    permissions = ctx.channel.permissions_for(ctx.author)  # type: ignore[arg-type]
     return ctx.channel.parent_id == help_forum_id and (permissions.manage_threads or ctx.channel.owner_id == ctx.author.id)
 
 
-def is_help_thread() -> commands.core.Check:
+def is_help_thread():
     def predicate(ctx: Context) -> bool:
         if isinstance(ctx.channel, discord.Thread) and ctx.channel.parent_id == help_forum_id:
             return True
@@ -128,13 +129,13 @@ class Meta(Cog):
 
     emoji = '<a:staff_animated:1322337965774602313>'
 
-    MENTION_REGEX: Final[ClassVar[re.Pattern[str]]] = re.compile(r'<@!?\d+>')
+    MENTION_REGEX: ClassVar[re.Pattern[str]] = re.compile(r'<@!?\d+>')
 
-    GITHUB_RE: Final[ClassVar[re.Pattern]] = re.compile(
+    GITHUB_RE: ClassVar[re.Pattern[str]] = re.compile(
         r'https://github\.com/(?P<repo>[a-zA-Z0-9-]+/[\w.-]+)/blob/'
         r'(?P<path>[^#>]+)(\?[^#>]+)?(#L(?P<start_line>\d+)(([-~:]|(\.\.))L(?P<end_line>\d+))?)?'
     )
-    GITHUB_GIST_RE: Final[ClassVar[re.Pattern]] = re.compile(
+    GITHUB_GIST_RE: ClassVar[re.Pattern[str]] = re.compile(
         r'https://gist\.github\.com/([a-zA-Z0-9-]+)/(?P<gist_id>[a-zA-Z0-9]+)/*'
         r'(?P<revision>[a-zA-Z0-9]*)/*#file-(?P<file_path>[^#>]+?)(\?[^#>]+)?'
         r'(-L(?P<start_line>\d+)([-~:]L(?P<end_line>\d+))?)'
@@ -150,7 +151,7 @@ class Meta(Cog):
             (self.GITHUB_GIST_RE, self._fetch_github_gist_snippet),
         ]
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
         self.auto_archive_old_forum_threads.cancel()
 
     async def _prepare_invites(self) -> None:
@@ -175,8 +176,8 @@ class Meta(Cog):
         return ref, file_path
 
     async def _fetch_github_snippet(
-            self, repo: str, path: str, start_line: str, end_line: str
-    ) -> tuple[str, str | File]:
+            self, repo: str, path: str, start_line: str | None, end_line: str | None
+    ) -> tuple[str, str | File] | None:
         """Fetches a snippet from a GitHub repo."""
         branches = await self.github_request('GET', f'repos/{repo}/branches')
         tags = await self.github_request('GET', f'repos/{repo}/tags')
@@ -193,7 +194,7 @@ class Meta(Cog):
         return self._snippet_to_codeblock(file_contents, file_path, repo, start_line, end_line)
 
     async def _fetch_github_gist_snippet(
-            self, gist_id: str, revision: str, file_path: str, start_line: str, end_line: str
+            self, gist_id: str, revision: str, file_path: str, start_line: str | None, end_line: str | None
     ) -> tuple[str, str | File] | None:
         """Fetches a snippet from a GitHub gist."""
         gist_json = await self.github_request(
@@ -218,7 +219,7 @@ class Meta(Cog):
 
     @staticmethod
     def _snippet_to_codeblock(
-            file_contents: str, file_path: str, full_url: str, start_line: str, end_line: str
+            file_contents: str, file_path: str, full_url: str, start_line: str | None, end_line: str | None
     ) -> tuple[str, str | File] | None:
         """Given the entire file contents and target lines, creates a code block.
 
@@ -232,19 +233,13 @@ class Meta(Cog):
         """
         split_file_contents = file_contents.splitlines()
 
-        if end_line is None:
-            end_line = len(split_file_contents) if start_line is None else int(start_line)
+        end: int = int(end_line) if end_line is not None else (len(split_file_contents) if start_line is None else int(start_line))
+        start: int = int(start_line) if start_line is not None else 1
 
-        if start_line is None:
-            start_line = 1
+        start = max(1, start)
+        end = min(len(split_file_contents), end)
 
-        start_line = int(start_line)
-        end_line = int(end_line)
-
-        start_line = max(1, start_line)
-        end_line = min(len(split_file_contents), end_line)
-
-        required = '\n'.join(split_file_contents[start_line - 1: end_line])
+        required = '\n'.join(split_file_contents[start - 1: end])
         required = textwrap.dedent(required).rstrip().replace('`', '`\u200b')
 
         # Extracts the code language and checks whether it's a 'valid' language
@@ -255,10 +250,10 @@ class Meta(Cog):
             language = ''
 
         # Adds a label showing the file path to the snippet
-        if start_line == end_line:
-            ret = f'`{file_path}` from `{full_url}` line `{start_line}`\n'
+        if start == end:
+            ret = f'`{file_path}` from `{full_url}` line `{start}`\n'
         else:
-            ret = f'`{file_path}` from `{full_url}` lines `{start_line}` to `{end_line}`\n'
+            ret = f'`{file_path}` from `{full_url}` lines `{start}` to `{end}`\n'
 
         if len(required) != 0:
             fmt = f'{ret}```{language}\n{required}```'
@@ -284,7 +279,7 @@ class Meta(Cog):
                     error_message = error.message
                     log.log(
                         logging.DEBUG if error.status == 404 else logging.ERROR,
-                        f'Failed to fetch code snippet from {match[0]!r}: {error.status} '  # noqa: G004
+                        f'Failed to fetch code snippet from {match[0]!r}: {error.status} '
                         f'{error_message} for GET {error.request_info.real_url.human_repr()}',
                     )
 
@@ -454,9 +449,9 @@ class Meta(Cog):
                 return
 
             if isinstance(snippet, discord.File):
-                await message.channel.send(ret, file=snippet, view=TrashView(message.author))
+                await message.channel.send(ret, file=snippet, view=TrashView(message.author))  # type: ignore[arg-type]
             else:
-                await message.channel.send(snippet, view=TrashView(message.author))
+                await message.channel.send(snippet, view=TrashView(message.author))  # type: ignore[arg-type]
 
     @Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
@@ -475,7 +470,7 @@ class Meta(Cog):
                 colour=discord.Color.yellow(),
             )
             try:
-                await thread.send(content=thread.owner.mention, embed=embed)
+                await thread.send(content=thread.owner.mention if thread.owner else None, embed=embed)
             except discord.Forbidden as e:
                 if e.code == 40058:
                     await asyncio.sleep(2)
@@ -530,7 +525,7 @@ class Meta(Cog):
 
         if can_close_threads(ctx):
             await ctx.message.add_reaction(Emojis.success)
-            await self.mark_as_solved(ctx.channel, ctx.author._user)
+            await self.mark_as_solved(ctx.channel, ctx.author)
         else:
             msg = f'<@!{ctx.channel.owner_id}>, would you like to mark this thread as solved? This has been requested by {ctx.author.mention}.'
             confirm = await ctx.confirm(msg, author_id=ctx.channel.owner_id, timeout=300.0)
@@ -542,7 +537,7 @@ class Meta(Cog):
                 await ctx.send_success(
                     f'Marking as solved. Note that next time, you can mark the thread as solved yourself with `{default_prefix}solved`.'
                 )
-                await self.mark_as_solved(ctx.channel, ctx.channel.owner._user or ctx.user)
+                await self.mark_as_solved(ctx.channel, ctx.channel.owner or ctx.user)
             elif confirm is None:
                 await ctx.send_error('Timed out waiting for a response. Not marking as solved.')
             else:
@@ -554,7 +549,7 @@ class Meta(Cog):
 
         If `json` is True, send the information in a copy-pasteable Python format.
         """
-        if not message.channel.permissions_for(ctx.author).read_messages:
+        if not message.channel.permissions_for(ctx.author).read_messages:  # type: ignore[arg-type]
             await ctx.send_error('You do not have permissions to see the channel this message is in.')
             return
 
@@ -603,48 +598,6 @@ class Meta(Cog):
 
         await ctx.send('\n'.join(lines))
 
-    # @command(
-    #     aliases=['src'],
-    #     description='Shows parts of the Bots Source Command.'
-    # )
-    # @describe(command='The command to show the source of.')
-    # async def source(self, ctx: Context, *, command: str | None = None):
-    #     """Displays my full source code or for a specific command.
-    #
-    #     To display the source code of a subcommand, you can separate it by
-    #     periods, e.g., tag.create for the creation subcommand of the tag command
-    #     or by spaces.
-    #     """
-    #     if command is None:
-    #         return await ctx.send(repo_url)
-    #
-    #     obj = self.bot.get_command(command)
-    #     if obj is None:
-    #         return await ctx.send_error('Could not find command.')
-    #
-    #     if command == 'help':
-    #         src = type(self.bot.help_command)
-    #         filename = inspect.getsourcefile(src)
-    #     else:
-    #         item = inspect.unwrap(obj.callback)
-    #         src = item.__code__
-    #         filename = src.co_filename
-    #
-    #     lines, firstlineno = inspect.getsourcelines(src)
-    #     if filename is None:
-    #         return await ctx.send_error('Could not find source for command.')
-    #
-    #     location_parts = filename.split(os.path.sep)
-    #     cogs_index = location_parts.index('cogs')
-    #     location = os.path.sep.join(location_parts[cogs_index:])  # Join parts from 'cogs' onwards
-    #
-    #     final_url = f'<{repo_url}blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-    #
-    #     embed = discord.Embed(title=f'Command: {command}', description=obj.description)
-    #     embed.add_field(name='Source Code', value=f'[Jump to GitHub]({final_url})')
-    #     embed.set_footer(text=f'{location}:{firstlineno}')
-    #     await ctx.send(embed=embed)
-
     @app_commands.command(
         name='help',
         description='Get help for a command or module.'
@@ -672,6 +625,7 @@ class Meta(Cog):
 
         assert isinstance(config.owners, int)
         owner = ctx.bot.get_user(config.owners)
+        assert owner is not None
 
         embed.set_author(name=owner, icon_url=owner.display_avatar.url)
         embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
@@ -736,13 +690,13 @@ class Meta(Cog):
             await ctx.send_error('Guild ID must be an int.')
             return
 
-        guild_id = guild_id or ctx.guild.id
-        guild = self.bot.get_guild(guild_id)
+        resolved_id: int = int(guild_id) if guild_id else ctx.guild.id  # type: ignore[union-attr]
+        guild = self.bot.get_guild(resolved_id)
         if not guild:
             await ctx.send_error(f'Guild with ID `{guild_id}` not found.')
             return
 
-        features = [f'**{e[0]}** - {e[1]}' for e in list(self.bot.get_guild_features(guild.features, only_current=True))]
+        features = [f'**{e[0]}** - {e[1]}' for e in self.bot.get_guild_features(guild.features, only_current=True)]
         embed = discord.Embed(title='Guild Features',
                               timestamp=discord.utils.utcnow(),
                               color=helpers.Colour.white())
@@ -790,7 +744,7 @@ class Meta(Cog):
             perms = discord.Permissions((everyone_perms & ~deny.value) | allow.value)
             channel_type = type(channel)
             totals[channel_type] += 1
-            if not perms.read_messages or isinstance(channel, discord.VoiceChannel) and (not perms.connect or not perms.speak):
+            if not perms.read_messages or (isinstance(channel, discord.VoiceChannel) and (not perms.connect or not perms.speak)):
                 secret[channel_type] += 1
 
         embed = discord.Embed(
@@ -833,7 +787,8 @@ class Meta(Cog):
             embed.add_field(name='Boosts', value=boosts, inline=False)
 
         bots = sum(m.bot for m in guild.members)
-        fmt = f'Total: {guild.member_count} ({pluralize(bots):bot} `{bots / guild.member_count:.2%}`)'
+        member_count = guild.member_count or len(guild.members)
+        fmt = f'Total: {member_count} ({pluralize(bots):bot} `{bots / member_count:.2%}`)'
 
         embed.add_field(name='Members', value=fmt, inline=False)
         embed.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
@@ -861,11 +816,11 @@ class Meta(Cog):
             embed.set_image(url=guild.banner.url)
 
         embed.set_footer(text='Created').timestamp = guild.created_at
-        await ctx.send(embed=embed, view=GuildUserJoinView(ctx.author))
+        await ctx.send(embed=embed, view=GuildUserJoinView(ctx.author))  # type: ignore[arg-type]
 
     @command(description='Shows the avatar of a user.', alias='av')
     @describe(user='The user to show the avatar of. (Default: You)')
-    async def avatar(self, ctx: Context, *, user: discord.Member | discord.User = None) -> None:
+    async def avatar(self, ctx: Context, *, user: discord.Member | discord.User | None = None) -> None:
         """Shows a user's enlarged avatar (if possible)."""
         user = user or ctx.author
         avatar = user.display_avatar.with_static_format('png')
@@ -879,7 +834,7 @@ class Meta(Cog):
     async def quote(
             self,
             ctx: Context,
-            user: discord.Member | None = None,
+            user: discord.Member | discord.User | None = None,
             *,
             message: str | None = None
     ) -> None:
@@ -919,7 +874,7 @@ class Meta(Cog):
         bot_info = (
             f'Public App: `{humanize_bool(application.bot_public)}`\n'
             f'Requires code grant: `{humanize_bool(application.bot_require_code_grant)}`\n'
-            f'Monetized: `{humanize_bool(application.is_monetized)}`\n'
+            f'Monetized: `{humanize_bool(application.is_monetized or False)}`\n'
         )
         if application.guild_id:
             bot_info += f'Guild ID: `{application.guild_id}`\n'
@@ -966,7 +921,7 @@ class Meta(Cog):
         if assets:
             embed.add_field(
                 name='Assets',
-                value='\n'.join([f'[{asset.name}]({asset.url})' for asset in assets]),
+                value='\n'.join(f'[{asset.name}]({asset.url})' for asset in assets),
                 inline=False
             )
 
@@ -1010,14 +965,14 @@ class Meta(Cog):
     )
     async def prefix(self, ctx: Context) -> None:
         """Manages the server's custom prefixes."""
-        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc, union-attr]
         prefixes = config.prefixes.copy()
         prefixes.add(ctx.bot.user.mention)  # mention will always be available
         prefixes = sorted(prefixes, key=len, reverse=True)
 
         embed = discord.Embed(title='Prefix List', colour=helpers.Colour.white())
-        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.set_footer(text=f'{pluralize(len(prefixes)):prefix}')
         embed.description = '\n'.join(f'`{index}.` {elem}' for index, elem in enumerate(prefixes, 1))
         await ctx.send(embed=embed)
@@ -1038,7 +993,7 @@ class Meta(Cog):
         if not prefixes:
             raise commands.BadArgument('You must specify at least one prefix.')
 
-        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc, union-attr]
 
         if len(prefixes) + len(config.prefixes) > 25:
             raise commands.BadArgument('You cannot have more than 25 prefixes.')
@@ -1072,7 +1027,7 @@ class Meta(Cog):
         if not prefixes:
             raise commands.BadArgument('You must specify at least one prefix.')
 
-        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc, union-attr]
 
         updated = [prefix for prefix in config.prefixes if prefix not in prefixes]
 
@@ -1099,7 +1054,7 @@ class Meta(Cog):
         """Removes all custom prefixes.
         **After this, the bot will listen to only mention prefixes.**
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)
+        config: GuildConfig = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc, union-attr]
         await config.update(prefixes=[])
         await ctx.send_success('Cleared all prefixes.')
 
@@ -1198,8 +1153,8 @@ class Meta(Cog):
     async def permissions_user(
             self,
             ctx: Context,
-            member: discord.Member = None,
-            channel: discord.abc.GuildChannel | discord.Thread = None,
+            member: discord.Member | None = None,
+            channel: discord.abc.GuildChannel | discord.Thread | None = None,
     ) -> None:
         """Shows a member's permissions in a specific channel.
         If no channel is given then it uses the current one.
@@ -1207,8 +1162,8 @@ class Meta(Cog):
         the info returned will be yours.
         """
         channel = channel or ctx.channel
-        member = member or ctx.author
-        await self.say_permissions(ctx, member, channel)
+        member = member or ctx.author  # type: ignore[assignment]
+        await self.say_permissions(ctx, member, channel)  # type: ignore[arg-type]
 
     @permissions.command(
         'bot',
@@ -1217,14 +1172,14 @@ class Meta(Cog):
     )
     @describe(channel='The channel to show the permissions in.')
     async def permissions_bot(
-            self, ctx: Context, *, channel: discord.abc.GuildChannel | discord.Thread = None) -> None:
+            self, ctx: Context, *, channel: discord.abc.GuildChannel | discord.Thread | None = None) -> None:
         """Shows the bots permissions in a specific channel.
         If no channel is given then it uses the current one.
         This is a good way of checking if the bot has the permissions needed
         to execute the commands it wants to execute.
         """
         channel = channel or ctx.channel
-        await self.say_permissions(ctx, ctx.guild.me, channel)
+        await self.say_permissions(ctx, ctx.guild.me, channel)  # type: ignore[union-attr, arg-type]
 
 
 async def setup(bot) -> None:

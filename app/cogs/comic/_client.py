@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import hashlib
-from typing import TYPE_CHECKING, Any, TypeVar, Generic
+from typing import TYPE_CHECKING, Any
 
 import discord
 import yarl
@@ -14,8 +14,6 @@ from config import marvel as marvel_config
 
 if TYPE_CHECKING:
     from app.core import Bot
-
-K_T = TypeVar('K_T', bound=dict[str, Any])
 
 
 class MarvelError(discord.HTTPException):
@@ -65,7 +63,8 @@ class Marvel:
         if headers is not None and isinstance(headers, dict):
             hdrs.update(headers)
 
-        params.update(data)
+        if data is not None:
+            params.update(data)
 
         async with self.bot.session.request(method, req_url, params=params, headers=headers) as r:
             remaining = r.headers.get('X-Ratelimit-Remaining')
@@ -100,7 +99,7 @@ class MarvelObject:
         self.data: dict = data
 
     @staticmethod
-    def str_to_datetime(text: str) -> datetime:
+    def str_to_datetime(text: str) -> datetime.datetime:
         """Converts string to datetime object"""
         return utcparse(text)
 
@@ -132,7 +131,7 @@ class DataWrapper(MarvelObject):
         return self.data['type']
 
     @property
-    def date(self) -> datetime:
+    def date(self) -> datetime.datetime:
         return self.str_to_datetime(self.data['date'])
 
     @property
@@ -144,10 +143,10 @@ class DataWrapper(MarvelObject):
         return DataContainer(self.marvel, self.data['data'])
 
 
-class DataContainer(MarvelObject, Generic[K_T]):
+class DataContainer[K_T: dict[str, Any]](MarvelObject):
     """Base DataContainer"""
 
-    data: K_T
+    data: K_T  # type: ignore[assignment]
 
     def __init__(self, marvel: Marvel, data: K_T) -> None:
         super().__init__(marvel, data)
@@ -176,17 +175,17 @@ class DataContainer(MarvelObject, Generic[K_T]):
     def result(self) -> MarvelObject:
         """Returns the first item in the results list.
         Useful for methods that should return only one results. """
-        return self.data[0]
+        return self.data['results'][0]
 
     @property
     def results(self) -> list[Comic]:
         return [Comic(self.marvel, comic) for comic in self.data['results']]
 
 
-class List(MarvelObject, Generic[K_T]):
+class List[K_T: dict[str, Any]](MarvelObject):
     """Base List object"""
 
-    data: K_T
+    data: K_T  # type: ignore[assignment]
 
     @property
     def available(self) -> int:
@@ -210,10 +209,10 @@ class List(MarvelObject, Generic[K_T]):
         return [Summary(self.marvel, item) for item in self.data['items']]
 
 
-class Summary(MarvelObject, Generic[K_T]):
+class Summary[K_T: dict[str, Any]](MarvelObject):
     """Base Summary object"""
 
-    data: K_T
+    data: K_T  # type: ignore[assignment]
 
     @property
     def resourceURI(self) -> str:
@@ -231,10 +230,10 @@ class Summary(MarvelObject, Generic[K_T]):
         return self.data['role']
 
 
-class TextObject(MarvelObject, Generic[K_T]):
+class TextObject[K_T: dict[str, Any]](MarvelObject):
     """Base TextObject object"""
 
-    data: K_T
+    data: K_T  # type: ignore[assignment]
 
     @property
     def type(self) -> str:
@@ -252,10 +251,10 @@ class TextObject(MarvelObject, Generic[K_T]):
         return self.data['text']
 
 
-class Image(MarvelObject, Generic[K_T]):
+class Image[K_T: dict[str, Any]](MarvelObject):
     """Base Image object"""
 
-    data: K_T
+    data: K_T  # type: ignore[assignment]
 
     @property
     def path(self) -> str:
@@ -271,11 +270,11 @@ class Image(MarvelObject, Generic[K_T]):
         return f'{self.path}.{self.extension}'
 
 
-class Comic(MarvelObject, Generic[K_T]):
+class Comic[K_T: dict[str, Any]](MarvelObject):
     """Comic object"""
 
     ENDPOINT: str = 'comics'
-    data: dict[str, K_T]
+    data: dict[str, K_T]  # type: ignore[assignment]
 
     @property
     def id(self) -> int:
@@ -298,7 +297,7 @@ class Comic(MarvelObject, Generic[K_T]):
         return self.data['description']
 
     @property
-    def modified(self) -> datetime:
+    def modified(self) -> datetime.datetime:
         return self.str_to_datetime(self.data['modified'])
 
     @property
@@ -370,11 +369,11 @@ class Comic(MarvelObject, Generic[K_T]):
         return [DataWrapper(self.marvel, price) for price in self.data['prices']]
 
 
-class Creator(MarvelObject, Generic[K_T]):
+class Creator[K_T: dict[str, Any]](MarvelObject):
     """Creator object for Marvel API."""
 
     ENDPOINT: str = 'creators'
-    data: dict[str, K_T]
+    data: dict[str, K_T]  # type: ignore[assignment]
 
     @property
     def id(self) -> int:
@@ -401,7 +400,7 @@ class Creator(MarvelObject, Generic[K_T]):
         return self.data['fullName']
 
     @property
-    def modified(self) -> datetime:
+    def modified(self) -> datetime.datetime:
         return self.str_to_datetime(self.data['modified'])
 
     @property

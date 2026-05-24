@@ -1,6 +1,7 @@
 import asyncio
 import datetime
-from typing import TypeVar, Generic, Callable, Any, Awaitable, TYPE_CHECKING, Generator, Iterable, TypeAlias
+from typing import TypeVar, Any, TYPE_CHECKING
+from collections.abc import Callable, Awaitable, Generator, Iterable
 
 import asyncpg
 import discord
@@ -15,11 +16,11 @@ else:
     Context = commands.Context
 
 __all__ = (
-    'View',
-    'TrashView',
     'ConfirmationView',
     'DisambiguatorView',
+    'TrashView',
     'UserInfoView',
+    'View',
 )
 
 from app.utils import AsyncCallable, get_asset_url, helpers, Timer
@@ -27,7 +28,7 @@ from config import Emojis
 
 T = TypeVar('T')
 
-ViewIdentifierKwars: TypeAlias = 'discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | bool | float| None'
+type ViewIdentifierKwars = Any  # loose alias kept for back-compat; kwargs are passed to View.__init__
 
 
 @discord.utils.copy_doc(discord.ui.View)
@@ -70,10 +71,11 @@ class View(discord.ui.View):
         if not self.members:
             return True
 
-        is_iterable = isinstance(self.members, Iterable)
+        members = self.members
+        is_iterable = isinstance(members, Iterable) and not isinstance(members, discord.abc.Snowflake)
         if (
-                is_iterable and not discord.utils.get(self.members, id=interaction.user.id)  # type: ignore[arg-type]
-                or not is_iterable and interaction.user.id != self.members.id
+                (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
+                or (not is_iterable and interaction.user.id != members.id)  # type: ignore[union-attr]
         ):
             await interaction.response.send_message(
                 f'{Emojis.error} This view is not meant for you.')
@@ -88,9 +90,8 @@ class View(discord.ui.View):
         if self._clear_on_timeout:
             self.clear_items()
             return
-        if self._delete_on_timeout:
-            if self.message:
-                return await self.message.delete()
+        if self._delete_on_timeout and self.message:
+            return await self.message.delete()
         self.disable_all()
 
     def disable_item(self, item: discord.ui.Item) -> 'View':
@@ -106,8 +107,8 @@ class View(discord.ui.View):
         View
             The view with the item disabled. -> Chainable
         """
-        item.style = discord.ButtonStyle.secondary
-        item.disabled = True
+        item.style = discord.ButtonStyle.secondary  # type: ignore[union-attr]
+        item.disabled = True  # type: ignore[union-attr]
 
         return self
 
@@ -121,8 +122,8 @@ class View(discord.ui.View):
         """
         for item in self._children:
             if with_style:
-                item.style = discord.ButtonStyle.secondary
-            item.disabled = True
+                item.style = discord.ButtonStyle.secondary  # type: ignore[union-attr]
+            item.disabled = True  # type: ignore[union-attr]
 
     def enable_all(self, with_style: bool = False) -> None:
         """Enables all children of the view.
@@ -134,13 +135,12 @@ class View(discord.ui.View):
         """
         for item in self._children:
             if with_style:
-                item.style = discord.ButtonStyle.blurple
-            item.disabled = False
+                item.style = discord.ButtonStyle.blurple  # type: ignore[union-attr]
+            item.disabled = False  # type: ignore[union-attr]
 
     def walk_children(self) -> Generator[discord.ui.Item, None, None]:
         """Walks the children of the view."""
-        for item in self._children:
-            yield item
+        yield from self._children
 
     @classmethod
     def from_items(cls, *items: discord.ui.Item, **view_kwargs: ViewIdentifierKwars) -> 'View':
@@ -173,11 +173,12 @@ class TrashView(View):
         label='Delete', custom_id='delete'
     )
     async def delete(self, interaction: discord.Interaction, _) -> None:
-        await interaction.message.delete()
+        if interaction.message:
+            await interaction.message.delete()
 
     async def on_timeout(self) -> None:
-        for children in self.children:
-            children.disabled = True
+        for child in self.children:
+            child.disabled = True  # type: ignore[union-attr]
 
 
 class ConfirmationView(View):
@@ -199,24 +200,23 @@ class ConfirmationView(View):
             timeout: float | None = None,
             defer: bool = False,
             delete_after: bool = False,
-            hook: AsyncCallable[discord.Interaction, None] = None,
+            hook: AsyncCallable[discord.Interaction, None] | None = None,
     ) -> None:
         self.value: bool | None = None
         self.hook_value: Any = None
 
         self._defer: bool = defer
         self._delete_after: bool = delete_after
-        self._hook: AsyncCallable[discord.Interaction, None] = hook
+        self._hook: AsyncCallable[discord.Interaction, None] | None = hook
         super().__init__(timeout=timeout, members=user)
 
-        self._true_button = discord.ui.Button(style=discord.ButtonStyle.green, label=true)
-        self._true_button.callback = self._make_callback(True)
+        self._true_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(style=discord.ButtonStyle.green, label=true)
+        self._true_button.callback = self._make_callback(True)  # type: ignore[method-assign]
 
-        self._false_button = discord.ui.Button(style=discord.ButtonStyle.red, label=false)
-        self._false_button.callback = self._make_callback(False)
+        self._false_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(style=discord.ButtonStyle.red, label=false)
+        self._false_button.callback = self._make_callback(False)  # type: ignore[method-assign]
 
         self.interaction: discord.Interaction | None = None
-        self.message: discord.Message | None = None
 
         self.add_item(self._true_button)
         self.add_item(self._false_button)
@@ -240,12 +240,13 @@ class ConfirmationView(View):
 
             self.stop()
             if toggle and self._hook is not None:
-                self.hook_value = await self._hook(interaction)
+                self.hook_value = await self._hook(interaction)  # type: ignore[arg-type]
             elif self._defer:
                 await interaction.response.defer()
             elif self._delete_after:
                 try:
-                    await interaction.message.delete()
+                    if interaction.message:
+                        await interaction.message.delete()
                 except discord.HTTPException:
                     if self.message:
                         await self.message.delete()
@@ -253,12 +254,11 @@ class ConfirmationView(View):
         return callback
 
 
-class DisambiguatorView(View, Generic[T]):
-    message: discord.Message
+class DisambiguatorView[T](View):
     selected: T
 
     def __init__(self, ctx: Context, data: list[T], entry: Callable[[T], Any]) -> None:
-        super().__init__(members=ctx.author)
+        super().__init__(members=ctx.author)  # type: ignore[arg-type]
         self.ctx: Context = ctx
         self.data: list[T] = data
 
@@ -272,7 +272,7 @@ class DisambiguatorView(View, Generic[T]):
 
         select = discord.ui.Select(options=options)
 
-        select.callback = self.on_select_submit
+        select.callback = self.on_select_submit  # type: ignore[method-assign]
         self.select = select
         self.add_item(select)
 
@@ -280,7 +280,7 @@ class DisambiguatorView(View, Generic[T]):
         index = int(self.select.values[0])
         self.selected = self.data[index]
         await interaction.response.defer()
-        if not self.message.flags.ephemeral:
+        if self.message and not self.message.flags.ephemeral:
             await self.message.delete()
 
         self.stop()

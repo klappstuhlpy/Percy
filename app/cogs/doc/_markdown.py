@@ -70,7 +70,7 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             # We have a link that matches the text, and we're allowed to use
             # autolinks, and we don't have a title, and we don't want to use
             # the default title, so we just return the URL.
-            return '<%s>' % href
+            return f'<{href}>'
 
         return f'{prefix}[{text}]({href}){suffix}' if href else text
 

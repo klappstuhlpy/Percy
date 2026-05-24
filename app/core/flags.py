@@ -5,7 +5,8 @@ import re
 import sys
 from argparse import ArgumentParser as _ArgumentParser, Namespace
 from dataclasses import dataclass
-from typing import Annotated, Any, Collection, Generic, Iterator, TYPE_CHECKING, Type, TypeVar, Union, Literal
+from typing import Annotated, Any, NoReturn, TYPE_CHECKING, TypeVar, Union, Literal
+from collections.abc import Collection, Iterator
 
 from discord import AppCommandOptionType, app_commands, Interaction
 from discord.ext import commands
@@ -24,13 +25,13 @@ T = TypeVar('T')
 WS_SPLIT_REGEX: re.Pattern[str] = re.compile(r'(\s+\S+)')
 
 __all__ = (
+    'ConsumeUntilFlag',
+    'FlagMeta',
+    'FlagNamespace',
+    'Flags',
+    'MockFlags',
     'flag',
     'store_true',
-    'MockFlags',
-    'Flags',
-    'FlagMeta',
-    'ConsumeUntilFlag',
-    'FlagNamespace',
 )
 
 
@@ -70,12 +71,12 @@ class MockFlags:
 
 
 class ArgumentParser(_ArgumentParser):
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         raise BadArgument(message)
 
 
 @dataclass
-class Flag(Generic[T]):
+class Flag[T]:
     """Represents a flag.
 
     This class is not intended to be created manually, instead, use the :func:`flag` factory.
@@ -115,9 +116,9 @@ class Flag(Generic[T]):
     max_args: int = MISSING
     override: bool = MISSING
     store_true: bool = False
-    converter: Converter[T] | Type[T] = MISSING
-    short: str = MISSING
-    description: str = MISSING
+    converter: Converter[T] | type[T] = MISSING
+    short: str | None = MISSING  # type: ignore[assignment]
+    description: str | None = MISSING  # type: ignore[assignment]
     required: bool = False
     default: T = MISSING
 
@@ -129,7 +130,7 @@ class Flag(Generic[T]):
         return self.dest
 
     @property
-    def annotation(self) -> Converter[T] | Type[T]:
+    def annotation(self) -> Converter[T] | type[T]:
         """:class:`Any`: The annotation for the flag."""
         return self.converter
 
@@ -171,13 +172,13 @@ def _resolve_aliases(alias: str, aliases: Collection[str]) -> list[str]:
     return []
 
 
-def flag(
+def flag[T](
         *,
         name: str = MISSING,
         short: str = MISSING,
         alias: str = MISSING,
         aliases: Collection[str] = MISSING,
-        converter: Converter[T] | Type[T] = MISSING,
+        converter: Converter[T] | type[T] = MISSING,
         override: bool = MISSING,
         description: str = MISSING,
         max_args: int = MISSING,
@@ -216,7 +217,7 @@ def flag(
         :class:`Context` as its sole parameter. If not given then it defaults to
         the default value given to the attribute.
     """
-    return Flag(
+    return Flag(  # type: ignore[return-value]
         name=name and name.casefold(),
         short=short,
         aliases=_resolve_aliases(alias, aliases),
@@ -235,24 +236,24 @@ class store_true_dummy_converter(commands.Converter[bool], app_commands.Transfor
     exist with app commands by default, so for app commands, we just set the parameter as a boolean
     parameter, so it behaves like a `AppCommandOptionType.boolean`.
     """
-    async def convert(self, ctx: Context, argument: str) -> bool:
+    async def convert(self, ctx: Context, argument: str) -> bool:  # type: ignore[override]
         return True
 
     async def transform(self, interaction: Interaction, value: Any, /) -> Any:
         return value
 
     @property
-    def type(self) -> Literal[AppCommandOptionType.boolean]:
+    def type(self) -> AppCommandOptionType:  # type: ignore[override]
         return AppCommandOptionType.boolean
 
 
 def store_true(
         *,
         name: str = MISSING,
-        short: str = None,
+        short: str | None = None,
         alias: str = MISSING,
         aliases: Collection[str] = (),
-        description: str = None,
+        description: str | None = None,
 ) -> Flag:
     """A factory that creates a store true flag. This is a flag that is always true once passed.
 
@@ -286,11 +287,11 @@ class ConsumeUntilFlag(Converter[T]):
     If the flag is not found, the converter will return the default value if given.
     """
 
-    def __init__(self, converter: Converter[T] | Type[T], default: T = MISSING) -> None:
-        self.converter: Converter[T] | Type[T] = converter
+    def __init__(self, converter: Converter[T] | type[T], default: T = MISSING) -> None:
+        self.converter: Converter[T] | type[T] = converter
         self.default: T = default
 
-    async def convert(self, ctx: Context, argument: str) -> T:
+    async def convert(self, ctx: Context, argument: str) -> T:  # type: ignore[override]
         from app.core.models import Command
 
         if not isinstance(ctx.command, Command) or ctx.command.custom_flags is None:
@@ -298,9 +299,9 @@ class ConsumeUntilFlag(Converter[T]):
 
         if ctx.command.custom_flags.is_flag_starter(argument):
             if self.default is not MISSING:
-                return self.default
+                return self.default  # type: ignore[return-value]
 
-            raise MissingRequiredArgument(ctx.current_parameter)
+            raise MissingRequiredArgument(ctx.current_parameter)  # type: ignore[arg-type]
 
         ctx.view.undo()
         rest = ctx.view.read_rest()
@@ -318,9 +319,9 @@ class ConsumeUntilFlag(Converter[T]):
         ctx.view.index = ctx.view.buffer.rfind(argument) + len(argument)
 
         if not self.converter:
-            return argument
+            return argument  # type: ignore[return-value]
 
-        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)
+        return await run_converters(ctx, self.converter, argument, ctx.current_parameter)  # type: ignore[arg-type]
 
 
 def _get_namespaces(attrs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -401,13 +402,13 @@ def _resolve_flag_annotation(flag: Flag[Any], annotation: Any, *args: Any) -> No
     flag.default = False
 
 
-def _resolve_flags(attrs: dict[str, T]) -> dict[str, Flag[T]]:
+def _resolve_flags[T](attrs: dict[str, Any]) -> dict[str, Flag[T]]:
     """Resolves the flags from the class attributes.
 
     This parses the class attributes and resolves the flags from them.
     """
     local_ns, global_ns = _get_namespaces(attrs)
-    annotations = attrs.get('__annotations__', {})
+    annotations: dict[str, Any] = attrs.get('__annotations__', {})
 
     flags = {}
     args = global_ns, local_ns, {}
@@ -437,7 +438,7 @@ def _resolve_flags(attrs: dict[str, T]) -> dict[str, Flag[T]]:
     return flags
 
 
-class FlagMeta(type, Generic[T]):
+class FlagMeta[T](type):
     if TYPE_CHECKING:
         __commands_is_flag__: bool
 
@@ -450,9 +451,9 @@ class FlagMeta(type, Generic[T]):
         __commands_flag_prefix__: str
 
     def __new__(
-            mcs: Type[FlagMetaT],
+            mcs: type[FlagMetaT],
             name: str,
-            bases: tuple[Type[Any], ...],
+            bases: tuple[type[Any], ...],
             attrs: dict[str, Any],
             *,
             compress_usage: bool = False,
@@ -479,7 +480,7 @@ class FlagMeta(type, Generic[T]):
 
         for flag_name, flag in _resolve_flags(attrs).items():
             flags[flag_name] = flag
-            aliases.update({alias_name: flag_name for alias_name in flag.aliases})
+            aliases.update(dict.fromkeys(flag.aliases, flag_name))
 
         forbidden = set(delimiter).union(prefix)
         for flag_name in flags:
@@ -487,7 +488,7 @@ class FlagMeta(type, Generic[T]):
         for alias_name in aliases:
             validate_flag_name(alias_name, forbidden)
 
-        attrs['__doc__'] = __doc__ = inspect.cleandoc(inspect.getdoc(mcs))
+        attrs['__doc__'] = __doc__ = inspect.cleandoc(inspect.getdoc(mcs) or '')
         attrs['__commands_flags__'] = flags
         attrs['__commands_flag_aliases__'] = aliases
 
@@ -588,10 +589,10 @@ class FlagMeta(type, Generic[T]):
 
     def inject(cls, command: Command) -> None:
         """Injects the flags into the command."""
-        command.custom_flags = cls.__commands_flags__
+        command.custom_flags = cls.__commands_flags__  # type: ignore[assignment]
 
 
-class FlagNamespace(Generic[T]):
+class FlagNamespace[T]:
     """Represents a namespace of flags."""
 
     if TYPE_CHECKING:
@@ -724,7 +725,7 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
             The namespace of flags.
         """
         try:
-            flags: FlagMeta[T] = ctx.command.custom_flags    # type: ignore[arg-defined]
+            flags: FlagMeta[T] = ctx.command.custom_flags  # type: ignore[union-attr]
         except Exception as exc:
             raise TypeError(f'bad flag annotation: {exc}')
 
@@ -760,12 +761,15 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
 
             converter = flag.converter
             if converter and v is not None and not flag.store_true:
-                param: inspect.Parameter = ctx.current_parameter.replace(name=_FI(f'{ctx.current_parameter.name}.{name}'))
+                current_param = ctx.current_parameter
+                if current_param is None:
+                    raise TypeError('Missing current parameter context.')
+                param: inspect.Parameter = current_param.replace(name=_FI(f'{current_param.name}.{name}'))
 
                 is_list: bool = False
                 try:
-                    origin = converter.__origin__
-                    args = converter.__args__
+                    origin = converter.__origin__  # type: ignore[union-attr]
+                    args = converter.__args__  # type: ignore[union-attr]
                 except AttributeError:
                     pass
                 else:
@@ -773,7 +777,7 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                         is_list = True
 
                 if is_list:
-                    converter = args[0]
+                    converter = args[0]  # type: ignore[index]
                     view = StringView(v)
                     v = []
 
@@ -783,17 +787,17 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                             break
 
                         word = view.get_quoted_word()
-                        v.append(await run_converters(ctx, converter, word, param))
+                        v.append(await run_converters(ctx, converter, word or '', param))
 
                     if 0 < flag.max_args < len(v):
                         if flag.override:
                             v = v[-flag.max_args:]
                         else:
-                            raise TooManyFlags(flag, v)
+                            raise TooManyFlags(flag, v)  # type: ignore[arg-type]
 
                     # skip the reset and convert only the first value
                     if flag.max_args == 1:
-                        v = await convert_flag(ctx, v[0], flag)
+                        v = await convert_flag(ctx, v[0], flag)  # type: ignore[arg-type]
                         setattr(ns, name, v)
                         continue
 
@@ -802,15 +806,15 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                     # So, the given flag: hello 20 as the input and Tuple[str, int] as the type hint
                     # We would receive ('hello', 20) as the resulting value
                     # This uses the same whitespace and quoting rules as regular parameters.
-                    v = [await convert_flag(ctx, value, flag) for value in v]
+                    v = [await convert_flag(ctx, value, flag) for value in v]  # type: ignore[arg-type]
 
                     if flag.cast_to_dict:
                         v = dict(v)
                 else:
-                    v = await run_converters(ctx, converter, v, param)
+                    v = await run_converters(ctx, converter, v, param)  # type: ignore[arg-type]
 
             elif v is None and flag.required:
-                raise commands.MissingRequiredFlag(flag)
+                raise commands.MissingRequiredFlag(flag)  # type: ignore[arg-type]
 
             setattr(ns, name, v)
 

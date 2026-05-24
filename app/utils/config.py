@@ -5,7 +5,8 @@ import re
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Generic, TypeVar, overload, AsyncGenerator
+from typing import Any, TypeVar, overload
+from collections.abc import AsyncGenerator
 
 from app.utils.tasks import executor
 from config import path
@@ -16,7 +17,7 @@ V = TypeVar('V')
 ObjectHook = Callable[[dict[str, Any]], Any]
 
 
-class Config(Generic[K, V]):
+class Config[K, V]:
     """A database-like config object. Internally based on `json`.
 
     Parameters

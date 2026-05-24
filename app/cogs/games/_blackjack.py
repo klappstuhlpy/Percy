@@ -130,7 +130,7 @@ class Hand(BaseHand[Card]):
             )
 
         for card in card_blocks:
-            rendered = render(current_cards + [card]) if current_cards else render([card])
+            rendered = render([*current_cards, card]) if current_cards else render([card])
 
             # only reserve space for the value in the FIRST block
             limit = 1024 - value_len if not blocks else 1024
@@ -357,10 +357,7 @@ class TableView(View):
         if isinstance(interaction, Context):
             _send_action = self.table.active_hand.message.edit
         else:
-            if interaction.response.is_done():
-                _send_action = interaction.message.edit
-            else:
-                _send_action = interaction.response.edit_message
+            _send_action = interaction.message.edit if interaction.response.is_done() else interaction.response.edit_message
         await _send_action(embed=self.table.build_embed(self.table.active_hand), view=self)
 
         _disabled_self = copy.copy(self)
@@ -515,5 +512,5 @@ class NewGameButton(discord.ui.Button):
         if not await table.view.check_for_winner(interaction):
             await interaction.message.edit(embed=table.build_embed(table.active_hand), view=table.view)
 
-        table.ctx.bot.get_cog('Games').blackjack_tables[table.ctx.user.id] = table  # noqa
+        table.ctx.bot.get_cog('Games').blackjack_tables[table.ctx.user.id] = table
 

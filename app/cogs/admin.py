@@ -49,10 +49,7 @@ class Admin(Cog):
     async def sync(self, ctx: Context, guild_id: int | None, copy: bool = False) -> None:
         """Syncs the slash commands with the given guild"""
 
-        if guild_id:
-            guild = discord.Object(id=guild_id)
-        else:
-            guild = ctx.guild
+        guild = discord.Object(id=guild_id) if guild_id else ctx.guild
 
         if copy:
             self.bot.tree.copy_global_to(guild=guild)

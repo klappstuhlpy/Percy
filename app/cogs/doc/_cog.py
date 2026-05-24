@@ -261,7 +261,7 @@ class Documentation(Cog):
     def base_aliases(self, value: dict[str, str]) -> None:
         self._base_aliases = value
 
-        sorted_aliases = sorted([(alias, package) for alias, package in value.items()], key=lambda x: x[1])
+        sorted_aliases = sorted(value.items(), key=lambda x: x[1])
         self.grouped_aliases = {
             k: [alias for alias, _ in v] for k, v in itertools.groupby(sorted_aliases, key=lambda x: x[1])}
 
@@ -276,7 +276,7 @@ class Documentation(Cog):
 
     async def cog_load(self) -> None:
         """Refresh documentation inventory on cog initialization."""
-        self.bot.loop.create_task(self.refresh_inventories())  # noqa
+        self.bot.loop.create_task(self.refresh_inventories())
 
     async def cog_unload(self) -> None:
         """Clear scheduled inventories, queued symbols and cleanup task on cog unload."""

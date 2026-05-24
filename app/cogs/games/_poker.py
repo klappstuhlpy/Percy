@@ -15,7 +15,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.special import comb
 
-from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck, MinimumBet, DisplayCard
+from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck, DisplayCard
 from app.core.views import View
 from app.rendering import BarChart
 from app.utils import RevDict, helpers, number_suffix, fnumb
@@ -245,7 +245,7 @@ class Ranker:
             return np.array(
                 [x.rank for x in rank_arr]) * (16 ** 5) + np.sum(num_combos * np.power(16, np.arange(0, 5)), axis=1)
 
-        for i, ranking in enumerate(rank_arr):  # noqa: B007
+        for i, ranking in enumerate(rank_arr):
             ranking = cast(RankingItem, ranking)
             # Example: Implement the logic for each RankingItem
             rank_arr[i] = RankingItem(
@@ -442,7 +442,7 @@ class Player:
 
         self.stack: int = stack
         self.bet: int = 0
-        
+
         self.wait_for_allin_call: bool = False
         self.folded: bool = False
         self.all_in: bool = False
@@ -1270,10 +1270,8 @@ class TableView(View):
             await self.table.remove_player(player.member)
 
         if self.table.message is not None:
-            try:
+            with suppress(KeyError):
                 del self.table.cog.poker_tables[self.table.message.channel.id]
-            except KeyError:
-                pass
 
             with suppress(discord.HTTPException):
                 await self.table.message.reply(f'{Emojis.error} The table has been closed due to inactivity.')
@@ -1402,7 +1400,7 @@ class TableView(View):
 
         if len(self.table.players) == 4:
             self.table.start()
-            self = TableView(table=self.table)  # noqa[override]
+            self = TableView(table=self.table)  # noqa: E501
 
         self.update_buttons()
         await interaction.response.edit_message(embed=self.table.build_embed(), view=self)
@@ -1465,7 +1463,7 @@ class TableView(View):
         if self.start_next_round.label == 'Next Round':
             await self.table.prepare_next_game()
         else:
-            self.table.view = self = TableView(table=self.table)  # noqa[override]
+            self.table.view = self = TableView(table=self.table)  # noqa: E501
             self.table.start()
 
         self.update_buttons()
@@ -1674,10 +1672,8 @@ class TableView(View):
         if len(self.table.players) == 1:
             self.table.state = TableState.STOPPED
         elif len(self.table.players) == 0:
-            try:
+            with suppress(KeyError):
                 del self.table.cog.poker_tables[self.table.ctx.channel.id]
-            except KeyError:
-                pass
             if self.table.message is not None:
                 await self.table.message.delete()
 

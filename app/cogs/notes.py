@@ -1,5 +1,6 @@
 import datetime
-from typing import Callable, Any
+from typing import Any
+from collections.abc import Callable
 
 import asyncpg
 import discord
@@ -28,7 +29,7 @@ class Note(BaseRecord):
     created_at: datetime.datetime
     timer: Timer | None
 
-    __slots__ = ('bot', 'id', 'owner_id', 'content', 'topic', 'created_at', 'timer')
+    __slots__ = ('bot', 'content', 'created_at', 'id', 'owner_id', 'timer', 'topic')
 
     @property
     def owner(self) -> discord.User | None:

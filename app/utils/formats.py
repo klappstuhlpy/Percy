@@ -4,17 +4,14 @@ import logging
 import os
 import re
 import textwrap
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, BinaryIO, ParamSpec, TypeVar, Mapping
+from typing import Any, BinaryIO, TypeVar
 
 import dateparser
 import discord
 
-P = ParamSpec('P')
 T = TypeVar('T')
-
-KwargT = TypeVar('KwargT')
 
 try:
     # Try to set the locale
@@ -29,17 +26,14 @@ class SentinelConstant:  # Exists for type hinting purposes
     pass
 
 
-ConstantT = TypeVar('ConstantT', bound=SentinelConstant)
-
-
-def _create_sentinel_callback(v: KwargT) -> Callable[[ConstantT], KwargT]:
-    def wrapper(_self: ConstantT) -> KwargT:
+def _create_sentinel_callback[KwargT](v: KwargT) -> Callable[[Any], KwargT]:
+    def wrapper(_self: Any) -> KwargT:
         return v
 
     return wrapper
 
 
-def sentinel(name: str, **dunders: KwargT) -> ConstantT:
+def sentinel[KwargT](name: str, **dunders: KwargT) -> SentinelConstant:
     """Creates a constant singleton object.
 
     Parameters
@@ -52,11 +46,11 @@ def sentinel(name: str, **dunders: KwargT) -> ConstantT:
 
     Returns
     -------
-    `ConstantT`
+    `SentinelConstant`
         The constant singleton object.
     """
     attrs = {f'__{k}__': _create_sentinel_callback(v) for k, v in dunders.items()}
-    return type(name, (SentinelConstant,), attrs)()
+    return type(name, (SentinelConstant,), attrs)()  # type: ignore[return-value]
 
 
 class pluralize:
@@ -266,7 +260,7 @@ def pagify(
             yield text[start:end]
 
 
-def merge(*iterables: Iterable[T]) -> Iterator[T]:
+def merge[T](*iterables: Iterable[T]) -> Iterator[T]:
     """Merge multiple iterables into one.
 
     Parameters
@@ -300,12 +294,6 @@ def truncate(text: str, length: int) -> str:
         return text[:length - 1] + '…'
     return text
 
-
-def truncate_iterable(iterable: Iterable[Any], length: int) -> str:
-    """Truncate an iterable to a certain length, adding an ellipsis if it was truncated."""
-    if len(iterable) > length:  # type: ignore
-        return ', '.join(iterable[:length]) + ', …'
-    return ', '.join(iterable)
 
 
 def WrapList(list_: list, length: int) -> list[list]:
@@ -369,7 +357,7 @@ def get_shortened_string(length: int, start: int, string: str) -> str:
     if full_length <= 100:
         return string
 
-    _id, _, remaining = string.partition(' - ')
+    _id, _, _remaining = string.partition(' - ')
     start_index = len(_id) + 3
     max_remaining_length = 100 - start_index
 
@@ -389,7 +377,7 @@ def get_shortened_string(length: int, start: int, string: str) -> str:
     return f'[{_id}] …{string[start + excess:end]}'
 
 
-async def aenumerate(asequence: AsyncIterable[T], start: int = 0) -> AsyncIterator[tuple[int, T]]:
+async def aenumerate[T](asequence: AsyncIterable[T], start: int = 0) -> AsyncIterator[tuple[int, T]]:
     """Asynchronously enumerate an async iterator from a given start value"""
     n = start
     async for elem in asequence:
@@ -406,7 +394,7 @@ def resolve_entity_id(x: int, *, guild: discord.Guild) -> str:
     return f'<@{x}>'
 
 
-def validate_snowflakes(*ids: str, guild: discord.Guild, to_obj: bool = False) -> list[int]:
+def validate_snowflakes(*ids: str, guild: discord.Guild, to_obj: bool = False) -> list[int | discord.abc.Snowflake]:
     """Returns all ids that match the following conditions:
 
     - The id is a valid snowflake.
@@ -425,14 +413,14 @@ def validate_snowflakes(*ids: str, guild: discord.Guild, to_obj: bool = False) -
 
     def _check_id(x: Any) -> int | discord.abc.Snowflake | None:
         if not x.isdigit():
-            return
+            return None
         x = int(x)
         if to_obj:
             return next(filter(
                 lambda v: v is not None, [guild.get_role(x), guild.get_member(x), guild.get_channel_or_thread(x)]))
         return x
 
-    return [x for x in map(_check_id, ids) if x]
+    return [x for x in map(_check_id, ids) if x is not None]
 
 
 def get_asset_url(obj: discord.Guild | discord.User | discord.Member | discord.ClientUser) -> str:
@@ -444,7 +432,8 @@ def get_asset_url(obj: discord.Guild | discord.User | discord.Member | discord.C
     if isinstance(obj, (discord.Member, discord.ClientUser)) and obj.display_avatar:
         return obj.display_avatar.url
     if obj.avatar:
-        return obj.display_avatar.url
+        return obj.display_avatar.url  # type: ignore[union-attr]
+    return ''
 
 
 def tail(f: BinaryIO, n: int = 10) -> list[Any] | None:
@@ -492,7 +481,7 @@ def format_fields(mapping: Mapping[str, Any], field_width: int | None = None) ->
             val = textwrap.indent(text, ' ' * (field_width + len(': ')))
             val = val.lstrip()
 
-        if key == 'color':
+        if key == 'color' and isinstance(val, int):
             val = hex(val)
 
         out += '{0:>{width}}: {1}\n'.format(key, val, width=field_width)
@@ -500,10 +489,10 @@ def format_fields(mapping: Mapping[str, Any], field_width: int | None = None) ->
     return out.rstrip()
 
 
-def sanitize_snowflakes(
+def sanitize_snowflakes[T](
         mapping: dict[discord.abc.Snowflake | int, T]
-) -> dict[discord.abc.Snowflake | int, T]:
-    return {int(k): v for k, v in mapping.items()}
+) -> dict[int, T]:
+    return {(k if isinstance(k, int) else k.id): v for k, v in mapping.items()}
 
 
 def to_bool(arg: str | int) -> bool | None:

@@ -2,28 +2,25 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Collection, AsyncGenerator
-from typing import TYPE_CHECKING, Any, AnyStr, Generic, Literal, NamedTuple, Self, TypeVar, override, \
-    Generator
+from typing import TYPE_CHECKING, Any, AnyStr, Literal, NamedTuple, Self, TypeVar, override
+from collections.abc import Generator
 
 import discord
 import numpy as np
-from discord.ext import commands
-from discord.ui import Item
-from discord.ui.view import BaseView
 from discord.utils import MISSING
 
 from app.core.models import Context
 from app.core.views import View
-from app.utils import aenumerate, fuzzy, helpers, Coro
+from app.utils import aenumerate, fuzzy, helpers
 from config import Emojis
 
 __all__ = (
-    'TextSource',
     'BasePaginator',
     'EmbedPaginator',
+    'FilePaginator',
     'LinePaginator',
     'TextPaginator',
-    'FilePaginator',
+    'TextSource',
     'TextSourcePaginator'
 )
 
@@ -225,7 +222,7 @@ class SearchForButton(discord.ui.Button):
 BasePaginatorT = TypeVar('BasePaginatorT', bound='BasePaginator')
 
 
-class BasePaginator(View, Generic[T], metaclass=ABCMeta):
+class BasePaginator[T](View, metaclass=ABCMeta):
     """The Base Button Paginator class. Will handle all page switching without
     you having to do anything.
 
@@ -242,7 +239,7 @@ class BasePaginator(View, Generic[T], metaclass=ABCMeta):
     timeout: :class: `int`
         The timeout for the paginator.
     """
-    
+
     if TYPE_CHECKING:
         per_page: int
         clamp_pages: bool
@@ -736,7 +733,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
         self.interface.close_page()
 
     @override
-    async def start(  # noqa[override]
+    async def start(  # noqa: F811
             self,
             *,
             search_for: bool = False,

@@ -4,7 +4,8 @@ import logging
 import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar, Any, Generator
+from typing import ClassVar, Any
+from collections.abc import Generator
 
 import asyncpg
 import click
@@ -24,14 +25,14 @@ else:
 
 __all__ = (
     'RemoveNoise',
-    'setup_logging',
-    'run_bot',
-    'main',
     'db',
     'init',
-    'migrate',
-    'upgrade',
     'log',
+    'main',
+    'migrate',
+    'run_bot',
+    'setup_logging',
+    'upgrade',
 )
 
 
@@ -42,9 +43,7 @@ class RemoveNoise(logging.Filter):
         super().__init__(name='discord.state')
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.levelname == 'WARNING' and 'referencing an unknown' in record.msg:
-            return False
-        return True
+        return not (record.levelname == 'WARNING' and 'referencing an unknown' in record.msg)
 
 
 class _ColourFormatter(logging.Formatter):
@@ -114,10 +113,8 @@ async def run_bot() -> None:
     discord.VoiceClient.warn_nacl = False
 
     async with Bot() as bot:
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await bot.start()
-        except asyncio.CancelledError:
-            pass
 
 
 @click.group(invoke_without_command=True, options_metavar='[options]')

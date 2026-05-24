@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, Generator, Any
+from typing import TYPE_CHECKING, NamedTuple, Any
+from collections.abc import Generator
 
 from discord import User
 
@@ -12,7 +13,7 @@ from app.utils.formats import sentinel
 if TYPE_CHECKING:
     from app.core import Context
 
-    AnsiIdentifierKwargs: TypeAlias = 'AnsiColor | AnsiBackgroundColor | bool'
+    type AnsiIdentifierKwargs = 'AnsiColor | AnsiBackgroundColor | bool'
 
 INHERIT = sentinel('INHERIT', repr='INHERIT')
 
@@ -175,13 +176,13 @@ class AnsiStringBuilder:
 
     __slots__ = (
         '_chunks',
-        '_prefix',
-        '_fallback_prefix',
-        '_suffix',
-        '_default_color',
         '_default_background_color',
         '_default_bold',
+        '_default_color',
         '_default_underline',
+        '_fallback_prefix',
+        '_prefix',
+        '_suffix',
     )
 
     if TYPE_CHECKING:

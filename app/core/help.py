@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import Type, Any, Callable, Mapping, TYPE_CHECKING, Generator
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable, Iterable, Mapping, Generator
 
 import discord
 from discord.ext import commands
@@ -19,7 +20,6 @@ AnyGroup = commands.Group | commands.HybridGroup
 AnyCommand = commands.Command | commands.HybridCommand | AnyGroup
 
 COMMAND_ICON_URL = 'https://klappstuhl.me/gallery/xGPqHsSgWE.png'
-INFO_ICON_URL = 'https://klappstuhl.me/gallery/YDdbsAuttR.png'
 
 
 class HelpPaginator(BasePaginator[AnyCommand]):
@@ -37,7 +37,8 @@ class HelpPaginator(BasePaginator[AnyCommand]):
         if is_any_locked:
             yield f'{Emojis.Command.locked} » This command expects certain permissions from the user to be run.'
         if any_has_more_help:
-            prefix = self.extras.get('origin').clean_prefix
+            origin: Context | discord.Interaction | None = self.extras.get('origin')
+            prefix = origin.clean_prefix if isinstance(origin, commands.Context) else (origin.client.user and origin.client.user.name or '')  # type: ignore[union-attr]
             yield f'{Emojis.Command.more_info} » This command has more detailed help available with `{prefix}help <command>`.'
 
     async def format_page(self, entries: list[AnyCommand]) -> discord.Embed:
@@ -82,7 +83,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
 
     @classmethod
     async def start(
-            cls: Type[HelpPaginator],
+            cls: type[HelpPaginator],
             context: Context | discord.Interaction,
             /,
             *,
@@ -105,7 +106,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             self.clear_items()
 
         def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]):
-            return CategorySelect(context.client, mapping=items, with_index=self.extras.get('with_index', True))  # type: ignore[arg-type]
+            return CategorySelect(context.client, mapping=items, with_index=self.extras.get('with_index', True))  # type: ignore[arg-type, union-attr]
 
         if isinstance(entries, dict):
             self.extras['groups'] = entries
@@ -120,7 +121,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
         self.update_buttons()
 
         view = self
-        if self.total_pages <= 1 and not self.current_page == 1 and not edit:
+        if self.total_pages <= 1 and self.current_page != 1 and not edit:
             view = None
 
         await (self._edit if edit else self._send)(ctx=context, embed=page, view=view, ephemeral=ephemeral)
@@ -196,7 +197,7 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
 class PaginatedHelpCommand(commands.HelpCommand):
     """A subclass of the default help command that implements support for Application/Hybrid Commands."""
 
-    context: Context
+    context: Context  # type: ignore[override]
 
     def __init__(self, **kwargs: Any):
         super().__init__(
@@ -211,10 +212,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
             **kwargs  # type: ignore[arg-type]
         )
 
-    def get_bot_mapping(self) -> dict[Cog, list[Command]]:
+    def get_bot_mapping(self) -> dict[Cog, list[Command]]:  # type: ignore[override]
         mapping = super().get_bot_mapping()
         del mapping[None]
-        return mapping
+        return mapping  # type: ignore[return-value]
 
     async def total_commands_invoked(self) -> int:
         """Returns the total amount of commands invoked."""
@@ -259,13 +260,11 @@ class PaginatedHelpCommand(commands.HelpCommand):
         guild_ids = getattr(command.callback, '__guild_ids__', None)
         if not guild_ids:
             return True
-        if self.context.guild and self.context.guild.id in guild_ids:
-            return True
-        return False
+        return bool(self.context.guild and self.context.guild.id in guild_ids)
 
-    async def filter_commands(
+    async def filter_commands(  # type: ignore[override]
             self,
-            commands: Iterable[AnyCommand],  # noqa
+            commands: Iterable[AnyCommand],
             /,
             *,
             sort: bool = False,
@@ -292,7 +291,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The filtered Commands.
         """
         if sort and key is None:
-            key = lambda c: c.name  # noqa
+            key = lambda c: c.name
 
         iterator = commands if self.show_hidden else filter(lambda c: not c.hidden, commands)
 
@@ -305,10 +304,10 @@ class PaginatedHelpCommand(commands.HelpCommand):
             ret.extend(self._get_all_subcommands(command, names))
 
         if sort:
-            ret.sort(key=key)
+            ret.sort(key=key)  # type: ignore[arg-type]
         return ret
 
-    async def command_callback(self, ctx: Context, /, *, command: str | None = None) -> None:
+    async def command_callback(self, ctx: Context, /, *, command: str | None = None) -> None:  # type: ignore[override]
         if command is not None and command.lower() == 'flags':
             await ctx.send(embed=self.get_flag_help_embed(), silent=True)
         else:
@@ -337,7 +336,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         :class:`str`
             The command signature.
         """
-        flags: FlagMeta = getattr(command, 'custom_flags', None)  # type: ignore[arg-type]
+        flags: FlagMeta | None = getattr(command, 'custom_flags', None)
 
         if not flags:
             return [] if descripted else ''
@@ -365,7 +364,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
             return ' '.join(resolved)
 
-    def get_command_signature(
+    def get_command_signature(  # type: ignore[override]
             self,
             command: AnyCommand,
             *,
@@ -423,7 +422,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         hidden_tag = '[!]' if command.hidden else ''
         return f'{prefix}{command.qualified_name} {truncate(signature, 150)} {hidden_tag}'.strip()
 
-    async def send_bot_help(self, mapping: Mapping[Cog | None, list[AnyCommand]]) -> None:
+    async def send_bot_help(self, mapping: Mapping[Cog | None, list[AnyCommand]]) -> None:  # type: ignore[override]
         """|coro|
 
         Sends the help command for the whole bot.
@@ -441,17 +440,17 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         grouped: dict[Cog, list[AnyCommand]] = {}
         for command in entries:
-            cog: Cog = self.context.bot.get_cog(key(command))  # type: ignore[arg-type]
+            cog: Cog | None = self.context.bot.get_cog(key(command))  # type: ignore[arg-type]
             if getattr(cog, '__hidden__', False):
                 continue
 
             if cog and not command.hidden:
                 grouped.setdefault(cog, []).append(command)
 
-        grouped = {cog: cmds for cog, cmds in sorted(grouped.items(), key=lambda x: x[0].qualified_name)}
+        grouped = dict(sorted(grouped.items(), key=lambda x: x[0].qualified_name))
         await HelpPaginator.start(self.context, entries=grouped, per_page=1, origin=self.context)
 
-    async def send_cog_help(self, cog: Cog):
+    async def send_cog_help(self, cog: Cog):  # type: ignore[override]
         """|coro|
 
         Sends the help command for a cog.
@@ -468,7 +467,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         await HelpPaginator.start(self.context, entries=entries, group=cog, with_index=False, origin=self.context)
 
-    async def send_command_help(self, command: AnyCommand):
+    async def send_command_help(self, command: AnyCommand):  # type: ignore[override]
         """|coro|
 
         Sends the help command for a command.
@@ -511,14 +510,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         ctx = self.context
         prefix = ctx.clean_prefix
 
+        bot_user = ctx.bot.user
         embed = discord.Embed(
-            title=f'{ctx.bot.user.name} Help',
+            title=f'{bot_user.name if bot_user else "Percy"} Help',
             description=f'Use `{prefix}v2` to get more information about the Percy-v2 Release.\n\n'
                         f'**Privacy Policy**: [Click here](https://t.ly/vAhUk)\n'
                         f'**Terms of Service**: [Click here](https://t.ly/8V2D4)',
             colour=helpers.Colour.white()
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.add_field(
             name='More Help',
             value='Alternatively you can use the following commands to get information about a specific command or category:\n'
@@ -534,7 +534,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         )
         embed.set_author(name=ctx.client.user, icon_url=get_asset_url(ctx.client.user))  # type: ignore[arg-type]
         embed.set_footer(text='I was created at')
-        embed.timestamp = ctx.client.user.created_at
+        embed.timestamp = bot_user.created_at if bot_user else None
         return embed
 
     def get_flag_help_embed(self) -> discord.Embed:
@@ -555,7 +555,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             description='**```\nType command arguments without the brackets shown here!```**',
             colour=helpers.Colour.white()
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
+        embed.set_thumbnail(url=get_asset_url(ctx.guild) if ctx.guild else None)
         embed.add_field(name='`<argument>`', value='This argument is **required**.', inline=False)
         embed.add_field(name='`[argument]`', value='This argument is **optional**.', inline=False)
         embed.add_field(name='`<A|B>`',
@@ -585,7 +585,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                   f'E.g. `{prefix}command -ab` is equal to `{prefix}command --a --b`.\n\n'
                   f'{escaped_asterisk} The last flag in the short-hand combination can take an argument.', inline=False)
 
-        embed.set_author(name=ctx.bot.user, icon_url=get_asset_url(ctx.bot.user))  # type: ignore[arg-type]
+        embed.set_author(name=ctx.bot.user, icon_url=get_asset_url(ctx.bot.user) if ctx.bot.user else None)  # type: ignore[arg-type]
         return embed
 
     async def command_formatting(self, command: AnyCommand) -> discord.Embed:
@@ -613,21 +613,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
         signature = AnsiStringBuilder()
         signature.append(ctx.clean_prefix, color=AnsiColor.white, bold=True)
         signature.append(command.qualified_name + ' ', color=AnsiColor.green, bold=True)
-        signature.extend(Command.ansi_signature_of(command))
+        signature.extend(Command.ansi_signature_of(command))  # type: ignore[arg-type]
 
         description = inspect.cleandoc(command.help or command.description or 'No description provided.')
 
         signature = signature.ensure_codeblock(fallback='md').dynamic(ctx)
         embed.description = f'{signature}\n{description}'
 
-        embed.add_fields(self.get_command_signature(command, descripted=True))  # type: ignore[arg-type]
-        embed.add_fields(self.get_command_flag_signature(command, descripted=True))  # type: ignore[arg-type]
+        sig_fields = self.get_command_signature(command, descripted=True)
+        if isinstance(sig_fields, list):
+            embed.add_fields(sig_fields)  # type: ignore[arg-type]
+        flag_fields = self.get_command_flag_signature(command, descripted=True)
+        if isinstance(flag_fields, list):
+            embed.add_fields(flag_fields)  # type: ignore[arg-type]
 
         if getattr(command, 'aliases', None):
             embed.add_field(name=f'{Emojis.Command.alias} | **Aliases**',
                             value=' '.join(f'`{alias}`' for alias in command.aliases), inline=False)
 
-        if cooldown := command._buckets._cooldown:  # noqa
+        if cooldown := command._buckets._cooldown:
             humanized = f'{cooldown.rate} time(s) per {humanize_duration(cooldown.per)}'
             embed.add_field(name='\N{HOURGLASS} Cooldown', value=humanized)
 
@@ -667,7 +671,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return embed
 
     @classmethod
-    def temporary(cls, context: Context | discord.Interaction) -> 'PaginatedHelpCommand':
+    def temporary(cls, context: Context | discord.Interaction) -> PaginatedHelpCommand:
         """Returns a temporary instance of the help command.
 
         Useful for helper functions that require a help command instance.
@@ -683,5 +687,5 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The temporary help command instance.
         """
         self = cls()
-        self.context = context  # type: ignore[arg-type]
+        self.context = context  # type: ignore[arg-type, assignment]
         return self

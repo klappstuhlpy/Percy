@@ -19,7 +19,7 @@ PY3: bool = sys.version_info[0] == 3
 # Fuzzy matching
 
 
-def check_for_equivalence(func: Callable[[str, str], T]) -> Callable[[str], T]:
+def check_for_equivalence[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if two strings are equivalent. If so, return 100."""
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
@@ -29,7 +29,7 @@ def check_for_equivalence(func: Callable[[str, str], T]) -> Callable[[str], T]:
     return decorator
 
 
-def check_for_none(func: Callable[[str, str], T]) -> Callable[[str], T]:
+def check_for_none[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if either string is None. If so, return 0."""
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
@@ -39,7 +39,7 @@ def check_for_none(func: Callable[[str, str], T]) -> Callable[[str], T]:
     return decorator
 
 
-def check_empty_string(func: Callable[[str, str], T]) -> Callable[[str], T]:
+def check_empty_string[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if either string is empty. If so, return 0."""
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
@@ -57,7 +57,7 @@ if PY3:
 
 def make_type_consistent(s1: str, s2: str) -> tuple[str, str]:
     """If both objects aren't, either both string or unicode instances force them to unicode"""
-    if isinstance(s1, str) and isinstance(s2, str) or isinstance(s1, unicode) and isinstance(s2, unicode):
+    if (isinstance(s1, str) and isinstance(s2, str)) or (isinstance(s1, unicode) and isinstance(s2, unicode)):
         return s1, s2
 
     else:
@@ -66,7 +66,7 @@ def make_type_consistent(s1: str, s2: str) -> tuple[str, str]:
 
 def intr(n: float) -> int:
     """Returns a correctly rounded integer"""
-    return int(round(n))
+    return round(n)
 
 
 def has_manage_roles_overwrite(member: discord.Member, channel: discord.abc.GuildChannel) -> bool:
@@ -137,9 +137,7 @@ def is_player_playing() -> Callable[[T], T]:
 def is_dj(member: discord.Member) -> bool:
     """Checks if the Member has the DJ Role."""
     role = discord.utils.get(member.guild.roles, name="DJ")
-    if role in member.roles:
-        return True
-    return False
+    return role in member.roles
 
 
 def is_listen_together() -> Callable[[T], T]:

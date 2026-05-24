@@ -7,13 +7,11 @@ import json
 import logging
 import random
 from abc import ABC
-from contextlib import AbstractAsyncContextManager
-from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, ParamSpec, TypeVar, Type
+from typing import TYPE_CHECKING, Any, Iterator, Literal, NamedTuple
 
 import asyncpg
 import dateutil.tz
 import discord
-from PIL.SpiderImagePlugin import isInt
 from captcha.image import ImageCaptcha
 from discord.utils import MISSING
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
@@ -24,23 +22,21 @@ from .migrations import Migrations
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
+    from typing import Self, TypeVar
 
     from PIL import Image
 
     from app.core import Bot
 
     DatabaseT = TypeVar('DatabaseT', bound='_Database')
-    RecordT = TypeVar('RecordT', bound='BaseRecord')
-
-P = ParamSpec('P')
 
 __all__ = (
-    'Database',
+    'Balance',
     'BaseRecord',
+    'Database',
+    'Gatekeeper',
     'GuildConfig',
     'UserConfig',
-    'Gatekeeper',
-    'Balance',
 )
 
 
@@ -57,7 +53,7 @@ class _Database:
         The event loop to use for the database operations.
     """
 
-    __slots__ = ('bot', '_internal_pool', '_connect_task', 'loop')
+    __slots__ = ('_connect_task', '_internal_pool', 'bot', 'loop')
 
     if TYPE_CHECKING:
         loop: asyncio.AbstractEventLoop
@@ -75,7 +71,7 @@ class _Database:
 
             async with self.acquire() as conn:
                 migrator = Migrations()
-                await migrator.upgrade(conn)
+                await migrator.upgrade(conn)  # type: ignore[arg-type]
         except (asyncpg.PostgresError, OSError, TimeoutError) as e:
             logging.error('Failed to connect to the PostgreSQL database: %s', e)
             logging.critical('Shutting down the bot due to database connection failure.')
@@ -124,7 +120,7 @@ class _Database:
         await self._connect_task
         return self
 
-    def acquire(self, *, timeout: float | None = None) -> AbstractAsyncContextManager | asyncpg.pool.PoolAcquireContext | Awaitable[None]:
+    def acquire(self, *, timeout: float | None = None) -> asyncpg.pool.PoolAcquireContext:
         return self._internal_pool.acquire(timeout=timeout)  # type: ignore[arg-type]
 
     def release(self, conn: asyncpg.Connection, *, timeout: float | None = None) -> Awaitable[None]:
@@ -140,7 +136,7 @@ class _Database:
         return self._internal_pool.fetchrow(query, *args, timeout=timeout)
 
     def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Awaitable[Any]:
-        return self._internal_pool.fetchval(query, *args, column=column, timeout=timeout)
+        return self._internal_pool.fetchval(query, *args, column=column, timeout=timeout)  # type: ignore[arg-type]
 
 
 class Database(_Database):
@@ -372,7 +368,7 @@ class BaseRecord(ABC):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> RecordT:
+    ) -> Self:
         """|coro|
 
         Updates the record with the given values.
@@ -393,9 +389,7 @@ class BaseRecord(ABC):
         """
         raise NotImplementedError
 
-    async def update(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def update(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Updates the record with the given values by setting the values to the record.
@@ -411,9 +405,7 @@ class BaseRecord(ABC):
         """
         return await self._update(lambda o: f'"{o[1]}" = ${o[0]}', values, connection=connection)
 
-    async def add(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def add(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Adds the given values to the record.
@@ -429,9 +421,7 @@ class BaseRecord(ABC):
         """
         return await self._update(lambda o: f'"{o[1]}" = "{o[1]}" + ${o[0]}', values, connection=connection)
 
-    async def remove(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def remove(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Removes the given values from the record.
@@ -447,9 +437,7 @@ class BaseRecord(ABC):
         """
         return await self._update(lambda o: f'"{o[1]}" = "{o[1]}" - ${o[0]}', values, connection=connection)
 
-    async def append(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def append(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Appends the given values to the array.
@@ -465,9 +453,7 @@ class BaseRecord(ABC):
         """
         return await self._update(lambda o: f'"{o[1]}" = ARRAY_APPEND("{o[1]}", ${o[0]})', values, connection=connection)
 
-    async def prune(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def prune(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Removes the given values to the array.
@@ -483,9 +469,7 @@ class BaseRecord(ABC):
         """
         return await self._update(lambda o: f'"{o[1]}" = ARRAY_REMOVE("{o[1]}", ${o[0]})', values, connection=connection)
 
-    async def merge(
-            self, *, connection: asyncpg.Connection | None = None, **values: Any
-    ) -> Awaitable[RecordT] | RecordT:
+    async def merge(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
         """|coro|
 
         Merges two lists in the array with the given values.
@@ -506,9 +490,9 @@ class BaseRecord(ABC):
         """Returns whether the subclass has a record attribute."""
         return hasattr(subclass, '__record')
 
-    def __iter__(self) -> dict[str, Any]:
-        """An iterator over the record's values."""
-        return {k: v for k, v in self.__record.items() if not k.startswith('_')}
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
+        """An iterator over the record's keys (excluding private ones)."""
+        return iter(k for k in self.__record if not k.startswith('_'))
 
     def __repr__(self) -> str:
         args = [f'{k}={v!r}' for k, v in (self.__record.items() if self.__record else self.__dict__.items())]
@@ -581,12 +565,12 @@ class BaseRecord(ABC):
         return self.__record
 
     @classmethod
-    def temporary(cls, *args: P.args, **kwargs: P.kwargs) -> BaseRecord:
+    def temporary(cls, *args: Any, **kwargs: Any) -> Self:
         """Creates a temporary instance of this class with __ignore_record__ set to True."""
-        return ignore_record(cls)(*args, **kwargs)  # type: ignore
+        return ignore_record(cls)(*args, **kwargs)  # type: ignore[return-value]
 
 
-def ignore_record(cls: type[BaseRecord]) -> Type[BaseRecord]:
+def ignore_record(cls: type[BaseRecord]) -> type[BaseRecord]:
     """A decorator that sets the __ignore_record__ attribute to True."""
     cls.__ignore_record__ = True
     return cls
@@ -598,22 +582,22 @@ class GuildConfig(BaseRecord):
     class AutoModFlags(BaseFlags):
         """The flags for the guild config settings."""
 
-        @flag_value
+        @flag_value  # type: ignore[misc]
         def audit_log(self) -> int:
             """Whether the server is broadcasting audit logs."""
             return 1
 
-        @flag_value
+        @flag_value  # type: ignore[misc]
         def raid(self) -> int:
             """Whether the server is auto banning spammers."""
             return 2
 
-        @flag_value
+        @flag_value  # type: ignore[misc]
         def alerts(self) -> int:
             """Whether the server has alerts enabled."""
             return 4
 
-        @flag_value
+        @flag_value  # type: ignore[misc]
         def gatekeeper(self) -> int:
             """Whether the server has gatekeeper enabled."""
             return 8
@@ -647,28 +631,28 @@ class GuildConfig(BaseRecord):
     linked_automod_rules: set[str]
 
     __slots__ = (
-        'flags',
-        'id',
-        'bot',
+        '_cs_alert_webhook',
+        '_cs_audit_log_webhook',
+        'alert_channel_id',
+        'alert_webhook_url',
         'audit_log_channel_id',
         'audit_log_flags',
         'audit_log_webhook_url',
+        'bot',
+        'flags',
+        'id',
+        'linked_automod_rules',
+        'mention_count',
+        'music_panel_channel_id',
+        'music_panel_message_id',
+        'mute_role_id',
+        'muted_members',
         'poll_channel_id',
         'poll_ping_role_id',
         'poll_reason_channel_id',
-        'mention_count',
-        'safe_automod_entity_ids',
-        'mute_role_id',
-        'muted_members',
-        'alert_webhook_url',
-        'alert_channel_id',
-        'music_panel_channel_id',
-        'music_panel_message_id',
-        'use_music_panel',
         'prefixes',
-        'linked_automod_rules',
-        '_cs_audit_log_webhook',
-        '_cs_alert_webhook',
+        'safe_automod_entity_ids',
+        'use_music_panel',
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -686,7 +670,7 @@ class GuildConfig(BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> GuildConfig:
+    ) -> Self:
         """|coro|
 
         Updates the record with the given values.
@@ -708,7 +692,7 @@ class GuildConfig(BaseRecord):
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
         self.bot.db.get_guild_config.invalidate(self.id)
-        return self.__class__(bot=self.bot, record=record)
+        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
 
     @property
     def guild(self) -> discord.Guild | None:
@@ -719,22 +703,25 @@ class GuildConfig(BaseRecord):
     def poll_channel(self) -> discord.TextChannel | discord.ForumChannel | None:
         """:class:`discord.TextChannel`: The poll channel."""
         guild = self.bot.get_guild(self.id)
-        if guild:
-            return guild.get_channel(self.poll_channel_id)  # type: ignore
+        if guild and self.poll_channel_id:
+            return guild.get_channel(self.poll_channel_id)  # type: ignore[return-value]
+        return None
 
     @property
     def poll_reason_channel(self) -> discord.TextChannel | None:
         """:class:`discord.TextChannel`: The poll reason channel."""
         guild = self.bot.get_guild(self.id)
-        if guild:
-            return guild.get_channel(self.poll_reason_channel_id)  # type: ignore
+        if guild and self.poll_reason_channel_id:
+            return guild.get_channel(self.poll_reason_channel_id)  # type: ignore[return-value]
+        return None
 
     @property
     def music_panel_channel(self) -> discord.TextChannel | None:
         """:class:`discord.TextChannel`: The music panel channel."""
         guild = self.bot.get_guild(self.id)
-        if guild:
-            return guild.get_channel(self.music_panel_channel_id)  # type: ignore
+        if guild and self.music_panel_channel_id:
+            return guild.get_channel(self.music_panel_channel_id)  # type: ignore[return-value]
+        return None
 
     @discord.utils.cached_slot_property('_cs_audit_log_webhook')
     def audit_log_webhook(self) -> discord.Webhook | None:
@@ -755,7 +742,7 @@ class GuildConfig(BaseRecord):
         """:class:`discord.Role`: The mute role."""
         guild = self.bot.get_guild(self.id)
         if guild and self.mute_role_id:
-            return guild.get_role(self.mute_role_id)
+            return guild.get_role(self.mute_role_id)  # type: ignore[return-value]
         return None
 
     async def fetch_automod_rules(self) -> list[discord.AutoModRule]:
@@ -768,11 +755,11 @@ class GuildConfig(BaseRecord):
         list[:class:`discord.AutoModRule`]
             The linked automod rules.
         """
-        if not self.linked_automod_rules:
+        if not self.linked_automod_rules or self.guild is None:
             return []
 
         guild_rules = await self.guild.fetch_automod_rules()
-        return list(filter(lambda rule: rule.id in self.linked_automod_rules, guild_rules))
+        return [rule for rule in guild_rules if rule.id in self.linked_automod_rules]
 
     def is_muted(self, member: discord.abc.Snowflake) -> bool:
         """Checks if a member is muted.
@@ -832,7 +819,12 @@ class GuildConfig(BaseRecord):
         try:
             if not alerts_available and force:
                 # Send to the system channel if alerts are disabled
-                return await self.bot.get_guild(self.id).system_channel.send(content, **kwargs)
+                guild = self.bot.get_guild(self.id)
+                if guild is None or guild.system_channel is None:
+                    return None
+                return await guild.system_channel.send(content, **kwargs)
+            if self.alert_webhook is None:
+                return None
             return await self.alert_webhook.send(content, **kwargs)
         except discord.HTTPException:
             return None
@@ -854,7 +846,7 @@ class UserConfig(BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> RecordT:
+    ) -> Self:
         """|coro|
 
         Updates the record with the given values.
@@ -876,7 +868,7 @@ class UserConfig(BaseRecord):
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
         self.bot.db.get_user_config.invalidate(self.id)
-        return self.__class__(bot=self.bot, record=record)
+        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
 
     @property
     def tzinfo(self) -> datetime.tzinfo:
@@ -949,8 +941,8 @@ class Gatekeeper(BaseRecord):
         text: str
         image: Image.Image
 
-    __CAPTCHA_CHARS: Final[str] = 'abcdefghijklmnopqrstuvwxyz1234567890'  # ABCDEFGHIJKLMNOPQRSTUVWXYZ
-    __image_captcha: Final[ImageCaptcha] = ImageCaptcha(
+    __CAPTCHA_CHARS: str = 'abcdefghijklmnopqrstuvwxyz1234567890'  # ABCDEFGHIJKLMNOPQRSTUVWXYZ
+    __image_captcha: ImageCaptcha = ImageCaptcha(
         width=300, height=100, fonts=[str(ASSETS / 'fonts/helvetica.ttf')])
 
     log = logging.getLogger('mod')
@@ -966,8 +958,20 @@ class Gatekeeper(BaseRecord):
     rate: tuple[int, int] | str | None
 
     __slots__ = (
-        'bot', '__members', '__stop_event', 'id', 'members', 'queue', 'task',
-        'started_at', 'role_id', 'starter_role_id', 'channel_id', 'message_id', 'bypass_action', 'rate',
+        '__members',
+        '__stop_event',
+        'bot',
+        'bypass_action',
+        'channel_id',
+        'id',
+        'members',
+        'message_id',
+        'queue',
+        'rate',
+        'role_id',
+        'started_at',
+        'starter_role_id',
+        'task',
     )
 
     def __init__(self, members: list[Any], **kwargs: Any) -> None:
@@ -984,15 +988,13 @@ class Gatekeeper(BaseRecord):
         # cancel the task gracefully without stopping the internal loop
         self.__stop_event: asyncio.Event = asyncio.Event()
         self.task: asyncio.Task = asyncio.create_task(self.role_loop())
-        self.task._log_destroy_pending = False
+        self.task._log_destroy_pending = False  # type: ignore[attr-defined]
 
         self.log.debug('Gatekeeper %r has started.', self.id)
         if self.started_at is not None:
             self.started_at = self.started_at.replace(tzinfo=datetime.UTC)
 
-        # Alias for a type hint because we can't use self.GatekeeperRoleState
-        _GatekeeperRoleState = self.GatekeeperRoleState
-        self.queue: CancellableQueue[int, tuple[int, _GatekeeperRoleState]] = CancellableQueue(hook_check=self.__stop_event.is_set)
+        self.queue: CancellableQueue[int, tuple[int, Gatekeeper.GatekeeperRoleState]] = CancellableQueue(hook_check=self.__stop_event.is_set)
 
         for member in members:
             state = self.GatekeeperRoleState(member['state'])
@@ -1051,7 +1053,7 @@ class Gatekeeper(BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> Gatekeeper:
+    ) -> Self:
         """|coro|
 
         Updates the record with the given values.
@@ -1073,7 +1075,7 @@ class Gatekeeper(BaseRecord):
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
         self.bot.db.get_guild_gatekeeper.invalidate(self.id)
-        return self.__class__(self.__members, bot=self.bot, record=record)
+        return self.__class__(self.__members, bot=self.bot, record=record)  # type: ignore[return-value]
 
     async def edit(
             self,
@@ -1160,21 +1162,22 @@ class Gatekeeper(BaseRecord):
         It's more of a queue that's being processed in the background.
         """
         while self.role_id is not None and not self.__stop_event.is_set():
+            role_id = self.role_id  # capture for narrowing inside the loop
             member_id, action = await self.queue.get()
 
             try:
                 if action is self.GatekeeperRoleState.pending_remove:
                     await self.bot.http.remove_role(
-                        self.id, member_id, self.role_id, reason='Completed Gatekeeper verification')
+                        self.id, member_id, role_id, reason='Completed Gatekeeper verification')
                     query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
 
                     if self.starter_role:
                         await self.bot.http.add_role(
-                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')  # type: ignore
+                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')  # type: ignore[arg-type]
                 elif action is self.GatekeeperRoleState.pending_add:
                     await self.bot.http.add_role(
-                        self.id, member_id, self.role_id, reason='Started Gatekeeper verification')
+                        self.id, member_id, role_id, reason='Started Gatekeeper verification')
                     query = "UPDATE guild_gatekeeper_members SET state = 'added' WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
             except discord.DiscordServerError:
@@ -1261,7 +1264,7 @@ class Gatekeeper(BaseRecord):
         """The role that is being added to members."""
         guild = self.bot.get_guild(self.id)
         if guild and self.role_id:
-            return guild.get_role(self.role_id)
+            return guild.get_role(self.role_id)  # type: ignore[return-value]
         return None
 
     @property
@@ -1269,15 +1272,15 @@ class Gatekeeper(BaseRecord):
         """The role that is being added to members that bypass the gatekeeper."""
         guild = self.bot.get_guild(self.id)
         if guild and self.starter_role_id:
-            return guild.get_role(self.starter_role_id)
+            return guild.get_role(self.starter_role_id)  # type: ignore[return-value]
         return None
 
     @property
     def channel(self) -> discord.TextChannel | None:
         """The channel where the gatekeeper is active."""
         guild = self.bot.get_guild(self.id)
-        if guild:
-            return guild.get_channel(self.channel_id)  # type: ignore
+        if guild and self.channel_id:
+            return guild.get_channel(self.channel_id)  # type: ignore[return-value]
         return None
 
     @property
@@ -1379,7 +1382,7 @@ class Balance(BaseRecord):
     cash: int
     bank: int
 
-    __slots__ = ('bot', 'user_id', 'guild_id', 'cash', 'bank')
+    __slots__ = ('bank', 'bot', 'cash', 'guild_id', 'user_id')
 
     @property
     def total(self) -> int:
@@ -1392,7 +1395,7 @@ class Balance(BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> Balance:
+    ) -> Self:
         """|coro|
 
         Updates the record with the given values.
@@ -1413,4 +1416,4 @@ class Balance(BaseRecord):
             RETURNING *;
         """
         record = await (connection or self.bot.db).fetchrow(query, self.user_id, self.guild_id, *values.values())
-        return self.__class__(bot=self.bot, record=record)
+        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]

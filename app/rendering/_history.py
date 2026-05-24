@@ -11,9 +11,9 @@ from app.rendering.pillow import ASSETS, FontManager, get_text_dimensions, resiz
 from app.utils import helpers
 
 __all__ = (
+    'AvatarCollage',
     'BarChart',
     'PresenceChart',
-    'AvatarCollage',
 )
 
 
@@ -98,7 +98,7 @@ class BarChart:
 
             for label, value in subset_data.items():
                 _, label_height = get_text_dimensions(label, font=font)
-                value_width, value_height = get_text_dimensions(str(value), font=font)
+                _value_width, value_height = get_text_dimensions(str(value), font=font)
 
                 # the label is aligned to the left of the image
                 label_position = (LABEL_PADDING, y + (BAR_HEIGHT - label_height) // 2)

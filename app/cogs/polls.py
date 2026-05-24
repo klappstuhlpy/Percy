@@ -515,10 +515,7 @@ class PollRolePingButton(
         return cls(int(match['role_id']))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-        if interaction.guild_id is None:
-            return False
-
-        return True
+        return interaction.guild_id is not None
 
     async def callback(self, interaction: discord.Interaction) -> Any:
         assert isinstance(interaction.user, discord.Member)
@@ -587,9 +584,25 @@ class Poll(BaseRecord):
     options: list[VoteOption]
 
     __slots__ = (
-        'id', 'message_id', 'channel_id', 'guild_id', 'metadata', 'entries', 'expires', 'published',
-        'args', 'kwargs', 'message', 'question', 'votes', 'description', 'options',
-        'cog', 'bot', 'ping_message', 'color'
+        'args',
+        'bot',
+        'channel_id',
+        'cog',
+        'color',
+        'description',
+        'entries',
+        'expires',
+        'guild_id',
+        'id',
+        'kwargs',
+        'message',
+        'message_id',
+        'metadata',
+        'options',
+        'ping_message',
+        'published',
+        'question',
+        'votes'
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -608,7 +621,7 @@ class Poll(BaseRecord):
         self.options: list[VoteOption] = self.kwargs.get('options', [])
         self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get('color') or '#ffffff')
 
-        self.entries = {PollEntry(record=entry).__iter__() for entry in self.entries or []}
+        self.entries = [PollEntry(record=entry) for entry in self.entries or []]
 
     @property
     def jump_url(self) -> str | None:
@@ -845,10 +858,8 @@ class Poll(BaseRecord):
             await self.fetch_message()
 
         if self.message:
-            try:
+            with suppress(discord.HTTPException):
                 await self.message.delete()
-            except discord.HTTPException:
-                pass
 
         self.cog.get_guild_polls.invalidate(self.guild_id)
 

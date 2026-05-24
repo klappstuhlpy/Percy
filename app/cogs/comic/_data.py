@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     import asyncpg
 
-    from app.core import CogT
+    from app.core import Cog
 
 MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/IoXwuZkPas.png'
 DC_ICON_URL = 'https://klappstuhl.me/gallery/JFhdZbBozA.png'
@@ -132,7 +132,7 @@ class GenericComic:
     def __init__(
             self,
             *,
-            brand: Brand = None,
+            brand: Brand | None = None,
             _id: int | str | None = None,
             title: str | None = None,
             description: str | None = None,
@@ -145,20 +145,20 @@ class GenericComic:
             date: datetime.datetime | None = None,
             **kwargs: Any
     ) -> None:
-        self.brand: Brand = brand
-        self.id: int = _id
-        self.title: str = title
-        self.description: str = description
-        self.creators: dict[str, list[str]] = creators
+        self.brand: Brand | None = brand
+        self.id: int | str | None = _id
+        self.title: str | None = title
+        self.description: str | None = description
+        self.creators: dict[str, list[str]] | None = creators
 
-        self.image_url: str = image_url
+        self.image_url: str | None = image_url
         self.url: str = url or ""
 
-        self.date: datetime.datetime = date
-        self.page_count: int = page_count
-        self.price: float = price
+        self.date: datetime.datetime | None = date
+        self.page_count: int | None = page_count
+        self.price: float | None = price
 
-        self.copyright: str = _copyright
+        self.copyright: str | None = _copyright
         self.kwargs = kwargs
 
     def __str__(self) -> str:
@@ -241,28 +241,26 @@ class GenericComicMessage(GenericComic):
         return self.message.jump_url
 
 
-B = TypeVar('B', bound=Brand)
+class ComicFeed[B: Brand](BaseRecord):
 
-
-class ComicFeed(BaseRecord, Generic[B]):
-
-    cog: CogT
+    if TYPE_CHECKING:
+        cog: Cog
     id: int
     guild_id: int
     channel_id: int
     format: Format
-    brand: Brand
+    brand: B  # type: ignore[assignment]
     day: int
     ping: bool
     pin: bool
     next_pull: datetime.datetime
 
-    __slots__ = ('cog', 'id', 'guild_id', 'channel_id', 'format', 'brand', 'day', 'ping', 'pin', 'next_pull')
+    __slots__ = ('brand', 'channel_id', 'cog', 'day', 'format', 'guild_id', 'id', 'next_pull', 'pin', 'ping')
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        self.brand: B = Brand[str(self.brand)]
+        self.brand = Brand[str(self.brand)]  # type: ignore[assignment]
         self.format = Format[str(self.format)]
 
     async def _update(
@@ -278,7 +276,7 @@ class ComicFeed(BaseRecord, Generic[B]):
             WHERE id = $1
             RETURNING *;
         """
-        record = await (connection or self.cog.bot).fetchrow(query, self.id, *values.values())
+        record = await (connection or self.cog.bot.db).fetchrow(query, self.id, *values.values())
         return self.__class__(cog=self.cog, record=record)
 
     def to_dict(self) -> dict[str, Any]:
@@ -324,7 +322,7 @@ class ComicFeed(BaseRecord, Generic[B]):
         """
         query = "DELETE FROM comic_config WHERE guild_id = $1 AND brand = $2;"
         await self.cog.bot.db.execute(query, self.guild_id, self.brand.name)
-        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))
+        self.cog.get_comic_config.invalidate_containing(str(self.guild_id))  # type: ignore[attr-defined]
 
     def next_scheduled(self, day: int | None = None) -> datetime.datetime:
         """Returns the Next Scheduled Date for the Comic Feed.
@@ -360,13 +358,13 @@ class ComicFeed(BaseRecord, Generic[B]):
 
 
 class ComicJSONEncoder(json.JSONEncoder):
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, Enum):
-            return obj.name
-        elif isinstance(obj, commands.Cog):
-            return f"<class '{obj.__module__}'>"
-        elif isinstance(obj, datetime.datetime):
-            return obj.isoformat()
-        elif isinstance(obj, object):
-            return f"<class '{obj.__class__.__module__}.{obj.__class__.__name__}'>"
-        return super().default(obj)
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Enum):
+            return o.name
+        elif isinstance(o, commands.Cog):
+            return f"<class '{o.__module__}'>"
+        elif isinstance(o, datetime.datetime):
+            return o.isoformat()
+        elif isinstance(o, object):
+            return f"<class '{o.__class__.__module__}.{o.__class__.__name__}'>"
+        return super().default(o)

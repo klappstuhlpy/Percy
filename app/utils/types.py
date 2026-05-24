@@ -9,7 +9,7 @@ from discord.types.appinfo import AppInfo as AppInfoPayload
 from discord.webhook.async_ import _WebhookState
 
 if TYPE_CHECKING:
-    from app.core.bot import Bot
+    pass
 
 _State = ConnectionState | _WebhookState
 

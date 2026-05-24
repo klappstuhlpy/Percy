@@ -1,7 +1,7 @@
 import enum
 import re
 from collections import namedtuple
-from typing import Generic, Literal, TypeVar
+from typing import Literal, TypeVar
 
 import numpy as np
 
@@ -110,7 +110,7 @@ class BaseCard:
 CardT = TypeVar('CardT', bound=BaseCard)
 
 
-class BaseHand(Generic[CardT]):
+class BaseHand[CardT: BaseCard]:
     """Represents a hand of cards"""
 
     def __init__(self) -> None:
@@ -132,7 +132,7 @@ class BaseHand(Generic[CardT]):
         return [BaseCard(suit=suit, value=value) for value, suit in self.card_arr]
 
 
-class Deck(Generic[CardT]):
+class Deck[CardT: BaseCard]:
     """Represents one or Card Decks with 52 cards (or more*) that can be shuffled and drawn from
 
     Parameters

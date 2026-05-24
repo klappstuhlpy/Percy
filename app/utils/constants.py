@@ -3,8 +3,6 @@ import re
 from collections.abc import AsyncIterable, Awaitable, Callable, Coroutine
 from typing import Any, ParamSpec, TypeVar
 
-import matplotlib
-
 P = ParamSpec('P')
 T = TypeVar('T')
 
@@ -20,7 +18,14 @@ URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|%[0-9a-fA-
 
 # DATA
 
-COLOUR_DICT = matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS
+def get_colour_dict() -> dict[str, str]:
+    """Return the combined CSS4 + XKCD colour dictionary, built once on first access.
+
+    matplotlib is imported lazily here so that modules importing constants.py
+    do not pay the full matplotlib startup cost unless colour lookup is needed.
+    """
+    import matplotlib.colors  # noqa: PLC0415
+    return matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS  # type: ignore[return-value]
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),

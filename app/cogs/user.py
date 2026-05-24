@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from lxml import etree
 
-from app.core.models import Cog, describe, group, command
+from app.core.models import Cog, describe, group
 from app.utils import fuzzy, helpers, timetools
 
 if TYPE_CHECKING:

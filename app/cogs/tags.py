@@ -289,8 +289,18 @@ class Tag(BaseRecord):
     created_at: datetime.datetime
     use_embed: bool
 
-    __slots__ = ('bot', 'aliases', 'id', 'name', 'content', 'owner_id',
-                 'uses', 'location_id', 'created_at', 'use_embed')
+    __slots__ = (
+        'aliases',
+        'bot',
+        'content',
+        'created_at',
+        'id',
+        'location_id',
+        'name',
+        'owner_id',
+        'use_embed',
+        'uses',
+    )
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -419,7 +429,7 @@ class AliasTag(BaseRecord):
     location_id: int
     created_at: datetime.datetime
 
-    __slots__ = ('parent', 'id', 'name', 'parent_id', 'owner_id', 'location_id', 'created_at')
+    __slots__ = ('created_at', 'id', 'location_id', 'name', 'owner_id', 'parent', 'parent_id')
 
     @property
     def choice_text(self) -> str:

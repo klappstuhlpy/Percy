@@ -61,7 +61,7 @@ class IncidentItem(BaseRecord):
     channel_id: int
     message_id: int | None
 
-    __slots__ = ('bot', 'id', 'name', 'status', 'started_at', 'guild_id', 'channel_id', 'message_id')
+    __slots__ = ('bot', 'channel_id', 'guild_id', 'id', 'message_id', 'name', 'started_at', 'status')
 
     def get_channel(self) -> discord.TextChannel | None:
         guild = self.bot.get_guild(self.guild_id)

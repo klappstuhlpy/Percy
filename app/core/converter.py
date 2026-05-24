@@ -1,7 +1,7 @@
 import re
 from ssl import CertificateError
 from textwrap import dedent
-from typing import Any, TypeVar, ClassVar, Coroutine, Literal
+from typing import Any, TypeVar, ClassVar, Literal
 
 import discord
 from aiohttp import ClientConnectorError
@@ -9,16 +9,17 @@ from discord import app_commands, AppCommandOptionType, Colour, Member, User
 from discord.ext import commands
 
 from app.core.models import Context
-from app.utils import Colour, COLOUR_DICT, fuzzy
+from app.utils import Colour, fuzzy
+from app.utils.constants import get_colour_dict
 
 __all__ = (
+    'ActionReason',
+    'BannedMember',
     'CodeblockConverter',
     'ColorTransformer',
     'IgnoreEntity',
     'IgnoreableEntity',
     'MemberID',
-    'BannedMember',
-    'ActionReason',
 )
 
 T = TypeVar('T')
@@ -92,7 +93,7 @@ class CodeblockConverter(commands.Converter[list[str]]):
                 codeblocks = [block.group('code') for block in blocks]
             else:
                 match = match[0] if len(blocks) == 0 else blocks[0]
-                code, block, lang, delim = match.group('code', 'block', 'lang', 'delim')
+                code, _block, _lang, _delim = match.group('code', 'block', 'lang', 'delim')
                 codeblocks = [dedent(code)]
         else:
             codeblocks = [dedent(cls.RAW_CODE_REGEX.fullmatch(code).group('code'))]
@@ -115,7 +116,7 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
 
             result = discord.Colour.from_rgb(*bytes.fromhex(value))
         except ValueError:
-            results: list[tuple[str, str]] = fuzzy.finder(value, COLOUR_DICT.items(), key=lambda x: x[0], limit=1)
+            results: list[tuple[str, str]] = fuzzy.finder(value, get_colour_dict().items(), key=lambda x: x[0], limit=1)
             if results:
                 try:
                     result = discord.Colour.from_rgb(*bytes.fromhex(results[0][1]))
@@ -127,7 +128,7 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
             return result
 
     async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[Colour]]:  # type: ignore[arg-type]
-        results = fuzzy.extract(current, COLOUR_DICT, limit=20)
+        results = fuzzy.extract(current, get_colour_dict(), limit=20)
         return [app_commands.Choice(name=f'{result[0]} ({result[2]})', value=result[2]) for result in results]
 
     async def convert(self, ctx: Context, argument: str) -> Colour | None:
@@ -147,7 +148,7 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
 
             result = Colour.from_rgb(*bytes.fromhex(argument))
         except ValueError:
-            results: list[tuple[str, str]] = fuzzy.finder(argument, COLOUR_DICT.items(), key=lambda x: x[0], limit=1)
+            results: list[tuple[str, str]] = fuzzy.finder(argument, get_colour_dict().items(), key=lambda x: x[0], limit=1)
             if results:
                 try:
                     result = Colour.from_rgb(*bytes.fromhex(results[0][1]))
