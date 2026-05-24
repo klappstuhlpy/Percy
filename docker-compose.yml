@@ -15,7 +15,7 @@ services:
 #      - bot
 
   snekbox:
-    container_name: percy-snekbox
+    container_name: snekbox
     image: ghcr.io/python-discord/snekbox
     restart: unless-stopped
     ipc: none
