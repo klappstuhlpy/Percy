@@ -491,7 +491,7 @@ def format_fields(mapping: Mapping[str, Any], field_width: int | None = None) ->
 def sanitize_snowflakes[T](
         mapping: dict[discord.abc.Snowflake | int, T]
 ) -> dict[int, T]:
-    return {(k if isinstance(k, int) else k.id): v for k, v in mapping.items()}
+    return {(int(k) if isinstance(k, (int, str)) else k.id): v for k, v in mapping.items()}
 
 
 def to_bool(arg: str | int) -> bool | None:
