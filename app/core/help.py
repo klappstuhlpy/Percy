@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands
-from discord.ext.commands import Cog, Command
+from discord.ext.commands import Cog
 
 from app.core.flags import FlagMeta
 from app.core.models import Command, EmbedBuilder, HybridCommand
@@ -51,7 +51,8 @@ class HelpPaginator(BasePaginator[AnyCommand]):
 
         # self.entries is always a list after BasePaginator.__init__; check extras["groups"]
         # which is set in start() when the original entries argument was a dict.
-        if self.current_page == 1 and self.extras.get("groups") is not None:
+
+        if self.current_page == 1 and self.extras.get("group") is None:
             return await helper.get_front_page_embed()
 
         if not (group := self.extras.get("group")):
@@ -103,7 +104,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
         edit = kwargs.pop("edit", False)
         self.extras.update(kwargs)
 
-        if len(self.pages) == 1:
+        if self.current_page == 1 and self.extras.get("group") is None:
             self.clear_items()
 
         def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]) -> CategorySelect:
@@ -171,7 +172,9 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
 
         value = self.values[0]
         if value == "__index":
-            await HelpPaginator.start(interaction, entries=self.mapping, edit=True, **self.view.extras)
+            _extras = self.view.extras
+            _extras.pop("group", None)
+            await HelpPaginator.start(interaction, entries=self.mapping, edit=True, **_extras)
         else:
             try:
                 cog = self.cog_mapping[value]
@@ -410,8 +413,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             return f"{prefix}{command.qualified_name}"
 
         signature = command.ansi_signature.raw if isinstance(command, AnyCommand) else command.signature
-
         hidden_tag = "[!]" if command.hidden else ""
+
         return f"{prefix}{command.qualified_name} {truncate(signature, 150)} {hidden_tag}".strip()
 
     async def send_bot_help(self, mapping: Mapping[Cog | None, list[AnyCommand]]) -> None:

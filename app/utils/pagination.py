@@ -405,7 +405,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         page = await self.format_page(entries)
         await interaction.response.edit_message(**self.resolve_msg_kwargs(page))
 
-    def update_buttons(self):
+    def update_buttons(self) -> None:
         self.on_middle.label = self.middle
 
     async def _paged_embeds(self) -> AsyncGenerator[discord.Embed, None]:
