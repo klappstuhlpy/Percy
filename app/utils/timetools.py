@@ -11,6 +11,7 @@ import parsedatetime as pdt
 from dateutil.relativedelta import relativedelta
 from discord import app_commands
 from discord.ext import commands
+from parsedatetime import pdt_locales as _pdt_locales
 
 from app.utils import human_join, humanize_list, pluralize
 from app.utils.helpers import copy_dict
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 else:
     type Context = commands.Context
 
-units = pdt.pdt_locales.load_locale('en_US').units
+units = _pdt_locales.load_locale('en_US').units
 units['minutes'].append('mins')
 units['seconds'].append('secs')
 

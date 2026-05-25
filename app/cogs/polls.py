@@ -3,11 +3,13 @@ from __future__ import annotations
 import random
 import traceback
 import warnings
+from collections.abc import Iterator
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, Self, TypedDict
 
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
@@ -557,7 +559,7 @@ class PollEntry(BaseRecord):
 
     __slots__ = ('user_id', 'vote')
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return iter((self.user_id, self.vote))
 
 
@@ -570,7 +572,7 @@ class Poll(BaseRecord):
     channel_id: int
     guild_id: int
     metadata: dict[str, Any]
-    entries: set[tuple[int, int]]
+    entries: set[PollEntry]
     expires: datetime.datetime
     published: datetime.datetime
 
@@ -615,13 +617,13 @@ class Poll(BaseRecord):
         self.message: discord.Message = MISSING
         self.ping_message: discord.Message = MISSING
 
-        self.question: str = self.kwargs.get('question')
+        self.question: str = self.kwargs.get('question', 'N/A')
         self.votes: int = self.kwargs.get('votes', 0)
-        self.description: str = self.kwargs.get('description')
+        self.description: str = self.kwargs.get('description', 'N/A')
         self.options: list[VoteOption] = self.kwargs.get('options', [])
         self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get('color') or '#ffffff')
 
-        self.entries = [PollEntry(record=entry) for entry in self.entries or []]
+        self.entries: set[PollEntry] = {PollEntry(record=entry) for entry in self.entries or []}
 
     @property
     def jump_url(self) -> str | None:
@@ -780,7 +782,7 @@ class Poll(BaseRecord):
                 ch['index'] = index
 
             self.votes -= option['votes']
-            self.entries = {(user, user_option) for user, user_option in self.entries if user_option != option['index']}
+            self.entries = {PollEntry.temporary(user, user_option) for user, user_option in self.entries if user_option != option['index']}
             return self.options
         return None
 
@@ -847,7 +849,7 @@ class Poll(BaseRecord):
 
         self.metadata.get('kwargs').update(form)  # type: ignore[union-attr]
         self.cog.get_guild_polls.invalidate(self.guild_id)
-        return await self.update(metadata=self.metadata, entries=self.entries)  # type: ignore[return-value]
+        return await self.update(metadata=self.metadata, entries=[(e.user_id, e.vote) for e in self.entries])  # type: ignore[return-value]
 
     async def delete(self) -> None:
         """Deletes the poll."""
@@ -904,7 +906,7 @@ class Polls(Cog):
 
     async def poll_id_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
+    ) -> list[Choice[str | int | float]]:
         assert interaction.guild is not None
         polls = await self.get_guild_polls(interaction.guild.id)  # type: ignore[misc]
 
@@ -915,7 +917,8 @@ class Polls(Cog):
         results = fuzzy.finder(current, polls, key=lambda p: p.choice_text, raw=True)
         return [
             app_commands.Choice(name=get_shortened_string(length, start, poll.choice_text), value=poll.id)
-            for length, start, poll in results[:20]]
+            for length, start, poll in results[:20]
+        ]
 
     async def create_poll(
             self,
