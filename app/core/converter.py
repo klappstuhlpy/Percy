@@ -1,11 +1,11 @@
 import re
 from ssl import CertificateError
 from textwrap import dedent
-from typing import Any, TypeVar, ClassVar, Literal
+from typing import Any, ClassVar, Literal, TypeVar
 
 import discord
 from aiohttp import ClientConnectorError
-from discord import app_commands, AppCommandOptionType, Colour, Member, User
+from discord import AppCommandOptionType, Colour, Member, User, app_commands
 from discord.ext import commands
 
 from app.core.models import Context

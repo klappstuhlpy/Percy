@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import itertools
 from collections import defaultdict
-from collections.abc import Callable, Generator
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import asyncpg
 import discord
-from discord import utils, app_commands
+from discord import app_commands, utils
 from discord.ext import tasks
 
-from app.core import Cog, Bot, Context, group, HybridContext, describe
+from app.core import Bot, Cog, Context, HybridContext, describe, group
 from app.database import BaseRecord
-from app.utils import helpers, validate_snowflakes, fuzzy
+from app.utils import fuzzy, helpers, validate_snowflakes
 from app.utils.lock import lock
 from app.utils.pagination import LinePaginator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
 
 
 class HighlightConfig(BaseRecord):

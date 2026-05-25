@@ -22,9 +22,10 @@ from app.utils import (
     SUCCESSFULL_CRIME_RESPONSES,
     SUCCESSFULL_SLUT_RESPONSES,
     WORKING_RESPONSES,
+    fnumb,
     fuzzy,
     helpers,
-    txt, fnumb,
+    txt,
 )
 from config import Emojis, path
 

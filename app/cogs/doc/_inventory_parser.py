@@ -8,7 +8,7 @@ import aiohttp
 
 log = logging.getLogger(__name__)
 
-FAILED_REQUEST_ATTEMPTS = 3
+FAILED_REQUEST_ATTEMPTS = 2
 _V2_LINE_RE = re.compile(r'(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+?(\S*)\s+(.*)')
 
 InventoryDict = defaultdict[str, list[tuple[str, str]]]
@@ -127,7 +127,7 @@ async def fetch_inventory(session: aiohttp.ClientSession, url: str) -> Inventory
                 # Somehow reachable, but not a valid inventory file?
                 log.error(
                     'Failed to get inventory from %s with status %r; '
-                    'trying again (%r/%r).', url, e.status, attempt. FAILED_REQUEST_ATTEMPTS
+                    'trying again (%r/%r).', url, e.status, attempt, FAILED_REQUEST_ATTEMPTS
                 )
         except aiohttp.ClientError:
             log.error(

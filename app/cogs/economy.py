@@ -5,7 +5,7 @@ from discord.ext import commands
 
 from app.core import Bot, Cog, converter
 from app.core.models import Context, PermissionTemplate, command, describe, group
-from app.utils import get_asset_url, helpers, fnumb
+from app.utils import fnumb, get_asset_url, helpers
 from app.utils.pagination import LinePaginator
 from config import Emojis
 

@@ -1,8 +1,8 @@
-from typing import TYPE_CHECKING, Any, Self, TypedDict, NotRequired
+from typing import TYPE_CHECKING, Any, NotRequired, Self, TypedDict
 
 import discord
-from discord import Asset as _Asset, AppInfo
-from discord import Permissions
+from discord import AppInfo, Permissions
+from discord import Asset as _Asset
 from discord.http import Route
 from discord.state import ConnectionState
 from discord.types.appinfo import AppInfo as AppInfoPayload

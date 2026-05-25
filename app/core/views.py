@@ -1,9 +1,7 @@
 import asyncio
-import datetime
-from typing import TypeVar, Any, TYPE_CHECKING
-from collections.abc import Callable, Awaitable, Generator, Iterable
+from collections.abc import Awaitable, Callable, Generator, Iterable
+from typing import TYPE_CHECKING, Any, TypeVar
 
-import asyncpg
 import discord
 from discord import Interaction
 from discord.ext import commands
@@ -11,6 +9,10 @@ from discord.ext import commands
 from app.rendering import AvatarCollage, PresenceChart
 
 if TYPE_CHECKING:
+    import datetime
+
+    import asyncpg
+
     from app.core import Context
 else:
     Context = commands.Context
@@ -23,7 +25,7 @@ __all__ = (
     'View',
 )
 
-from app.utils import AsyncCallable, get_asset_url, helpers, Timer
+from app.utils import AsyncCallable, Timer, get_asset_url, helpers
 from config import Emojis
 
 T = TypeVar('T')

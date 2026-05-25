@@ -3,10 +3,10 @@ from functools import partial
 from io import BytesIO
 
 import discord
-from PIL import Image, ImageDraw
 from discord import File
+from PIL import Image, ImageDraw
 
-from app.rendering.pillow import ASSETS, FontManager, Font, FONT_MAPPING, get_text_dimensions
+from app.rendering.pillow import ASSETS, FONT_MAPPING, Font, FontManager, get_text_dimensions
 
 
 class Quote:

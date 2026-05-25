@@ -6,7 +6,7 @@ import discord
 from discord import File
 from PIL import Image, ImageDraw
 
-from app.rendering.pillow import ASSETS, FontManager, get_dominant_color, get_text_dimensions, Font, FONT_MAPPING
+from app.rendering.pillow import ASSETS, FONT_MAPPING, Font, FontManager, get_dominant_color, get_text_dimensions
 from app.utils import shorten_number
 
 if TYPE_CHECKING:

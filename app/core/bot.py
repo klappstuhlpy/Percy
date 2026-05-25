@@ -9,7 +9,6 @@ import traceback
 from collections import Counter, defaultdict
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Final, TypeVar
-from collections.abc import AsyncIterator, Callable, Generator, Iterable
 
 import discord
 import jishaku
@@ -47,6 +46,9 @@ from config import (
 from config import (
     name as bot_name,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable, Generator, Iterable
 
 GuildFeatureT = TypeVar('GuildFeatureT', bound=list[tuple[str, str]] | Any)
 

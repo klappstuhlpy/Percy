@@ -19,7 +19,7 @@ try:
 except locale.Error:
     # If it fails, fall back to 'C' locale or log the issue
     locale.setlocale(locale.LC_ALL, 'C')
-    logging.warning(f"WARNING: Locale 'en_US.UTF-8' not supported, falling back to 'C'.")
+    logging.warning("WARNING: Locale 'en_US.UTF-8' not supported, falling back to 'C'.")
 
 
 class SentinelConstant:  # Exists for type hinting purposes
@@ -124,7 +124,7 @@ class TabularData:
         to_draw.append(sep)
 
         for row in self._rows:
-            to_draw.append(get_entry(row))
+            to_draw.append(get_entry(row))  # noqa: PERF401
 
         to_draw.append(sep)
         return '\n'.join(to_draw)
@@ -293,7 +293,6 @@ def truncate(text: str, length: int) -> str:
     if len(text) > length:
         return text[:length - 1] + '…'
     return text
-
 
 
 def WrapList(list_: list, length: int) -> list[list]:

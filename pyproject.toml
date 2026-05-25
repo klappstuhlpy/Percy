@@ -24,7 +24,6 @@ click = "^8.1.7"
 expiringdict = "^1.2.2"
 lru-dict = "^1.3.0"
 captcha = "^0.6.0"
-parsedatetime = "^2.6"
 python-dateutil = "^2.9.0.post0"
 matplotlib = "^3.8.3"
 numpy = "^2.2.1"
@@ -39,6 +38,7 @@ regex = "^2024.11.6"
 pilmoji = {git = "https://github.com/jay3332/pilmoji", branch = "2.0"}
 fonttools = "^4.50.0"
 discord-py = {extras = ["voice"], version = "^2.7.1"}
+parsedatetime = "^2.6"
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"

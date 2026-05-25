@@ -6,7 +6,7 @@ from typing import ClassVar, Final
 import discord
 
 from app.core.views import View
-from app.utils import helpers, fnumb
+from app.utils import fnumb, helpers
 from app.utils.helpers import HealthBarBuilder
 from config import Emojis
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import random
-import re
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -17,6 +16,8 @@ from app.utils import checks, fuzzy, get_shortened_string, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
+    import re
+
     from app.core.timer import Timer
 
 

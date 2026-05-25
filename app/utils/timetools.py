@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 else:
     type Context = commands.Context
 
-units = pdt.pdtLocales['en_US'].units
+units = pdt.pdt_locales.load_locale('en_US').units
 units['minutes'].append('mins')
 units['seconds'].append('secs')
 

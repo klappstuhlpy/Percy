@@ -3,25 +3,17 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, ParamSpec, TypeVar, override
 
 import asyncpg
-from typing import (
-    Any,
-    ClassVar,
-    Concatenate,
-    Literal,
-    ParamSpec,
-    TYPE_CHECKING,
-    TypeVar, override
-)
-from collections.abc import Callable, Sequence
-
 import discord
 from discord.utils import format_dt, utcnow
 
-from app.database import Database, BaseRecord
+from app.database import BaseRecord, Database
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from . import Bot
 
     P = ParamSpec('P')
@@ -43,13 +35,13 @@ class Timer(BaseRecord):
 
     __slots__ = ('args', 'bot', 'created', 'event', 'expires', 'id', 'kwargs', 'metadata', 'timezone')
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
         self.args: Sequence[Any] = self.metadata.get('args', [])
         self.kwargs: dict[str, Any] = self.metadata.get('kwargs', {})
 
-    async def _update(
+    async def _update(  # noqa: ANN202
             self,
             key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
@@ -77,7 +69,7 @@ class Timer(BaseRecord):
         record = await (connection or self.bot.db).execute(query, self.id, *values.values())
         return self.__class__(bot=self.bot, record=record)
 
-    async def rerun(
+    async def rerun(  # noqa: ANN201
             self,
             when: datetime.datetime | datetime.timedelta,
             /,
@@ -174,7 +166,7 @@ class TimerManager:
     SHORT_TIMER_THRESHOLD: ClassVar[int] = 60
     MAX_DAYS: ClassVar[int] = 40
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: Bot) -> None:
         self.bot = bot
         self.db: Database = bot.db
         self._dispatch: Callable[Concatenate[str, P], None] = bot.dispatch
@@ -327,7 +319,7 @@ class TimerManager:
             self._short_timers[key] = timer
 
             self._loop.create_task(self.start_short_timer(seconds, timer))
-            log.debug(f'Short timer {timer.id} will fire in {seconds} seconds.')
+            log.debug(f'Short timer {timer.id} will fire in {seconds} seconds.')  # noqa: G004
             return timer
 
         query = """
@@ -343,7 +335,7 @@ class TimerManager:
         if self._loaded_timer and when < self._loaded_timer.expires:
             self.reset_task()
 
-        log.debug(f'Timer {timer.id} will fire at {when}.')
+        log.debug(f'Timer {timer.id} will fire at {when}.')  # noqa: G004
         return timer
 
     async def decrement_atomic_key(self) -> int:
@@ -400,7 +392,7 @@ class TimerManager:
         async with (connection or self.db).acquire(timeout=500.0) as con:
             timer = await self.load_next_timer(connection=con, days=days)
             if timer is not None:
-                log.debug(f'Loaded timer %r to fire at %s.', timer.id, timer.expires)
+                log.debug('Loaded timer %r to fire at %s.', timer.id, timer.expires)
                 self.__event.set()
                 return timer
 
@@ -437,7 +429,7 @@ class TimerManager:
                     to_sleep = (timer.expires - now).total_seconds()
                     await asyncio.sleep(to_sleep)
 
-                log.debug(f'Dispatching timer %r for event %s now.', timer.id, timer.event)
+                log.debug('Dispatching timer %r for event %s now.', timer.id, timer.event)
                 await self.call(timer)
         except asyncio.CancelledError:
             raise

@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Final
 
 import discord
 
-from app.core.models import Context
 from app.core.views import View
-from app.utils import helpers, humanize_duration, fnumb
+from app.utils import fnumb, helpers, humanize_duration
 from config import Emojis
 
 if TYPE_CHECKING:
+    from app.core.models import Context
     from app.database.base import Balance
 
 

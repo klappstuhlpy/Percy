@@ -9,7 +9,7 @@ import discord
 from discord import PartialEmoji
 
 from app.core import View
-from app.utils import helpers, pluralize, fnumb
+from app.utils import fnumb, helpers, pluralize
 from config import Emojis
 
 if TYPE_CHECKING:

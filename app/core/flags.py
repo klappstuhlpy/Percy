@@ -3,19 +3,21 @@ from __future__ import annotations as _
 import inspect
 import re
 import sys
-from argparse import ArgumentParser as _ArgumentParser, Namespace
+from argparse import ArgumentParser as _ArgumentParser
+from argparse import Namespace
 from dataclasses import dataclass
-from typing import Annotated, Any, NoReturn, TYPE_CHECKING, TypeVar, Union, Literal
-from collections.abc import Collection, Iterator
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NoReturn, TypeVar, Union
 
-from discord import AppCommandOptionType, app_commands, Interaction
+from discord import AppCommandOptionType, Interaction, app_commands
 from discord.ext import commands
-from discord.ext.commands import BadArgument, Converter, MissingRequiredArgument, run_converters, TooManyFlags
-from discord.ext.commands.flags import validate_flag_name, convert_flag
+from discord.ext.commands import BadArgument, Converter, MissingRequiredArgument, TooManyFlags, run_converters
+from discord.ext.commands.flags import convert_flag, validate_flag_name
 from discord.ext.commands.view import StringView
-from discord.utils import MISSING, resolve_annotation, maybe_coroutine
+from discord.utils import MISSING, maybe_coroutine, resolve_annotation
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Iterator
+
     from app.core.models import Command, Context
 
 FlagMetaT = TypeVar('FlagMetaT', bound='FlagMeta')
@@ -42,31 +44,31 @@ class MockFlags:
 
     It can be initialized only one time and is afterwards frozen with the given attributes.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
 
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<MockFlags {self.__dict__}>'
 
-    def __getattribute__(self, item):
+    def __getattribute__(self, item: Any) -> Any:
         try:
             return super().__getattribute__(item)
         except AttributeError:
             return None
 
-    def __getitem__(self, item) -> Any:
+    def __getitem__(self, item: Any) -> Any:
         try:
             return self.__dict__[item]
         except KeyError:
             return MockFlags()
 
-    def __contains__(self, item) -> bool:
+    def __contains__(self, item: Any) -> bool:
         return item in self.__dict__
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.__dict__)
 
 

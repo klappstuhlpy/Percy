@@ -13,7 +13,7 @@ from discord import DiscordException, app_commands
 from discord.ext import commands
 from discord.ext.commands import Range
 
-from app.core import Bot, Cog, Context, Flags, flag, View
+from app.core import Bot, Cog, Context, Flags, View, flag
 from app.core.models import describe, group
 from app.utils import fuzzy, helpers
 from app.utils.pagination import EmbedPaginator

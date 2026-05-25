@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import datetime
-from typing import Annotated, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import discord
 import wavelink
@@ -16,6 +15,9 @@ from app.database import BaseRecord
 from app.utils import cache, checks, fuzzy, get_shortened_string, helpers, pluralize
 from app.utils.pagination import BasePaginator, TextSource
 from config import Emojis
+
+if TYPE_CHECKING:
+    import datetime
 
 
 class PlaylistNameOrID(commands.clean_content):

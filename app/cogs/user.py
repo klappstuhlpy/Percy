@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import zoneinfo
-from typing import TYPE_CHECKING, ClassVar, Final, NamedTuple, Self
+from typing import TYPE_CHECKING, ClassVar, Final, NamedTuple
 
 import dateutil.tz
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from lxml import etree
 
@@ -21,7 +22,7 @@ class TimeZone(NamedTuple):
     key: str
 
     @classmethod
-    async def convert(cls, ctx: Context, argument: str) -> Self:
+    async def convert(cls, ctx: Context, argument: str) -> TimeZone | TimeZone:
         cog: UserSettings | None = ctx.bot.get_cog('User Settings')
         if cog is None:
             # should never happen though?
@@ -40,7 +41,7 @@ class TimeZone(NamedTuple):
         except ValueError:
             raise commands.BadArgument(f'Could not find timezone for {argument!r}')
 
-    def to_choice(self) -> app_commands.Choice[str]:
+    def to_choice(self) -> Choice[str | int | float]:
         return app_commands.Choice(name=self.label, value=self.key)
 
 

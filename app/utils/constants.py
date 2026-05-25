@@ -16,8 +16,8 @@ type AsyncCallableDecorator[P, T] = Callable[[AsyncCallable[P, T]], AsyncCallabl
 
 URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|%[0-9a-fA-F][0-9a-fA-F])+')
 
-# DATA
 
+# DATA
 def get_colour_dict() -> dict[str, str]:
     """Return the combined CSS4 + XKCD colour dictionary, built once on first access.
 
@@ -26,6 +26,7 @@ def get_colour_dict() -> dict[str, str]:
     """
     import matplotlib.colors  # noqa: PLC0415
     return matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS  # type: ignore[return-value]
+
 
 GUILD_FEATURES = {
     'ANIMATED_BANNER': ('🖼️', 'Server can upload and use an animated banner.'),

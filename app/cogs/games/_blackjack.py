@@ -11,7 +11,7 @@ import numpy as np
 
 from app.cogs.games._classes import BaseCard, BaseHand, Deck, DisplayCard
 from app.core import Context, View
-from app.utils import helpers, fnumb
+from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:

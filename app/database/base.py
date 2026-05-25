@@ -7,13 +7,14 @@ import json
 import logging
 import random
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Iterator, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import asyncpg
 import dateutil.tz
 import discord
 from captcha.image import ImageCaptcha
 from discord.utils import MISSING
+
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
 from config import DatabaseConfig, Emojis
 
@@ -21,7 +22,7 @@ from ..rendering import ASSETS
 from .migrations import Migrations
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import Awaitable, Callable, Iterator, Sequence
     from typing import Self, TypeVar
 
     from PIL import Image

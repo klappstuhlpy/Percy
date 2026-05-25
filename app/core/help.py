@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, TYPE_CHECKING
-from collections.abc import Callable, Iterable, Mapping, Generator
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands
 
-from app.utils import helpers, pluralize, truncate, get_asset_url, AnsiStringBuilder, AnsiColor, humanize_duration
 from app.core.flags import FlagMeta
+from app.core.models import Command, EmbedBuilder, HybridCommand
+from app.utils import AnsiColor, AnsiStringBuilder, get_asset_url, helpers, humanize_duration, pluralize, truncate
 from app.utils.pagination import BasePaginator
-from app.core.models import Command, HybridCommand, EmbedBuilder
 from config import Emojis
 
 if TYPE_CHECKING:
-    from app.core import Context, Bot, Cog
+    from collections.abc import Callable, Generator, Iterable, Mapping
+
+    from app.core import Bot, Cog, Context
 
 AnyGroup = commands.Group | commands.HybridGroup
 AnyCommand = commands.Command | commands.HybridCommand | AnyGroup
@@ -25,7 +26,7 @@ COMMAND_ICON_URL = 'https://klappstuhl.me/gallery/xGPqHsSgWE.png'
 class HelpPaginator(BasePaginator[AnyCommand]):
 
     @staticmethod
-    def create_prefixes(cmd):
+    def create_prefixes(cmd) -> list[str]:
         prefixes = []
         if getattr(cmd, 'is_locked', False):
             prefixes.append(Emojis.Command.locked)
@@ -105,7 +106,7 @@ class HelpPaginator(BasePaginator[AnyCommand]):
         if len(self.pages) == 1:
             self.clear_items()
 
-        def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]):
+        def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]) -> CategorySelect:
             return CategorySelect(context.client, mapping=items, with_index=self.extras.get('with_index', True))  # type: ignore[arg-type, union-attr]
 
         if isinstance(entries, dict):
@@ -138,7 +139,7 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
             *,
             with_index: bool = True,
             default: Cog | None = None
-    ):
+    ) -> None:
         super().__init__(placeholder='Select a category to view...')
         self.bot: Bot = bot
 
@@ -169,7 +170,7 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
                 default=cog is self.default
             )
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         assert self.view is not None
         await interaction.response.defer()
 
@@ -199,7 +200,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     context: Context  # type: ignore[override]
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(
             show_hidden=False,
             verify_checks=False,
@@ -223,7 +224,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         return await self.context.db.fetchval(query)  # type: ignore
 
     @staticmethod
-    def command_requires_permissions(command: AnyCommand):
+    def command_requires_permissions(command: AnyCommand) -> bool:
         """Returns whether a command is locked or not."""
         if not isinstance(command, (Command, HybridCommand)):
             return False
@@ -235,7 +236,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         """Returns all subcommands of a command."""
         subcommands: set[AnyCommand] = set()
 
-        def add_subcommand(cmd: AnyCommand):
+        def add_subcommand(cmd: AnyCommand) -> None:
             nonlocal subcommands, names
             if not cmd.hidden and self.is_available(cmd) and cmd.qualified_name not in names:
                 setattr(cmd, 'is_locked', self.command_requires_permissions(cmd))
@@ -450,7 +451,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         grouped = dict(sorted(grouped.items(), key=lambda x: x[0].qualified_name))
         await HelpPaginator.start(self.context, entries=grouped, per_page=1, origin=self.context)
 
-    async def send_cog_help(self, cog: Cog):  # type: ignore[override]
+    async def send_cog_help(self, cog: Cog) -> discord.Message | None:
         """|coro|
 
         Sends the help command for a cog.
@@ -467,7 +468,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         await HelpPaginator.start(self.context, entries=entries, group=cog, with_index=False, origin=self.context)
 
-    async def send_command_help(self, command: AnyCommand):  # type: ignore[override]
+    async def send_command_help(self, command: AnyCommand) -> discord.Message | None:
         """|coro|
 
         Sends the help command for a command.
@@ -484,7 +485,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         embed = await self.command_formatting(command)
         await self.context.send(embed=embed, silent=True)
 
-    async def send_group_help(self, group: AnyGroup):
+    async def send_group_help(self, group: AnyGroup) -> None:
         """|coro|
 
         Sends the help command for a group.

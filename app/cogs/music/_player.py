@@ -11,11 +11,11 @@ import wavelink
 import yarl
 from discord.ext import commands
 from discord.utils import MISSING
-from wavelink import QueueMode, ChannelTimeoutException
+from wavelink import ChannelTimeoutException, QueueMode
 
 from app.cogs.music._queue import Queue, ShuffleMode
 from app.core import Bot, Context, View
-from app.utils import PlayerStamp, ProgressBar, convert_duration, helpers, truncate, letter_emoji
+from app.utils import PlayerStamp, ProgressBar, convert_duration, helpers, letter_emoji, truncate
 from config import Emojis
 
 if TYPE_CHECKING:

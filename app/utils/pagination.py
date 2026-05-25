@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Collection, AsyncGenerator
 from typing import TYPE_CHECKING, Any, AnyStr, Literal, NamedTuple, Self, TypeVar, override
-from collections.abc import Generator
 
 import discord
 import numpy as np
@@ -13,6 +11,9 @@ from app.core.models import Context
 from app.core.views import View
 from app.utils import aenumerate, fuzzy, helpers
 from config import Emojis
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Collection, Generator
 
 __all__ = (
     'BasePaginator',

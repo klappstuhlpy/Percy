@@ -10,7 +10,7 @@ import numpy as np
 
 from app.cogs.emoji import EMOJI_REGEX
 from app.core.views import View
-from app.utils import find_word, helpers, fnumb
+from app.utils import find_word, fnumb, helpers
 from config import Emojis
 
 

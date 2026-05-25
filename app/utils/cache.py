@@ -36,7 +36,7 @@ T = TypeVar('T')
 
 
 class AwaitableObj[T]:
-    def __init__(self, value: T):
+    def __init__(self, value: T) -> None:
         self.value: T = value
 
     def __await__(self) -> Generator[Any, None, T]:
@@ -67,7 +67,7 @@ class CacheProtocol(Protocol[R]):
 
 class ExpiringCache(dict):
     """A cache that expires after a given amount of time."""
-    def __init__(self, seconds: float):
+    def __init__(self, seconds: float) -> None:
         self.__ttl: float = seconds
         super().__init__()
 
@@ -86,7 +86,7 @@ class ExpiringCache(dict):
         self.__verify_cache_integrity()
         return super().__getitem__(key)
 
-    def get(self, key: str, default: Any = None):
+    def get(self, key: str, default: Any = None):  # noqa: ANN201
         v = super().get(key, default)
         if v is default:
             return default
@@ -179,7 +179,7 @@ def cache[T](
             key_parts = [f'{func.__module__}.{func.__name__}']
 
             for arg in args:
-                key_parts.append(_true_repr(arg))
+                key_parts.append(_true_repr(arg))  # noqa: PERF401
 
             if not ignore_kwargs:
                 for k in kwargs:

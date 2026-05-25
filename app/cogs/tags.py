@@ -4,7 +4,6 @@ import contextlib
 import csv
 import datetime
 import io
-import re
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 import asyncpg
@@ -12,8 +11,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from app.core import Bot, Cog, Context, Flags, flag, store_true, View
-from app.core.models import BadArgument, PermissionTemplate, cooldown, describe, group, AppBadArgument
+from app.core import Bot, Cog, Context, Flags, View, flag, store_true
+from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
 from app.database import BaseRecord
 from app.utils import (
     TabularData,
@@ -29,6 +28,7 @@ from app.utils.pagination import LinePaginator
 from config import Emojis
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Callable, Generator
 
 

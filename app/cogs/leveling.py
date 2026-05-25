@@ -1,27 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-import asyncpg
 import logging
 import math
 import random
 from contextlib import suppress
-from typing import Annotated, Any, NamedTuple
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import discord
 from discord import AppCommandOptionType, app_commands
 from discord.ext import commands
 from discord.ext.commands import Range
 
-from app.core import Bot, Cog, Flags, flag, View, converter
+from app.core import Bot, Cog, Flags, View, converter, flag
 from app.core.converter import IgnoreableEntity, IgnoreEntity
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.database import BaseRecord
 from app.rendering import LevelCard
-from app.utils import cache, get_asset_url, helpers, humanize_duration, medal_emoji, sanitize_snowflakes, truncate, \
-    fnumb
+from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, sanitize_snowflakes, truncate
 from config import Emojis
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+
+    import asyncpg
 
 log = logging.getLogger(__name__)
 

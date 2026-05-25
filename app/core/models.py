@@ -8,35 +8,35 @@ from collections import OrderedDict
 from contextlib import suppress
 from functools import wraps
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
     Literal,
     NamedTuple,
-    TYPE_CHECKING,
-    TypeVar,
     Protocol,
-    override,
+    TypeVar,
     Union,
+    override,
     runtime_checkable,
 )
-from collections.abc import Callable, Iterable
 
-import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ext.commands import GroupMixin
 from discord.utils import MISSING, cached_property
 
 from app.core.flags import ConsumeUntilFlag, FlagMeta, Flags
 from app.core.views import ConfirmationView, DisambiguatorView
-from app.utils import AnsiColor, AnsiStringBuilder, helpers, truncate
-from app.utils import TemporaryAttribute, AsyncCallable
+from app.utils import AnsiColor, AnsiStringBuilder, AsyncCallable, TemporaryAttribute, helpers, truncate
 from config import Emojis
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
     from datetime import datetime
     from typing import Self
+
+    import aiohttp
+    from discord.ext.commands import GroupMixin
 
     from app.core import Bot, FlagNamespace
     from app.database import Database

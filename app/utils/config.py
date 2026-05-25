@@ -3,10 +3,9 @@ import contextlib
 import json
 import re
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from pathlib import Path
 from typing import Any, TypeVar, overload
-from collections.abc import AsyncGenerator
 
 from app.utils.tasks import executor
 from config import path

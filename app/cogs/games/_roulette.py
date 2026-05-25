@@ -4,13 +4,16 @@ import datetime
 import enum
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import discord
 
-from app.core.models import Context
 from app.core.views import View
-from app.utils import NotCaseSensitiveEnum, helpers, pluralize, fnumb
+from app.utils import NotCaseSensitiveEnum, fnumb, helpers, pluralize
 from config import Emojis
+
+if TYPE_CHECKING:
+    from app.core.models import Context
 
 SOWCASE_SPACES = [
     'Single Numbers', '1st', '2nd', '3rd', '1-12', '13-24', '25-36', '1-18', '19-36', 'Red', 'Black', 'Even', 'Odd'

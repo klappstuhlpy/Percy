@@ -18,7 +18,7 @@ from scipy.special import comb
 from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck, DisplayCard
 from app.core.views import View
 from app.rendering import BarChart
-from app.utils import RevDict, helpers, number_suffix, fnumb
+from app.utils import RevDict, fnumb, helpers, number_suffix
 from config import Emojis
 
 if TYPE_CHECKING:

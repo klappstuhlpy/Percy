@@ -7,7 +7,6 @@ import io
 import logging
 import re
 from collections import Counter, defaultdict
-from collections.abc import AsyncIterator, Callable, MutableMapping, Sequence
 from contextlib import suppress
 from functools import partial
 from operator import attrgetter
@@ -21,7 +20,6 @@ from discord.ext import commands, tasks
 from app.core import Bot, Context, Flags, flag, store_true
 from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, IgnoreEntity, MemberID
 from app.core.models import AppBadArgument, BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
-from app.core.timer import Timer
 from app.core.views import ConfirmationView, View
 from app.database.base import Gatekeeper, GuildConfig
 from app.utils import (
@@ -43,6 +41,10 @@ from app.utils.pagination import LinePaginator, TextSource
 from config import Emojis
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable, MutableMapping, Sequence
+
+    from app.core.timer import Timer
+
     class ModGuildContext(Context):
         cog: Moderation
         guild_config: GuildConfig

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import TYPE_CHECKING, NamedTuple, Any
-from collections.abc import Generator
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from discord import User
 
@@ -11,6 +10,8 @@ from app.utils.formats import sentinel
 # Code obtained form: https://github.com/jay3332/Lambda-v3/blob/main/app/util/ansi.py
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from app.core import Context
 
     type AnsiIdentifierKwargs = 'AnsiColor | AnsiBackgroundColor | bool'

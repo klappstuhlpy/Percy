@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, describe, group
@@ -37,7 +38,7 @@ class TempChannel(BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ):
+    ) -> TempChannel:
         query = f"""
             UPDATE temp_channels
             SET {', '.join(map(key, enumerate(values.keys(), start=3)))}
@@ -99,7 +100,7 @@ class TempChannels(Cog):
         records = await self.bot.db.fetch(query, guild_id)
         if convert:
             guild = self.bot.get_guild(guild_id)
-            return [guild.get_channel(record['channel_id']) for record in records]
+            return [guild.get_channel(record['channel_id']) for record in records]  # type: ignore
         return [TempChannel(bot=self.bot, record=record) for record in records]
 
     async def get_guild_temp_channel(self, guild_id: int, channel_id: int) -> TempChannel | None:
@@ -125,7 +126,7 @@ class TempChannels(Cog):
 
     async def temp_channel_id_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[Choice[str | int | float]]:
         """The autocomplete for the temp channel ID."""
         channels = await self.get_guild_temp_channels(interaction.guild_id, convert=True)
         results = fuzzy.finder(current, channels, key=attrgetter('name'))

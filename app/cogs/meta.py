@@ -3,38 +3,46 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import datetime
 import inspect
 import io
 import logging
 import pprint
 import re
 import textwrap
+import unicodedata
+from collections import Counter
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from urllib.parse import urljoin
 
 import aiohttp
-import unicodedata
-from collections import Counter
-from typing import TYPE_CHECKING, ClassVar, Any, Literal
-
 import discord
 from dateutil.relativedelta import relativedelta
-from discord import app_commands, File
+from discord import File, app_commands
 from discord.ext import commands, tasks
 
 import config
-from app.core import Cog, Context, Flags, flag, Bot
+from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
-from app.core.views import View, TrashView
-from app.rendering import get_dominant_color, Quote
-from app.utils import AnsiColor, AnsiStringBuilder, Timer, get_asset_url, helpers, humanize_small_duration, pluralize, \
-    format_fields, RelativeDelta, humanize_bool
+from app.core.views import TrashView, View
+from app.rendering import Quote, get_dominant_color
+from app.utils import (
+    AnsiColor,
+    AnsiStringBuilder,
+    RelativeDelta,
+    Timer,
+    format_fields,
+    get_asset_url,
+    helpers,
+    humanize_bool,
+    humanize_small_duration,
+    pluralize,
+)
 from app.utils.lock import lock
 from app.utils.pagination import LinePaginator, TextSource, TextSourcePaginator
-from config import main_guild_id, Emojis, github_key, default_prefix, test_guild_id
+from config import Emojis, default_prefix, github_key, main_guild_id, test_guild_id
 
 if TYPE_CHECKING:
-    import datetime
-
     from app.database.base import GuildConfig
 
 log = logging.getLogger(__name__)

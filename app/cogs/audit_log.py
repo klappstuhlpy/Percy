@@ -26,7 +26,7 @@ class AuditLog(Cog):
         return string.replace('_', ' ').title()
 
     @classmethod
-    def resolve_target(cls, target: PossibleTarget, *, raw: bool = False) -> str:
+    def resolve_target(cls, target: PossibleTarget, *, raw: bool = False) -> str | None | Any:
         if isinstance(target, str):
             return target
 
