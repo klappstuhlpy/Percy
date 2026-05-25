@@ -189,6 +189,9 @@ class Bot(commands.Bot):
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
+        if beta:
+            return commands.when_mentioned_or('b.')(self, message)
+
         if not message.guild:
             return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
 

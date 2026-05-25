@@ -43,13 +43,13 @@ test_guild_id: int = 1062074624935993424
 main_guild_id: int = 1066703165669515264
 default_prefix: Collection[str] | str = '?'
 allowed_mentions: AllowedMentions = AllowedMentions(everyone=False, users=True, roles=False, replied_user=False)
-stats_webhook: tuple[int, str] = (1085947117140463708, env('STATS_WEBHOOK_TOKEN'))
+stats_webhook: tuple[int, str | None] = (1085947117140463708, env('STATS_WEBHOOK_TOKEN'))
 
-token: str = env('DISCORD_TOKEN')
-beta_token: str = env('DISCORD_BETA_TOKEN')
-client_secret: str = env('DISCORD_CLIENT_SECRET')
+token: str | None = env('DISCORD_TOKEN')
+beta_token: str | None = env('DISCORD_BETA_TOKEN')
+client_secret: str | None = env('DISCORD_CLIENT_SECRET')
 
-resolved_token: str = beta_token if beta else token
+resolved_token: str | None = beta_token if beta else token
 
 lavalink_nodes: Collection[SimpleNamespace] = [
     SimpleNamespace(uri='https://lavalink.klappstuhl.me/', password=env('LAVALINK_NODE_1_PASSWORD')),
