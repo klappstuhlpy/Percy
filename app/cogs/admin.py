@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import discord
+from aiohttp import FormData
 from discord.ext import commands
 
 from app.core import Cog, Context
@@ -118,16 +119,15 @@ class Admin(Cog):
 
         async with ctx.typing():
             headers = {
-                'Authorization': images_key,
-                'Content-Type': 'multipart/form-data; boundary=---------------------------332189364018871511822391569513'
+                'Content-Type': 'multipart/form-data',
+                'Authorization': images_key
             }
-            files = {
-                'file': await file.read()
-            }
+            data = FormData()
+            data.add_field('file', await file.read())
             async with self.bot.session.post(
                     'https://klappstuhl.me/api/images/upload',
                     headers=headers,
-                    data=files
+                    data=data
             ) as resp:
                 if resp.status == 200:
                     await ctx.send_success(f'Uploaded to <{(await resp.json())}>')
@@ -139,8 +139,7 @@ class Admin(Cog):
         """Deletes a file from https://klappstuhl.me."""
         async with ctx.typing():
             headers = {
-                'Authorization': images_key,
-                'Content-Type': 'multipart/form-data; boundary=---------------------------332189364018871511822391569513'
+                'Authorization': images_key
             }
             async with self.bot.session.delete(
                     f'https://klappstuhl.me/api/images/{_id}',
