@@ -302,7 +302,7 @@ class Games(Cog):
         # Shuffle cards, just for aesthetics
         embed = blackjack.build_embed(
             hand=blackjack.active_hand,
-            image_url='https://klappstuhl.me/gallery/ZvGkGVKtXx.gif',
+            image_url='https://klappstuhl.me/gallery/TpjOl.gif',
             colour=discord.Colour.light_grey(),
             text='*Shuffling Cards...*'
         )
@@ -615,7 +615,7 @@ class Games(Cog):
 
         # Note this is just for aesthetics
         await roulette.message.edit(
-            embed=roulette.build_embed(image_url='https://klappstuhl.me/gallery/GlbnUFmzan.gif'),
+            embed=roulette.build_embed(image_url='https://klappstuhl.me/gallery/KdKof.gif'),
             view=roulette.view)
         await asyncio.sleep(5)
 

@@ -701,7 +701,7 @@ class Stats(Cog):
 
         embed.set_footer(
             text=f'Made with discord.py v{discord.__version__}',
-            icon_url='https://klappstuhl.me/gallery/jUksiGZDtC.png')
+            icon_url='https://klappstuhl.me/gallery/lVUYV.png')
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
@@ -1301,7 +1301,7 @@ class Stats(Cog):
         msg = textwrap.shorten(f'{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}', width=1990)
         if record.name == 'discord.gateway':
             username = 'Gateway'
-            avatar_url = 'https://klappstuhl.me/gallery/hVBcEmbqsw.png'
+            avatar_url = 'https://klappstuhl.me/gallery/xNZqq.png'
         else:
             username = f'{record.name} Logger'
             avatar_url = discord.utils.MISSING

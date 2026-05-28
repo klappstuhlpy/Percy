@@ -18,7 +18,7 @@ from app.utils import cache, utcparse
 from config import Emojis
 
 DS_ENDPOINT = 'https://discordstatus.com/api/v2/incidents.json'
-DISCORD_ICON_URL = 'https://klappstuhl.me/gallery/MICwIlEsnC.png'
+DISCORD_ICON_URL = 'https://klappstuhl.me/gallery/EzWyA.png'
 
 
 class Status(enum.Enum):

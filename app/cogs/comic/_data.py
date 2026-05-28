@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
     from app.core import Cog
 
-MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/IoXwuZkPas.png'
-DC_ICON_URL = 'https://klappstuhl.me/gallery/JFhdZbBozA.png'
-VIZ_ICON_URL = 'https://klappstuhl.me/gallery/WbpikEeKxf.png'
+MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/HTBFL.png'
+DC_ICON_URL = 'https://klappstuhl.me/gallery/VmiCY.png'
+VIZ_ICON_URL = 'https://klappstuhl.me/gallery/nsTxu.png'
 
 MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 

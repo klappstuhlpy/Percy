@@ -522,7 +522,7 @@ class Documentation(Cog):
                 description=await self.get_symbol_markdown(item)
             )
             embed.set_author(
-                name=f'{item.package} Documentation', icon_url='https://klappstuhl.me/gallery/jUksiGZDtC.png')
+                name=f'{item.package} Documentation', icon_url='https://klappstuhl.me/gallery/lVUYV.png')
 
             for name, value in item.resolved_fields.items():
                 embed.add_field(name=name, value=value, inline=False)

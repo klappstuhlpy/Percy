@@ -2,10 +2,10 @@ import asyncio
 import contextlib
 import logging
 import traceback
+from collections.abc import Generator
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar, Any
-from collections.abc import Generator
+from typing import Any, ClassVar
 
 import asyncpg
 import click

@@ -462,7 +462,7 @@ class TableView(View):
     async def help(self, interaction: discord.Interaction, _) -> None:
         """Shows the help menu"""
         embed = discord.Embed(title='Blackjack Help', colour=helpers.Colour.blurple())
-        embed.set_thumbnail(url='https://klappstuhl.me/gallery/RcqogFmTrn.gif')
+        embed.set_thumbnail(url='https://klappstuhl.me/gallery/nnxiW.gif')
         embed.description = (
             'The goal of blackjack is to beat the dealer\'s hand without going over 21.\n'
             'Face cards are worth 10. Aces are worth 1 or 11, whichever makes a better hand.\n'
@@ -499,7 +499,7 @@ class NewGameButton(discord.ui.Button):
         # Shuffle cards, just for aesthetics
         embed = table.build_embed(
             hand=table.active_hand,
-            image_url='https://klappstuhl.me/gallery/ZvGkGVKtXx.gif',
+            image_url='https://klappstuhl.me/gallery/TpjOl.gif',
             colour=discord.Colour.light_grey(),
             text='*Shuffling Cards...*'
         )

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 AnyGroup = commands.Group | commands.HybridGroup
 AnyCommand = commands.Command | commands.HybridCommand | AnyGroup
 
-COMMAND_ICON_URL = "https://klappstuhl.me/gallery/xGPqHsSgWE.png"
+COMMAND_ICON_URL = "https://klappstuhl.me/gallery/jQkGI.png"
 
 
 class HelpPaginator(BasePaginator[AnyCommand]):

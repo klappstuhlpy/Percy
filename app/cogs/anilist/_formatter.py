@@ -13,8 +13,8 @@ from app.utils import helpers, pluralize
 if TYPE_CHECKING:
     import aiohttp
 
-ANILIST_LOGO = 'https://klappstuhl.me/gallery/QsPdYKTELw.png'
-ANILIST_ICON = 'https://klappstuhl.me/gallery/UBBnkPhKID.png'
+ANILIST_LOGO = 'https://klappstuhl.me/gallery/ufXiq.png'
+ANILIST_ICON = 'https://klappstuhl.me/gallery/sngjJ.png'
 
 
 class AniListEmbed(discord.Embed):

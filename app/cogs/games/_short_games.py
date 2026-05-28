@@ -14,14 +14,14 @@ from config import Emojis
 class Hangman:
     """A class to represent a hangman game."""
 
-    IMAGES: Final[ClassVar[list[str]]] = [
-        'https://klappstuhl.me/gallery/nPjxrLeBqw.png',  # Hangman 0
-        'https://klappstuhl.me/gallery/osVwjXkXzV.png',
-        'https://klappstuhl.me/gallery/algiRuPvKR.png',
-        'https://klappstuhl.me/gallery/AshgxKkabK.png',
-        'https://klappstuhl.me/gallery/CJhofrVhxx.png',
-        'https://klappstuhl.me/gallery/ZvmbcoRetA.png',
-        'https://klappstuhl.me/gallery/ybxVZsGoCo.png'
+    IMAGES: Final[list[str]] = [
+        'https://klappstuhl.me/gallery/RaPNv.png',  # Hangman 0
+        'https://klappstuhl.me/gallery/YsDeg.png',
+        'https://klappstuhl.me/gallery/PnXlL.png',
+        'https://klappstuhl.me/gallery/WstIp.png',
+        'https://klappstuhl.me/gallery/FpYQR.png',
+        'https://klappstuhl.me/gallery/ZTKmW.png',
+        'https://klappstuhl.me/gallery/nJnEN.png'
     ]
 
     def __init__(self, player: discord.Member, word: str) -> None:
