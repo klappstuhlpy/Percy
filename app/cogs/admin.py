@@ -162,8 +162,8 @@ class Admin(Cog):
                     headers=headers
             ) as resp:
                 if resp.status == 200:
-                    file = discord.File(fp=io.BytesIO(await resp.read()), filename=f'{_id}.png')
-                    await ctx.send_success(f'Image [**{_id}**]', file=file)
+                    file = discord.File(fp=io.BytesIO(await resp.read()), filename=resp.url.name)
+                    await ctx.send_success(f'Image [**{resp.url.name}**]', file=file)
                 else:
                     await ctx.send_error(f'Failed to get: **{resp.status}**\n```json\n{await resp.json()}```')
 
