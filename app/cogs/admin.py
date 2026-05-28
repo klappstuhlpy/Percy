@@ -158,7 +158,7 @@ class Admin(Cog):
                 'Content-Type': 'multipart/form-data',
             }
             async with self.bot.session.get(
-                    f'https://klappstuhl.me/gallery/{_id}',
+                    f'https://klappstuhl.me/gallery/raw/{_id}',
                     headers=headers
             ) as resp:
                 if resp.status == 200:
