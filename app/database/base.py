@@ -17,6 +17,7 @@ from discord.utils import MISSING
 
 from app.database.repositories import (
     GuildsRepository,
+    LevelingRepository,
     ModerationRepository,
     PollsRepository,
     UsersRepository,
@@ -151,6 +152,7 @@ class Database(_Database):
     guilds: GuildsRepository
     users: UsersRepository
     polls: PollsRepository
+    leveling: LevelingRepository
     moderation: ModerationRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
@@ -158,6 +160,7 @@ class Database(_Database):
         self.guilds = GuildsRepository(self)
         self.users = UsersRepository(self)
         self.polls = PollsRepository(self)
+        self.leveling = LevelingRepository(self)
         self.moderation = ModerationRepository(self)
 
     @cache.cache()
