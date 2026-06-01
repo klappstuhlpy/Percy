@@ -15,6 +15,12 @@ import discord
 from captcha.image import ImageCaptcha
 from discord.utils import MISSING
 
+from app.database.repositories import (
+    GuildsRepository,
+    ModerationRepository,
+    PollsRepository,
+    UsersRepository,
+)
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
 from config import DatabaseConfig, Emojis
 
@@ -142,6 +148,18 @@ class _Database:
 
 class Database(_Database):
 
+    guilds: GuildsRepository
+    users: UsersRepository
+    polls: PollsRepository
+    moderation: ModerationRepository
+
+    def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        super().__init__(bot, loop=loop)
+        self.guilds = GuildsRepository(self)
+        self.users = UsersRepository(self)
+        self.polls = PollsRepository(self)
+        self.moderation = ModerationRepository(self)
+
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
         """|coro| @cached
@@ -158,15 +176,8 @@ class Database(_Database):
         :class:`GuildConfig`
             The guild record if it exists, else a new record.
         """
-        query = "SELECT * FROM guild_config WHERE id=$1;"
-        async with self.acquire(timeout=300.0) as con:
-            record = await con.fetchrow(query, guild_id)
-            if record is not None:
-                return GuildConfig(bot=self.bot, record=record)
-
-            query = "INSERT INTO guild_config (id) VALUES ($1) RETURNING *;"
-            record = await con.fetchrow(query, guild_id)
-            return GuildConfig(bot=self.bot, record=record)
+        record = await self.guilds.get_config_record(guild_id)
+        return GuildConfig(bot=self.bot, record=record)
 
     @cache.cache(action=lambda g: g.cancel_task())
     async def get_guild_gatekeeper(self, guild_id: int | None) -> Gatekeeper | None:
@@ -187,14 +198,12 @@ class Database(_Database):
         if guild_id is None:
             return None
 
-        query = "SELECT * FROM guild_gatekeeper WHERE id=$1;"
-        async with self.acquire(timeout=300.0) as con:
-            record = await con.fetchrow(query, guild_id)
-            if record is not None:
-                query = "SELECT * FROM guild_gatekeeper_members WHERE guild_id=$1;"
-                members = await con.fetch(query, guild_id)
-                return Gatekeeper(members, bot=self.bot, record=record)
+        record = await self.guilds.get_gatekeeper_record(guild_id)
+        if record is None:
             return None
+
+        members = await self.guilds.get_gatekeeper_members(guild_id)
+        return Gatekeeper(members, bot=self.bot, record=record)
 
     @cache.cache()
     async def get_user_config(self, user_id: int, /) -> UserConfig:
@@ -212,11 +221,7 @@ class Database(_Database):
         :class:`UserConfig`
             The user config for the user, if it exists.
         """
-        query = "SELECT * from user_settings WHERE id = $1;"
-        record = await self.fetchrow(query, user_id)
-        if record is None:
-            query = "INSERT INTO user_settings (id) VALUES ($1) RETURNING *;"
-            record = await self.fetchrow(query, user_id)
+        record = await self.users.get_settings_record(user_id)
         return UserConfig(bot=self.bot, record=record)
 
     async def get_user_timezone(self, user_id: int, /) -> str:
@@ -234,8 +239,7 @@ class Database(_Database):
         :class:`str`
             The user's timezone.
         """
-        query = "SELECT timezone FROM user_settings WHERE id = $1;"
-        return await self.fetchval(query, user_id, column='timezone')
+        return await self.users.get_timezone(user_id)
 
     async def get_user_balance(self, user_id: int, guild_id: int) -> Balance:
         """|coro|
@@ -254,11 +258,7 @@ class Database(_Database):
         :class:`Balance`
             The balance of the user in the guild.
         """
-        query = "SELECT * FROM economy WHERE user_id = $1 AND guild_id = $2;"
-        record = await self.fetchrow(query, user_id, guild_id)
-        if not record:
-            query = "INSERT INTO economy (user_id, guild_id, cash, bank) VALUES ($1, $2, 0, 0) RETURNING *;"
-            record = await self.fetchrow(query, user_id, guild_id)
+        record = await self.users.get_balance_record(user_id, guild_id)
         return Balance(bot=self.bot, record=record)
 
     async def get_guild_balances(self, guild_id: int) -> list[Balance]:
@@ -276,8 +276,7 @@ class Database(_Database):
         list[:class:`Balance`]
             The balances of all users in the guild.
         """
-        query = "SELECT * FROM economy WHERE guild_id = $1;"
-        records = await self.fetch(query, guild_id)
+        records = await self.users.get_guild_balance_records(guild_id)
         return [Balance(bot=self.bot, record=record) for record in records]
 
 

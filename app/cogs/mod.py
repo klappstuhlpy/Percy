@@ -2700,8 +2700,7 @@ class Moderation(Cog):
         async with ctx.typing():
             failures = await self.end_lockdown(ctx.guild, reason=reason)
 
-        query = "DELETE FROM guild_lockdowns WHERE guild_id=$1;"
-        await ctx.db.execute(query, ctx.guild.id)
+        await ctx.db.moderation.clear_lockdowns(ctx.guild.id)
         if failures:
             await ctx.send_info(
                 f'Lockdown ended. Failed to edit {human_join([c.mention for c in failures], final='and')}')
@@ -2723,8 +2722,7 @@ class Moderation(Cog):
         reason = f'Automatic lockdown ended from timer made on {timer.created} by {moderator}'
         failures = await self.end_lockdown(guild, channel_ids=channel_ids, reason=reason)
 
-        query = "DELETE FROM guild_lockdowns WHERE guild_id=$1 AND channel_id = ANY($2::bigint[]);"
-        await self.bot.db.execute(query, guild_id, channel_ids)
+        await self.bot.db.moderation.remove_lockdowns(guild_id, channel_ids)
 
         channel = guild.get_channel_or_thread(channel_id)
         if channel is not None:
@@ -2752,18 +2750,8 @@ class Moderation(Cog):
             self, guild_id: int, channel_ids: list[int] | None = None
     ) -> dict[int, discord.PermissionOverwrite]:
         """Gets the lockdown information for the given guild."""
-        rows: list[tuple[int, int, int]]
-        if channel_ids is None:
-            query = "SELECT channel_id, allow, deny FROM guild_lockdowns WHERE guild_id=$1;"
-            rows = await self.bot.db.fetch(query, guild_id)
-        else:
-            query = """
-                SELECT channel_id, allow, deny
-                FROM guild_lockdowns
-                WHERE guild_id = $1
-                  AND channel_id = ANY ($2::bigint[]);
-            """
-            rows = await self.bot.db.fetch(query, guild_id, channel_ids)
+        rows: list[tuple[int, int, int]] = await self.bot.db.moderation.get_lockdowns(
+            guild_id, channel_ids=channel_ids)
 
         return {
             channel_id: discord.PermissionOverwrite.from_pair(discord.Permissions(allow), discord.Permissions(deny))
@@ -2808,19 +2796,7 @@ class Moderation(Cog):
                         }
                     )
 
-        query = """
-            INSERT INTO guild_lockdowns(guild_id, channel_id, allow, deny)
-            SELECT d.guild_id, d.channel_id, d.allow, d.deny
-            FROM jsonb_to_recordset($1::jsonb)
-                     AS d(
-                          guild_id BIGINT,
-                          channel_id BIGINT,
-                          allow BIGINT,
-                          deny BIGINT
-                    )
-            ON CONFLICT (guild_id, channel_id) DO NOTHING;
-        """
-        await self.bot.db.execute(query, records)
+        await self.bot.db.moderation.add_lockdowns(records)
         return success, failures
 
     async def end_lockdown(
@@ -2855,8 +2831,7 @@ class Moderation(Cog):
 
     async def is_cooldown_active(self, guild: discord.Guild, channel: discord.abc.GuildChannel) -> bool:
         """Checks if the given channel is currently in a lockdown."""
-        query = "SELECT * FROM guild_lockdowns WHERE guild_id=$1 AND channel_id=$2;"
-        record = await self.bot.db.fetchrow(query, guild.id, channel.id)
+        record = await self.bot.db.moderation.get_lockdown(guild.id, channel.id)
         return bool(record)
 
     @staticmethod
@@ -3458,15 +3433,7 @@ class Moderation(Cog):
                             await member.add_roles(role, reason=reason)
 
             members.update(m.id for m in role.members)
-            query = """
-                INSERT INTO guild_config (id, mute_role_id, muted_members)
-                VALUES ($1, $2, $3::bigint[])
-                ON CONFLICT (id)
-                    DO UPDATE SET mute_role_id  = EXCLUDED.mute_role_id,
-                                  muted_members = EXCLUDED.muted_members;
-            """
-            await self.bot.db.execute(query, ctx.guild.id, role.id, list(members))
-            self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+            await self.bot.db.moderation.set_mute_role(ctx.guild.id, role.id, list(members))
 
             escaped = discord.utils.escape_mentions(role.name)
             await ctx.send_success(f'Successfully set the {escaped} role as the mute role.\n\n'
@@ -3517,14 +3484,7 @@ class Moderation(Cog):
         except discord.HTTPException as e:
             return await ctx.send_error(f'Failed to create role: {e}')
 
-        query = """
-            INSERT INTO guild_config (id, mute_role_id)
-            VALUES ($1, $2)
-            ON CONFLICT (id)
-                DO UPDATE SET mute_role_id = EXCLUDED.mute_role_id;
-        """
-        await ctx.db.execute(query, guild_id, role.id)
-        self.bot.db.get_guild_config.invalidate(guild_id)
+        await ctx.db.moderation.create_mute_role(guild_id, role.id)
 
         confirm = await ctx.confirm(f'{Emojis.warning} Would you like to update the channel overwrites as well?')
         if not confirm:
@@ -3557,9 +3517,7 @@ class Moderation(Cog):
             if not confirm:
                 return
 
-        query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
-        await self.bot.db.execute(query, guild_id)
-        self.bot.db.get_guild_config.invalidate(guild_id)
+        await self.bot.db.moderation.unbind_mute_role(guild_id)
         await ctx.send_success('Successfully unbound mute role.')
 
     @command(

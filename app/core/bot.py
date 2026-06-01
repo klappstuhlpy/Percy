@@ -276,7 +276,7 @@ class Bot(commands.Bot):
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         if await self.db.get_guild_config(guild.id):  # type: ignore[misc]
-            await self.db.execute("DELETE FROM guild_config WHERE id = $1;", guild.id)
+            await self.db.guilds.delete_config(guild.id)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
         (exc_type, exc, tb) = sys.exc_info()
