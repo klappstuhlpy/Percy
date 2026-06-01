@@ -35,7 +35,7 @@ class Timer(BaseRecord):
 
     __slots__ = ('args', 'bot', 'created', 'event', 'expires', 'id', 'kwargs', 'metadata', 'timezone')
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         self.args: Sequence[Any] = self.metadata.get('args', [])

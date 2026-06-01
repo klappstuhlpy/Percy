@@ -200,7 +200,7 @@ class Bot(commands.Bot):
         self.session = ClientSession()
         self.timers = TimerManager(self)
 
-        asyncio.ensure_future(self._setup_hook_task())
+        self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 
     @staticmethod
     def prepare_jishaku_flags() -> None:
@@ -234,7 +234,7 @@ class Bot(commands.Bot):
     ) -> Context:
         return await super().get_context(origin, cls=cls)
 
-    async def process_commands(self, message: discord.Message):
+    async def process_commands(self, message: discord.Message) -> None:
         ctx = await self.get_context(message)
 
         if ctx.command is None:
@@ -251,7 +251,7 @@ class Bot(commands.Bot):
 
         await self.invoke(ctx)
 
-    async def on_shard_resumed(self, shard_id: int):
+    async def on_shard_resumed(self, shard_id: int) -> None:
         self.log.info('Shard ID %s has resumed...', shard_id)
         self.resumes[shard_id].append(discord.utils.utcnow())
 
@@ -498,7 +498,7 @@ class Bot(commands.Bot):
         ansi = builder.ensure_codeblock().dynamic(ctx)
         await ctx.send_error(f'Could not parse your command input properly:\n{ansi}', reference=ctx.message)
 
-    async def on_blacklist_timer_complete(self, timer: Timer):
+    async def on_blacklist_timer_complete(self, timer: Timer) -> None:
         """Called when a blacklist timer completed.
 
         .. versionadded:: 2.0.0
@@ -694,7 +694,7 @@ class Bot(commands.Bot):
         hook = discord.Webhook.partial(id=wh_id, token=wh_token, session=self.session)
         return hook
 
-    async def add_to_blacklist(self, obj: discord.abc.Snowflake, *, duration: int | None = None):
+    async def add_to_blacklist(self, obj: discord.abc.Snowflake, *, duration: int | None = None) -> None:
         """|coro|
 
         Adds an object to the bot's blacklist.
@@ -716,7 +716,7 @@ class Bot(commands.Bot):
 
         await self.blacklist.put(obj, True)
 
-    async def remove_from_blacklist(self, obj: discord.abc.Snowflake):
+    async def remove_from_blacklist(self, obj: discord.abc.Snowflake) -> None:
         """|coro|
 
         Removes an object from the bot's blacklist.

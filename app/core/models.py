@@ -25,7 +25,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import MISSING, cached_property
 
-from app.core.flags import ConsumeUntilFlag, FlagMeta, Flags
+from app.core.flags import ConsumeUntilFlag, FlagMeta, FlagNamespace, Flags
 from app.core.views import ConfirmationView, DisambiguatorView
 from app.utils import AnsiColor, AnsiStringBuilder, AsyncCallable, TemporaryAttribute, helpers, truncate
 from config import Emojis
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     import aiohttp
     from discord.ext.commands import GroupMixin
 
-    from app.core import Bot, FlagNamespace
+    from app.core import Bot
     from app.database import Database
 
 
@@ -312,7 +312,7 @@ class PermissionSpec(NamedTuple):
             self,
             permissions: Iterable[str],
             destination: Literal['user', 'bot'],
-    ):
+    ) -> None:
         """Updates the permissions of the given destination."""
         false = [permission for permission in permissions if permission not in VALID_FLAGS]
         if false:
@@ -738,7 +738,7 @@ class Context[CogT: 'Cog'](commands.Context):
         command: type[Command | GroupCommand]
         invoked_subcommand: Command | GroupCommand | None
 
-    def __init__(self, **attrs) -> None:
+    def __init__(self, **attrs: Any) -> None:
         self._message: discord.Message | None = None
         super().__init__(**attrs)
 
@@ -973,7 +973,7 @@ class Context[CogT: 'Cog'](commands.Context):
             if typing:
                 await self.typing()
 
-    async def safe_send(self, content: str, *, escape_mentions: bool = True, **kwargs) -> discord.Message:
+    async def safe_send(self, content: str, *, escape_mentions: bool = True, **kwargs: Any) -> discord.Message:
         if escape_mentions:
             content = discord.utils.escape_mentions(content)
 
@@ -1080,7 +1080,7 @@ def define_app_command_impl(
         )
 
         @source.app_command.error
-        async def on_error(_, interaction: discord.Interaction, error: BaseException) -> None:  # type: ignore[arg-type]
+        async def on_error(_: Any, interaction: discord.Interaction, error: BaseException) -> None:  # type: ignore[arg-type]
             interaction.client.dispatch('command_error', interaction._baton, error)
 
     return decorator
@@ -1174,7 +1174,7 @@ def _resolve_command_kwargs(
     return kwargs
 
 
-def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand):
+def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand) -> dict[str, Any]:
     new.setdefault('guild_only', parent.__original_kwargs__.get('guild_only', False))
     new.setdefault('parent', parent)
     new.setdefault('hybrid', isinstance(parent, (HybridGroupCommand, HybridCommand)))

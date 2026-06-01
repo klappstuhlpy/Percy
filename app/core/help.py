@@ -26,7 +26,7 @@ COMMAND_ICON_URL = "https://klappstuhl.me/gallery/jQkGI.png"
 
 class HelpPaginator(BasePaginator[AnyCommand]):
     @staticmethod
-    def create_prefixes(cmd) -> list[str]:
+    def create_prefixes(cmd: AnyCommand) -> list[str]:
         prefixes = []
         if getattr(cmd, "is_locked", False):
             prefixes.append(Emojis.Command.locked)

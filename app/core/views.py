@@ -174,7 +174,7 @@ class TrashView(View):
         style=discord.ButtonStyle.red, emoji=Emojis.trash,
         label='Delete', custom_id='delete'
     )
-    async def delete(self, interaction: discord.Interaction, _) -> None:
+    async def delete(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if interaction.message:
             await interaction.message.delete()
 
@@ -310,7 +310,7 @@ class UserInfoView(View):
         return file
 
     @discord.ui.button(label='Avatar Collage', style=discord.ButtonStyle.blurple, emoji='🖼️')
-    async def avatar_collage(self, interaction: discord.Interaction, _) -> None:
+    async def avatar_collage(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the avatar collage button."""
         self.disable_item(self.avatar_collage)
         await interaction.response.edit_message(view=self)
@@ -339,7 +339,7 @@ class UserInfoView(View):
         await interaction.followup.send(embed=embed, file=file, ephemeral=True)
 
     @discord.ui.button(label='Name History', style=discord.ButtonStyle.blurple, emoji='📜')
-    async def name_history(self, interaction: discord.Interaction, _) -> None:
+    async def name_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the name history button."""
         self.disable_item(self.name_history)
         await interaction.response.edit_message(view=self)
@@ -371,7 +371,7 @@ class UserInfoView(View):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label='Status History', style=discord.ButtonStyle.blurple, emoji='📊')
-    async def status_history(self, interaction: discord.Interaction, _) -> None:
+    async def status_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the status history button."""
         self.disable_item(self.status_history)
         await interaction.response.edit_message(view=self)
