@@ -390,17 +390,17 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         return self.pages[self._current_page]
 
     @discord.ui.button(label='<==', style=discord.ButtonStyle.green)
-    async def on_arrow_backward(self, interaction: discord.Interaction, _) -> None:
+    async def on_arrow_backward(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         entries = self.switch_page(-1)
         page = await self.format_page(entries)
         await interaction.response.edit_message(**self.resolve_msg_kwargs(page))
 
     @discord.ui.button(label='1/-', style=discord.ButtonStyle.grey)
-    async def on_middle(self, interaction: discord.Interaction, _) -> None:
+    async def on_middle(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.send_modal(JumpToModal(self))
 
     @discord.ui.button(label='==>', style=discord.ButtonStyle.green)
-    async def on_arrow_forward(self, interaction: discord.Interaction, _) -> None:
+    async def on_arrow_forward(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         entries = self.switch_page(1)
         page = await self.format_page(entries)
         await interaction.response.edit_message(**self.resolve_msg_kwargs(page))
@@ -734,7 +734,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
         self.interface.close_page()
 
     @override
-    async def start(  # noqa: F811
+    async def start(
             self,
             *,
             search_for: bool = False,

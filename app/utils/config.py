@@ -3,7 +3,7 @@ import contextlib
 import json
 import re
 import uuid
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, TypeVar, overload
 
@@ -301,7 +301,7 @@ class Config[K, V]:
     def __contains__(self, item: Any) -> bool:
         return str(item) in self._db
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[K]:
         yield from self._db
 
     def __add__(self, other: V) -> None:

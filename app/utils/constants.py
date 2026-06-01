@@ -24,7 +24,7 @@ def get_colour_dict() -> dict[str, str]:
     matplotlib is imported lazily here so that modules importing constants.py
     do not pay the full matplotlib startup cost unless colour lookup is needed.
     """
-    import matplotlib.colors  # noqa: PLC0415
+    import matplotlib.colors
     return matplotlib.colors.CSS4_COLORS | matplotlib.colors.XKCD_COLORS  # type: ignore[return-value]
 
 

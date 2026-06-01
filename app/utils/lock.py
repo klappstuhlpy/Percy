@@ -162,7 +162,7 @@ def lock(
             else:
                 id_ = resource_id
 
-            log.debug(f'{name}: getting the lock object for resource {namespace!r}:{id_!r}')
+            log.debug('%s: getting the lock object for resource %r:%r', name, namespace, id_)
 
             # Get the lock for the ID. Create a lock if one doesn't exist yet.
             locks = __lock_dicts[namespace]
@@ -173,11 +173,11 @@ def lock(
             #   2. `asyncio.Lock.acquire()` does not internally await anything if the lock is free
             #   3. awaits only yield execution to the event loop at actual I/O boundaries
             if wait or not waiter_lock.locked():
-                log.debug(f'{name}: acquiring lock for resource {namespace!r}:{id_!r}...')
+                log.debug('%s: acquiring lock for resource %r:%r...', name, namespace, id_)
                 async with waiter_lock:
                     return await func(*args, **kwargs)
             else:
-                log.info(f'{name}: aborted because resource {namespace!r}:{id_!r} is locked')
+                log.info('%s: aborted because resource %r:%r is locked', name, namespace, id_)
                 if raise_error:
                     raise LockedResourceError(str(namespace), id_)
                 return None
@@ -228,16 +228,16 @@ def lock_from(
         name = func.__name__
 
         @command_wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             waiter_lock: asyncio.Lock = __lock_dicts[namespace].setdefault(resource_id, asyncio.Lock())
 
             if waiter_lock is None or not waiter_lock.locked():
-                log.debug(f'{name}: resource {namespace!r}:{resource_id!r} is unlocked, continue...')
+                log.debug('%s: resource %r:%r is unlocked, continue...', name, namespace, resource_id)
                 return await func(*args, **kwargs)
             else:
-                log.info(f'{name}: aborted because resource {namespace!r}:{resource_id!r} is locked')
+                log.info('%s: aborted because resource %r:%r is locked', name, namespace, resource_id)
                 if wait:
-                    log.debug(f'{name}: waiting for locked resource {namespace!r}:{resource_id!r} to release...')
+                    log.debug('%s: waiting for locked resource %r:%r to release...', name, namespace, resource_id)
                     while __lock_dicts[namespace].get(resource_id).locked():
                         await asyncio.sleep(0.1)
                     return await func(*args, **kwargs)

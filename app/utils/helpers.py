@@ -135,7 +135,7 @@ class NotCaseSensitiveEnum(enum.Enum):
     """
 
     @classmethod
-    async def convert(cls, _, argument: str) -> NotCaseSensitiveEnum:
+    async def convert(cls, _: commands.Context, argument: str) -> NotCaseSensitiveEnum:
         by_value = '__by_value__' in cls.__members__
         for case in [str.title, str.upper, str.lower, int]:
             if argument.startswith('__') or argument.endswith('__'):

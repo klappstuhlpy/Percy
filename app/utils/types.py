@@ -8,9 +8,6 @@ from discord.state import ConnectionState
 from discord.types.appinfo import AppInfo as AppInfoPayload
 from discord.webhook.async_ import _WebhookState
 
-if TYPE_CHECKING:
-    pass
-
 _State = ConnectionState | _WebhookState
 
 # Type alias for Interaction where client is the custom Bot class.
@@ -87,5 +84,5 @@ class RPCAppInfo(AppInfo):
         )
         return [Asset._from_app_asset(self._state, self.id, asset['id'], name=asset['name']) for asset in assets]
 
-    async def edit(self, **kwargs) -> Any:
+    async def edit(self, **kwargs: Any) -> Any:
         raise NotImplementedError('Editing RPCAppInfo is not supported.')
