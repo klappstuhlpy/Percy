@@ -11,9 +11,9 @@ from wavelink import Playable
 from app.cogs.music._player import Player, SearchReturn
 from app.core import Cog, Context
 from app.core.models import group
+from app.core.pagination import BasePaginator, TextSource
 from app.database import BaseRecord
 from app.utils import cache, checks, fuzzy, get_shortened_string, helpers, pluralize
-from app.utils.pagination import BasePaginator, TextSource
 from config import Emojis
 
 if TYPE_CHECKING:

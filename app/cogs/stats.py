@@ -22,10 +22,10 @@ from expiringdict import ExpiringDict
 import config
 from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
+from app.core.pagination import FilePaginator
 from app.core.views import UserInfoView
 from app.rendering import AvatarCollage, BarChart, PresenceChart, resize_to_limit
 from app.utils import AnsiColor, AnsiStringBuilder, TabularData, Timer, censor_object, get_asset_url, helpers, medal_emoji
-from app.utils.pagination import FilePaginator
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
 from config import Emojis, beta, path, repo_url, version

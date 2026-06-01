@@ -193,7 +193,7 @@ Percy-v2/
 ├── main.py               # CLI entry point (bot runner + DB management)
 ├── config.py             # Tokens, IDs, emoji definitions, version info
 ├── app/
-│   ├── core/             # Bot class, Context, Command, help system, timers, views
+│   ├── core/             # Bot class, Context, Command, help system, timers, views, pagination
 │   ├── cogs/             # Feature modules (~30 cogs)
 │   │   ├── games/        # Card games, Minesweeper, Tictactoe, Hangman
 │   │   ├── music/        # Lavalink music player
@@ -203,7 +203,7 @@ Percy-v2/
 │   │   └── doc/          # Documentation browser
 │   ├── database/         # asyncpg connection pool, ORM base class, migrations runner
 │   ├── rendering/        # Pillow image rendering (rank cards, music panels)
-│   └── utils/            # Helpers, formatters, pagination, caching, ANSI builder
+│   └── utils/            # Helpers, formatters, caching, ANSI builder
 ├── migrations/           # Versioned SQL migration files (V1–V15)
 └── assets/               # Fonts, word lists, image templates
 ```

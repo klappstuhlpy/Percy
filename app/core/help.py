@@ -9,8 +9,8 @@ from discord.ext.commands import Cog
 
 from app.core.flags import FlagMeta
 from app.core.models import Command, EmbedBuilder, HybridCommand
+from app.core.pagination import BasePaginator
 from app.utils import AnsiColor, AnsiStringBuilder, get_asset_url, helpers, humanize_duration, pluralize, truncate
-from app.utils.pagination import BasePaginator
 from config import Emojis
 
 if TYPE_CHECKING:

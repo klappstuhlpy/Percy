@@ -24,6 +24,7 @@ from discord.ext import commands, tasks
 import config
 from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
+from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
 from app.core.views import TrashView, View
 from app.rendering import Quote, get_dominant_color
 from app.utils import (
@@ -39,7 +40,6 @@ from app.utils import (
     pluralize,
 )
 from app.utils.lock import lock
-from app.utils.pagination import LinePaginator, TextSource, TextSourcePaginator
 from config import Emojis, default_prefix, github_key, main_guild_id, test_guild_id
 
 if TYPE_CHECKING:

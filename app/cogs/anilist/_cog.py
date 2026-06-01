@@ -15,8 +15,8 @@ from discord.ext.commands import Range
 
 from app.core import Bot, Cog, Context, Flags, View, flag
 from app.core.models import describe, group
+from app.core.pagination import EmbedPaginator
 from app.utils import fuzzy, helpers
-from app.utils.pagination import EmbedPaginator
 from config import Emojis, anilist
 
 from ._cache import AniListExpiringCache

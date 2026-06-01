@@ -10,10 +10,10 @@ from discord import app_commands, utils
 from discord.ext import tasks
 
 from app.core import Bot, Cog, Context, HybridContext, describe, group
+from app.core.pagination import LinePaginator
 from app.database import BaseRecord
 from app.utils import fuzzy, helpers, validate_snowflakes
 from app.utils.lock import lock
-from app.utils.pagination import LinePaginator
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator

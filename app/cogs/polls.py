@@ -26,9 +26,9 @@ from app.core.models import (
     describe,
     group,
 )
+from app.core.pagination import BasePaginator, LinePaginator
 from app.database import BaseRecord
 from app.utils import cache, fuzzy, get_asset_url, get_shortened_string, helpers, pluralize, timetools
-from app.utils.pagination import BasePaginator, LinePaginator
 from config import Emojis
 
 if TYPE_CHECKING:

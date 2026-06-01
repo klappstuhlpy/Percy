@@ -10,8 +10,8 @@ from discord.ext import commands
 
 from app.core import Cog, Context
 from app.core.models import PermissionTemplate, cooldown, describe, group
+from app.core.pagination import LinePaginator
 from app.utils import cache, get_asset_url, helpers
-from app.utils.pagination import LinePaginator
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterable

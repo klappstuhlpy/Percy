@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from app.core import Bot, Cog, Context, Flags, View, flag, store_true
 from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
+from app.core.pagination import LinePaginator
 from app.database import BaseRecord
 from app.utils import (
     TabularData,
@@ -24,7 +25,6 @@ from app.utils import (
     pluralize,
     usage_per_day,
 )
-from app.utils.pagination import LinePaginator
 from config import Emojis
 
 if TYPE_CHECKING:

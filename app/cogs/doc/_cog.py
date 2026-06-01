@@ -16,9 +16,9 @@ from discord.ext import commands
 from app.cogs.doc import PRIORITY_PACKAGES, _batch_parser, _inventory_parser, doc_cache
 from app.core import Bot, Cog, Context
 from app.core.models import command, describe, group
+from app.core.pagination import BasePaginator, LinePaginator
 from app.utils import fuzzy, helpers, pluralize
 from app.utils.lock import SharedEvent, lock, lock_from
-from app.utils.pagination import BasePaginator, LinePaginator
 from app.utils.tasks import Scheduler, executor
 from config import Emojis
 

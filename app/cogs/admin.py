@@ -17,8 +17,8 @@ from discord.ext import commands
 from app.core import Cog, Context
 from app.core.converter import CodeblockConverter
 from app.core.models import command, group
+from app.core.pagination import TextSourcePaginator
 from app.utils import TabularData, pluralize, tail
-from app.utils.pagination import TextSourcePaginator
 from config import images_key
 
 if TYPE_CHECKING:

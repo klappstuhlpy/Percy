@@ -23,13 +23,13 @@ from app.cogs import EXTENSIONS
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
 from app.core.models import AppBadArgument, Command, Context, GroupCommand, PermissionSpec
+from app.core.pagination import TextSource
 from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.database.base import Database
 from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
 from app.utils.lock import LockedResourceError
-from app.utils.pagination import TextSource
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
     Emojis,

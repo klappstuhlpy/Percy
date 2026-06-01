@@ -19,8 +19,8 @@ from discord.utils import MISSING
 
 from app.core import Cog, Context, Flags, flag, store_true
 from app.core.models import command, describe, group
+from app.core.pagination import BasePaginator
 from app.utils import ProgressBar, checks, convert_duration, helpers, pagify
-from app.utils.pagination import BasePaginator
 from config import Emojis, genius_key
 
 from ...rendering import Music

@@ -8,9 +8,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from app.core import Bot, Cog, Timer, describe
+from app.core.pagination import LinePaginator
 from app.database import BaseRecord
 from app.utils import Time, fuzzy, get_shortened_string, helpers, positive_reply, truncate
-from app.utils.pagination import LinePaginator
 
 
 @app_commands.allowed_installs(guilds=False, users=True)

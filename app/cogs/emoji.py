@@ -12,10 +12,10 @@ from discord.ext import commands, tasks
 
 from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
+from app.core.pagination import TextSource
 from app.rendering import get_dominant_color
 from app.utils import helpers, usage_per_day
 from app.utils.lock import lock
-from app.utils.pagination import TextSource
 from config import Emojis
 
 EMOJI_REGEX = re.compile(r'<a?:.+?:([0-9]{15,21})>')

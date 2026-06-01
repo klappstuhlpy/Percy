@@ -9,9 +9,9 @@ from discord.ext import commands
 
 from app.core import Cog, Context
 from app.core.models import HybridContext, command, cooldown, describe
+from app.core.pagination import BasePaginator
 from app.rendering import ColorImage
 from app.utils import helpers
-from app.utils.pagination import BasePaginator
 from config import Emojis, main_guild_id
 
 
