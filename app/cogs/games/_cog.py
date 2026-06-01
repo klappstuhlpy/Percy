@@ -59,7 +59,7 @@ class Games(Cog):
 
         self.blackjack_tables: dict[int, _blackjack.Blackjack] = ExpiringDict(max_len=1000, max_age_seconds=21600)
         self.roulette_tables: dict[int, _roulette.Table] = {}
-        self.poker_tables: dict[int, _poker.TexasHoldem] = {}
+        self.poker_tables: dict[int, _poker.PokerSession] = {}
 
     @command(
         'tictactoe',
@@ -577,7 +577,7 @@ class Games(Cog):
             poker.view.update_buttons()
             await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
         else:
-            poker = _poker.TexasHoldem(self, ctx, first_buy_in=stack)
+            poker = _poker.PokerSession(self, ctx, first_buy_in=stack)
             poker.add_player(cast('discord.Member', ctx.author), stack)
             poker.view.update_buttons()
 
