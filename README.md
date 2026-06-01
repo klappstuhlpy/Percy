@@ -155,11 +155,34 @@ The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and [Pyright](
 
 ```bash
 # Lint
-ruff check .
+poetry run ruff check .
 
 # Type check
-pyright
+poetry run pyright
 ```
+
+### Tests
+
+The test suite lives in `tests/` and uses [pytest](https://docs.pytest.org/). It currently
+covers the pure helper modules (`app/utils/formats.py`, `fuzzy.py`, `timetools.py`) and is
+designed to grow as a safety net before further refactoring.
+
+```bash
+# Run the full suite
+poetry run pytest
+
+# Run a single module
+poetry run pytest tests/test_formats.py
+```
+
+`pytest` is configured in `pyproject.toml` (`[tool.pytest.ini_options]`) with
+`asyncio_mode = "auto"`, so `async def` tests run without extra decorators.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs the test suite on every push and pull request. Ruff and
+Pyright also run there in informational (non-blocking) mode while their pre-existing
+backlog is worked down; once clean, each will be promoted to a required check.
 
 ---
 

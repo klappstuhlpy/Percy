@@ -273,7 +273,7 @@ def merge[T](*iterables: Iterable[T]) -> Iterator[T]:
         yield from iterable
 
 
-INVITE_REGEX = re.compile(r'(?:https?:)?discord(?:\.gg|\.com|app\.com(/invite)?)?[A-Za-z0-9]+')
+INVITE_REGEX = re.compile(r'(?:https?://)?(?:discord\.gg|discord(?:app)?\.com/invite)/[A-Za-z0-9-]+')
 
 
 def censor_invite(obj: Any, *, _regex: re.Pattern = INVITE_REGEX) -> str:

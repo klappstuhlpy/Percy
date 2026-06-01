@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: Run tests
+        run: poetry run pytest
+
+      # Ruff and Pyright currently report a backlog of pre-existing findings.
+      # They run in informational (non-blocking) mode until that backlog is
+      # worked down, at which point each should be promoted to a hard gate.
+      - name: Lint (Ruff, non-blocking)
+        continue-on-error: true
+        run: poetry run ruff check .
+
+      - name: Type check (Pyright, non-blocking)
+        continue-on-error: true
+        run: poetry run pyright
