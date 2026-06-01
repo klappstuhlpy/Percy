@@ -14,7 +14,6 @@ import discord
 import jishaku
 import wavelink
 from aiohttp import ClientSession
-from discord import app_commands
 from discord.ext import commands
 from discord.http import Route
 from discord.utils import MISSING
@@ -24,7 +23,9 @@ from app.cogs import EXTENSIONS
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
 from app.core.models import AppBadArgument, Command, Context, GroupCommand, PermissionSpec
+from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
+from app.core.tree import CommandTree
 from app.database.base import Database
 from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
 from app.utils.lock import LockedResourceError
@@ -58,62 +59,6 @@ __all__ = (
 )
 
 LOG: Final[logging.Logger] = logging.getLogger(bot_name)
-
-
-class CommandTree(app_commands.CommandTree):
-    """A custom command that implements a custom error handler."""
-
-    async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        error = getattr(error, 'original', error)
-
-        blacklist = (
-            discord.Forbidden, discord.NotFound
-        )
-        if isinstance(error, blacklist):
-            return None
-
-        embed = discord.Embed(
-            title=f'{Emojis.warning} App Command Error',
-            timestamp=interaction.created_at,
-            colour=helpers.Colour.burgundy()
-        )
-
-        command = interaction.command
-        if command is not None:
-            if command._has_any_error_handlers():
-                return None
-
-            embed.add_field(name='Name', value=command.qualified_name)
-
-        handle_elsewhere = (
-            app_commands.CommandOnCooldown, app_commands.CommandInvokeError, app_commands.TransformerError,
-            LockedResourceError, app_commands.BotMissingPermissions, AppBadArgument
-        )
-        if isinstance(error, handle_elsewhere):
-            interaction.client.dispatch('command_error', interaction._baton, error)
-            return None
-
-        embed.add_field(
-            name='User',
-            value=f'[{interaction.user}](https://discord.com/users/{interaction.user.id}) (ID: {interaction.user.id})')
-
-        fmt = f'Channel: [#{interaction.channel}]({interaction.channel.jump_url if interaction.channel else ''}) (ID: {interaction.channel_id})\n'
-        if interaction.guild:
-            fmt += f'Guild: {interaction.guild} (ID: {interaction.guild.id})'
-        else:
-            fmt += 'Guild: *<Private Message>*'
-
-        embed.add_field(name='Location', value=fmt, inline=False)
-
-        namespace = interaction.namespace.__dict__
-        embed.add_field(name='Namespace(s)', value=', '.join(f'{k}: {v!r}' for k, v in namespace.items()), inline=False)
-
-        exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-        embed.description = f'### Retrieved Traceback\n```py\n{exc}\n```'
-        embed.set_footer(text='occurred at')
-
-        with suppress(discord.HTTPException, ValueError):
-            await interaction.client.stats_webhook.send(embed=embed)  # type: ignore[attr-defined]
 
 
 class Bot(commands.Bot):
@@ -605,22 +550,6 @@ class Bot(commands.Bot):
                 else:
                     yield feature, fmt[1]
 
-    @cache.cache()
-    async def get_member_from_user(self, user: discord.abc.Snowflake) -> discord.Member | None:
-        """Finds the first member object given a user/object.
-
-        Note that the guild the returned member is associated, to will be a random guild.
-        Returns ``None`` if the user is not in any mutual guilds.
-        """
-        if isinstance(user, discord.Member):
-            return user
-
-        for guild in self.guilds:
-            if member := guild.get_member(user.id):
-                return member
-
-        return None
-
     @staticmethod
     async def get_or_fetch_member(guild: discord.Guild, member_id: int) -> discord.Member | None:
         """|coro|
@@ -821,111 +750,3 @@ class Bot(commands.Bot):
 
     async def start(self, token: str = resolved_token, *, reconnect: bool = True) -> None:
         await super().start(token, reconnect=reconnect)
-
-
-class SpamControl:
-    """A class that implements a cooldown for spamming.
-
-    Attributes
-    ------------
-    bot: Bot
-        The bot instance.
-    spam_counter: CooldownMapping
-        The cooldown mapping.
-    spam_details: dict[int, list[float]]
-        The details of the spam.
-    """
-
-    if TYPE_CHECKING:
-        bot: Bot
-        spam_counter: commands.CooldownMapping
-        _auto_spam_count: Counter[int]
-        spam_details: dict[int, list[float]]
-
-    def __init__(self, bot: Bot):
-        self.bot: Bot = bot
-        self.spam_counter: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
-            10, 12.0, commands.BucketType.user
-        )
-        self._auto_spam_count: Counter[int] = Counter()
-        self.spam_details: dict[int, list[float]] = defaultdict(list)
-
-    @property
-    def current_spammers(self) -> list[int]:
-        """Returns a list of spammers."""
-        return list(self._auto_spam_count.keys())
-
-    async def log_spammer(self, ctx: Context, message: discord.Message, retry_after: float, *, autoblock: bool = False):
-        guild_name = getattr(ctx.guild, 'name', 'No Guild (DMs)')
-        guild_id = getattr(ctx.guild, 'id', None)
-        fmt = 'User %s (ID: %s) in guild %r (ID: %s) is spamming | retry_after: %.2fs | autoblock: %s'
-        self.bot.log.warning(fmt, message.author, message.author.id, guild_name, guild_id, retry_after, autoblock)
-
-        if not autoblock:
-            return
-
-        embed = discord.Embed(title='Auto-Blocked Member', colour=helpers.Colour.di_sierra())
-        embed.add_field(name='Member', value=f'{message.author} (ID: {message.author.id})', inline=False)
-        embed.add_field(name='Guild Info', value=f'{guild_name} (ID: {guild_id})', inline=False)
-        embed.add_field(name='Channel Info', value=f'{message.channel} (ID: {message.channel.id}', inline=False)
-        embed.timestamp = discord.utils.utcnow()
-        await self.bot.stats_webhook.send(embed=embed, username='Bot Spam Control')
-
-    def calculate_penalty(self, user: discord.abc.Snowflake) -> int | None:
-        """Calculate penalty based on frequency and recency of spamming.
-
-        Note: Only applies to one day currently.
-        TODO: Advance it to be calculated based on the recency of spamming.
-
-        Returns
-        --------
-        int
-            The penalty to apply in seconds.
-        """
-        frequency = self._auto_spam_count[user.id]
-
-        if frequency > 15:
-            return None
-        elif 15 > frequency > 10:
-            return 7 * 24 * 60 * 60  # 1 week in seconds
-        else:
-            return 24 * 60 * 60  # 1 day in seconds
-
-    async def apply_penalty(self, user: discord.abc.Snowflake) -> None:
-        """Apply penalty to the user."""
-        penalty = self.calculate_penalty(user)
-        await self.bot.add_to_blacklist(user, duration=penalty)
-
-    async def is_spam(self, ctx: Context, message: discord.Message) -> bool:
-        """|coro|
-
-        Checks if the message is spam or not.
-
-        Parameters
-        -----------
-        ctx: Context
-            The invocation context.
-        message: Message
-            The message to check.
-
-        Returns
-        --------
-        bool
-            Whether the message is spam or not.
-        """
-        bucket = self.spam_counter.get_bucket(message)
-        retry_after = bucket and bucket.update_rate_limit(message.created_at.timestamp())
-        author_id = message.author.id
-
-        if retry_after and author_id != self.bot.owner_id:
-            self._auto_spam_count[author_id] += 1
-            if self._auto_spam_count[author_id] >= 5:
-                await self.apply_penalty(message.author)
-                del self._auto_spam_count[author_id]
-                await self.log_spammer(ctx, message, retry_after, autoblock=True)  # type: ignore[arg-type]
-            else:
-                await self.log_spammer(ctx, message, retry_after)  # type: ignore[arg-type]
-            return True
-        else:
-            self._auto_spam_count.pop(author_id, None)
-        return False
