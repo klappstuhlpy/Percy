@@ -14,7 +14,7 @@ import discord
 from aiohttp import FormData
 from discord.ext import commands
 
-from app.core import Cog, Context
+from app.core import Bot, Cog, Context
 from app.core.converter import CodeblockConverter
 from app.core.models import command, group
 from app.core.pagination import TextSourcePaginator

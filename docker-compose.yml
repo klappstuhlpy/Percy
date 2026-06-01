@@ -1,19 +1,4 @@
 services:
-#  db:
-#    container_name: percy-db
-#    image: postgres
-#    restart: unless-stopped
-#    environment:
-#      POSTGRES_DB: percy
-#      POSTGRES_USER: percy
-#      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-#    volumes:
-#      - percy-db:/var/lib/postgresql/data
-#    ports:
-#      - "5422:5432"
-#    networks:
-#      - bot
-
   snekbox:
     container_name: snekbox
     image: ghcr.io/python-discord/snekbox
@@ -46,13 +31,8 @@ services:
       ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET}
       MARVEL_API_PUBLIC_KEY: ${MARVEL_API_PUBLIC_KEY}
       MARVEL_API_PRIVATE_KEY: ${MARVEL_API_PRIVATE_KEY}
-#    depends_on:
-#      - db
     networks:
       - bot
-
-#volumes:
-#  percy-db:
 
 networks:
   bot:

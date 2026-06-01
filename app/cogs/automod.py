@@ -7,7 +7,7 @@ from discord.automod import AutoModRule, AutoModRuleAction, AutoModTrigger
 from discord.ext import commands
 from discord.utils import MISSING
 
-from app.core import Cog, Context, View, command
+from app.core import Bot, Cog, Context, View, command
 from app.utils import TimeDelta, format_fields, get_asset_url, helpers, letter_emoji
 from config import Emojis
 
