@@ -4,7 +4,6 @@ import io
 import re
 from enum import Enum
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from fontTools.ttLib import TTFont
@@ -210,8 +209,7 @@ class FontManager:
         except KeyError:
             pass
 
-        fp = Path(path).open('rb')
-        self._internal_cache[key] = font = ImageFont.truetype(fp, size=size)
+        self._internal_cache[key] = font = ImageFont.truetype(path, size=size)
         return font
 
     def clear(self) -> None:

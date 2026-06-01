@@ -595,7 +595,7 @@ class Config(Cog):
     @describe(channel='The channel to show the disabled commands for.')
     async def config_disabled(
             self, ctx: Context, *, channel: discord.TextChannel | discord.VoiceChannel | None = None
-    ):
+    ) -> discord.Message | None:
         """Shows the disabled commands for the channel given."""
         channel_id: int
         if channel is None:

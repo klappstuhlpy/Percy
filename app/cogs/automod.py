@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NotRequired, Required, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, Required, TypedDict
 
 import discord
 from discord import AutoModRuleActionType, AutoModRuleEventType, AutoModRuleTriggerType, Interaction
@@ -52,7 +52,7 @@ class AutoModPresets:
 
     __PREFIX__ = 'Percy Rule'
 
-    links: AutoModRulePreset = {
+    links: ClassVar[AutoModRulePreset] = {
         'id': 0,
         'name': f'{__PREFIX__} Links',
         'event_type': AutoModRuleEventType.message_send,
@@ -71,7 +71,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    capital_spam: AutoModRulePreset = {
+    capital_spam: ClassVar[AutoModRulePreset] = {
         'id': 0,
         'name': f'{__PREFIX__} Capital Spam',
         'event_type': AutoModRuleEventType.message_send,
@@ -89,7 +89,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    invites_spam: AutoModRulePreset = {
+    invites_spam: ClassVar[AutoModRulePreset] = {
         'id': 0,
         'name': f'{__PREFIX__} Invites Spam',
         'event_type': AutoModRuleEventType.message_send,
@@ -107,7 +107,7 @@ class AutoModPresets:
         'exempt_roles': MISSING,
         'exempt_channels': MISSING,
     }
-    bad_words: AutoModRulePreset = {
+    bad_words: ClassVar[AutoModRulePreset] = {
         'id': 0,
         'name': f'{__PREFIX__} Bad Words',
         'event_type': AutoModRuleEventType.message_send,
@@ -213,7 +213,7 @@ class AutoModPresets:
 class BasicTextInputModal(discord.ui.Modal, title='Text Input'):
     text_input = discord.ui.TextInput(label='Input', placeholder='Enter text...', style=discord.TextStyle.long)
 
-    def __init__(self, placeholder: str = 'Enter text...', default: str | None = None, **kwargs):
+    def __init__(self, placeholder: str = 'Enter text...', default: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.text_input.placeholder = placeholder
         self.text_input.default = default

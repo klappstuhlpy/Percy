@@ -530,7 +530,7 @@ class GatekeeperSetUpView(View):
         await interaction.followup.send(f'{Emojis.success} Successfully set bypass action to {value}', ephemeral=True)
 
     @discord.ui.button(label='Set up Role', style=discord.ButtonStyle.blurple, row=3)
-    async def setup_role(self, interaction: discord.Interaction, _):
+    async def setup_role(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if not interaction.app_permissions.manage_roles:
             await interaction.response.send_message(
                 f'{Emojis.error} Bot requires Manage Roles permission for this to work.')
@@ -2905,7 +2905,7 @@ class Moderation(Cog):
             member: Annotated[MaybeMember, MemberID],
             *,
             reason: Annotated[str | None, ActionReason] = None,
-    ):
+    ) -> discord.Message | None:
         """Kicks a member from the server."""
         assert ctx.guild is not None
         if reason is None:

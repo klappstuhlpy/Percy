@@ -45,7 +45,7 @@ class TagPageEntry(BaseRecord):
 class TagNameOrID(commands.clean_content):
     """Converts the content to either an integer or string."""
 
-    def __init__(self, *, lower: bool = False, with_id: bool = False):
+    def __init__(self, *, lower: bool = False, with_id: bool = False) -> None:
         self.lower: bool = lower
         self.with_id: bool = with_id
         super().__init__()

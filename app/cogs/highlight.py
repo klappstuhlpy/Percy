@@ -29,7 +29,7 @@ class HighlightConfig(BaseRecord):
 
     __slots__ = ('blocked', 'bot', 'id', 'location_id', 'lookup', 'user_id')
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.blocked = set(self.blocked or [])
         self.lookup = set(self.lookup or [])
@@ -85,7 +85,7 @@ class Highlights(Cog):
 
     emoji = '<:pen:1322507977583759390>'
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
 
         self._highlight_data_batch: defaultdict[int, list[MessagedHighlight]] = defaultdict(list)
@@ -114,9 +114,10 @@ class Highlights(Cog):
                 latest_triggered = max(grouped_list, key=lambda x: x.message.created_at)
                 message = latest_triggered.message
 
-                previous = []
-                async for m in message.channel.history(limit=3, before=message):
-                    previous.append(f'[{utils.format_dt(m.created_at, "T")}] @{m.author}: {m.content}')
+                previous = [
+                    f'[{utils.format_dt(m.created_at, "T")}] @{m.author}: {m.content}'
+                    async for m in message.channel.history(limit=3, before=message)
+                ]
 
                 embed = discord.Embed(
                     title=f'Highlight triggered for "{latest_triggered.trigger}"',

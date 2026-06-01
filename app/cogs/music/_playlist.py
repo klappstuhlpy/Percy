@@ -400,9 +400,7 @@ class PlaylistTools(Cog):
 
         items = [playlist.field_tuple for playlist in playlists]
 
-        fields = []
-        for i in range(0, len(items), 12):
-            fields.append(items[i:i + 12])
+        fields = [items[i:i + 12] for i in range(0, len(items), 12)]
 
         embeds = []
         for index, field in enumerate(fields):

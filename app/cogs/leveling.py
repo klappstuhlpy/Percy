@@ -377,7 +377,7 @@ class GuildLevelConfig(BaseRecord):
         self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)
         self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.enabled
 
     async def _update(

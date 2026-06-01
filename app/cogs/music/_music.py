@@ -951,9 +951,7 @@ class Music(Cog):
         if not lyrics_container:
             return None
 
-        text_parts = []
-        for part in lyrics_container:
-            text_parts.append(cls._get_text(part))
+        text_parts = [cls._get_text(part) for part in lyrics_container]
 
         return '\n'.join(text_parts)
 

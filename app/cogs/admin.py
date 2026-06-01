@@ -59,14 +59,14 @@ class Admin(Cog):
         await ctx.send(f'Successfully synced {len(commands)} commands')
 
     @sync.command(name='global', guild_only=False)
-    async def sync_global(self, ctx: Context):
+    async def sync_global(self, ctx: Context) -> None:
         """Syncs the commands globally"""
 
         commands = await self.bot.tree.sync(guild=None)
         await ctx.send(f'Successfully synced {len(commands)} commands')
 
     @group(invoke_without_command=True, alias='rl')
-    async def reload(self, ctx: Context):
+    async def reload(self, ctx: Context) -> None:
         """Command group for module reloading purposes."""
         pass
 

@@ -43,6 +43,8 @@ from app.utils.lock import lock
 from config import Emojis, default_prefix, github_key, main_guild_id, test_guild_id
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from app.database.base import GuildConfig
 
 log = logging.getLogger(__name__)
@@ -118,7 +120,7 @@ def can_close_threads(ctx: Context) -> bool:
     return ctx.channel.parent_id == help_forum_id and (permissions.manage_threads or ctx.channel.owner_id == ctx.author.id)
 
 
-def is_help_thread():
+def is_help_thread() -> Callable[[Any], Any]:
     def predicate(ctx: Context) -> bool:
         if isinstance(ctx.channel, discord.Thread) and ctx.channel.parent_id == help_forum_id:
             return True
@@ -287,8 +289,8 @@ class Meta(Cog):
                     error_message = error.message
                     log.log(
                         logging.DEBUG if error.status == 404 else logging.ERROR,
-                        f'Failed to fetch code snippet from {match[0]!r}: {error.status} '
-                        f'{error_message} for GET {error.request_info.real_url.human_repr()}',
+                        'Failed to fetch code snippet from %r: %s %s for GET %s',
+                        match[0], error.status, error_message, error.request_info.real_url.human_repr(),
                     )
 
         return [x[1] for x in sorted(all_snippets)]

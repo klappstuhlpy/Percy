@@ -80,7 +80,7 @@ class EnterCodeModal(discord.ui.Modal, title='Enter AniList Code'):
 
 
 class AniListLinkView(View):
-    def __init__(self, ctx: Context | discord.Interaction, url: str):
+    def __init__(self, ctx: Context | discord.Interaction, url: str) -> None:
         super().__init__(timeout=100.0)
         self.ctx: Context | discord.Interaction = ctx
 
@@ -133,7 +133,7 @@ class AniList(Cog):
             for item in data:
                 self._lookup_manga_table.append(item.get('title').get('romaji'))
         except (AttributeError, KeyError, aiohttp.ClientError):
-            log.error('Failed to load AniList data', exc_info=True)
+            log.exception('Failed to load AniList data')
 
     async def cog_command_error(self, ctx: Context, error: commands.BadArgument) -> None:
         if isinstance(error, commands.CheckFailure):

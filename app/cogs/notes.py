@@ -78,7 +78,7 @@ class Note(BaseRecord):
         self.timer = await self.bot.timers.fetch('note', note_id=self.id)
         return self.timer
 
-    async def delete(self):
+    async def delete(self) -> None:
         """|coro|
 
         Delete the note.
