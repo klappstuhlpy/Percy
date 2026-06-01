@@ -16,7 +16,7 @@ from app.cogs.comic._cache import ComicCache
 from app.cogs.comic._client import Marvel
 from app.cogs.comic._data import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
 from app.cogs.comic._parser import Parser
-from app.core import Bot, Cog, Flags, flag, store_true, View
+from app.core import Bot, Cog, Flags, View, flag, store_true
 from app.core.models import Context, cooldown, describe, group
 from app.utils import cache
 from app.utils.lock import lock, lock_arg, lock_from

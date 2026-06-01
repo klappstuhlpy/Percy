@@ -59,7 +59,7 @@ class VolumeConverter(commands.Converter[int]):
     VOLUME_REGEX: Final[ClassVar[re.Pattern]] = re.compile(r'^[+-]?\d+$')
 
     async def convert(self, ctx: Context, argument: str) -> int:
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
 
         if not (match := self.VOLUME_REGEX.match(argument)):
             raise commands.BadArgument(
@@ -94,7 +94,7 @@ class Music(Cog):
             # Normal close, Session Invalid, Disconnected
             return
 
-        player: Player | None = cast(Player, payload.player)
+        player: Player | None = cast('Player', payload.player)
 
         if player:
             try:
@@ -124,7 +124,7 @@ class Music(Cog):
 
     @Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload) -> None:
-        player: Player | None = cast(Player, payload.player)
+        player: Player | None = cast('Player', payload.player)
         if not player:
             return
 
@@ -182,7 +182,7 @@ class Music(Cog):
 
     @Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload) -> None:
-        player: Player | None = cast(Player, payload.player)
+        player: Player | None = cast('Player', payload.player)
         if not player:
             return
 
@@ -212,7 +212,7 @@ class Music(Cog):
     @Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member) -> None:
         await self.bot.wait_until_ready()
-        player: Player | None = cast(Player, before.guild.voice_client)
+        player: Player | None = cast('Player', before.guild.voice_client)
         if not player:
             return
 
@@ -289,7 +289,7 @@ class Music(Cog):
         """Play Music in a voice channel by searching for a track/playlist."""
         await ctx.defer()
 
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
@@ -372,7 +372,7 @@ class Music(Cog):
         if not ctx.guild.voice_client:
             await Player.join(ctx)
 
-        player: Player = cast(Player, ctx.guild.voice_client)
+        player: Player = cast('Player', ctx.guild.voice_client)
         if not player:
             return
 
@@ -423,7 +423,7 @@ class Music(Cog):
     async def listen_together_stop(self, ctx: Context) -> None:
         """Stops the current listen-together activity."""
         assert ctx.guild is not None
-        player: Player = cast(Player, ctx.guild.voice_client)
+        player: Player = cast('Player', ctx.guild.voice_client)
         if not player:
             return
 
@@ -456,7 +456,7 @@ class Music(Cog):
     @checks.is_player_connected()
     async def leave(self, ctx: Context) -> None:
         """Disconnect me from a voice-channel."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -468,7 +468,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def stop(self, ctx: Context) -> None:
         """Clears the queue and stop the current plugins."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -486,7 +486,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def pause_or_resume(self, ctx: Context) -> None:
         """Pause the current playing track."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -511,7 +511,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def loop(self, ctx: Context, mode: Literal['normal', 'track', 'queue']) -> None:
         """Sets a loop mode for the plugins."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -530,7 +530,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def shuffle(self, ctx: Context, mode: bool) -> None:
         """Sets the shuffle mode for the plugins."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -545,7 +545,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def seek(self, ctx: Context, position: str | None = None) -> None:
         """Seek to a specific position in the tack."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -579,7 +579,7 @@ class Music(Cog):
     @seek.autocomplete('position')
     async def seek_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         assert interaction.guild is not None
-        player: Player = cast(Player, interaction.guild.voice_client)
+        player: Player = cast('Player', interaction.guild.voice_client)
         if not player:
             return []
 
@@ -606,7 +606,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def volume(self, ctx: Context, amount: Annotated[int, VolumeConverter] | None = None) -> None:
         """Set the volume for the plugins."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -639,7 +639,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def cleanupleft(self, ctx: Context) -> None:
         """Removes all songs from users that are not in the voice channel."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -676,7 +676,7 @@ class Music(Cog):
         -----
         The preset paremeter will be given priority, if provided.
         """
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -709,7 +709,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def filter_bassboost(self, ctx: Context) -> None:
         """Apply a bassboost filter for the current track."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -742,7 +742,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def filter_nightcore(self, ctx: Context) -> None:
         """Apply a Nightcore Filter to the current track."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -760,7 +760,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def filter_8d(self, ctx: Context) -> None:
         """Apply an 8D Filter to create a 3D effect."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -779,7 +779,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def filter_lowpass(self, ctx: Context, smoothing: app_commands.Range[float, 2.5, 50.0]) -> None:
         """Apply a Lowpass Filter to the current Track."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -797,7 +797,7 @@ class Music(Cog):
     @checks.is_player_playing()
     async def filter_reset(self, ctx: Context) -> None:
         """Reset all active filters."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -811,7 +811,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def forceskip(self, ctx: Context) -> None:
         """Skip the playing song."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -830,7 +830,7 @@ class Music(Cog):
     async def jump_to(self, ctx: Context, position: int) -> None:
         """Jump to a track in the Queue.
         Note: The number you enter is the count of how many tracks in the queue will be skipped."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -864,7 +864,7 @@ class Music(Cog):
     @checks.is_listen_together()
     async def back(self, ctx: Context) -> None:
         """Plays the previous Track."""
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -880,7 +880,7 @@ class Music(Cog):
     async def queue(self, ctx: Context) -> None:
         """Display the active queue."""
         assert ctx.guild is not None
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             return
 
@@ -964,7 +964,7 @@ class Music(Cog):
         """Search for some lyrics."""
         await ctx.defer(ephemeral=True)
 
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player and not song:
             await ctx.send_error('Please provide a song to search for.')
             return

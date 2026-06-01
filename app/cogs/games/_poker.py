@@ -246,7 +246,7 @@ class Ranker:
                 [x.rank for x in rank_arr]) * (16 ** 5) + np.sum(num_combos * np.power(16, np.arange(0, 5)), axis=1)
 
         for i, ranking in enumerate(rank_arr):
-            ranking = cast(RankingItem, ranking)
+            ranking = cast('RankingItem', ranking)
             # Example: Implement the logic for each RankingItem
             rank_arr[i] = RankingItem(
                 name=ranking.name, cards=ranking.cards,
@@ -553,7 +553,7 @@ class TexasHoldem:
         self.players: list[Player] = []
 
         # Initialize game settings
-        self.host: discord.Member = self.players[0].member if self.players else cast(discord.Member, ctx.author)
+        self.host: discord.Member = self.players[0].member if self.players else cast('discord.Member', ctx.author)
         self.max_players: int = max_players
         self.player_index: int = 0
 
@@ -1185,7 +1185,7 @@ class TexasHoldem:
     def _append_finished_embed_text(self, player: Player, text: str) -> str:
         if self.state == TableState.FINISHED:
             raw_cards = [card.display('small') for card in player.hand.cards]
-            cards = [cast(DisplayCard, c) for c in raw_cards]
+            cards = [cast('DisplayCard', c) for c in raw_cards]
             found = discord.utils.find(lambda x: x[0] == player, self.ranks)
             assert found is not None
             _, hand = found
@@ -1205,7 +1205,7 @@ class TexasHoldem:
         cards = [Card.from_arr(arr) for arr in self.community_arr]
         if len(cards) >= 3:
             card_list = [f'{elem1} {elem2} {elem3}' for elem1, elem2, elem3 in zip(
-                *[cast(str, card.display('large', formatted=True)).split('\n') for card in cards[:3]])]
+                *[cast('str', card.display('large', formatted=True)).split('\n') for card in cards[:3]])]
             embed.add_field(
                 name='The Flop',
                 value='\n'.join(card_list)
@@ -1396,11 +1396,11 @@ class TableView(View):
             return
 
         await balance.remove(cash=amount)
-        self.table.add_player(cast(discord.Member, interaction.user), stack=amount)
+        self.table.add_player(cast('discord.Member', interaction.user), stack=amount)
 
         if len(self.table.players) == 4:
             self.table.start()
-            self = TableView(table=self.table)  # noqa: E501
+            self = TableView(table=self.table)
 
         self.update_buttons()
         await interaction.response.edit_message(embed=self.table.build_embed(), view=self)
@@ -1421,14 +1421,14 @@ class TableView(View):
         embed = discord.Embed(title='Your Cards', color=discord.Color.blurple())
 
         card_list = [f'{elem1} {elem2}' for elem1, elem2 in zip(
-            *[cast(str, card.display('large', formatted=True)).split('\n') for card in player.hand.cards])]
+            *[cast('str', card.display('large', formatted=True)).split('\n') for card in player.hand.cards])]
         embed.description = '\n'.join(card_list)
 
         # Returns your best hand
         hand = player.hand.evaluate(self.table.community_arr)
 
         card_list = [
-            cast(str, card.display('large', formatted=True)).split('\n') for card in hand.cards
+            cast('str', card.display('large', formatted=True)).split('\n') for card in hand.cards
         ]
         # Use zip_longest to handle different lengths of display elements in each card
         results = [
@@ -1463,7 +1463,7 @@ class TableView(View):
         if self.start_next_round.label == 'Next Round':
             await self.table.prepare_next_game()
         else:
-            self.table.view = self = TableView(table=self.table)  # noqa: E501
+            self.table.view = self = TableView(table=self.table)
             self.table.start()
 
         self.update_buttons()
@@ -1667,7 +1667,7 @@ class TableView(View):
             await interaction.response.send_message(f'{Emojis.error} You are not in the game.', ephemeral=True)
             return
 
-        await self.table.remove_player(cast(discord.Member, interaction.user))
+        await self.table.remove_player(cast('discord.Member', interaction.user))
 
         if len(self.table.players) == 1:
             self.table.state = TableState.STOPPED

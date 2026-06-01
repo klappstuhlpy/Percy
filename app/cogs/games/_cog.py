@@ -129,7 +129,7 @@ class Games(Cog):
             return
 
         word = random.choice(filtered_words)
-        hangman = _short_games.Hangman(cast(discord.Member, ctx.author), word)
+        hangman = _short_games.Hangman(cast('discord.Member', ctx.author), word)
 
         origin = await ctx.send(embed=hangman.build_embed())
 
@@ -222,7 +222,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        tower = _short_games.Tower(cast(discord.Member, ctx.author), bet)
+        tower = _short_games.Tower(cast('discord.Member', ctx.author), bet)
         await ctx.send(embed=tower.build_embed(), view=tower)
 
     @command(
@@ -256,7 +256,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        slots = _slot.SlotMachine(cast(discord.Member, ctx.author), bet)
+        slots = _slot.SlotMachine(cast('discord.Member', ctx.author), bet)
         await ctx.send(embed=slots.build_embed(), view=slots)
 
     @command(
@@ -504,11 +504,11 @@ class Games(Cog):
                 await ctx.send_error('**Bets are closed.** *Rien ne va plus*')
                 return
 
-            roulette.place(_roulette.Bet(cast(discord.Member, ctx.author), space, bet))
+            roulette.place(_roulette.Bet(cast('discord.Member', ctx.author), space, bet))
             await ctx.maybe_edit(roulette.message, embed=roulette.build_embed())
         else:
             roulette = _roulette.Table(ctx)
-            roulette.place(_roulette.Bet(cast(discord.Member, ctx.author), space, bet))
+            roulette.place(_roulette.Bet(cast('discord.Member', ctx.author), space, bet))
 
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
 
@@ -573,12 +573,12 @@ class Games(Cog):
                     f'The buy-in range for this table is {Emojis.Economy.cash} **{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**.')
                 return
 
-            poker.add_player(cast(discord.Member, ctx.author), stack)
+            poker.add_player(cast('discord.Member', ctx.author), stack)
             poker.view.update_buttons()
             await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
         else:
             poker = _poker.TexasHoldem(self, ctx, first_buy_in=stack)
-            poker.add_player(cast(discord.Member, ctx.author), stack)
+            poker.add_player(cast('discord.Member', ctx.author), stack)
             poker.view.update_buttons()
 
             message = await ctx.send(embed=poker.build_embed(), view=poker.view)

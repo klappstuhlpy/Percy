@@ -471,7 +471,7 @@ class PlaylistTools(Cog):
             await ctx.send_error('There are no tracks in this playlist, please add some using `/playlist add`.')
             return
 
-        player: Player = cast(Player, ctx.voice_client)
+        player: Player = cast('Player', ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
@@ -531,7 +531,7 @@ class PlaylistTools(Cog):
             return
 
         if not query and ctx.guild and ctx.guild.voice_client:  # type: ignore[union-attr]
-            player: Player = cast(Player, ctx.voice_client)
+            player: Player = cast('Player', ctx.voice_client)
 
             if not player.current:
                 await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
