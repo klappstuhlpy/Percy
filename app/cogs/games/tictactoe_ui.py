@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -9,6 +8,7 @@ import discord
 from discord import PartialEmoji
 
 from app.core import View
+from app.games.engine.tictactoe import Board, BoardKind
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
 
@@ -16,37 +16,29 @@ if TYPE_CHECKING:
     from app.database.base import Balance
 
 
-class BoardKind(enum.Enum):
-    Empty = 0
-    X = -1
-    O = 1
+def kind_emoji(kind: BoardKind) -> PartialEmoji | str:
+    """Discord presentation for a board mark."""
+    if kind is BoardKind.X:
+        return Emojis.cross
+    if kind is BoardKind.O:
+        return Emojis.circle
+    return '\u200b'
 
-    def __repr__(self) -> str:
-        if self is self.X:
-            return Emojis.cross
-        if self is self.O:
-            return Emojis.circle
-        return '\u200b'
 
-    @property
-    def emoji(self) -> PartialEmoji | str:
-        return self.__repr__()
+def kind_style(kind: BoardKind) -> discord.ButtonStyle:
+    if kind is BoardKind.X:
+        return discord.ButtonStyle.red
+    if kind is BoardKind.O:
+        return discord.ButtonStyle.blurple
+    return discord.ButtonStyle.grey
 
-    @property
-    def style(self) -> discord.ButtonStyle:
-        if self is self.X:
-            return discord.ButtonStyle.red
-        if self is self.O:
-            return discord.ButtonStyle.blurple
-        return discord.ButtonStyle.grey
 
-    @property
-    def colour(self) -> discord.Colour:
-        if self is self.X:
-            return discord.Colour.red()
-        if self is self.O:
-            return discord.Colour.blurple()
-        return discord.Colour.greyple()
+def kind_colour(kind: BoardKind) -> discord.Colour:
+    if kind is BoardKind.X:
+        return discord.Colour.red()
+    if kind is BoardKind.O:
+        return discord.Colour.blurple()
+    return discord.Colour.greyple()
 
 
 @dataclass()
@@ -85,7 +77,6 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
             await interaction.response.send_message(f'{Emojis.error} It\'s not your turn.', ephemeral=True)
             return
 
-        state = self.view.get_board_state(self.x, self.y)
         if player.current_selection is not None:
             await interaction.response.send_message(
                 f'{Emojis.error} You\'ve already selected a piece, you can\'t select multiple pieces.', ephemeral=True)
@@ -93,10 +84,10 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
 
         player.current_selection = (self.x, self.y)
 
-        state.kind = player.kind
+        self.view.engine.place(self.x, self.y, player.kind)
         self.label = None
-        self.emoji = state.kind.emoji
-        self.style = state.kind.style
+        self.emoji = kind_emoji(player.kind)
+        self.style = kind_style(player.kind)
         self.disabled = True
 
         next_player = self.view.swap_player()
@@ -104,7 +95,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
 
         embed = self.view.embed
 
-        winner = self.view.get_winner()
+        winner = self.view.engine.winner()
         if winner is not None:
             if winner is not BoardKind.Empty:
                 user_balance: Balance = await interaction.client.db.get_user_balance(player.member.id, interaction.guild.id)
@@ -114,9 +105,9 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
                 winning_player = next_player if next_player.kind is winner else player
                 loser = player if next_player is winning_player else next_player
 
-                embed.colour = winning_player.kind.colour
+                embed.colour = kind_colour(winning_player.kind)
                 embed.description = (
-                    f'{winner.emoji} {winning_player.member.mention} won and earned {Emojis.Economy.cash} **{fnumb(amount)}**!\n'
+                    f'{kind_emoji(winner)} {winning_player.member.mention} won and earned {Emojis.Economy.cash} **{fnumb(amount)}**!\n'
                     f'*Maybe next time, {loser.member.mention}!*'
                 )
                 embed.set_footer()
@@ -131,15 +122,6 @@ class TicTacToeButton(discord.ui.Button['TicTacToe']):
         await interaction.response.edit_message(embed=embed, view=self.view)
 
 
-@dataclass()
-class BoardState:
-    kind: BoardKind
-
-    @classmethod
-    def empty(cls) -> BoardState:
-        return BoardState(kind=BoardKind.Empty)
-
-
 class TicTacToe(View):
     children: list[TicTacToeButton]
 
@@ -147,7 +129,7 @@ class TicTacToe(View):
         super().__init__(timeout=36000.0, members=[p.member for p in players])
         self.players: tuple[Player, ...] = players
         self.player_index: int = 0
-        self.board: list[list[BoardState]] = [[BoardState.empty() for _ in range(3)] for _ in range(3)]
+        self.engine: Board = Board()
 
         for x in range(3):
             for y in range(3):
@@ -157,47 +139,12 @@ class TicTacToe(View):
         for child in self.children:
             child.disabled = True
 
-    def get_winner(self) -> BoardKind | None:
-        for across in self.board:
-            value = sum(p.kind.value for p in across)
-            if value == 3:
-                return BoardKind.O
-            elif value == -3:
-                return BoardKind.X
-
-        for line in range(3):
-            value = self.board[0][line].kind.value + self.board[1][line].kind.value + self.board[2][line].kind.value
-            if value == 3:
-                return BoardKind.O
-            elif value == -3:
-                return BoardKind.X
-
-        diag = self.board[0][2].kind.value + self.board[1][1].kind.value + self.board[2][0].kind.value
-        if diag == 3:
-            return BoardKind.O
-        elif diag == -3:
-            return BoardKind.X
-
-        diag = self.board[0][0].kind.value + self.board[1][1].kind.value + self.board[2][2].kind.value
-        if diag == 3:
-            return BoardKind.O
-        elif diag == -3:
-            return BoardKind.X
-
-        if all(i.kind is not BoardKind.Empty for row in self.board for i in row):
-            return BoardKind.Empty
-
-        return None
-
-    def get_board_state(self, x: int, y: int) -> BoardState:
-        return self.board[y][x]
-
     @property
     def embed(self) -> discord.Embed:
         next_player = self.players[(self.player_index + 1) % len(self.players)]
         embed = discord.Embed(
             title='TicTacToe',
-            description=f'It is now {self.current_player.kind.emoji} {self.current_player.member.mention}\'s turn with '
+            description=f'It is now {kind_emoji(self.current_player.kind)} {self.current_player.member.mention}\'s turn with '
                         f'currently {pluralize(self.get_player_fields):field}.',
             colour=helpers.Colour.light_orange(),
         )
@@ -214,7 +161,7 @@ class TicTacToe(View):
 
     @property
     def get_player_fields(self) -> int:
-        return sum(1 for x in range(3) for y in range(3) if self.board[y][x].kind is self.current_player.kind)
+        return self.engine.count(self.current_player.kind)
 
 
 class Prompt(View):

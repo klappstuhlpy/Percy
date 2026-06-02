@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 from expiringdict import ExpiringDict
 
-from app.cogs.games import _blackjack, _minesweeper, _poker, _roulette, _short_games, _slot, _tictactoe
+from app.cogs.games import _blackjack, _minesweeper, _poker, _roulette, _short_games, _slot, tictactoe_ui
 from app.cogs.games._classes import MinimumBet, Payouts
 from app.cogs.games._roulette import Payout, Space
 from app.core import Bot, Cog, Flags, flag
@@ -76,7 +76,7 @@ class Games(Cog):
             await ctx.send_error('You cannot play against a bot')
             return
 
-        prompt = _tictactoe.Prompt(ctx.author, other)
+        prompt = tictactoe_ui.Prompt(ctx.author, other)
         embed = discord.Embed(
             title='TicTacToe',
             description=f'{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n'
