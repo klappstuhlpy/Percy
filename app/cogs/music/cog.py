@@ -33,7 +33,6 @@ from app.utils import (
 )
 from config import Emojis, genius_key
 
-from ...rendering import Music
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import Player
 from .ui import PlaylistPaginator
@@ -83,7 +82,6 @@ class Music(Cog):
     """Commands for playing music in a voice channel."""
 
     emoji = '<:music:1322338453937193000>'
-    render = Music()
 
     async def cog_before_invoke(self, ctx: Context) -> None:
         playlist_tools: PlaylistTools | None = self.bot.get_cog('PlaylistTools')
@@ -704,7 +702,7 @@ class Music(Cog):
 
         embed = discord.Embed(title='Changed Filter', color=helpers.Colour.white(),
                               description='*It may takes a while for the changes to apply.*')
-        image = self.render.generate_eq_image([entry['gain'] for entry in filters.equalizer.payload.values()])
+        image = await self.bot.render.equalizer([entry['gain'] for entry in filters.equalizer.payload.values()])
         embed.set_image(url='attachment://image.png')
         embed.set_footer(text=f'Requested by: {ctx.author}')
         await ctx.send(embed=embed, file=image, delete_after=20)
@@ -737,7 +735,7 @@ class Music(Cog):
             title='Changed Filter',
             color=helpers.Colour.white(),
             description='*It may takes a while for the changes to apply.*')
-        image = self.render.generate_eq_image([entry['gain'] for entry in filters.equalizer.payload.values()])
+        image = await self.bot.render.equalizer([entry['gain'] for entry in filters.equalizer.payload.values()])
         embed.set_image(url='attachment://image.png')
         embed.set_footer(text=f'Requested by: {ctx.author}')
         await ctx.send(embed=embed, file=image, delete_after=20)

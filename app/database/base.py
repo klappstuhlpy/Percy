@@ -5,14 +5,12 @@ import datetime
 import enum
 import json
 import logging
-import random
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal
 
 import asyncpg
 import dateutil.tz
 import discord
-from captcha.image import ImageCaptcha
 from discord.utils import MISSING
 
 from app.database.repositories import (
@@ -25,14 +23,11 @@ from app.database.repositories import (
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
 from config import DatabaseConfig, Emojis
 
-from ..rendering import ASSETS
 from .migrations import Migrations
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator, Sequence
     from typing import Self, TypeVar
-
-    from PIL import Image
 
     from app.core import Bot
 
@@ -939,15 +934,6 @@ class Gatekeeper(BaseRecord):
         pending_add = 'pending_add'
         pending_remove = 'pending_remove'
 
-    class Captcha(NamedTuple):
-        """A captcha image with the letters and the image."""
-        text: str
-        image: Image.Image
-
-    __CAPTCHA_CHARS: str = 'abcdefghijklmnopqrstuvwxyz1234567890'  # ABCDEFGHIJKLMNOPQRSTUVWXYZ
-    __image_captcha: ImageCaptcha = ImageCaptcha(
-        width=300, height=100, fonts=[str(ASSETS / 'fonts/helvetica.ttf')])
-
     log = logging.getLogger('mod')
 
     bot: Bot
@@ -1034,11 +1020,6 @@ class Gatekeeper(BaseRecord):
             ('Auto Trigger', f'{self.rate[0]}/{self.rate[1]}s' if self.rate is not None else 'N/A'),
         ]
         return '\n'.join(f'{header}: {value}' for header, value in headers)
-
-    def generate_captcha(self) -> Captcha:
-        """Creates a new random captacha image."""
-        chars: str = ''.join(random.choices(self.__CAPTCHA_CHARS, k=6))
-        return self.Captcha(text=chars, image=self.__image_captcha.generate_image(chars))
 
     def cancel_task(self) -> None:
         """Cancels the task."""

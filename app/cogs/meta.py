@@ -26,7 +26,7 @@ from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
 from app.core.views import TrashView, View
-from app.rendering import Quote, get_dominant_color
+from app.rendering import get_dominant_color
 from app.utils import (
     AnsiColor,
     AnsiStringBuilder,
@@ -857,8 +857,8 @@ class Meta(Cog):
             await ctx.send_error('You must specify a user and a message, reply to a message or provide a message_id to quote.')
             return
 
-        quote = Quote(await user.display_avatar.read(), message, user)
-        await ctx.send(file=quote.create())
+        file = await self.bot.render.quote(user, message)
+        await ctx.send(file=file)
 
     @command(name='appinfo', aliases=['ai'], description='Shows information about a discord application.')
     @describe(app_id='The ID of the application to show info about.')

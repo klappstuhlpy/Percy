@@ -12,7 +12,6 @@ from app.cogs.leveling.ui import InteractiveLevelRolesView, InteractiveMultiplie
 from app.core import Bot, Cog, Flags, converter, flag
 from app.core.converter import IgnoreableEntity, IgnoreEntity
 from app.core.models import Context, PermissionTemplate, describe, group
-from app.rendering import LevelCard
 from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, truncate
 from config import Emojis
 
@@ -148,12 +147,7 @@ class Leveling(Cog):
             await ctx.send_error(f'**{user}** has not gained any XP yet.')
             return
 
-        level_card = LevelCard(
-            await user.display_avatar.read(),
-            user,
-            config
-        )
-        image = await level_card.create()
+        image = await self.bot.render.level_card(user, config)
         await ctx.send(file=image)
 
     @level.command(

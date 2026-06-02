@@ -24,7 +24,7 @@ from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
 from app.core.views import UserInfoView
-from app.rendering import AvatarCollage, BarChart, PresenceChart, resize_to_limit
+from app.rendering import resize_to_limit
 from app.utils import AnsiColor, AnsiStringBuilder, TabularData, Timer, censor_object, get_asset_url, helpers, medal_emoji
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
@@ -613,11 +613,10 @@ class Stats(Cog):
         minutes = delta.total_seconds() / 60
         total = sum(self.bot.socket_stats.values())
         cpm = total / minutes
-        chart = BarChart(
-            data=dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
-            title=f'{total} socket events observed ({cpm:.2f}/minute)')
-        images = [chart.create(merge=True)]
-        await FilePaginator.start(ctx, entries=images, per_page=1)  # type: ignore[arg-type]
+        image = await self.bot.render.bar_chart(
+            dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
+            f'{total} socket events observed ({cpm:.2f}/minute)', merge=True)
+        await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
 
     @command(description='Tells you how long the bot has been up for.')
     async def uptime(self, ctx: Context) -> None:
@@ -1049,8 +1048,7 @@ class Stats(Cog):
                 if not avatars:
                     return
 
-                collage = AvatarCollage(avatars)
-                file = await asyncio.to_thread(collage.create)
+                file = await self.bot.render.avatar_collage(avatars)
 
         embed = discord.Embed(
             title=f'Avatar Collage for {user}',
@@ -1113,7 +1111,7 @@ class Stats(Cog):
 
                 analyzing_time = timer.reset()
 
-                presence_instance = PresenceChart(
+                canvas: discord.File = await self.bot.render.presence_chart(
                     labels=['Online', 'Offline', 'DND', 'Idle'],
                     colors=['#43b581', '#747f8d', '#f04747', '#fba31c'],
                     values=[
@@ -1123,7 +1121,6 @@ class Stats(Cog):
                         int(status_timers['Idle']),
                     ]
                 )
-                canvas: discord.File = await asyncio.to_thread(presence_instance.create)
 
         embed = discord.Embed(
             title=f'Past 1 Month User Activity of {user}',
@@ -1508,12 +1505,11 @@ class Stats(Cog):
             common = counter.most_common()[limit:]
             title = f'Bottom `{limit}` Commands'
 
-        chart = BarChart(
-            data=dict(sorted(dict(common).items(), key=lambda item: item[1], reverse=True)),
-            title=f'{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)')
-        images = [chart.create(merge=True)]
+        image = await self.bot.render.bar_chart(
+            dict(sorted(dict(common).items(), key=lambda item: item[1], reverse=True)),
+            f'{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)', merge=True)
         await ctx.send(f'## {title}')
-        await FilePaginator.start(ctx, entries=images, per_page=1)  # type: ignore[arg-type]
+        await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
 
     @_cmd.group(
         name='history',

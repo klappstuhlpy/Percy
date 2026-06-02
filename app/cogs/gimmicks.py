@@ -10,7 +10,6 @@ from discord.ext import commands
 from app.core import Cog, Context
 from app.core.models import HybridContext, command, cooldown, describe
 from app.core.pagination import BasePaginator
-from app.rendering import ColorImage
 from app.utils import helpers
 from config import Emojis, main_guild_id
 
@@ -242,8 +241,7 @@ class Gimmicks(Cog):
             embed.url = f"{url}?hex={color.value:0>6x}"
 
             message = js['name']['value']
-            color_image = ColorImage((js['rgb']['r'], js['rgb']['g'], js['rgb']['b']), message)
-            image = color_image.create()
+            image = await self.bot.render.color_swatch((js['rgb']['r'], js['rgb']['g'], js['rgb']['b']), message)
 
             hsl = js["hsl"]["value"]
             hsv = js["hsv"]["value"]

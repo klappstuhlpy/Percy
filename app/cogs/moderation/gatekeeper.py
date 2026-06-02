@@ -722,7 +722,7 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
 
         await interaction.response.defer(ephemeral=True)
 
-        captcha = self.gatekeeper.generate_captcha()
+        captcha = await self.gatekeeper.bot.render.captcha()
 
         await interaction.channel.set_permissions(
             interaction.user,
@@ -737,13 +737,9 @@ class GatekeeperVerifyButton(discord.ui.DynamicItem[discord.ui.Button], template
         )
         embed.set_footer(text='You have 90 seconds to enter the captcha.')
 
-        buffer = io.BytesIO()
-        captcha.image.save(buffer, format='PNG')
-        buffer.seek(0)
-        file = discord.File(buffer, filename='captcha.png')
         embed.set_image(url='attachment://captcha.png')
 
-        message = await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+        message = await interaction.followup.send(embed=embed, file=captcha.file, ephemeral=True)
 
         # Wait for message input from user
         try:

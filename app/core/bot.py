@@ -31,6 +31,7 @@ from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.database.base import Database
+from app.rendering import RenderingService
 from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
 from app.utils.lock import LockedResourceError
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
@@ -80,6 +81,7 @@ class Bot(commands.Bot):
     startup_timestamp: datetime.datetime
     context: type[Context]
     timers: TimerManager
+    render: RenderingService
     spam_control: SpamControl
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -202,6 +204,7 @@ class Bot(commands.Bot):
         self.db = await Database(self, loop=self.loop).wait()
         self.session = ClientSession()
         self.timers = TimerManager(self)
+        self.render = RenderingService()
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 

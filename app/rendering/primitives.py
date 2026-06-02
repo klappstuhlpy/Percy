@@ -30,6 +30,7 @@ __all__ = (
     'alpha_paste',
     'get_dominant_color',
     'get_text_dimensions',
+    'mask_to_circle',
     'resize_to_limit',
     'rounded_mask',
     'wrap_text',

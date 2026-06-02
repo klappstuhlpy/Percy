@@ -1,12 +1,9 @@
-import asyncio
 from collections.abc import Awaitable, Callable, Generator, Iterable
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import discord
 from discord import Interaction
 from discord.ext import commands
-
-from app.rendering import AvatarCollage, PresenceChart
 
 if TYPE_CHECKING:
     import datetime
@@ -298,16 +295,13 @@ class UserInfoView(View):
 
         self.cog: Any = ctx.bot.get_cog('Stats')
 
-    @staticmethod
-    async def create_member_collage(results: list[dict[str, Any]]) -> discord.File | None:
+    async def create_member_collage(self, results: list[dict[str, Any]]) -> discord.File | None:
         """Creates a member avatar collage."""
         avatars = [x['avatar'] for x in results]
         if not avatars:
             return
 
-        collage = AvatarCollage(avatars)
-        file = await asyncio.to_thread(collage.create)
-        return file
+        return await self.bot.render.avatar_collage(avatars)
 
     @discord.ui.button(label='Avatar Collage', style=discord.ButtonStyle.blurple, emoji='🖼️')
     async def avatar_collage(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -410,7 +404,7 @@ class UserInfoView(View):
 
             analyzing_time = timer.reset()
 
-            presence_instance = PresenceChart(
+            canvas: discord.File = await self.bot.render.presence_chart(
                 labels=['Online', 'Offline', 'DND', 'Idle'],
                 colors=['#43b581', '#747f8d', '#f04747', '#fba31c'],
                 values=[
@@ -420,7 +414,6 @@ class UserInfoView(View):
                     int(status_timers['Idle']),
                 ]
             )
-            canvas: discord.File = await asyncio.to_thread(presence_instance.create)
 
         embed = discord.Embed(
             title=f'Past 1 Month User Activity of {interaction.user}',

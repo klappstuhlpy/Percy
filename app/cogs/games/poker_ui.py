@@ -8,13 +8,11 @@ import discord
 
 from app.cogs.games.engine.poker import TableState
 from app.core.views import View
-from app.rendering import BarChart
+from app.rendering.models import BarChartData
 from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    import PIL.Image
-
     from app.cogs.games.engine.poker import Player, TexasHoldem
     from app.cogs.games.poker_bridge import PokerSession
     from app.core import Bot
@@ -452,15 +450,15 @@ class TableView(View):
                 1: 'Flop',
                 2: 'Turn'
             }
-            images: list[PIL.Image.Image] = []
-            for i in range(len(data)):
-                chart = BarChart(
+            specs = [
+                BarChartData(
                     data=dict(dict((data[i][1][d_index]).items()).items()),
                     title=TITLE_MAP.get(i, '---'),
                 )
-                images.extend(cast('list[PIL.Image.Image]', chart.render(byted=False)))
-
-            image = BarChart._merge_and_render(images)
+                for i in range(len(data))
+            ]
+            image = await cast('Bot', interaction.client).render.merge_bar_charts(
+                specs, filename=f'bar_chart-{index}.png')
 
             embed.set_image(url=f'attachment://bar_chart-{index}.png')
             embeds.append(embed)
