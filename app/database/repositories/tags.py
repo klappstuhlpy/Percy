@@ -169,16 +169,22 @@ class TagsRepository(BaseRepository):
     async def get_alias_record(
             self, name_or_id: str | int, *, owner_id: int | None = None, location_id: int | None = None
     ) -> asyncpg.Record | None:
-        """Fetches a single alias row matching the given filters."""
+        """Fetches a single alias row by name or ID, narrowed to the given guild/owner."""
         form: dict[str, Any] = {}
         if location_id:
             form['location_id'] = location_id
         if owner_id:
             form['owner_id'] = owner_id
 
+        if _is_id(name_or_id):
+            form['id'] = name_or_id
+        else:
+            assert isinstance(name_or_id, str)
+            form['LOWER(name)'] = name_or_id.lower()
+
         where = ' AND '.join(f'{k}=${i}' for i, k in enumerate(form, 1))
         query = f"SELECT * FROM tag_lookup WHERE {where} LIMIT 1;"
-        return await self.fetchrow(query, name_or_id)
+        return await self.fetchrow(query, *form.values())
 
     async def get_similar_aliases(self, location_id: int, name: str) -> list[asyncpg.Record]:
         """Fetches up to 25 aliases whose names are similar to ``name``."""
@@ -238,37 +244,20 @@ class TagsRepository(BaseRepository):
             'name': 'name',
         }.get(sort, 'name')
 
-        if not query:
-            sql = """
-                SELECT name, id
-                FROM tag_lookup
-                WHERE location_id=$1
-            """
-            if owner_id:
-                sql += " AND owner_id=$2"
-                values: tuple[Any, ...] = (location_id, owner_id)
-            else:
-                values = (location_id,)
+        values: list[Any] = [location_id]
+        where = ['location_id=$1']
 
-            sql += f" ORDER BY {order};"
-        else:
+        if query:
+            values.append(query)
+            where.append(f'name % ${len(values)}')
             if sort == 'name':
-                order = 'similarity(name, $2) DESC'
+                order = f'similarity(name, ${len(values)}) DESC'
 
-            sql = f"""
-                SELECT name, id
-                FROM tag_lookup
-                WHERE location_id=$1 AND name % $2
-                ORDER BY {order};
-            """
-            if owner_id:
-                sql += " AND owner_id=$3"
-                values = (location_id, query, owner_id)
-            else:
-                values = (location_id, query)
+        if owner_id:
+            values.append(owner_id)
+            where.append(f'owner_id=${len(values)}')
 
-            sql += f" ORDER BY {order};"
-
+        sql = f"SELECT name, id FROM tag_lookup WHERE {' AND '.join(where)} ORDER BY {order};"
         return await self.fetch(sql, *values)
 
     async def export_tags(self, location_id: int, *, owner_id: int | None = None) -> list[asyncpg.Record]:
