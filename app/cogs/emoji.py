@@ -81,26 +81,13 @@ class Emoji(Cog):
 
     @lock('Emoji', 'emoji_batch', wait=True)
     async def bulk_insert(self) -> None:
-        query = """
-            INSERT INTO emoji_stats (guild_id, emoji_id, total)
-            SELECT x.guild, x.emoji, x.added
-            FROM jsonb_to_recordset($1::jsonb)
-                     AS x(
-                          guild BIGINT,
-                          emoji BIGINT,
-                          added INT
-                    )
-            ON CONFLICT (guild_id, emoji_id) DO UPDATE
-                SET total = emoji_stats.total + excluded.total;
-        """
-
         transformed = [
             {'guild': guild_id, 'emoji': emoji_id, 'added': count}
             for guild_id, data in self._emoji_data_batch.items()
             for emoji_id, count in data.items()
         ]
         self._emoji_data_batch.clear()
-        await self.bot.db.execute(query, transformed)
+        await self.bot.db.emoji_stats.bulk_insert(transformed)
 
     @tasks.loop(seconds=60.0)
     async def bulk_insert_loop(self) -> None:
@@ -134,24 +121,14 @@ class Emoji(Cog):
             connection: asyncpg.Connection | None = None,
     ) -> int | None:
         """Returns a random emoji from the database."""
-
-        con = connection or self.bot.db
-        query = """
-            SELECT emoji_id
-            FROM emoji_stats
-            OFFSET FLOOR(RANDOM() * (SELECT COUNT(*) FROM emoji_stats))
-            LIMIT 1;
-        """
-        return await con.fetchval(query)
+        return await self.bot.db.emoji_stats.get_random_emoji_id(connection=connection)
 
     async def resolve_random_emoji_until_available(
             self, *, connection: asyncpg.Connection | None = None
     ) -> discord.Emoji | None:
-        con = connection or self.bot.db
-
         emoji = None
         while emoji is None:
-            emoji = self.bot.get_emoji(await self.get_random_emoji(connection=con))
+            emoji = self.bot.get_emoji(await self.get_random_emoji(connection=connection))
         return emoji
 
     async def validate_emoji(
@@ -161,10 +138,7 @@ class Emoji(Cog):
             connection: asyncpg.Connection | None = None,
     ) -> discord.Emoji | None:
         """Returns a discord.Emoji object if the emoji is valid, otherwise returns None."""
-        con = connection or self.bot.db
-
-        query = 'SELECT * FROM emoji_stats WHERE emoji_id=$1 LIMIT 1;'
-        record = await con.fetchrow(query, emoji_id)
+        record = await self.bot.db.emoji_stats.get_emoji_record(emoji_id, connection=connection)
 
         guild = self.bot.get_guild(record['guild_id'])
         if guild is None:
@@ -312,15 +286,7 @@ class Emoji(Cog):
     async def get_guild_stats(self, ctx: Context) -> None:
         embed = discord.Embed(title='Emoji Leaderboard', colour=helpers.Colour.white())
 
-        query = """
-            SELECT
-               COALESCE(SUM(total), 0) AS "Count",
-               COUNT(*) AS "Emoji"
-            FROM emoji_stats
-            WHERE guild_id=$1
-            GROUP BY guild_id;
-        """
-        record = await ctx.db.fetchrow(query, ctx.guild.id)
+        record = await ctx.db.emoji_stats.get_guild_summary(ctx.guild.id)
         if record is None:
             await ctx.send_error('This server has no emoji stats yet.')
             return
@@ -334,15 +300,7 @@ class Emoji(Cog):
         embed.set_footer(text='Emoji Stats since')
         embed.timestamp = ctx.me.joined_at
 
-        query = """
-            SELECT emoji_id, total
-            FROM emoji_stats
-            WHERE guild_id=$1
-            ORDER BY total DESC
-            LIMIT 10;
-        """
-
-        top = await ctx.db.fetch(query, ctx.guild.id)
+        top = await ctx.db.emoji_stats.get_top_guild_emojis(ctx.guild.id)
 
         embed.description = '\n'.join(
             f'{i}. {self.emoji_fmt(emoji, count, total)}' for i, (emoji, count) in enumerate(top, 1))
@@ -364,15 +322,8 @@ class Emoji(Cog):
 
         embed.set_thumbnail(url=cdn)
 
-        query = """
-            SELECT guild_id, SUM(total) AS "count"
-            FROM emoji_stats
-            WHERE emoji_id=$1
-            GROUP BY guild_id;
-        """
-
-        records = await ctx.db.fetch(query, emoji_id)
-        transformed = dict(records)
+        records = await ctx.db.emoji_stats.get_emoji_guild_breakdown(emoji_id)
+        transformed: dict[int, int] = {record['guild_id']: record['count'] for record in records}
         total = sum(transformed.values())
 
         dt = discord.utils.snowflake_time(emoji_id)
@@ -430,15 +381,8 @@ class Emoji(Cog):
             await ctx.send_error('This guild has no custom emoji.')
             return
 
-        query = """
-            SELECT emoji_id, total
-            FROM emoji_stats
-            WHERE guild_id=$1 AND emoji_id = ANY($2::bigint[])
-            ORDER BY total DESC;
-        """
-
         embed = discord.Embed(title='Emoji Leaderboard', colour=helpers.Colour.white())
-        records = await ctx.db.fetch(query, ctx.guild.id, emoji_ids)
+        records = await ctx.db.emoji_stats.get_guild_emoji_stats(ctx.guild.id, emoji_ids)
 
         total = sum(a for _, a in records)
         emoji_used = len(records)
@@ -465,16 +409,8 @@ class Emoji(Cog):
     )
     async def emojistats_global(self, ctx: Context) -> None:
         """Shows you statistics about the global emoji usage."""
-        query = """
-            SELECT emoji_id, SUM(total) AS "count"
-            FROM emoji_stats
-            GROUP BY emoji_id
-            ORDER BY "count" DESC
-            LIMIT 10;
-        """
-
         embed = discord.Embed(title='Emoji Leaderboard', colour=helpers.Colour.white())
-        records = await ctx.db.fetch(query)
+        records = await ctx.db.emoji_stats.get_global_top_emojis()
 
         total = sum(a for _, a in records)
         emoji_used = len(records)
