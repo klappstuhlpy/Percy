@@ -3,6 +3,7 @@ from app.database.repositories.guilds import GuildsRepository
 from app.database.repositories.incidents import IncidentsRepository
 from app.database.repositories.leveling import LevelingRepository
 from app.database.repositories.moderation import ModerationRepository
+from app.database.repositories.notes import NotesRepository
 from app.database.repositories.polls import PollsRepository
 from app.database.repositories.stats import StatsRepository
 from app.database.repositories.tags import TagsRepository
@@ -14,6 +15,7 @@ __all__ = (
     'IncidentsRepository',
     'LevelingRepository',
     'ModerationRepository',
+    'NotesRepository',
     'PollsRepository',
     'StatsRepository',
     'TagsRepository',

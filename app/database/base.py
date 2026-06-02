@@ -18,6 +18,7 @@ from app.database.repositories import (
     IncidentsRepository,
     LevelingRepository,
     ModerationRepository,
+    NotesRepository,
     PollsRepository,
     StatsRepository,
     TagsRepository,
@@ -155,6 +156,7 @@ class Database(_Database):
     tags: TagsRepository
     stats: StatsRepository
     incidents: IncidentsRepository
+    notes: NotesRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -166,6 +168,7 @@ class Database(_Database):
         self.tags = TagsRepository(self)
         self.stats = StatsRepository(self)
         self.incidents = IncidentsRepository(self)
+        self.notes = NotesRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

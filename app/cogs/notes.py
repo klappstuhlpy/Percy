@@ -56,13 +56,7 @@ class Note(BaseRecord):
         connection: Optional[:class:`asyncpg.Connection`]
             The connection to use for the query.
         """
-        query = f"""
-            UPDATE user_notes
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, *values.values(), self.id)
+        record = await self.bot.db.notes.update_note(self.id, key, values, connection=connection)
         return self.__class__(bot=self.bot, record=record)
 
     async def get_timer(self) -> Timer | None:
@@ -83,8 +77,7 @@ class Note(BaseRecord):
 
         Delete the note.
         """
-        query = "DELETE FROM user_notes WHERE id = $1;"
-        await self.bot.db.execute(query, self.id)
+        await self.bot.db.notes.delete_note(self.id)
 
 
 class UserNotes(Cog, name='Notes'):
@@ -96,8 +89,7 @@ class UserNotes(Cog, name='Notes'):
     async def notes_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[int]]:
-        query = "SELECT * FROM user_notes WHERE owner_id=$1 ORDER BY topic;"
-        records = await self.bot.db.fetch(query, interaction.user.id)
+        records = await self.bot.db.notes.get_owner_notes(interaction.user.id, sort_by_topic=True)
         results = fuzzy.finder(current, records, key=lambda p: f'{p["topic"]} {p["content"]}', raw=True)
         return [
             app_commands.Choice(name=get_shortened_string(
@@ -124,12 +116,7 @@ class UserNotes(Cog, name='Notes'):
         :class:`Note`
             The note.
         """
-        query = "SELECT * FROM user_notes WHERE id = $1"
-        args = note_id,
-        if owner_id:
-            query += " AND owner_id = $2;"
-            args = note_id, owner_id
-        record = await self.bot.db.fetchrow(query, *args)
+        record = await self.bot.db.notes.get_note(note_id, owner_id)
         if not record:
             return
 
@@ -155,8 +142,7 @@ class UserNotes(Cog, name='Notes'):
         List[:class:`Note`]
             A list of notes for the user.
         """
-        query = "SELECT * FROM user_notes WHERE owner_id = $1;"
-        records = await self.bot.db.fetch(query, user_id)
+        records = await self.bot.db.notes.get_owner_notes(user_id)
         if not records:
             return
 
@@ -190,13 +176,7 @@ class UserNotes(Cog, name='Notes'):
         :class:`int`
             The ID of the created note.
         """
-        query = """
-            INSERT INTO user_notes (owner_id, content, topic)
-            VALUES ($1, $2, $3)
-            RETURNING id;
-        """
-        note_id = await self.bot.db.fetchval(query, user_id, note, topic)
-        return note_id
+        return await self.bot.db.notes.create_note(user_id, note, topic)
 
     @notes.command(name='add', description='Take a note.')
     @describe(
@@ -344,8 +324,7 @@ class UserNotes(Cog, name='Notes'):
         """Clear all notes."""
         ctx = await self.bot.get_context(interaction)
 
-        query = "DELETE FROM user_notes WHERE owner_id = $1;"
-        await self.bot.db.execute(query, ctx.author.id)
+        await self.bot.db.notes.clear_owner_notes(ctx.author.id)
         await ctx.send_success(f'{positive_reply()} I\'ve cleared all your notes.')
 
     @Cog.listener()
