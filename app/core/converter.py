@@ -8,7 +8,7 @@ from aiohttp import ClientConnectorError
 from discord import AppCommandOptionType, Member, User, app_commands
 from discord.ext import commands
 
-from app.core.models import Context
+from app.core.context import Context
 from app.utils import Colour, fuzzy
 from app.utils.constants import get_colour_dict
 

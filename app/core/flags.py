@@ -18,7 +18,8 @@ from discord.utils import MISSING, maybe_coroutine, resolve_annotation
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterator
 
-    from app.core.models import Command, Context
+    from app.core.command import Command
+    from app.core.context import Context
 
 FlagMetaT = TypeVar('FlagMetaT', bound='FlagMeta')
 D = TypeVar('D')
@@ -294,7 +295,7 @@ class ConsumeUntilFlag(Converter[T]):
         self.default: T = default
 
     async def convert(self, ctx: Context, argument: str) -> T:  # type: ignore[override]
-        from app.core.models import Command
+        from app.core.command import Command
 
         if not isinstance(ctx.command, Command) or ctx.command.custom_flags is None:
             raise TypeError

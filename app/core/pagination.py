@@ -7,7 +7,7 @@ import discord
 import numpy as np
 from discord.utils import MISSING
 
-from app.core.models import Context
+from app.core.context import Context
 from app.core.views import View
 from app.utils import aenumerate, fuzzy, helpers
 from config import Emojis

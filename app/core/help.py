@@ -7,8 +7,9 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import Cog
 
+from app.core.command import Command, HybridCommand
+from app.core.embeds import EmbedBuilder
 from app.core.flags import FlagMeta
-from app.core.models import Command, EmbedBuilder, HybridCommand
 from app.core.pagination import BasePaginator
 from app.utils import AnsiColor, AnsiStringBuilder, get_asset_url, helpers, humanize_duration, pluralize, truncate
 from config import Emojis

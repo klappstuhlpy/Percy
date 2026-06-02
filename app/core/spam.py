@@ -10,7 +10,7 @@ from app.utils import helpers
 
 if TYPE_CHECKING:
     from app.core.bot import Bot
-    from app.core.models import Context
+    from app.core.context import Context
 
 __all__ = ('SpamControl',)
 

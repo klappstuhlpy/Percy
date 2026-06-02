@@ -20,10 +20,13 @@ from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
 from app.cogs import EXTENSIONS
+from app.core.command import Command, GroupCommand
+from app.core.context import Context
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
-from app.core.models import AppBadArgument, Command, Context, GroupCommand, PermissionSpec
+from app.core.models import AppBadArgument
 from app.core.pagination import TextSource
+from app.core.permissions import PermissionSpec
 from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
