@@ -11,6 +11,9 @@ copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 """
 
-async def setup(bot) -> None:
-    from app.cogs.doc._cog import Documentation
-    await bot.add_cog(Documentation(bot))
+from app.cogs.doc.cog import Documentation, setup
+
+__all__ = (
+    'Documentation',
+    'setup',
+)

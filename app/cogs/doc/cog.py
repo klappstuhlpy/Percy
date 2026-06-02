@@ -13,19 +13,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from app.cogs.doc import _batch_parser, _inventory_parser
+from app.cogs.doc import client, engine
 from app.cogs.doc.cache import doc_cache
-from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem, DocItemT
+from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem
+from app.cogs.doc.ui import DocPaginator
 from app.core import Bot, Cog, Context
 from app.core.models import command, describe, group
-from app.core.pagination import BasePaginator, LinePaginator
+from app.core.pagination import LinePaginator
 from app.utils import fuzzy, helpers, pluralize
 from app.utils.lock import SharedEvent, lock, lock_from
 from app.utils.tasks import Scheduler, executor
 from config import Emojis
 
 if TYPE_CHECKING:
-    from app.cogs.doc._inventory_parser import InventoryDict
+    from app.cogs.doc.client import InventoryDict
 
 log = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class Inventory(commands.Converter):
     Otherwise, it returns the url and the fetched inventory dict in a tuple.
     """
 
-    async def convert(self, ctx: Context, url: str) -> tuple[str, _inventory_parser.InventoryDict]:
+    async def convert(self, ctx: Context, url: str) -> tuple[str, client.InventoryDict]:
         """Convert url to Intersphinx inventory URL."""
         await ctx.typing()
 
@@ -105,101 +106,15 @@ class Inventory(commands.Converter):
             url = url.rstrip('/') + '/objects.inv'
 
         try:
-            inventory = await _inventory_parser.fetch_inventory(ctx.bot.session, url)
-        except _inventory_parser.InvalidHeaderError:
+            inventory = await client.fetch_inventory(ctx.bot.session, url)
+        except client.InvalidHeaderError:
             raise commands.BadArgument(
                 f'{Emojis.error} Unable to parse inventory because of invalid header, check if URL is correct.')
         else:
             if inventory is None:
                 raise commands.BadArgument(
-                    f'Failed to fetch inventory file after `{_inventory_parser.FAILED_REQUEST_ATTEMPTS}` attempts.')
+                    f'Failed to fetch inventory file after `{client.FAILED_REQUEST_ATTEMPTS}` attempts.')
             return url, inventory
-
-
-class DocSelect(discord.ui.Select):
-    def __init__(self, parent: BasePaginator[DocItemT]) -> None:
-        super().__init__(
-            placeholder='Select a similar Documentation...',
-            max_values=1,
-            row=1,
-        )
-        self.super_parent: BasePaginator[DocItemT] = parent  # separate attribute — dpy overrides "parent" internally
-
-        for item in self.super_parent.entries:
-            self.add_option(
-                label=item.symbol_id,
-                description=item.group,
-                value=str(self.super_parent.entries.index(item)),
-            )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-
-        self.super_parent._current_page = int(self.values[0])
-        entries = self.super_parent.switch_page(0)
-        page = await self.super_parent.format_page(entries)
-        await interaction.message.edit(**self.super_parent.resolve_msg_kwargs(page))
-
-
-class DocPaginator(BasePaginator[DocItemT]):
-    """A View that represents a documentation page for a specific object."""
-
-    async def format_page(self, entries: list[DocItem]) -> discord.Embed:
-        """Format the page for the given item."""
-        item = entries[0]
-
-        if item.embed is not None:
-            return item.embed
-
-        cog: Documentation | None = self.extras.get('cog', None)
-        if cog is None:
-            raise ValueError('The cog was not passed to the paginator.')
-
-        embed = await cog.create_symbol_embed(item)
-        item.embed = embed
-
-        try:
-            # update the embed in the doc_symbols cache
-            # we set the embed permanently, so we don't have to re-create it next time
-            origin = cog.doc_symbols[item.package][item.symbol_id]
-        except KeyError:
-            pass
-        else:
-            origin.embed = embed
-            cog.doc_symbols[item.package][item.symbol_id] = origin
-
-        return embed
-
-    @classmethod
-    async def start(
-            cls,
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[DocItemT],
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 450,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: Any
-    ) -> BasePaginator[DocItemT]:
-        """Starts documentation paginator with optional selection menu"""
-        self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
-        self.ctx = context
-        self.extras.update(kwargs)
-
-        page = await self.format_page(self.pages[0])
-        object_kwargs = self.resolve_msg_kwargs(page)
-
-        # Dont need no pagination buttons
-        self.clear_items()
-
-        if len(self.entries) > 1:
-            self.add_item(DocSelect(self))
-
-        self.msg = await cls._send(context, ephemeral, **object_kwargs)
-        return self
 
 
 class Documentation(Cog):
@@ -214,7 +129,7 @@ class Documentation(Cog):
         self.grouped_aliases: dict[str, list[str]] = {}
         self.base_urls: dict[str, Any] = {}
         self.doc_symbols: dict[str, dict[str, DocItem]] = {}
-        self.item_fetcher = _batch_parser.BatchParser(bot)
+        self.item_fetcher = engine.BatchParser(bot)
 
         self.inventory_scheduler: Scheduler = Scheduler('Documentation')
         self.symbol_get_event: SharedEvent = SharedEvent()
@@ -330,8 +245,8 @@ class Documentation(Cog):
             The URL of the package's inventory.
         """
         try:
-            package = await _inventory_parser.fetch_inventory(self.bot.session, inventory_url)
-        except _inventory_parser.InvalidHeaderError as e:
+            package = await client.fetch_inventory(self.bot.session, inventory_url)
+        except client.InvalidHeaderError as e:
             log.warning('Invalid inventory header at %s. Reason: %s', inventory_url, e)
             return
 
@@ -702,3 +617,7 @@ class Documentation(Cog):
             f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url})'
             for doc_item in matches)
         await ctx.send(embed=embed, reference=ctx.replied_reference)
+
+
+async def setup(bot: Bot) -> None:
+    await bot.add_cog(Documentation(bot))
