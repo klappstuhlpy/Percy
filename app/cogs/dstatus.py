@@ -214,9 +214,7 @@ class DiscordStatus(Cog):
             The open incident item.
         """
 
-        query = "SELECT * FROM discord_incidents;"
-        async with self.bot.db.acquire() as conn, conn.transaction():
-            records = await conn.fetch(query)
+        records = await self.bot.db.incidents.get_all_subscribers()
 
         if not records:
             return None
@@ -271,19 +269,17 @@ class DiscordStatus(Cog):
         """
 
         if saved.id is None or not saved.id:
-            query = "UPDATE discord_incidents SET id = $1 WHERE guild_id = $2 RETURNING *;"
             saved = IncidentItem(
-                bot=self.bot, record=await self.bot.db.fetchrow(query, incident.id, saved.guild_id))
+                bot=self.bot, record=await self.bot.db.incidents.set_incident_id(incident.id, saved.guild_id))
 
         if incident.id == saved.id:
             if incident.status == saved.status:
                 return
 
-            query = "UPDATE discord_incidents SET status = $3 WHERE id = $1 AND guild_id = $2;"
-            await self.bot.db.execute(query, saved.id, saved.guild_id, incident.status)
+            await self.bot.db.incidents.set_status(saved.id, saved.guild_id, incident.status)
         else:
-            query = "UPDATE discord_incidents SET id = $1, status = $3 WHERE id = $2 AND guild_id = $4;"
-            await self.bot.db.execute(query, incident.id, saved.id, incident.status, saved.guild_id)
+            await self.bot.db.incidents.replace_incident(
+                incident.id, saved.id, incident.status, saved.guild_id)
 
         channel = saved.get_channel()
         message = await saved.get_message()
@@ -293,8 +289,7 @@ class DiscordStatus(Cog):
                     message = await channel.send(embed=incident.build_embed())
 
             if message:
-                query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
-                await self.bot.db.execute(query, message.id, saved.id, saved.guild_id)
+                await self.bot.db.incidents.set_message_id(message.id, saved.id, saved.guild_id)
         else:
             await message.edit(embed=incident.build_embed())
 
@@ -317,9 +312,7 @@ class DiscordStatus(Cog):
             Whether the guild is subscribed or not.
         """
 
-        query = "SELECT * FROM discord_incidents WHERE guild_id = $1;"
-        async with self.bot.db.acquire() as conn, conn.transaction():
-            record = await conn.fetchrow(query, guild_id)
+        record = await self.bot.db.incidents.get_subscriber(guild_id)
 
         if not record:
             return None
@@ -365,17 +358,14 @@ class DiscordStatus(Cog):
             return
         latest = incidents[0]
 
-        check = await self.bot.db.execute("SELECT * FROM discord_incidents WHERE id = $1 AND guild_id = $2;",
-                                          latest.id, ctx.guild.id)
-
-        if check.endswith('0'):
-            query = "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;"
-            values = (latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)
+        if not await self.bot.db.incidents.incident_exists(latest.id, ctx.guild.id):
+            record = await self.bot.db.incidents.create_incident(
+                latest.id, latest.status, subscriber.guild_id, subscriber.channel_id)
         else:
-            query = "UPDATE discord_incidents SET status = $2 WHERE id = $1 AND guild_id = $3 RETURNING *;"
-            values = (latest.id, latest.status, subscriber.guild_id)
+            record = await self.bot.db.incidents.update_incident_status(
+                latest.id, latest.status, subscriber.guild_id)
 
-        incident = IncidentItem(bot=self.bot, record=await self.bot.db.fetchrow(query, *values))
+        incident = IncidentItem(bot=self.bot, record=record)
 
         if incident.id == latest.id and incident.status == latest.status:
             await ctx.send_error('This incident is already released.')
@@ -386,8 +376,7 @@ class DiscordStatus(Cog):
             message = await incident_channel.send(embed=latest.build_embed())
 
             if message:
-                query = "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;"
-                await self.bot.db.execute(query, message.id, incident.id, ctx.guild.id)
+                await self.bot.db.incidents.set_message_id(message.id, incident.id, ctx.guild.id)
 
         self.get_subscribers.invalidate()
         self.get_subscriber.invalidate(ctx.guild.id)
@@ -402,20 +391,18 @@ class DiscordStatus(Cog):
     async def dstatus_subscribe(self, ctx: Context, channel: discord.TextChannel) -> None:
         """Subscribes to Discord Status updates."""
         assert ctx.guild is not None
-        query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2) RETURNING *;"
         async with ctx.db.acquire() as connection:
             tr = connection.transaction()
             await tr.start()
 
             try:
-                await connection.execute(query, ctx.guild.id, channel.id)
+                await ctx.db.incidents.create_subscription(ctx.guild.id, channel.id, connection=connection)  # type: ignore[arg-type]
             except Exception as e:
                 # Rollback the transaction if anything goes wrong
                 await tr.rollback()
                 match e:
                     case asyncpg.UniqueViolationError():
-                        query = "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;"
-                        await ctx.db.execute(query, ctx.guild.id, channel.id)
+                        await ctx.db.incidents.update_channel(ctx.guild.id, channel.id)
 
                         await ctx.send_success(f'Successfully updated the channel to [{channel.mention}].')
                     case _:
@@ -438,8 +425,7 @@ class DiscordStatus(Cog):
     async def dstatus_unsubscribe(self, ctx: Context) -> None:
         """Unsubscribes from Discord Status updates."""
         assert ctx.guild is not None
-        query = "DELETE FROM discord_incidents WHERE guild_id = $1;"
-        await ctx.db.execute(query, ctx.guild.id)
+        await ctx.db.incidents.unsubscribe(ctx.guild.id)
 
         self.get_subscribers.invalidate()
         self.get_subscriber.invalidate(ctx.guild.id)
