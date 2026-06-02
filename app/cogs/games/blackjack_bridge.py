@@ -30,7 +30,7 @@ __all__ = (
 
 
 class Blackjack:
-    """Bridges a :class:`~app.games.engine.blackjack.BlackjackGame` engine to Discord."""
+    """Bridges a :class:`~app.cogs.games.engine.blackjack.BlackjackGame` engine to Discord."""
 
     def __init__(self, ctx: Context, bet: int, decks: int = 1) -> None:
         self.ctx: Context = ctx

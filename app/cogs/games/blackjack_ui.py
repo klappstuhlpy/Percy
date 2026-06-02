@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from app.cogs.games.engine.blackjack import WinningType
 from app.core import Context, View
-from app.games.engine.blackjack import WinningType
 from app.utils import fnumb, helpers
 from config import Emojis
 

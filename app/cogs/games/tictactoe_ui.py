@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import discord
 from discord import PartialEmoji
 
+from app.cogs.games.engine.tictactoe import Board, BoardKind
 from app.core import View
-from app.games.engine.tictactoe import Board, BoardKind
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
 

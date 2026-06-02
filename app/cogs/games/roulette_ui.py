@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from app.cogs.games.engine import roulette as engine
+from app.cogs.games.engine.roulette import Payout
 from app.core.views import View
-from app.games.engine import roulette as engine
-from app.games.engine.roulette import Payout
 from app.utils import NotCaseSensitiveEnum, fnumb, helpers, pluralize
 from config import Emojis
 
@@ -109,7 +109,7 @@ class Bet:
 
 class Table:
     """Discord-facing roulette table: owns the message, view and placed bets, delegating
-    the wheel rules to :mod:`app.games.engine.roulette`."""
+    the wheel rules to :mod:`app.cogs.games.engine.roulette`."""
 
     def __init__(self, ctx: Context) -> None:
         self.ctx: Context = ctx

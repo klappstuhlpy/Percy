@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from app.cogs.games.engine.minesweeper import Board, MSField
 from app.core.views import View
-from app.games.engine.minesweeper import Board, MSField
 from app.utils import fnumb, helpers, humanize_duration
 from config import Emojis
 

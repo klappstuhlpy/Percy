@@ -36,7 +36,7 @@ __all__ = (
 
 
 class PokerSession:
-    """Bridges a :class:`~app.games.engine.poker.TexasHoldem` engine to Discord.
+    """Bridges a :class:`~app.cogs.games.engine.poker.TexasHoldem` engine to Discord.
 
     Parameters
     ----------

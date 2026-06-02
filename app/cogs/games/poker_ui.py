@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
+from app.cogs.games.engine.poker import TableState
 from app.core.views import View
-from app.games.engine.poker import TableState
 from app.rendering import BarChart
 from app.utils import fnumb, helpers
 from config import Emojis
@@ -15,10 +15,10 @@ from config import Emojis
 if TYPE_CHECKING:
     import PIL.Image
 
+    from app.cogs.games.engine.poker import Player, TexasHoldem
     from app.cogs.games.poker_bridge import PokerSession
     from app.core import Bot
     from app.database.base import Balance
-    from app.games.engine.poker import Player, TexasHoldem
 
 __all__ = (
     'BuyInModal',
