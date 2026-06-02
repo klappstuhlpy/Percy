@@ -15,6 +15,8 @@ from app.database.base import Gatekeeper, GuildConfig
 from app.utils import checks, helpers, merge_perms, pluralize
 from config import Emojis
 
+from .infractions import update_role_permissions
+
 if TYPE_CHECKING:
     from .cog import Moderation
 
@@ -112,7 +114,7 @@ class GatekeeperSetupRoleView(View):
             else:
                 assert isinstance(interaction.channel, discord.abc.Messageable)
                 async with interaction.channel.typing():  # type: ignore[union-attr]
-                    success, failure, skipped = await self.parent.cog.update_role_permissions(
+                    success, failure, skipped = await update_role_permissions(
                         role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels  # type: ignore[arg-type]
                     )
                     total = success + failure + skipped
@@ -170,7 +172,7 @@ class GatekeeperSetupRoleView(View):
             )
         else:
             async with interaction.channel.typing():  # type: ignore[union-attr]
-                success, failure, skipped = await self.parent.cog.update_role_permissions(
+                success, failure, skipped = await update_role_permissions(
                     role, self.parent.guild, interaction.user, update_read_permissions=True, channels=channels
                 )
                 total = success + failure + skipped

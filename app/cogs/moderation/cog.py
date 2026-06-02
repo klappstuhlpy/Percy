@@ -25,7 +25,6 @@ from app.utils import (
     get_asset_url,
     helpers,
     human_join,
-    merge_perms,
     pluralize,
     resolve_entity_id,
     timetools,
@@ -40,11 +39,12 @@ from .gatekeeper import (
     GatekeeperSetUpView,
     GatekeeperVerifyButton,
 )
+from .infractions import default_reason, safe_reason_append, update_role_permissions
 from .models import SpammerSequence
 from .ui import PreExistingMuteRoleView
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Sequence
+    from collections.abc import AsyncIterator, Callable
 
     from app.core.timer import Timer
 
@@ -55,13 +55,6 @@ if TYPE_CHECKING:
 MaybeMember = discord.Member | discord.abc.Snowflake
 
 log = logging.getLogger(__name__)
-
-
-def safe_reason_append(base: str, to_append: str) -> str:
-    appended = f'{base} ({to_append})'
-    if len(appended) > 512:
-        return base
-    return appended
 
 
 AutoModFlags = GuildConfig.AutoModFlags
@@ -488,7 +481,7 @@ class Moderation(Cog):
         me = channel.guild.me
 
         if config.mute_role is not None:
-            _, failed, _ = await self.update_role_permissions(
+            _, failed, _ = await update_role_permissions(
                 config.mute_role, channel.guild, me, channels=[channel])
             if failed:
                 await config.send_alert(
@@ -500,7 +493,7 @@ class Moderation(Cog):
             if gatekeeper is not None and gatekeeper.role_id:
                 role = channel.guild.get_role(gatekeeper.role_id)
                 if role is not None:
-                    _, failed, _ = await self.update_role_permissions(
+                    _, failed, _ = await update_role_permissions(
                         role, channel.guild, me, update_read_permissions=True, channels=[channel])
                     if failed:
                         await config.send_alert(
@@ -1653,7 +1646,7 @@ class Moderation(Cog):
         """Kicks a member from the server."""
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot kick yourself.')
@@ -1695,7 +1688,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot ban yourself.')
@@ -1736,7 +1729,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         total_members = len(members)
         if total_members == 0:
@@ -1782,7 +1775,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot soft-ban yourself.')
@@ -1825,7 +1818,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         await ctx.guild.unban(member.user, reason=reason)
         if member.reason:
@@ -1870,7 +1863,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot ban yourself.')
@@ -1960,7 +1953,7 @@ class Moderation(Cog):
             raise BadArgument('Missing members to mute.', 'members')
 
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         assert ctx.guild_config.mute_role_id is not None
         role = discord.Object(id=ctx.guild_config.mute_role_id)
@@ -2004,7 +1997,7 @@ class Moderation(Cog):
             raise BadArgument('Missing members to unmute.', 'members')
 
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         assert ctx.guild_config.mute_role_id is not None
         role = discord.Object(id=ctx.guild_config.mute_role_id)
@@ -2058,7 +2051,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         if reason is None:
-            reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
+            reason = default_reason(ctx.author)
 
         if ctx.author.id == member.id:
             return await ctx.send_error('You cannot mute yourself.')
@@ -2223,7 +2216,7 @@ class Moderation(Cog):
         assert ctx.guild_config is not None
         assert ctx.guild_config.mute_role is not None
         async with ctx.typing():
-            success, failure, skipped = await self.update_role_permissions(
+            success, failure, skipped = await update_role_permissions(
                 ctx.guild_config.mute_role, ctx.guild, ctx.author
             )
             total = success + failure + skipped
@@ -2260,7 +2253,7 @@ class Moderation(Cog):
             return await ctx.send_success('Mute role successfully created.')
 
         async with ctx.typing():
-            success, failure, skipped = await self.update_role_permissions(
+            success, failure, skipped = await update_role_permissions(
                 role, ctx.guild, ctx.author)
             await ctx.send_success(f'Mute role successfully created. Overwrites: '
                                    f'[Updated: {success}, Failed: {failure}, Skipped: {skipped}]')
@@ -2345,84 +2338,6 @@ class Moderation(Cog):
 
         fmt_time = discord.utils.format_dt(duration.dt, 'f')
         await ctx.send_success(f'Selfmute ends **{fmt_time}**.\nBe sure not to bother anyone about it.')
-
-    @staticmethod
-    async def update_role_permissions(
-            role: discord.Role,
-            guild: discord.Guild,
-            invoker: discord.abc.User,
-            update_read_permissions: bool = False,
-            channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None = None,
-            **permissions: bool | None
-    ) -> tuple[int, int, int]:
-        r"""|coro|
-
-        Updates the permission overwrites of a specified role on the server.
-
-        Notes
-        -----
-        This method should only be used to restrict permissions for the role in the channels.
-
-        Parameters
-        ----------
-        role: discord.Role
-            The role to update the permission overwrites for.
-        guild: discord.Guild
-            The guild to update the permission overwrites in.
-        invoker: discord.abc.User
-            The user who invoked the action.
-        update_read_permissions: bool
-            Whether to update the read permissions as well.
-        channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None
-            The channels to update the permission overwrites in.
-        \*\*permissions: bool | None
-            The permissions to update the permission overwrites with.
-            Those are extras.
-
-        Returns
-        -------
-        tuple[int, int, int]
-            A tuple containing the number of successful, failed, and skipped updates.
-        """
-        success, failure, skipped = 0, 0, 0
-        reason = f'Action done by {invoker} (ID: {invoker.id})'
-        effective_channels: list[discord.abc.GuildChannel | discord.abc.Messageable]
-        if channels is None:
-            effective_channels = [ch for ch in guild.channels if isinstance(ch, discord.abc.Messageable)]
-        else:
-            effective_channels = list(channels)
-
-        guild_perms = guild.me.guild_permissions
-        for channel in effective_channels:
-            perms = channel.permissions_for(guild.me)  # type: ignore[union-attr]
-            if perms.manage_roles:
-                overwrite = channel.overwrites_for(role)  # type: ignore[union-attr]
-                channel_perms = {
-                    'send_messages': False,
-                    'add_reactions': False,
-                    'use_application_commands': False,
-                    'create_private_threads': False,
-                    'create_public_threads': False,
-                    'send_messages_in_threads': False,
-                    'connect': False,
-                    'speak': False,
-                }
-                if update_read_permissions:
-                    channel_perms['read_messages'] = False
-
-                if permissions:
-                    merge_perms(overwrite, guild_perms, **permissions)  # type: ignore[arg-type]
-
-                merge_perms(overwrite, guild_perms, **channel_perms)
-                try:
-                    await channel.set_permissions(role, overwrite=overwrite, reason=reason)  # type: ignore[union-attr]
-                except discord.HTTPException:
-                    failure += 1
-                else:
-                    success += 1
-            else:
-                skipped += 1
-        return success, failure, skipped
 
 
 async def setup(bot: Bot) -> None:
