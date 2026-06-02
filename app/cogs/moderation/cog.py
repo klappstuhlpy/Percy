@@ -40,6 +40,7 @@ from app.utils.lock import lock
 from config import Emojis
 
 from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSequence
+from .ui import PreExistingMuteRoleView
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, MutableMapping, Sequence
@@ -982,33 +983,6 @@ class PurgeFlags(Flags):
     require: Literal['any', 'all'] = flag(
         description='Whether any or all of the flags should be met before deleting messages. Defaults to "all"',
         default='all')
-
-
-# VIEWS
-
-
-class PreExistingMuteRoleView(View):
-    def __init__(self, member: discord.Member) -> None:
-        super().__init__(timeout=120.0, members=member)
-        self.merge: bool | None = None
-
-    @discord.ui.button(label='Merge', style=discord.ButtonStyle.blurple)
-    async def merge_button(self, interaction: discord.Interaction, _) -> None:
-        await interaction.response.defer()
-        await interaction.delete_original_response()
-        self.merge = True
-
-    @discord.ui.button(label='Replace', style=discord.ButtonStyle.grey)
-    async def replace_button(self, interaction: discord.Interaction, _) -> None:
-        await interaction.response.defer()
-        await interaction.delete_original_response()
-        self.merge = False
-
-    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red)
-    async def abort_button(self, _, __) -> None:
-        self.merge = None
-        if self.message is not None:
-            await self.message.delete()
 
 
 class SpamChecker:
