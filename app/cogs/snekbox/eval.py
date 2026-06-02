@@ -4,17 +4,15 @@ import contextlib
 import logging
 from dataclasses import dataclass, field
 from signal import Signals
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from discord.utils import escape_markdown, escape_mentions
 
-from app.cogs.snekbox._formatter import FILE_COUNT_LIMIT, FILE_SIZE_LIMIT, FileAttachment, sizeof_fmt
 from config import Emojis
 
-if TYPE_CHECKING:
-    from ._cog import SupportedPythonVersions
-else:
-    SupportedPythonVersions = Literal['3.11', '3.10']
+from .formatter import FILE_COUNT_LIMIT, FILE_SIZE_LIMIT, FileAttachment, sizeof_fmt
+
+SupportedPythonVersions = Literal['3.11', '3.10']
 
 log = logging.getLogger(__name__)
 

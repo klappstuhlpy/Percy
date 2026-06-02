@@ -5,24 +5,24 @@ import logging
 import re
 from functools import partial
 from operator import attrgetter
-from typing import TYPE_CHECKING, Annotated, Literal, NamedTuple
+from typing import TYPE_CHECKING, Annotated, NamedTuple
 
 import discord
+from aiohttp import ClientConnectorError
 from discord import AllowedMentions, HTTPException, Interaction, Message, NotFound, Reaction, User, app_commands, enums
 
-from app.cogs.snekbox._eval import EvalJob, EvalResult
-from app.cogs.snekbox._service import PasteTooLongError, PasteUploadError, send_to_paste_service
-from app.core import Bot, Cog, Context, Flags, flag
+from app.core import Bot, Cog, Context, Flags, command, flag
 from app.core.converter import CodeblockConverter
-from app.core.models import command
 from app.core.views import TrashView
 from app.utils.lock import lock_arg
 from config import Emojis
 
+from .eval import EvalJob, EvalResult, SupportedPythonVersions
+
 if TYPE_CHECKING:
     from discord.ext import commands
 
-    from app.cogs.snekbox._formatter import FileAttachment
+    from .formatter import FileAttachment
 
     class EvalContext(Context):
         job_message: Message
@@ -75,15 +75,13 @@ if not hasattr(sys, '_setup_finished'):
 {setup}
 """
 
-MAX_PASTE_LENGTH = 10_000
+MAX_OUTPUT_PASTE_LENGTH = 10_000
 MAX_OUTPUT_BLOCK_LINES = 10
 MAX_OUTPUT_BLOCK_CHARS = 1000
 
 
 REDO_EMOJI = '\U0001f501'  # :repeat:
 REDO_TIMEOUT = 30
-
-SupportedPythonVersions = Literal['3.11', '3.10']
 
 
 class EvalFlags(Flags):
@@ -169,7 +167,7 @@ class Snekbox(Cog):
         log.debug('Uploading full output to paste service...')
 
         try:
-            return await send_to_paste_service(self.bot, output, extension='txt', max_length=MAX_PASTE_LENGTH)
+            return await send_to_paste_service(self.bot, output, extension='txt', max_length=MAX_OUTPUT_PASTE_LENGTH)
         except PasteTooLongError:
             return 'too long to upload'
         except PasteUploadError:
@@ -554,3 +552,93 @@ def predicate_message_edit(ctx: EvalContext, old_msg: Message, new_msg: Message)
 def predicate_emoji_reaction(ctx: EvalContext, reaction: Reaction, user: User) -> bool:
     """Return True if the reaction REDO_EMOJI was added by the context message author on this message."""
     return reaction.message.id == ctx.message.id and user.id == ctx.author.id and str(reaction) == REDO_EMOJI
+
+
+FAILED_REQUEST_ATTEMPTS = 3
+MAX_PASTE_LENGTH = 100_000
+PASTE_URL = 'https://paste.pythondiscord.com/{key}'
+
+
+class PasteUploadError(Exception):
+    """Raised when an error is encountered uploading to the paste service."""
+
+
+class PasteTooLongError(Exception):
+    """Raised when content is too large to upload to the paste service."""
+
+
+async def send_to_paste_service(bot: Bot, contents: str, *, extension: str = "", max_length: int = MAX_PASTE_LENGTH) -> str:
+    """
+    Upload `contents` to the paste service.
+
+    Add `extension` to the output URL. Use `max_length` to limit the allowed contents length
+    to lower than the maximum allowed by the paste service.
+
+    Raise `ValueError` if `max_length` is greater than the maximum allowed by the paste service.
+    Raise `PasteTooLongError` if `contents` is too long to upload, and `PasteUploadError` if uploading fails.
+
+    Return the generated URL with the extension.
+    """
+    if max_length > MAX_PASTE_LENGTH:
+        raise ValueError(f'`max_length` must not be greater than {MAX_PASTE_LENGTH}')
+
+    extension = extension and f'.{extension}'
+
+    contents_size = len(contents.encode())
+    if contents_size > max_length:
+        log.info('Contents too large to send to paste service.')
+        raise PasteTooLongError(f'Contents of size {contents_size} greater than maximum size {max_length}')
+
+    log.debug('Sending contents of size %r bytes to paste service.', contents_size)
+    paste_url = PASTE_URL.format(key='documents')
+    for attempt in range(1, FAILED_REQUEST_ATTEMPTS + 1):
+        try:
+            async with bot.session.post(paste_url, data=contents) as response:
+                response_json = await response.json()
+        except ClientConnectorError:
+            log.warning(
+                'Failed to connect to paste service at url %s, '
+                'trying again (%r/%r).', paste_url, attempt, FAILED_REQUEST_ATTEMPTS
+            )
+            continue
+        except Exception:
+            log.exception(
+                'An unexpected error has occurred during handling of the request, '
+                'trying again (%r/%r).', attempt, FAILED_REQUEST_ATTEMPTS
+            )
+            continue
+
+        if 'message' in response_json:
+            log.warning(
+                'Paste service returned error %s with status code %r, '
+                'trying again (%r/%r).', response_json['message'], response.status, attempt, FAILED_REQUEST_ATTEMPTS
+            )
+            continue
+        if 'key' in response_json:
+            log.info('Successfully uploaded contents to paste service behind key %s.', response_json['key'])
+
+            paste_link = PASTE_URL.format(key=response_json['key']) + extension
+
+            if extension == '.py':
+                return paste_link
+
+            return paste_link + '?noredirect'
+
+        log.warning(
+            'Got unexpected JSON response from paste service: %s\n'
+            'trying again (%r/%r).', response_json, attempt, FAILED_REQUEST_ATTEMPTS
+        )
+
+    raise PasteUploadError('Failed to upload contents to paste service')
+
+
+async def setup(bot: Bot) -> None:
+    try:
+        async with bot.session.get('https://snekbox.klappstuhl.me/') as resp:
+            if resp.status == 502:
+                log.warning('Cannot connect to Snekbox API. Failed to load Snekbox cog...')
+            else:
+                log.info('Successfully connected to Snekbox API.')
+                await bot.add_cog(Snekbox(bot))
+    except ClientConnectorError:
+        log.warning('Cannot connect to Snekbox API. Failed to load Snekbox cog...')
