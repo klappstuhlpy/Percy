@@ -1,5 +1,6 @@
-from app.cogs.anilist._cog import AniList
+from app.cogs.anilist.cog import AniList, setup
 
-
-async def setup(bot) -> None:
-    await bot.add_cog(AniList(bot))
+__all__ = (
+    'AniList',
+    'setup',
+)

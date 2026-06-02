@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import inspect
 import logging
-from contextlib import suppress
 from typing import Any
 from urllib.parse import urljoin
 
@@ -13,15 +12,14 @@ from discord import DiscordException, app_commands
 from discord.ext import commands
 from discord.ext.commands import Range
 
-from app.core import Bot, Cog, Context, Flags, View, flag
-from app.core.models import describe, group
+from app.core import Bot, Cog, Context, Flags, describe, flag, group
 from app.core.pagination import EmbedPaginator
 from app.utils import fuzzy, helpers
-from config import Emojis, anilist
+from config import anilist
 
-from ._cache import AniListExpiringCache
-from ._client import AniListClient
-from ._formatter import ANILIST_ICON, ANILIST_LOGO, AniListEmbedBuilder, month_to_season
+from .client import AniListClient
+from .models import AniListExpiringCache
+from .ui import ANILIST_ICON, ANILIST_LOGO, AniListEmbedBuilder, AniListLinkView, month_to_season
 
 log = logging.getLogger(__name__)
 
@@ -47,48 +45,6 @@ class AniListRequestError(DiscordException):
         if reason:
             fmt += ': {2}'
         super().__init__(fmt.format(self.response, error, reason))
-
-
-class EnterCodeModal(discord.ui.Modal, title='Enter AniList Code'):
-    code = discord.ui.TextInput(
-        label='Code', placeholder='e.g. def50202deda18...',
-        max_length=4000, min_length=1, style=discord.TextStyle.long)
-
-    def __init__(self, bot: Bot) -> None:
-        self.bot: Bot = bot
-        super().__init__(timeout=90.0)
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        cog: AniList | None = self.bot.get_cog('AniList')
-        if not anilist:
-            return
-
-        access = await cog.get_access_token(self.code.value)
-        if access is None:
-            return await interaction.response.send_message(
-                f'{Emojis.error} Invalid code provided.', ephemeral=True
-            )
-
-        await cog.access_tokens.set(interaction.user.id, access[0], access[1])
-
-        await interaction.response.send_message(
-            f'{Emojis.success} Successfully linked profile.', ephemeral=True)
-
-        self.stop()
-        with suppress(discord.HTTPException):
-            await interaction.message.delete()
-
-
-class AniListLinkView(View):
-    def __init__(self, ctx: Context | discord.Interaction, url: str) -> None:
-        super().__init__(timeout=100.0)
-        self.ctx: Context | discord.Interaction = ctx
-
-        self.add_item(discord.ui.Button(label="Link AniList", style=discord.ButtonStyle.link, url=url))
-
-    @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.green)
-    async def enter_code(self, interaction: discord.Interaction, _) -> None:
-        await interaction.response.send_modal(EnterCodeModal(self.ctx.bot))
 
 
 def is_bearer_valid(reverse: bool = False) -> commands.core.Check:
@@ -352,3 +308,7 @@ class AniList(Cog):
             embeds.append(embed)
 
         await EmbedPaginator.start(ctx, entries=embeds[:3], per_page=1)
+
+
+async def setup(bot: Bot) -> None:
+    await bot.add_cog(AniList(bot))

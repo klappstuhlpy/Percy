@@ -3,15 +3,20 @@ from __future__ import annotations
 import calendar
 import datetime
 import re
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 import discord
 from bs4 import BeautifulSoup
 
+from app.core import Bot, Context, View
 from app.utils import helpers, pluralize
+from config import Emojis, anilist
 
 if TYPE_CHECKING:
     import aiohttp
+
+    from .cog import AniList
 
 ANILIST_LOGO = 'https://klappstuhl.me/gallery/ufXiq.png'
 ANILIST_ICON = 'https://klappstuhl.me/gallery/sngjJ.png'
@@ -363,3 +368,45 @@ def month_to_season(month: int) -> str:
         12: 'FALL',
     }
     return seasons.get(month, 'N/A')
+
+
+class EnterCodeModal(discord.ui.Modal, title='Enter AniList Code'):
+    code = discord.ui.TextInput(
+        label='Code', placeholder='e.g. def50202deda18...',
+        max_length=4000, min_length=1, style=discord.TextStyle.long)
+
+    def __init__(self, bot: Bot) -> None:
+        self.bot: Bot = bot
+        super().__init__(timeout=90.0)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        cog: AniList | None = self.bot.get_cog('AniList')
+        if not anilist:
+            return
+
+        access = await cog.get_access_token(self.code.value)
+        if access is None:
+            return await interaction.response.send_message(
+                f'{Emojis.error} Invalid code provided.', ephemeral=True
+            )
+
+        await cog.access_tokens.set(interaction.user.id, access[0], access[1])
+
+        await interaction.response.send_message(
+            f'{Emojis.success} Successfully linked profile.', ephemeral=True)
+
+        self.stop()
+        with suppress(discord.HTTPException):
+            await interaction.message.delete()
+
+
+class AniListLinkView(View):
+    def __init__(self, ctx: Context | discord.Interaction, url: str) -> None:
+        super().__init__(timeout=100.0)
+        self.ctx: Context | discord.Interaction = ctx
+
+        self.add_item(discord.ui.Button(label="Link AniList", style=discord.ButtonStyle.link, url=url))
+
+    @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.green)
+    async def enter_code(self, interaction: discord.Interaction, _) -> None:
+        await interaction.response.send_modal(EnterCodeModal(self.ctx.bot))

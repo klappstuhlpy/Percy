@@ -12,16 +12,15 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
-from app.cogs.comic._cache import ComicCache
-from app.cogs.comic._client import Marvel
-from app.cogs.comic._data import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
-from app.cogs.comic._parser import Parser
-from app.core import Bot, Cog, Flags, View, flag, store_true
-from app.core.models import Context, cooldown, describe, group
+from app.core import Bot, Cog, Context, Flags, View, cooldown, describe, flag, group, store_true
 from app.utils import cache
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
 from config import Emojis, default_prefix
+
+from .client import ComicCache, Marvel, Parser
+from .models import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
+from .ui import JumpToTopButton
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -41,16 +40,6 @@ class ComicsEditFlags(Flags):
     format: Format = flag(description='Feed format. Use /formats to view options.')
     pin: bool = store_true(description='Whether to pin the feed message.')
     reset: bool = store_true(description='Reset the configuration.', short='r')
-
-
-class JumpToTopButton(discord.ui.Button):
-    def __init__(self, message: discord.Message) -> None:
-        assert message.guild is not None
-        super().__init__(
-            label='Jump to the Top',
-            style=discord.ButtonStyle.link,
-            url=f'https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}',
-        )
 
 
 class Comics(Cog):
@@ -571,3 +560,7 @@ class Comics(Cog):
     async def on_comic_schedule(self, feed: ComicFeed) -> None:
         if feed:
             await self.publish_to_feed(feed)
+
+
+async def setup(bot: Bot) -> None:
+    await bot.add_cog(Comics(bot))

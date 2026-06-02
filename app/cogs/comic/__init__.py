@@ -1,5 +1,11 @@
-from app.cogs.comic._cog import Comics
+from app.cogs.comic.cog import Comics, setup
+from app.cogs.comic.models import Brand, ComicFeed, Format, GenericComic
 
-
-async def setup(bot) -> None:
-    await bot.add_cog(Comics(bot))
+__all__ = (
+    'Brand',
+    'ComicFeed',
+    'Comics',
+    'Format',
+    'GenericComic',
+    'setup',
+)
