@@ -13,16 +13,16 @@ from bs4.element import NavigableString, Tag
 
 from app.utils import executor, find_nth_occurrence, pagify
 
-from . import MAX_SIGNATURE_AMOUNT
 from ._html import FilterAttributes, get_dd_description, get_general_description, get_signatures
 from ._markdown import DocMarkdownConverter
+from .models import MAX_SIGNATURE_AMOUNT
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Iterator
 
     from bs4 import BeautifulSoup
 
-    from ._cog import DocItem
+    from .models import DocItem
 
 log = logging.getLogger(__name__)
 

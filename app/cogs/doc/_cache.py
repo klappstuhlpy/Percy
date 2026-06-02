@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from app.utils.lock import lock
 
 if TYPE_CHECKING:
-    from ._cog import DocItem
+    from .models import DocItem
 
 WEEK_SECONDS = int(datetime.timedelta(weeks=1).total_seconds())
 

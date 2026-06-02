@@ -13,11 +13,6 @@ furnished to do so, subject to the following conditions:
 
 from app.cogs.doc._cache import DocCache
 
-MAX_SIGNATURE_AMOUNT = 3
-PRIORITY_PACKAGES = (
-    'python',
-)
-
 doc_cache = DocCache()
 
 

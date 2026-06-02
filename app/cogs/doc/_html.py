@@ -6,7 +6,7 @@ from typing import Any, Literal
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PageElement, SoupStrainer, Tag
 
-from app.cogs.doc import MAX_SIGNATURE_AMOUNT
+from app.cogs.doc.models import MAX_SIGNATURE_AMOUNT
 
 log = logging.getLogger(__name__)
 

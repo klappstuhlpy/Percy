@@ -12,8 +12,9 @@ from bs4 import BeautifulSoup
 
 from app.utils import executor
 
-from . import _cog, doc_cache
+from . import doc_cache
 from ._parsing import get_field_markdown, get_symbol_markdown
+from .models import DocItem
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -22,13 +23,13 @@ log = logging.getLogger(__name__)
 
 
 class QueueItem(NamedTuple):
-    """Contains a `_cog.DocItem` and the `BeautifulSoup` object needed to parse it."""
+    """Contains a `DocItem` and the `BeautifulSoup` object needed to parse it."""
 
-    doc_item: _cog.DocItem
+    doc_item: DocItem
     soup: BeautifulSoup
 
-    def __eq__(self, other: QueueItem | _cog.DocItem) -> bool:
-        if isinstance(other, _cog.DocItem):
+    def __eq__(self, other: QueueItem | DocItem) -> bool:
+        if isinstance(other, DocItem):
             return self.doc_item == other
         return NamedTuple.__eq__(self, other)
 
@@ -56,19 +57,19 @@ class BatchParser:
     if TYPE_CHECKING:
         bot: Bot
         queue: deque[QueueItem]
-        _page_doc_items: dict[str, list[_cog.DocItem]]
-        _item_futures: dict[_cog.DocItem, ParseResultFuture]
+        _page_doc_items: dict[str, list[DocItem]]
+        _item_futures: dict[DocItem, ParseResultFuture]
         __task: asyncio.Task | None
 
     def __init__(self, bot: Bot) -> None:
         self.bot: Bot = bot
 
         self.queue: deque[QueueItem] = collections.deque()
-        self._page_doc_items: dict[str, list[_cog.DocItem]] = defaultdict(list)
-        self._item_futures: dict[_cog.DocItem, ParseResultFuture] = defaultdict(ParseResultFuture)
+        self._page_doc_items: dict[str, list[DocItem]] = defaultdict(list)
+        self._item_futures: dict[DocItem, ParseResultFuture] = defaultdict(ParseResultFuture)
         self.__task: asyncio.Task | None = None
 
-    async def get_markdown(self, doc_item: _cog.DocItem) -> str | None:
+    async def get_markdown(self, doc_item: DocItem) -> str | None:
         """|coro|
 
         If no symbols were fetched from `doc_item`s page before,
@@ -78,7 +79,7 @@ class BatchParser:
 
         Parameters
         ----------
-        doc_item : _cog.DocItem
+        doc_item : DocItem
             The symbol to get the Markdown for.
 
         Returns
@@ -116,7 +117,7 @@ class BatchParser:
         log.debug('Starting queue parsing.')
         try:
             while self.queue:
-                item, soup = self.queue.pop()  # type: _cog.DocItem, BeautifulSoup
+                item, soup = self.queue.pop()  # type: DocItem, BeautifulSoup
                 markdown = None
 
                 if (future := self._item_futures[item]).done():
@@ -137,7 +138,7 @@ class BatchParser:
             self.__task = None
             log.debug('Finished parsing queue.')
 
-    def _move_to_front(self, item: QueueItem | _cog.DocItem) -> None:
+    def _move_to_front(self, item: QueueItem | DocItem) -> None:
         """Move `item` to the front of the parse queue."""
         item_index = self.queue.index(item)
         queue_item = self.queue[item_index]
@@ -146,8 +147,8 @@ class BatchParser:
         self.queue.append(queue_item)
         log.debug('Moved %s to the front of the queue.', item)
 
-    def add_item(self, doc_item: _cog.DocItem) -> None:
-        """Map a _cog.DocItem to its page so that the symbol will be parsed once the page is requested."""
+    def add_item(self, doc_item: DocItem) -> None:
+        """Map a DocItem to its page so that the symbol will be parsed once the page is requested."""
         self._page_doc_items[doc_item.url].append(doc_item)
 
     async def remove(self, doc_key: str) -> None:
