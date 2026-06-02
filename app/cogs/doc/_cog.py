@@ -13,7 +13,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from app.cogs.doc import _batch_parser, _inventory_parser, doc_cache
+from app.cogs.doc import _batch_parser, _inventory_parser
+from app.cogs.doc.cache import doc_cache
 from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem, DocItemT
 from app.core import Bot, Cog, Context
 from app.core.models import command, describe, group

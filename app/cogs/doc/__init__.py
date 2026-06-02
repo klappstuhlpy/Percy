@@ -11,11 +11,6 @@ copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 """
 
-from app.cogs.doc._cache import DocCache
-
-doc_cache = DocCache()
-
-
 async def setup(bot) -> None:
-    from ._cog import Documentation
+    from app.cogs.doc._cog import Documentation
     await bot.add_cog(Documentation(bot))

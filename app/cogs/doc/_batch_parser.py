@@ -12,8 +12,8 @@ from bs4 import BeautifulSoup
 
 from app.utils import executor
 
-from . import doc_cache
 from ._parsing import get_field_markdown, get_symbol_markdown
+from .cache import doc_cache
 from .models import DocItem
 
 if TYPE_CHECKING:
