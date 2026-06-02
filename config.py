@@ -82,12 +82,12 @@ class DatabaseConfig:
 
 # API Keys
 
-genius_key: str = env('GENIUS_TOKEN')
-github_key: str = env('GITHUB_TOKEN')
-dbots_key: str = env('DBOTS_TOKEN')
-top_gg_key: str = env('TOPGG_TOKEN')
-images_key: str = env('IMAGES_API_TOKEN')
-anilist = SimpleNamespace(client_id=int(env('ANILIST_CLIENT_ID')), client_secret=str(env('ANILIST_CLIENT_SECRET')),
+genius_key: str | None = env('GENIUS_TOKEN')
+github_key: str | None = env('GITHUB_TOKEN')
+dbots_key: str | None = env('DBOTS_TOKEN')
+top_gg_key: str | None = env('TOPGG_TOKEN')
+images_key: str | None = env('IMAGES_API_TOKEN')
+anilist = SimpleNamespace(client_id=int(env('ANILIST_CLIENT_ID') or 0), client_secret=str(env('ANILIST_CLIENT_SECRET')),
                           redirect_uri='https://anilist.co/api/v2/oauth/pin')
 marvel = SimpleNamespace(public_key=str(env('MARVEL_API_PUBLIC_KEY')), private_key=str(env('MARVEL_API_PRIVATE_KEY')))
 
