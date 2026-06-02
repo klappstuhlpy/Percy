@@ -18,6 +18,7 @@ from app.database.repositories import (
     LevelingRepository,
     ModerationRepository,
     PollsRepository,
+    StatsRepository,
     TagsRepository,
     UsersRepository,
 )
@@ -151,6 +152,7 @@ class Database(_Database):
     leveling: LevelingRepository
     moderation: ModerationRepository
     tags: TagsRepository
+    stats: StatsRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -160,6 +162,7 @@ class Database(_Database):
         self.leveling = LevelingRepository(self)
         self.moderation = ModerationRepository(self)
         self.tags = TagsRepository(self)
+        self.stats = StatsRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

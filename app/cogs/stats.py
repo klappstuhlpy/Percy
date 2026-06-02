@@ -126,13 +126,7 @@ class Stats(Cog):
 
         A task that automatically clears all presence history entries that are older than 30 days.
         """
-        async with self.bot.db.acquire() as connection:
-            await connection.execute(
-                """
-                    DELETE FROM presence_history
-                    WHERE changed_at < (CURRENT_TIMESTAMP - INTERVAL '30 days');
-                """
-            )
+        await self.bot.db.stats.delete_old_presence_history()
 
     @tasks.loop(seconds=10.0)
     async def command_insert(self) -> None:
@@ -142,33 +136,8 @@ class Stats(Cog):
 
         This task is automatically started after the cog is loaded.
         """
-        query = """
-            INSERT INTO commands (guild_id, channel_id, author_id, used, prefix, command, failed, app_command, error)
-            SELECT x.guild,
-                   x.channel,
-                   x.author,
-                   x.used,
-                   x.prefix,
-                   x.command,
-                   x.failed,
-                   x.app_command,
-                   x.error
-            FROM jsonb_to_recordset($1::jsonb)
-                AS x(
-                        guild BIGINT,
-                        channel BIGINT,
-                        author BIGINT,
-                        used TIMESTAMP,
-                        prefix TEXT,
-                        command TEXT,
-                        failed BOOLEAN,
-                        app_command BOOLEAN,
-                        error TEXT
-                );
-        """
-
         if self._command_data_batch:
-            await self.bot.db.execute(query, self._command_data_batch)
+            await self.bot.db.stats.insert_commands(self._command_data_batch)
             total = len(self._command_data_batch)
             if total > 1:
                 log.info('Registered %s commands to the database.', total)
@@ -182,9 +151,8 @@ class Stats(Cog):
 
         This task is automatically started after the cog is loaded.
         """
-        query = "SELECT insert_avatar_history_item($1, $2, $3);"
         for data in self._avatar_data_batch:
-            await self.bot.db.execute(query, data['user_id'], data['name'], data['image'])
+            await self.bot.db.stats.insert_avatar(data['user_id'], data['name'], data['image'])
         self._avatar_data_batch.clear()
 
     def cog_unload(self) -> None:
@@ -384,9 +352,7 @@ class Stats(Cog):
             )
 
         if before.nick != after.nick and after.nick is not None:
-            query = "INSERT INTO item_history (uuid, item_type, item_value) VALUES ($1, $2, $3);"
-            async with self.bot.db.acquire() as connection:
-                await connection.execute(query, after.id, 'nickname', after.nick)
+            await self.bot.db.stats.insert_item_history(after.id, 'nickname', after.nick)
 
     @Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User) -> None:
@@ -405,9 +371,7 @@ class Stats(Cog):
         - Avatar
         """
         if before.name != after.name:
-            query = "INSERT INTO item_history (uuid, item_type, item_value) VALUES ($1, $2, $3);"
-            async with self.bot.db.acquire() as connection:
-                await connection.execute(query, after.id, 'name', after.name)
+            await self.bot.db.stats.insert_item_history(after.id, 'name', after.name)
 
         if before.avatar != after.avatar:
             avatar: bytes | None = await self._read_avatar(after)
@@ -455,14 +419,11 @@ class Stats(Cog):
 
             self._presence_cache[_make_key(after)] = True
 
-            query: str = "INSERT INTO presence_history (uuid, status, status_before) VALUES ($1, $2, $3);"
-            async with self.bot.db.acquire() as connection:
-                await connection.execute(
-                    query,
-                    after.id,
-                    self._presence_map.get(after.status),
-                    self._presence_map.get(before.status),
-                )
+            await self.bot.db.stats.insert_presence(
+                after.id,
+                self._presence_map.get(after.status),
+                self._presence_map.get(before.status),
+            )
 
     async def _read_avatar(
             self, member: discord.Member | discord.User
@@ -586,24 +547,8 @@ class Stats(Cog):
         `asyncpg.Record`
             The command usage statistics.
         """
-        args = ()
-        query = f"SELECT {group_by}, COUNT(*) as uses FROM commands"
-
-        def _pref() -> str:
-            return "WHERE" if not args else "AND"
-
-        if guild_id:
-            query += " WHERE guild_id = $1"
-            args += (guild_id,)
-        if author_id:
-            query += f" {_pref()} author_id = ${len(args) + 1}"
-            args += (author_id,)
-        if days:
-            query += f" {_pref()} used > (CURRENT_TIMESTAMP - ${len(args) + 1}::interval)"
-            args += (datetime.timedelta(days=days),)
-
-        query += f" GROUP BY {group_by} ORDER BY uses DESC LIMIT {limit};"
-        return await self.bot.db.fetch(query, *args)
+        return await self.bot.db.stats.get_command_usage(
+            guild_id, author_id, days=days, group_by=group_by, limit=limit)
 
     @command(hidden=True, description='Shows the current socket event statistics.')
     async def socketstats(self, ctx: Context) -> None:
@@ -722,10 +667,8 @@ class Stats(Cog):
                 embed.title = 'Server Command Stats'
                 embed.colour = helpers.Colour.white()
 
-                count: tuple[int, datetime.datetime] = await ctx.db.fetchrow(  # type: ignore
-                    "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1;",
-                    ctx.guild.id
-                )
+                count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
+                    ctx.guild.id)
 
                 top_commands = await self.get_commands_stats(ctx.guild.id) or []
                 value = '\n'.join(
@@ -764,10 +707,8 @@ class Stats(Cog):
                 embed.colour = member.colour
                 embed.set_author(name=str(member), icon_url=get_asset_url(member))
 
-                count: tuple[int, datetime.datetime] = await ctx.db.fetchrow(  # type: ignore
-                    "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1 AND author_id=$2;",
-                    ctx.guild.id, member.id
-                )
+                count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
+                    ctx.guild.id, member.id)
 
                 most_used = await self.get_commands_stats(ctx.guild.id, member.id) or []
                 value = '\n'.join(
@@ -800,7 +741,7 @@ class Stats(Cog):
         """Global all time command statistics."""
         await ctx.typing()
 
-        total: int = await ctx.db.fetchval("SELECT COUNT(*) FROM commands;")
+        total: int = await ctx.db.stats.count_all_commands()
         embed = discord.Embed(title='Command Stats', colour=helpers.Colour.white())
         embed.description = f'`{total}` commands used.'
 
@@ -839,14 +780,7 @@ class Stats(Cog):
         """Global command statistics for the day."""
         await ctx.typing()
 
-        query = """
-            SELECT failed,
-                   COUNT(*)
-            FROM commands
-            WHERE used > (CURRENT_TIMESTAMP - INTERVAL '1 day')
-            GROUP BY failed;
-        """
-        total = await ctx.db.fetch(query)
+        total = await ctx.db.stats.get_daily_status_counts()
         failed, success, question = 0, 0, 0
         for state, count in total:
             match state:
@@ -908,17 +842,7 @@ class Stats(Cog):
         await self.bot.stats_webhook.send(embed=embed)
 
     async def get_presence_history(self, user_id: int, /, *, days: int = 30) -> list[asyncpg.Record]:
-        async with self.bot.db.acquire() as connection:
-            return await connection.fetch(
-                """
-                    SELECT status, status_before, changed_at
-                    FROM presence_history
-                    WHERE uuid = $1
-                      AND (changed_at AT TIME ZONE 'UTC') > (CURRENT_TIMESTAMP - $2::interval)
-                    ORDER BY changed_at DESC;
-                """,
-                user_id, datetime.timedelta(days=days),
-            )
+        return await self.bot.db.stats.get_presence_history(user_id, days=days)
 
     async def get_item_history(self, user_id: int, item_type: Literal['name', 'nickname']) -> list[asyncpg.Record]:
         """|coro|
@@ -937,17 +861,7 @@ class Stats(Cog):
         `list[asyncpg.Record]`
             The item history for the user.
         """
-        async with self.bot.db.acquire() as connection:
-            return await connection.fetch(
-                """
-                    SELECT item_value, changed_at
-                    FROM item_history
-                    WHERE uuid = $1
-                      AND item_type = $2
-                    ORDER BY changed_at DESC;
-                """,
-                user_id, item_type,
-            )
+        return await self.bot.db.stats.get_item_history(user_id, item_type)
 
     async def get_avatar_history(self, member: discord.Member | discord.User) -> list[asyncpg.Record]:
         """Fetch the user's avatar history.
@@ -962,15 +876,7 @@ class Stats(Cog):
         list[asyncpg.Record]
             The avatar history of the user.
         """
-        return await self.bot.db.fetch(
-            """
-                SELECT avatar, changed_at
-                FROM avatar_history
-                WHERE uuid = $1
-                ORDER BY changed_at LIMIT 100;
-            """,
-            member.id,
-        )
+        return await self.bot.db.stats.get_avatar_history(member.id)
 
     @command(
         'names',
@@ -1456,9 +1362,8 @@ class Stats(Cog):
         await ctx.send(embed=embed)
 
     @staticmethod
-    async def tabulate_query(ctx: Context, query: str, *args: Any) -> None:
-        records = await ctx.db.fetch(query, *args)
-
+    async def send_records_table(ctx: Context, records: list[asyncpg.Record]) -> None:
+        """Renders a list of records as a plaintext table and sends it as a file."""
         if len(records) == 0:
             await ctx.send_error('No results found.')
             return
@@ -1522,20 +1427,8 @@ class Stats(Cog):
     async def command_history(self, ctx: Context, limit: int = 15) -> None:
         """Command history."""
         async with ctx.channel.typing():
-            query = f"""
-                SELECT
-                    CASE failed
-                        WHEN TRUE THEN command || ' [!]'
-                        ELSE command
-                    END AS "command",
-                    to_char(used, 'Mon DD HH12:MI:SS AM') AS "invoked",
-                    author_id,
-                    guild_id
-                FROM commands
-                ORDER BY used DESC
-                LIMIT {limit};
-            """
-            await self.tabulate_query(ctx, query)
+            records = await self.bot.db.stats.get_recent_command_history(limit)
+            await self.send_records_table(ctx, records)
 
     @command_history.command(
         name='for',
@@ -1547,20 +1440,9 @@ class Stats(Cog):
     async def command_history_for(self, ctx: Context, days: int = 7, *, command: str) -> None:
         """Command history for a command."""
         async with ctx.channel.typing():
-            query = """
-                SELECT *,
-                       t.success + t.failed AS "total"
-                FROM (SELECT guild_id,
-                             SUM(CASE WHEN failed THEN 0 ELSE 1 END) AS "success",
-                             SUM(CASE WHEN failed THEN 1 ELSE 0 END) AS "failed"
-                      FROM commands
-                      WHERE command = $1
-                        AND used > (CURRENT_TIMESTAMP - $2::interval)
-                      GROUP BY guild_id) AS t
-                ORDER BY "total" DESC
-                LIMIT 30;
-            """
-            await self.tabulate_query(ctx, query, command, datetime.timedelta(days=days))
+            records = await self.bot.db.stats.get_command_history_for(
+                command, datetime.timedelta(days=days))
+            await self.send_records_table(ctx, records)
 
     @command_history.command(
         name='guild',
@@ -1573,20 +1455,8 @@ class Stats(Cog):
     async def command_history_guild(self, ctx: Context, guild_id: int) -> None:
         """Command history for a guild."""
         async with ctx.channel.typing():
-            query = """
-                SELECT CASE failed
-                           WHEN TRUE THEN command || ' [!]'
-                           ELSE command
-                           END AS "command",
-                       channel_id,
-                       author_id,
-                       used
-                FROM commands
-                WHERE guild_id = $1
-                ORDER BY used DESC
-                LIMIT 15;
-            """
-            await self.tabulate_query(ctx, query, guild_id)
+            records = await self.bot.db.stats.get_command_history_guild(guild_id)
+            await self.send_records_table(ctx, records)
 
     @command_history.command(
         name='user',
@@ -1599,19 +1469,8 @@ class Stats(Cog):
     async def command_history_user(self, ctx: Context, user_id: int) -> None:
         """Command history for a user."""
         async with ctx.channel.typing():
-            query = """
-                SELECT CASE failed
-                           WHEN TRUE THEN command || ' [!]'
-                           ELSE command
-                           END AS "command",
-                       guild_id,
-                       used
-                FROM commands
-                WHERE author_id = $1
-                ORDER BY used DESC
-                LIMIT 20;
-            """
-            await self.tabulate_query(ctx, query, user_id)
+            records = await self.bot.db.stats.get_command_history_user(user_id)
+            await self.send_records_table(ctx, records)
 
     @command_history.command(
         name='log',
@@ -1671,33 +1530,12 @@ class Stats(Cog):
                     await ctx.send_error(f'Unknown Cog: {cog_name}')
                     return
 
-                query = """
-                    SELECT *,
-                           t.success + t.failed AS "total"
-                    FROM (SELECT command,
-                                 SUM(CASE WHEN failed THEN 0 ELSE 1 END) AS "success",
-                                 SUM(CASE WHEN failed THEN 1 ELSE 0 END) AS "failed"
-                          FROM commands
-                          WHERE command = any ($1::text[])
-                            AND used > (CURRENT_TIMESTAMP - $2::interval)
-                          GROUP BY command) AS t
-                    ORDER BY "total" DESC
-                    LIMIT 30;
-                """
-                return await self.tabulate_query(ctx, query, [c.qualified_name for c in cog.walk_commands()], interval)
+                records = await self.bot.db.stats.get_command_history_by_cog(
+                    [c.qualified_name for c in cog.walk_commands()], interval)
+                return await self.send_records_table(ctx, records)
 
-            query = """
-                SELECT *,
-                       t.success + t.failed AS "total"
-                FROM (SELECT command,
-                             SUM(CASE WHEN failed THEN 0 ELSE 1 END) AS "success",
-                             SUM(CASE WHEN failed THEN 1 ELSE 0 END) AS "failed"
-                      FROM commands
-                      WHERE used > (CURRENT_TIMESTAMP - $1::interval)
-                      GROUP BY command) AS t;
-            """
             data = defaultdict(CommandUsageCount)
-            records = await ctx.db.fetch(query, interval)
+            records = await self.bot.db.stats.get_command_history_grouped(interval)
             for record in records:
                 command = self.bot.get_command(record['command'])
                 if command is None or command.cog is None:
