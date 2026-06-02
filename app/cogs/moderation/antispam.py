@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from operator import attrgetter
 from typing import TYPE_CHECKING
 
@@ -8,13 +9,16 @@ import discord
 from discord.ext import commands
 
 from app.utils import ListedRateLimit, RateLimit, cache
+from config import Emojis
 
 from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSequence
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping
+    from collections.abc import AsyncIterator, MutableMapping
 
     from app.database.base import Gatekeeper, GuildConfig
+
+log = logging.getLogger(__name__)
 
 
 class SpamChecker:
@@ -278,3 +282,86 @@ class SpamChecker:
     def remove_member(self, user: discord.abc.User) -> None:
         """Remove a member from the spam checker."""
         self.flagged_users.pop(user.id, None)
+
+
+async def check_raid(
+        checker: SpamChecker,
+        config: GuildConfig,
+        guild: discord.Guild,
+        member: discord.Member,
+        message: discord.Message,
+) -> None:
+    """|coro|
+
+    Check if a member is raiding the server and ban them if they are.
+
+    Parameters
+    ----------
+    checker: :class:`SpamChecker`
+        The guild's spam checker holding the live detection state.
+    config: :class:`GuildConfig`
+        The guild configuration to check.
+    guild: :class:`discord.Guild`
+        The guild to check.
+    member: :class:`discord.Member`
+        The member to check.
+    message: :class:`discord.Message`
+        The message to check.
+    """
+    if not config.flags.raid:
+        return
+
+    result = checker.is_spamming(message)
+    if result is None:
+        return
+
+    members = result.members if isinstance(result, SpammerSequence) else [member]
+
+    for user in members:
+        try:
+            await guild.ban(user, reason=result.reason)
+        except discord.HTTPException:
+            log.info('[Moderation] Failed to ban %s (ID: %s) from server %s.', member, member.id, member.guild)
+        else:
+            log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
+
+
+async def mention_spam_ban(
+        mention_count: int,
+        guild_id: int,
+        member: discord.Member,
+        multiple: bool = False,
+) -> AsyncIterator[str]:
+    """|coro|
+
+    Ban a member for mention spamming.
+    This asynchronusly yields a result message for the performed ban on the a user.
+
+    Parameters
+    ----------
+    mention_count: :class:`int`
+        The number of mentions the member has made.
+    guild_id: :class:`int`
+        The guild ID to ban the member from.
+    member: :class:`discord.Member`
+        The member to ban.
+    multiple: :class:`bool`
+        Whether the member has spammed over multiple messages.
+
+    Yields
+    ------
+    :class:`str`
+        The result message for the performed ban on the a user.
+    """
+    if multiple:
+        reason = f'Spamming mentions over multiple messages ({mention_count} mentions)'
+    else:
+        reason = f'Spamming mentions ({mention_count} mentions)'
+
+    try:
+        await member.ban(reason=reason)
+    except discord.HTTPException:
+        log.info('[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s', member, member.id, guild_id)
+    else:
+        yield f'{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions.'
+        log.info('[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s', member, member.id, guild_id)
