@@ -346,15 +346,8 @@ class Tag(BaseRecord):
         Tag
             The updated Tag.
         """
-        query = f"""
-            UPDATE tags
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-
         try:
-            record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
+            record = await self.bot.db.tags.update_tag(self.id, key, values, connection=connection)
         except Exception as e:
             match e:
                 case asyncpg.UniqueViolationError():
@@ -378,26 +371,14 @@ class Tag(BaseRecord):
         int
             The rank of the tag.
         """
-        query = """
-            SELECT (SELECT COUNT(*)
-                    FROM tags second
-                    WHERE (second.uses, second.id) >= (first.uses, first.id)
-                      AND second.location_id = first.location_id) AS rank
-            FROM tags first
-            WHERE first.id = $1
-        """
-        return await self.bot.db.fetchval(query, self.id)
+        return await self.bot.db.tags.get_tag_rank(self.id)
 
     async def delete(self) -> None:
         """|coro|
 
         Deletes the tag and all corresponding aliases.
         """
-        query = "DELETE FROM tags WHERE id=$1;"
-        await self.bot.db.execute(query, self.id)
-
-        query = "DELETE FROM tag_lookup WHERE parent_id=$1;"
-        await self.bot.db.execute(query, self.id)
+        await self.bot.db.tags.delete_tag(self.id)
 
     async def transfer(self, to: discord.Member, only_parent: bool = False) -> None:
         """|coro|
@@ -414,8 +395,7 @@ class Tag(BaseRecord):
         async with self.bot.db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             await self.update(owner_id=to.id, connection=conn)  # type: ignore[arg-type]
             if not only_parent:
-                query = "UPDATE tag_lookup SET owner_id=$1 WHERE parent_id=$2;"
-                await conn.execute(query, to.id, self.id)
+                await self.bot.db.tags.transfer_aliases(self.id, to.id, connection=conn)  # type: ignore[arg-type]
 
 
 class AliasTag(BaseRecord):
@@ -449,19 +429,17 @@ class AliasTag(BaseRecord):
             Needs to be used if there is no :attr:`parent` attribute.
 
         """
-        con = self.parent.bot.db if self.parent else connection
-        async with con.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
-            query = "UPDATE tag_lookup SET owner_id=$1 WHERE id=$2;"
-            await conn.execute(query, to.id, self.id)
+        db = self.parent.bot.db if self.parent else connection
+        async with db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
+            await db.tags.transfer_alias(self.id, to.id, connection=conn)  # type: ignore[union-attr]
 
     async def delete(self) -> None:
         """|coro|
 
         Deletes the alias.
         """
-        query = "DELETE FROM tag_lookup WHERE id=$1;"
         assert self.parent is not None, "AliasTag.delete requires a parent tag with a bot reference"
-        await self.parent.bot.db.execute(query, self.id)
+        await self.parent.bot.db.tags.delete_alias(self.id)
 
 
 class Tags(Cog):
@@ -541,65 +519,30 @@ class Tags(Cog):
         list[AliasTag] | Tag | AliasTag | None
             The Tag or a list of AliasTags or None if no Tag was found.
         """
-        form: dict[str, Any] = {}
-        parent_form: dict[str, Any] = {}
-        is_id: bool = isinstance(name_or_id, int) or (isinstance(name_or_id, str) and name_or_id.isdigit())
+        repo = self.bot.db.tags
 
-        if is_id:
-            parent_form['tags.id'] = name_or_id
-        else:
-            parent_form['LOWER(tags.name)'] = name_or_id.lower()
-
-        if location_id:
-            form['location_id'] = location_id
-        if owner_id:
-            form['owner_id'] = owner_id
-
-        query = f"SELECT * FROM tags WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(form | parent_form, 1))} LIMIT 1;"
-        record = await self.bot.db.fetchrow(query, *(form | parent_form).values())
+        record = await repo.get_tag_record(name_or_id, owner_id=owner_id, location_id=location_id)
         parent = Tag(bot=self.bot, record=record) if record else None
 
         if not parent:
-            query = f"""
-                SELECT tags.*
-                FROM tags
-                         INNER JOIN tag_lookup t on t.parent_id = tags.id
-                WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(parent_form, 1))}
-                LIMIT 1;
-            """
-            record = await self.bot.db.fetchrow(query, *parent_form.values())
+            record = await repo.get_parent_record_via_alias(name_or_id)
             parent = Tag(bot=self.bot, record=record) if record else None
 
         if parent and not exact_match:
             if not only_parent:
-                form['parent_id'] = parent.id
-
-                query = f"""
-                    SELECT * FROM tag_lookup
-                    WHERE name != '{parent['name']}'
-                    AND {' AND '.join(f'{k}=${i}' for i, k in enumerate(form, 1))}
-                """
-                aliases = await self.bot.db.fetch(query, *form.values())
+                aliases = await repo.get_alias_records(
+                    parent.id, parent.name, owner_id=owner_id, location_id=location_id)
                 parent.aliases = [AliasTag(parent=parent, record=alias) for alias in aliases]
 
             return parent
 
         if not parent and exact_match:
-            query = f"SELECT * FROM tag_lookup WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(form, 1))} LIMIT 1;"
-            alias = await self.bot.db.fetchrow(query, name_or_id)
+            alias = await repo.get_alias_record(name_or_id, owner_id=owner_id, location_id=location_id)
             return AliasTag(record=alias) if alias else None
 
         if similarites and isinstance(name_or_id, str):
-            query = """
-                SELECT tag_lookup.*
-                FROM tag_lookup
-                         INNER JOIN tags t on t.id = tag_lookup.parent_id
-                WHERE tag_lookup.location_id = $1
-                  AND tag_lookup.name % $2
-                ORDER BY similarity(tag_lookup.name, $2) DESC
-                LIMIT 25;
-            """
-            rows = await self.bot.db.fetch(query, location_id, name_or_id)
+            assert location_id is not None
+            rows = await repo.get_similar_aliases(location_id, name_or_id)
             return [AliasTag(parent=parent, record=row) for row in rows]
 
     async def send_tag(
@@ -672,22 +615,14 @@ class Tags(Cog):
         content: str
             The content of the Tag.
         """
-        query = """
-            WITH tag_insert AS (
-                INSERT INTO tags (name, content, owner_id, location_id)
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING id)
-            INSERT
-            INTO tag_lookup (name, owner_id, location_id, parent_id)
-            VALUES ($1, $3, $4, (SELECT id FROM tag_insert));
-        """
         async with ctx.db.acquire() as connection:
             tr = connection.transaction()
             await tr.start()
 
             try:
                 assert ctx.guild is not None
-                await connection.execute(query, name, content, ctx.author.id, ctx.guild.id)
+                await ctx.db.tags.create_tag(
+                    name, content, ctx.author.id, ctx.guild.id, connection=connection)  # type: ignore[arg-type]
             except AssertionError:
                 await tr.rollback()
                 raise BadArgument('This command can only be used in a server.', 'name')
@@ -731,9 +666,10 @@ class Tags(Cog):
     async def non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT * FROM tags WHERE location_id=$1 ORDER BY uses;"
+        assert interaction.guild_id is not None
         tags: list[Tag] = [
-            Tag(bot=self.bot, record=record) for record in await self.bot.db.fetch(query, interaction.guild_id)]
+            Tag(bot=self.bot, record=record)
+            for record in await self.bot.db.tags.get_guild_tags(interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -744,15 +680,10 @@ class Tags(Cog):
     async def aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = """
-            SELECT tag_lookup.*
-            FROM tag_lookup
-                     INNER JOIN tags ON tags.id = tag_lookup.parent_id
-            WHERE tag_lookup.location_id = $1
-            ORDER BY uses DESC;
-        """
+        assert interaction.guild_id is not None
         tags: list[AliasTag] = [
-            AliasTag(record=record) for record in await self.bot.db.fetch(query, interaction.guild_id)]
+            AliasTag(record=record)
+            for record in await self.bot.db.tags.get_guild_aliases(interaction.guild_id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -763,10 +694,10 @@ class Tags(Cog):
     async def owned_non_aliased_tag_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT * FROM tags WHERE location_id=$1 AND owner_id=$2 ORDER BY uses;"
+        assert interaction.guild_id is not None
         tags: list[Tag] = [
-            Tag(bot=self.bot, record=record) for record in await
-            self.bot.db.fetch(query, interaction.guild_id, interaction.user.id)]
+            Tag(bot=self.bot, record=record) for record in
+            await self.bot.db.tags.get_owned_tags(interaction.guild_id, interaction.user.id)]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -818,16 +749,9 @@ class Tags(Cog):
         Every alias can be only assigned to one Tag.
         If you want to edit an alias, you have to delete it and create a new one.
         """
-        query = """
-            INSERT INTO tag_lookup (name, owner_id, location_id, parent_id)
-            SELECT $1, $4, tag_lookup.location_id, tag_lookup.parent_id
-            FROM tag_lookup
-            WHERE tag_lookup.location_id = $3
-              AND LOWER(tag_lookup.name) = $2;
-        """
         assert ctx.guild is not None
         try:
-            status = await ctx.db.execute(query, new_alias, original_tag.lower(), ctx.guild.id, ctx.author.id)
+            status = await ctx.db.tags.create_alias(new_alias, original_tag, ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
             raise BadArgument('This alias is already taken.', 'new_alias')
         else:
@@ -942,14 +866,13 @@ class Tags(Cog):
         embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         embed.set_footer(text='Tag Statistics for this Server.')
 
-        total_tags_query = "SELECT COUNT(*) as total_tags FROM tags WHERE location_id=$1;"
-        total_tags = await self.bot.db.fetchval(total_tags_query, ctx.guild.id)
+        repo = self.bot.db.tags
+        total_tags = await repo.count_tags(ctx.guild.id)
 
         if not total_tags:
             embed.description = '*There are no statistics available.*'
         else:
-            total_uses_query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag';"
-            total_uses = await self.bot.db.fetchval(total_uses_query, ctx.guild.id)
+            total_uses = await repo.count_tag_command_uses(ctx.guild.id)
 
             joined_at = ctx.me.joined_at if isinstance(ctx.me, discord.Member) else None
             embed.add_field(
@@ -960,16 +883,7 @@ class Tags(Cog):
                 inline=False
             )
 
-        most_used_tags_query = """
-            SELECT
-                name,
-                uses
-            FROM tags
-            WHERE location_id=$1
-            ORDER BY uses DESC
-            LIMIT 3;
-        """
-        most_used_records = await ctx.db.fetch(most_used_tags_query, ctx.guild.id)
+        most_used_records = await repo.get_most_used_tags(ctx.guild.id)
         most_used_tags_value = '\n'.join(
             f'{medal_emoji(index)}: {name} (**{uses}** uses)'
             for index, (name, uses) in enumerate(most_used_records)
@@ -977,17 +891,7 @@ class Tags(Cog):
 
         embed.add_field(name='**Most Used Tags**', value=most_used_tags_value, inline=False)
 
-        top_tag_users_query = """
-            SELECT
-                COUNT(*) AS "uses",
-                author_id
-            FROM commands
-            WHERE guild_id=$1 AND command='tag'
-            GROUP BY author_id
-            ORDER BY COUNT(*) DESC
-            LIMIT 3;
-        """
-        top_tag_users_records = await ctx.db.fetch(top_tag_users_query, ctx.guild.id)
+        top_tag_users_records = await repo.get_top_tag_users(ctx.guild.id)
         top_tag_users_value = '\n'.join(
             f'{medal_emoji(index)}: <@{author_id}> (**{uses}** times)'
             for index, (uses, author_id) in enumerate(top_tag_users_records)
@@ -995,17 +899,7 @@ class Tags(Cog):
 
         embed.add_field(name='**Top Tag Users**', value=top_tag_users_value, inline=False)
 
-        top_creators_query = """
-            SELECT
-               COUNT(*) AS "count",
-               owner_id
-            FROM tags
-            WHERE location_id=$1
-            GROUP BY owner_id
-            ORDER BY COUNT(*) DESC
-            LIMIT 3;
-        """
-        top_creators_records = await ctx.db.fetch(top_creators_query, ctx.guild.id)
+        top_creators_records = await repo.get_top_tag_creators(ctx.guild.id)
         top_creators_value = '\n'.join(
             f'{medal_emoji(index)}: <@{owner_id}> (**{count}** tags)'
             for index, (count, owner_id) in enumerate(top_creators_records)
@@ -1017,16 +911,8 @@ class Tags(Cog):
     @staticmethod
     async def member_tag_stats(ctx: Context, member: discord.Member | discord.User) -> None:
         assert ctx.guild is not None
-        query = """
-            SELECT COUNT(*) OVER ()  AS "count",
-                   SUM(uses) OVER () AS "total_uses"
-            FROM tags
-            WHERE location_id = $1
-              AND owner_id = $2
-            ORDER BY uses DESC
-            LIMIT 1;
-        """
-        records = await ctx.db.fetchrow(query, ctx.guild.id, member.id)
+        repo = ctx.db.tags
+        records = await repo.get_member_tag_summary(ctx.guild.id, member.id)
 
         if not records:
             await ctx.send_error('No Tag Statistics found for this member.')
@@ -1037,24 +923,14 @@ class Tags(Cog):
         embed.set_thumbnail(url=get_asset_url(member))
         embed.set_footer(text='Tag Stats for this Member.')
 
-        query = "SELECT COUNT(*) FROM commands WHERE guild_id=$1 AND command='tag' AND author_id=$2;"
-        count: tuple[int] = await ctx.db.fetchrow(query, ctx.guild.id, member.id)
+        count = await repo.count_member_tag_command_uses(ctx.guild.id, member.id)
 
-        embed.add_field(name='**Tag Command invoked**', value=f'**{count[0]}** times', inline=False)
+        embed.add_field(name='**Tag Command invoked**', value=f'**{count}** times', inline=False)
         embed.add_field(name='**Owned Tags**', value=records['count'])
         embed.add_field(name='**Owned Tags Used**', value=records['total_uses'])
 
-        query = """
-            SELECT name,
-                   uses
-            FROM tags
-            WHERE location_id = $1
-              AND owner_id = $2
-            ORDER BY uses DESC
-            LIMIT 3;
-        """
-        records = await ctx.db.fetch(query, ctx.guild.id, member.id)
-        for index, (name, uses) in enumerate(records):
+        top_records = await repo.get_member_top_tags(ctx.guild.id, member.id)
+        for index, (name, uses) in enumerate(top_records):
             embed.add_field(
                 name=f'**#{index + 1} {medal_emoji(index)}**',
                 value=f'**{name}** (**{uses}** uses)',
@@ -1263,50 +1139,13 @@ class Tags(Cog):
             The list of Tags that were found.
         """
         assert ctx.guild is not None
-        SORT = {
-            'id': 'id',
-            'newest': 'created_at DESC',
-            'oldest': 'created_at ASC',
-            'name': 'name'
-        }.get(flags.sort, 'name')
-
         member: discord.Member | None = None
         if isinstance(flags, TagListFlags):
             raw_member = flags.member or ctx.author
             member = raw_member if isinstance(raw_member, discord.Member) else None
 
-        if not flags.query:
-            query = """
-                SELECT name, id
-                FROM tag_lookup
-                WHERE location_id=$1
-            """
-            if member:
-                query += " AND owner_id=$2"
-                values = (ctx.guild.id, member.id)
-            else:
-                values = (ctx.guild.id,)
-
-            query += f" ORDER BY {SORT};"
-        else:
-            if flags.sort == 'name':
-                SORT = 'similarity(name, $2) DESC'
-
-            query = f"""
-                SELECT name, id
-                FROM tag_lookup
-                WHERE location_id=$1 AND name % $2
-                ORDER BY {SORT};
-            """
-            if member:
-                query += " AND owner_id=$3"
-                values = (ctx.guild.id, flags.query, member.id)
-            else:
-                values = (ctx.guild.id, flags.query)
-
-            query += f" ORDER BY {SORT};"
-
-        return await ctx.db.fetch(query, *values)
+        return await ctx.db.tags.filter_tags(
+            ctx.guild.id, query=flags.query, owner_id=member.id if member else None, sort=flags.sort)
 
     @tag.command(
         'list',
@@ -1392,8 +1231,7 @@ class Tags(Cog):
     async def tag_purge(self, ctx: Context, member: discord.User) -> None:
         """Bulk remove all Tags and assigned Aliases of a given User."""
         assert ctx.guild is not None
-        query = "SELECT COUNT(*) FROM tags WHERE location_id=$1 AND owner_id=$2;"
-        count: int = await self.bot.db.fetchval(query, ctx.guild.id, member.id)
+        count = await ctx.db.tags.count_owned_tags(ctx.guild.id, member.id)
 
         if count == 0:
             await ctx.send_error(f'No tags found for **{member}**.')
@@ -1404,8 +1242,7 @@ class Tags(Cog):
         if not confirm:
             return
 
-        query = "DELETE FROM tags WHERE location_id=$1 AND owner_id=$2;"
-        await ctx.db.execute(query, ctx.guild.id, member.id)  # guild already asserted above
+        await ctx.db.tags.delete_owned_tags(ctx.guild.id, member.id)  # guild already asserted above
 
         await ctx.send_success(f'Successfully removed all **{count}** tags that belong to **{member}**.')
 
@@ -1500,20 +1337,15 @@ class Tags(Cog):
     ) -> None:
         """Exports all your tags/server tags to a csv file."""
         assert ctx.guild is not None
-        form = {
-            'location_id': ctx.guild.id,
-        }
+        owner_id: int | None = None
         if which == 'server':
             if ctx.author.id != ctx.guild.owner_id:
                 raise BadArgument('You need to be the server owner to export all server tags.')
         else:
-            form['owner_id'] = ctx.author.id
+            owner_id = ctx.author.id
 
-        async with ctx.channel.typing(), ctx.db.acquire() as conn, conn.transaction():
-            records = await conn.fetch(
-                f"SELECT name, content FROM tags WHERE {' AND '.join(f'{k}=${i}' for i, k in enumerate(form, 1))};",
-                *form.values()
-            )
+        async with ctx.channel.typing():
+            records = await ctx.db.tags.export_tags(ctx.guild.id, owner_id=owner_id)
 
         if not records:
             await ctx.send_error('No tags found to export.')
