@@ -39,7 +39,7 @@ from .gatekeeper import (
     GatekeeperSetUpView,
     GatekeeperVerifyButton,
 )
-from .infractions import default_reason, safe_reason_append, update_role_permissions
+from .infractions import check_member_hierarchy, default_reason, safe_reason_append, update_role_permissions
 from .models import SpammerSequence
 from .ui import PreExistingMuteRoleView
 
@@ -1648,18 +1648,8 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if ctx.author.id == member.id:
-            return await ctx.send_error('You cannot kick yourself.')
-
-        if member.id == ctx.guild.owner_id:
-            return await ctx.send_error('You cannot kick the server owner.')
-
-        if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-                return await ctx.send_error('You cannot kick a member with a role equal to or higher than yours.')
-
-            if ctx.guild.me.top_role < member.top_role:
-                return await ctx.send_error('I cannot kick a member with a role equal to or higher than mine.')
+        if error := check_member_hierarchy(ctx, member, action='kick'):
+            return await ctx.send_error(error)
 
         await ctx.guild.kick(member, reason=reason)
         await ctx.send_success(f'Kicked {member}.')
@@ -1690,18 +1680,8 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if ctx.author.id == member.id:
-            return await ctx.send_error('You cannot ban yourself.')
-
-        if member.id == ctx.guild.owner_id:
-            return await ctx.send_error('You cannot ban the server owner.')
-
-        if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-                return await ctx.send_error('You cannot ban a member with a role equal to or higher than yours.')
-
-            if ctx.guild.me.top_role < member.top_role:
-                return await ctx.send_error('I cannot ban a member with a role equal to or higher than mine.')
+        if error := check_member_hierarchy(ctx, member, action='ban'):
+            return await ctx.send_error(error)
 
         await ctx.guild.ban(member, reason=reason)
         await ctx.send_success(f'Successfully banned `{member}`.')
@@ -1777,18 +1757,8 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if ctx.author.id == member.id:
-            return await ctx.send_error('You cannot soft-ban yourself.')
-
-        if member.id == ctx.guild.owner_id:
-            return await ctx.send_error('You cannot soft-ban the server owner.')
-
-        if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-                return await ctx.send_error('You cannot soft-ban a member with a role equal to or higher than yours.')
-
-            if ctx.guild.me.top_role < member.top_role:
-                return await ctx.send_error('I cannot soft-ban a member with a role equal to or higher than mine.')
+        if error := check_member_hierarchy(ctx, member, action='soft-ban'):
+            return await ctx.send_error(error)
 
         await ctx.guild.ban(member, reason=reason)
         await ctx.guild.unban(member, reason=reason)
@@ -1865,18 +1835,8 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if ctx.author.id == member.id:
-            return await ctx.send_error('You cannot ban yourself.')
-
-        if member.id == ctx.guild.owner_id:
-            return await ctx.send_error('You cannot ban the server owner.')
-
-        if isinstance(member, discord.Member):
-            if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-                return await ctx.send_error('You cannot ban a member with a role equal to or higher than yours.')
-
-            if ctx.guild.me.top_role < member.top_role:
-                return await ctx.send_error('I cannot ban a member with a role equal to or higher than mine.')
+        if error := check_member_hierarchy(ctx, member, action='ban'):
+            return await ctx.send_error(error)
 
         until = f'until {discord.utils.format_dt(duration.dt, 'F')}'
 
@@ -2053,14 +2013,8 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if ctx.author.id == member.id:
-            return await ctx.send_error('You cannot mute yourself.')
-
-        if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-            return await ctx.send_error('You cannot mute a member with a role equal to or higher than yours.')
-
-        if ctx.guild.me.top_role < member.top_role:
-            return await ctx.send_error('I cannot mute a member with a role equal to or higher than mine.')
+        if error := check_member_hierarchy(ctx, member, action='mute', check_owner=False):
+            return await ctx.send_error(error)
 
         role_id = ctx.guild_config.mute_role_id
         assert role_id is not None

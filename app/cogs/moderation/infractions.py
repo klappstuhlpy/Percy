@@ -16,6 +16,39 @@ from app.utils import merge_perms
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from app.core import Context
+
+
+def check_member_hierarchy(
+    ctx: Context,
+    member: discord.abc.Snowflake | discord.Member,
+    *,
+    action: str,
+    check_owner: bool = True,
+) -> str | None:
+    """Return an error message if a moderation ``action`` cannot target ``member``, else ``None``.
+
+    Centralises the self / server-owner / role-hierarchy guards shared by the ban, kick and mute
+    commands. ``check_owner`` is disabled for mutes, which historically skipped the owner guard.
+    The ``isinstance`` guard mirrors the ban family, where ``member`` may be a bare snowflake
+    (banning by ID); for the always-resolved mute case it is simply always true.
+    """
+    assert ctx.guild is not None
+    if ctx.author.id == member.id:
+        return f'You cannot {action} yourself.'
+
+    if check_owner and member.id == ctx.guild.owner_id:
+        return f'You cannot {action} the server owner.'
+
+    if isinstance(member, discord.Member):
+        if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
+            return f'You cannot {action} a member with a role equal to or higher than yours.'
+
+        if ctx.guild.me.top_role < member.top_role:
+            return f'I cannot {action} a member with a role equal to or higher than mine.'
+
+    return None
+
 
 def safe_reason_append(base: str, to_append: str) -> str:
     appended = f'{base} ({to_append})'
