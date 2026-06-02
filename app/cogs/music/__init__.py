@@ -1,20 +1,14 @@
-import logging
+from app.cogs.music.cog import Music, PlaylistTools, setup
+from app.cogs.music.models import Playlist, PlaylistTrack, Queue, ShuffleMode
+from app.cogs.music.player import Player
 
-import wavelink
-
-from app.cogs.music._music import Music
-from app.cogs.music._player import Player
-from app.cogs.music._playlist import PlaylistTools
-
-log = logging.getLogger(__name__)
-
-
-async def setup(bot) -> None:
-    try:
-        wavelink.Pool.get_node()
-    except wavelink.InvalidNodeException:
-        log.warning('Music Cog not being initialized as no nodes are available.')
-        return
-
-    await bot.add_cog(Music(bot))
-    await bot.add_cog(PlaylistTools(bot))
+__all__ = (
+    'Music',
+    'Player',
+    'Playlist',
+    'PlaylistTools',
+    'PlaylistTrack',
+    'Queue',
+    'ShuffleMode',
+    'setup',
+)
