@@ -12,6 +12,7 @@ from app.games.engine.poker import (
     comb_index,
     item_by_count,
 )
+from app.games.engine.roulette import Payout, is_winning, spin
 from app.games.engine.tictactoe import Board, BoardKind, BoardState
 
 __all__ = (
@@ -22,6 +23,7 @@ __all__ = (
     'CombResult',
     'Hand',
     'HandResult',
+    'Payout',
     'Player',
     'Pot',
     'Ranker',
@@ -29,5 +31,7 @@ __all__ = (
     'TableState',
     'TexasHoldem',
     'comb_index',
+    'is_winning',
     'item_by_count',
+    'spin',
 )

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import enum
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -9,48 +8,27 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.core.views import View
+from app.games.engine import roulette as engine
+from app.games.engine.roulette import Payout
 from app.utils import NotCaseSensitiveEnum, fnumb, helpers, pluralize
 from config import Emojis
 
 if TYPE_CHECKING:
     from app.core.models import Context
 
+__all__ = ('Bet', 'Payout', 'RouletteView', 'Space', 'Table')
+
 SOWCASE_SPACES = [
     'Single Numbers', '1st', '2nd', '3rd', '1-12', '13-24', '25-36', '1-18', '19-36', 'Red', 'Black', 'Even', 'Odd'
 ]
 
 
-class Payout(enum.Enum):
-    """Represents the payout for each space."""
-    SINGLE_NUMBER = 36
-    DOZEN = 3
-    COLUMN = 3
-    HALF = 2
-    COLOR = 2
-    ODD_EVEN = 2
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-    @classmethod
-    def by_space(cls, space: Space) -> int:
-        """Get the payout for a space."""
-        if space.value in ('1st', '2nd', '3rd'):
-            return cls.COLUMN.value
-        elif space.value in ('1-12', '13-24', '25-36'):
-            return cls.DOZEN.value
-        elif space.value in ('1-18', '19-36'):
-            return cls.HALF.value
-        elif space.value in ('Red', 'Black'):
-            return cls.COLOR.value
-        elif space.value in ('Even', 'Odd'):
-            return cls.ODD_EVEN.value
-        else:
-            return cls.SINGLE_NUMBER.value
-
-
 class Space(NotCaseSensitiveEnum):
-    """Represents a space on the roulette table."""
+    """Represents a space on the roulette table.
+
+    The wheel data (which numbers each space covers) lives in the pure engine; this enum
+    is the Discord-facing converter layered on top.
+    """
     __by_value__ = True
 
     SINGLE_NUMBERS__ = 'Single Numbers'  # placeholder
@@ -111,68 +89,12 @@ class Space(NotCaseSensitiveEnum):
     ODD = 'Odd'
 
     @property
-    def real_value(self) -> list:
-        VALUE_MAP = {
-            'SINGLE_0': [0],
-            'SINGLE_1': [1],
-            'SINGLE_2': [2],
-            'SINGLE_3': [3],
-            'SINGLE_4': [4],
-            'SINGLE_5': [5],
-            'SINGLE_6': [6],
-            'SINGLE_7': [7],
-            'SINGLE_8': [8],
-            'SINGLE_9': [9],
-            'SINGLE_10': [10],
-            'SINGLE_11': [11],
-            'SINGLE_12': [12],
-            'SINGLE_13': [13],
-            'SINGLE_14': [14],
-            'SINGLE_15': [15],
-            'SINGLE_16': [16],
-            'SINGLE_17': [17],
-            'SINGLE_18': [18],
-            'SINGLE_19': [19],
-            'SINGLE_20': [20],
-            'SINGLE_21': [21],
-            'SINGLE_22': [22],
-            'SINGLE_23': [23],
-            'SINGLE_24': [24],
-            'SINGLE_25': [25],
-            'SINGLE_26': [26],
-            'SINGLE_27': [27],
-            'SINGLE_28': [28],
-            'SINGLE_29': [29],
-            'SINGLE_30': [30],
-            'SINGLE_31': [31],
-            'SINGLE_32': [32],
-            'SINGLE_33': [33],
-            'SINGLE_34': [34],
-            'SINGLE_35': [35],
-            'SINGLE_36': [36],
-            'COLUMN_FIRST': list(range(1, 37, 3)),
-            'COLUMN_SECOND': list(range(2, 37, 3)),
-            'COLUMN_THIRD': list(range(3, 37, 3)),
-            'DOZEN_FIRST': list(range(1, 13)),
-            'DOZEN_SECOND': list(range(13, 25)),
-            'DOZEN_THIRD': list(range(25, 37)),
-            'HALF_FIRST': list(range(1, 19)),
-            'HALF_SECOND': list(range(19, 37)),
-            'RED': [1, 3, 5, 7, 9, 12, 14, 16, 18, 21, 23, 25, 27, 30, 32, 34, 36],
-            'BLACK': [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35],
-            'EVEN': list(range(2, 37, 2)),
-            'ODD': list(range(1, 37, 2))
-        }
-        return VALUE_MAP[self.name]
+    def real_value(self) -> list[int]:
+        return engine.SPACE_NUMBERS[self.name]
 
     @property
     def placeholder_field(self) -> int:
-        PLACEHOLDER_MAP = {
-            'HALF_SECOND': 1,
-            'BLACK': 1,
-            'ODD': 1
-        }
-        return PLACEHOLDER_MAP.get(self.name, 0)
+        return engine.PLACEHOLDER_FIELDS.get(self.name, 0)
 
 
 @dataclass(frozen=True)
@@ -186,12 +108,13 @@ class Bet:
 
 
 class Table:
-    """Represents a roulette table with all spaces."""
+    """Discord-facing roulette table: owns the message, view and placed bets, delegating
+    the wheel rules to :mod:`app.games.engine.roulette`."""
 
     def __init__(self, ctx: Context) -> None:
         self.ctx: Context = ctx
 
-        self.start_time: time = time.time()
+        self.start_time: float = time.time()
 
         self.message: discord.Message | None = None
         self.bets: list[Bet] = []
@@ -219,7 +142,7 @@ class Table:
             if Space.SINGLE_0 in spaces:
                 # 0 is green, so all bets lose
                 break
-            if result in space.real_value:
+            if engine.is_winning(space.name, result):
                 spaces.append(space)
         return spaces
 

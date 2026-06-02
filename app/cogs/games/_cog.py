@@ -11,11 +11,12 @@ from discord import app_commands
 from discord.ext import commands
 from expiringdict import ExpiringDict
 
-from app.cogs.games import _blackjack, _minesweeper, _poker, _roulette, _short_games, _slot, tictactoe_ui
+from app.cogs.games import _blackjack, _minesweeper, _poker, _short_games, _slot, roulette_ui, tictactoe_ui
 from app.cogs.games._classes import MinimumBet, Payouts
-from app.cogs.games._roulette import Payout, Space
+from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, command, cooldown, describe
+from app.games.engine import roulette as roulette_engine
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
@@ -58,7 +59,7 @@ class Games(Cog):
         super().__init__(bot)
 
         self.blackjack_tables: dict[int, _blackjack.Blackjack] = ExpiringDict(max_len=1000, max_age_seconds=21600)
-        self.roulette_tables: dict[int, _roulette.Table] = {}
+        self.roulette_tables: dict[int, roulette_ui.Table] = {}
         self.poker_tables: dict[int, _poker.PokerSession] = {}
 
     @command(
@@ -504,11 +505,11 @@ class Games(Cog):
                 await ctx.send_error('**Bets are closed.** *Rien ne va plus*')
                 return
 
-            roulette.place(_roulette.Bet(cast('discord.Member', ctx.author), space, bet))
+            roulette.place(roulette_ui.Bet(cast('discord.Member', ctx.author), space, bet))
             await ctx.maybe_edit(roulette.message, embed=roulette.build_embed())
         else:
-            roulette = _roulette.Table(ctx)
-            roulette.place(_roulette.Bet(cast('discord.Member', ctx.author), space, bet))
+            roulette = roulette_ui.Table(ctx)
+            roulette.place(roulette_ui.Bet(cast('discord.Member', ctx.author), space, bet))
 
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
 
@@ -619,7 +620,7 @@ class Games(Cog):
             view=roulette.view)
         await asyncio.sleep(5)
 
-        result = random.randint(0, 36)
+        result = roulette_engine.spin()
         # Get all bets that are on the winning space.
         winning_spaces = list(roulette.get_winning_spaces(result))
         winning_bets = [bet for bet in roulette.bets if bet.space in winning_spaces]
@@ -629,7 +630,7 @@ class Games(Cog):
             # Calculate the payout for each bet.
             for bet in winning_bets:
                 balance = await self.bot.db.get_user_balance(bet.placed_by.id, roulette.ctx.guild.id)
-                payout = round(bet.amount * Payout.by_space(bet.space))
+                payout = round(bet.amount * Payout.by_value(bet.space.value))
                 if balance is not None:
                     await balance.add(cash=payout)
 
