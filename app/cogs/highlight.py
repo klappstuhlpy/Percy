@@ -41,13 +41,7 @@ class HighlightConfig(BaseRecord):
             *,
             connection: asyncpg.Connection | None = None,
     ) -> HighlightConfig:
-        query = f"""
-            UPDATE highlights
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
+        record = await self.bot.db.highlights.update_config(self.id, key, values, connection=connection)
         return self.__class__(bot=self.bot, record=record)
 
     def match(self, text: str, /) -> str | None:
@@ -70,8 +64,7 @@ class HighlightConfig(BaseRecord):
 
         Delete the highlight configuration.
         """
-        query = "DELETE FROM highlights WHERE id = $1;"
-        await self.bot.db.execute(query, self.id)
+        await self.bot.db.highlights.delete_config(self.id)
 
 
 class MessagedHighlight(NamedTuple):
@@ -154,11 +147,7 @@ class Highlights(Cog):
         list[Highlight]
             A list of the guilds' highlights.
         """
-        query = """
-            SELECT * FROM highlights
-            WHERE location_id = $1;
-        """
-        records = await self.bot.db.fetch(query, guild_id)
+        records = await self.bot.db.highlights.get_guild_configs(guild_id)
         return [HighlightConfig(bot=self.bot, record=record) for record in records]
 
     async def get_highlight_config(self, guild_id: int, user_id: int, /, *, initialize: bool = True) -> HighlightConfig | None:
@@ -180,19 +169,9 @@ class Highlights(Cog):
         Highlight
             The user's highlight configuration.
         """
-        query = """
-            SELECT * FROM highlights
-            WHERE location_id = $1
-            AND user_id = $2;
-        """
-        record = await self.bot.db.fetchrow(query, guild_id, user_id)
+        record = await self.bot.db.highlights.get_config(guild_id, user_id)
         if not record and initialize:
-            query = """
-                INSERT INTO highlights (user_id, location_id)
-                VALUES ($1, $2)
-                RETURNING *;
-            """
-            record = await self.bot.db.fetchrow(query, user_id, guild_id)
+            record = await self.bot.db.highlights.create_config(user_id, guild_id)
         return HighlightConfig(bot=self.bot, record=record) if record else None
 
     @staticmethod
@@ -345,14 +324,8 @@ class Highlights(Cog):
     async def highlight_import_guild_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = """
-            SELECT location_id
-            FROM highlights
-            WHERE user_id = $1
-            AND location_id != $2
-            AND lookup IS NOT NULL;
-        """
-        records = await self.bot.db.fetch(query, interaction.user.id, interaction.guild.id)  # type: ignore[union-attr]
+        records = await self.bot.db.highlights.get_import_locations(
+            interaction.user.id, interaction.guild.id)  # type: ignore[union-attr]
         if not records:
             return []
 

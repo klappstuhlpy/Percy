@@ -2,6 +2,7 @@ from app.database.repositories.base import BaseRepository
 from app.database.repositories.emoji_stats import EmojiStatsRepository
 from app.database.repositories.giveaways import GiveawaysRepository
 from app.database.repositories.guilds import GuildsRepository
+from app.database.repositories.highlights import HighlightsRepository
 from app.database.repositories.incidents import IncidentsRepository
 from app.database.repositories.leveling import LevelingRepository
 from app.database.repositories.moderation import ModerationRepository
@@ -16,6 +17,7 @@ __all__ = (
     'EmojiStatsRepository',
     'GiveawaysRepository',
     'GuildsRepository',
+    'HighlightsRepository',
     'IncidentsRepository',
     'LevelingRepository',
     'ModerationRepository',
