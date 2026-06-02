@@ -12,7 +12,7 @@ tests drive the deterministic betting/transition logic directly.
 
 from __future__ import annotations
 
-from app.games.engine.poker import Pot, TableState, TexasHoldem
+from app.cogs.games.engine.poker import Pot, TableState, TexasHoldem
 
 
 def make_engine(buy_in: int = 1000) -> TexasHoldem:
