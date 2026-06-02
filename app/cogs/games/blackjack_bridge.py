@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.games.blackjack_ui import TableView
-from app.games.engine.blackjack import BlackjackGame, WinningType
+from app.cogs.games.engine.blackjack import BlackjackGame, WinningType
 from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from app.cogs.games._classes import Deck
+    from app.cogs.games.cards import Deck
+    from app.cogs.games.engine.blackjack import Hand
     from app.core import Context
-    from app.games.engine.blackjack import Hand
 
 __all__ = (
     'Blackjack',

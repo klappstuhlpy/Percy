@@ -3,13 +3,12 @@ from __future__ import annotations
 import random
 import time
 from contextlib import suppress
-from dataclasses import dataclass
-from itertools import chain
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 import discord
 
 from app.core.views import View
+from app.games.engine.minesweeper import Board, MSField
 from app.utils import fnumb, helpers, humanize_duration
 from config import Emojis
 
@@ -17,20 +16,7 @@ if TYPE_CHECKING:
     from app.core.models import Context
     from app.database.base import Balance
 
-
-neighbors: Final[list[tuple[int, int]]] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-
-@dataclass
-class MSField:
-    x: int
-    y: int
-    value: int = 0
-    revealed: bool = False
-    mine: bool = False
-
-    def __eq__(self, other: MSField) -> bool:
-        return self.x == other.x and self.y == other.y
+__all__ = ('Minesweeper', 'MinesweeperButton')
 
 
 class Minesweeper(View):
@@ -38,16 +24,22 @@ class Minesweeper(View):
         super().__init__(timeout=250.0, members=ctx.author)
 
         self.ctx: Context | discord.Interaction = ctx
-        self.mines = mines
         self.moves: int = 0
         self.start = time.perf_counter()
 
-        self.board = [[MSField(x=x, y=y) for x in range(5)] for y in range(5)]
-        self.place_mines()
+        self.engine: Board = Board(mines)
 
-        for x in range(5):
-            for y in range(5):
-                self.add_item(MinesweeperButton(self.board[x][y], (x, y)))
+        for x in range(Board.SIZE):
+            for y in range(Board.SIZE):
+                self.add_item(MinesweeperButton(self.engine.board[x][y], (x, y)))
+
+    @property
+    def board(self) -> list[list[MSField]]:
+        return self.engine.board
+
+    @property
+    def mines(self) -> int:
+        return self.engine.mines
 
     async def end(
         self, interaction: discord.Interaction | None = None, won: bool = False, *, field: MSField | None = None
@@ -102,45 +94,6 @@ class Minesweeper(View):
         embed.set_footer(text=f'Player: {self.ctx.author}')
         return embed
 
-    def place_mines(self) -> None:
-        """Place the mines on the board.
-
-        This is done by setting the `mine` attribute of a MSField to `true`
-        and incrementing the value of the surrounding cells.
-        """
-        for field in random.sample(list(chain.from_iterable(self.board)), self.mines):
-            field.mine = True
-
-            for j, i in self.get_neighbours(field):
-                if not self.board[j][i].mine:
-                    self.board[j][i].value += 1
-
-    @staticmethod
-    def get_neighbours(field: MSField) -> list[tuple[int, int]]:
-        """Get the neighbours of a cell"""
-        return [(field.x + i, field.y + j) for i, j in neighbors if (0 <= field.x + i < 5) and (0 <= field.y + j < 5)]
-
-    def mark(self, field: MSField) -> bool:
-        """Mark a cell as selected, iterative flood-fill to avoid RecursionError."""
-        stack = [field]
-
-        while stack:
-            current = stack.pop()
-            if current.revealed:
-                continue
-            current.revealed = True
-
-            if current.mine:
-                return False  # hit a mine
-
-            if current.value == 0:
-                for i, j in self.get_neighbours(current):
-                    neighbour = self.board[i][j]
-                    if not neighbour.revealed:
-                        stack.append(neighbour)
-
-        return True
-
 
 class MinesweeperButton(discord.ui.Button['Minesweeper']):
     def __init__(self, field: MSField, position: tuple[int, int]) -> None:
@@ -172,7 +125,7 @@ class MinesweeperButton(discord.ui.Button['Minesweeper']):
         x, y = self.position
         field = self.view.board[x][y]
 
-        if not self.view.mark(field):
+        if not self.view.engine.mark(field):
             return await self.view.end(interaction, field=field)
 
         if self.cell.value == 0:
@@ -182,7 +135,7 @@ class MinesweeperButton(discord.ui.Button['Minesweeper']):
         else:
             self._update_labels()
 
-        if all(all(kind.revealed for kind in row if not kind.mine) for row in self.view.board):
+        if self.view.engine.is_won:
             return await self.view.end(interaction, True)
 
         await interaction.response.edit_message(embed=self.view.build_embed(), view=self.view)

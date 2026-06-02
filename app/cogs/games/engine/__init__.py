@@ -1,5 +1,7 @@
-from app.games.engine.blackjack import BlackjackGame, WinningType
-from app.games.engine.poker import (
+from app.cogs.games.engine.blackjack import BlackjackGame, WinningType
+from app.cogs.games.engine.minesweeper import Board as MinesweeperBoard
+from app.cogs.games.engine.minesweeper import MSField
+from app.cogs.games.engine.poker import (
     Card,
     CombResult,
     Hand,
@@ -13,8 +15,8 @@ from app.games.engine.poker import (
     comb_index,
     item_by_count,
 )
-from app.games.engine.roulette import Payout, is_winning, spin
-from app.games.engine.tictactoe import Board, BoardKind, BoardState
+from app.cogs.games.engine.roulette import Payout, is_winning, spin
+from app.cogs.games.engine.tictactoe import Board, BoardKind, BoardState
 
 __all__ = (
     'BlackjackGame',
@@ -25,6 +27,8 @@ __all__ = (
     'CombResult',
     'Hand',
     'HandResult',
+    'MSField',
+    'MinesweeperBoard',
     'Payout',
     'Player',
     'Pot',

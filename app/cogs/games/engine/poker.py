@@ -23,7 +23,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.special import comb
 
-from app.cogs.games._classes import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck
+from app.cogs.games.cards import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck
 from app.utils import RevDict, fnumb
 
 __all__ = (

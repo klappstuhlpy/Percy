@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
+from app.cogs.games.engine.poker import Card, TableState, TexasHoldem
 from app.cogs.games.poker_ui import TableView
-from app.games.engine.poker import Card, TableState, TexasHoldem
 from app.utils import helpers, number_suffix
 from config import Emojis
 
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     import numpy as np
 
     from app.cogs.games import Games
-    from app.cogs.games._classes import DisplayCard
+    from app.cogs.games.cards import DisplayCard
+    from app.cogs.games.engine.poker import HandResult, Player, Pot
     from app.core import Context
-    from app.games.engine.poker import HandResult, Player, Pot
 
 __all__ = (
     'PokerSession',

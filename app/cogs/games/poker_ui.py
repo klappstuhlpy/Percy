@@ -15,7 +15,7 @@ from config import Emojis
 if TYPE_CHECKING:
     import PIL.Image
 
-    from app.cogs.games._poker import PokerSession
+    from app.cogs.games.poker_bridge import PokerSession
     from app.core import Bot
     from app.database.base import Balance
     from app.games.engine.poker import Player, TexasHoldem

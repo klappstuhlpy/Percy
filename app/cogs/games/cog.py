@@ -8,15 +8,25 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from expiringdict import ExpiringDict
 
-from app.cogs.games import _blackjack, _minesweeper, _poker, _short_games, _slot, roulette_ui, tictactoe_ui
-from app.cogs.games._classes import MinimumBet, Payouts
+from app.cogs.games import (
+    blackjack_bridge,
+    hangman_ui,
+    minesweeper_ui,
+    poker_bridge,
+    roulette_ui,
+    slot_ui,
+    tictactoe_ui,
+    tower_ui,
+)
+from app.cogs.games.cards import MinimumBet, Payouts
+from app.cogs.games.engine import roulette as roulette_engine
 from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, command, cooldown, describe
-from app.games.engine import roulette as roulette_engine
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
@@ -34,7 +44,7 @@ if TYPE_CHECKING:
     from app.core.timer import Timer
 
 
-async def roulette_space_autocomplete(_, current: str) -> list[app_commands.Choice[str]]:
+async def roulette_space_autocomplete(_, current: str) -> list[Choice[str | int | float]]:
     results = fuzzy.finder(current, list(Space), key=lambda p: str(p.value))
     return [
         app_commands.Choice(name=str(space.value), value=str(space.value)) for space in results[:20]
@@ -58,9 +68,9 @@ class Games(Cog):
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
 
-        self.blackjack_tables: dict[int, _blackjack.Blackjack] = ExpiringDict(max_len=1000, max_age_seconds=21600)
+        self.blackjack_tables: dict[int, blackjack_bridge.Blackjack] = ExpiringDict(max_len=1000, max_age_seconds=21600)
         self.roulette_tables: dict[int, roulette_ui.Table] = {}
-        self.poker_tables: dict[int, _poker.PokerSession] = {}
+        self.poker_tables: dict[int, poker_bridge.PokerSession] = {}
 
     @command(
         'tictactoe',
@@ -103,7 +113,7 @@ class Games(Cog):
             await ctx.send_error('The amount of mines must be greater than equal to 3 and less than 25.')
             return
 
-        ms = _minesweeper.Minesweeper(ctx, mines=mines)
+        ms = minesweeper_ui.Minesweeper(ctx, mines=mines)
         await ctx.send(embed=ms.build_embed(), view=ms)
 
     @command(
@@ -130,7 +140,7 @@ class Games(Cog):
             return
 
         word = random.choice(filtered_words)
-        hangman = _short_games.Hangman(cast('discord.Member', ctx.author), word)
+        hangman = hangman_ui.Hangman(cast('discord.Member', ctx.author), word)
 
         origin = await ctx.send(embed=hangman.build_embed())
 
@@ -223,7 +233,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        tower = _short_games.Tower(cast('discord.Member', ctx.author), bet)
+        tower = tower_ui.Tower(cast('discord.Member', ctx.author), bet)
         await ctx.send(embed=tower.build_embed(), view=tower)
 
     @command(
@@ -257,7 +267,7 @@ class Games(Cog):
 
         await balance.remove(cash=bet)
 
-        slots = _slot.SlotMachine(cast('discord.Member', ctx.author), bet)
+        slots = slot_ui.SlotMachine(cast('discord.Member', ctx.author), bet)
         await ctx.send(embed=slots.build_embed(), view=slots)
 
     @command(
@@ -297,7 +307,7 @@ class Games(Cog):
 
             blackjack = blackjack.wake_up(ctx, bet)
         else:
-            blackjack = _blackjack.Blackjack(ctx, bet=bet, decks=3)
+            blackjack = blackjack_bridge.Blackjack(ctx, bet=bet, decks=3)
             self.blackjack_tables[ctx.author.id] = blackjack
 
         # Shuffle cards, just for aesthetics
@@ -559,7 +569,7 @@ class Games(Cog):
                 await ctx.send_error('The table is full.')
                 return
 
-            if poker.state != _poker.TableState.STOPPED:
+            if poker.state != poker_bridge.TableState.STOPPED:
                 await ctx.send_error(
                     'The game is already running.\n'
                     'Please wait for the next round or open a new game in a different channel.')
@@ -578,7 +588,7 @@ class Games(Cog):
             poker.view.update_buttons()
             await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
         else:
-            poker = _poker.PokerSession(self, ctx, first_buy_in=stack)
+            poker = poker_bridge.PokerSession(self, ctx, first_buy_in=stack)
             poker.add_player(cast('discord.Member', ctx.author), stack)
             poker.view.update_buttons()
 

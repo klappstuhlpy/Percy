@@ -13,7 +13,7 @@ from config import Emojis
 
 if TYPE_CHECKING:
     from app.cogs.economy import Economy
-    from app.cogs.games._blackjack import Blackjack
+    from app.cogs.games.blackjack_bridge import Blackjack
     from app.database.base import Balance
 
 __all__ = ('NewGameButton', 'TableView')
