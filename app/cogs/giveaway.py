@@ -138,8 +138,7 @@ class GiveawayEnterButton(discord.ui.DynamicItem[discord.ui.Button], template=r'
     async def callback(self, interaction: Interaction) -> None:
         assert self.giveaway is not None
         self.giveaway.entries.add(interaction.user.id)
-        query = "UPDATE giveaways SET entries = $1 WHERE id = $2;"
-        await interaction.client.db.execute(query, self.giveaway.entries, self.giveaway.id)  # type: ignore[union-attr]
+        await interaction.client.db.giveaways.set_entries(self.giveaway.id, self.giveaway.entries)  # type: ignore[union-attr]
 
         if self.giveaway.message is MISSING:
             await self.giveaway.fetch_message()
@@ -291,8 +290,7 @@ class Giveaway(BaseRecord):
             if member:
                 winners.append(member)
 
-        query = "UPDATE giveaways SET entries = $1 WHERE id = $2;"
-        await self.bot.db.execute(query, self.entries, self.id)
+        await self.bot.db.giveaways.set_entries(self.id, self.entries)
         return winners
 
 
@@ -330,8 +328,7 @@ class Giveaways(Cog):
         :class:`Giveaway`
             The giveaway if found, else ``None``.
         """
-        query = "SELECT * FROM giveaways WHERE id = $1 LIMIT 1;"
-        record = await self.bot.db.fetchrow(query, giveaway_id)
+        record = await self.bot.db.giveaways.get_giveaway(giveaway_id)
         giveaway = Giveaway(cog=self, record=record) if record else None
         return giveaway
 
@@ -352,8 +349,7 @@ class Giveaways(Cog):
         class:`Giveaway`
             The giveaway if found, else ``None``.
         """
-        query = "SELECT * FROM giveaways WHERE guild_id = $1 AND id = $2 LIMIT 1;"
-        record = await self.bot.db.fetchrow(query, guild_id, giveaway_id)
+        record = await self.bot.db.giveaways.get_guild_giveaway(guild_id, giveaway_id)
         giveaway = Giveaway(cog=self, record=record) if record else None
         return giveaway
 
@@ -372,8 +368,7 @@ class Giveaways(Cog):
         List[:class:`Giveaway`]
             The giveaways in the guild.
         """
-        query = "SELECT * FROM giveaways WHERE guild_id = $1;"
-        records = await self.bot.db.fetch(query, guild_id)
+        records = await self.bot.db.giveaways.get_guild_giveaways(guild_id)
         return [Giveaway(cog=self, record=record) for record in records]
 
     async def create_giveaway(
@@ -419,13 +414,8 @@ class Giveaways(Cog):
             metadata={'args': args, 'kwargs': kwargs}
         )
 
-        query = """
-            INSERT INTO giveaways (channel_id, message_id, guild_id, author_id, metadata)
-            VALUES ($1, $2, $3, $4, $5::jsonb)
-            RETURNING id;
-        """
-        giveaway.id = await self.bot.db.fetchval(  # type: ignore[misc]
-            query, channel_id, message_id, guild_id, author_id, {'args': args, 'kwargs': kwargs})
+        giveaway.id = await self.bot.db.giveaways.create_giveaway(  # type: ignore[misc]
+            channel_id, message_id, guild_id, author_id, {'args': args, 'kwargs': kwargs})
         return giveaway
 
     async def end_giveaway(self, giveaway_id: int) -> None:
@@ -546,8 +536,7 @@ class Giveaways(Cog):
         if giveaway.message is MISSING:
             await giveaway.fetch_message()
 
-        query = "DELETE FROM giveaways WHERE id = $1;"
-        await self.bot.db.execute(query, giveaway.id)
+        await self.bot.db.giveaways.delete_giveaway(giveaway.id)
 
         winners = await giveaway.get_winners()
         await giveaway.message.edit(embed=giveaway.to_embed(winners), view=None)
