@@ -22,6 +22,7 @@ from app.database.repositories import (
     LevelingRepository,
     ModerationRepository,
     NotesRepository,
+    PlaylistsRepository,
     PollsRepository,
     StatsRepository,
     TagsRepository,
@@ -165,6 +166,7 @@ class Database(_Database):
     emoji_stats: EmojiStatsRepository
     highlights: HighlightsRepository
     temp_channels: TempChannelsRepository
+    playlists: PlaylistsRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -181,6 +183,7 @@ class Database(_Database):
         self.emoji_stats = EmojiStatsRepository(self)
         self.highlights = HighlightsRepository(self)
         self.temp_channels = TempChannelsRepository(self)
+        self.playlists = PlaylistsRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

@@ -170,8 +170,7 @@ class Playlist(BaseRecord):
         PlaylistTrack
             The track that was added to the playlist.
         """
-        query = "INSERT INTO playlist_lookup (playlist_id, name, url) VALUES ($1, $2, $3) RETURNING *;"
-        record = await self.cog.bot.db.fetchrow(query, self.id, track.title, track.uri)
+        record = await self.cog.bot.db.playlists.add_track(self.id, track.title, track.uri)
 
         playlist_track = PlaylistTrack(record=record)
         self.tracks.append(playlist_track)
@@ -185,7 +184,7 @@ class Playlist(BaseRecord):
         track: PlaylistTrack
             The track to remove from the playlist.
         """
-        await self.cog.bot.db.execute("DELETE FROM playlist_lookup WHERE id = $1;", track.id)
+        await self.cog.bot.db.playlists.remove_track(track.id)
         self.tracks.remove(track)
 
     def to_embeds(self) -> list[discord.Embed]:
@@ -217,19 +216,12 @@ class Playlist(BaseRecord):
 
     async def delete(self) -> None:
         """Delete a playlist and all corresponding entries."""
-        query = "DELETE FROM playlist WHERE id = $1;"
-        await self.cog.bot.db.execute(query, self.id)
-
-        query = "DELETE FROM playlist_lookup WHERE playlist_id = $1;"
-        await self.cog.bot.db.execute(query, self.id)
-
+        await self.cog.bot.db.playlists.delete_playlist(self.id)
         self.cog.get_playlists.invalidate(self.owner_id)
 
     async def clear(self) -> None:
         """Clear all Items in a playlist."""
-        query = "DELETE FROM playlist_lookup WHERE playlist_id = $1;"
-        await self.cog.bot.db.execute(query, self.id)
-
+        await self.cog.bot.db.playlists.clear_tracks(self.id)
         self.tracks.clear()
 
 

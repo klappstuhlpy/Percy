@@ -7,6 +7,7 @@ from app.database.repositories.incidents import IncidentsRepository
 from app.database.repositories.leveling import LevelingRepository
 from app.database.repositories.moderation import ModerationRepository
 from app.database.repositories.notes import NotesRepository
+from app.database.repositories.playlists import PlaylistsRepository
 from app.database.repositories.polls import PollsRepository
 from app.database.repositories.stats import StatsRepository
 from app.database.repositories.tags import TagsRepository
@@ -23,6 +24,7 @@ __all__ = (
     'LevelingRepository',
     'ModerationRepository',
     'NotesRepository',
+    'PlaylistsRepository',
     'PollsRepository',
     'StatsRepository',
     'TagsRepository',

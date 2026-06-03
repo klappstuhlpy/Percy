@@ -1255,8 +1255,7 @@ class PlaylistTools(Cog):
         if any(playlist.is_liked_songs for playlist in playlists):
             return None
 
-        record = await self.bot.db.fetchval(
-            "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
+        record = await self.bot.db.playlists.create_playlist(
             user.id, 'Liked Songs', discord.utils.utcnow().replace(tzinfo=None))
         self.get_playlists.invalidate(user.id)
         return record
@@ -1280,8 +1279,7 @@ class PlaylistTools(Cog):
         ]
 
     async def _get_playlist_tracks(self, playlist_id: int) -> list[PlaylistTrack]:
-        query = "SELECT * FROM playlist_lookup WHERE playlist_id=$1;"
-        records = await self.bot.db.fetch(query, playlist_id)
+        records = await self.bot.db.playlists.get_playlist_tracks(playlist_id)
         return [PlaylistTrack(record=record) for record in records]
 
     async def get_playlist(
@@ -1308,13 +1306,10 @@ class PlaylistTools(Cog):
             The Playlist if found, else None.
         """
         if isinstance(name_or_id, int):
-            args = (name_or_id,)
-            query = "SELECT * FROM playlist WHERE id = $1;"
+            record = await self.bot.db.playlists.get_playlist_by_id(name_or_id)
         else:
-            query = "SELECT * FROM playlist WHERE LOWER(name) = $1 AND user_id = $2;"
-            args = (name_or_id.lower(), ctx.user.id)
+            record = await self.bot.db.playlists.get_playlist_by_name(ctx.user.id, name_or_id)
 
-        record = await self.bot.db.fetchrow(query, *args)
         playlist = Playlist(cog=self, record=record) if record else None
 
         if playlist and pass_tracks is False:
@@ -1323,8 +1318,7 @@ class PlaylistTools(Cog):
 
     async def get_liked_songs(self, user_id: int) -> Playlist | None:
         """Gets a User 'Liked Songs' playlist."""
-        query = "SELECT * FROM playlist WHERE user_id=$1 AND name='Liked Songs' LIMIT 1;"
-        record = await self.bot.db.fetchrow(query, user_id)
+        record = await self.bot.db.playlists.get_liked_songs(user_id)
         playlist = Playlist(cog=self, record=record) if record else None
 
         if playlist:
@@ -1345,9 +1339,7 @@ class PlaylistTools(Cog):
         list[Playlist]
             A list of all playlists from the user.
         """
-        query = "SELECT * FROM playlist WHERE user_id=$1;"
-
-        records = await self.bot.db.fetch(query, user_id)
+        records = await self.bot.db.playlists.get_user_playlists(user_id)
         playlists = [Playlist(cog=self, record=record) for record in records]
 
         for playlist in playlists:
@@ -1418,8 +1410,7 @@ class PlaylistTools(Cog):
             await ctx.send_error('The name of the playlist must be 100 characters or less.')
             return
 
-        query = "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;"
-        playlist_id = await self.bot.db.fetchval(query, ctx.author.id, name, discord.utils.utcnow())
+        playlist_id = await self.bot.db.playlists.create_playlist(ctx.author.id, name, discord.utils.utcnow())
         self.get_playlists.invalidate(ctx.author.id)
 
         await ctx.send_success(f'Successfully created playlist **{name}** [`{playlist_id}`].')
