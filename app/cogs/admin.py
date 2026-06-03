@@ -247,13 +247,7 @@ class Admin(Cog):
     @sql.command(name='schema')
     async def sql_schema(self, ctx: Context, *, table_name: str) -> None:
         """Runs a query describing the table schema."""
-        query = """
-            SELECT column_name, data_type, column_default, is_nullable
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE table_name = $1
-            ORDER BY ordinal_position;
-        """
-        results: list[Record] = await ctx.db.fetch(query, table_name)
+        results = await ctx.db.admin.get_table_schema(table_name)
 
         if len(results) == 0:
             raise commands.BadArgument(f'Table `{table_name}` not found')
@@ -263,14 +257,7 @@ class Admin(Cog):
     @sql.command(name='tables')
     async def sql_tables(self, ctx: Context) -> None:
         """Lists all SQL tables in the database."""
-        query = """
-            SELECT table_name
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_schema = 'public'
-              AND table_type = 'BASE TABLE'
-            ORDER BY table_name;
-        """
-        results: list[Record] = await ctx.db.fetch(query)
+        results = await ctx.db.admin.list_tables()
 
         if len(results) == 0:
             raise commands.BadArgument('Could not find any tables')
@@ -280,17 +267,7 @@ class Admin(Cog):
     @sql.command(name='sizes')
     async def sql_sizes(self, ctx: Context) -> None:
         """Display how much space the database is taking up."""
-        query = """
-            SELECT nspname || '.' || relname                   AS "relation",
-                   pg_size_pretty(pg_relation_size(C.oid))     AS "size",
-                   COALESCE(pg_row_estimate(relname::text), 0) AS "rows"
-            FROM pg_class C
-                     LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
-            WHERE nspname NOT IN ('pg_catalog', 'information_schema')
-            ORDER BY pg_relation_size(C.oid) DESC
-            LIMIT 20;
-        """
-        results: list[Record] = await ctx.db.fetch(query)
+        results = await ctx.db.admin.get_table_sizes()
 
         if len(results) == 0:
             await ctx.send_error('Could not find any tables')
@@ -304,12 +281,7 @@ class Admin(Cog):
         query = '\n'.join(query)
 
         analyze = ctx.invoked_with == 'analyze'
-        if analyze:
-            query = f'EXPLAIN (ANALYZE, COSTS, VERBOSE, BUFFERS, FORMAT JSON)\n{query}'
-        else:
-            query = f'EXPLAIN (COSTS, VERBOSE, FORMAT JSON)\n{query}'
-
-        json = await ctx.db.fetchrow(query)
+        json = await ctx.db.admin.explain_query(query, analyze=analyze)
         if json is None:
             await ctx.send_error('No results.')
             return

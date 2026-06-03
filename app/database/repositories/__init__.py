@@ -1,3 +1,4 @@
+from app.database.repositories.admin import AdminRepository
 from app.database.repositories.base import BaseRepository
 from app.database.repositories.emoji_stats import EmojiStatsRepository
 from app.database.repositories.giveaways import GiveawaysRepository
@@ -15,6 +16,7 @@ from app.database.repositories.temp_channels import TempChannelsRepository
 from app.database.repositories.users import UsersRepository
 
 __all__ = (
+    'AdminRepository',
     'BaseRepository',
     'EmojiStatsRepository',
     'GiveawaysRepository',
