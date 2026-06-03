@@ -144,8 +144,7 @@ class Comics(Cog):
         comic: :class:`ComicFeed`
             The comic feed to call.
         """
-        query = "UPDATE comic_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;"
-        await self.bot.db.execute(query, comic.next_scheduled(), comic.guild_id, comic.brand.name)
+        await self.bot.db.comics.set_next_pull(comic.next_scheduled(), comic.guild_id, comic.brand.name)
 
         self.bot.dispatch('comic_schedule', comic)
 
@@ -223,14 +222,7 @@ class Comics(Cog):
         :class:`ComicFeed`
             The next feed to be dispatched.
         """
-        query = """
-            SELECT *
-            FROM comic_config
-            WHERE (next_pull AT TIME ZONE 'UTC') < (CURRENT_TIMESTAMP + $1::interval)
-            ORDER BY next_pull
-            LIMIT 1;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, datetime.timedelta(days=days))
+        record = await self.bot.db.comics.get_next_scheduled(days, connection=connection)
         return ComicFeed(cog=self, record=record) if record else None
 
     def reset_task(self) -> None:
@@ -395,8 +387,7 @@ class Comics(Cog):
         :class:`ComicFeed`
             The comic feed config, if found.
         """
-        query = "SELECT * FROM comic_config WHERE guild_id = $1 AND brand = $2;"
-        record = await self.bot.db.fetchrow(query, guild_id, str(brand))
+        record = await self.bot.db.comics.get_config(guild_id, str(brand))
         return ComicFeed(cog=self, record=record) if record else None
 
     @group(
@@ -490,11 +481,7 @@ class Comics(Cog):
         )
         new_config.next_pull = new_config.next_scheduled()  # type: ignore[union-attr]
 
-        query = """
-            INSERT INTO comic_config (guild_id, channel_id, brand, format, day, ping, pin, next_pull)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
-        """
-        await self.bot.db.execute(query, *new_config.to_dict().values())  # type: ignore[union-attr]
+        await self.bot.db.comics.create_config(new_config.to_dict())  # type: ignore[union-attr]
 
         self.get_comic_config.invalidate_containing(str(ctx.guild.id))
         self.reset_task()

@@ -270,13 +270,7 @@ class ComicFeed[B: Brand](BaseRecord):
             *,
             connection: asyncpg.Connection | None = None,
     ) -> ComicFeed[B]:
-        query = f"""
-            UPDATE comic_config
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        record = await (connection or self.cog.bot.db).fetchrow(query, self.id, *values.values())
+        record = await self.cog.bot.db.comics.update_config(self.id, key, values, connection=connection)
         return self.__class__(cog=self.cog, record=record)
 
     def to_dict(self) -> dict[str, Any]:
@@ -320,8 +314,7 @@ class ComicFeed[B: Brand](BaseRecord):
 
         Deletes the Comic Feed Configuration from the Database
         """
-        query = "DELETE FROM comic_config WHERE guild_id = $1 AND brand = $2;"
-        await self.cog.bot.db.execute(query, self.guild_id, self.brand.name)
+        await self.cog.bot.db.comics.delete_config(self.guild_id, self.brand.name)
         self.cog.get_comic_config.invalidate_containing(str(self.guild_id))  # type: ignore[attr-defined]
 
     def next_scheduled(self, day: int | None = None) -> datetime.datetime:
