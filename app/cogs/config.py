@@ -56,7 +56,7 @@ class GuildCommandsConfiguration:
             self.allow: set[str] = set()
             self.deny: set[str] = set()
 
-    def __init__(self, guild_id: int, records: list[tuple[str, int, bool]]) -> None:
+    def __init__(self, guild_id: int, records: list[asyncpg.Record]) -> None:
         self.guild_id: int = guild_id
 
         self._lookup: defaultdict[int | None, GuildCommandsConfiguration._Entry] = defaultdict(self._Entry)
@@ -210,18 +210,13 @@ class Config(Cog):
                 if member is not None and member.guild_permissions.manage_guild:
                     return False
 
-        if channel is None:
-            query = "SELECT 1 FROM plonks WHERE guild_id=$1 AND entity_id=$2;"
-            row = await self.bot.db.fetchrow(query, guild_id, member_id)
-        else:
+        entity_ids = [member_id]
+        if channel is not None:
+            entity_ids.append(channel.id)
             if isinstance(channel, discord.Thread):
-                query = "SELECT 1 FROM plonks WHERE guild_id=$1 AND entity_id IN ($2, $3, $4);"
-                row = await self.bot.db.fetchrow(query, guild_id, member_id, channel.id, channel.parent_id)
-            else:
-                query = "SELECT 1 FROM plonks WHERE guild_id=$1 AND entity_id IN ($2, $3);"
-                row = await self.bot.db.fetchrow(query, guild_id, member_id, channel.id)
+                entity_ids.append(channel.parent_id)
 
-        return row is not None
+        return await self.bot.db.guilds.is_plonked(guild_id, entity_ids)
 
     async def bot_check_once(self, ctx: Context) -> bool:
         if ctx.guild is None:
@@ -255,8 +250,7 @@ class Config(Cog):
         :class:`GuildCommandsConfiguration`
             The resolved command permissions for the given guild.
         """
-        query = "SELECT name, channel_id, whitelist FROM command_config WHERE guild_id=$1;"
-        records = await self.bot.db.fetch(query, guild_id)
+        records = await self.bot.db.guilds.get_command_config(guild_id)
         return GuildCommandsConfiguration(guild_id, records)
 
     async def bot_check(self, ctx: Context) -> bool:
@@ -270,16 +264,8 @@ class Config(Cog):
         return not resolved.is_blocked(ctx)
 
     async def _bulk_ignore_entries(self, ctx: Context, entries: Iterable[discord.abc.Snowflake]) -> None:
-        async with ctx.db.acquire() as con, con.transaction():
-            query = "SELECT entity_id FROM plonks WHERE guild_id=$1;"
-            records = await con.fetch(query, ctx.guild.id)
-
-            current_plonks = {r[0] for r in records}
-            to_insert = [(ctx.guild.id, e.id) for e in entries if e.id not in current_plonks]
-
-            await con.copy_records_to_table('plonks', columns=['guild_id', 'entity_id'], records=to_insert)
-
-            self.is_plonked.invalidate_containing(str(ctx.guild.id))
+        await self.bot.db.guilds.bulk_add_plonks(ctx.guild.id, [e.id for e in entries])
+        self.is_plonked.invalidate_containing(str(ctx.guild.id))
 
     @group(
         'config',
@@ -313,9 +299,7 @@ class Config(Cog):
         """
         if len(entities) == 0:
             entities = [0]
-            query = "INSERT INTO plonks (guild_id, entity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
-            await ctx.db.execute(query, ctx.guild.id, ctx.channel.id)
-
+            await ctx.db.guilds.add_plonk(ctx.guild.id, ctx.channel.id)
             self.is_plonked.invalidate_containing(f'{ctx.guild.id!r}:')
         else:
             await self._bulk_ignore_entries(ctx, entities)
@@ -331,8 +315,7 @@ class Config(Cog):
     @cooldown(1, 5, commands.BucketType.guild)
     async def ignore_list(self, ctx: Context) -> None:
         """Tells you what channels or members are currently ignored in this server."""
-        query = "SELECT entity_id FROM plonks WHERE guild_id=$1;"
-        records = await ctx.db.fetch(query, ctx.guild.id)
+        records = await ctx.db.guilds.get_plonks(ctx.guild.id)
 
         if len(records) == 0:
             await ctx.send_error('There are no ignored channels or members in this server.')
@@ -367,8 +350,7 @@ class Config(Cog):
     )
     async def ignore_clear(self, ctx: Context) -> None:
         """Clears all the currently set ignores."""
-        query = "DELETE FROM plonks WHERE guild_id=$1;"
-        await ctx.db.execute(query, ctx.guild.id)
+        await ctx.db.guilds.clear_plonks(ctx.guild.id)
         self.is_plonked.invalidate_containing(f'{ctx.guild.id!r}:')
         await ctx.send_success('Successfully cleared all the ignores.')
 
@@ -387,12 +369,9 @@ class Config(Cog):
         If nothing is specified, it unignores the current channel.
         """
         if len(entities) == 0:
-            query = "DELETE FROM plonks WHERE guild_id=$1 AND entity_id=$2;"
-            await ctx.db.execute(query, ctx.guild.id, ctx.channel.id)
+            await ctx.db.guilds.remove_plonks(ctx.guild.id, [ctx.channel.id])
         else:
-            query = "DELETE FROM plonks WHERE guild_id=$1 AND entity_id = ANY($2::bigint[]);"
-            entity_ids = [c.id for c in entities]
-            await ctx.db.execute(query, ctx.guild.id, entity_ids)
+            await ctx.db.guilds.remove_plonks(ctx.guild.id, [c.id for c in entities])
 
         self.is_plonked.invalidate_containing(f'{ctx.guild.id!r}:')
         await ctx.send_success(f'Successfully unignored **{len(entities)}** entities.')
@@ -438,25 +417,13 @@ class Config(Cog):
         """
         self.get_commands_configuration.invalidate(guild_id)
 
-        if channel_id is None:
-            subcheck = 'channel_id IS NULL'
-            args = (guild_id, name)
-        else:
-            subcheck = 'channel_id=$3'
-            args = (guild_id, name, channel_id)
-
-        async with db.acquire() as connection, connection.transaction():
-            query = f"DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND {subcheck};"
-            await connection.execute(query, *args)
-
-            query = "INSERT INTO command_config (guild_id, channel_id, name, whitelist) VALUES ($1, $2, $3, $4);"
-            try:
-                await connection.execute(query, guild_id, channel_id, name, whitelist)
-            except asyncpg.UniqueViolationError:
-                raise commands.BadArgument(
-                    'This command is already disabled.'
-                    if not whitelist else 'This command is already explicitly enabled.'
-                )
+        try:
+            await db.guilds.set_command_config(guild_id, channel_id, name, whitelist=whitelist)
+        except asyncpg.UniqueViolationError:
+            raise commands.BadArgument(
+                'This command is already disabled.'
+                if not whitelist else 'This command is already explicitly enabled.'
+            )
 
     @config.group(
         'channel',
