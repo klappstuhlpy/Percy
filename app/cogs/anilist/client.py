@@ -1,26 +1,34 @@
 from typing import Any
 
 import aiohttp
-import discord
+
+from app.clients import BaseHTTPClient, HTTPClientError
 
 API_ENDPOINT = 'https://graphql.anilist.co'
 
 
-class AniListClient:
+class AniListClient(BaseHTTPClient):
+    """GraphQL client for AniList, hardened by :class:`~app.clients.BaseHTTPClient`.
+
+    Rate-limit retries, transport-error backoff and circuit-breaking are inherited;
+    this class only owns the GraphQL queries and AniList's quirk of returning HTTP 500
+    for transient/empty results (surfaced as ``None`` so callers fall back to empty).
+    """
+
     def __init__(self, session: aiohttp.ClientSession) -> None:
-        self.session: aiohttp.ClientSession = session
+        super().__init__(session, name='AniList')
 
     async def _request(self, query: str, **variables: dict[str, Any]) -> dict[str, Any] | None:
         headers = variables.pop('headers', {})
-        async with self.session.post(API_ENDPOINT, json={'query': query, 'variables': variables},
-                                     headers=headers) as resp:
-            data = await resp.json()
-
-            if resp.status != 200:
-                if resp.status == 500:
-                    return None
-                raise discord.HTTPException(resp, data)
-        return data
+        try:
+            return await self.fetch(
+                'POST', API_ENDPOINT,
+                json={'query': query, 'variables': variables}, headers=headers,
+            )
+        except HTTPClientError as exc:
+            if exc.status == 500:
+                return None
+            raise
 
     async def media(self, **variables: Any) -> list[dict[str, Any]]:
         data = await self._request(query=self._media_query, **variables)

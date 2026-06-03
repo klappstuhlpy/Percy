@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import hashlib
 import re
@@ -8,11 +7,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urljoin
 
 import aiohttp
-import discord
-import yarl
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
 
+from app.clients import BaseHTTPClient, HTTPClientError
 from app.utils import executor, utcparse
 from app.utils.lock import lock
 from config import marvel as marvel_config
@@ -23,25 +21,34 @@ if TYPE_CHECKING:
     from app.core import Bot
 
 
-class MarvelError(discord.HTTPException):
+class MarvelError(HTTPClientError):
     """Base exception class for all Marvel errors."""
     pass
 
 
-class Marvel:
+class Marvel(BaseHTTPClient):
     """A client for the Marvel API.
 
-    Attributes
-    ----------
-    BASE_URL: str
-        The base URL for the Marvel API.
+    Inherits rate-limit retries, transport-error backoff and circuit-breaking from
+    :class:`~app.clients.BaseHTTPClient`; this class only owns request signing (the
+    timestamp/hash Marvel requires) and surfaces failures as :class:`MarvelError`.
     """
 
     BASE_URL = 'http://gateway.marvel.com/v1/public/'
 
     def __init__(self, bot: Bot) -> None:
+        super().__init__(bot.session, name='Marvel')
         self.bot: Bot = bot
         self.config = marvel_config
+
+    def _should_retry(self, response: aiohttp.ClientResponse, payload: Any) -> bool:
+        # Marvel signals an exhausted window with X-Ratelimit-Remaining: 0 even on a 200;
+        # back off in that case too so the next call doesn't immediately get a 429.
+        return response.status == 429 or response.headers.get('X-Ratelimit-Remaining') == '0'
+
+    def _build_error(self, response: aiohttp.ClientResponse, payload: Any) -> HTTPClientError:
+        message = payload.get('message') if isinstance(payload, dict) else str(payload)
+        return MarvelError(response, message)
 
     @lock('Marvel', 'request', wait=True)
     async def request(
@@ -65,25 +72,13 @@ class Marvel:
             'Accept': 'application/json'
         }
 
-        req_url = yarl.URL(self.BASE_URL) / url
-
         if headers is not None and isinstance(headers, dict):
             hdrs.update(headers)
 
         if data is not None:
             params.update(data)
 
-        async with self.bot.session.request(method, req_url, params=params, headers=headers) as r:
-            remaining = r.headers.get('X-Ratelimit-Remaining')
-            js = await r.json()
-            if r.status == 429 or remaining == '0':
-                delta = discord.utils._parse_ratelimit_header(r)
-                await asyncio.sleep(delta)
-                return await self.request(method, url, data=data, headers=headers)
-            elif 300 > r.status >= 200:
-                return js
-            else:
-                raise MarvelError(r, js['message'])
+        return await self.fetch(method, url, params=params, headers=hdrs)
 
     async def get_comic(self, _id: int) -> DataWrapper:
         """Fetches a single comic by id."""
