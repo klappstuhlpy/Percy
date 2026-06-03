@@ -61,12 +61,7 @@ class Timer(BaseRecord):
         connection: :class:`asyncpg.Connection` | None
             The connection to use for the query.
         """
-        query = f"""
-            UPDATE timers
-            SET {', '.join(f"{key((i, k))} = ${i + 1}" for i, k in enumerate(values))}
-            WHERE id = $1;
-        """
-        record = await (connection or self.bot.db).execute(query, self.id, *values.values())
+        record = await self.bot.db.timers.update_timer(self.id, key, values, connection=connection)
         return self.__class__(bot=self.bot, record=record)
 
     async def rerun(  # noqa: ANN201
@@ -204,9 +199,7 @@ class TimerManager:
         if not kwargs:
             raise ValueError('You must provide at least one keyword argument.')
 
-        filter_clause = [f"metadata #>> ARRAY['kwargs', '{key}'] = ${i}" for i, key in enumerate(kwargs.keys(), start=2)]
-        query = f"SELECT * FROM timers WHERE event = $1 AND {' AND '.join(filter_clause)} LIMIT 1;"
-        record = await self.bot.db.fetchrow(query, event, *map(str, kwargs.values()))
+        record = await self.bot.db.timers.fetch_by_kwargs(event, kwargs)
         return Timer(bot=self.bot, record=record) if record else None
 
     async def delete(self, event: str, /, **kwargs: Any) -> None:
@@ -225,9 +218,7 @@ class TimerManager:
         if not kwargs:
             raise ValueError('You must provide at least one keyword argument.')
 
-        filter_clause = [f"metadata #>> ARRAY['kwargs', '{key}'] = ${i}" for i, key in enumerate(kwargs.keys(), start=2)]
-        query = f"DELETE FROM timers WHERE event = $1 AND {' AND '.join(filter_clause)} RETURNING id;"
-        timer_id = await self.bot.db.fetchval(query, event, *map(str, kwargs.values()))
+        timer_id = await self.bot.db.timers.delete_by_kwargs(event, kwargs)
 
         if timer_id is not None and self._loaded_timer and self._loaded_timer.id == timer_id:
             self.reset_task()
@@ -245,7 +236,7 @@ class TimerManager:
         if timer.is_short_dispatch:
             del self._short_timers[timer.id]
         else:
-            await self.db.execute("DELETE FROM timers WHERE id = $1;", timer.id)
+            await self.db.timers.delete_timer(timer.id)
 
         event_name = f'{timer.event}_timer_complete'
         self._dispatch(event_name, timer)
@@ -322,12 +313,8 @@ class TimerManager:
             log.debug(f'Short timer {timer.id} will fire in {seconds} seconds.')  # noqa: G004
             return timer
 
-        query = """
-            INSERT INTO timers (event, metadata, expires, created, timezone)
-            VALUES ($1, $2::jsonb, $3, $4, $5)
-            RETURNING id;
-        """
-        timer.id = await self.bot.db.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when, now, tz)
+        timer.id = await self.bot.db.timers.create_timer(
+            event, {'args': args, 'kwargs': kwargs}, when, now, tz)
 
         if seconds <= self.MAX_DAYS * 86400:
             self.__event.set()
@@ -360,14 +347,7 @@ class TimerManager:
         days: int
             The amount of days to look for the next timer.
         """
-        query = """
-            SELECT *
-            FROM timers
-            WHERE (expires AT TIME ZONE timezone) < (CURRENT_TIMESTAMP + $1::interval)
-            ORDER BY expires
-            LIMIT 1;
-        """
-        record = await (connection or self.db).fetchrow(query, datetime.timedelta(days=days))
+        record = await self.bot.db.timers.get_next_due(days, connection=connection)
         return Timer(bot=self.bot, record=record) if record else None
 
     async def wait(
