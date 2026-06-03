@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable, Generator, Iterable
+from collections.abc import Awaitable, Callable, Generator, Iterable, Coroutine
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import discord
@@ -28,6 +28,7 @@ from config import Emojis
 T = TypeVar("T")
 
 type ViewIdentifierKwars = Any  # loose alias kept for back-compat; kwargs are passed to View.__init__
+AsyncHook = Callable[[discord.Interaction], Coroutine[Any, Any, None]]
 
 
 @discord.utils.copy_doc(discord.ui.View)
@@ -196,14 +197,14 @@ class ConfirmationView(View):
         timeout: float | None = None,
         defer: bool = False,
         delete_after: bool = False,
-        hook: AsyncCallable[discord.Interaction, None] | None = None,
+        hook: AsyncHook | None = None,
     ) -> None:
         self.value: bool | None = None
         self.hook_value: Any = None
 
         self._defer: bool = defer
         self._delete_after: bool = delete_after
-        self._hook: AsyncCallable[discord.Interaction, None] | None = hook
+        self._hook: AsyncHook | None = hook
         super().__init__(timeout=timeout, members=user)
 
         self._true_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(  # type: ignore

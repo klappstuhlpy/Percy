@@ -12,7 +12,6 @@ from discord import DiscordException, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 from discord.ext.commands import Range
-from discord.ext.commands.core import Check
 
 from app.core import Bot, Cog, Context, Flags, describe, flag, group
 from app.core.pagination import EmbedPaginator
@@ -216,7 +215,7 @@ class AniList(Cog):
         hybrid=True
     )
     @describe(prompt='The title of the anime to search for')
-    @app_commands.autocomplete(prompt=media_prompt_autocomplete)
+    @app_commands.autocomplete(prompt=media_prompt_autocomplete)  # type: ignore
     async def anime(self, ctx: Context, *, prompt: str, flags: AniListSearchFlags) -> None:
         """Searches for an anime with the given title and displays information about the search results."""
         await ctx.defer(typing=True)
