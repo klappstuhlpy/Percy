@@ -227,14 +227,7 @@ class UserSettings(Cog, name='User Settings'):
         using the reminder command and other miscellaneous commands
         such as tempblock, tempmute, etc.
         """
-        query = """
-            INSERT INTO user_settings (id, timezone)
-            VALUES ($1, $2)
-                ON CONFLICT (id) DO UPDATE SET timezone = $2;
-        """
-        await ctx.db.execute(query, ctx.author.id, tz.key)
-
-        self.bot.db.get_user_config.invalidate(ctx.author.id)
+        await ctx.db.users.set_timezone(ctx.author.id, tz.key)
         await ctx.send_success(f'Your timezone has been set to **{tz.label}** (IANA ID: {tz.key}).',
                                ephemeral=True, delete_after=10)
 
@@ -256,8 +249,7 @@ class UserSettings(Cog, name='User Settings'):
         if config is None or (config and config.timezone is None):
             raise commands.BadArgument('You have not set your timezone.')
 
-        await ctx.db.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", ctx.author.id)
-        self.bot.db.get_user_config.invalidate(ctx.author.id)
+        await ctx.db.users.clear_timezone(ctx.author.id)
         await ctx.send_success('Your timezone has been deleted.', ephemeral=True)
 
     def find_timezones(self, query: str) -> list[TimeZone]:
@@ -292,16 +284,7 @@ class UserSettings(Cog, name='User Settings'):
         - name history
         """
 
-        async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            await conn.execute(
-                """
-                DELETE FROM presence_history WHERE uuid = $1;
-                DELETE FROM avatar_history WHERE uuid = $1;
-                DELETE FROM item_history WHERE uuid = $1;
-                """,
-                ctx.author.id
-            )
-
+        await self.bot.db.users.delete_personal_data(ctx.author.id)
         await ctx.send_success('Your data has been removed from the bot.', ephemeral=True)
 
 

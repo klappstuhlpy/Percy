@@ -31,6 +31,33 @@ class UsersRepository(BaseRepository):
         """Fetches the stored timezone for a user."""
         return await self.fetchval("SELECT timezone FROM user_settings WHERE id = $1;", user_id, column='timezone')
 
+    async def set_timezone(self, user_id: int, timezone: str) -> None:
+        """Stores (or replaces) a user's timezone."""
+        query = """
+            INSERT INTO user_settings (id, timezone)
+            VALUES ($1, $2)
+                ON CONFLICT (id) DO UPDATE SET timezone = $2;
+        """
+        await self.execute(query, user_id, timezone)
+        self.db.get_user_config.invalidate(user_id)
+
+    async def clear_timezone(self, user_id: int) -> None:
+        """Clears a user's stored timezone."""
+        await self.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", user_id)
+        self.db.get_user_config.invalidate(user_id)
+
+    async def delete_personal_data(self, user_id: int) -> None:
+        """Removes a user's tracked history (presence, avatar and item) in one transaction."""
+        async with self.acquire(timeout=300.0) as conn, conn.transaction():
+            await conn.execute(
+                """
+                DELETE FROM presence_history WHERE uuid = $1;
+                DELETE FROM avatar_history WHERE uuid = $1;
+                DELETE FROM item_history WHERE uuid = $1;
+                """,
+                user_id,
+            )
+
     # -- economy ----------------------------------------------------------
 
     async def get_balance_record(self, user_id: int, guild_id: int) -> asyncpg.Record:
