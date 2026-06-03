@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 import asyncpg
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 
 from app.core import Bot, Cog, Context, Flags, View, flag, store_true
@@ -36,10 +37,10 @@ class TagPageEntry(BaseRecord):
     id: int
     name: str
 
-    __slots__ = ('id', 'name')
+    __slots__ = ("id", "name")
 
     def __str__(self) -> str:
-        return f'{self.name} [`{self.id}`]'
+        return f"{self.name} [`{self.id}`]"
 
 
 class TagNameOrID(commands.clean_content):
@@ -55,21 +56,20 @@ class TagNameOrID(commands.clean_content):
         lower = converted.lower().strip()
 
         if not lower:
-            raise BadArgument('Please enter a valid tag name' + ' or id.' if self.with_id else '.')
+            raise BadArgument("Please enter a valid tag name" + " or id." if self.with_id else ".")
 
         if len(lower) > 100:
-            raise BadArgument(
-                f'Tag names must be 100 characters or less. (You have *{len(lower)}* characters)')
+            raise BadArgument(f"Tag names must be 100 characters or less. (You have *{len(lower)}* characters)")
 
-        cog: Tags | None = cast('Tags | None', ctx.bot.get_cog('Tags'))
+        cog: Tags | None = cast("Tags | None", ctx.bot.get_cog("Tags"))
         if cog is None:
-            raise BadArgument('Tags are currently unavailable.')
+            raise BadArgument("Tags are currently unavailable.")
 
         if ctx.guild is None:
-            raise BadArgument('This command can only be used in a server.')
+            raise BadArgument("This command can only be used in a server.")
 
         if cog.is_tag_reserved(ctx.guild.id, argument):
-            raise BadArgument('Hey, that\'s a reserved tag name. Choose another one.')
+            raise BadArgument("Hey, that's a reserved tag name. Choose another one.")
 
         if self.with_id and converted and converted.isdigit():
             return int(converted)
@@ -91,73 +91,67 @@ class TagContent(commands.clean_content):
         converted = await super().convert(ctx, argument)
 
         if len(converted) > 2000:
-            raise BadArgument(
-                'Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)')
+            raise BadArgument("Tag content must be 2000 characters or less. (You have *{len(argument)}* characters)")
 
         return converted
 
 
 class TagSearchFlags(Flags):
-    query: str | None = flag(description='The query to search for', aliases=['q'])
-    sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
-        description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
+    query: str | None = flag(description="The query to search for", aliases=["q"])
+    sort: Literal["name", "newest", "oldest", "id"] = flag(
+        description="The key to sort the results.", aliases=["s"], default="name"
+    )
+    to_text: bool = store_true(description="Whether to output the results as raw tabular text.", aliases=["tt"])
 
 
 class TagListFlags(Flags):
-    member: discord.Member | None = flag(
-        description='The member to search for', aliases=['m'])
-    query: str | None = flag(description='The query to search for', aliases=['q'])
-    sort: Literal['name', 'newest', 'oldest', 'id'] = flag(
-        description='The key to sort the results.', aliases=['s'], default='name')
-    to_text: bool = store_true(description='Whether to output the results as raw tabular text.', aliases=['tt'])
+    member: discord.Member | None = flag(description="The member to search for", aliases=["m"])
+    query: str | None = flag(description="The query to search for", aliases=["q"])
+    sort: Literal["name", "newest", "oldest", "id"] = flag(
+        description="The key to sort the results.", aliases=["s"], default="name"
+    )
+    to_text: bool = store_true(description="Whether to output the results as raw tabular text.", aliases=["tt"])
 
 
 class TagTransferConfirmButton(
-    discord.ui.DynamicItem[discord.ui.Button],
-    template=r'tag:transfer:confirm:(?P<tag_id>[0-9]+):(?P<from_id>[0-9]+)'
+    discord.ui.DynamicItem[discord.ui.Button], template=r"tag:transfer:confirm:(?P<tag_id>[0-9]+):(?P<from_id>[0-9]+)"
 ):
     def __init__(self, tag: Tag, from_id: int) -> None:
         self.tag = tag
         self.from_id = from_id
         super().__init__(
             discord.ui.Button(
-                label='Accept',
-                style=discord.ButtonStyle.green,
-                row=0,
-                custom_id=f'tag:transfer:confirm:{tag.id}:{from_id}'
+                label="Accept", style=discord.ButtonStyle.green, row=0, custom_id=f"tag:transfer:confirm:{tag.id}:{from_id}"
             )
         )
 
     @classmethod
-    async def from_custom_id(
-            cls, interaction: discord.Interaction, _, match: re.Match[str], /
-    ) -> TagTransferConfirmButton:
-        cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
+    async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> TagTransferConfirmButton:
+        cog: Tags | None = cast("Tags | None", interaction.client.get_cog("Tags"))  # type: ignore[union-attr]
         if cog is None:
             await interaction.response.send_message(
-                f'{Emojis.error} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
             )
-            raise AppBadArgument(f'{Emojis.error} Tags cog is not loaded')
+            raise AppBadArgument(f"{Emojis.error} Tags cog is not loaded")
 
-        tag_id = int(match['tag_id'])
-        from_id = int(match['from_id'])
+        tag_id = int(match["tag_id"])
+        from_id = int(match["from_id"])
         tag = await cog.get_tag(tag_id, owner_id=from_id)
         if tag is None:
             if interaction.message is not None:
                 await interaction.message.delete()
-            raise AppBadArgument(f'{Emojis.error} Tag was not found')
+            raise AppBadArgument(f"{Emojis.error} Tag was not found")
 
         if not isinstance(tag, Tag) or tag.owner_id != -1:
             if interaction.message is not None:
                 await interaction.message.delete()
-            raise AppBadArgument(f'{Emojis.error} Tag is not pending for transfer.')
+            raise AppBadArgument(f"{Emojis.error} Tag is not pending for transfer.")
 
         return cls(tag, from_id)
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if self.tag is None:
-            await interaction.response.send_message(f'{Emojis.error} Tag was not found.', ephemeral=True)
+            await interaction.response.send_message(f"{Emojis.error} Tag was not found.", ephemeral=True)
             return False
         return True
 
@@ -167,55 +161,50 @@ class TagTransferConfirmButton(
         if interaction.message is not None:
             await interaction.message.delete()
         await interaction.response.send_message(
-            f'{Emojis.success} Tag **{self.tag.name}** [`{self.tag.id}`] was successfully transferred to you.',
-            ephemeral=True)
+            f"{Emojis.success} Tag **{self.tag.name}** [`{self.tag.id}`] was successfully transferred to you.",
+            ephemeral=True,
+        )
 
 
 class TagTransferDeclineButton(
-    discord.ui.DynamicItem[discord.ui.Button],
-    template=r'tag:transfer:decline:(?P<tag_id>[0-9]+):(?P<from_id>[0-9]+)'
+    discord.ui.DynamicItem[discord.ui.Button], template=r"tag:transfer:decline:(?P<tag_id>[0-9]+):(?P<from_id>[0-9]+)"
 ):
     def __init__(self, tag: Tag, from_id: int) -> None:
         self.tag = tag
         self.from_id = from_id
         super().__init__(
             discord.ui.Button(
-                label='Decline',
-                style=discord.ButtonStyle.red,
-                row=0,
-                custom_id=f'tag:transfer:decline:{tag.id}:{from_id}'
+                label="Decline", style=discord.ButtonStyle.red, row=0, custom_id=f"tag:transfer:decline:{tag.id}:{from_id}"
             )
         )
 
     @classmethod
-    async def from_custom_id(
-            cls, interaction: discord.Interaction, _, match: re.Match[str], /
-    ) -> TagTransferDeclineButton:
-        cog: Tags | None = cast('Tags | None', interaction.client.get_cog('Tags'))  # type: ignore[union-attr]
+    async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> TagTransferDeclineButton:
+        cog: Tags | None = cast("Tags | None", interaction.client.get_cog("Tags"))  # type: ignore[union-attr]
         if cog is None:
             await interaction.response.send_message(
-                f'{Emojis.error} Sorry, this button does not work at the moment. Try again later', ephemeral=True
+                f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
             )
-            raise AppBadArgument(f'{Emojis.error} Tags cog is not loaded')
+            raise AppBadArgument(f"{Emojis.error} Tags cog is not loaded")
 
-        tag_id = int(match['tag_id'])
-        from_id = int(match['from_id'])
+        tag_id = int(match["tag_id"])
+        from_id = int(match["from_id"])
         tag = await cog.get_tag(tag_id, owner_id=from_id)
         if tag is None:
             if interaction.message is not None:
                 await interaction.message.delete()
-            raise AppBadArgument(f'{Emojis.error} Tag was not found')
+            raise AppBadArgument(f"{Emojis.error} Tag was not found")
 
         if not isinstance(tag, Tag) or tag.owner_id != -1:
             if interaction.message is not None:
                 await interaction.message.delete()
-            raise AppBadArgument(f'{Emojis.error} Tag is not pending for transfer.')
+            raise AppBadArgument(f"{Emojis.error} Tag is not pending for transfer.")
 
         return cls(tag, from_id)
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if self.tag is None:
-            await interaction.response.send_message(f'{Emojis.error} Tag was not found.', ephemeral=True)
+            await interaction.response.send_message(f"{Emojis.error} Tag was not found.", ephemeral=True)
             return False
         return True
 
@@ -223,13 +212,14 @@ class TagTransferDeclineButton(
         await self.tag.update(owner_id=self.from_id)
         if interaction.message is not None:
             await interaction.message.delete()
-        await interaction.response.send_message(f'{Emojis.success} Tag transfer was declined.', ephemeral=True)
+        await interaction.response.send_message(f"{Emojis.success} Tag transfer was declined.", ephemeral=True)
 
 
-class TagEditModal(discord.ui.Modal, title='Edit Tag'):
-    tag_name = discord.ui.TextInput(label='Name', required=True, max_length=100, min_length=1)
+class TagEditModal(discord.ui.Modal, title="Edit Tag"):
+    tag_name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
     content = discord.ui.TextInput(
-        label='Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000)
+        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
+    )
 
     def __init__(self, tag: Tag) -> None:
         super().__init__()
@@ -241,10 +231,10 @@ class TagEditModal(discord.ui.Modal, title='Edit Tag'):
         self.stop()
 
 
-class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
-    name = discord.ui.TextInput(label='Name', required=True, max_length=100, min_length=1)
+class TagMakeModal(discord.ui.Modal, title="Create a New Tag"):
+    name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
     content = discord.ui.TextInput(
-        label='Content', required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
+        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
     )
 
     def __init__(self, cog: Tags, ctx: Context) -> None:
@@ -260,16 +250,17 @@ class TagMakeModal(discord.ui.Modal, title='Create a New Tag'):
             await interaction.response.send_message(str(e), ephemeral=True)
             return
 
-        self.ctx.interaction = interaction
+        self.ctx.interaction = interaction  # type: ignore
         content = str(self.content)
         if len(content) > 2000:
             await interaction.response.send_message(
-                f'{Emojis.error} Consider using a shorter description for your Tag. (2000 max characters)',
-                ephemeral=True)
+                f"{Emojis.error} Consider using a shorter description for your Tag. (2000 max characters)", ephemeral=True
+            )
         else:
             if interaction.guild_id is None:
                 await interaction.response.send_message(
-                    f'{Emojis.error} This command can only be used in a server.', ephemeral=True)
+                    f"{Emojis.error} This command can only be used in a server.", ephemeral=True
+                )
                 return
             assert isinstance(name, str)
             with self.cog.reserve_tag(interaction.guild_id, name):
@@ -290,16 +281,16 @@ class Tag(BaseRecord):
     use_embed: bool
 
     __slots__ = (
-        'aliases',
-        'bot',
-        'content',
-        'created_at',
-        'id',
-        'location_id',
-        'name',
-        'owner_id',
-        'use_embed',
-        'uses',
+        "aliases",
+        "bot",
+        "content",
+        "created_at",
+        "id",
+        "location_id",
+        "name",
+        "owner_id",
+        "use_embed",
+        "uses",
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -308,7 +299,7 @@ class Tag(BaseRecord):
 
     @property
     def choice_text(self) -> str:
-        return f'[{self.id}] {self.name}'
+        return f"[{self.id}] {self.name}"
 
     @property
     def raw_content(self) -> str:
@@ -318,15 +309,15 @@ class Tag(BaseRecord):
     def to_embed(self) -> discord.Embed:
         embed = discord.Embed(title=self.name, description=self.content)
         embed.timestamp = self.created_at.replace(tzinfo=datetime.UTC)
-        embed.set_footer(text=f'[{self.id}] • Created at')
+        embed.set_footer(text=f"[{self.id}] • Created at")
         return embed
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Tag:
         """|coro|
 
@@ -351,11 +342,11 @@ class Tag(BaseRecord):
         except Exception as e:
             match e:
                 case asyncpg.UniqueViolationError():
-                    raise BadArgument('A Tag with this name already exists.', 'name_or_id')
+                    raise BadArgument("A Tag with this name already exists.", "name_or_id")
                 case asyncpg.StringDataRightTruncationError():
-                    raise BadArgument('Tag Name length out of range, max. 100 characters.', 'name_or_id')
+                    raise BadArgument("Tag Name length out of range, max. 100 characters.", "name_or_id")
                 case asyncpg.CheckViolationError():
-                    raise BadArgument('Tag Content is missing.', 'name_or_id')
+                    raise BadArgument("Tag Content is missing.", "name_or_id")
                 case _:
                     raise e
         else:
@@ -409,11 +400,11 @@ class AliasTag(BaseRecord):
     location_id: int
     created_at: datetime.datetime
 
-    __slots__ = ('created_at', 'id', 'location_id', 'name', 'owner_id', 'parent', 'parent_id')
+    __slots__ = ("created_at", "id", "location_id", "name", "owner_id", "parent", "parent_id")
 
     @property
     def choice_text(self) -> str:
-        return f'[{self.id}] {self.name}'
+        return f"[{self.id}] {self.name}"
 
     async def transfer(self, to: discord.Member, /, *, connection: asyncpg.Connection | None = None) -> None:
         """|coro|
@@ -445,7 +436,7 @@ class AliasTag(BaseRecord):
 class Tags(Cog):
     """Commands to fetch something by a tag name."""
 
-    emoji = '<:tag:1322338570484322304>'
+    emoji = "<:tag:1322338570484322304>"
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -468,7 +459,7 @@ class Tags(Cog):
             self._temporary_reserved_tags[guild_id] = set()
 
         if name in self._temporary_reserved_tags[guild_id]:
-            raise BadArgument('This name is currently reserved, try again later or use a different one.', 'name_or_id')
+            raise BadArgument("This name is currently reserved, try again later or use a different one.", "name_or_id")
 
         self._temporary_reserved_tags[guild_id].add(name)
         try:
@@ -480,14 +471,14 @@ class Tags(Cog):
                 del self._temporary_reserved_tags[guild_id]
 
     async def get_tag(
-            self,
-            name_or_id: str | int,
-            *,
-            owner_id: int | None = None,
-            location_id: int | None = None,
-            only_parent: bool = False,
-            similarites: bool = False,
-            exact_match: bool = False,
+        self,
+        name_or_id: str | int,
+        *,
+        owner_id: int | None = None,
+        location_id: int | None = None,
+        only_parent: bool = False,
+        similarites: bool = False,
+        exact_match: bool = False,
     ) -> list[AliasTag] | Tag | AliasTag | None:
         """|coro| @cached
 
@@ -530,8 +521,7 @@ class Tags(Cog):
 
         if parent and not exact_match:
             if not only_parent:
-                aliases = await repo.get_alias_records(
-                    parent.id, parent.name, owner_id=owner_id, location_id=location_id)
+                aliases = await repo.get_alias_records(parent.id, parent.name, owner_id=owner_id, location_id=location_id)
                 parent.aliases = [AliasTag(parent=parent, record=alias) for alias in aliases]
 
             return parent
@@ -545,13 +535,7 @@ class Tags(Cog):
             rows = await repo.get_similar_aliases(location_id, name_or_id)
             return [AliasTag(parent=parent, record=row) for row in rows]
 
-    async def send_tag(
-            self,
-            ctx: Context,
-            name_or_id: str | int,
-            *,
-            escape_markdown: bool = False
-    ) -> None:
+    async def send_tag(self, ctx: Context, name_or_id: str | int, *, escape_markdown: bool = False) -> None:
         """|coro|
 
         Look up a Tag by name in the given guild. Searching with similarity queries.
@@ -574,27 +558,28 @@ class Tags(Cog):
         if isinstance(result, list):
             # Assuming no tags were found and similarites are returned instead
             if len(result) == 0:
-                raise BadArgument(f'No Tag with the name or ID `{name_or_id}` found.', 'name_or_id')
+                raise BadArgument(f"No Tag with the name or ID `{name_or_id}` found.", "name_or_id")
             else:
-                embed = discord.Embed(title='*Did you mean ...*', colour=helpers.Colour.white())
+                embed = discord.Embed(title="*Did you mean ...*", colour=helpers.Colour.white())
                 await LinePaginator.start(
-                    ctx, entries=[f'* **{r.name}** [`{r.id}`]' for r in result], embed=embed, per_page=20)
+                    ctx, entries=[f"* **{r.name}** [`{r.id}`]" for r in result], embed=embed, per_page=20
+                )
             return
 
         if not result:
-            raise BadArgument(f'No Tag with the name or ID `{name_or_id}` found.', 'name_or_id')
+            raise BadArgument(f"No Tag with the name or ID `{name_or_id}` found.", "name_or_id")
 
-        tag: Tag = result
+        tag: Tag = result  # type: ignore
         if tag.use_embed and not escape_markdown:
             await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
         else:
             await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
 
-        _aliases = getattr(tag, 'aliases', None)
-        updated = await tag.add(uses=1)  # type: ignore[union-attr]
+        _aliases = getattr(tag, "aliases", None)
+        updated = await tag.add(uses=1)
         tag = updated
         if _aliases:
-            tag.aliases = _aliases
+            tag.aliases = _aliases  # type: ignore
 
     @staticmethod
     async def create_tag(ctx: Context, name: str, content: str) -> None:
@@ -621,26 +606,24 @@ class Tags(Cog):
 
             try:
                 assert ctx.guild is not None
-                await ctx.db.tags.create_tag(
-                    name, content, ctx.author.id, ctx.guild.id, connection=connection)  # type: ignore[arg-type]
+                await ctx.db.tags.create_tag(name, content, ctx.author.id, ctx.guild.id, connection=connection)
             except AssertionError:
                 await tr.rollback()
-                raise BadArgument('This command can only be used in a server.', 'name')
+                raise BadArgument("This command can only be used in a server.", "name")
             except Exception as e:
                 await tr.rollback()
                 match e:
                     case asyncpg.UniqueViolationError():
-                        raise BadArgument('A Tag with this name already exists.', 'name')
+                        raise BadArgument("A Tag with this name already exists.", "name")
                     case asyncpg.StringDataRightTruncationError():
-                        raise BadArgument('Tag Name length out of range, max. 100 characters.', 'name')
+                        raise BadArgument("Tag Name length out of range, max. 100 characters.", "name")
                     case asyncpg.CheckViolationError():
-                        raise BadArgument('Tag Content is missing.', 'name')
+                        raise BadArgument("Tag Content is missing.", "name")
                     case _:
-                        raise BadArgument(
-                            'Tag could not be created due to an Unknown reason. Try again later?', 'name')
+                        raise BadArgument("Tag could not be created due to an Unknown reason. Try again later?", "name")
             else:
                 await tr.commit()
-                await ctx.send_success(f'Tag `{name}` was successfully created.')
+                await ctx.send_success(f"Tag `{name}` was successfully created.")
 
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
         """Helper method to check if a Tag with ``name`` is currently being made or reserved.
@@ -650,9 +633,9 @@ class Tags(Cog):
         This doesn't check if the Tag exact_matchly exists.
         This needs to be handled by the caller.
         """
-        first_word, *_ = name.partition(' ')
+        first_word, *_ = name.partition(" ")
 
-        root: commands.GroupMixin = self.bot.get_command('tag')  # type: ignore
+        root: commands.GroupMixin = self.bot.get_command("tag")  # type: ignore
         if first_word in root.all_commands:
             return True
         else:
@@ -664,12 +647,12 @@ class Tags(Cog):
                 return name.lower() in being_made
 
     async def non_aliased_tag_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]]:
         assert interaction.guild_id is not None
         tags: list[Tag] = [
-            Tag(bot=self.bot, record=record)
-            for record in await self.bot.db.tags.get_guild_tags(interaction.guild_id)]
+            Tag(bot=self.bot, record=record) for record in await self.bot.db.tags.get_guild_tags(interaction.guild_id)
+        ]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -678,12 +661,12 @@ class Tags(Cog):
         ]
 
     async def aliased_tag_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]]:
         assert interaction.guild_id is not None
         tags: list[AliasTag] = [
-            AliasTag(record=record)
-            for record in await self.bot.db.tags.get_guild_aliases(interaction.guild_id)]
+            AliasTag(record=record) for record in await self.bot.db.tags.get_guild_aliases(interaction.guild_id)
+        ]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -692,12 +675,13 @@ class Tags(Cog):
         ]
 
     async def owned_non_aliased_tag_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]]:
         assert interaction.guild_id is not None
         tags: list[Tag] = [
-            Tag(bot=self.bot, record=record) for record in
-            await self.bot.db.tags.get_owned_tags(interaction.guild_id, interaction.user.id)]
+            Tag(bot=self.bot, record=record)
+            for record in await self.bot.db.tags.get_owned_tags(interaction.guild_id, interaction.user.id)
+        ]
 
         results = fuzzy.finder(current, tags, key=lambda p: p.choice_text, raw=True)
         return [
@@ -705,21 +689,15 @@ class Tags(Cog):
             for length, start, tag in results[:20]
         ]
 
-    @group(
-        'tag',
-        description='Shows a tag from the server.',
-        fallback='show',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(name_or_id='The tag to retrieve')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
+    @group("tag", description="Shows a tag from the server.", fallback="show", guild_only=True, hybrid=True)
+    @describe(name_or_id="The tag to retrieve")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
     async def tag(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)]  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
     ) -> None:
         """Retrieves a tag from the server.
         If the tag is an alias, the original tag will be retrieved instead.
@@ -727,21 +705,16 @@ class Tags(Cog):
         await self.send_tag(ctx, name_or_id)
 
     @tag.command(
-        'alias',
-        description='Creates a new alias for an existing tag.',
-        examples=['new-alias original-tag',
-                  '\'new alias\' original tag'],
-        guild_only=True
+        "alias",
+        description="Creates a new alias for an existing tag.",
+        examples=["new-alias original-tag", "'new alias' original tag"],
+        guild_only=True,
     )
-    @describe(new_alias='The new alias to set', original_tag='The original tag to alias')
-    @app_commands.rename(new_alias='new-alias', original_tag='original-tag')
+    @describe(new_alias="The new alias to set", original_tag="The original tag to alias")
+    @app_commands.rename(new_alias="new-alias", original_tag="original-tag")
     @app_commands.autocomplete(original_tag=non_aliased_tag_autocomplete)  # type: ignore
     async def tag_alias(
-            self,
-            ctx: Context,
-            new_alias: Annotated[str, TagNameOrID],
-            *,
-            original_tag: Annotated[str, TagNameOrID]
+        self, ctx: Context, new_alias: Annotated[str, TagNameOrID], *, original_tag: Annotated[str, TagNameOrID]
     ) -> None:
         """Assign an alias to an existing tag of yours.
         `Note:` You have to be the owner of the Tag.
@@ -753,29 +726,25 @@ class Tags(Cog):
         try:
             status = await ctx.db.tags.create_alias(new_alias, original_tag, ctx.guild.id, ctx.author.id)
         except asyncpg.UniqueViolationError:
-            raise BadArgument('This alias is already taken.', 'new_alias')
+            raise BadArgument("This alias is already taken.", "new_alias")
         else:
-            if status[-1] == '0':
-                raise BadArgument('The original tag could not be found.', 'original_tag')
+            if status[-1] == "0":
+                raise BadArgument("The original tag could not be found.", "original_tag")
             else:
                 await ctx.send_success(
-                    f'Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created.')
+                    f"Tag alias **{new_alias}** that redirects to **{original_tag}** successfully created."
+                )
 
     @tag.command(
-        'create',
-        description='Creates a new tag in the server.',
-        aliases=['add'],
-        examples=['new-tag This is the content of the tag.',
-                  '\'new tag\' This is the content of the tag.'],
-        guild_only=True
+        "create",
+        description="Creates a new tag in the server.",
+        aliases=["add"],
+        examples=["new-tag This is the content of the tag.", "'new tag' This is the content of the tag."],
+        guild_only=True,
     )
-    @describe(name='The tag name', content='The tag content')
+    @describe(name="The tag name", content="The tag content")
     async def tag_create(
-            self,
-            ctx: Context,
-            name: Annotated[str, TagNameOrID],
-            *,
-            content: Annotated[str, TagContent]
+        self, ctx: Context, name: Annotated[str, TagNameOrID], *, content: Annotated[str, TagContent]
     ) -> None:
         """Creates a new Tag owned by yourself in this server.
         The tag name must be between 1 and 100 characters long.
@@ -787,10 +756,10 @@ class Tags(Cog):
             await self.create_tag(ctx, name, content)
 
     @tag.command(
-        'make',
-        description='Interactively create a Tag owned by yourself in this server.',
+        "make",
+        description="Interactively create a Tag owned by yourself in this server.",
         ignore_extra=True,
-        guild_only=True
+        guild_only=True,
     )
     async def tag_make(self, ctx: Context) -> None:
         """Interactively create a Tag owned by yourself in this server.
@@ -811,13 +780,13 @@ class Tags(Cog):
             try:
                 await ctx.send(prompt)
                 user_input = await self.bot.wait_for(
-                    'message', timeout=timeout,
-                    check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel)
+                    "message", timeout=timeout, check=lambda msg: msg.author == ctx.author and ctx.channel == msg.channel
+                )
                 return user_input.content
             except TimeoutError:
                 return None
 
-        name = await get_user_input('What would you like the tag\'s **name** to be?')
+        name = await get_user_input("What would you like the tag's **name** to be?")
         if name is None:
             return
 
@@ -832,79 +801,78 @@ class Tags(Cog):
         assert ctx.guild is not None
         tag = await self.get_tag(name_or_id=name, location_id=ctx.guild.id, only_parent=True, exact_match=True)
         if tag is not None:
-            raise BadArgument('A Tag with this name already exists.')
+            raise BadArgument("A Tag with this name already exists.")
 
         assert isinstance(name, str)
         with self.reserve_tag(ctx.guild.id, name):
             content_prompt = (
-                f'The new Tags name is **{name}**.\n'
-                f'Please enter now a content for the tag.\n'
+                f"The new Tags name is **{name}**.\n"
+                f"Please enter now a content for the tag.\n"
                 f'You can type "`{ctx.prefix}abort`" to abort the tag make process.'
             )
             content = await get_user_input(content_prompt, timeout=100.0)
 
-            if content == f'{ctx.prefix}abort':
+            if content == f"{ctx.prefix}abort":
                 return
 
             if content:
                 clean_content = await TagContent().convert(ctx, content)
 
                 if ctx.message.attachments:
-                    clean_content = f'{clean_content}\n{ctx.message.attachments[0].url}'
+                    clean_content = f"{clean_content}\n{ctx.message.attachments[0].url}"
 
                 await self.create_tag(ctx, name, clean_content)
 
         try:
-            if hasattr(ctx.channel, 'delete_messages'):
+            if hasattr(ctx.channel, "delete_messages"):
                 await ctx.channel.delete_messages(messages)  # type: ignore[union-attr]
         except discord.HTTPException:
             pass
 
     async def guild_tag_stats(self, ctx: Context) -> None:
         assert ctx.guild is not None
-        embed = discord.Embed(colour=helpers.Colour.white(), title=f'Tag Statistics for {ctx.guild.name}')
+        embed = discord.Embed(colour=helpers.Colour.white(), title=f"Tag Statistics for {ctx.guild.name}")
         embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-        embed.set_footer(text='Tag Statistics for this Server.')
+        embed.set_footer(text="Tag Statistics for this Server.")
 
         repo = self.bot.db.tags
         total_tags = await repo.count_tags(ctx.guild.id)
 
         if not total_tags:
-            embed.description = '*There are no statistics available.*'
+            embed.description = "*There are no statistics available.*"
         else:
             total_uses = await repo.count_tag_command_uses(ctx.guild.id)
 
             joined_at = ctx.me.joined_at if isinstance(ctx.me, discord.Member) else None
             embed.add_field(
-                name='**Guild Stats**',
-                value=f'Total Tags: **{total_tags}**\n'
-                      f'Total Uses: **{total_uses}**\n\n'
-                      f'*with **{usage_per_day(joined_at, total_uses):.2f}** tag uses per day*',  # type: ignore[arg-type]
-                inline=False
+                name="**Guild Stats**",
+                value=f"Total Tags: **{total_tags}**\n"
+                f"Total Uses: **{total_uses}**\n\n"
+                f"*with **{usage_per_day(joined_at, total_uses):.2f}** tag uses per day*",  # type: ignore[arg-type]
+                inline=False,
             )
 
         most_used_records = await repo.get_most_used_tags(ctx.guild.id)
-        most_used_tags_value = '\n'.join(
-            f'{medal_emoji(index)}: {name} (**{uses}** uses)'
-            for index, (name, uses) in enumerate(most_used_records)
+        most_used_tags_value = "\n".join(
+            f"{medal_emoji(index)}: {name} (**{uses}** uses)" for index, (name, uses) in enumerate(most_used_records)
         )
 
-        embed.add_field(name='**Most Used Tags**', value=most_used_tags_value, inline=False)
+        embed.add_field(name="**Most Used Tags**", value=most_used_tags_value, inline=False)
 
         top_tag_users_records = await repo.get_top_tag_users(ctx.guild.id)
-        top_tag_users_value = '\n'.join(
-            f'{medal_emoji(index)}: <@{author_id}> (**{uses}** times)'
+        top_tag_users_value = "\n".join(
+            f"{medal_emoji(index)}: <@{author_id}> (**{uses}** times)"
             for index, (uses, author_id) in enumerate(top_tag_users_records)
         )
 
-        embed.add_field(name='**Top Tag Users**', value=top_tag_users_value, inline=False)
+        embed.add_field(name="**Top Tag Users**", value=top_tag_users_value, inline=False)
 
         top_creators_records = await repo.get_top_tag_creators(ctx.guild.id)
-        top_creators_value = '\n'.join(
-            f'{medal_emoji(index)}: <@{owner_id}> (**{count}** tags)'
+        top_creators_value = "\n".join(
+            f"{medal_emoji(index)}: <@{owner_id}> (**{count}** tags)"
             for index, (count, owner_id) in enumerate(top_creators_records)
         )
-        embed.add_field(name='**Top Creators**', value=top_creators_value, inline=False)
+        embed.add_field(name="**Top Creators**", value=top_creators_value, inline=False)
 
         await ctx.send(embed=embed)
 
@@ -915,26 +883,24 @@ class Tags(Cog):
         records = await repo.get_member_tag_summary(ctx.guild.id, member.id)
 
         if not records:
-            await ctx.send_error('No Tag Statistics found for this member.')
+            await ctx.send_error("No Tag Statistics found for this member.")
             return
 
         embed = discord.Embed(color=helpers.Colour.white())
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_thumbnail(url=get_asset_url(member))
-        embed.set_footer(text='Tag Stats for this Member.')
+        embed.set_footer(text="Tag Stats for this Member.")
 
         count = await repo.count_member_tag_command_uses(ctx.guild.id, member.id)
 
-        embed.add_field(name='**Tag Command invoked**', value=f'**{count}** times', inline=False)
-        embed.add_field(name='**Owned Tags**', value=records['count'])
-        embed.add_field(name='**Owned Tags Used**', value=records['total_uses'])
+        embed.add_field(name="**Tag Command invoked**", value=f"**{count}** times", inline=False)
+        embed.add_field(name="**Owned Tags**", value=records["count"])
+        embed.add_field(name="**Owned Tags Used**", value=records["total_uses"])
 
         top_records = await repo.get_member_top_tags(ctx.guild.id, member.id)
         for index, (name, uses) in enumerate(top_records):
             embed.add_field(
-                name=f'**#{index + 1} {medal_emoji(index)}**',
-                value=f'**{name}** (**{uses}** uses)',
-                inline=False
+                name=f"**#{index + 1} {medal_emoji(index)}**", value=f"**{name}** (**{uses}** uses)", inline=False
             )
 
         await ctx.send(embed=embed)
@@ -944,16 +910,11 @@ class Tags(Cog):
         table = TabularData()
         table.set_columns(list(tags[0].keys()))
         table.add_rows(list(r.values()) for r in tags)
-        fp = io.BytesIO(table.render().encode('utf-8'))
-        await ctx.send(file=discord.File(fp, 'tags.txt'))
+        fp = io.BytesIO(table.render().encode("utf-8"))
+        await ctx.send(file=discord.File(fp, "tags.txt"))
 
-    @tag.command(
-        'stats',
-        description='Shows Tag Statistics about the Server or a Member.',
-        guild_only=True
-    )
-    @describe(
-        member='The member to get tag statistics for. If not given, the server\'s tag statistics will be shown.')
+    @tag.command("stats", description="Shows Tag Statistics about the Server or a Member.", guild_only=True)
+    @describe(member="The member to get tag statistics for. If not given, the server's tag statistics will be shown.")
     async def tag_stats(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Shows Tag Statistics about the Server or a Member."""
         if member is None:
@@ -961,24 +922,20 @@ class Tags(Cog):
         else:
             await self.member_tag_stats(ctx, member)
 
-    @tag.command(
-        'edit',
-        description='Edit the content or name of a Tag.',
-        guild_only=True
-    )
+    @tag.command("edit", description="Edit the content or name of a Tag.", guild_only=True)
     @describe(
-        name_or_id='The Tag you want to edit. (Must be yours)',
-        content='The new content of the tag. (If not given, you will be prompted to edit the tag in a modal.)',
+        name_or_id="The Tag you want to edit. (Must be yours)",
+        content="The new content of the tag. (If not given, you will be prompted to edit the tag in a modal.)",
     )
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
     async def tag_edit(
-            self,
-            ctx: Context,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
-            use_embed: bool | None = None,
-            *,
-            content: Annotated[str | None, TagContent(required=False)] = None,  # type: ignore
+        self,
+        ctx: Context,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],
+        use_embed: bool | None = None,
+        *,
+        content: Annotated[str | None, TagContent(required=False)] = None,
     ) -> None:
         """Edit the content or name of a Tag.
         `Note:` If you don't pass a content, you will be prompted to edit the tag in a modal.
@@ -992,43 +949,37 @@ class Tags(Cog):
         raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
         if not raw_tag or not isinstance(raw_tag, Tag):
-            raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
-                              'name_or_id')
+            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         tag: Tag = raw_tag
         name = tag.name
         if content is None and use_embed is None:
             if ctx.interaction is None:
-                raise BadArgument('You need to pass a content or use the modal to edit the tag.', 'content')
+                raise BadArgument("You need to pass a content or use the modal to edit the tag.", "content")
             else:
                 modal = TagEditModal(tag)
                 await ctx.interaction.response.send_modal(modal)
                 await modal.wait()
-                ctx.interaction = modal.interaction
+                ctx.interaction = modal.interaction  # type: ignore
                 content = modal.content.value
                 name = modal.tag_name.value
 
         if content and len(content) > 2000:
-            raise BadArgument('Tag Content is too long, max. 2000 characters.', 'content')
+            raise BadArgument("Tag Content is too long, max. 2000 characters.", "content")
 
         await tag.update(name=name, use_embed=use_embed, content=content)
-        await ctx.send_success('Successfully edited tag.')
+        await ctx.send_success("Successfully edited tag.")
         await self.send_tag(ctx, tag.id)
 
-    @tag.command(
-        'delete',
-        description='Removes a Tag by Name or ID.',
-        aliases=['remove'],
-        guild_only=True
-    )
-    @describe(name_or_id='The assigned Tag to delete.')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)
+    @tag.command("delete", description="Removes a Tag by Name or ID.", aliases=["remove"], guild_only=True)
+    @describe(name_or_id="The assigned Tag to delete.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=owned_non_aliased_tag_autocomplete)  # type: ignore
     async def tag_delete(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Removes a Tag by ID owned by yourself.
         Your Tags can also be removed by Moderators if they have the `MANAGE MESSAGES` permission.
@@ -1036,85 +987,73 @@ class Tags(Cog):
         """
         assert ctx.guild is not None
         form = {
-            'location_id': ctx.guild.id,
-            'only_parent': True,
+            "location_id": ctx.guild.id,
+            "only_parent": True,
         }
-        can_manage = (
-            ctx.author.id == self.bot.owner_id
-            or (isinstance(ctx.author, discord.Member) and ctx.author.guild_permissions.manage_messages)
+        can_manage = ctx.author.id == self.bot.owner_id or (
+            isinstance(ctx.author, discord.Member) and ctx.author.guild_permissions.manage_messages
         )
         if not can_manage:
-            form['owner_id'] = ctx.author.id
+            form["owner_id"] = ctx.author.id
 
         raw_tag = await self.get_tag(name_or_id, **form)
 
         if not raw_tag or isinstance(raw_tag, list):
-            raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
-                              'name_or_id')
+            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         await raw_tag.delete()
 
-    @tag.command(
-        'info',
-        description='Shows you Information about a Tag.',
-        guild_only=True
-    )
-    @describe(name_or_id='The name or id of the tag to get info about.')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
+    @tag.command("info", description="Shows you Information about a Tag.", guild_only=True)
+    @describe(name_or_id="The name or id of the tag to get info about.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
     async def tag_info(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Shows you Information about a Tag."""
         assert ctx.guild is not None
         raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id)
 
         if raw_tag is None or isinstance(raw_tag, list) or not isinstance(raw_tag, Tag):
-            raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
-                              'name_or_id')
+            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         tag: Tag = raw_tag
-        embed = discord.Embed(title='Tag Info', description=f'**```{tag.name}```**\n')
-        embed.add_field(name='**Owner**', value=f'<@{tag.owner_id}>')
+        embed = discord.Embed(title="Tag Info", description=f"**```{tag.name}```**\n")
+        embed.add_field(name="**Owner**", value=f"<@{tag.owner_id}>")
 
         user = self.bot.get_user(tag.owner_id) or (await self.bot.fetch_user(tag.owner_id))
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
 
         embed.timestamp = tag.created_at.replace(tzinfo=datetime.UTC)
-        embed.set_footer(text=f'[{tag.id}] • Tag created at')
+        embed.set_footer(text=f"[{tag.id}] • Tag created at")
 
         rank = await tag.get_rank()
         if rank and rank in (1, 2, 3):
-            embed.add_field(name='**Rank**', value=f'**#{rank}** {chr(129350 + int(rank))}')
+            embed.add_field(name="**Rank**", value=f"**#{rank}** {chr(129350 + int(rank))}")
 
-        embed.add_field(name='**Tag Used**', value=tag.uses)
+        embed.add_field(name="**Tag Used**", value=tag.uses)
 
         if tag.aliases:
             aliases_info = [
-                f'**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style="D")})'
+                f"**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})"
                 for alias in tag.aliases
             ]
-            embed.add_field(name=f'**Aliases ({len(tag.aliases)})**', value='\n'.join(aliases_info), inline=False)
+            embed.add_field(name=f"**Aliases ({len(tag.aliases)})**", value="\n".join(aliases_info), inline=False)
 
         await ctx.send(embed=embed)
 
-    @tag.command(
-        'raw',
-        description='This displays you the raw content of a tag.',
-        aliases=['content'],
-        guild_only=True
-    )
-    @describe(name_or_id='The name or id of the tag to display the escaped markdown content.')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=non_aliased_tag_autocomplete)
+    @tag.command("raw", description="This displays you the raw content of a tag.", aliases=["content"], guild_only=True)
+    @describe(name_or_id="The name or id of the tag to display the escaped markdown content.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=non_aliased_tag_autocomplete)  # type: ignore
     async def tag_raw(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],
     ) -> None:
         """This displays you the raw content of a tag."""
         await self.send_tag(ctx, name_or_id, escape_markdown=True)
@@ -1145,191 +1084,170 @@ class Tags(Cog):
             member = raw_member if isinstance(raw_member, discord.Member) else None
 
         return await ctx.db.tags.filter_tags(
-            ctx.guild.id, query=flags.query, owner_id=member.id if member else None, sort=flags.sort)
+            ctx.guild.id, query=flags.query, owner_id=member.id if member else None, sort=flags.sort
+        )
 
-    @tag.command(
-        'list',
-        description='Shows a list of Tags owned by yourself or a given member.',
-        guild_only=True
-    )
-    @describe(member='The member to list tags of, if not given then it defaults to you.')
+    @tag.command("list", description="Shows a list of Tags owned by yourself or a given member.", guild_only=True)
+    @describe(member="The member to list tags of, if not given then it defaults to you.")
     async def tag_list(self, ctx: Context, *, flags: TagListFlags) -> None:
         """Shows a list of Tags owned by yourself or a given member."""
         member = flags.member or ctx.author
         rows = await self.filter_tags(ctx, flags)
         if not rows:
-            await ctx.send_error(f'No tags found for **{member}**.')
+            await ctx.send_error(f"No tags found for **{member}**.")
             return
 
         if flags.to_text:
             return await self.send_tags_to_text(ctx, rows)
 
-        guild_name = ctx.guild.name if ctx.guild is not None else 'this server'
+        guild_name = ctx.guild.name if ctx.guild is not None else "this server"
         embed = discord.Embed(
-            title='Tag Search',
-            description=f'**{member}\'s** Tags in {guild_name}\n'
-                        f'Sorted by: **{flags.sort}**',
+            title="Tag Search",
+            description=f"**{member}'s** Tags in {guild_name}\nSorted by: **{flags.sort}**",
             colour=helpers.Colour.white(),
-            timestamp=discord.utils.utcnow())
-        embed.set_footer(text=f'{pluralize(len(rows)):entry|entries}')
-
-        results = [f'`{index}.` {entry}' for index, entry in
-                   enumerate([TagPageEntry(record=row) for row in rows], 1)]
-        await LinePaginator.start(
-            ctx, entries=results, search_for=True, per_page=20, embed=embed
+            timestamp=discord.utils.utcnow(),
         )
+        embed.set_footer(text=f"{pluralize(len(rows)):entry|entries}")
 
-    @tag.command(
-        'search',
-        description='Search for tags matching the given query.',
-        guild_only=True
-    )
-    @describe(query='The tag name to search for')
+        results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
+        await LinePaginator.start(ctx, entries=results, search_for=True, per_page=20, embed=embed)
+
+    @tag.command("search", description="Search for tags matching the given query.", guild_only=True)
+    @describe(query="The tag name to search for")
     @app_commands.choices(
         sort=[
-            app_commands.Choice(name='Name', value='name'),
-            app_commands.Choice(name='Newest', value='newest'),
-            app_commands.Choice(name='Oldest', value='oldest'),
-            app_commands.Choice(name='ID', value='id'),
+            app_commands.Choice(name="Name", value="name"),
+            app_commands.Choice(name="Newest", value="newest"),
+            app_commands.Choice(name="Oldest", value="oldest"),
+            app_commands.Choice(name="ID", value="id"),
         ]
     )
-    async def tags_search(
-            self,
-            ctx: Context,
-            *,
-            flags: TagSearchFlags
-    ) -> None:
+    async def tags_search(self, ctx: Context, *, flags: TagSearchFlags) -> None:
         """Search for tags matching the given query.
         `Note:` To use autocomplete, you have to at least provide three characters.
         """
         rows = await self.filter_tags(ctx, flags)
         if not rows:
-            await ctx.send_error('No tags found.')
+            await ctx.send_error("No tags found.")
             return
 
         if flags.to_text:
             return await self.send_tags_to_text(ctx, rows)
 
         embed = discord.Embed(
-            title='Tag Search',
-            description=f'Sorted by: **{flags.sort}**',
+            title="Tag Search",
+            description=f"Sorted by: **{flags.sort}**",
             colour=helpers.Colour.white(),
-            timestamp=discord.utils.utcnow())
-        embed.set_footer(text=f'{pluralize(len(rows)):entry|entries}')
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=f"{pluralize(len(rows)):entry|entries}")
 
-        results = [f'`{index}.` {TagPageEntry(record=row)}' for index, row in enumerate(rows, 1)]
-        await LinePaginator.start(
-            ctx, entries=results, search_for=True, per_page=20, embed=embed)
+        results = [f"`{index}.` {TagPageEntry(record=row)}" for index, row in enumerate(rows, 1)]
+        await LinePaginator.start(ctx, entries=results, search_for=True, per_page=20, embed=embed)
 
     @tag.command(
-        'purge',
-        description='Bulk remove all Tags and assigned Aliases of a given User.',
+        "purge",
+        description="Bulk remove all Tags and assigned Aliases of a given User.",
         guild_only=True,
-        user_permissions=PermissionTemplate.mod
+        user_permissions=PermissionTemplate.mod,
     )
-    @describe(member='The member to remove all tags of')
+    @describe(member="The member to remove all tags of")
     async def tag_purge(self, ctx: Context, member: discord.User) -> None:
         """Bulk remove all Tags and assigned Aliases of a given User."""
         assert ctx.guild is not None
         count = await ctx.db.tags.count_owned_tags(ctx.guild.id, member.id)
 
         if count == 0:
-            await ctx.send_error(f'No tags found for **{member}**.')
+            await ctx.send_error(f"No tags found for **{member}**.")
             return
 
         confirm = await ctx.confirm(
-            f'{Emojis.warning} This will delete **{count}** tags are you sure? **This action cannot be reversed**.')
+            f"{Emojis.warning} This will delete **{count}** tags are you sure? **This action cannot be reversed**."
+        )
         if not confirm:
             return
 
         await ctx.db.tags.delete_owned_tags(ctx.guild.id, member.id)  # guild already asserted above
 
-        await ctx.send_success(f'Successfully removed all **{count}** tags that belong to **{member}**.')
+        await ctx.send_success(f"Successfully removed all **{count}** tags that belong to **{member}**.")
 
     @tag.command(
-        'claim',
-        description='Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.',
-        guild_only=True
+        "claim",
+        description="Claim a tag by yourself if the User is not in this server anymore or the tag has no owner.",
+        guild_only=True,
     )
-    @describe(name_or_id='The tag to claim')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
+    @describe(name_or_id="The tag to claim")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
     async def tag_claim(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, TagNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Claim a tag by yourself if the User is not in this server anymore or the tag has no owner."""
         assert ctx.guild is not None
         raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, exact_match=True)
 
         if raw_tag is None or isinstance(raw_tag, list):
-            raise BadArgument('Could not find a tag with that name.', 'name_or_id')
+            raise BadArgument("Could not find a tag with that name.", "name_or_id")
 
         tag: Tag | AliasTag = raw_tag
-        member = await self.bot.get_or_fetch_member(ctx.guild, tag.owner_id)
+        guild = ctx.guild
+        assert guild is not None
+        member = await self.bot.get_or_fetch_member(guild, tag.owner_id)
         if member is not None:
-            await ctx.send_error(f'Tag **{tag.name}** is already owned by **{member}**.')
+            await ctx.send_error(f"Tag **{tag.name}** is already owned by **{member}**.")
             return
 
         assert isinstance(ctx.author, discord.Member)
         if isinstance(tag, AliasTag):
-            await tag.transfer(ctx.author, connection=self.bot.db)  # type: ignore[arg-type]
+            await tag.transfer(ctx.author, connection=self.bot.db)  # type: ignore
         else:
-            await tag.transfer(ctx.author, only_parent=True)
+            await tag.transfer(ctx.author, only_parent=True)  # type: ignore
 
-        await ctx.send_success('Successfully transferred tag ownership to you.')
+        await ctx.send_success("Successfully transferred tag ownership to you.")
 
-    @tag.command(
-        'transfer',
-        description='Transfer a tag owned by you to another member.',
-        guild_only=True
-    )
-    @describe(member='The member to transfer the tag to.', name_or_id='The tag to transfer.')
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)
+    @tag.command("transfer", description="Transfer a tag owned by you to another member.", guild_only=True)
+    @describe(member="The member to transfer the tag to.", name_or_id="The tag to transfer.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
     async def tag_transfer(
-            self,
-            ctx: Context,
-            member: discord.Member,
-            *,
-            name_or_id: Annotated[str, TagNameOrID(with_id=True)]  # type: ignore
+        self,
+        ctx: Context,
+        member: discord.Member,
+        *,
+        name_or_id: Annotated[str, TagNameOrID(with_id=True)],
     ) -> None:
         """Transfer a tag owned by you to another member."""
         assert ctx.guild is not None
         if member.bot:
-            await ctx.send_error('You cannot transfer tags to bots.')
+            await ctx.send_error("You cannot transfer tags to bots.")
             return
 
-        raw_tag = await self.get_tag(
-            name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
 
         if raw_tag is None or not isinstance(raw_tag, Tag):
-            raise BadArgument('Could not find a tag with that name, are you sure it exists or you own it?',
-                              'name_or_id')
+            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         tag: Tag = raw_tag
-        view = View.from_items(TagTransferConfirmButton(tag, ctx.author.id),
-                               TagTransferDeclineButton(tag, ctx.author.id), timeout=None)
+        view = View.from_items(
+            TagTransferConfirmButton(tag, ctx.author.id), TagTransferDeclineButton(tag, ctx.author.id), timeout=None
+        )
         embed = discord.Embed(
-            title='Tag Transfer Request',
-            description=f'User **{ctx.author}** from Server **{ctx.guild}** wants to transfer the tag **{tag.name}** [`{tag.id}`] to you.'
-                        f'\n\nDo you want to accept this transfer?',
+            title="Tag Transfer Request",
+            description=f"User **{ctx.author}** from Server **{ctx.guild}** wants to transfer the tag **{tag.name}** [`{tag.id}`] to you."
+            f"\n\nDo you want to accept this transfer?",
             color=helpers.Colour.light_grey(),
-            timestamp=ctx.utcnow()
+            timestamp=ctx.utcnow(),
         )
         await member.send(embed=embed, view=view)
-        await ctx.send_info(f'Transfer request for tag **{tag.name}** has been sent to **{member}**.')
+        await ctx.send_info(f"Transfer request for tag **{tag.name}** has been sent to **{member}**.")
         await tag.update(owner_id=-1)  # -1 indicates that the tag is in transfer
 
-    @tag.command(
-        'export',
-        description='Exports all your tags/server tags to a csv file.',
-        guild_only=True
-    )
+    @tag.command("export", description="Exports all your tags/server tags to a csv file.", guild_only=True)
     @cooldown(1, 30, commands.BucketType.member)
-    @describe(which='Whether to export server tags or personal tags. (Server tags only for server owners)')
+    @describe(which="Whether to export server tags or personal tags. (Server tags only for server owners)")
     async def tag_export(
             self,
             ctx: Context,
@@ -1352,7 +1270,7 @@ class Tags(Cog):
             return
 
         buffer = io.BytesIO()
-        writer = csv.writer(buffer, delimiter=',', quotechar="'", quoting=csv.QUOTE_MINIMAL)
+        writer = csv.writer(buffer, delimiter=',', quotechar="'", quoting=csv.QUOTE_MINIMAL)  # type: ignore
         for record in records:
             writer.writerow([record[0], record[1]])
         buffer.seek(0)

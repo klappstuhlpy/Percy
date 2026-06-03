@@ -23,21 +23,19 @@ if TYPE_CHECKING:
     from app.core import Bot
 
 __all__ = (
-    'Poll',
-    'PollEntry',
-    'VoteOption',
-    'lineformat',
-    'to_emoji',
-    'uuid',
+    "Poll",
+    "PollEntry",
+    "VoteOption",
+    "lineformat",
+    "to_emoji",
+    "uuid",
 )
 
 _MAX_VOTE_BAR_LENGTH = 10
 
 
 def to_emoji(index: int) -> str:
-    INDEX_TO_LETTER = {
-        0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H'
-    }
+    INDEX_TO_LETTER = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G", 7: "H"}
     return getattr(Emojis.PollVoteBar, INDEX_TO_LETTER[index])
 
 
@@ -49,7 +47,7 @@ def lineformat(x: int) -> str:
     txt.append(Emojis.PollVoteBar.end)
     txt[0] = Emojis.PollVoteBar.start
 
-    return ''.join(txt)
+    return "".join(txt)
 
 
 def uuid(ids: list[int]) -> int:
@@ -61,6 +59,7 @@ def uuid(ids: list[int]) -> int:
 
 class VoteOption(TypedDict):
     """A vote option."""
+
     index: int
     content: str
     votes: int
@@ -72,7 +71,7 @@ class PollEntry(BaseRecord):
     user_id: int
     vote: int
 
-    __slots__ = ('user_id', 'vote')
+    __slots__ = ("user_id", "vote")
 
     def __iter__(self) -> Iterator[int]:
         return iter((self.user_id, self.vote))
@@ -101,42 +100,42 @@ class Poll(BaseRecord):
     options: list[VoteOption]
 
     __slots__ = (
-        'args',
-        'bot',
-        'channel_id',
-        'cog',
-        'color',
-        'description',
-        'entries',
-        'expires',
-        'guild_id',
-        'id',
-        'kwargs',
-        'message',
-        'message_id',
-        'metadata',
-        'options',
-        'ping_message',
-        'published',
-        'question',
-        'votes'
+        "args",
+        "bot",
+        "channel_id",
+        "cog",
+        "color",
+        "description",
+        "entries",
+        "expires",
+        "guild_id",
+        "id",
+        "kwargs",
+        "message",
+        "message_id",
+        "metadata",
+        "options",
+        "ping_message",
+        "published",
+        "question",
+        "votes",
     )
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.bot: Bot = self.cog.bot
 
-        self.args: list[Any] = self.metadata.get('args', [])
-        self.kwargs: dict[str, Any] = self.metadata.get('kwargs', {})
+        self.args: list[Any] = self.metadata.get("args", [])
+        self.kwargs: dict[str, Any] = self.metadata.get("kwargs", {})
 
         self.message: discord.Message = MISSING
         self.ping_message: discord.Message = MISSING
 
-        self.question: str = self.kwargs.get('question', 'N/A')
-        self.votes: int = self.kwargs.get('votes', 0)
-        self.description: str = self.kwargs.get('description', 'N/A')
-        self.options: list[VoteOption] = self.kwargs.get('options', [])
-        self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get('color') or '#ffffff')
+        self.question: str = self.kwargs.get("question", "N/A")
+        self.votes: int = self.kwargs.get("votes", 0)
+        self.description: str = self.kwargs.get("description", "N/A")
+        self.options: list[VoteOption] = self.kwargs.get("options", [])
+        self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get("color") or "#ffffff")
 
         self.entries: set[PollEntry] = {PollEntry(record=entry) for entry in self.entries or []}
 
@@ -144,8 +143,8 @@ class Poll(BaseRecord):
     def jump_url(self) -> str | None:
         """The jump URL of the poll."""
         if self.message_id and self.channel_id:
-            guild = self.guild_id or '@me'
-            return f'https://discord.com/channels/{guild}/{self.channel_id}/{self.message_id}'
+            guild = self.guild_id or "@me"
+            return f"https://discord.com/channels/{guild}/{self.channel_id}/{self.message_id}"
         return None
 
     @property
@@ -158,14 +157,14 @@ class Poll(BaseRecord):
     @property
     def choice_text(self) -> str:
         """The text to use for the autocomplete."""
-        return f'[{self.id}] {self.question}'
+        return f"[{self.id}] {self.question}"
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Poll:
         """|coro|
 
@@ -205,7 +204,7 @@ class Poll(BaseRecord):
         VoteOption
             The option from the poll.
         """
-        return next((option for option in self.options if option['index'] == index), None)
+        return next((option for option in self.options if option["index"] == index), None)
 
     def get_entry(self, user_id: int) -> tuple[int, int] | None:
         """Gets the vote of a user.
@@ -226,25 +225,26 @@ class Poll(BaseRecord):
         """Converts the poll to fields."""
         fields = []
         for i, option in enumerate(self.options):
-            v = option['votes']
+            v = option["votes"]
             votes = self.votes
 
             p = v / votes if votes else 0
             x = (v * _MAX_VOTE_BAR_LENGTH) // votes if votes else 0
 
-            fields.append({
-                'name': f'{Emojis.PollVoteBar.corner} ' + option['content'],
-                'value': f'{to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({round(p * 100)}%)',
-                'inline': False
-            })
+            fields.append(
+                {
+                    "name": f"{Emojis.PollVoteBar.corner} " + option["content"],
+                    "value": f"{to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({round(p * 100)}%)",
+                    "inline": False,
+                }
+            )
 
         if extras:
-            fields.append({'name': 'Voting', 'value': f'Total Votes: **{self.votes}**', 'inline': True})
+            fields.append({"name": "Voting", "value": f"Total Votes: **{self.votes}**", "inline": True})
             if self.expires:
-                fields.append(
-                    {'name': 'Poll ends', 'value': discord.utils.format_dt(self.expires, 'R'), 'inline': True})
-            if (thread := self.kwargs.get('thread', None)) is not None:
-                fields.append({'name': 'Discussion in Thread:', 'value': thread, 'inline': True})
+                fields.append({"name": "Poll ends", "value": discord.utils.format_dt(self.expires, "R"), "inline": True})
+            if (thread := self.kwargs.get("thread", None)) is not None:
+                fields.append({"name": "Discussion in Thread:", "value": thread, "inline": True})
 
         return fields
 
@@ -259,7 +259,8 @@ class Poll(BaseRecord):
             if message:
                 self.message = message
 
-        if (ping_message_id := self.kwargs.get('ping_message_id')) is not None:
+        if (ping_message_id := self.kwargs.get("ping_message_id")) is not None:
+            assert isinstance(ping_message_id, int)
             ping_message = await self.cog.get_message(channel, ping_message_id)
             if ping_message:
                 self.ping_message = ping_message
@@ -271,10 +272,10 @@ class Poll(BaseRecord):
             description=self.description,
             colour=self.color,
             timestamp=self.published,
-            fields=self.to_fields()
+            fields=self.to_fields(),
         )
-        embed.set_image(url=self.kwargs.get('image', None))
-        embed.set_footer(text=f'#{self.kwargs.get('index')} • [{self.id}]')
+        embed.set_image(url=self.kwargs.get("image", None))
+        embed.set_footer(text=f"#{self.kwargs.get('index')} • [{self.id}]")
         return embed
 
     def remove_option(self, option: VoteOption = MISSING) -> list[VoteOption] | None:
@@ -287,25 +288,29 @@ class Poll(BaseRecord):
         """
         if len(self.options) > 2:
             self.options.remove(option)
-            for index, ch in enumerate(sorted(self.options, key=lambda x: x['index'])):
-                ch['index'] = index
+            for index, ch in enumerate(sorted(self.options, key=lambda x: x["index"])):
+                ch["index"] = index
 
-            self.votes -= option['votes']
-            self.entries = {PollEntry.temporary(user, user_option) for user, user_option in self.entries if user_option != option['index']}
+            self.votes -= option["votes"]
+            self.entries = {
+                PollEntry.temporary(user, user_option)
+                for user, user_option in self.entries
+                if user_option != option["index"]
+            }
             return self.options
         return None
 
     async def edit(
-            self,
-            *,
-            question: str | None = MISSING,
-            description: str | None = MISSING,
-            thread: list[int | str] | None = MISSING,
-            image_url: str | None = MISSING,
-            color: str | None = MISSING,
-            options: list[VoteOption] | None = MISSING,
-            running: bool | None = MISSING,
-            votes: int | None = MISSING,
+        self,
+        *,
+        question: str | None = MISSING,
+        description: str | None = MISSING,
+        thread: list[int | str] | None = MISSING,
+        image_url: str | None = MISSING,
+        color: str | None = MISSING,
+        options: list[VoteOption] | None = MISSING,
+        running: bool | None = MISSING,
+        votes: int | None = MISSING,
     ) -> Self:
         """|coro|
 
@@ -338,25 +343,25 @@ class Poll(BaseRecord):
         form: dict[str, Any] = {}
 
         if question is not MISSING:
-            form['content'] = question
+            form["content"] = question
         if description is not MISSING:
-            form['description'] = description
+            form["description"] = description
         if thread is not MISSING:
-            form['thread'] = thread
+            form["thread"] = thread
         if image_url is not MISSING:
-            form['image_url'] = image_url
+            form["image_url"] = image_url
         if running is not MISSING:
-            form['running'] = running
+            form["running"] = running
         if color is not MISSING:
-            form['color'] = color
+            form["color"] = color
         if options is not MISSING:
-            form['options'] = options
+            form["options"] = options
         if votes is not MISSING:
-            form['votes'] = votes
+            form["votes"] = votes
             # NOTE: This is a temporary fix for the votes not updating properly.
             self.votes = votes  # type: ignore[misc]
 
-        self.metadata.get('kwargs').update(form)  # type: ignore[union-attr]
+        self.metadata.get("kwargs").update(form)  # type: ignore[union-attr]
         self.cog.get_guild_polls.invalidate(self.guild_id)
         return await self.update(metadata=self.metadata, entries=[(e.user_id, e.vote) for e in self.entries])  # type: ignore[return-value]
 

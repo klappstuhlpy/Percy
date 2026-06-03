@@ -16,23 +16,19 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Collection, Generator
 
 __all__ = (
-    'BasePaginator',
-    'EmbedPaginator',
-    'FilePaginator',
-    'LinePaginator',
-    'TextPaginator',
-    'TextSource',
-    'TextSourcePaginator'
+    "BasePaginator",
+    "EmbedPaginator",
+    "FilePaginator",
+    "LinePaginator",
+    "TextPaginator",
+    "TextSource",
+    "TextSourcePaginator",
 )
 
-T = TypeVar('T')
-BasePaginatorT = TypeVar('BasePaginatorT', bound='BasePaginator')  # kept for external callers
+T = TypeVar("T")
+BasePaginatorT = TypeVar("BasePaginatorT", bound="BasePaginator")  # kept for external callers
 
-TYPE_MAPPING = {
-    discord.Embed: 'embed',
-    discord.File: 'file',
-    str: 'content'
-}
+TYPE_MAPPING = {discord.Embed: "embed", discord.File: "file", str: "content"}
 
 
 class TextSource:
@@ -51,11 +47,7 @@ class TextSource:
     """
 
     def __init__(
-            self,
-            prefix: str | None = '```',
-            suffix: str | None = '```',
-            max_size: int = 2000,
-            seperator: str = '\n'
+        self, prefix: str | None = "```", suffix: str | None = "```", max_size: int = 2000, seperator: str = "\n"
     ) -> None:
         self.prefix: str | None = prefix
         self.suffix: str | None = suffix
@@ -104,7 +96,7 @@ class TextSource:
 
         return self
 
-    def add_line(self, line: str = '', *, empty: bool = False) -> Self:
+    def add_line(self, line: str = "", *, empty: bool = False) -> Self:
         """Adds a line to the current page.
 
         If the line exceeds the :attr:`max_size` then an exception
@@ -124,7 +116,7 @@ class TextSource:
         """
         MAX_PAGE_SIZE = self.max_size - self.prefix_len - self.suffix_len - 2 * len(self.seperator)
         if len(line) > MAX_PAGE_SIZE:
-            raise RuntimeError(f'Line exceeds maximum page size {MAX_PAGE_SIZE}')
+            raise RuntimeError(f"Line exceeds maximum page size {MAX_PAGE_SIZE}")
 
         if self._count + len(line) + len(self.seperator) > self.max_size - self.suffix_len:
             self.close_page()
@@ -133,7 +125,7 @@ class TextSource:
         self._current_page.append(line)
 
         if empty:
-            self._current_page.append('')
+            self._current_page.append("")
             self._count += len(self.seperator)
 
         return self
@@ -169,24 +161,26 @@ class TextSource:
         return self._pages
 
 
-class JumpToModal(discord.ui.Modal, title='Jump to'):
+class JumpToModal(discord.ui.Modal, title="Jump to"):
     """Modal that prompts users for the page number to change to"""
-    page_number = discord.ui.TextInput(label='Page Index', style=discord.TextStyle.short)
+
+    page_number = discord.ui.TextInput(label="Page Index", style=discord.TextStyle.short)
 
     def __init__(self, paginator: BasePaginator) -> None:
         super().__init__(timeout=30)
         self.paginator: BasePaginator = paginator
-        self.page_number.placeholder = f'Enter a Number between 1 and {self.paginator.total_pages}'
+        self.page_number.placeholder = f"Enter a Number between 1 and {self.paginator.total_pages}"
         self.page_number.min_length = 1
         self.page_number.max_length = len(str(self.paginator.total_pages))
 
     async def on_submit(self, interaction: discord.Interaction, /) -> None:
         if not self.page_number.value.isdigit():
-            await interaction.response.send_message('Please enter a number.', ephemeral=True)
+            await interaction.response.send_message("Please enter a number.", ephemeral=True)
             return
         if not 1 <= int(self.page_number.value) <= self.paginator.total_pages:
             await interaction.response.send_message(
-                f'Please enter a valid page number in range `1` to `{self.paginator.total_pages}`.', ephemeral=True)
+                f"Please enter a valid page number in range `1` to `{self.paginator.total_pages}`.", ephemeral=True
+            )
             return
 
         value = int(self.page_number.value) - 1
@@ -196,9 +190,10 @@ class JumpToModal(discord.ui.Modal, title='Jump to'):
         await interaction.response.edit_message(**self.paginator.resolve_msg_kwargs(page))
 
 
-class SearchForModal(discord.ui.Modal, title='Search for Similarity'):
+class SearchForModal(discord.ui.Modal, title="Search for Similarity"):
     """Modal that prompts users to search in all embeds for query similarities"""
-    query = discord.ui.TextInput(label='Query', style=discord.TextStyle.short)
+
+    query = discord.ui.TextInput(label="Query", style=discord.TextStyle.short)
 
     def __init__(self, paginator: BasePaginator) -> None:
         super().__init__(timeout=60)
@@ -212,15 +207,13 @@ class SearchForModal(discord.ui.Modal, title='Search for Similarity'):
 
 class SearchForButton(discord.ui.Button):
     def __init__(self, paginator: BasePaginator) -> None:
-        super().__init__(label='Search for …', emoji='\N{RIGHT-POINTING MAGNIFYING GLASS}',
-                         style=discord.ButtonStyle.grey, row=1)
+        super().__init__(
+            label="Search for …", emoji="\N{RIGHT-POINTING MAGNIFYING GLASS}", style=discord.ButtonStyle.grey, row=1
+        )
         self.paginator: BasePaginator = paginator
 
     async def callback(self, interaction: discord.Interaction) -> Any:
         await interaction.response.send_modal(SearchForModal(self.paginator))
-
-
-BasePaginatorT = TypeVar('BasePaginatorT', bound='BasePaginator')
 
 
 class BasePaginator[T](View, metaclass=ABCMeta):
@@ -247,14 +240,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         extras: dict[str, Any]
         msg: discord.Message
 
-    def __init__(
-            self,
-            *,
-            entries: Collection[T],
-            per_page: int = 10,
-            clamp_pages: bool = True,
-            timeout: int = 180
-    ) -> None:
+    def __init__(self, *, entries: Collection[T], per_page: int = 10, clamp_pages: bool = True, timeout: int = 180) -> None:
         super().__init__(timeout=timeout)
         self.entries: list[T] = list(entries) if not isinstance(entries, dict) else list(entries.values())  # type: ignore[arg-type]
         self.per_page: int = per_page
@@ -265,7 +251,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         self._current_page: int = 0
 
         try:
-            self.pages: list[list[T]] = [self.entries[i: i + per_page] for i in range(0, len(self.entries), per_page)]
+            self.pages: list[list[T]] = [self.entries[i : i + per_page] for i in range(0, len(self.entries), per_page)]
         except KeyError:
             self.pages = [self.entries]  # type: ignore[list-item]
 
@@ -303,7 +289,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
     @property
     def middle(self) -> str:
         """:class:`str`: Returns the middle text for the paginator."""
-        return f'{self.current_page}/{self.total_pages}'
+        return f"{self.current_page}/{self.total_pages}"
 
     async def to_array(self) -> np.ndarray:
         """Returns a 2D array of the pages, their index and the page content."""
@@ -312,7 +298,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
             if isinstance(e, discord.Embed):
                 if e.fields:
                     for field in e.fields:
-                        yield f'{field.name}: {field.value}'
+                        yield f"{field.name}: {field.value}"
                 if e.description:
                     yield e.description
                 if e.title:
@@ -328,9 +314,9 @@ class BasePaginator[T](View, metaclass=ABCMeta):
     def resolve_msg_kwargs(self, page: T) -> dict[str, Any]:
         """:class:`dict`: The kwargs to edit/send the message with."""
         try:
-            payload = {'view': self, TYPE_MAPPING[page.__class__]: page}
+            payload = {"view": self, TYPE_MAPPING[page.__class__]: page}
         except KeyError:
-            raise TypeError(f'Unsupported type {page.__class__} for pagination.')
+            raise TypeError(f"Unsupported type {page.__class__} for pagination.")
         return payload
 
     async def on_timeout(self) -> None:
@@ -389,17 +375,17 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         self.update_buttons()
         return self.pages[self._current_page]
 
-    @discord.ui.button(label='<==', style=discord.ButtonStyle.green)
+    @discord.ui.button(label="<==", style=discord.ButtonStyle.green)
     async def on_arrow_backward(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         entries = self.switch_page(-1)
         page = await self.format_page(entries)
         await interaction.response.edit_message(**self.resolve_msg_kwargs(page))
 
-    @discord.ui.button(label='1/-', style=discord.ButtonStyle.grey)
+    @discord.ui.button(label="1/-", style=discord.ButtonStyle.grey)
     async def on_middle(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.send_modal(JumpToModal(self))
 
-    @discord.ui.button(label='==>', style=discord.ButtonStyle.green)
+    @discord.ui.button(label="==>", style=discord.ButtonStyle.green)
     async def on_arrow_forward(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         entries = self.switch_page(1)
         page = await self.format_page(entries)
@@ -426,6 +412,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
         interaction: :class:`discord.Interaction`
             The interaction to respond to.
         """
+
         class SearchResult(NamedTuple):
             ratio: float
             page_index: int  # named page_index to avoid conflict with NamedTuple.index()
@@ -439,7 +426,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
                     current_result = SearchResult(ratio, index)
 
         if current_result is None:
-            await self._send(interaction, content=f'{Emojis.error} No matches found.', ephemeral=True)
+            await self._send(interaction, content=f"{Emojis.error} No matches found.", ephemeral=True)
             return
 
         entries = self.switch_page(current_result.page_index - self._current_page)
@@ -448,17 +435,17 @@ class BasePaginator[T](View, metaclass=ABCMeta):
 
     @classmethod
     async def start(
-            cls,
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[T],
-            per_page: int = 10,
-            timeout: int = 180,
-            clamp_pages: bool = True,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: Any
+        cls,
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: list[T],
+        per_page: int = 10,
+        timeout: int = 180,
+        clamp_pages: bool = True,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        **kwargs: Any,
     ) -> Self:
         """|coro|
 
@@ -500,13 +487,15 @@ class BasePaginator[T](View, metaclass=ABCMeta):
             self.add_item(SearchForButton(self))
 
         if self.total_pages <= 1:
-            object_kwargs.pop('view')
+            object_kwargs.pop("view")
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self  # type: ignore[return-value]
 
     @classmethod
-    async def _send(cls, ctx: Context | discord.Interaction | discord.Message, ephemeral: bool, **kwargs: Any) -> discord.Message:
+    async def _send(
+        cls, ctx: Context | discord.Interaction | discord.Message, ephemeral: bool, **kwargs: Any
+    ) -> discord.Message:
         if isinstance(ctx, Context):
             message = await ctx.send(**kwargs)
         elif isinstance(ctx, discord.Message):
@@ -522,7 +511,7 @@ class BasePaginator[T](View, metaclass=ABCMeta):
 
     @classmethod
     async def _edit(cls, ctx: Context | discord.Interaction, **kwargs: Any) -> discord.Message | None:
-        kwargs.pop('ephemeral', None)
+        kwargs.pop("ephemeral", None)
 
         if isinstance(ctx, discord.Interaction):
             if ctx.response.is_done():
@@ -542,21 +531,21 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
         return entries
 
     def resolve_msg_kwargs(self, page: list[discord.Embed]) -> dict:
-        return {'embeds': page, 'view': self}
+        return {"embeds": page, "view": self}
 
     @classmethod
     async def start(
-            cls: type[EmbedPaginator],
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[discord.Embed],
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 180,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: None
+        cls: type[EmbedPaginator],
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: list[discord.Embed],
+        per_page: int = 1,
+        clamp_pages: bool = True,
+        timeout: int = 180,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        **kwargs: None,
     ) -> EmbedPaginator:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
@@ -564,7 +553,7 @@ class EmbedPaginator(BasePaginator[discord.Embed]):
         pages = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(pages)
         if self.total_pages <= 1:
-            object_kwargs.pop('view')
+            object_kwargs.pop("view")
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
@@ -575,7 +564,7 @@ class LinePaginator(BasePaginator[T]):
 
     if TYPE_CHECKING:
         embed: discord.Embed
-        location: Literal['field', 'description']
+        location: Literal["field", "description"]
         numerate: bool
 
     async def format_page(self, entries: list[T], /) -> discord.Embed:
@@ -584,39 +573,39 @@ class LinePaginator(BasePaginator[T]):
 
         def fmt(x: T) -> str:
             if self.numerate:
-                return f'{self.numerate_start + entries.index(x)}. {x}'
+                return f"{self.numerate_start + entries.index(x)}. {x}"
             return str(x)
 
         match self.location:
-            case 'field':
+            case "field":
                 if custom_fields:
                     for name, value, inline in entries:
                         embed.add_field(name=name, value=value, inline=inline)
                 else:
-                    embed.add_field(name='Results', value='\n'.join(fmt(e) for e in entries))
-            case 'description':
-                embed.description = '\n'.join(fmt(e) for e in entries)
+                    embed.add_field(name="Results", value="\n".join(fmt(e) for e in entries))
+            case "description":
+                embed.description = "\n".join(fmt(e) for e in entries)
 
         return embed
 
     def resolve_msg_kwargs(self, page: discord.Embed) -> dict:
-        return {'embed': page, 'view': self}
+        return {"embed": page, "view": self}
 
     @classmethod
     async def start(
-            cls: type[LinePaginator],
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: Collection[T],
-            per_page: int = 15,
-            clamp_pages: bool = True,
-            timeout: int = 180,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            location: Literal['field', 'description'] = 'field',
-            embed: discord.Embed = discord.Embed(colour=helpers.Colour.white()),
-            numerate: bool = False
+        cls: type[LinePaginator],
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: Collection[T],
+        per_page: int = 15,
+        clamp_pages: bool = True,
+        timeout: int = 180,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        location: Literal["field", "description"] = "field",
+        embed: discord.Embed = discord.Embed(colour=helpers.Colour.white()),
+        numerate: bool = False,
     ) -> LinePaginator[T]:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
@@ -626,13 +615,13 @@ class LinePaginator(BasePaginator[T]):
         self.location = location
 
         if not self.pages:
-            await cls._send(context, ephemeral, content=f'{Emojis.error} No entries to paginate currently.')
+            await cls._send(context, ephemeral, content=f"{Emojis.error} No entries to paginate currently.")
             return self
 
         pages = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(pages)
         if self.total_pages <= 1:
-            object_kwargs.pop('view')
+            object_kwargs.pop("view")
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
@@ -645,29 +634,29 @@ class TextPaginator(BasePaginator[str]):
         return entries[0]
 
     def resolve_msg_kwargs(self, page: str) -> dict:
-        return {'content': page, 'view': self}
+        return {"content": page, "view": self}
 
     @classmethod
     async def start(
-            cls: type[TextPaginator],
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[str],
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 180,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: None
-    ) -> TextPaginator[str]:
+        cls: type[TextPaginator],
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: list[str],
+        per_page: int = 1,
+        clamp_pages: bool = True,
+        timeout: int = 180,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        **kwargs: None,
+    ) -> TextPaginator:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
         page = await self.format_page(self.pages[0])
         object_kwargs = self.resolve_msg_kwargs(page)  # type: ignore  # lying
         if self.total_pages <= 1:
-            object_kwargs.pop('view')
+            object_kwargs.pop("view")
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
@@ -680,29 +669,29 @@ class FilePaginator(BasePaginator[discord.File]):
         return entries
 
     def resolve_msg_kwargs(self, page: list[discord.File]) -> dict:
-        return {'attachments': page, 'view': self}
+        return {"attachments": page, "view": self}
 
     @classmethod
     async def start(
-            cls: type[FilePaginator],
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[discord.File],
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 180,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: None
-    ) -> FilePaginator[discord.File]:
+        cls: type[FilePaginator],
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: list[discord.File],
+        per_page: int = 1,
+        clamp_pages: bool = True,
+        timeout: int = 180,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        **kwargs: None,
+    ) -> FilePaginator:
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)
         self.ctx = context
 
         page = await self.format_page(self.pages[0])
-        object_kwargs = {'files': page, 'view': self}
+        object_kwargs = {"files": page, "view": self}
         if self.total_pages <= 1:
-            object_kwargs.pop('view')
+            object_kwargs.pop("view")
 
         self.msg = await cls._send(context, ephemeral, **object_kwargs)
         return self
@@ -712,13 +701,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
     """A paginator interface that handles the pagination session for you."""
 
     def __init__(
-            self,
-            ctx: Context,
-            *,
-            prefix: str = '```',
-            suffix: str = '```',
-            max_size: int = 2000,
-            timeout: int = 180
+        self, ctx: Context, *, prefix: str = "```", suffix: str = "```", max_size: int = 2000, timeout: int = 180
     ) -> None:
         self.interface: TextSource = TextSource(prefix=prefix, suffix=suffix, max_size=max_size)
         super().__init__(entries=[], per_page=1, clamp_pages=False, timeout=timeout)
@@ -727,7 +710,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
     async def format_page(self, entries: list[AnyStr], /) -> str:
         return entries[0]
 
-    def add_line(self, line: str = '', *, empty: bool = False) -> None:
+    def add_line(self, line: str = "", *, empty: bool = False) -> None:
         self.interface.add_line(line, empty=empty)
 
     def close_page(self) -> None:
@@ -735,10 +718,10 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
 
     @override
     async def start(
-            self,
-            *,
-            search_for: bool = False,
-            ephemeral: bool = False,
+        self,
+        *,
+        search_for: bool = False,
+        ephemeral: bool = False,
     ) -> TextSourcePaginator[AnyStr]:
         """
         Starts a pagination session.

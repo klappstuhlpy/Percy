@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.core.models import Context
     from app.database.base import Balance
 
-__all__ = ('Minesweeper', 'MinesweeperButton')
+__all__ = ("Minesweeper", "MinesweeperButton")
 
 
 class Minesweeper(View):
@@ -53,29 +53,29 @@ class Minesweeper(View):
 
                 if item.cell.mine:
                     if item.cell == field:
-                        item.label = '\N{COLLISION SYMBOL}'
+                        item.label = "\N{COLLISION SYMBOL}"
                     else:
-                        item.label = '\N{TRIANGULAR FLAG ON POST}' if won else '\N{BOMB}'
+                        item.label = "\N{TRIANGULAR FLAG ON POST}" if won else "\N{BOMB}"
                     item.style = discord.ButtonStyle.green if won else discord.ButtonStyle.red
                 else:
                     item.style = discord.ButtonStyle.gray
-                    item.label = str(item.cell.value) if item.cell.value != 0 else '‎'  # Zero width space
+                    item.label = str(item.cell.value) if item.cell.value != 0 else "‎"  # Zero width space
 
         embed = discord.Embed(
-            title='Minesweeper',
+            title="Minesweeper",
             description=(
-                f'You {'found all' if won else 'exploded by'} **{self.mines}** mines in **{self.moves}** moves.\n'
-                f'Time: {humanize_duration(duration)}'
+                f"You {'found all' if won else 'exploded by'} **{self.mines}** mines in **{self.moves}** moves.\n"
+                f"Time: {humanize_duration(duration)}"
             ),
-            colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red()
+            colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red(),
         )
-        embed.set_footer(text=f'Player: {self.ctx.author}')
+        embed.set_footer(text=f"Player: {self.ctx.author}")
 
         if won:
             user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
             amount: int = random.randint(25, 100)
             await user_balance.add(cash=amount)
-            embed.description += f'\nEarned: {Emojis.Economy.cash} **{fnumb(amount)}**'
+            embed.description += f"\nEarned: {Emojis.Economy.cash} **{fnumb(amount)}**"
 
         with suppress(discord.NotFound, discord.HTTPException):
             if interaction:
@@ -86,16 +86,16 @@ class Minesweeper(View):
     def build_embed(self) -> discord.Embed:
         """Builds the base embed for the game."""
         embed = discord.Embed(
-            title='Minesweeper',
-            description=f'Moves: **{self.moves}**\n'
-                        f'Mines: **{self.mines}**',
+            title="Minesweeper",
+            description=f"Moves: **{self.moves}**\nMines: **{self.mines}**",
             colour=helpers.Colour.white(),
         )
-        embed.set_footer(text=f'Player: {self.ctx.author}')
+        assert isinstance(self.ctx, Context)
+        embed.set_footer(text=f"Player: {self.ctx.author}")
         return embed
 
 
-class MinesweeperButton(discord.ui.Button['Minesweeper']):
+class MinesweeperButton(discord.ui.Button["Minesweeper"]):
     def __init__(self, field: MSField, position: tuple[int, int]) -> None:
         self.position: tuple[int, int] = position
         self.cell: MSField = field
@@ -109,9 +109,9 @@ class MinesweeperButton(discord.ui.Button['Minesweeper']):
 
         if self.cell.revealed:
             self.style = discord.ButtonStyle.secondary
-            self.label = str(self.cell.value) if self.cell.value != 0 else '‎'
+            self.label = str(self.cell.value) if self.cell.value != 0 else "‎"
         else:
-            self.label = '‎'
+            self.label = "‎"
             self.style = discord.ButtonStyle.blurple
 
         self.disabled = self.cell.revealed

@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from app.core.context import Context
 
 __all__ = (
-    'PermissionSpec',
-    'PermissionTemplate',
+    "PermissionSpec",
+    "PermissionTemplate",
 )
 
 
@@ -23,11 +23,10 @@ class PermissionTemplate:
     This implements basic permission sets for easy access to permissions.
     """
 
-    bot: ClassVar[set[str]] = {'read_message_history', 'view_channel', 'send_messages', 'embed_links',
-                               'use_external_emojis'}
-    mod: ClassVar[set[str]] = {'ban_members', 'manage_messages'}
-    admin: ClassVar[set[str]] = {'administrator'}
-    manager: ClassVar[set[str]] = {'manage_guild'}
+    bot: ClassVar[set[str]] = {"read_message_history", "view_channel", "send_messages", "embed_links", "use_external_emojis"}
+    mod: ClassVar[set[str]] = {"ban_members", "manage_messages"}
+    admin: ClassVar[set[str]] = {"administrator"}
+    manager: ClassVar[set[str]] = {"manage_guild"}
 
 
 VALID_FLAGS: dict[str, int] = discord.Permissions.VALID_FLAGS
@@ -61,28 +60,23 @@ class PermissionSpec(NamedTuple):
         return cls(user=set(), bot=PermissionTemplate.bot)
 
     def update(
-            self,
-            permissions: Iterable[str],
-            destination: Literal['user', 'bot'],
+        self,
+        permissions: Iterable[str],
+        destination: Literal["user", "bot"],
     ) -> None:
         """Updates the permissions of the given destination."""
         false = [permission for permission in permissions if permission not in VALID_FLAGS]
         if false:
-            raise ValueError(f'Invalid permission(s): {", ".join(false)}')
+            raise ValueError(f"Invalid permission(s): {', '.join(false)}")
 
-        if destination == 'user':
+        if destination == "user":
             return self.user.update(permissions)
         self.bot.update(permissions)
 
     @staticmethod
     def permission_as_str(permission: str) -> str:
         """Takes the attribute name of a permission and turns it into a capitalized, readable one."""
-        return (
-            permission.title()
-            .replace('_', ' ')
-            .replace('Tts', 'TTS')
-            .replace('Guild', 'Server')
-        )
+        return permission.title().replace("_", " ").replace("Tts", "TTS").replace("Guild", "Server")
 
     @staticmethod
     def _is_owner(bot: Bot, user: discord.User | discord.Member) -> bool:

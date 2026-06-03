@@ -21,20 +21,20 @@ if TYPE_CHECKING:
     from app.core.command import Command
     from app.core.context import Context
 
-FlagMetaT = TypeVar('FlagMetaT', bound='FlagMeta')
-D = TypeVar('D')
-T = TypeVar('T')
+FlagMetaT = TypeVar("FlagMetaT", bound="FlagMeta")
+D = TypeVar("D")
+T = TypeVar("T")
 
-WS_SPLIT_REGEX: re.Pattern[str] = re.compile(r'(\s+\S+)')
+WS_SPLIT_REGEX: re.Pattern[str] = re.compile(r"(\s+\S+)")
 
 __all__ = (
-    'ConsumeUntilFlag',
-    'FlagMeta',
-    'FlagNamespace',
-    'Flags',
-    'MockFlags',
-    'flag',
-    'store_true',
+    "ConsumeUntilFlag",
+    "FlagMeta",
+    "FlagNamespace",
+    "Flags",
+    "MockFlags",
+    "flag",
+    "store_true",
 )
 
 
@@ -45,6 +45,7 @@ class MockFlags:
 
     It can be initialized only one time and is afterwards frozen with the given attributes.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
 
@@ -52,7 +53,7 @@ class MockFlags:
             setattr(self, key, value)
 
     def __repr__(self) -> str:
-        return f'<MockFlags {self.__dict__}>'
+        return f"<MockFlags {self.__dict__}>"
 
     def __getattribute__(self, item: Any) -> Any:
         try:
@@ -140,31 +141,31 @@ class Flag[T]:
     def add_to(self, parser: ArgumentParser, /) -> None:
         """Adds the flag to the parser."""
         if self.name is MISSING:
-            raise TypeError('name must be set.')
+            raise TypeError("name must be set.")
 
         if self.dest is MISSING:
-            self.dest = self.name.replace('-', '_')
+            self.dest = self.name.replace("-", "_")
 
-        args = ['--' + self.name] if self.short in (MISSING, None) else ['--' + self.name, '-' + self.short]
-        args.extend('--' + alias for alias in self.aliases)
+        args = ["--" + self.name] if self.short in (MISSING, None) else ["--" + self.name, "-" + self.short]
+        args.extend("--" + alias for alias in self.aliases)
 
         if not self.store_true:
             parser.add_argument(
                 *args,
-                nargs='+',
+                nargs="+",
                 dest=self.dest,
                 required=self.required,
                 default=self.default,
             )
             return
 
-        parser.add_argument(*args, dest=self.dest, action='store_true')
+        parser.add_argument(*args, dest=self.dest, action="store_true")
 
 
 def _resolve_aliases(alias: str, aliases: Collection[str]) -> list[str]:
     """Resolve the aliases for the flag."""
     if alias and aliases:
-        raise ValueError('`alias` and `aliases` are mutually exclusive.')
+        raise ValueError("`alias` and `aliases` are mutually exclusive.")
 
     if alias is not MISSING:
         aliases = (alias,)
@@ -176,17 +177,17 @@ def _resolve_aliases(alias: str, aliases: Collection[str]) -> list[str]:
 
 
 def flag[T](
-        *,
-        name: str = MISSING,
-        short: str = MISSING,
-        alias: str = MISSING,
-        aliases: Collection[str] = MISSING,
-        converter: Converter[T] | type[T] = MISSING,
-        override: bool = MISSING,
-        description: str = MISSING,
-        max_args: int = MISSING,
-        required: bool = False,
-        default: T | None = None,
+    *,
+    name: str = MISSING,
+    short: str = MISSING,
+    alias: str = MISSING,
+    aliases: Collection[str] = MISSING,
+    converter: Converter[T] | type[T] = MISSING,
+    override: bool = MISSING,
+    description: str = MISSING,
+    max_args: int = MISSING,
+    required: bool = False,
+    default: T | None = None,
 ) -> Annotated[T, Flag[T]]:
     """Override the default functionality and parameters of the underlying :class:`Flag` class attributes.
 
@@ -239,6 +240,7 @@ class store_true_dummy_converter(commands.Converter[bool], app_commands.Transfor
     exist with app commands by default, so for app commands, we just set the parameter as a boolean
     parameter, so it behaves like a `AppCommandOptionType.boolean`.
     """
+
     async def convert(self, ctx: Context, argument: str) -> bool:  # type: ignore[override]
         return True
 
@@ -251,12 +253,12 @@ class store_true_dummy_converter(commands.Converter[bool], app_commands.Transfor
 
 
 def store_true(
-        *,
-        name: str = MISSING,
-        short: str | None = None,
-        alias: str = MISSING,
-        aliases: Collection[str] = (),
-        description: str | None = None,
+    *,
+    name: str = MISSING,
+    short: str | None = None,
+    alias: str = MISSING,
+    aliases: Collection[str] = (),
+    description: str | None = None,
 ) -> Flag:
     """A factory that creates a store true flag. This is a flag that is always true once passed.
 
@@ -278,7 +280,7 @@ def store_true(
         short=short,
         aliases=_resolve_aliases(alias, aliases),
         store_true=True,
-        description=description
+        description=description,
     )
 
 
@@ -318,7 +320,7 @@ class ConsumeUntilFlag(Converter[T]):
                 break
             valid.append(part)
 
-        argument = ''.join(valid).strip()
+        argument = "".join(valid).strip()
         ctx.view.index = ctx.view.buffer.rfind(argument) + len(argument)
 
         if not self.converter:
@@ -329,7 +331,7 @@ class ConsumeUntilFlag(Converter[T]):
 
 def _get_namespaces(attrs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
-        global_ns = sys.modules[attrs['__module__']].__dict__
+        global_ns = sys.modules[attrs["__module__"]].__dict__
     except KeyError:
         global_ns = {}
 
@@ -388,7 +390,7 @@ def _resolve_flag_annotation(flag: Flag[Any], annotation: Any, *args: Any) -> No
             if flag.max_args is MISSING:
                 flag.max_args = 1
         else:
-            raise TypeError(f'Unsupported typing annotation {annotation!r} for {flag.name!r} flag')
+            raise TypeError(f"Unsupported typing annotation {annotation!r} for {flag.name!r} flag")
 
     if flag.override is MISSING:
         flag.override = False
@@ -411,13 +413,13 @@ def _resolve_flags[T](attrs: dict[str, Any]) -> dict[str, Flag[T]]:
     This parses the class attributes and resolves the flags from them.
     """
     local_ns, global_ns = _get_namespaces(attrs)
-    annotations: dict[str, Any] = attrs.get('__annotations__', {})
+    annotations: dict[str, Any] = attrs.get("__annotations__", {})
 
     flags = {}
     args = global_ns, local_ns, {}
 
     for name, value in attrs.items():
-        if name.startswith('__') or not isinstance(value, Flag):
+        if name.startswith("__") or not isinstance(value, Flag):
             continue
 
         if value.converter is MISSING:
@@ -454,32 +456,32 @@ class FlagMeta[T](type):
         __commands_flag_prefix__: str
 
     def __new__(
-            mcs: type[FlagMetaT],
-            name: str,
-            bases: tuple[type[Any], ...],
-            attrs: dict[str, Any],
-            *,
-            compress_usage: bool = False,
-            delimiter: str = ' ',
-            prefix: str = '--',
+        mcs: type[FlagMetaT],
+        name: str,
+        bases: tuple[type[Any], ...],
+        attrs: dict[str, Any],
+        *,
+        compress_usage: bool = False,
+        delimiter: str = " ",
+        prefix: str = "--",
     ) -> FlagMetaT:
-        attrs['__commands_is_flag__'] = True
+        attrs["__commands_is_flag__"] = True
 
         flags: dict[str, Flag] = {}
         aliases: dict[str, str] = {}
 
         for base in reversed(bases):
-            if base.__dict__.get('__commands_is_flag__', False):
-                flags.update(base.__dict__['__commands_flags__'])
-                aliases.update(base.__dict__['__commands_flag_aliases__'])
+            if base.__dict__.get("__commands_is_flag__", False):
+                flags.update(base.__dict__["__commands_flags__"])
+                aliases.update(base.__dict__["__commands_flag_aliases__"])
                 if delimiter is MISSING:
-                    attrs['__commands_flag_delimiter__'] = base.__dict__['__commands_flag_delimiter__']
+                    attrs["__commands_flag_delimiter__"] = base.__dict__["__commands_flag_delimiter__"]
                 if prefix is MISSING:
-                    attrs['__commands_flag_prefix__'] = base.__dict__['__commands_flag_prefix__']
+                    attrs["__commands_flag_prefix__"] = base.__dict__["__commands_flag_prefix__"]
 
-        attrs['__commands_flag_delimiter__'] = delimiter
-        attrs['__commands_flag_prefix__'] = prefix
-        attrs['__commands_flag_compress_usage__'] = compress_usage
+        attrs["__commands_flag_delimiter__"] = delimiter
+        attrs["__commands_flag_prefix__"] = prefix
+        attrs["__commands_flag_compress_usage__"] = compress_usage
 
         for flag_name, flag in _resolve_flags(attrs).items():
             flags[flag_name] = flag
@@ -491,16 +493,16 @@ class FlagMeta[T](type):
         for alias_name in aliases:
             validate_flag_name(alias_name, forbidden)
 
-        attrs['__doc__'] = __doc__ = inspect.cleandoc(inspect.getdoc(mcs) or '')
-        attrs['__commands_flags__'] = flags
-        attrs['__commands_flag_aliases__'] = aliases
+        attrs["__doc__"] = __doc__ = inspect.cleandoc(inspect.getdoc(mcs) or "")
+        attrs["__commands_flags__"] = flags
+        attrs["__commands_flag_aliases__"] = aliases
 
         parser = ArgumentParser(description=__doc__)
 
         for flag in flags.values():
             flag.add_to(parser)
 
-        attrs['__commands_flag_parser__'] = parser
+        attrs["__commands_flag_parser__"] = parser
 
         return super().__new__(mcs, name, bases, attrs)
 
@@ -522,7 +524,7 @@ class FlagMeta[T](type):
             If any flag has required set to True.
         """
         if any(flag.required for flag in cls.flags.values()):
-            raise ValueError('cannot set as default')
+            raise ValueError("cannot set as default")
 
         kwargs = {v.dest: False if v.store_true else v.default for v in cls.flags.values()}
 
@@ -558,26 +560,26 @@ class FlagMeta[T](type):
         :class:`bool`
             Whether the sample starts with a flag.
         """
-        sample, *_ = sample.lstrip().split(' ', maxsplit=1)
-        sample, _, _ = sample.replace('\u2014', '--').partition('=')
+        sample, *_ = sample.lstrip().split(" ", maxsplit=1)
+        sample, _, _ = sample.replace("\u2014", "--").partition("=")
 
-        if not sample.startswith('-'):
+        if not sample.startswith("-"):
             return False
 
         for flag in cls.walk_flags():
-            if flag.short and sample == f'-{flag.short}':
+            if flag.short and sample == f"-{flag.short}":
                 # check if the short version matches
                 return True
-            if flag.name and sample.casefold() == f'--{flag.name}':
+            if flag.name and sample.casefold() == f"--{flag.name}":
                 # check if the long version matches
                 return True
-            if any(sample.casefold() == f'--{alias}' for alias in flag.aliases):
+            if any(sample.casefold() == f"--{alias}" for alias in flag.aliases):
                 # check if any of the aliases match
                 return True
 
         for part in sample.split():
             # Check for combined short flag syntax, e.g. -a -b can become -ab
-            if part.startswith('--') or not part.startswith('-'):
+            if part.startswith("--") or not part.startswith("-"):
                 continue
 
             # splits an "-ab" flag into [a, b] for comparison
@@ -669,8 +671,8 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
     """
 
     def __repr__(self) -> str:
-        pairs = ' '.join([f'{flag.dest}={getattr(self, flag.dest)!r}' for flag in self.get_flags().values()])
-        return f'<{self.__class__.__name__} {pairs}>'
+        pairs = " ".join([f"{flag.dest}={getattr(self, flag.dest)!r}" for flag in self.get_flags().values()])
+        return f"<{self.__class__.__name__} {pairs}>"
 
     def __iter__(self) -> Iterator[tuple[str, Any]]:
         for flag in self.__class__.__commands_flags__.values():  # type: ignore[access]
@@ -679,16 +681,16 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
     @classmethod
     def get_flags(cls) -> dict[str, Flag]:
         """Dict[:class:`str`, :class:`Flag`]: A mapping of flag name to flag object this converter has."""
-        return cls.__commands_flags__.copy()  # type: ignore[access]
+        return cls.__commands_flags__.copy()
 
     @classmethod
     def _can_be_constructible(cls) -> bool:
-        return all(not flag.required for flag in cls.__commands_flags__.values())  # type: ignore[access]
+        return all(not flag.required for flag in cls.__commands_flags__.values())
 
     @classmethod
     async def _construct_default(cls, ctx: Context) -> Flags[T]:
         self = cls.__new__(cls)
-        flags = cls.__commands_flags__
+        flags = cls.__commands_flags__  # type: ignore
         for flag in flags.values():
             if callable(flag.default):
                 # Type checker does not understand that flag.default is a Callable
@@ -728,9 +730,9 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
             The namespace of flags.
         """
         try:
-            flags: FlagMeta[T] = ctx.command.custom_flags  # type: ignore[union-attr]
+            flags: FlagMeta[T] = ctx.command.custom_flags  # type: ignore
         except Exception as exc:
-            raise TypeError(f'bad flag annotation: {exc}')
+            raise TypeError(f"bad flag annotation: {exc}")
 
         splitted = WS_SPLIT_REGEX.split(argument)
         buffer: list[str] = []
@@ -741,16 +743,16 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                 continue
 
             if flags.is_flag_starter(part):
-                if joined := ''.join(buffer):
+                if joined := "".join(buffer):
                     args.append(joined)
 
-                args.append(part.lstrip().replace('\u2014', '--'))
+                args.append(part.lstrip().replace("\u2014", "--"))
                 buffer = []
                 continue
 
             buffer.append(part)
 
-        if joined := ''.join(buffer):
+        if joined := "".join(buffer):
             args.append(joined)
 
         ns = flags.parser.parse_args(args)
@@ -758,7 +760,7 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
             flag = flags.get_flag(name)
 
             if isinstance(v, list):
-                v = ''.join(v)
+                v = "".join(v)
             if isinstance(v, str):
                 v = v.strip()
 
@@ -766,8 +768,8 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
             if converter and v is not None and not flag.store_true:
                 current_param = ctx.current_parameter
                 if current_param is None:
-                    raise TypeError('Missing current parameter context.')
-                param: inspect.Parameter = current_param.replace(name=_FI(f'{current_param.name}.{name}'))
+                    raise TypeError("Missing current parameter context.")
+                param: inspect.Parameter = current_param.replace(name=_FI(f"{current_param.name}.{name}"))
 
                 is_list: bool = False
                 try:
@@ -790,11 +792,11 @@ class Flags[T](metaclass=FlagMeta):  # type: FlagMeta[T]
                             break
 
                         word = view.get_quoted_word()
-                        v.append(await run_converters(ctx, converter, word or '', param))
+                        v.append(await run_converters(ctx, converter, word or "", param))
 
                     if 0 < flag.max_args < len(v):
                         if flag.override:
-                            v = v[-flag.max_args:]
+                            v = v[-flag.max_args :]
                         else:
                             raise TooManyFlags(flag, v)  # type: ignore[arg-type]
 

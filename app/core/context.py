@@ -25,22 +25,21 @@ if TYPE_CHECKING:
     from app.database import Database
     from app.utils import AsyncCallable
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 __all__ = (
-    'Context',
-    'HybridContext',
-    'HybridContextProtocol',
+    "Context",
+    "HybridContext",
+    "HybridContextProtocol",
 )
 
 
 @discord.utils.copy_doc(commands.Context)
-class Context[CogT: 'Cog'](commands.Context):
-
+class Context[CogT: "Cog"](commands.Context):
     if TYPE_CHECKING:
         bot: Bot
         cog: CogT
-        command: type[Command | GroupCommand]
+        command: Command | GroupCommand | None
         invoked_subcommand: Command | GroupCommand | None
 
     def __init__(self, **attrs: Any) -> None:
@@ -94,13 +93,13 @@ class Context[CogT: 'Cog'](commands.Context):
     def clean_prefix(self) -> str:
         """This is preferred over the base implementation as I feel like regex, which was used in the base implementation, is simply unnecessary for this."""
         if self.prefix is None:
-            return ''
+            return ""
 
         user = self.bot.user
         if user is None:
-            return self.prefix or ''
-        MENTIONED_REGEX = re.compile(rf'<@!?{user.id}>')
-        return MENTIONED_REGEX.sub(f'@{user.name}', self.prefix)
+            return self.prefix or ""
+        MENTIONED_REGEX = re.compile(rf"<@!?{user.id}>")
+        return MENTIONED_REGEX.sub(f"@{user.name}", self.prefix)
 
     @property
     def is_interaction(self) -> bool:
@@ -122,17 +121,17 @@ class Context[CogT: 'Cog'](commands.Context):
         return None
 
     async def confirm(
-            self,
-            content: str | None = None,
-            *,
-            view: ConfirmationView | None = None,
-            user: discord.Member | discord.User | None = None,
-            timeout: float = 60.,
-            true: str = 'Yes',
-            false: str = 'No',
-            interaction: discord.Interaction | None = None,
-            hook: AsyncCallable[discord.Interaction, None] | None = None,
-            **kwargs: Any,
+        self,
+        content: str | None = None,
+        *,
+        view: ConfirmationView | None = None,
+        user: discord.Member | discord.User | None = None,
+        timeout: float = 60.0,
+        true: str = "Yes",
+        false: str = "No",
+        interaction: discord.Interaction | None = None,
+        hook: AsyncCallable[discord.Interaction, None] | None = None,
+        **kwargs: Any,
     ) -> bool | None:
         """|coro|
 
@@ -162,13 +161,7 @@ class Context[CogT: 'Cog'](commands.Context):
             Additional keyword arguments to pass to the send method.
         """
         author = user or self.author
-        view = view or ConfirmationView(
-            author,
-            true=true,
-            false=false,
-            hook=hook,
-            timeout=timeout
-        )
+        view = view or ConfirmationView(author, true=true, false=false, hook=hook, timeout=timeout)
 
         if interaction is not None:
             await interaction.response.send_message(content, view=view, **kwargs)
@@ -184,76 +177,83 @@ class Context[CogT: 'Cog'](commands.Context):
 
     async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
         if len(matches) == 0:
-            raise ValueError('No results found.')
+            raise ValueError("No results found.")
 
         if len(matches) == 1:
             return matches[0]
 
         if len(matches) > 25:
-            raise ValueError('Too many results... sorry.')
+            raise ValueError("Too many results... sorry.")
 
         view = DisambiguatorView(self, matches, entry)
         view.message = await self.send_info(
-            'There are too many matches... Please specify your choice by selecting a result.', view=view,
-            ephemeral=ephemeral
+            "There are too many matches... Please specify your choice by selecting a result.", view=view, ephemeral=ephemeral
         )
         await view.wait()
         return view.selected
 
     async def send_success(self, content: str, **kwargs: Any) -> discord.Message:
         """Sends a success message."""
-        emoji = Emojis.success if self.bot_permissions.use_external_emojis else '\N{WHITE HEAVY CHECK MARK}'
-        return await self.send(f'{emoji} {content}', **kwargs)
+        emoji = Emojis.success if self.bot_permissions.use_external_emojis else "\N{WHITE HEAVY CHECK MARK}"
+        return await self.send(f"{emoji} {content}", **kwargs)
 
     async def send_error(self, content: str, **kwargs: Any) -> discord.Message:
         """Sends an error message."""
-        kwargs.setdefault('delete_after', 15)
-        kwargs.setdefault('ephemeral', True)
-        kwargs.setdefault('reference', self.message)
-        emoji = Emojis.error if self.bot_permissions.use_external_emojis else '\N{CROSS MARK}'
-        return await self.send(f'{emoji} {content}', **kwargs)
+        kwargs.setdefault("delete_after", 15)
+        kwargs.setdefault("ephemeral", True)
+        kwargs.setdefault("reference", self.message)
+        emoji = Emojis.error if self.bot_permissions.use_external_emojis else "\N{CROSS MARK}"
+        return await self.send(f"{emoji} {content}", **kwargs)
 
     async def send_info(self, content: str, **kwargs: Any) -> discord.Message:
         """Sends an info message."""
-        emoji = Emojis.info if self.bot_permissions.use_external_emojis else '\N{INFORMATION SOURCE}'
-        return await self.send(f'{emoji} {content}', **kwargs)
+        emoji = Emojis.info if self.bot_permissions.use_external_emojis else "\N{INFORMATION SOURCE}"
+        return await self.send(f"{emoji} {content}", **kwargs)
 
     async def send_warning(self, content: str, **kwargs: Any) -> discord.Message:
         """Sends a warning message."""
-        kwargs.setdefault('delete_after', 15)
-        kwargs.setdefault('ephemeral', True)
-        kwargs.setdefault('reference', self.message)
-        emoji = Emojis.warning if self.bot_permissions.use_external_emojis else '\N{WARNING SIGN}'
-        return await self.send(f'{emoji} {content}', **kwargs)
+        kwargs.setdefault("delete_after", 15)
+        kwargs.setdefault("ephemeral", True)
+        kwargs.setdefault("reference", self.message)
+        emoji = Emojis.warning if self.bot_permissions.use_external_emojis else "\N{WARNING SIGN}"
+        return await self.send(f"{emoji} {content}", **kwargs)
 
     async def send(self, content: Any = None, **kwargs: Any) -> discord.Message:
-        if kwargs.get('embed') and kwargs.get('embeds') is not None:
-            kwargs['embeds'].append(kwargs['embed'])
-            del kwargs['embed']
+        if kwargs.get("embed") and kwargs.get("embeds") is not None:
+            kwargs["embeds"].append(kwargs["embed"])
+            del kwargs["embed"]
 
-        if kwargs.get('file') and kwargs.get('files') is not None:
-            kwargs['files'].append(kwargs['file'])
-            del kwargs['file']
+        if kwargs.get("file") and kwargs.get("files") is not None:
+            kwargs["files"].append(kwargs["file"])
+            del kwargs["file"]
 
-        if kwargs.pop('edit', False) and self._message:
-            kwargs.pop('files', None)
-            kwargs.pop('reference', None)
+        if kwargs.pop("edit", False) and self._message:
+            kwargs.pop("files", None)
+            kwargs.pop("reference", None)
 
             await self.maybe_edit(content, **kwargs)
             return self._message
 
-        if self.is_interaction and self.interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
+        if (
+            self.is_interaction
+            and self.interaction
+            and not self.interaction.is_expired()
+            and not self.interaction.response.is_done()
+        ):
             # If there is a pending interaction from maybe a hybrid app command left, we should use that instead
-            kwargs.pop('reference', None)
-            kwargs.pop('mention_author', None)
-            kwargs.pop('nonce', None)
-            kwargs.pop('stickers', None)
-            self._message = result = await self.interaction.response.send_message(content, **kwargs)  # type: ignore[assignment]
+            kwargs.pop("reference", None)
+            kwargs.pop("mention_author", None)
+            kwargs.pop("nonce", None)
+            kwargs.pop("stickers", None)
+            await self.interaction.response.send_message(content, **kwargs)
+            self._message = result = await self.interaction.original_response()
         else:
             self._message = result = await super().send(content, **kwargs)
         return result  # type: ignore[return-value]
 
-    async def maybe_edit(self, message: discord.Message | None = None, content: Any = None, **kwargs: Any) -> discord.Message | None:
+    async def maybe_edit(
+        self, message: discord.Message | None = None, content: Any = None, **kwargs: Any
+    ) -> discord.Message | None:
         """Edits the message silently."""
         message = message or self._message
         try:
@@ -272,7 +272,12 @@ class Context[CogT: 'Cog'](commands.Context):
 
     async def defer(self, *, ephemeral: bool = False, typing: bool = False) -> None:
         """Defers the response of the interaction or starts typing if it's a regular message."""
-        if self.is_interaction and self.interaction and not self.interaction.is_expired() and not self.interaction.response.is_done():
+        if (
+            self.is_interaction
+            and self.interaction
+            and not self.interaction.is_expired()
+            and not self.interaction.response.is_done()
+        ):
             await self.interaction.response.defer(ephemeral=ephemeral)
         else:
             if typing:
@@ -284,13 +289,13 @@ class Context[CogT: 'Cog'](commands.Context):
 
         if len(content) > 2000:
             fp = io.BytesIO(content.encode())
-            kwargs.pop('file', None)
-            return await self.send(file=discord.File(fp, filename='message_too_long.txt'), **kwargs)
+            kwargs.pop("file", None)
+            return await self.send(file=discord.File(fp, filename="message_too_long.txt"), **kwargs)
         else:
             return await self.send(content)
 
 
-ContextT = TypeVar('ContextT', bound=Context, covariant=True)  # type: ignore[misc]
+ContextT = TypeVar("ContextT", bound=Context, covariant=True)  # type: ignore[misc]
 
 
 @runtime_checkable

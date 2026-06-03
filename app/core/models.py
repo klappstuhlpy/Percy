@@ -32,32 +32,32 @@ from app.core.permissions import PermissionSpec, PermissionTemplate
 if TYPE_CHECKING:
     from app.core import Bot
 
-CogT = TypeVar('CogT', bound='Cog')
+CogT = TypeVar("CogT", bound="Cog")
 
 __all__ = (
-    'AppBadArgument',
-    'BadArgument',
-    'Cog',
-    'CogT',
-    'Command',
-    'CommandInstance',
-    'Context',
-    'EmbedBuilder',
-    'GroupCommand',
-    'HybridCommand',
-    'HybridContext',
-    'HybridContextProtocol',
-    'HybridGroupCommand',
-    'ParamInfo',
-    'PermissionSpec',
-    'PermissionTemplate',
-    'command',
-    'cooldown',
-    'describe',
-    'group',
-    'guild_max_concurrency',
-    'guilds',
-    'user_max_concurrency',
+    "AppBadArgument",
+    "BadArgument",
+    "Cog",
+    "CogT",
+    "Command",
+    "CommandInstance",
+    "Context",
+    "EmbedBuilder",
+    "GroupCommand",
+    "HybridCommand",
+    "HybridContext",
+    "HybridContextProtocol",
+    "HybridGroupCommand",
+    "ParamInfo",
+    "PermissionSpec",
+    "PermissionTemplate",
+    "command",
+    "cooldown",
+    "describe",
+    "group",
+    "guild_max_concurrency",
+    "guilds",
+    "user_max_concurrency",
 )
 
 
@@ -100,6 +100,7 @@ class Cog(commands.Cog):
     emoji: str | discord.PartialEmoji | None
         The emoji that represents the cog.
     """
+
     __hidden__: ClassVar[bool] = False
     emoji: ClassVar[str | discord.PartialEmoji | None] = None
 

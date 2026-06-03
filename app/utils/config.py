@@ -10,8 +10,7 @@ from typing import Any, TypeVar, overload
 from app.utils.tasks import executor
 from config import path
 
-K = TypeVar('K')
-V = TypeVar('V')
+V = TypeVar("V")
 
 ObjectHook = Callable[[dict[str, Any]], Any]
 
@@ -63,7 +62,7 @@ class Config[K, V]:
         self.encoder = encoder
         self.loop = asyncio.get_running_loop()
         self.lock = asyncio.Lock()
-        self._db: dict[K, V] = {}
+        self._db: dict[str, Any] = {}
 
         if load_later:
             self.loop.create_task(self.load())
@@ -78,7 +77,7 @@ class Config[K, V]:
     def load_from_file(self) -> None:
         """Loads the config from the file."""
         try:
-            with self.real_path(self.name).open(encoding='utf-8') as f:
+            with self.real_path(self.name).open(encoding="utf-8") as f:
                 self._db = json.load(f, object_hook=self.object_hook)
         except FileNotFoundError:
             self._db = {}
@@ -86,15 +85,15 @@ class Config[K, V]:
     async def load(self) -> None:
         """Loads the config from the file."""
         async with self.lock:
-            self.loop.run_in_executor(None, self.load_from_file)
+            await self.loop.run_in_executor(None, self.load_from_file)
 
     @executor
     def _dump(self) -> None:
         """Dumps the config to the file."""
-        temp = f'{uuid.uuid4()}-{self.name}.tmp'
+        temp = f"{uuid.uuid4()}-{self.name}.tmp"
         _path = self.real_path(temp)
-        with _path.open('w', encoding='utf-8') as tmp:
-            json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(',', ':'))
+        with _path.open("w", encoding="utf-8") as tmp:
+            json.dump(self._db.copy(), tmp, ensure_ascii=True, cls=self.encoder, separators=(",", ":"))
 
         _path.replace(self.real_path(self.name))
 
@@ -104,12 +103,10 @@ class Config[K, V]:
             await self._dump()
 
     @overload
-    def get(self, key: Any) -> V | None:
-        ...
+    def get(self, key: Any) -> V | None: ...
 
     @overload
-    def get(self, key: Any, default: Any) -> V:
-        ...
+    def get(self, key: Any, default: Any) -> V: ...
 
     def get(self, key: Any, default: Any = None) -> V | None:
         """Retrieves a config entry.
@@ -185,7 +182,7 @@ class Config[K, V]:
             await self.put(key, value)
             return None
 
-        temp = self._db
+        temp: dict[str, Any] = self._db
         for key in keys[:-1]:
             if key not in temp:
                 temp[key] = {}
@@ -230,7 +227,7 @@ class Config[K, V]:
             await self.remove(key)
             return None
 
-        temp = self._db
+        temp: dict[str, Any] = self._db
         for key in keys[:-1]:
             if key not in temp:
                 temp[key] = {}

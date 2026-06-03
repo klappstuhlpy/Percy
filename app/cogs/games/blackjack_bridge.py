@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from app.core import Context
 
 __all__ = (
-    'Blackjack',
-    'BlackjackGame',
-    'WinningType',
+    "Blackjack",
+    "BlackjackGame",
+    "WinningType",
 )
 
 
@@ -38,7 +38,7 @@ class Blackjack:
         self.view: TableView = TableView(table=self)
 
     def __repr__(self) -> str:
-        return f'Blackjack(ctx={self.ctx}, decks={self.deck.decks} dealer={self.dealer})'
+        return f"Blackjack(ctx={self.ctx}, decks={self.deck.decks} dealer={self.dealer})"
 
     # -- Engine state proxies ------------------------------------------------------
 
@@ -90,35 +90,33 @@ class Blackjack:
     # -- Rendering -----------------------------------------------------------------
 
     def build_embed(
-            self,
-            hand: Hand,
-            colour: discord.Colour = helpers.Colour.white(),
-            text: str | None = None,
-            image_url: str | None = None
+        self,
+        hand: Hand,
+        colour: discord.Colour = helpers.Colour.white(),
+        text: str | None = None,
+        image_url: str | None = None,
     ) -> discord.Embed:
         """Gets the embed for the game"""
         embed = discord.Embed(
-            title='Blackjack',
-            description=text or f'Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**',
-            colour=colour
+            title="Blackjack", description=text or f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**", colour=colour
         )
         if image_url:
             embed.set_image(url=image_url)
             return embed
 
-        name = 'Your Hand'
+        name = "Your Hand"
         if len(self.player_hands) > 1:
-            name += f' #{self.player_hands.index(hand) + 1}'
+            name += f" #{self.player_hands.index(hand) + 1}"
 
         p_blocks = hand.display_blocks
         embed.add_field(name=name, value=p_blocks[0], inline=True)
         for block in p_blocks[1:]:
-            embed.add_field(name='\u200b', value=block, inline=True)
+            embed.add_field(name="\u200b", value=block, inline=True)
 
         d_blocks = self.dealer.display_blocks
-        embed.add_field(name='Dealer Hand', value=d_blocks[0], inline=True)
+        embed.add_field(name="Dealer Hand", value=d_blocks[0], inline=True)
         for block in d_blocks[1:]:
-            embed.add_field(name='\u200b', value=block, inline=True)
+            embed.add_field(name="\u200b", value=block, inline=True)
 
         if colour == discord.Colour.blurple():
             embed.set_footer(text=f'Cards remaining: {len(self.deck)}')

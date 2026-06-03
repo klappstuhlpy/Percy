@@ -28,6 +28,7 @@ class ShuffleMode(enum.IntEnum):
     on
         When on, the queue will be shuffled.
     """
+
     off = 0
     on = 1
 
@@ -59,7 +60,7 @@ class Queue(wavelink.Queue):
     @property
     def history_is_empty(self) -> bool:
         """Returns True if the history has no members."""
-        return not bool((len(self.history) - 1) if len(self.history) > 0 else 0)
+        return not bool((len(self.history) - 1) if len(self.history) > 0 else 0)  # type: ignore
 
     @property
     def all_is_empty(self) -> bool:
@@ -105,26 +106,25 @@ class SearchReturn(enum.Enum):
 
 def is_dj(member: discord.Member) -> bool:
     """Checks if the Member has the DJ Role."""
-    role = discord.utils.get(member.guild.roles, name='DJ')
+    role = discord.utils.get(member.guild.roles, name="DJ")
     return role in member.roles
 
 
 class Playlist(BaseRecord):
-
     cog: PlaylistTools
     id: int
     name: str
     owner_id: int
     created: datetime.datetime
 
-    __slots__ = ('cog', 'created', 'id', 'name', 'owner_id', 'tracks')
+    __slots__ = ("cog", "created", "id", "name", "owner_id", "tracks")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.tracks: list[PlaylistTrack] = []
 
     def __repr__(self) -> str:
-        return f'<Playlist id={self.id} name={self.name}>'
+        return f"<Playlist id={self.id} name={self.name}>"
 
     def __str__(self) -> str:
         return self.name
@@ -135,27 +135,27 @@ class Playlist(BaseRecord):
     @property
     def is_liked_songs(self) -> bool:
         """:class:`bool`: Whether the playlist is the user's liked songs."""
-        return self.name == 'Liked Songs'
+        return self.name == "Liked Songs"
 
     @property
     def field_tuple(self) -> tuple[str, str]:
         """:class:`tuple`: Returns a tuple of the Playlist's name and value."""
-        name = f'#{self.id}: {self.name}'
+        name = f"#{self.id}: {self.name}"
         if self.is_liked_songs:
             name = self.name
 
         value = None
         if len(self.tracks) >= 1:
-            value = f'with {pluralize(len(self.tracks)):Track}'
+            value = f"with {pluralize(len(self.tracks)):Track}"
 
-        return name, value or '...'
+        return name, value or "..."
 
     @property
     def choice_text(self) -> str:
         """:class:`str`: Returns the name of the Playlist."""
         if self.is_liked_songs:
             return self.name
-        return f'[{self.id}] {self.name}'
+        return f"[{self.id}] {self.name}"
 
     async def add_track(self, track: Playable) -> PlaylistTrack:
         """Add a track to the playlist.
@@ -191,17 +191,17 @@ class Playlist(BaseRecord):
         """Converts the Playlist to a list of Embeds."""
         source = TextSource(prefix=None, suffix=None, max_size=3080)
         if len(self.tracks) == 0:
-            source.add_line('*This playlist is empty.*')
+            source.add_line("*This playlist is empty.*")
         else:
             for index, track in enumerate(self.tracks):
-                source.add_line(f'`{index + 1}.` {track.text}')
+                source.add_line(f"`{index + 1}.` {track.text}")
 
         embeds = []
         for page in source.pages:
-            embed = discord.Embed(title=f'{self.name} ({pluralize(len(self.tracks)):Track})',
-                                  timestamp=self.created,
-                                  description=page)
-            embed.set_footer(text=f'[{self.id}] • Created at')
+            embed = discord.Embed(
+                title=f"{self.name} ({pluralize(len(self.tracks)):Track})", timestamp=self.created, description=page
+            )
+            embed.set_footer(text=f"[{self.id}] • Created at")
             embeds.append(embed)
 
         return embeds
@@ -209,10 +209,8 @@ class Playlist(BaseRecord):
     def to_select_option(self, value: Any) -> discord.SelectOption:
         """Converts the Playlist to a SelectOption."""
         return discord.SelectOption(
-            label=self.name,
-            emoji='\N{MULTIPLE MUSICAL NOTES}',
-            value=str(value),
-            description=f'{len(self.tracks)} Tracks')
+            label=self.name, emoji="\N{MULTIPLE MUSICAL NOTES}", value=str(value), description=f"{len(self.tracks)} Tracks"
+        )
 
     async def delete(self) -> None:
         """Delete a playlist and all corresponding entries."""

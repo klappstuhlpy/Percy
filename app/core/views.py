@@ -15,17 +15,17 @@ else:
     Context = commands.Context
 
 __all__ = (
-    'ConfirmationView',
-    'DisambiguatorView',
-    'TrashView',
-    'UserInfoView',
-    'View',
+    "ConfirmationView",
+    "DisambiguatorView",
+    "TrashView",
+    "UserInfoView",
+    "View",
 )
 
 from app.utils import AsyncCallable, Timer, get_asset_url, helpers
 from config import Emojis
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 type ViewIdentifierKwars = Any  # loose alias kept for back-compat; kwargs are passed to View.__init__
 
@@ -51,12 +51,12 @@ class View(discord.ui.View):
     """
 
     def __init__(
-            self,
-            *,
-            timeout: float | None = 180.0,
-            members: discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | None = None,
-            clear_on_timeout: bool = True,
-            delete_on_timeout: bool = False
+        self,
+        *,
+        timeout: float | None = 180.0,
+        members: discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | None = None,
+        clear_on_timeout: bool = True,
+        delete_on_timeout: bool = False,
     ) -> None:
         super().__init__(timeout=timeout)
         self.members = members
@@ -73,11 +73,10 @@ class View(discord.ui.View):
         members = self.members
         is_iterable = isinstance(members, Iterable) and not isinstance(members, discord.abc.Snowflake)
         if (
-                (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
-                or (not is_iterable and interaction.user.id != members.id)  # type: ignore[union-attr]
+            (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
+            or (not is_iterable and interaction.user.id != members.id)
         ):
-            await interaction.response.send_message(
-                f'{Emojis.error} This view is not meant for you.')
+            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.")
             return False
         return True
 
@@ -93,7 +92,7 @@ class View(discord.ui.View):
             return await self.message.delete()
         self.disable_all()
 
-    def disable_item(self, item: discord.ui.Item) -> 'View':
+    def disable_item(self, item: discord.ui.Item) -> "View":
         """Disables the given item.
 
         Parameters
@@ -106,8 +105,8 @@ class View(discord.ui.View):
         View
             The view with the item disabled. -> Chainable
         """
-        item.style = discord.ButtonStyle.secondary  # type: ignore[union-attr]
-        item.disabled = True  # type: ignore[union-attr]
+        item.style = discord.ButtonStyle.secondary
+        item.disabled = True
 
         return self
 
@@ -121,8 +120,8 @@ class View(discord.ui.View):
         """
         for item in self._children:
             if with_style:
-                item.style = discord.ButtonStyle.secondary  # type: ignore[union-attr]
-            item.disabled = True  # type: ignore[union-attr]
+                item.style = discord.ButtonStyle.secondary
+            item.disabled = True
 
     def enable_all(self, with_style: bool = False) -> None:
         """Enables all children of the view.
@@ -134,15 +133,15 @@ class View(discord.ui.View):
         """
         for item in self._children:
             if with_style:
-                item.style = discord.ButtonStyle.blurple  # type: ignore[union-attr]
-            item.disabled = False  # type: ignore[union-attr]
+                item.style = discord.ButtonStyle.blurple
+            item.disabled = False
 
     def walk_children(self) -> Generator[discord.ui.Item, None, None]:
         """Walks the children of the view."""
         yield from self._children
 
     @classmethod
-    def from_items(cls, *items: discord.ui.Item, **view_kwargs: ViewIdentifierKwars) -> 'View':
+    def from_items(cls, *items: discord.ui.Item, **view_kwargs: ViewIdentifierKwars) -> "View":
         """Creates a view from an item.
 
         Parameters
@@ -164,20 +163,17 @@ class View(discord.ui.View):
 
 
 class TrashView(View):
-    def __init__(self, author: discord.Member) -> None:
+    def __init__(self, author: discord.Member | discord.User) -> None:
         super().__init__(members=author)
 
-    @discord.ui.button(
-        style=discord.ButtonStyle.red, emoji=Emojis.trash,
-        label='Delete', custom_id='delete'
-    )
+    @discord.ui.button(style=discord.ButtonStyle.red, emoji=Emojis.trash, label="Delete", custom_id="delete")
     async def delete(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if interaction.message:
             await interaction.message.delete()
 
     async def on_timeout(self) -> None:
         for child in self.children:
-            child.disabled = True  # type: ignore[union-attr]
+            child.disabled = True
 
 
 class ConfirmationView(View):
@@ -190,16 +186,17 @@ class ConfirmationView(View):
     value: bool | None
         The value of the confirmation dialog.
     """
+
     def __init__(
-            self,
-            user: discord.Member | discord.User,
-            *,
-            true: str = 'Confirm',
-            false: str = 'Cancel',
-            timeout: float | None = None,
-            defer: bool = False,
-            delete_after: bool = False,
-            hook: AsyncCallable[discord.Interaction, None] | None = None,
+        self,
+        user: discord.Member | discord.User,
+        *,
+        true: str = "Confirm",
+        false: str = "Cancel",
+        timeout: float | None = None,
+        defer: bool = False,
+        delete_after: bool = False,
+        hook: AsyncCallable[discord.Interaction, None] | None = None,
     ) -> None:
         self.value: bool | None = None
         self.hook_value: Any = None
@@ -209,11 +206,15 @@ class ConfirmationView(View):
         self._hook: AsyncCallable[discord.Interaction, None] | None = hook
         super().__init__(timeout=timeout, members=user)
 
-        self._true_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(style=discord.ButtonStyle.green, label=true)
-        self._true_button.callback = self._make_callback(True)  # type: ignore[method-assign]
+        self._true_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(  # type: ignore
+            style=discord.ButtonStyle.green, label=true
+        )
+        self._true_button.callback = self._make_callback(True)
 
-        self._false_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(style=discord.ButtonStyle.red, label=false)
-        self._false_button.callback = self._make_callback(False)  # type: ignore[method-assign]
+        self._false_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(  # type: ignore
+            style=discord.ButtonStyle.red, label=false
+        )
+        self._false_button.callback = self._make_callback(False)
 
         self.interaction: discord.Interaction | None = None
 
@@ -239,7 +240,7 @@ class ConfirmationView(View):
 
             self.stop()
             if toggle and self._hook is not None:
-                self.hook_value = await self._hook(interaction)  # type: ignore[arg-type]
+                self.hook_value = await self._hook(interaction)
             elif self._defer:
                 await interaction.response.defer()
             elif self._delete_after:
@@ -257,7 +258,7 @@ class DisambiguatorView[T](View):
     selected: T
 
     def __init__(self, ctx: Context, data: list[T], entry: Callable[[T], Any]) -> None:
-        super().__init__(members=ctx.author)  # type: ignore[arg-type]
+        super().__init__(members=ctx.author)
         self.ctx: Context = ctx
         self.data: list[T] = data
 
@@ -271,7 +272,7 @@ class DisambiguatorView[T](View):
 
         select = discord.ui.Select(options=options)
 
-        select.callback = self.on_select_submit  # type: ignore[method-assign]
+        select.callback = self.on_select_submit
         self.select = select
         self.add_item(select)
 
@@ -293,17 +294,17 @@ class UserInfoView(View):
         self.bot = ctx.bot
         self.member = member
 
-        self.cog: Any = ctx.bot.get_cog('Stats')
+        self.cog: Any = ctx.bot.get_cog("Stats")
 
     async def create_member_collage(self, results: list[dict[str, Any]]) -> discord.File | None:
         """Creates a member avatar collage."""
-        avatars = [x['avatar'] for x in results]
+        avatars = [x["avatar"] for x in results]
         if not avatars:
             return
 
         return await self.bot.render.avatar_collage(avatars)
 
-    @discord.ui.button(label='Avatar Collage', style=discord.ButtonStyle.blurple, emoji='🖼️')
+    @discord.ui.button(label="Avatar Collage", style=discord.ButtonStyle.blurple, emoji="🖼️")
     async def avatar_collage(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the avatar collage button."""
         self.disable_item(self.avatar_collage)
@@ -315,56 +316,49 @@ class UserInfoView(View):
             file = await self.create_member_collage(results)
 
         if not file:
-            await interaction.followup.send(f'{Emojis.error} No avatar history found. 🫠', ephemeral=True)
+            await interaction.followup.send(f"{Emojis.error} No avatar history found. 🫠", ephemeral=True)
             return
 
         embed = discord.Embed(
-            title=f'Avatar Collage for {self.member}',
+            title=f"Avatar Collage for {self.member}",
             description=(
-                f'`{'Fetching':<{12}}:` {fetching_time:.3f}s\n'
-                f'`{'Generating':<{12}}:` {timer.seconds:.3f}s\n\n'
-                f'Showing `{len(results)}` of up to `100` changes.'
+                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
+                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s\n\n"
+                f"Showing `{len(results)}` of up to `100` changes."
             ),
-            timestamp=results[-1]['changed_at'],
-            colour=helpers.Colour.white()
+            timestamp=results[-1]["changed_at"],
+            colour=helpers.Colour.white(),
         )
-        embed.set_image(url=f'attachment://{file.filename if file else 'collage.png'}')
-        embed.set_footer(text='Last updated')
+        embed.set_image(url=f"attachment://{file.filename if file else 'collage.png'}")
+        embed.set_footer(text="Last updated")
         await interaction.followup.send(embed=embed, file=file, ephemeral=True)
 
-    @discord.ui.button(label='Name History', style=discord.ButtonStyle.blurple, emoji='📜')
+    @discord.ui.button(label="Name History", style=discord.ButtonStyle.blurple, emoji="📜")
     async def name_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the name history button."""
         self.disable_item(self.name_history)
         await interaction.response.edit_message(view=self)
 
-        un_history = await self.cog.get_item_history(self.member.id, 'name')
-        nn_history = await self.cog.get_item_history(self.member.id, 'nickname')
+        un_history = await self.cog.get_item_history(self.member.id, "name")
+        nn_history = await self.cog.get_item_history(self.member.id, "nickname")
 
         if not un_history:
-            await interaction.followup.send(f'{Emojis.error} No name history found.', ephemeral=True)
+            await interaction.followup.send(f"{Emojis.error} No name history found.", ephemeral=True)
             return
 
-        un_text = ', '.join(
-            f'`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})' for x in un_history)
-        nn_text = ', '.join(
-            f'`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})' for x in nn_history)
+        un_text = ", ".join(f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in un_history)
+        nn_text = ", ".join(f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in nn_history)
         embed = discord.Embed(
-            title=f'Name History for {self.member}',
-            description=(
-                f'**Username History:**\n'
-                f'{un_text}\n\n'
-                f'**Nickname History:**\n'
-                f'{nn_text}'
-            ),
-            timestamp=un_history[-1]['changed_at'],
-            colour=helpers.Colour.white()
+            title=f"Name History for {self.member}",
+            description=f"**Username History:**\n{un_text}\n\n**Nickname History:**\n{nn_text}",
+            timestamp=un_history[-1]["changed_at"],
+            colour=helpers.Colour.white(),
         )
-        embed.set_footer(text='Username last updated')
+        embed.set_footer(text="Username last updated")
         embed.set_thumbnail(url=get_asset_url(self.member))
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label='Status History', style=discord.ButtonStyle.blurple, emoji='📊')
+    @discord.ui.button(label="Status History", style=discord.ButtonStyle.blurple, emoji="📊")
     async def status_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """The callback for the status history button."""
         self.disable_item(self.status_history)
@@ -374,24 +368,24 @@ class UserInfoView(View):
             history: list[asyncpg.Record] = await self.cog.get_presence_history(interaction.user.id, days=30)
 
             if not history:
-                await interaction.followup.send(f'{Emojis.error} No presence history found.', ephemeral=True)
+                await interaction.followup.send(f"{Emojis.error} No presence history found.", ephemeral=True)
                 return
 
             fetching_time = timer.reset()
 
             record_dict: dict[datetime.datetime, Any] = {
-                record['changed_at']: [
-                    record['status'],
-                    record['status_before'],
+                record["changed_at"]: [
+                    record["status"],
+                    record["status_before"],
                 ]
                 for record in history
             }
 
             status_timers: dict[str, float] = {
-                'Online': 0,
-                'Idle': 0,
-                'Do Not Disturb': 0,
-                'Offline': 0,
+                "Online": 0,
+                "Idle": 0,
+                "Do Not Disturb": 0,
+                "Offline": 0,
             }
 
             for i, (changed_at, statuses) in enumerate(record_dict.items()):
@@ -400,30 +394,31 @@ class UserInfoView(View):
 
             if all(value == 0 for value in status_timers.values()):
                 return await interaction.followup.send(
-                    f'{Emojis.error} Not enough data to generate a chart.', ephemeral=True)
+                    f"{Emojis.error} Not enough data to generate a chart.", ephemeral=True
+                )
 
             analyzing_time = timer.reset()
 
             canvas: discord.File = await self.bot.render.presence_chart(
-                labels=['Online', 'Offline', 'DND', 'Idle'],
-                colors=['#43b581', '#747f8d', '#f04747', '#fba31c'],
+                labels=["Online", "Offline", "DND", "Idle"],
+                colors=["#43b581", "#747f8d", "#f04747", "#fba31c"],
                 values=[
-                    int(status_timers['Online']),
-                    int(status_timers['Offline']),
-                    int(status_timers['Do Not Disturb']),
-                    int(status_timers['Idle']),
-                ]
+                    int(status_timers["Online"]),
+                    int(status_timers["Offline"]),
+                    int(status_timers["Do Not Disturb"]),
+                    int(status_timers["Idle"]),
+                ],
             )
 
         embed = discord.Embed(
-            title=f'Past 1 Month User Activity of {interaction.user}',
+            title=f"Past 1 Month User Activity of {interaction.user}",
             description=(
-                f'`{'Fetching':<{12}}:` {fetching_time:.3f}s\n'
-                f'`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n'
-                f'`{'Generating':<{12}}:` {timer.seconds:.3f}s'
+                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
+                f"`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n"
+                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s"
             ),
             timestamp=min(record_dict.keys()),
-            colour=helpers.Colour.white()
+            colour=helpers.Colour.white(),
         )
         embed.set_image(url=f'attachment://{canvas.filename}')
         embed.set_footer(text='Watching since')

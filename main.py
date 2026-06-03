@@ -16,7 +16,7 @@ from app.database import Migrations
 from config import DatabaseConfig, path
 
 try:
-    import uvloop
+    import uvloop  # type: ignore[import-not-found]
 except ImportError:
     pass
 else:

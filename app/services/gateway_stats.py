@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 __all__ = (
-    'GatewayTraffic',
-    'summarize_gateway_traffic',
+    "GatewayTraffic",
+    "summarize_gateway_traffic",
 )
 
 
@@ -37,10 +37,10 @@ class GatewayTraffic:
 
 
 def summarize_gateway_traffic(
-        identifies: Mapping[int, Iterable[datetime]],
-        resumes: Mapping[int, Iterable[datetime]],
-        *,
-        since: datetime,
+    identifies: Mapping[int, Iterable[datetime]],
+    resumes: Mapping[int, Iterable[datetime]],
+    *,
+    since: datetime,
 ) -> GatewayTraffic:
     """Count, per shard, the IDENTIFY/RESUME timestamps strictly newer than ``since``.
 

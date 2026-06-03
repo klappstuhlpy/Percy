@@ -3,14 +3,14 @@ from __future__ import annotations
 import datetime
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, Literal
 
 import discord
 import wavelink
 import yarl
 from discord.ext import commands
 from discord.utils import MISSING
-from wavelink import ChannelTimeoutException
+from wavelink import ChannelTimeoutException, Playable, Playlist
 
 from app.core import Context
 from app.utils import convert_duration, helpers
@@ -60,7 +60,9 @@ class Player(wavelink.Player):
             source: wavelink.TrackSource | str = wavelink.TrackSource.SoundCloud,
             ctx: discord.Interaction | Context | None = None,
             return_first: bool = False
-    ) -> wavelink.Playable | wavelink.Playlist | SearchReturn:
+    ) -> Literal[
+             SearchReturn.CANCELLED, SearchReturn.NO_YOUTUBE_ALLOWED, SearchReturn.NO_RESULTS] | Playable | Playlist | \
+         list[Playable]:
         """Searches for a keyword/url on YouTube, Spotify, or SoundCloud.
 
         Parameters
@@ -119,7 +121,7 @@ class Player(wavelink.Player):
         if isinstance(results, list) and is_url:
             results = results[0]
 
-        return results  # type: ignore[return-value]
+        return results
 
     @classmethod
     async def join(cls, obj: discord.Interaction | Context) -> Self:
@@ -140,12 +142,12 @@ class Player(wavelink.Player):
         await obj.guild.me.edit(suppress=False if isinstance(channel, discord.StageChannel) else MISSING, deafen=True)
 
         disabled: bool = False
-        config: GuildConfig = await obj.client.db.get_guild_config(obj.guild_id)  # type: ignore[misc, union-attr]
+        config: GuildConfig = await obj.client.db.get_guild_config(obj.guild_id)
         if config and not config.use_music_panel:
             disabled = True
 
         assert isinstance(obj.channel, discord.TextChannel)
-        self.panel = await PlayerPanel.start(self, channel=obj.channel, disabled=disabled)
+        self.panel = await PlayerPanel.start(self, channel=obj.channel, disabled=disabled)  # type: ignore
         return self
 
     async def disconnect(self, **kwargs: Any) -> None:
@@ -277,7 +279,7 @@ class Player(wavelink.Player):
             return await obj.send(embed=embed, delete_after=15)
         else:
             if obj and obj.response.is_done():
-                return await obj.followup.send(embed=embed, delete_after=15)  # type: ignore[call-overload]
+                return await obj.followup.send(embed=embed, delete_after=15)
             else:
                 return await obj.response.send_message(embed=embed, delete_after=15)
 

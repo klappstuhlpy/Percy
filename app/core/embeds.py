@@ -14,9 +14,7 @@ if TYPE_CHECKING:
 
     from app.core.context import Context
 
-__all__ = (
-    'EmbedBuilder',
-)
+__all__ = ("EmbedBuilder",)
 
 
 class EmbedBuilder(discord.Embed):
@@ -27,28 +25,28 @@ class EmbedBuilder(discord.Embed):
 
     @override
     def __init__(
-            self,
-            *,
-            colour: helpers.Colour | int | None = helpers.Colour.white(),
-            timestamp: datetime | None = None,
-            fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]] = (),
-            **kwargs: Any,
+        self,
+        *,
+        colour: helpers.Colour | int | None = helpers.Colour.white(),
+        timestamp: datetime | None = None,
+        fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]] = (),
+        **kwargs: Any,
     ) -> None:
         super().__init__(colour=colour, timestamp=timestamp, **kwargs)
         if fields:
             self.add_fields(fields)
 
-        if 'description' in kwargs:
-            self.description = kwargs['description']
+        if "description" in kwargs:
+            self.description = kwargs["description"]
 
     @staticmethod
     def _resolve_field_dicts(
-            fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]]
+        fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]],
     ) -> Iterable[tuple[str, str, bool]]:
         first_item_checker = type(next(iter(fields), None))
         if first_item_checker is dict:
-            dict_fields: list[dict[str, str | bool]] = fields
-            return [(str(f['name']), str(f['value']), bool(f['inline'])) for f in dict_fields]
+            dict_fields: list[dict[str, str | bool]] = fields  # type: ignore
+            return [(str(f["name"]), str(f["value"]), bool(f["inline"])) for f in dict_fields]
         return fields  # type: ignore[return-value]
 
     def add_fields(self, fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]]) -> EmbedBuilder:
@@ -92,9 +90,9 @@ class EmbedBuilder(discord.Embed):
 
     @classmethod
     def from_message(
-            cls,
-            message: discord.Message,
-            **kwargs: Any,
+        cls,
+        message: discord.Message,
+        **kwargs: Any,
     ) -> Self:
         """Create a new embed from a message.
 
@@ -120,9 +118,9 @@ class EmbedBuilder(discord.Embed):
         instance.set_author(name=author.display_name, icon_url=author.display_avatar)
 
         if (
-                message.attachments
-                and message.attachments[0].content_type
-                and message.attachments[0].content_type.startswith("image")
+            message.attachments
+            and message.attachments[0].content_type
+            and message.attachments[0].content_type.startswith("image")
         ):
             instance.set_image(url=message.attachments[0].url)
 

@@ -27,23 +27,24 @@ from app.cogs.games.cards import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, 
 from app.utils import RevDict, fnumb
 
 __all__ = (
-    'Card',
-    'CombResult',
-    'Hand',
-    'HandResult',
-    'Player',
-    'Pot',
-    'Ranker',
-    'RankingItem',
-    'TableState',
-    'TexasHoldem',
-    'comb_index',
-    'item_by_count',
+    "Card",
+    "CombResult",
+    "Hand",
+    "HandResult",
+    "Player",
+    "Pot",
+    "Ranker",
+    "RankingItem",
+    "TableState",
+    "TexasHoldem",
+    "comb_index",
+    "item_by_count",
 )
 
 
 class TableState(enum.Enum):
     """Represents the state of the table"""
+
     STOPPED = 0
     RUNNING = 1
     FINISHED = 2
@@ -56,7 +57,7 @@ class Card(BaseCard):
     @property
     def display_text_short(self) -> str:
         """Returns the display text of the card"""
-        return f'{self.name.title()}s'
+        return f"{self.name.title()}s"
 
     @classmethod
     def from_arr(cls, card_arr: tuple) -> Card:
@@ -100,22 +101,22 @@ class Hand(BaseHand[Card]):
             # Pre-flop
             high_card = Card.from_arr(np.max(self.card_arr, axis=0))
             return HandResult(
-                name=f'High Card, {high_card.display_text}',
+                name=f"High Card, {high_card.display_text}",
                 cards=[Card(suit=suit, value=value) for value, suit in self.card_arr],
                 # in this case, we just summarized the cards values of the hand
-                value=sum(self.card_arr[:, 0])
+                value=sum(self.card_arr[:, 0]),
             )
 
         best_comb: RankingItem = np.max(combs.ranking)
 
-        name = NAMED_HAND[np.max(best_comb.rank) // 16 ** 5]
+        name = NAMED_HAND[np.max(best_comb.rank) // 16**5]
         if best_comb.name is not None:
-            name += f', {best_comb.name}'
+            name += f", {best_comb.name}"
 
         return HandResult(
             name=name,
             cards=[Card(suit=x[1], value=x[0]) for x in combs.all_combos[0, np.argmax(combs.ranking), :, :]],
-            value=best_comb.rank
+            value=best_comb.rank,
         )
 
     def hand_value(self, community_arr: np.ndarray) -> CombResult | None:
@@ -135,7 +136,8 @@ class Hand(BaseHand[Card]):
         player_valid_hand = np.concatenate([self.card_arr, community_arr], axis=0)
         all_combos = np.expand_dims(player_valid_hand, axis=0)[:, comb_index(len(player_valid_hand), 5), :]
         ranking: np.ndarray[Any, np.dtype[Any]] = cast(
-            'np.ndarray[Any, np.dtype[Any]]', Ranker.rank_all_hands(all_combos, return_all=True))
+            "np.ndarray[Any, np.dtype[Any]]", Ranker.rank_all_hands(all_combos, return_all=True)
+        )
         return CombResult(all_combos=all_combos, ranking=ranking)
 
 
@@ -156,6 +158,7 @@ class CombResult(NamedTuple):
 
 class HandResult(NamedTuple):
     """Represents the result of a hand of cards"""
+
     name: str
     cards: list[Card]
     value: int
@@ -164,31 +167,32 @@ class HandResult(NamedTuple):
 @dataclass
 class RankingItem:
     """Represents the ranking of a hand of cards"""
+
     rank: int
     cards: np.ndarray
     name: str | None = None
 
     def __ge__(self, other: RankingItem) -> bool:
         if not isinstance(other, RankingItem):
-            raise TypeError(f'unsupported operand type(s) for >=: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for >=: {type(self)} and {type(other)}")
 
         return self.rank >= other.rank
 
     def __gt__(self, other: RankingItem) -> bool:
         if not isinstance(other, RankingItem):
-            raise TypeError(f'unsupported operand type(s) for >: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for >: {type(self)} and {type(other)}")
 
         return self.rank > other.rank
 
     def __floordiv__(self, other: Any) -> int:
         if not isinstance(other, int):
-            raise TypeError(f'unsupported operand type(s) for //: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for //: {type(self)} and {type(other)}")
 
         return self.rank // other
 
     def __imul__(self, other: Any) -> RankingItem:
         if not isinstance(other, (int, np.ndarray)):
-            raise TypeError(f'unsupported operand type(s) for *: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for *: {type(self)} and {type(other)}")
 
         self.rank = int(self.rank * other)
         return self
@@ -198,10 +202,13 @@ class Ranker:
     """Represents the ranking of a hand of cards"""
 
     @classmethod
-    def rank_all_hands(cls, hand_combos: np.ndarray, return_all: bool = False) -> RankingItem | np.ndarray[Any, np.dtype[Any]]:
+    def rank_all_hands(
+        cls, hand_combos: np.ndarray, return_all: bool = False
+    ) -> RankingItem | np.ndarray[Any, np.dtype[Any]]:
         """Returns the rank of all combinations of cards."""
         rank_res_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(  # type: ignore
-            shape=(hand_combos.shape[1], hand_combos.shape[0]), dtype=RankingItem)
+            shape=(hand_combos.shape[1], hand_combos.shape[0]), dtype=RankingItem
+        )
 
         for scenario in range(hand_combos.shape[1]):
             rank_res_arr[scenario, :] = cls.rank_one_hand(hand_combos[:, scenario, :, :], group_by=not return_all)
@@ -251,15 +258,17 @@ class Ranker:
         cls.high_card_check(num_combos, rank_arr)
 
         if group_by:
-            return np.array(
-                [x.rank for x in rank_arr]) * (16 ** 5) + np.sum(num_combos * np.power(16, np.arange(0, 5)), axis=1)
+            return np.array([x.rank for x in rank_arr]) * (16**5) + np.sum(
+                num_combos * np.power(16, np.arange(0, 5)), axis=1
+            )
 
         for i, ranking in enumerate(rank_arr):
-            ranking = cast('RankingItem', ranking)
+            ranking = cast("RankingItem", ranking)
             # Example: Implement the logic for each RankingItem
             rank_arr[i] = RankingItem(
-                name=ranking.name, cards=ranking.cards,
-                rank=ranking.rank * (16 ** 5) + np.sum(ranking.cards * np.power(16, np.arange(0, 5)))
+                name=ranking.name,
+                cards=ranking.cards,
+                rank=ranking.rank * (16**5) + np.sum(ranking.cards * np.power(16, np.arange(0, 5))),
             )
 
         return rank_arr
@@ -270,10 +279,10 @@ class Ranker:
         straight_check: np.ndarray = np.zeros(len(num_combos), dtype=int)
         for i in range(4):
             if i <= 2:
-                straight_check += (num_combos[:, i] == (num_combos[:, i + 1] - 1))
+                straight_check += num_combos[:, i] == (num_combos[:, i + 1] - 1)
             else:
-                straight_check += (num_combos[:, i] == (num_combos[:, i + 1] - 1))
-                straight_check += ((num_combos[:, i] == 5) & (num_combos[:, i + 1] == 14))
+                straight_check += num_combos[:, i] == (num_combos[:, i + 1] - 1)
+                straight_check += (num_combos[:, i] == 5) & (num_combos[:, i + 1] == 14)
 
         return straight_check == 4
 
@@ -283,13 +292,16 @@ class Ranker:
         return np.max(suit_combos, axis=1) == np.min(suit_combos, axis=1)
 
     @staticmethod
-    def straight_flush_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool, suit_arr: bool) -> None:
+    def straight_flush_check(
+        num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool, suit_arr: bool
+    ) -> None:
         """Checks if the combination of cards is a straight flush."""
         ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
-        straight_label = 'Low' if ace_low_straight else 'High'
+        straight_label = "Low" if ace_low_straight else "High"
 
         rank_arr[(rank_arr == 0) & (straight_arr & suit_arr)] = RankingItem(
-            rank=8, name=f'{UNAMED[np.max(num_combos[:, 4])]} {straight_label}', cards=num_combos[0, :5])
+            rank=8, name=f"{UNAMED[np.max(num_combos[:, 4])]} {straight_label}", cards=num_combos[0, :5]
+        )
 
         # Rearrange order of 2345A to A2345
         reorder_idx = (rank_arr == 8) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
@@ -301,10 +313,9 @@ class Ranker:
         small = np.all(num_combos[:, 0:4] == num_combos[:, :1], axis=1)  # 22223
         large = np.all(num_combos[:, 1:] == num_combos[:, 4:], axis=1)  # 24444
 
-        condition = (small | large)
+        condition = small | large
         four_of_a_kind = item_by_count(num_combos[condition], 4)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=7, name=f'{four_of_a_kind[0]}s', cards=num_combos[0, :5])
+        rank_arr[(rank_arr == 0) & condition] = RankingItem(rank=7, name=f"{four_of_a_kind[0]}s", cards=num_combos[0, :5])
 
         reorder_idx = (rank_arr == 7) & small
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 4:], num_combos[reorder_idx, :4]], axis=1)
@@ -313,36 +324,40 @@ class Ranker:
     def full_house_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a full house."""
         small = np.all(
-            (num_combos[:, 0:3] == num_combos[:, :1])
-            & (num_combos[:, 3:4] == num_combos[:, 4:5]), axis=1)  # 22233
+            (num_combos[:, 0:3] == num_combos[:, :1]) & (num_combos[:, 3:4] == num_combos[:, 4:5]), axis=1
+        )  # 22233
 
         large = np.all(
-            (num_combos[:, 0:1] == num_combos[:, 1:2])
-            & (num_combos[:, 2:5] == num_combos[:, 4:]), axis=1)  # 22444
+            (num_combos[:, 0:1] == num_combos[:, 1:2]) & (num_combos[:, 2:5] == num_combos[:, 4:]), axis=1
+        )  # 22444
 
-        condition = (small | large)
+        condition = small | large
         three_pair, two_pair = item_by_count(num_combos[condition], 3), item_by_count(num_combos[condition], 2)
         rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=6, name=f'{UNAMED[three_pair[0]]}s over {UNAMED[two_pair[0]]}s',
-            cards=num_combos[0, :5])
+            rank=6, name=f"{UNAMED[three_pair[0]]}s over {UNAMED[two_pair[0]]}s", cards=num_combos[0, :5]
+        )
 
         reorder_idx = (rank_arr == 6) & small
         num_combos[reorder_idx, :] = np.concatenate([num_combos[reorder_idx, 3:], num_combos[reorder_idx, :3]], axis=1)
 
     @staticmethod
-    def flush_check(num_combos: np.ndarray, suit_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], suit_arr: bool) -> None:
+    def flush_check(
+        num_combos: np.ndarray, suit_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], suit_arr: bool
+    ) -> None:
         """Checks if the combination of cards is a flush."""
         rank_arr[(rank_arr == 0) & suit_arr] = RankingItem(
-            rank=5, name=RevDict(SUITS)[np.max(suit_combos, axis=1)[0]].title(), cards=num_combos[0, :5])
+            rank=5, name=RevDict(SUITS)[np.max(suit_combos, axis=1)[0]].title(), cards=num_combos[0, :5]
+        )
 
     @staticmethod
     def straight_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]], straight_arr: bool) -> None:
         """Checks if the combination of cards is a straight."""
         ace_low_straight = np.max(num_combos[:, 4]) == 14 and np.min(num_combos[:, 0]) == 2
-        straight_label = 'Low' if ace_low_straight else 'High'
+        straight_label = "Low" if ace_low_straight else "High"
 
         rank_arr[(rank_arr == 0) & straight_arr] = RankingItem(
-            rank=4, name=f'{UNAMED[np.max(num_combos[:, 4])]} {straight_label}', cards=num_combos[0, :5])
+            rank=4, name=f"{UNAMED[np.max(num_combos[:, 4])]} {straight_label}", cards=num_combos[0, :5]
+        )
 
         # Rearrange order of 2345A to A2345
         reorder_idx = (rank_arr == 4) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
@@ -355,51 +370,49 @@ class Ranker:
         middle = np.all((num_combos[:, 1:4] == num_combos[:, 1:2]), axis=1)  # 23335
         large = np.all((num_combos[:, 2:] == num_combos[:, 2:3]), axis=1)  # 36AAA
 
-        condition = (small | middle | large)
+        condition = small | middle | large
         three_of_a_kind = item_by_count(num_combos[condition], 3)
         rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=3, name=f'{UNAMED[three_of_a_kind[0]]}s', cards=num_combos[0, :5])
+            rank=3, name=f"{UNAMED[three_of_a_kind[0]]}s", cards=num_combos[0, :5]
+        )
 
         reorder_small = (rank_arr == 3) & small
         reorder_middle = (rank_arr == 3) & large
 
-        num_combos[reorder_small, :] = np.concatenate(
-            [num_combos[reorder_small, 3:], num_combos[reorder_small, :3]], axis=1)
-        num_combos[reorder_middle, :] = np.concatenate([
-            num_combos[reorder_middle, :1],
-            num_combos[reorder_middle, 4:],
-            num_combos[reorder_middle, 1:4]
-        ], axis=1)
+        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 3:], num_combos[reorder_small, :3]], axis=1)
+        num_combos[reorder_middle, :] = np.concatenate(
+            [num_combos[reorder_middle, :1], num_combos[reorder_middle, 4:], num_combos[reorder_middle, 1:4]], axis=1
+        )
 
     @staticmethod
     def two_pairs_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a two pairs."""
         small = np.all(
-            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1)  # 2233A
+            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1
+        )  # 2233A
 
         middle = np.all(
-            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1)  # 223AA
+            (num_combos[:, 0:2] == num_combos[:, :1]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1
+        )  # 223AA
 
         large = np.all(
-            (num_combos[:, 1:3] == num_combos[:, 1:2]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1)  # 233AA
+            (num_combos[:, 1:3] == num_combos[:, 1:2]) & (num_combos[:, 3:] == num_combos[:, 4:]), axis=1
+        )  # 233AA
 
-        condition = (small | middle | large)
+        condition = small | middle | large
         two_pairs = item_by_count(num_combos[condition], 2)
         if len(two_pairs) == 2:
             rank_arr[(rank_arr == 0) & (small | middle | large)] = RankingItem(
-                rank=2, name=f'{UNAMED[two_pairs[0]]}s and {UNAMED[two_pairs[1]]}s',
-                cards=num_combos[0, :5])
+                rank=2, name=f"{UNAMED[two_pairs[0]]}s and {UNAMED[two_pairs[1]]}s", cards=num_combos[0, :5]
+            )
 
         reorder_small = (rank_arr == 2) & small
         reorder_middle = (rank_arr == 2) & large
 
-        num_combos[reorder_small, :] = np.concatenate(
-            [num_combos[reorder_small, 4:], num_combos[reorder_small, :4]], axis=1)
-        num_combos[reorder_middle, :] = np.concatenate([
-            num_combos[reorder_middle, 2:3],
-            num_combos[reorder_middle, 0:2],
-            num_combos[reorder_middle, 3:]
-        ], axis=1)
+        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 4:], num_combos[reorder_small, :4]], axis=1)
+        num_combos[reorder_middle, :] = np.concatenate(
+            [num_combos[reorder_middle, 2:3], num_combos[reorder_middle, 0:2], num_combos[reorder_middle, 3:]], axis=1
+        )
 
     @staticmethod
     def one_pair_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
@@ -409,33 +422,30 @@ class Ranker:
         mid_large = np.all((num_combos[:, 2:4] == num_combos[:, 2:3]), axis=1)  # 23445
         large = np.all((num_combos[:, 3:] == num_combos[:, 3:4]), axis=1)  # 23455
 
-        condition = (small | mid_small | mid_large | large)
+        condition = small | mid_small | mid_large | large
         one_pair = item_by_count(num_combos[condition], 2)
-        rank_arr[(rank_arr == 0) & condition] = RankingItem(
-            rank=1, name=f'{UNAMED[one_pair[0]]}s', cards=num_combos[0, :5])
+        rank_arr[(rank_arr == 0) & condition] = RankingItem(rank=1, name=f"{UNAMED[one_pair[0]]}s", cards=num_combos[0, :5])
 
         reorder_small = (rank_arr == 1) & small
         reorder_mid_small = (rank_arr == 1) & mid_small
         reorder_mid_large = (rank_arr == 1) & mid_large
 
-        num_combos[reorder_small, :] = np.concatenate(
-            [num_combos[reorder_small, 2:], num_combos[reorder_small, :2]], axis=1)
-        num_combos[reorder_mid_small, :] = np.concatenate([
-            num_combos[reorder_mid_small, :1],
-            num_combos[reorder_mid_small, 3:],
-            num_combos[reorder_mid_small, 1:3]
-        ], axis=1)
-        num_combos[reorder_mid_large, :] = np.concatenate([
-            num_combos[reorder_mid_large, :2],
-            num_combos[reorder_mid_large, 4:],
-            num_combos[reorder_mid_large, 2:4]
-        ], axis=1)
+        num_combos[reorder_small, :] = np.concatenate([num_combos[reorder_small, 2:], num_combos[reorder_small, :2]], axis=1)
+        num_combos[reorder_mid_small, :] = np.concatenate(
+            [num_combos[reorder_mid_small, :1], num_combos[reorder_mid_small, 3:], num_combos[reorder_mid_small, 1:3]],
+            axis=1,
+        )
+        num_combos[reorder_mid_large, :] = np.concatenate(
+            [num_combos[reorder_mid_large, :2], num_combos[reorder_mid_large, 4:], num_combos[reorder_mid_large, 2:4]],
+            axis=1,
+        )
 
     @staticmethod
     def high_card_check(num_combos: np.ndarray, rank_arr: np.ndarray[Any, np.dtype[Any]]) -> None:
         """Checks if the combination of cards is a high card."""
         rank_arr[(rank_arr == 0)] = RankingItem(
-            rank=0, name=f'{UNAMED[np.max(num_combos[:, 4])]} High', cards=num_combos[0, :5])
+            rank=0, name=f"{UNAMED[np.max(num_combos[:, 4])]} High", cards=num_combos[0, :5]
+        )
 
         # Rearrange order of 2345A to A2345
         reorder_idx = (rank_arr == 0) & (num_combos[:, 0] == 2) & (num_combos[:, 4] == 14)
@@ -463,8 +473,8 @@ class Player:
 
     def __repr__(self) -> str:
         return (
-            f'Player(member={self.member} hand={self.hand} stack={self.stack} '
-            f'bet={self.bet} folded={self.folded} all_in={self.all_in})'
+            f"Player(member={self.member} hand={self.hand} stack={self.stack} "
+            f"bet={self.bet} folded={self.folded} all_in={self.all_in})"
         )
 
     def reset(self) -> None:
@@ -492,18 +502,18 @@ class Pot:
         self.players: list[Player] = players or []
 
     def __repr__(self) -> str:
-        return f'Pot(amount={self.amount}, players={len(self.players)})'
+        return f"Pot(amount={self.amount}, players={len(self.players)})"
 
     def __iadd__(self, other: int) -> Pot:
         if not isinstance(other, int):
-            raise TypeError(f'unsupported operand type(s) for +: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for +: {type(self)} and {type(other)}")
 
         self.amount += other
         return self
 
     def __isub__(self, other: int) -> Pot:
         if not isinstance(other, int):
-            raise TypeError(f'unsupported operand type(s) for -: {type(self)} and {type(other)}')
+            raise TypeError(f"unsupported operand type(s) for -: {type(self)} and {type(other)}")
 
         self.amount -= other
         return self
@@ -515,7 +525,7 @@ class Pot:
         return self.amount
 
     def __str__(self) -> str:
-        return f'{fnumb(self.amount)}'
+        return f"{fnumb(self.amount)}"
 
 
 class TexasHoldem:
@@ -536,15 +546,9 @@ class TexasHoldem:
         The maximum number of players allowed in the game.
     """
 
-    def __init__(
-            self,
-            *,
-            first_buy_in: int,
-            decks: int = 1,
-            max_players: int = 4
-    ) -> None:
+    def __init__(self, *, first_buy_in: int, decks: int = 1, max_players: int = 4) -> None:
         self.first_buy_in: int = first_buy_in
-        self.deck: Deck = Deck(game='poker', decks=decks)
+        self.deck: Deck = Deck(game="poker", decks=decks)
 
         self.state: TableState = TableState.STOPPED
 
@@ -576,7 +580,7 @@ class TexasHoldem:
         self.analysis: list[tuple[dict[str, float], dict[int, dict[str, float]]]] = []
 
     def __repr__(self) -> str:
-        return f'TexasHoldem(state={self.state} host={self.host} players={len(self.players)} max_players={self.max_players})'
+        return f"TexasHoldem(state={self.state} host={self.host} players={len(self.players)} max_players={self.max_players})"
 
     @property
     def min_buy_in(self) -> int:
@@ -689,7 +693,7 @@ class TexasHoldem:
 
         self.pot.amount = self.small_blind + self.big_blind
 
-        self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
+        self.analysis.append(cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
 
     def end(self) -> None:
         """Ends the game by calculating the winner(s).
@@ -780,8 +784,7 @@ class TexasHoldem:
         self.reset()
 
         assert self.blind_index is not None
-        self.blind_index = (
-            (self.blind_index[0] + 1) % len(self.players), (self.blind_index[1] + 1) % len(self.players))
+        self.blind_index = ((self.blind_index[0] + 1) % len(self.players), (self.blind_index[1] + 1) % len(self.players))
         self.player_index = (self.blind_index[1] + 1) % len(self.players)
         return removed
 
@@ -790,7 +793,9 @@ class TexasHoldem:
         while len(self.community_arr) < 5:
             if len(self.community_arr) in (3, 4):
                 # add analysis data for the flop and turn
-                self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
+                self.analysis.append(
+                    cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
+                )
 
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
 
@@ -835,7 +840,9 @@ class TexasHoldem:
                     if not player.all_in:
                         player.checked = False
 
-                if (all_in_player := next((player for player in self.playing_players if player.wait_for_allin_call), None)) and len(self.playing_players) > 2:
+                if (
+                    all_in_player := next((player for player in self.playing_players if player.wait_for_allin_call), None)
+                ) and len(self.playing_players) > 2:
                     # the call round for the all-in player is over,
                     # all further bets will be added to the side pot
                     all_in_player.wait_for_allin_call = False
@@ -846,7 +853,9 @@ class TexasHoldem:
 
                 if len(self.community_arr) != 5:
                     # Only calculate the odds if the game is not over
-                    self.analysis.append(cast('tuple[dict[str, float], dict[int, dict[str, float]]]', self.simulate(final_hand=True)))
+                    self.analysis.append(
+                        cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
+                    )
 
     def autoplay_turn(self, player: Player) -> bool:
         """Applies the automatic action for a player who took too long.
@@ -876,21 +885,16 @@ class TexasHoldem:
     def game_is_over(self) -> bool:
         """Returns whether the game is over (last round, all 5 community cards dealt, and every player has checked)"""
         return (
-                self.state == TableState.FINISHED
-                or (len(self.community_arr) == 5 and all(player.checked or player.all_in for player in self.playing_players))
-                or (len(self.playing_players) == 1)
-                or (len(self.playing_players) == 2 and any(player.all_in for player in self.playing_players))
+            self.state == TableState.FINISHED
+            or (len(self.community_arr) == 5 and all(player.checked or player.all_in for player in self.playing_players))
+            or (len(self.playing_players) == 1)
+            or (len(self.playing_players) == 2 and any(player.all_in for player in self.playing_players))
         )
 
     @property
     def to_draw(self) -> int:
         """Returns how much community cards need to be dealt"""
-        TO_DRAW_MAP = {
-            0: 3,
-            3: 1,
-            4: 1,
-            5: 0
-        }
+        TO_DRAW_MAP = {0: 3, 3: 1, 4: 1, 5: 0}
         return TO_DRAW_MAP[len(self.community_arr)]
 
     def deal(self) -> None:
@@ -901,7 +905,7 @@ class TexasHoldem:
 
     # Simulation
 
-    def _simulation_preparation(self, num_scenarios: int | Literal['all']) -> tuple[np.ndarray | None, np.ndarray]:
+    def _simulation_preparation(self, num_scenarios: int | Literal["all"]) -> tuple[np.ndarray | None, np.ndarray]:
         """Prepares the simulation by generating the community cards and undrawn cards
 
         Parameters
@@ -916,7 +920,7 @@ class TexasHoldem:
         """
         total_idx = comb_index(len(self.deck.cards), 5 - len(self.community_arr))
         undrawn_combos = self.deck.cards[total_idx]
-        if num_scenarios != 'all':
+        if num_scenarios != "all":
             assert isinstance(num_scenarios, int), "'num_scenarios' must be an integer"
             if len(undrawn_combos) > num_scenarios:
                 undrawn_combos = undrawn_combos[np.array(random.sample(range(len(undrawn_combos)), num_scenarios))]
@@ -942,54 +946,61 @@ class TexasHoldem:
         """
         final_hand_dict = {}
         for player in range(len(self.players)):
-            hand_type, hand_freq = np.unique((res_arr // 16 ** 5)[:, player], return_counts=True)  # type: ignore[operator]
+            hand_type, hand_freq = np.unique((res_arr // 16**5)[:, player], return_counts=True)  # type: ignore[operator]
             final_hand_dict[player + 1] = dict(
-                zip(np.vectorize(NAMED_HAND.get)(hand_type),
-                    np.round(hand_freq / hand_freq.sum() * 100, 2).astype(float)))
+                zip(np.vectorize(NAMED_HAND.get)(hand_type), np.round(hand_freq / hand_freq.sum() * 100, 2).astype(float))
+            )
         return final_hand_dict
 
-    def _simulation_analysis(self, odds_type: Literal['win_any', 'tie_win', 'precise'], res_arr: np.ndarray[Any, np.dtype[Any]]) -> dict:
-        outcome_arr = (res_arr == np.expand_dims(np.max(res_arr, axis=1), axis=1))
+    def _simulation_analysis(
+        self, odds_type: Literal["win_any", "tie_win", "precise"], res_arr: np.ndarray[Any, np.dtype[Any]]
+    ) -> dict:
+        outcome_arr = res_arr == np.expand_dims(np.max(res_arr, axis=1), axis=1)
         num_outcomes = len(outcome_arr)  # type: ignore # lying
         outcome_dict = {}
 
         # Any Tied Win counts as a Win
-        if odds_type == 'win_any':
+        if odds_type == "win_any":
             tie_indices = np.all(outcome_arr, axis=1)  # multi-way tie
-            outcome_dict['Tie'] = np.round(np.mean(tie_indices) * 100, 2)
+            outcome_dict["Tie"] = np.round(np.mean(tie_indices) * 100, 2)
 
             for player in range(len(self.players)):
-                outcome_dict['Player ' + str(player + 1)] = np.round(
-                    np.sum(outcome_arr[~tie_indices, player]) / num_outcomes * 100, 2)  # type: ignore # lying
+                outcome_dict["Player " + str(player + 1)] = np.round(
+                    np.sum(outcome_arr[~tie_indices, player]) / num_outcomes * 100, 2
+                )  # type: ignore # lying
 
         # Any Multi-way Tie/Tied Win counts as a Tie, Win must be exclusive
-        elif odds_type == 'tie_win':
+        elif odds_type == "tie_win":
             for player in range(len(self.players)):
                 tie_win_scenarios = outcome_arr[outcome_arr[:, player] == 1].sum(axis=1)  # type: ignore # lying
-                outcome_dict['Player ' + str(player + 1) + ' Win'] = np.round(
-                    np.sum(tie_win_scenarios == 1) / num_outcomes * 100, 2)
-                outcome_dict['Player ' + str(player + 1) + ' Tie'] = np.round(
-                    np.sum(tie_win_scenarios > 1) / num_outcomes * 100, 2)
+                outcome_dict["Player " + str(player + 1) + " Win"] = np.round(
+                    np.sum(tie_win_scenarios == 1) / num_outcomes * 100, 2
+                )
+                outcome_dict["Player " + str(player + 1) + " Tie"] = np.round(
+                    np.sum(tie_win_scenarios > 1) / num_outcomes * 100, 2
+                )
 
         # Every possible outcome
-        elif odds_type == 'precise':
+        elif odds_type == "precise":
             for num_player in range(1, len(self.players) + 1):
                 for player_arr in comb_index(len(self.players), num_player):
                     temp_arr = np.ones(shape=(outcome_arr.shape[0]), dtype=bool)  # type: ignore # lying
                     for player in player_arr:
-                        temp_arr = (temp_arr & (outcome_arr[:, player] == 1))
+                        temp_arr = temp_arr & (outcome_arr[:, player] == 1)
                     for non_player in [player for player in range(len(self.players)) if player not in player_arr]:
-                        temp_arr = (temp_arr & (outcome_arr[:, non_player] == 0))
+                        temp_arr = temp_arr & (outcome_arr[:, non_player] == 0)
 
                     if len(player_arr) == 1:
-                        outcome_key = f'Player {player_arr[0] + 1} Win'
+                        outcome_key = f"Player {player_arr[0] + 1} Win"
                     else:
-                        outcome_key = f'Player {','.join([str(player + 1) for player in player_arr])} Tie'
+                        outcome_key = f"Player {','.join([str(player + 1) for player in player_arr])} Tie"
 
                     outcome_dict[outcome_key] = np.round(temp_arr.sum() / num_outcomes * 100, 2)
         return outcome_dict
 
-    def _simulate_calculation(self, community_cards: np.ndarray | None, undrawn_combos: np.ndarray) -> np.ndarray[Any, np.dtype[Any]]:
+    def _simulate_calculation(
+        self, community_cards: np.ndarray | None, undrawn_combos: np.ndarray
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Simulates the game by calculating the hand strength of each player
 
         Parameters
@@ -1005,23 +1016,27 @@ class TexasHoldem:
             The result array.
         """
         res_arr: np.ndarray[Any, np.dtype[Any]] = np.zeros(  # type: ignore
-            shape=(len(undrawn_combos), len(self.players)), dtype=RankingItem)
+            shape=(len(undrawn_combos), len(self.players)), dtype=RankingItem
+        )
 
         if len(self.players) >= 2:
-            (Parallel(n_jobs=multiprocessing.cpu_count(), backend="threading")
-             (delayed(self.gen_single_hand)(community_cards, player, undrawn_combos, res_arr) for player in
-              range(len(self.players))))
+            (
+                Parallel(n_jobs=multiprocessing.cpu_count(), backend="threading")(
+                    delayed(self.gen_single_hand)(community_cards, player, undrawn_combos, res_arr)
+                    for player in range(len(self.players))
+                )
+            )
         else:
             for player in range(len(self.players)):
                 self.gen_single_hand(community_cards, player, undrawn_combos, res_arr)
         return res_arr
 
     def gen_single_hand(
-            self,
-            community_cards: np.ndarray | None,
-            player: int,
-            undrawn_combos: np.ndarray,
-            res_arr: np.ndarray[Any, np.dtype[Any]]
+        self,
+        community_cards: np.ndarray | None,
+        player: int,
+        undrawn_combos: np.ndarray,
+        res_arr: np.ndarray[Any, np.dtype[Any]],
     ) -> None:
         """Generates a single hand
 
@@ -1038,24 +1053,24 @@ class TexasHoldem:
         """
         if community_cards is None:
             cur_player_cards = np.concatenate(
-                [
-                    np.repeat([self.players[player].hand.card_arr], len(undrawn_combos), axis=0),
-                    undrawn_combos
-                ], axis=1)
+                [np.repeat([self.players[player].hand.card_arr], len(undrawn_combos), axis=0), undrawn_combos], axis=1
+            )
         else:
             cur_player_cards = np.concatenate(
                 [
                     np.repeat([self.players[player].hand.card_arr], len(undrawn_combos), axis=0),
                     community_cards,
-                    undrawn_combos
-                ], axis=1)
+                    undrawn_combos,
+                ],
+                axis=1,
+            )
         res_arr[:, player] = Ranker.rank_all_hands(cur_player_cards[:, comb_index(7, 5), :])
 
     def simulate(
-            self,
-            num_scenarios: int | Literal['all'] = 150000,
-            odds_type: Literal['win_any', 'tie_win', 'precise'] = 'tie_win',
-            final_hand: bool = False
+        self,
+        num_scenarios: int | Literal["all"] = 150000,
+        odds_type: Literal["win_any", "tie_win", "precise"] = "tie_win",
+        final_hand: bool = False,
     ) -> tuple[dict, dict] | dict:
         """Simulates the game
 

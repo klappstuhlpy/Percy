@@ -13,24 +13,24 @@ import discord
 from discord.ext import commands
 from lru import LRU
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 __all__ = (
-    'BaseFlags',
-    'CancellableQueue',
-    'Colour',
-    'HashableT',
-    'HealthBarBuilder',
-    'ListedRateLimit',
-    'NotCaseSensitiveEnum',
-    'RateLimit',
-    'TemporaryAttribute',
-    'Timer',
-    'flag_value'
+    "BaseFlags",
+    "CancellableQueue",
+    "Colour",
+    "HashableT",
+    "HealthBarBuilder",
+    "ListedRateLimit",
+    "NotCaseSensitiveEnum",
+    "RateLimit",
+    "TemporaryAttribute",
+    "Timer",
+    "flag_value",
 )
 
 
-C = TypeVar('C', bound=type[object])
+C = TypeVar("C", bound=type[object])
 
 
 def copy_dict(cls: type[object]) -> Callable[[C], C]:
@@ -38,14 +38,14 @@ def copy_dict(cls: type[object]) -> Callable[[C], C]:
 
     def decorator(subclass: C) -> C:
         for key, value in cls.__dict__.items():
-            if key not in subclass.__dict__ and not key.startswith('__'):  # type: ignore[operator]
+            if key not in subclass.__dict__ and not key.startswith("__"):  # type: ignore[operator]
                 setattr(subclass, key, value)
         return subclass
 
     return decorator
 
 
-HashableT = TypeVar('HashableT', bound=Hashable)
+HashableT = TypeVar("HashableT", bound=Hashable)
 
 
 class RateLimit[V, HashableT: Hashable]:
@@ -73,13 +73,13 @@ class RateLimit[V, HashableT: Hashable]:
         _lookup: MutableMapping[V, datetime.datetime | tuple[datetime.datetime, set[HashableT]]]
 
     def __init__(
-            self,
-            rate: int,
-            per: float,
-            *,
-            key: Callable[[discord.Message], V],
-            tagger: Callable[[discord.Message], HashableT] | None = None,
-            maxsize: int = 256
+        self,
+        rate: int,
+        per: float,
+        *,
+        key: Callable[[discord.Message], V],
+        tagger: Callable[[discord.Message], HashableT] | None = None,
+        maxsize: int = 256,
     ) -> None:
         self._lookup = LRU(maxsize)  # type: ignore
 
@@ -136,9 +136,9 @@ class NotCaseSensitiveEnum(enum.Enum):
 
     @classmethod
     async def convert(cls, _: commands.Context, argument: str) -> NotCaseSensitiveEnum:
-        by_value = '__by_value__' in cls.__members__
+        by_value = "__by_value__" in cls.__members__
         for case in [str.title, str.upper, str.lower, int]:
-            if argument.startswith('__') or argument.endswith('__'):
+            if argument.startswith("__") or argument.endswith("__"):
                 break
             try:
                 if by_value:
@@ -146,8 +146,11 @@ class NotCaseSensitiveEnum(enum.Enum):
                 return cls(case(argument))  # type: ignore
             except (ValueError, KeyError):
                 continue
-        raise commands.BadArgument(f"Invalid format. Choose from {', '.join(
-            str(m.value).title() if by_value else m.name.title() for m in cls.__members__.values())}.")
+        raise commands.BadArgument(
+            f"Invalid format. Choose from {
+                ', '.join(str(m.value).title() if by_value else m.name.title() for m in cls.__members__.values())
+            }."
+        )
 
 
 class ListedRateLimit[V]:
@@ -167,13 +170,7 @@ class ListedRateLimit[V]:
     if TYPE_CHECKING:
         _lookup: set[V]
 
-    def __init__(
-            self,
-            rate: int,
-            per: float,
-            *,
-            key: Callable[[Any], datetime.datetime]
-    ) -> None:
+    def __init__(self, rate: int, per: float, *, key: Callable[[Any], datetime.datetime]) -> None:
         self._lookup: set[V] = set()
 
         self.rate = rate
@@ -188,7 +185,7 @@ class ListedRateLimit[V]:
     def is_ratelimited(self, obj: Any) -> list[V]:
         now = self.key(obj) or discord.utils.utcnow()
         if not isinstance(now, datetime.datetime):
-            raise TypeError(f'Key function must return a datetime object, not {now.__class__.__name__!r}')
+            raise TypeError(f"Key function must return a datetime object, not {now.__class__.__name__!r}")
 
         tat = max(self.tat, now)
         diff = (tat - now).total_seconds()
@@ -231,7 +228,7 @@ class CancellableQueue[T, V]:
                 break
 
     def __repr__(self) -> str:
-        return f'<{self.__class__.__name__} data={self._data!r} getters[{len(self._waiters)}]>'
+        return f"<{self.__class__.__name__} data={self._data!r} getters[{len(self._waiters)}]>"
 
     def __len__(self) -> int:
         return len(self._data)
@@ -287,7 +284,7 @@ class CancellableQueue[T, V]:
 class Timer:
     """A context manager that measures the time it takes to execute a block of code."""
 
-    __slots__ = ('end', 'start')
+    __slots__ = ("end", "start")
 
     def __init__(self) -> None:
         self.start: int | None = None
@@ -313,13 +310,13 @@ class Timer:
         return hash(self._time)
 
     def __repr__(self) -> str:
-        return f'<Timer time={self._time} start={self.start} end={self.end}>'
+        return f"<Timer time={self._time} start={self.start} end={self.end}>"
 
     @property
     def _time(self) -> float:
         """:class:`float`: Returns the time it took to execute the block of code."""
         if self.end is None or self.start is None:
-            raise ValueError('Timer has not ended yet.')
+            raise ValueError("Timer has not ended yet.")
         return self.end - self.start
 
     @property
@@ -345,7 +342,7 @@ class Timer:
     def reset(self) -> float:
         """Resets the timer and returns the time it took."""
         if self.start is None:
-            raise ValueError('Timer has not started yet.')
+            raise ValueError("Timer has not started yet.")
         time = (perf_counter_ns() - self.start) / 1_000_000_000
         self.start = perf_counter_ns()
         return time
@@ -354,15 +351,15 @@ class Timer:
 class HealthBarBuilder:
     """Represents a health bar consiting of partially animated emojis that dynamically decrease."""
 
-    HEART_HIT: str = '<a:heart_hit:1322337609061630022>'
-    HEART_NORMAL: str = '<:heart_normal:1322337601553829988>'
-    HEART_GAMEOVER: str = '<a:heart_gameover:1322337617424945202>'
+    HEART_HIT: str = "<a:heart_hit:1322337609061630022>"
+    HEART_NORMAL: str = "<:heart_normal:1322337601553829988>"
+    HEART_GAMEOVER: str = "<a:heart_gameover:1322337617424945202>"
 
-    BAR_HIT: str = '<a:heart_bar_hit:1322337651398807583>'
-    BAR_HIT_LOOSE: str = '<a:heart_bar_hit_loose:1322337625935450193>'
-    BAR_BLANK: str = '<:heart_bar_hit_blank:1322337643190685796>'
-    BAR_BORDER: str = '<:heart_bar_border:1322337671443517570>'
-    BAR_FULL: str = '<:heart_bar_full:1322337661968584734>'
+    BAR_HIT: str = "<a:heart_bar_hit:1322337651398807583>"
+    BAR_HIT_LOOSE: str = "<a:heart_bar_hit_loose:1322337625935450193>"
+    BAR_BLANK: str = "<:heart_bar_hit_blank:1322337643190685796>"
+    BAR_BORDER: str = "<:heart_bar_border:1322337671443517570>"
+    BAR_FULL: str = "<:heart_bar_full:1322337661968584734>"
 
     def __init__(self, max_health: int = 10) -> None:
         self.max_health = max_health
@@ -415,7 +412,7 @@ class Colour(discord.Colour):
 
     @classmethod
     def electric_violet(cls) -> Self:
-        return cls(0x9b00ff)
+        return cls(0x9B00FF)
 
     @classmethod
     def royal_blue(cls) -> Self:
@@ -432,7 +429,7 @@ class Colour(discord.Colour):
     @classmethod
     def mirage(cls) -> Self:
         # A darker blue
-        return cls(0x1d2439)
+        return cls(0x1D2439)
 
     @classmethod
     def di_sierra(cls) -> Self:
@@ -442,7 +439,7 @@ class Colour(discord.Colour):
     @classmethod
     def transparent(cls) -> Self:
         # Discord background
-        return cls(0x2b2d31)
+        return cls(0x2B2D31)
 
     @classmethod
     def white(cls) -> Self:
@@ -451,7 +448,7 @@ class Colour(discord.Colour):
     @classmethod
     def burgundy(cls) -> Self:
         # A dark red
-        return cls(0x99002b)
+        return cls(0x99002B)
 
     @classmethod
     def ocean_green(cls) -> Self:
@@ -473,7 +470,7 @@ _ATTR_MISSING = object()
 class TemporaryAttribute[T, V]:
     """Supports adding a temporary attribute to an object by using a context manager."""
 
-    __slots__ = ('attr', 'obj', 'original', 'value')
+    __slots__ = ("attr", "obj", "original", "value")
 
     def __init__(self, obj: T, attr: str, value: V) -> None:
         self.obj: T = obj
@@ -503,7 +500,7 @@ class BaseFlags:
     Every flag value must be a power of 2 to its previous value, starting from 1.
     """
 
-    __slots__ = ('value',)
+    __slots__ = ("value",)
 
     def __init__(self, value: int = 0) -> None:
         """
@@ -523,7 +520,7 @@ class BaseFlags:
         return hash(self.value)
 
     def __repr__(self) -> str:
-        return f'<{self.__class__.__name__} value={self.value}>'
+        return f"<{self.__class__.__name__} value={self.value}>"
 
     def is_empty(self) -> bool:
         """Returns true if the flags are empty (i.e. a zero value)"""
@@ -561,7 +558,7 @@ class BaseFlags:
         elif toggle is False:
             self.value &= ~other
         else:
-            raise TypeError(f'Value to set for {self.__class__.__name__} must be a bool.')
+            raise TypeError(f"Value to set for {self.__class__.__name__} must be a bool.")
 
 
 class flag_value:

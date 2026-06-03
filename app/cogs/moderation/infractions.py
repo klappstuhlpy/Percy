@@ -5,6 +5,7 @@ registered as commands), but the reusable mechanics they delegate to live here s
 stays focused on routing and so other modules (e.g. the gatekeeper UI) can share them without
 reaching back into the cog.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -35,23 +36,23 @@ def check_member_hierarchy(
     """
     assert ctx.guild is not None
     if ctx.author.id == member.id:
-        return f'You cannot {action} yourself.'
+        return f"You cannot {action} yourself."
 
     if check_owner and member.id == ctx.guild.owner_id:
-        return f'You cannot {action} the server owner.'
+        return f"You cannot {action} the server owner."
 
     if isinstance(member, discord.Member):
-        if ctx.author.top_role < member.top_role:  # type: ignore[union-attr]
-            return f'You cannot {action} a member with a role equal to or higher than yours.'
+        if ctx.author.top_role < member.top_role:
+            return f"You cannot {action} a member with a role equal to or higher than yours."
 
         if ctx.guild.me.top_role < member.top_role:
-            return f'I cannot {action} a member with a role equal to or higher than mine.'
+            return f"I cannot {action} a member with a role equal to or higher than mine."
 
     return None
 
 
 def safe_reason_append(base: str, to_append: str) -> str:
-    appended = f'{base} ({to_append})'
+    appended = f"{base} ({to_append})"
     if len(appended) > 512:
         return base
     return appended
@@ -59,16 +60,16 @@ def safe_reason_append(base: str, to_append: str) -> str:
 
 def default_reason(author: discord.abc.User | discord.Member) -> str:
     """Return the standard audit-log reason for a moderation action performed by ``author``."""
-    return f'Action done by {author} (ID: {author.id})'
+    return f"Action done by {author} (ID: {author.id})"
 
 
 async def update_role_permissions(
-        role: discord.Role,
-        guild: discord.Guild,
-        invoker: discord.abc.User,
-        update_read_permissions: bool = False,
-        channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None = None,
-        **permissions: bool | None
+    role: discord.Role,
+    guild: discord.Guild,
+    invoker: discord.abc.User,
+    update_read_permissions: bool = False,
+    channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None = None,
+    **permissions: bool | None,
 ) -> tuple[int, int, int]:
     r"""|coro|
 
@@ -105,32 +106,32 @@ async def update_role_permissions(
     if channels is None:
         effective_channels = [ch for ch in guild.channels if isinstance(ch, discord.abc.Messageable)]
     else:
-        effective_channels = list(channels)
+        effective_channels = list(channels)  # type: ignore
 
     guild_perms = guild.me.guild_permissions
     for channel in effective_channels:
-        perms = channel.permissions_for(guild.me)  # type: ignore[union-attr]
+        perms = channel.permissions_for(guild.me)
         if perms.manage_roles:
-            overwrite = channel.overwrites_for(role)  # type: ignore[union-attr]
+            overwrite = channel.overwrites_for(role)
             channel_perms = {
-                'send_messages': False,
-                'add_reactions': False,
-                'use_application_commands': False,
-                'create_private_threads': False,
-                'create_public_threads': False,
-                'send_messages_in_threads': False,
-                'connect': False,
-                'speak': False,
+                "send_messages": False,
+                "add_reactions": False,
+                "use_application_commands": False,
+                "create_private_threads": False,
+                "create_public_threads": False,
+                "send_messages_in_threads": False,
+                "connect": False,
+                "speak": False,
             }
             if update_read_permissions:
-                channel_perms['read_messages'] = False
+                channel_perms["read_messages"] = False
 
             if permissions:
-                merge_perms(overwrite, guild_perms, **permissions)  # type: ignore[arg-type]
+                merge_perms(overwrite, guild_perms, **permissions)
 
             merge_perms(overwrite, guild_perms, **channel_perms)
             try:
-                await channel.set_permissions(role, overwrite=overwrite, reason=reason)  # type: ignore[union-attr]
+                await channel.set_permissions(role, overwrite=overwrite, reason=reason)
             except discord.HTTPException:
                 failure += 1
             else:

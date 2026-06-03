@@ -4,6 +4,7 @@ Holds the board representation and win/draw detection with **zero** Discord (or 
 presentation) dependencies, mirroring the ``poker`` engine. The Discord-facing binding
 (players, buttons, embeds, economy) lives in ``app/cogs/games/tictactoe_ui.py``.
 """
+
 from __future__ import annotations
 
 import enum
@@ -31,9 +32,7 @@ class Board:
     SIZE = 3
 
     def __init__(self) -> None:
-        self.cells: list[list[BoardState]] = [
-            [BoardState.empty() for _ in range(self.SIZE)] for _ in range(self.SIZE)
-        ]
+        self.cells: list[list[BoardState]] = [[BoardState.empty() for _ in range(self.SIZE)] for _ in range(self.SIZE)]
 
     def get(self, x: int, y: int) -> BoardState:
         """Return the :class:`BoardState` at column ``x``, row ``y``."""

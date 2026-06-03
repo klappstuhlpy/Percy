@@ -12,6 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
+from app.cogs.comic import ComicFeed
 from app.core import Bot, Cog, Context, Flags, View, cooldown, describe, flag, group, store_true
 from app.utils import cache
 from app.utils.lock import lock, lock_arg, lock_from
@@ -67,7 +68,7 @@ class Comics(Cog):
 
         self.parser: Parser = Parser()
         self.comic_cache: ComicCache = ComicCache()
-        self.inventory_scheduler = Scheduler(self)
+        self.inventory_scheduler: Scheduler = Scheduler(self)
 
         self._current_feed: ComicFeed | None = None
 
@@ -148,15 +149,13 @@ class Comics(Cog):
 
         self.bot.dispatch('comic_schedule', comic)
 
-    async def wait_for_next_feed(self, *, connection: asyncpg.Connection | None = None, days: int = 7) -> ComicFeed:
+    async def wait_for_next_feed(self, *, days: int = 7) -> ComicFeed | None:
         """|coro|
 
         Waits for the next feed to be ready.
 
         Parameters
         ----------
-        connection: :class:`asyncpg.Connection`
-            The connection to use for the query.
         days: :class:`int`
             The number of days to wait for the next feed. Default is `7`.
 
@@ -165,8 +164,8 @@ class Comics(Cog):
         :class:`ComicFeed`
             The next feed to be dispatched.
         """
-        async with self.bot.db.acquire(timeout=500.0) as con:  # type: ignore[union-attr]
-            feed = await self.get_earliest_feed(connection=con, days=days)  # type: ignore[arg-type]
+        async with (self.bot.db.acquire(timeout=500.0)) as con:
+            feed = await self.get_earliest_feed(connection=con, days=days)
             if feed is not None:
                 log.debug('Loaded next feed %r to fire at %s.', feed.id, feed.next_pull)
                 self.__event.set()
@@ -177,7 +176,7 @@ class Comics(Cog):
             log.debug('No feed ready, waiting for next feed...')
             await self.__event.wait()
 
-            return await self.get_earliest_feed(connection=con, days=days)  # type: ignore[arg-type, return-value]
+            return await self.get_earliest_feed(connection=con, days=days)
 
     async def dispatch_feeds(self) -> None:
         """|coro|
@@ -192,6 +191,7 @@ class Comics(Cog):
                 self._current_feed = feed = await self.wait_for_next_feed()
                 now = utcnow()
 
+                assert feed is not None
                 if feed.next_pull.replace(tzinfo=datetime.UTC) >= now:
                     to_sleep = (feed.next_pull - now).total_seconds()
                     await asyncio.sleep(to_sleep)
@@ -301,7 +301,7 @@ class Comics(Cog):
                                 msg = await channel.send(embed=embeds[entry.id])
                             else:
                                 continue
-                        instances[entry.id] = entry.to_instance(msg)
+                        instances[entry.id] = entry.to_instance(msg)  # type: ignore
 
                 summary_embeds = await self.build_summary_embeds(comics, config.brand)
                 summ_msg = await channel.send(
@@ -462,7 +462,7 @@ class Comics(Cog):
         await ctx.defer()
         assert ctx.guild is not None
 
-        config = await self.get_comic_config(ctx.guild.id, brand)  # type: ignore[misc]
+        config = await self.get_comic_config(ctx.guild.id, brand)  # type: ignore
         if config is not None:
             await ctx.send_error('You have already set up a feed for this brand in this server.')
             return
@@ -470,7 +470,7 @@ class Comics(Cog):
         if channel is None:
             channel = ctx.channel
 
-        new_config = ComicFeed.temporary(  # type: ignore[call-arg]
+        new_config = ComicFeed.temporary(
             guild_id=ctx.guild.id,
             brand=brand,
             channel_id=channel.id,
@@ -479,9 +479,9 @@ class Comics(Cog):
             ping=None,
             pin=False
         )
-        new_config.next_pull = new_config.next_scheduled()  # type: ignore[union-attr]
+        new_config.next_pull = new_config.next_scheduled()
 
-        await self.bot.db.comics.create_config(new_config.to_dict())  # type: ignore[union-attr]
+        await self.bot.db.comics.create_config(new_config.to_dict())
 
         self.get_comic_config.invalidate_containing(str(ctx.guild.id))
         self.reset_task()
@@ -504,7 +504,7 @@ class Comics(Cog):
         """Show/Edit the current configuration for comic feeds."""
         await ctx.defer(ephemeral=True)
 
-        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)  # type: ignore[misc]
+        config: ComicFeed = await self.get_comic_config(ctx.guild_id, brand)  # type: ignore
         if config is None:
             await ctx.send_error(f'You have not set up a feed for **{brand.name}** yet in this server!')
             return

@@ -8,7 +8,7 @@ from typing import ClassVar, TypedDict
 import asyncpg
 import click
 
-__all__ = ('Migrations',)
+__all__ = ("Migrations",)
 
 
 class Revisions(TypedDict):
@@ -17,7 +17,7 @@ class Revisions(TypedDict):
 
 
 class Revision:
-    __slots__ = ('description', 'file', 'kind', 'version')
+    __slots__ = ("description", "file", "kind", "version")
 
     def __init__(self, *, kind: str, version: int, description: str, file: Path) -> None:
         self.kind: str = kind
@@ -26,19 +26,18 @@ class Revision:
         self.file: Path = file
 
     @classmethod
-    def from_match(cls, match: re.Match[str], file: Path) -> 'Revision':
+    def from_match(cls, match: re.Match[str], file: Path) -> "Revision":
         return cls(
-            kind=match.group('kind'), version=int(match.group('version')), description=match.group('description'),
-            file=file
+            kind=match.group("kind"), version=int(match.group("version")), description=match.group("description"), file=file
         )
 
 
 class Migrations:
     """Represents the migration manager for the bot."""
 
-    REVISION_FILE: ClassVar[re.Pattern] = re.compile(r'(?P<kind>[VU])(?P<version>[0-9]+)__(?P<description>.+).sql')
+    REVISION_FILE: ClassVar[re.Pattern] = re.compile(r"(?P<kind>[VU])(?P<version>[0-9]+)__(?P<description>.+).sql")
 
-    def __init__(self, *, filename: str = 'migrations/revisions.json') -> None:
+    def __init__(self, *, filename: str = "migrations/revisions.json") -> None:
         self.filename: str = filename
         self.root: Path = Path(filename).parent
         self.revisions: dict[int, Revision] = self.get_revisions()
@@ -49,14 +48,14 @@ class Migrations:
 
     def load_metadata(self) -> Revisions:
         try:
-            with Path(self.filename).open(encoding='utf-8') as fp:
+            with Path(self.filename).open(encoding="utf-8") as fp:
                 return Revisions(**json.load(fp))
         except FileNotFoundError:
-            return Revisions(version=0, database_uri='')
+            return Revisions(version=0, database_uri="")
 
     def get_revisions(self) -> dict[int, Revision]:
         result: dict[int, Revision] = {}
-        for file in self.root.glob('*.sql'):
+        for file in self.root.glob("*.sql"):
             match = self.REVISION_FILE.match(file.name)
             if match is not None:
                 rev = Revision.from_match(match, file)
@@ -71,13 +70,13 @@ class Migrations:
         self.ensure_path()
         data = self.load_metadata()
 
-        self.version: int = data['version']
-        self.database_uri: str = data['database_uri']
+        self.version: int = data["version"]
+        self.database_uri: str = data["database_uri"]
 
     def save(self) -> None:
-        temp = f'{self.filename}.{uuid.uuid4()}.tmp'
+        temp = f"{self.filename}.{uuid.uuid4()}.tmp"
         _path = Path(temp)
-        with _path.open('w', encoding='utf-8') as tmp:
+        with _path.open("w", encoding="utf-8") as tmp:
             json.dump(self.dump(), tmp)
 
         _path.replace(self.filename)
@@ -90,16 +89,16 @@ class Migrations:
     def ordered_revisions(self) -> list[Revision]:
         return sorted(self.revisions.values(), key=lambda r: r.version)
 
-    def create_revision(self, reason: str, *, kind: str = 'V') -> Revision:
-        cleaned = re.sub(r'\s', '_', reason)
-        filename = f'{kind}{self.version + 1}__{cleaned}.sql'
+    def create_revision(self, reason: str, *, kind: str = "V") -> Revision:
+        cleaned = re.sub(r"\s", "_", reason)
+        filename = f"{kind}{self.version + 1}__{cleaned}.sql"
         file_path = self.root / filename
 
-        with Path(file_path).open('w', encoding='utf-8', newline='\n') as fp:
+        with Path(file_path).open("w", encoding="utf-8", newline="\n") as fp:
             fp.write(
-                f'-- Revises: V{self.version}\n'
-                f'-- Creation Date: {datetime.datetime.now(datetime.UTC)} UTC\n'
-                f'-- Reason: {reason}'
+                f"-- Revises: V{self.version}\n"
+                f"-- Creation Date: {datetime.datetime.now(datetime.UTC)} UTC\n"
+                f"-- Reason: {reason}"
             )
 
         self.save()
@@ -111,15 +110,15 @@ class Migrations:
             if revision_number is not None:
                 revision = self.revisions.get(revision_number)
                 if revision is None:
-                    raise ValueError(f'No such revision `{revision_number}`')
+                    raise ValueError(f"No such revision `{revision_number}`")
 
-                sql = revision.file.read_text('utf-8')
+                sql = revision.file.read_text("utf-8")
                 await connection.execute(sql)
                 successes += 1
             else:
                 for revision in self.ordered_revisions:
                     if revision.version > self.version:
-                        sql = revision.file.read_text('utf-8')
+                        sql = revision.file.read_text("utf-8")
                         await connection.execute(sql)
                         successes += 1
 

@@ -6,7 +6,7 @@ import logging
 import random
 import re
 from contextlib import suppress
-from typing import Annotated, ClassVar, Final, Literal, cast
+from typing import Annotated, Any, ClassVar, Literal, cast
 from urllib.parse import urljoin
 
 import discord
@@ -14,6 +14,7 @@ import wavelink
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import Playable
@@ -52,28 +53,31 @@ If you accidentally deleted the message, you have to redo the setup with </music
 
 class PlayFlags(Flags):
     """Flags for the music commands."""
-    source: Literal['yt', 'sp', 'sc'] = flag(
-        name='source', description='What source to search for your query.', aliases=['s'], default='yt')
-    force: bool = store_true(
-        name='force', description='Whether to force play the track/playlist.', aliases=['f'])
+
+    source: Literal["yt", "sp", "sc"] = flag(
+        name="source", description="What source to search for your query.", aliases=["s"], default="yt"
+    )
+    force: bool = store_true(name="force", description="Whether to force play the track/playlist.", aliases=["f"])
     recommendations: bool = store_true(
-        name='recommendations',
-        short='r',
-        description='Whether to auto-fill the queue with recommended tracks if the queue is empty.')
+        name="recommendations",
+        short="r",
+        description="Whether to auto-fill the queue with recommended tracks if the queue is empty.",
+    )
 
 
 class VolumeConverter(commands.Converter[int]):
-    VOLUME_REGEX: Final[ClassVar[re.Pattern]] = re.compile(r'^[+-]?\d+$')
+    VOLUME_REGEX: ClassVar[re.Pattern] = re.compile(r"^[+-]?\d+$")
 
     async def convert(self, ctx: Context, argument: str) -> int:
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
 
         if not (match := self.VOLUME_REGEX.match(argument)):
             raise commands.BadArgument(
-                'Invalid Volume provided.\n'
-                'Please provide a valid number between **0-100** or a relative number, e.g. **+10** or **-15**.')
+                "Invalid Volume provided.\n"
+                "Please provide a valid number between **0-100** or a relative number, e.g. **+10** or **-15**."
+            )
 
-        if match.group().startswith(('+', '-')):
+        if match.group().startswith(("+", "-")):
             return player.volume + int(match.group()[1:])
         return int(match.group())
 
@@ -81,40 +85,43 @@ class VolumeConverter(commands.Converter[int]):
 class Music(Cog):
     """Commands for playing music in a voice channel."""
 
-    emoji = '<:music:1322338453937193000>'
+    emoji = "<:music:1322338453937193000>"
 
     async def cog_before_invoke(self, ctx: Context) -> None:
-        playlist_tools: PlaylistTools | None = self.bot.get_cog('PlaylistTools')
+        playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
         await playlist_tools.initizalize_user(ctx.author)
 
-    @Cog.listener(name='on_wavelink_track_exception')
-    @Cog.listener(name='on_wavelink_track_stuck')
-    @Cog.listener(name='on_wavelink_websocket_closed')
-    @Cog.listener(name='on_wavelink_extra_event')
+    @Cog.listener(name="on_wavelink_track_exception")
+    @Cog.listener(name="on_wavelink_track_stuck")
+    @Cog.listener(name="on_wavelink_websocket_closed")
+    @Cog.listener(name="on_wavelink_extra_event")
     async def on_wavelink_intercourse(
-            self,
-            payload: wavelink.TrackExceptionEventPayload | wavelink.TrackStuckEventPayload | wavelink.WebsocketClosedEventPayload | wavelink.ExtraEventPayload
+        self,
+        payload: wavelink.TrackExceptionEventPayload
+        | wavelink.TrackStuckEventPayload
+        | wavelink.WebsocketClosedEventPayload
+        | wavelink.ExtraEventPayload,
     ) -> None:
         """Handle Wavelink errors."""
         if isinstance(payload, wavelink.WebsocketClosedEventPayload) and payload.code.value in (1000, 4006, 4014):
-            # Normal close, Session Invalid, Disconnected
+            # Normal close, Sessions Invalid, Disconnected
             return
 
-        player: Player | None = cast('Player', payload.player)
+        player: Player | None = cast("Player", payload.player)
 
         if player:
             try:
                 await player.disconnect()
             except Exception as exc:
-                log.debug('Error while destroying player: %s', exc)
+                log.debug("Error while destroying player: %s", exc)
                 pass
 
-        args = [f'{k}={v!r}' for k, v in vars(payload).items()]
-        log.warning('Wavelink Error occurred: %s | %s', payload.__class__.__name__, ', '.join(args))
+        args = [f"{k}={v!r}" for k, v in vars(payload).items()]
+        log.warning("Wavelink Error occurred: %s | %s", payload.__class__.__name__, ", ".join(args))
 
     @Cog.listener()
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
-        logging.info('Wavelink Node connected: %s | Resumed: %s', payload.node.uri, payload.resumed)
+        logging.info("Wavelink Node connected: %s | Resumed: %s", payload.node.uri, payload.resumed)
 
     @Cog.listener()
     async def on_wavelink_inactive_player(self, player: Player) -> None:
@@ -122,31 +129,33 @@ class Music(Cog):
             return
 
         with suppress(discord.HTTPException):
-            await player.channel.send(
-                f'The player has been inactive for `{player.inactive_timeout}` seconds. *Goodbye!*')
+            await player.channel.send(f"The player has been inactive for `{player.inactive_timeout}` seconds. *Goodbye!*")
 
         if player.connected:
             await player.disconnect()
 
     @Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload) -> None:
-        player: Player | None = cast('Player', payload.player)
+        player: Player | None = cast("Player", payload.player)
         if not player:
             return
 
         if player.queue.listen_together is not MISSING:
-            assert player.guild is not None
-            member = await self.bot.get_or_fetch_member(
-                player.guild, player.queue.listen_together)
-            if member is None or (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)) is None:
+            guild = player.guild
+            assert guild is not None
+            member = await self.bot.get_or_fetch_member(guild, player.queue.listen_together)
+            if (
+                member is None
+                or (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)) is None
+            ):
                 await player.disconnect()
                 return
 
             try:
                 track = await player.search(activity.track_url)
             except Exception as exc:
-                log.debug('Error while searching for track: %s', exc)
-                await player.panel.channel.send('I couldn\'t find the track you were listening to on Spotify.')
+                log.debug("Error while searching for track: %s", exc)
+                await player.panel.channel.send("I couldn't find the track you were listening to on Spotify.")
                 await player.disconnect()
                 return
 
@@ -180,21 +189,23 @@ class Music(Cog):
             # Add all tracks that are before the next random track to the history
             assert player.queue.history is not None
             player.queue.history.clear()
-            player.queue.history.put(queue[:queue.index(next_random_track)])
+            player.queue.history.put(queue[: queue.index(next_random_track)])
 
             # Add all tracks that are after the next random track to the queue
             player.queue.clear()
-            await player.queue.put_wait(queue[queue.index(next_random_track):])
+            await player.queue.put_wait(queue[queue.index(next_random_track) :])
 
     @Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload) -> None:
-        player: Player | None = cast('Player', payload.player)
+        player: Player | None = cast("Player", payload.player)
         if not player:
             return
 
         if player.current is not None and player.current.recommended:
             assert player.queue.history is not None
-            player.queue.history.put(player.current)
+            current = player.current
+            assert current is not None
+            player.queue.history.put(current)
 
         while not player.queue.all or player.current not in player.queue.all:
             # ensure that the current track is in the queue
@@ -218,7 +229,7 @@ class Music(Cog):
     @Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member) -> None:
         await self.bot.wait_until_ready()
-        player: Player | None = cast('Player', before.guild.voice_client)
+        player: Player | None = cast("Player", before.guild.voice_client)
         if not player:
             return
 
@@ -254,10 +265,11 @@ class Music(Cog):
                     try:
                         track = await player.search(new_activity.track_url)
                     except Exception as exc:
-                        log.debug('Error while searching for track: %s', exc)
+                        log.debug("Error while searching for track: %s", exc)
                         await player.panel.channel.send(
-                            f'{Emojis.error} I couldn\'t find the track <@{user_id}> was listening to on spotify.',
-                            delete_after=10)
+                            f"{Emojis.error} I couldn't find the track <@{user_id}> was listening to on spotify.",
+                            delete_after=10,
+                        )
                         await player.disconnect()
                         return
 
@@ -269,24 +281,26 @@ class Music(Cog):
                     await player.send_track_add(track)
                     await player.play(player.queue.get())
 
-                    position = round(
-                        (datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - new_activity.start.replace(
-                            tzinfo=None)).total_seconds()) * 1000
+                    position = (
+                        round(
+                            (
+                                datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+                                - new_activity.start.replace(tzinfo=None)
+                            ).total_seconds()
+                        )
+                        * 1000
+                    )
                     await player.seek(position)
         else:
-            await player.panel.channel.send('The host has stopped listening to Spotify.')
+            await player.panel.channel.send("The host has stopped listening to Spotify.")
             await player.disconnect()
 
-    @command(
-        description='Adds a track/playlist to the queue.',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(query='The track/playlist to add to the queue. Can be a URL or a search query.')
+    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True)
+    @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
-            app_commands.Choice(name='SoundCloud (Default)', value='sc'),
-            app_commands.Choice(name='Spotify', value='sp')
+            app_commands.Choice(name="SoundCloud (Default)", value="sc"),
+            app_commands.Choice(name="Spotify", value="sp"),
         ],
     )
     @checks.is_author_connected()
@@ -295,32 +309,31 @@ class Music(Cog):
         """Play Music in a voice channel by searching for a track/playlist."""
         await ctx.defer()
 
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
         # Note: Due to Discords ToS, we can't use YouTube as our source of music
         SOURCE_LOOKUP = {
             # 'yt': wavelink.TrackSource.YouTubeMusic,
-            'sp': 'spsearch',
-            'sc': wavelink.TrackSource.SoundCloud
+            "sp": "spsearch",
+            "sc": wavelink.TrackSource.SoundCloud,
         }
         source = SOURCE_LOOKUP.get(flags.source, wavelink.TrackSource.SoundCloud)
 
         player.autoplay = wavelink.AutoPlayMode.enabled if flags.recommendations else wavelink.AutoPlayMode.partial
 
         if not query:
-            await ctx.send_error('Please provide a search query.')
+            await ctx.send_error("Please provide a search query.")
             return
 
-        result = await player.search(query, source=source, ctx=ctx,
-                                     return_first=not hasattr(flags, '__with_search__'))
+        result = await player.search(query, source=source, ctx=ctx, return_first=not hasattr(flags, "__with_search__"))
 
         if isinstance(result, SearchReturn):
             if result == SearchReturn.NO_RESULTS:
-                await ctx.send_error('Sorry! No results found matching your query.')
+                await ctx.send_error("Sorry! No results found matching your query.")
             elif result == SearchReturn.NO_YOUTUBE_ALLOWED:
-                await ctx.send_error('Sorry, you can\'t play YouTube tracks from this bot.')
+                await ctx.send_error("Sorry, you can't play YouTube tracks from this bot.")
             return
 
         if isinstance(result, wavelink.Playlist):
@@ -342,32 +355,31 @@ class Music(Cog):
         await player.send_track_add(result, ctx, short=short)
 
     @command(
-        description='Adds a track/playlist to the queue by choosing from a set of examples.',
-        guild_only=True,
-        hybrid=True
+        description="Adds a track/playlist to the queue by choosing from a set of examples.", guild_only=True, hybrid=True
     )
-    @describe(query='The track/playlist to add to the queue. Can be a URL or a search query.')
+    @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
-            app_commands.Choice(name='YouTube (Default)', value='yt'),
-            app_commands.Choice(name='Spotify', value='sp'),
-            app_commands.Choice(name='SoundCloud', value='sc')]
+            app_commands.Choice(name="YouTube (Default)", value="yt"),
+            app_commands.Choice(name="Spotify", value="sp"),
+            app_commands.Choice(name="SoundCloud", value="sc"),
+        ]
     )
     @checks.is_author_connected()
     @checks.is_listen_together()
     async def playsearch(self, ctx: Context, *, query: str, flags: PlayFlags) -> None:
         """Adds a track/playlist to the queue by choosing from a variety of examples."""
-        setattr(flags, '__with_search__', True)
+        setattr(flags, "__with_search__", True)
         await ctx.invoke(self.play, query=query, flags=flags)  # type: ignore
 
     @group(
-        'listen-together',
-        fallback='start',
-        description='Start a listen-together activity with a user.',
+        "listen-together",
+        fallback="start",
+        description="Start a listen-together activity with a user.",
         guild_only=True,
-        hybrid=True
+        hybrid=True,
     )
-    @describe(member='The user you want to start a listen-together activity with.')
+    @describe(member="The user you want to start a listen-together activity with.")
     @checks.is_author_connected()
     async def listen_together(self, ctx: Context, member: discord.Member) -> None:
         """Start a listen-together activity with an user.
@@ -378,19 +390,21 @@ class Music(Cog):
         if not ctx.guild.voice_client:
             await Player.join(ctx)
 
-        player: Player = cast('Player', ctx.guild.voice_client)
+        player: Player = cast("Player", ctx.guild.voice_client)
         if not player:
             return
 
         # We need to fetch the member to get the current activity
-        fetched_member = await self.bot.get_or_fetch_member(ctx.guild, member.id)
+        guild = ctx.guild
+        assert guild is not None
+        fetched_member = await self.bot.get_or_fetch_member(guild, member.id)
         if fetched_member is None:
-            await ctx.send_error(f'**{member.display_name}** could not be found.')
+            await ctx.send_error(f"**{member.display_name}** could not be found.")
             return
         member = fetched_member
 
         if not (activity := next((a for a in member.activities if isinstance(a, discord.Spotify)), None)):
-            await ctx.send_error(f'**{member.display_name}** is not currently listening to Spotify.')
+            await ctx.send_error(f"**{member.display_name}** is not currently listening to Spotify.")
             return
 
         if player.playing or player.queue.listen_together is not MISSING:
@@ -402,162 +416,164 @@ class Music(Cog):
         try:
             track = await player.search(activity.track_url)
         except Exception as exc:
-            log.debug('Error while searching for track: %s', exc)
-            await ctx.send_error(f'I couldn\'t find the track <@{member.id}> was listening to on Spotify.')
+            log.debug("Error while searching for track: %s", exc)
+            await ctx.send_error(f"I couldn't find the track <@{member.id}> was listening to on Spotify.")
             await player.disconnect()
             return
 
         if not isinstance(track, (wavelink.Playable, wavelink.Playlist)):
-            await ctx.send_error('Sorry! No results found matching your query.')
+            await ctx.send_error("Sorry! No results found matching your query.")
             return
 
         await player.queue.put_wait(track)
         player.queue.listen_together = member.id
         await player.play(player.queue.get())
 
-        poss = round((datetime.datetime.now(datetime.UTC).replace(tzinfo=None) -
-                      activity.start.replace(tzinfo=None)).total_seconds()) * 1000
+        poss = (
+            round(
+                (
+                    datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - activity.start.replace(tzinfo=None)
+                ).total_seconds()
+            )
+            * 1000
+        )
         await player.seek(poss)
 
         await player.send_track_add(track, ctx)
         await player.panel.update()
 
-    @listen_together.command(
-        name='stop',
-        description='Stops the current listen-together activity.'
-    )
+    @listen_together.command(name="stop", description="Stops the current listen-together activity.")
     async def listen_together_stop(self, ctx: Context) -> None:
         """Stops the current listen-together activity."""
         assert ctx.guild is not None
-        player: Player = cast('Player', ctx.guild.voice_client)
+        player: Player = cast("Player", ctx.guild.voice_client)
         if not player:
             return
 
         if player.queue.listen_together is MISSING:
-            await ctx.send_error('There is no listen-together activity to stop.')
+            await ctx.send_error("There is no listen-together activity to stop.")
             return
 
         await player.disconnect()
-        await ctx.send_success(f'{Emojis.success} Stopped the current listen-together activity.', delete_after=10)
+        await ctx.send_success(f"{Emojis.success} Stopped the current listen-together activity.", delete_after=10)
 
-    @command('connect', description='Connect me to a voice-channel.', hybrid=True, guild_only=True)
-    @describe(channel='The Voice/Stage-Channel you want to connect to.')
-    async def connect(self, ctx: Context, channel: discord.VoiceChannel | discord.StageChannel = None) -> None:
+    @command("connect", description="Connect me to a voice-channel.", hybrid=True, guild_only=True)
+    @describe(channel="The Voice/Stage-Channel you want to connect to.")
+    async def connect(self, ctx: Context, channel: discord.VoiceChannel | discord.StageChannel | None = None) -> None:
         """Connect me to a voice-channel."""
         if ctx.voice_client:
-            await ctx.send_error('I am already connected to a voice channel. Please disconnect me first.')
+            await ctx.send_error("I am already connected to a voice channel. Please disconnect me first.")
             return
 
         try:
             channel = channel or ctx.author.voice.channel
         except AttributeError:
-            await ctx.send_error('No voice channel to connect to. Please either provide one or join one.')
+            await ctx.send_error("No voice channel to connect to. Please either provide one or join one.")
             return
 
         await Player.join(ctx)
-        await ctx.send_success(f'Connected and bound to {channel.mention}', delete_after=10)
+        await ctx.send_success(f"Connected and bound to {channel.mention}", delete_after=10)
 
-    @command(description='Disconnect me from a voice-channel.', hybrid=True, guild_only=True)
+    @command(description="Disconnect me from a voice-channel.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_connected()
     async def leave(self, ctx: Context) -> None:
         """Disconnect me from a voice-channel."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         await player.disconnect()
-        await ctx.send_success('Disconnected Channel and cleaned up the queue.', delete_after=10)
+        await ctx.send_success("Disconnected Channel and cleaned up the queue.", delete_after=10)
 
-    @command('stop', description='Clears the queue and stop the current plugins.', hybrid=True, guild_only=True)
+    @command("stop", description="Clears the queue and stop the current plugins.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def stop(self, ctx: Context) -> None:
         """Clears the queue and stop the current plugins."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         await player.disconnect()
-        await ctx.send_success('Stopped Track and cleaned up queue.', delete_after=10)
+        await ctx.send_success("Stopped Track and cleaned up queue.", delete_after=10)
 
     @command(
-        'toggle',
-        aliases=['pause', 'resume'],
-        description='Pause/Resume the current track.',
-        guild_only=True,
-        hybrid=True
+        "toggle", aliases=["pause", "resume"], description="Pause/Resume the current track.", guild_only=True, hybrid=True
     )
     @checks.is_author_connected()
     @checks.is_listen_together()
     async def pause_or_resume(self, ctx: Context) -> None:
         """Pause the current playing track."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         await player.pause(not player.paused)
         assert player.current is not None
         await ctx.send_success(
-            f'{'Paused' if player.paused else 'Resumed'} Track [{player.current.title}]({player.current.uri})',
-            delete_after=10, suppress_embeds=True)
+            f"{'Paused' if player.paused else 'Resumed'} Track [{player.current.title}]({player.current.uri})",
+            delete_after=10,
+            suppress_embeds=True,
+        )
         await player.panel.update()
 
-    @command(description='Sets a loop mode for the plugins.', hybrid=True, guild_only=True)
-    @describe(mode='Select a loop mode.')
+    @command(description="Sets a loop mode for the plugins.", hybrid=True, guild_only=True)
+    @describe(mode="Select a loop mode.")
     @app_commands.choices(
         mode=[
-            app_commands.Choice(name='Normal', value='normal'),
-            app_commands.Choice(name='Track', value='track'),
-            app_commands.Choice(name='Queue', value='queue')
+            app_commands.Choice(name="Normal", value="normal"),
+            app_commands.Choice(name="Track", value="track"),
+            app_commands.Choice(name="Queue", value="queue"),
         ]
     )
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
-    async def loop(self, ctx: Context, mode: Literal['normal', 'track', 'queue']) -> None:
+    async def loop(self, ctx: Context, mode: Literal["normal", "track", "queue"]) -> None:
         """Sets a loop mode for the plugins."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         from wavelink import QueueMode as _QueueMode
-        player.queue.mode = {
-            'normal': _QueueMode.normal, 'track': _QueueMode.loop, 'queue': _QueueMode.loop_all
-        }.get(mode, _QueueMode.normal)
+
+        player.queue.mode = {"normal": _QueueMode.normal, "track": _QueueMode.loop, "queue": _QueueMode.loop_all}.get(
+            mode, _QueueMode.normal
+        )
 
         await player.panel.update()
-        await ctx.send_success(f'Loop Mode changed to `{mode}`', delete_after=10)
+        await ctx.send_success(f"Loop Mode changed to `{mode}`", delete_after=10)
 
-    @command(description='Sets the shuffle mode for the plugins.', hybrid=True, guild_only=True)
-    @describe(mode='Select a shuffle mode.')
+    @command(description="Sets the shuffle mode for the plugins.", hybrid=True, guild_only=True)
+    @describe(mode="Select a shuffle mode.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
     async def shuffle(self, ctx: Context, mode: bool) -> None:
         """Sets the shuffle mode for the plugins."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         player.queue.shuffle = ShuffleMode.on if mode else ShuffleMode.off
         await player.panel.update()
-        await ctx.send_success(f'Shuffle Mode changed to `{mode}`', delete_after=10)
+        await ctx.send_success(f"Shuffle Mode changed to `{mode}`", delete_after=10)
 
-    @command(description='Seek to a specific position in the tack.', hybrid=True, guild_only=True)
-    @describe(position='The position to seek to. (Format: H:M:S or S)')
+    @command(description="Seek to a specific position in the tack.", hybrid=True, guild_only=True)
+    @describe(position="The position to seek to. (Format: H:M:S or S)")
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
     async def seek(self, ctx: Context, position: str | None = None) -> None:
         """Seek to a specific position in the tack."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         assert player.current is not None
         if player.current.is_stream:
-            await ctx.send_error('Cannot seek if track is a stream.')
+            await ctx.send_error("Cannot seek if track is a stream.")
             return
 
         if position is None:
@@ -565,116 +581,108 @@ class Music(Cog):
             await player.seek(seconds)
         else:
             try:
-                seconds = sum(int(x) * 60 ** i for i, x in enumerate(reversed(position.split(':'))))
+                seconds = sum(int(x) * 60**i for i, x in enumerate(reversed(position.split(":"))))
             except ValueError:
-                await ctx.send_error('Please provide a valid timestamp format. (e.g. 3:20, 23)',
-                                     ephemeral=True)
+                await ctx.send_error("Please provide a valid timestamp format. (e.g. 3:20, 23)", ephemeral=True)
                 return
 
             seconds *= 1000  # Convert to milliseconds
             if seconds in range(player.current.length):
                 await player.seek(seconds)
             else:
-                await ctx.send_error('Please provide a seek time within the range of the track.',
-                                     ephemeral=True, delete_after=10)
+                await ctx.send_error(
+                    "Please provide a seek time within the range of the track.", ephemeral=True, delete_after=10
+                )
                 return
 
-        await ctx.send_success(f'Seeked to position `{convert_duration(seconds)}`', delete_after=10)
+        await ctx.send_success(f"Seeked to position `{convert_duration(seconds)}`", delete_after=10)
         await player.panel.update()
 
-    @seek.autocomplete('position')
-    async def seek_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    @seek.autocomplete("position")
+    async def seek_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Any] | list[Choice[str | int | float]]:
         assert interaction.guild is not None
-        player: Player = cast('Player', interaction.guild.voice_client)
+        player: Player = cast("Player", interaction.guild.voice_client)
         if not player:
             return []
 
         def _timestamp(secs: int) -> str:
-            return datetime.datetime.fromtimestamp(secs, datetime.UTC).strftime('%H:%M:%S')
+            return datetime.datetime.fromtimestamp(secs, datetime.UTC).strftime("%H:%M:%S")
 
         try:
-            seconds = sum(int(x.strip('""')) * 60 ** inT for inT, x in enumerate(reversed(current.split(':'))))
+            seconds = sum(int(x.strip('""')) * 60**inT for inT, x in enumerate(reversed(current.split(":"))))
         except ValueError:
             # Return a list of 3 choice timestamps -> track length, 1/3, 2/3
             assert player.current is not None
             length = player.current.length / 1000  # Convert to seconds
             return [
                 app_commands.Choice(name=_timestamp(int(length / 3)), value=str(int(length / 3))),
-                app_commands.Choice(name=_timestamp(int(length / 3 * 2)), value=str(int(length / 3 * 2)))
+                app_commands.Choice(name=_timestamp(int(length / 3 * 2)), value=str(int(length / 3 * 2))),
             ]
 
         timestamp = _timestamp(seconds)
         return [app_commands.Choice(name=timestamp, value=timestamp)]
 
-    @command(description='Set the volume for the plugins.', hybrid=True, guild_only=True)
-    @describe(amount='The volume to set the plugins to. (0-100)')
+    @command(description="Set the volume for the plugins.", hybrid=True, guild_only=True)
+    @describe(amount="The volume to set the plugins to. (0-100)")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def volume(self, ctx: Context, amount: Annotated[int, VolumeConverter] | None = None) -> None:
         """Set the volume for the plugins."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         if amount is None:
-            embed = discord.Embed(title='Current Volume', color=helpers.Colour.white())
+            embed = discord.Embed(title="Current Volume", color=helpers.Colour.white())
             embed.add_field(
-                name='Volume:',
-                value=f'```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```',
-                inline=False)
+                name="Volume:", value=f"```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```", inline=False
+            )
             await ctx.send(embed=embed, delete_after=15)
             return
 
         await player.set_volume(amount)
         await player.panel.update()
 
-        embed = discord.Embed(title='Changed Volume', color=helpers.Colour.white(),
-                              description='*It may takes a while for the changes to apply.*')
+        embed = discord.Embed(
+            title="Changed Volume",
+            color=helpers.Colour.white(),
+            description="*It may takes a while for the changes to apply.*",
+        )
         embed.add_field(
-            name='Volume:',
-            value=f'```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```',
-            inline=False)
+            name="Volume:", value=f"```swift\n{ProgressBar(0, 100, player.volume)} [ {player.volume}% ]```", inline=False
+        )
         await ctx.send(embed=embed, delete_after=15)
 
-    @command(
-        description='Removes all songs from users that are not in the voice channel.',
-        hybrid=True,
-        guild_only=True
-    )
+    @command(description="Removes all songs from users that are not in the voice channel.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def cleanupleft(self, ctx: Context) -> None:
         """Removes all songs from users that are not in the voice channel."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         await player.cleanupleft()
         await player.panel.update()
-        await ctx.send_success('Cleaned up the queue.', delete_after=10)
+        await ctx.send_success("Cleaned up the queue.", delete_after=10)
 
-    @group(
-        description='Manage Advanced Filters to specify you listening experience.',
-        guild_only=True,
-        hybrid=True
-    )
+    @group(description="Manage Advanced Filters to specify you listening experience.", guild_only=True, hybrid=True)
     async def filter(self, ctx: Context) -> None:
         """Find useful information about the filter command group."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @filter.command(
-        'equalizer',
-        description='Set the equalizer for the current Track.'
-    )
-    @describe(band='The Band you want to change. (1-15)', gain='The Gain you want to set. (-0.25-+1.0)')
+    @filter.command("equalizer", description="Set the equalizer for the current Track.")
+    @describe(band="The Band you want to change. (1-15)", gain="The Gain you want to set. (-0.25-+1.0)")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_equalizer(
-            self,
-            ctx: Context,
-            band: app_commands.Range[int, 1, 15] | None = None,
-            gain: app_commands.Range[float, -0.25, +1.0] | None = None
+        self,
+        ctx: Context,
+        band: app_commands.Range[int, 1, 15] | None = None,
+        gain: app_commands.Range[float, -0.25, +1.0] | None = None,
     ) -> None:
         """Set a custom Equalizer for the current Track.
 
@@ -682,7 +690,7 @@ class Music(Cog):
         -----
         The preset paremeter will be given priority, if provided.
         """
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
@@ -690,65 +698,75 @@ class Music(Cog):
 
         filters: wavelink.Filters = player.filters
         if not band or not gain:
-            await ctx.send_error('Please provide a valid Band and Gain or a Preset.')
+            await ctx.send_error("Please provide a valid Band and Gain or a Preset.")
             return
 
         band -= 1
 
         eq = filters.equalizer.payload
-        eq[band]['gain'] = gain
+        eq[band]["gain"] = gain
         filters.equalizer.set(bands=list(eq.values()))
         await player.set_filters(filters)
 
-        embed = discord.Embed(title='Changed Filter', color=helpers.Colour.white(),
-                              description='*It may takes a while for the changes to apply.*')
-        image = await self.bot.render.equalizer([entry['gain'] for entry in filters.equalizer.payload.values()])
-        embed.set_image(url='attachment://image.png')
-        embed.set_footer(text=f'Requested by: {ctx.author}')
+        embed = discord.Embed(
+            title="Changed Filter",
+            color=helpers.Colour.white(),
+            description="*It may takes a while for the changes to apply.*",
+        )
+        image = await self.bot.render.equalizer([entry["gain"] for entry in filters.equalizer.payload.values()])
+        embed.set_image(url="attachment://image.png")
+        embed.set_footer(text=f"Requested by: {ctx.author}")
         await ctx.send(embed=embed, file=image, delete_after=20)
 
-    @filter.command(
-        'bassboost',
-        description='Enable/Disable the bassboost filter.'
-    )
+    @filter.command("bassboost", description="Enable/Disable the bassboost filter.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_bassboost(self, ctx: Context) -> None:
         """Apply a bassboost filter for the current track."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         await ctx.defer()
 
         filters: wavelink.Filters = player.filters
-        filters.equalizer.set(bands=[
-            {'band': 0, 'gain': 0.2}, {'band': 1, 'gain': 0.15}, {'band': 2, 'gain': 0.1},
-            {'band': 3, 'gain': 0.05}, {'band': 4, 'gain': 0.0}, {'band': 5, 'gain': -0.05},
-            {'band': 6, 'gain': -0.1}, {'band': 7, 'gain': -0.1}, {'band': 8, 'gain': -0.1},
-            {'band': 9, 'gain': -0.1}, {'band': 10, 'gain': -0.1}, {'band': 11, 'gain': -0.1},
-            {'band': 12, 'gain': -0.1}, {'band': 13, 'gain': -0.1}, {'band': 14, 'gain': -0.1}
-        ])
+        filters.equalizer.set(
+            bands=[  # type: ignore
+                {"band": 0, "gain": 0.2},
+                {"band": 1, "gain": 0.15},
+                {"band": 2, "gain": 0.1},
+                {"band": 3, "gain": 0.05},
+                {"band": 4, "gain": 0.0},
+                {"band": 5, "gain": -0.05},
+                {"band": 6, "gain": -0.1},
+                {"band": 7, "gain": -0.1},
+                {"band": 8, "gain": -0.1},
+                {"band": 9, "gain": -0.1},
+                {"band": 10, "gain": -0.1},
+                {"band": 11, "gain": -0.1},
+                {"band": 12, "gain": -0.1},
+                {"band": 13, "gain": -0.1},
+                {"band": 14, "gain": -0.1},
+            ]
+        )
         await player.set_filters(filters)
 
         embed = discord.Embed(
-            title='Changed Filter',
+            title="Changed Filter",
             color=helpers.Colour.white(),
-            description='*It may takes a while for the changes to apply.*')
-        image = await self.bot.render.equalizer([entry['gain'] for entry in filters.equalizer.payload.values()])
-        embed.set_image(url='attachment://image.png')
-        embed.set_footer(text=f'Requested by: {ctx.author}')
+            description="*It may takes a while for the changes to apply.*",
+        )
+        image = await self.bot.render.equalizer([entry["gain"] for entry in filters.equalizer.payload.values()])
+        embed.set_image(url="attachment://image.png")
+        embed.set_footer(text=f"Requested by: {ctx.author}")
         await ctx.send(embed=embed, file=image, delete_after=20)
 
-    @filter.command(
-        name='nightcore',
-        description='Enables/Disables the nightcore filter.'
-    )
+    @filter.command(name="nightcore", description="Enables/Disables the nightcore filter.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_nightcore(self, ctx: Context) -> None:
         """Apply a Nightcore Filter to the current track."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
@@ -756,17 +774,14 @@ class Music(Cog):
         filters.timescale.set(speed=1.25, pitch=1.3, rate=1.3)
         await player.set_filters(filters)
 
-        await ctx.send_success('Applied Nightcore Filter.', delete_after=10)
+        await ctx.send_success("Applied Nightcore Filter.", delete_after=10)
 
-    @filter.command(
-        '8d',
-        description='Enable/Disable the 8d filter.'
-    )
+    @filter.command("8d", description="Enable/Disable the 8d filter.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_8d(self, ctx: Context) -> None:
         """Apply an 8D Filter to create a 3D effect."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
@@ -774,18 +789,15 @@ class Music(Cog):
         filters.rotation.set(rotation_hz=0.15)
         await player.set_filters(filters)
 
-        await ctx.send_success('Applied 8D Filter.', delete_after=10)
+        await ctx.send_success("Applied 8D Filter.", delete_after=10)
 
-    @filter.command(
-        'lowpass',
-        description='Suppresses higher frequencies while allowing lower frequencies to pass through.'
-    )
-    @describe(smoothing='The smoothing of the lowpass filter. (2.5-50.0)')
+    @filter.command("lowpass", description="Suppresses higher frequencies while allowing lower frequencies to pass through.")
+    @describe(smoothing="The smoothing of the lowpass filter. (2.5-50.0)")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_lowpass(self, ctx: Context, smoothing: app_commands.Range[float, 2.5, 50.0]) -> None:
         """Apply a Lowpass Filter to the current Track."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
@@ -793,105 +805,102 @@ class Music(Cog):
         filters.low_pass.set(smoothing=smoothing)
         await player.set_filters(filters)
 
-        await ctx.send_success(f'Set Lowpass Filter to **{smoothing}**.', delete_after=10)
+        await ctx.send_success(f"Set Lowpass Filter to **{smoothing}**.", delete_after=10)
 
-    @filter.command(
-        'reset',
-        description='Reset all active filters.'
-    )
+    @filter.command("reset", description="Reset all active filters.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def filter_reset(self, ctx: Context) -> None:
         """Reset all active filters."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         player.filters.reset()
         await player.set_filters()
-        await ctx.send_success('Removed all active filters.', delete_after=10)
+        await ctx.send_success("Removed all active filters.", delete_after=10)
 
-    @command(description='Skip the playing song to the next.', hybrid=True, guild_only=True)
+    @command(description="Skip the playing song to the next.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
     async def forceskip(self, ctx: Context) -> None:
         """Skip the playing song."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         if player.queue.is_empty:
-            await ctx.send_error('The queue is empty.')
+            await ctx.send_error("The queue is empty.")
             return
 
         await player.skip(force=True)
-        await ctx.send_success('An admin or DJ has to the next track.', delete_after=10)
+        await ctx.send_success("An admin or DJ has to the next track.", delete_after=10)
 
-    @command('jump-to', description='Jump to a track in the Queue.', hybrid=True, guild_only=True)
-    @describe(position='The index of the track you want to jump to.')
+    @command("jump-to", description="Jump to a track in the Queue.", hybrid=True, guild_only=True)
+    @describe(position="The index of the track you want to jump to.")
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
     async def jump_to(self, ctx: Context, position: int) -> None:
         """Jump to a track in the Queue.
         Note: The number you enter is the count of how many tracks in the queue will be skipped."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         if player.queue.all_is_empty:
-            await ctx.send_error('The queue is empty.')
+            await ctx.send_error("The queue is empty.")
             return
 
         if position < 0:
-            await ctx.send_error('The index must be greater than or 0.')
+            await ctx.send_error("The index must be greater than or 0.")
             return
 
         if (position - 1) > len(player.queue.all):
-            await ctx.send_error('There are not that many tracks in the queue.')
+            await ctx.send_error("There are not that many tracks in the queue.")
             return
 
         success = await player.jump_to(position - 1)
         if not success:
-            await ctx.send_error('Failed to jump to the specified track.')
+            await ctx.send_error("Failed to jump to the specified track.")
             return
 
         await player.stop()
 
         if position != 1:
-            await ctx.send_success(f'Playing the **{position}** track in queue.', delete_after=10)
+            await ctx.send_success(f"Playing the **{position}** track in queue.", delete_after=10)
         else:
-            await ctx.send_success('Playing the next track in queue.', delete_after=10)
+            await ctx.send_success("Playing the next track in queue.", delete_after=10)
 
-    @command(description='Plays the previous Track.', hybrid=True, guild_only=True)
+    @command(description="Plays the previous Track.", hybrid=True, guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_playing()
     @checks.is_listen_together()
     async def back(self, ctx: Context) -> None:
         """Plays the previous Track."""
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         assert player.queue.history is not None
         if player.queue.history.is_empty:
-            await ctx.send_error('There are no tracks in the history.')
+            await ctx.send_error("There are no tracks in the history.")
             return
 
         await player.back()
-        await ctx.send_success('An admin or DJ has skipped to the previous song.', delete_after=10)
+        await ctx.send_success("An admin or DJ has skipped to the previous song.", delete_after=10)
 
-    @command(description='Display the active queue.', hybrid=True, guild_only=True)
+    @command(description="Display the active queue.", hybrid=True, guild_only=True)
     async def queue(self, ctx: Context) -> None:
         """Display the active queue."""
         assert ctx.guild is not None
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
         if player.queue.all_is_empty:
-            await ctx.send_error('No items currently in the queue.', ephemeral=True)
+            await ctx.send_error("No items currently in the queue.", ephemeral=True)
             return
 
         await ctx.defer()
@@ -900,8 +909,8 @@ class Music(Cog):
             @staticmethod
             def fmt(track: wavelink.Playable, index: int) -> str:
                 return (
-                    f'`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** '
-                    f'[`{convert_duration(track.length)}`]'
+                    f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** "
+                    f"[`{convert_duration(track.length)}`]"
                 )
 
             async def format_page(self, entries: list, /) -> discord.Embed:
@@ -910,30 +919,33 @@ class Music(Cog):
                 assert player.queue.history is not None
                 embed = discord.Embed(color=helpers.Colour.white())
                 icon_url = ctx.guild.icon.url if ctx.guild.icon else None
-                embed.set_author(name=f'{ctx.guild.name}\'s Current Queue', icon_url=icon_url)
+                embed.set_author(name=f"{ctx.guild.name}'s Current Queue", icon_url=icon_url)
 
                 embed.description = (
-                    '**╔ Now Playing:**\n'
-                    f'[{player.current.title}]({player.current.uri}) by **{player.current.author or 'Unknown'}** '
-                    f'[`{convert_duration(player.current.length)}`]\n\n'
+                    "**╔ Now Playing:**\n"
+                    f"[{player.current.title}]({player.current.uri}) by **{player.current.author or 'Unknown'}** "
+                    f"[`{convert_duration(player.current.length)}`]\n\n"
                 )
 
-                tracks = '\n'.join(
-                    self.fmt(track, i) for i, track in enumerate(entries, (self._current_page * self.per_page) + 1)
-                ) if not isinstance(entries[0], str) else (
-                    '*It seems like there are currently no upcoming tracks.*\n'
-                    'Add one with </play:1207828024037216283>.'
+                tracks = (
+                    "\n".join(
+                        self.fmt(track, i) for i, track in enumerate(entries, (self._current_page * self.per_page) + 1)
+                    )
+                    if not isinstance(entries[0], str)
+                    else (
+                        "*It seems like there are currently no upcoming tracks.*\nAdd one with </play:1207828024037216283>."
+                    )
                 )
 
-                embed.description += '**╠ Up Next:**\n' + tracks
+                embed.description += "**╠ Up Next:**\n" + tracks
 
                 embed.add_field(
-                    name='╚ Settings:',
-                    value=f'DJ(s): {', '.join([x.mention for x in player.djs])}', inline=False)
-                embed.set_footer(text=f'Total: {len(player.queue.all)} • History: {len(player.queue.history) - 1}')
+                    name="╚ Settings:", value=f"DJ(s): {', '.join([x.mention for x in player.djs])}", inline=False
+                )
+                embed.set_footer(text=f"Total: {len(player.queue.all)} • History: {len(player.queue.history) - 1}")
                 return embed
 
-        await QueuePaginator.start(ctx, entries=list(player.queue) or ['PLACEHOLDER'], per_page=30)
+        await QueuePaginator.start(ctx, entries=list(player.queue) or ["PLACEHOLDER"], per_page=30)
 
     # Lyrics Stuff
 
@@ -942,63 +954,60 @@ class Music(Cog):
         """Recursively parse an element and its children into a markdown string."""
         if isinstance(element, NavigableString):
             return element.strip()
-        elif element.name == 'br':
-            return '\n'
+        elif element.name == "br":
+            return "\n"
         else:
-            return ''.join(cls._get_text(child) for child in element.contents)  # type: ignore[arg-type]
+            return "".join(cls._get_text(child) for child in element.contents)  # type: ignore
 
     @classmethod
     def _extract_lyrics(cls, html: str) -> str | None:
         """Extract lyrics from the provided HTML."""
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
-        lyrics_container = soup.find_all('div', {'data-lyrics-container': 'true'})
+        lyrics_container = soup.find_all("div", {"data-lyrics-container": "true"})
 
         if not lyrics_container:
             return None
 
         text_parts = [cls._get_text(part) for part in lyrics_container]
 
-        return '\n'.join(text_parts)
+        return "\n".join(text_parts)
 
-    @command(description='Search for some lyrics.', hybrid=True, guild_only=True)
-    @describe(song='The song you want to search for.')
+    @command(description="Search for some lyrics.", hybrid=True, guild_only=True)
+    @describe(song="The song you want to search for.")
     @commands.guild_only()
     async def lyrics(self, ctx: Context, *, song: str | None = None) -> None:
         """Search for some lyrics."""
         await ctx.defer(ephemeral=True)
 
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player and not song:
-            await ctx.send_error('Please provide a song to search for.')
+            await ctx.send_error("Please provide a song to search for.")
             return
 
         song = song or (player.current.title if player and player.current else None)
         if not song:
-            await ctx.send_error('Please provide a song to search for.')
+            await ctx.send_error("Please provide a song to search for.")
             return
 
         async with ctx.channel.typing():
-            headers = {
-                'Accept': 'application/json',
-                'Authorization': f'Bearer {genius_key}'
-            }
+            headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
 
             async with self.bot.session.get(
-                    'https://api.genius.com/search', headers=headers, params={
-                        'q': song.replace('by', '').replace('from', '').strip()
-                    }
+                "https://api.genius.com/search",
+                headers=headers,
+                params={"q": song.replace("by", "").replace("from", "").strip()},
             ) as resp:
                 if resp.status != 200:
-                    await ctx.send_error(f'{Emojis.error} I cannot find lyrics for the current track.')
+                    await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
                     return
 
-                data = (await resp.json())['response']['hits'][0]['result']
-                song_url = urljoin('https://genius.com', data['path'])
+                data = (await resp.json())["response"]["hits"][0]["result"]
+                song_url = urljoin("https://genius.com", data["path"])
 
             async with self.bot.session.get(song_url) as res:
                 if res.status != 200:
-                    await ctx.send_error(f'{Emojis.error} I cannot find lyrics for the current track.')
+                    await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
                     return
 
                 html = await res.text()
@@ -1006,42 +1015,36 @@ class Music(Cog):
             lyrics_data = self._extract_lyrics(html)
 
             if lyrics_data is None:
-                await ctx.send_error(f'{Emojis.error} I cannot find lyrics for the current track.')
+                await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
                 return
 
             mapped = list(pagify(lyrics_data, page_length=4096))
 
         class TextPaginator(BasePaginator):
             async def format_page(self, entries: list, /) -> discord.Embed:
-                embed = discord.Embed(title=data['full_title'],
-                                      url=song_url,
-                                      description=entries[0],
-                                      colour=helpers.Colour.white())
-                embed.set_thumbnail(url=data['header_image_url'])
+                embed = discord.Embed(
+                    title=data["full_title"], url=song_url, description=entries[0], colour=helpers.Colour.white()
+                )
+                embed.set_thumbnail(url=data["header_image_url"])
                 return embed
 
         await TextPaginator.start(ctx, entries=mapped, per_page=1, ephemeral=True)
 
     # DJ
 
-    @group(
-        'dj',
-        description='Manage the DJ role.',
-        guild_only=True,
-        hybrid=True
-    )
+    @group("dj", description="Manage the DJ role.", guild_only=True, hybrid=True)
     async def _dj(self, ctx: Context) -> None:
         """Manage the DJ Role."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
     @_dj.command(
-        'add',
-        description='Adds the DJ Role with which you have extended control rights to a member.',
-        bot_permissions=['manage_roles'],
-        user_permissions=['manage_roles']
+        "add",
+        description="Adds the DJ Role with which you have extended control rights to a member.",
+        bot_permissions=["manage_roles"],
+        user_permissions=["manage_roles"],
     )
-    @describe(member='The member you want to add the DJ Role to.')
+    @describe(member="The member you want to add the DJ Role to.")
     async def dj_add(self, ctx: Context, member: discord.Member) -> None:
         """Adds the DJ Role with which you have extended control rights to a member.
 
@@ -1052,63 +1055,63 @@ class Music(Cog):
         assert ctx.guild is not None
         assert ctx.guild.me is not None
         assert isinstance(ctx.author, discord.Member)
-        dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
+        dj_role = discord.utils.get(ctx.guild.roles, name="DJ")
         if dj_role is None:
-            dj_role = await ctx.guild.create_role(name='DJ')
-            await ctx.send_success(f'Created new DJ Role `{dj_role.mention}`.')
+            dj_role = await ctx.guild.create_role(name="DJ")
+            await ctx.send_success(f"Created new DJ Role `{dj_role.mention}`.")
 
         if dj_role in member.roles:
-            await ctx.send_error(f'{member} already has the DJ role.')
+            await ctx.send_error(f"{member} already has the DJ role.")
             return
 
         if dj_role.position >= ctx.guild.me.top_role.position:
-            await ctx.send_error('The DJ role is higher than my top role.')
+            await ctx.send_error("The DJ role is higher than my top role.")
             return
 
         if dj_role.position >= ctx.author.top_role.position:
-            await ctx.send_error('The DJ role is higher than your top role.')
+            await ctx.send_error("The DJ role is higher than your top role.")
             return
 
         await member.add_roles(dj_role)
-        await ctx.send_success(f'Added the {dj_role.mention} role to user {member}.')
+        await ctx.send_success(f"Added the {dj_role.mention} role to user {member}.")
 
     @_dj.command(
-        'remove',
-        description='Removes the DJ Role with which you have extended control rights from a member.',
-        bot_permissions=['manage_roles'],
-        user_permissions=['manage_roles']
+        "remove",
+        description="Removes the DJ Role with which you have extended control rights from a member.",
+        bot_permissions=["manage_roles"],
+        user_permissions=["manage_roles"],
     )
-    @describe(member='The member you want to remove the DJ Role from.')
+    @describe(member="The member you want to remove the DJ Role from.")
     async def dj_remove(self, ctx: Context, member: discord.Member) -> None:
         """Removes the DJ Role with which you have extended control rights from a member."""
         assert ctx.guild is not None
         assert ctx.guild.me is not None
         assert isinstance(ctx.author, discord.Member)
-        dj_role = discord.utils.get(ctx.guild.roles, name='DJ')
+        dj_role = discord.utils.get(ctx.guild.roles, name="DJ")
         if not dj_role:
-            await ctx.send_error('There is currently no existing DJ role.')
+            await ctx.send_error("There is currently no existing DJ role.")
             return
 
         if dj_role not in member.roles:
-            await ctx.send_error(f'**{member}** has not the DJ role.')
+            await ctx.send_error(f"**{member}** has not the DJ role.")
             return
 
         if dj_role.position >= ctx.guild.me.top_role.position:
-            await ctx.send_error('The DJ role is higher than my top role.')
+            await ctx.send_error("The DJ role is higher than my top role.")
             return
 
         if dj_role.position >= ctx.author.top_role.position:
-            await ctx.send_error('The DJ role is higher than your top role.')
+            await ctx.send_error("The DJ role is higher than your top role.")
             return
 
         await member.remove_roles(dj_role)
-        await ctx.send_success(f'Removed the {dj_role.mention} role from user {member.mention}.')
+        await ctx.send_success(f"Removed the {dj_role.mention} role from user {member.mention}.")
 
     # SETUP
 
     @group(
-        'music',
-        description='Manage the Music Configuration.',
+        "music",
+        description="Manage the Music Configuration.",
         guild_only=True,
         hybrid=True,
     )
@@ -1118,12 +1121,12 @@ class Music(Cog):
             await ctx.send_help(ctx.command)
 
     @_music.command(
-        'setup',
-        description='Start the Music configuration setup.',
-        bot_permissions=['manage_channels'],
-        user_permissions=['manage_channels'],
+        "setup",
+        description="Start the Music configuration setup.",
+        bot_permissions=["manage_channels"],
+        user_permissions=["manage_channels"],
     )
-    @describe(channel='The channel you want to set as the music player channel.')
+    @describe(channel="The channel you want to set as the music player channel.")
     async def music_setup(self, ctx: Context, channel: discord.TextChannel | None = None) -> None:
         """Sets up a new music player channel.
         If you don't provide a channel, the bot will create a new channel in the category where the command was executed.
@@ -1131,61 +1134,61 @@ class Music(Cog):
         await ctx.defer()
 
         assert ctx.guild is not None
-        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
+        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
         if config.music_panel_channel_id and config.music_panel_message_id:
-            await ctx.send_error('There is already a music configuration setup.')
+            await ctx.send_error("There is already a music configuration setup.")
             return
 
         if not channel:
             assert isinstance(ctx.channel, discord.TextChannel)
             parent = ctx.channel.category or ctx.guild
-            channel = await parent.create_text_channel(name='🎶percy-music')
+            channel = await parent.create_text_channel(name="🎶percy-music")
 
         assert self.bot.user is not None
-        await channel.edit(
-            slowmode_delay=3,
-            topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
+        await channel.edit(slowmode_delay=3, topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
 
-        await ctx.send_success(f'Successfully set the new player channel to {channel.mention}.')
+        await ctx.send_success(f"Successfully set the new player channel to {channel.mention}.")
 
-        message = await channel.send(embed=Player.preview_embed(ctx.guild))
+        guild = ctx.guild
+        assert guild is not None
+        message = await channel.send(embed=Player.preview_embed(guild))
         await message.pin()
         await channel.purge(limit=5, check=lambda msg: not msg.pinned)
 
         await config.update(music_panel_channel_id=channel.id, music_panel_message_id=message.id)
 
     @_music.command(
-        'reset',
-        description='Reset the Music configuration setup.',
-        user_permissions=['manage_channels'],
+        "reset",
+        description="Reset the Music configuration setup.",
+        user_permissions=["manage_channels"],
     )
     async def setup_reset(self, ctx: Context) -> None:
         """Reset the Music configuration setup."""
         assert ctx.guild is not None
-        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
+        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
         if not config.music_panel_channel_id or not config.music_panel_message_id:
-            await ctx.send_error('There is currently no music configuration.')
+            await ctx.send_error("There is currently no music configuration.")
             return
 
         await config.update(music_panel_channel_id=None, music_panel_message_id=None)
-        await ctx.send_success('The Music Configuration for this Guild has been deleted.', ephemeral=True)
+        await ctx.send_success("The Music Configuration for this Guild has been deleted.", ephemeral=True)
 
     @_music.command(
-        'panel',
-        description='Toggle the use of the Music Panel.',
-        user_permissions=['manage_channels'],
+        "panel",
+        description="Toggle the use of the Music Panel.",
+        user_permissions=["manage_channels"],
     )
     async def setup_panel(self, ctx: Context) -> None:
         """This toggles the use of the music panel.
         If disabled, the bot won't send a player panel regardless of the setup."""
         assert ctx.guild is not None
-        config = await self.bot.db.get_guild_config(ctx.guild.id)  # type: ignore[misc]
+        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
         if not config.music_panel_channel_id or not config.music_panel_message_id:
-            await ctx.send_error('There is currently no music configuration.')
+            await ctx.send_error("There is currently no music configuration.")
             return
 
         await config.update(use_music_panel=not config.use_music_panel)
-        await ctx.send_success(f'The Music Panel has been {'enabled' if not config.use_music_panel else 'disabled'}.')
+        await ctx.send_success(f"The Music Panel has been {'enabled' if not config.use_music_panel else 'disabled'}.")
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -1194,14 +1197,14 @@ class Music(Cog):
         if message.guild is None:
             return
 
-        config = await self.bot.db.get_guild_config(message.guild.id)  # type: ignore[misc]
+        config = await self.bot.db.get_guild_config(guild_id=message.guild.id)
         if not (config.music_panel_channel_id and config.music_panel_message_id):
             return
 
         if (
-                message.channel.id == config.music_panel_channel_id
-                and not message.pinned
-                and message.id != config.music_panel_message_id
+            message.channel.id == config.music_panel_channel_id
+            and not message.pinned
+            and message.id != config.music_panel_message_id
         ):
             await message.delete(delay=60)
 
@@ -1214,20 +1217,21 @@ class PlaylistNameOrID(commands.clean_content):
         self.with_id: bool = with_id
         super().__init__()
 
-    async def convert(self, ctx: Context, argument: str) -> str | int:  # type: ignore[override]
+    async def convert(self, ctx: Context, argument: str) -> str | int:
         converted = await super().convert(ctx, argument)
         lower = converted.lower().strip()
 
         if not lower:
-            raise commands.BadArgument('Please enter a valid playlist name' + ' or id.' if self.with_id else '.')
+            raise commands.BadArgument("Please enter a valid playlist name" + " or id." if self.with_id else ".")
 
         if len(lower) > 100:
             raise commands.BadArgument(
-                f'Playlist names must be 100 characters or less. (You have *{len(lower)}* characters)')
+                f"Playlist names must be 100 characters or less. (You have *{len(lower)}* characters)"
+            )
 
-        cog: PlaylistTools | None = ctx.bot.get_cog('PlaylistTools')  # type: ignore[assignment]
+        cog: PlaylistTools | None = ctx.bot.get_cog("PlaylistTools")  # type: ignore
         if cog is None:
-            raise commands.BadArgument('Playlist tools are currently unavailable.')
+            raise commands.BadArgument("Playlist tools are currently unavailable.")
 
         if self.with_id and converted and converted.isdigit():
             return int(converted)
@@ -1239,9 +1243,9 @@ class PlaylistTools(Cog):
     """Additional Music Tools for the Music Cog.
     Like: Playlist, DJ, Setup etc."""
 
-    emoji = '\N{GUITAR}'
+    emoji = "\N{GUITAR}"
 
-    async def cog_before_invoke(self, ctx: Context) -> None:  # type: ignore[override]
+    async def cog_before_invoke(self, ctx: Context) -> None:
         await self.initizalize_user(ctx.author)
 
     async def initizalize_user(self, user: discord.abc.User | discord.Member) -> int | None:
@@ -1251,25 +1255,24 @@ class PlaylistTools(Cog):
 
         # The User can store Liked Songs using the Button the Player Control Panel
 
-        playlists = await self.get_playlists(user.id)  # type: ignore[misc]
+        playlists = await self.get_playlists(user_id=user.id)
         if any(playlist.is_liked_songs for playlist in playlists):
             return None
 
         record = await self.bot.db.playlists.create_playlist(
-            user.id, 'Liked Songs', discord.utils.utcnow().replace(tzinfo=None))
+            user.id, "Liked Songs", discord.utils.utcnow().replace(tzinfo=None)
+        )
         self.get_playlists.invalidate(user.id)
         return record
 
-    async def playlist_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        playlists = await self.get_playlists(interaction.user.id)  # type: ignore[misc]
+    async def playlist_autocomplete(self, interaction: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
+        playlists = await self.get_playlists(user_id=interaction.user.id)
 
         def key(p: Playlist) -> str:
             cmd = interaction.command
-            if cmd is not None and cmd.name == 'play':
+            if cmd is not None and cmd.name == "play":
                 return p.choice_text
-            return p.choice_text if p.name != 'Liked Songs' else ''
+            return p.choice_text if p.name != "Liked Songs" else ""
 
         results = fuzzy.finder(current, playlists, key=key, raw=True)
 
@@ -1283,11 +1286,7 @@ class PlaylistTools(Cog):
         return [PlaylistTrack(record=record) for record in records]
 
     async def get_playlist(
-            self,
-            ctx: Context | discord.Interaction,
-            name_or_id: str | int,
-            *,
-            pass_tracks: bool = False
+        self, ctx: Context | discord.Interaction, name_or_id: str | int, *, pass_tracks: bool = False
     ) -> Playlist | None:
         """Gets a poll by ID.
 
@@ -1346,124 +1345,115 @@ class PlaylistTools(Cog):
             playlist.tracks = await self._get_playlist_tracks(playlist.id)
         return playlists
 
-    @group(
-        name='playlist',
-        alias='pl',
-        description='Manage your playlist.',
-        guild_only=True,
-        hybrid=True
-    )
+    @group(name="playlist", alias="pl", description="Manage your playlist.", guild_only=True, hybrid=True)
     async def playlist(self, ctx: Context) -> None:
         """Manage your playlist."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @playlist.command(
-        name='show',
-        description='Display all your playlists and tracks.'
-    )
+    @playlist.command(name="show", description="Display all your playlists and tracks.")
     async def playlist_show(self, ctx: Context) -> None:
         """Display all your playlists and tracks."""
-        playlists = await self.get_playlists(ctx.author.id)  # type: ignore[misc]
+        playlists = await self.get_playlists(user_id=ctx.author.id)
         if not playlists:
             await ctx.send_error(
-                f'You don\'t have any playlists. You can create a playlist using `{ctx.prefix}playlist create`.')
+                f"You don't have any playlists. You can create a playlist using `{ctx.prefix}playlist create`."
+            )
             return
 
         items = [playlist.field_tuple for playlist in playlists]
 
-        fields = [items[i:i + 12] for i in range(0, len(items), 12)]
+        fields = [items[i : i + 12] for i in range(0, len(items), 12)]
 
         embeds = []
         for index, field in enumerate(fields):
             embed = discord.Embed(
-                title='Your Playlists',
-                description='Here are your playlists, use the buttons and view to navigate',
-                color=helpers.Colour.white())
+                title="Your Playlists",
+                description="Here are your playlists, use the buttons and view to navigate",
+                color=helpers.Colour.white(),
+            )
             embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
-            embed.set_footer(text=f'{pluralize(len(playlists)):playlist}')
-            for name, value in field[index:index + 12]:
+            embed.set_footer(text=f"{pluralize(len(playlists)):playlist}")
+            for name, value in field[index : index + 12]:
                 embed.add_field(name=name, value=value, inline=False)
             embeds.append(embed)
 
         await PlaylistPaginator.start(
-            ctx, entries=embeds, per_page=1, ephemeral=True, playlists=playlists, start_pages=embeds)
+            ctx, entries=embeds, per_page=1, ephemeral=True, playlists=playlists, start_pages=embeds
+        )
 
-    @playlist.command(
-        name='create',
-        description='Create a new playlist.'
-    )
-    @app_commands.describe(name='The name of your new playlist.')
+    @playlist.command(name="create", description="Create a new playlist.")
+    @app_commands.describe(name="The name of your new playlist.")
     async def playlist_create(self, ctx: Context, name: str) -> None:
         """Create a new playlist."""
-        playlists = await self.get_playlists(ctx.author.id)  # type: ignore[misc]
+        playlists = await self.get_playlists(user_id=ctx.author.id)
 
-        if len(playlists) == 3 and not await self.bot.is_owner(ctx.author):  # type: ignore[arg-type]
-            await ctx.send_error('You can only have `3` playlists at the same time.')
+        if len(playlists) == 3 and not await self.bot.is_owner(ctx.author):
+            await ctx.send_error("You can only have `3` playlists at the same time.")
             return
 
         if any(playlist.name == name for playlist in playlists):
-            await ctx.send_error('There is already a playlist with this name, please choose another name.')
+            await ctx.send_error("There is already a playlist with this name, please choose another name.")
             return
 
         if len(name) > 100:
-            await ctx.send_error('The name of the playlist must be 100 characters or less.')
+            await ctx.send_error("The name of the playlist must be 100 characters or less.")
             return
 
         playlist_id = await self.bot.db.playlists.create_playlist(ctx.author.id, name, discord.utils.utcnow())
         self.get_playlists.invalidate(ctx.author.id)
 
-        await ctx.send_success(f'Successfully created playlist **{name}** [`{playlist_id}`].')
+        await ctx.send_success(f"Successfully created playlist **{name}** [`{playlist_id}`].")
 
     @playlist.command(
-        name='play',
-        description='Add the songs from you playlist to the plugins queue and play them.',
+        name="play",
+        description="Add the songs from you playlist to the plugins queue and play them.",
     )
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.describe(name_or_id='The name or id of your playlist to play.')
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.describe(name_or_id="The name or id of your playlist to play.")
     @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
     @checks.is_listen_together()
     @checks.is_author_connected()
     async def playlist_play(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Add the songs from you playlist to the plugins queue and play them."""
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
-            await ctx.send_error('There is no playlist with this id.')
+            await ctx.send_error("There is no playlist with this id.")
             return
 
         if len(playlist) == 0:
-            await ctx.send_error('There are no tracks in this playlist, please add some using `/playlist add`.')
+            await ctx.send_error("There are no tracks in this playlist, please add some using `/playlist add`.")
             return
 
-        player: Player = cast('Player', ctx.voice_client)
+        player: Player = cast("Player", ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
         old_stamp = len(player.queue.all)
-        wait_message = await ctx.send(f'*{Emojis.loading} adding tracks from your playlist to the queue... please wait...*')
+        wait_message = await ctx.send(f"*{Emojis.loading} adding tracks from your playlist to the queue... please wait...*")
 
         for track in playlist.tracks:
-            resolved: Playable = await player.search(track.url, ctx=ctx)  # type: ignore[assignment]
-            if not resolved:
+            resolved: Playable | Playlist | SearchReturn = await player.search(track.url, ctx=ctx)
+            if not resolved or isinstance(resolved, SearchReturn):
                 continue
             await player.queue.put_wait(resolved)
 
         new_queue = len(player.queue.all) - old_stamp
         succeeded = bool(new_queue == len(playlist.tracks))
 
-        description = f'`🎶` Successfully added **{new_queue}/{len(playlist.tracks)}** tracks from your playlist to the queue.'
+        description = (
+            f"`🎶` Successfully added **{new_queue}/{len(playlist.tracks)}** tracks from your playlist to the queue."
+        )
         if not succeeded:
-            description += f'\n{Emojis.warning} *Some tracks may not have been added due to unexpected issues.*'
-        embed = discord.Embed(
-            description=description,
-            color=helpers.Colour.teal())
-        embed.set_author(name=f'[{playlist.id}] • {playlist.name}', icon_url=ctx.author.display_avatar.url)
-        embed.set_footer(text='Now Playing')
+            description += f"\n{Emojis.warning} *Some tracks may not have been added due to unexpected issues.*"
+        embed = discord.Embed(description=description, color=helpers.Colour.teal())
+        embed.set_author(name=f"[{playlist.id}] • {playlist.name}", icon_url=ctx.author.display_avatar.url)
+        embed.set_footer(text="Now Playing")
         await wait_message.delete()
         await ctx.send(embed=embed, delete_after=15)
 
@@ -1473,56 +1463,55 @@ class PlaylistTools(Cog):
         else:
             await player.panel.update()
 
-    @playlist.command(
-        name='add',
-        description='Adds the current playing track or a track via a direct-url to your playlist.'
-    )
-    @app_commands.rename(name_or_id='name-or-id')
+    @playlist.command(name="add", description="Adds the current playing track or a track via a direct-url to your playlist.")
+    @app_commands.rename(name_or_id="name-or-id")
     @app_commands.describe(
-        query='The direct-url of the track/playlist/album you want to add to your playlist.',
-        name_or_id='The id of your playlist.')
-    @app_commands.autocomplete(name_or_id=playlist_autocomplete)
+        query="The direct-url of the track/playlist/album you want to add to your playlist.",
+        name_or_id="The id of your playlist.",
+    )
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
     async def playlist_add(
-            self,
-            ctx: Context,
-            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],  # type: ignore
-            *,
-            query: str | None = None
+        self,
+        ctx: Context,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
+        *,
+        query: str | None = None,
     ) -> None:
         """Adds the current playing track or a track via a direct-url to your playlist."""
         if not query and not (ctx.voice_client and ctx.voice_client.channel):
-            await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
+            await ctx.send_error("You have to provide either the `link` parameter or a current playing track.")
             return
 
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
-            await ctx.send_error('There is no playlist with that name.')
+            await ctx.send_error("There is no playlist with that name.")
             return
 
-        if not query and ctx.guild and ctx.guild.voice_client:  # type: ignore[union-attr]
-            player: Player = cast('Player', ctx.voice_client)
+        if not query and ctx.guild and ctx.guild.voice_client:
+            player: Player = cast("Player", ctx.voice_client)
 
             if not player.current:
-                await ctx.send_error('You have to provide either the `link` parameter or a current playing track.')
+                await ctx.send_error("You have to provide either the `link` parameter or a current playing track.")
                 return
 
             await playlist.add_track(player.current)
             embed = discord.Embed(
-                description=f'Added Track **[{player.current.title}]({player.current.uri})** to your playlist '
-                            f'at Position **#{len(playlist.tracks)}**',
-                color=helpers.Colour.teal()
+                description=f"Added Track **[{player.current.title}]({player.current.uri})** to your playlist "
+                f"at Position **#{len(playlist.tracks)}**",
+                color=helpers.Colour.teal(),
             )
             embed.set_thumbnail(url=player.current.artwork)
             embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
-            embed.set_footer(text=f'[{playlist.id}] • {playlist.name}')
+            embed.set_footer(text=f"[{playlist.id}] • {playlist.name}")
             await ctx.send(embed=embed, ephemeral=True)
         else:
-            result = await Player.search(query, ctx=ctx)  # type: ignore[arg-type]
+            assert query is not None
+            result = await Player.search(query, ctx=ctx)
             if isinstance(result, SearchReturn):
                 if result == SearchReturn.NO_RESULTS:
-                    await ctx.send_error('Sorry! No results found matching your query.')
+                    await ctx.send_error("Sorry! No results found matching your query.")
                 elif result == SearchReturn.NO_YOUTUBE_ALLOWED:
-                    await ctx.send_error('Sorry, you can\'t add YouTube tracks with this bot.')
+                    await ctx.send_error("Sorry, you can't add YouTube tracks with this bot.")
                 return
 
             added = [track.url for track in playlist.tracks]
@@ -1535,102 +1524,94 @@ class PlaylistTools(Cog):
                     success += 1
 
                 embed = discord.Embed(
-                    description=f'Added **{success}**/**{len(result.tracks)}** Tracks from {result.name} **[{result.name}]({result.url})** to your playlist.\n'
-                                f'Next Track at Position **#{len(playlist.tracks)}**',
-                    color=helpers.Colour.teal())
+                    description=f"Added **{success}**/**{len(result.tracks)}** Tracks from {result.name} **[{result.name}]({result.url})** to your playlist.\n"
+                    f"Next Track at Position **#{len(playlist.tracks)}**",
+                    color=helpers.Colour.teal(),
+                )
                 embed.set_thumbnail(url=result.artwork)
                 embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
-                embed.set_footer(text=f'[{playlist.id}] • {playlist.name}')
+                embed.set_footer(text=f"[{playlist.id}] • {playlist.name}")
                 await ctx.send(embed=embed, ephemeral=True)
             else:
                 if result.uri in added:
-                    await ctx.send_error('This Track is already in your playlist.')
+                    await ctx.send_error("This Track is already in your playlist.")
                     return
                 await playlist.add_track(result)
 
                 embed = discord.Embed(
-                    description=f'Added Track **[{result.title}]({result.uri})** to your playlist.\n'
-                                f'Track at Position **#{len(playlist.tracks)}**',
-                    color=helpers.Colour.teal())
+                    description=f"Added Track **[{result.title}]({result.uri})** to your playlist.\n"
+                    f"Track at Position **#{len(playlist.tracks)}**",
+                    color=helpers.Colour.teal(),
+                )
                 embed.set_thumbnail(url=result.artwork)
                 embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
-                embed.set_footer(text=f'[{playlist.id}] • {playlist.name}')
+                embed.set_footer(text=f"[{playlist.id}] • {playlist.name}")
                 await ctx.send(embed=embed, ephemeral=True)
 
         self.get_playlists.invalidate(ctx.author.id)
 
-    @playlist.command(
-        name='delete',
-        alias='del',
-        description='Delete a playlist.'
-    )
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.describe(name_or_id='The name or id of the playlist you want to delete.')
-    @app_commands.autocomplete(name_or_id=playlist_autocomplete)
+    @playlist.command(name="delete", alias="del", description="Delete a playlist.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.describe(name_or_id="The name or id of the playlist you want to delete.")
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
     async def playlist_delete(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Delete a playlist."""
         playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
         if playlist is None:
-            await ctx.send_error('No playlist was found matching your query.')
+            await ctx.send_error("No playlist was found matching your query.")
             return
 
-        if playlist.name == 'Liked Songs':
-            await ctx.send_error('You cannot delete the Liked Songs playlist.')
+        if playlist.name == "Liked Songs":
+            await ctx.send_error("You cannot delete the Liked Songs playlist.")
             return
 
         await playlist.delete()
         await ctx.send_success(
-            f'Successfully deleted playlist **{playlist.name}** [`{playlist.id}`] and all corresponding entries.',
-            ephemeral=True)
+            f"Successfully deleted playlist **{playlist.name}** [`{playlist.id}`] and all corresponding entries.",
+            ephemeral=True,
+        )
         self.get_playlists.invalidate(ctx.author.id)
 
     @playlist.command(
-        name='clear',
-        aliases=['purge', 'clean'],
-        description='Clear all Items in a playlist.',
-        guild_only=True
+        name="clear", aliases=["purge", "clean"], description="Clear all Items in a playlist.", guild_only=True
     )
-    @app_commands.rename(name_or_id='name-or-id')
-    @app_commands.describe(name_or_id='The name or id of the playlist you want to clear.')
-    @app_commands.autocomplete(name_or_id=playlist_autocomplete)
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.describe(name_or_id="The name or id of the playlist you want to clear.")
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
     async def playlist_clear(
-            self,
-            ctx: Context,
-            *,
-            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],  # type: ignore
+        self,
+        ctx: Context,
+        *,
+        name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Clear all Items in a playlist."""
         playlist = await self.get_playlist(ctx, name_or_id, pass_tracks=True)
         if playlist is None:
-            await ctx.send_error('No playlist was found matching your query.')
+            await ctx.send_error("No playlist was found matching your query.")
             return
 
         await playlist.clear()
         await ctx.send_success(
-            f'Successfully purged all corresponding entries of playlist **{playlist.name}** [`{playlist.id}`].',
-            ephemeral=True)
+            f"Successfully purged all corresponding entries of playlist **{playlist.name}** [`{playlist.id}`].",
+            ephemeral=True,
+        )
         self.get_playlists.invalidate(ctx.author.id)
 
-    @playlist.command(
-        name='remove',
-        alias='rm',
-        description='Remove a track from your playlist.',
-        guild_only=True
-    )
+    @playlist.command(name="remove", alias="rm", description="Remove a track from your playlist.", guild_only=True)
     @app_commands.rename(name_or_id='name-or-id')
     @app_commands.describe(
         name_or_id='The playlist ID you want to remove a track from.',
         track_id='The ID of the track to remove.')
-    @app_commands.autocomplete(name_or_id=playlist_autocomplete)
+    @app_commands.autocomplete(name_or_id=playlist_autocomplete)  # type: ignore
     async def playlist_remove(
             self,
             ctx: Context,
-            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],  # type: ignore
+            name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
             track_id: int
     ) -> None:
         """Remove a track from your playlist."""

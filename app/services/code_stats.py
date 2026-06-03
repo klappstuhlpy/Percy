@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = (
-    'CodeStats',
-    'count_code_stats',
+    "CodeStats",
+    "count_code_stats",
 )
 
 
@@ -47,21 +47,21 @@ def count_code_stats(root: Path, *, ignored: Iterable[Path] = ()) -> CodeStats:
     ignored = set(ignored)
     stats = CodeStats()
 
-    for file in root.rglob('*.py'):
+    for file in root.rglob("*.py"):
         if ignored and any(parent in ignored for parent in file.parents):
             continue
 
         stats.files += 1
-        text = file.read_text(encoding='utf8', errors='ignore')
+        text = file.read_text(encoding="utf8", errors="ignore")
         stats.characters += len(text)
 
         for raw_line in text.splitlines():
             line = raw_line.strip()
-            if line.startswith('class'):
+            if line.startswith("class"):
                 stats.classes += 1
-            if line.startswith(('def', 'async def')):
+            if line.startswith(("def", "async def")):
                 stats.functions += 1
-            if '#' in line:
+            if "#" in line:
                 stats.comments += 1
             stats.lines += 1
 

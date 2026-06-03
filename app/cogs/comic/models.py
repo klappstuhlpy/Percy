@@ -162,19 +162,21 @@ class GenericComic:
         self.kwargs = kwargs
 
     def __str__(self) -> str:
-        return self.title
+        return self.title or ""
 
     def __repr__(self) -> str:
-        return f'<GenericComic id={self.id} title={self.title} brand={self.brand.name}>'
+        brand = self.brand.name if self.brand is not None else "None"
+        return f'<GenericComic id={self.id} title={self.title} brand={brand}>'
 
     @property
     def writer(self) -> str:
-        next_key = next((a for a in ['Writer', 'Creator', *MANGA_POSITIONS] if a in self.creators), None)
-        return ', '.join(alpha_surnames(self.creators[next_key] if next_key else []))
+        creators = self.creators or {}
+        next_key = next((a for a in ['Writer', 'Creator', *MANGA_POSITIONS] if a in creators), None)
+        return ', '.join(alpha_surnames(creators[next_key] if next_key else []))
 
     @property
     def price_format(self) -> str:
-        return f'${fnumb(self.price)} USD' if self.price else 'Unknown'
+        return f'${fnumb(self.price)} USD' if self.price is not None else 'Unknown'
 
     def format_creators(self, *, cover: bool = False, compact: bool = False) -> str:
         priority = ['Writer', 'Artist', 'Penciler', 'Inker', 'Colorist', 'Letterer', 'Editor', *MANGA_POSITIONS]
@@ -188,16 +190,16 @@ class GenericComic:
         compact_positions = {'Writer', 'Penciler', 'Artist', *MANGA_POSITIONS}
         keys = sorted(self.creators.keys(), key=lambda k: (sorting_key(k), k))
         return '\n'.join(
-            f'**{k}**: {', '.join(alpha_surnames(self.creators[k]))}'
+            f"**{k}**: {', '.join(alpha_surnames(self.creators[k]))}"
             for k in keys
             if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
         )
 
     def to_embed(self, full_img: bool = True) -> discord.Embed:
         embed = discord.Embed(
-            title=self.title,
-            colour=self.brand.colour,
-            description=self.description,
+            title=self.title or "",
+            colour=self.brand.colour if self.brand is not None else 0,
+            description=self.description or "",
             url=self.url,
         )
 
@@ -205,9 +207,9 @@ class GenericComic:
             embed.add_field(name='General Info',
                             value=f'Price: {self.price_format}\n'
                                   f'Pages: {self.page_count}\n'
-                                  f'Release Date: {discord.utils.format_dt(self.date, 'D')}\n'
-                                  f'Category: {self.kwargs.get('category')}\n'
-                                  f'Age Rating: {self.kwargs.get('age_rating')}')
+                                  f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
+                                  f"Category: {self.kwargs.get('category')}\n"
+                                  f"Age Rating: {self.kwargs.get('age_rating')}")
 
             if self.creators:
                 embed.add_field(name='Creators', value=self.format_creators())
@@ -219,7 +221,7 @@ class GenericComic:
                             value=f'Price: {self.price_format}\n'
                                   f'Pages: {self.page_count}')
 
-        embed.set_footer(text=f'{self.title} • {self.copyright}', icon_url=self.brand.icon_url)
+        embed.set_footer(text=f'{self.title or ""} • {self.copyright or ""}', icon_url=self.brand.icon_url if self.brand else "")
 
         if full_img:
             embed.set_image(url=self.image_url)
@@ -241,7 +243,7 @@ class GenericComicMessage(GenericComic):
         return self.message.jump_url
 
 
-class ComicFeed[B: Brand](BaseRecord):
+class ComicFeed(BaseRecord):
 
     if TYPE_CHECKING:
         cog: Cog
@@ -249,7 +251,7 @@ class ComicFeed[B: Brand](BaseRecord):
     guild_id: int
     channel_id: int
     format: Format
-    brand: B  # type: ignore[assignment]
+    brand: Brand
     day: int
     ping: bool
     pin: bool
@@ -269,7 +271,7 @@ class ComicFeed[B: Brand](BaseRecord):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> ComicFeed[B]:
+    ) -> ComicFeed:
         record = await self.cog.bot.db.comics.update_config(self.id, key, values, connection=connection)
         return self.__class__(cog=self.cog, record=record)
 

@@ -6,11 +6,12 @@ import logging
 import re
 import sys
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Final
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
 import aiohttp
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 
 from app.cogs.doc import client, engine
@@ -31,12 +32,12 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 FORCE_PREFIX_GROUPS = (
-    'term',
-    'label',
-    'token',
-    'doc',
-    'pdbcommand',
-    '2to3fixer',
+    "term",
+    "label",
+    "token",
+    "doc",
+    "pdbcommand",
+    "2to3fixer",
 )
 
 FETCH_RESCHEDULE_DELAY = SimpleNamespace(first=2, repeated=5)
@@ -49,7 +50,7 @@ class PackageName(commands.Converter):
     Package names are used for stats and are restricted to the a-z and _ characters.
     """
 
-    PACKAGE_NAME_RE: Final[ClassVar[re.Pattern]] = re.compile(r'[^a-zA-Z0-9_.]')
+    PACKAGE_NAME_RE: ClassVar[re.Pattern] = re.compile(r"[^a-zA-Z0-9_.]")
 
     def __init__(self, available: bool = False, maybe_all: bool = False) -> None:
         self.available = available
@@ -60,32 +61,34 @@ class PackageName(commands.Converter):
 
         argument = argument.casefold()
 
-        if self.maybe_all and argument == '*':
+        if self.maybe_all and argument == "*":
             return argument
 
         if self.available:
-            cog: Documentation | None = ctx.bot.get_cog('Documentation')
+            cog: Documentation | None = ctx.bot.get_cog("Documentation")  # type: ignore
+            assert cog is not None
             argument = cog.base_aliases.get(argument, argument)
             if argument not in cog.doc_symbols:
                 if cog.base_urls:
                     embed = discord.Embed(color=helpers.Colour.white())
-                    embed.set_footer(text=f'{pluralize(len(cog.base_urls)):inventory|invetories} found.')
+                    embed.set_footer(text=f"{pluralize(len(cog.base_urls)):inventory|invetories} found.")
 
                     def fmt(entry: tuple[str, str]) -> str:
-                        first = f'• [`{entry[0]}`]({entry[1]})'
+                        first = f"• [`{entry[0]}`]({entry[1]})"
                         if entry[0] in cog.grouped_aliases:
-                            return f'{first} ({', '.join(f'*`{alias}`*' for alias in cog.grouped_aliases[entry[0]])})'
+                            return f"{first} ({', '.join(f'*`{alias}`*' for alias in cog.grouped_aliases[entry[0]])})"
                         return first
 
                     results = list(map(fmt, cog.base_urls.items()))
                     await LinePaginator.start(ctx, entries=results, per_page=15, embed=embed)
-                    raise AssertionError(f'The package `{argument}` is not available.')
+                    raise AssertionError(f"The package `{argument}` is not available.")
                 else:
-                    raise AssertionError('There are no inventories available at the moment.')
+                    raise AssertionError("There are no inventories available at the moment.")
 
         if self.PACKAGE_NAME_RE.search(argument):
             raise commands.BadArgument(
-                'The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters.')
+                "The provided package name is not valid; please only use the `.`, `_`, `0-9`, and `a-zA-Z` characters."
+            )
         return argument
 
 
@@ -98,29 +101,31 @@ class Inventory(commands.Converter):
     Otherwise, it returns the url and the fetched inventory dict in a tuple.
     """
 
-    async def convert(self, ctx: Context, url: str) -> tuple[str, client.InventoryDict]:
+    async def convert(self, ctx: Context, url: str) -> tuple[str, client.InventoryDict]:  # type: ignore
         """Convert url to Intersphinx inventory URL."""
         await ctx.typing()
 
-        if not url.endswith('/objects.inv'):
-            url = url.rstrip('/') + '/objects.inv'
+        if not url.endswith("/objects.inv"):
+            url = url.rstrip("/") + "/objects.inv"
 
         try:
             inventory = await client.fetch_inventory(ctx.bot.session, url)
         except client.InvalidHeaderError:
             raise commands.BadArgument(
-                f'{Emojis.error} Unable to parse inventory because of invalid header, check if URL is correct.')
+                f"{Emojis.error} Unable to parse inventory because of invalid header, check if URL is correct."
+            )
         else:
             if inventory is None:
                 raise commands.BadArgument(
-                    f'Failed to fetch inventory file after `{client.FAILED_REQUEST_ATTEMPTS}` attempts.')
+                    f"Failed to fetch inventory file after `{client.FAILED_REQUEST_ATTEMPTS}` attempts."
+                )
             return url, inventory
 
 
 class Documentation(Cog):
     """A set of commands for querying & displaying documentation."""
 
-    emoji = '\N{OPEN BOOK}'
+    emoji = "\N{OPEN BOOK}"
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -131,7 +136,7 @@ class Documentation(Cog):
         self.doc_symbols: dict[str, dict[str, DocItem]] = {}
         self.item_fetcher = engine.BatchParser(bot)
 
-        self.inventory_scheduler: Scheduler = Scheduler('Documentation')
+        self.inventory_scheduler: Scheduler = Scheduler("Documentation")
         self.symbol_get_event: SharedEvent = SharedEvent()
 
         self.inv_retries: dict[str, int] = {}
@@ -146,7 +151,8 @@ class Documentation(Cog):
 
         sorted_aliases = sorted(value.items(), key=lambda x: x[1])
         self.grouped_aliases = {
-            k: [alias for alias, _ in v] for k, v in itertools.groupby(sorted_aliases, key=lambda x: x[1])}
+            k: [alias for alias, _ in v] for k, v in itertools.groupby(sorted_aliases, key=lambda x: x[1])
+        }
 
     async def reset_cache(self) -> None:
         """Reset the internal cache of the cog."""
@@ -167,21 +173,22 @@ class Documentation(Cog):
         await self.item_fetcher.clear()
 
     async def documentation_autocomplete(
-            self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]] | list[Any]:
         if not current:
             return []
 
         package_name = interaction.namespace.package or interaction.namespace.package_name
         if not package_name:
-            package_name = 'python'
+            package_name = "python"
 
-        _, matches = await self.get_symbol_item(package_name, current, 15)
+        _, matches = await self.get_symbol_item(package_name, current, 15)  # type: ignore
         return [app_commands.Choice(name=m.symbol_id, value=m.symbol_id) for m in matches]
 
-    async def package_autocomplete(self, _, current: str) -> list[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=package, value=package)
-                for package in fuzzy.finder(current, self.base_urls.keys())][:25]
+    async def package_autocomplete(self, _, current: str) -> list[Choice[str | int | float]]:
+        return [
+            app_commands.Choice(name=package, value=package) for package in fuzzy.finder(current, self.base_urls.keys())
+        ][:25]
 
     def update_single(self, package_name: str, base_url: str, inventory: InventoryDict) -> None:
         """Build the inventory for a single package.
@@ -200,14 +207,14 @@ class Documentation(Cog):
 
         for dgroup, items in inventory.items():
             for symbol_name, relative_doc_url in items:
-                group_name = dgroup.split(':')[1]
+                group_name = dgroup.split(":")[1]
                 symbol_name = self.ensure_unique_symbol_name(
                     package_name,
                     group_name,
                     symbol_name,
                 )
 
-                relative_url_path, _, symbol_id = relative_doc_url.partition('#')
+                relative_url_path, _, symbol_id = relative_doc_url.partition("#")
                 doc_item = DocItem(
                     package_name,
                     sys.intern(group_name),
@@ -218,13 +225,13 @@ class Documentation(Cog):
                 self.doc_symbols[package_name] |= {symbol_name: doc_item}
                 self.item_fetcher.add_item(doc_item)
 
-        log.debug('Fetched inventory for %s.', package_name)
+        log.debug("Fetched inventory for %s.", package_name)
 
     async def update_or_reschedule_inventory(
-            self,
-            api_package_name: str,
-            base_url: str,
-            inventory_url: str,
+        self,
+        api_package_name: str,
+        base_url: str,
+        inventory_url: str,
     ) -> None:
         """|coro|
 
@@ -247,7 +254,7 @@ class Documentation(Cog):
         try:
             package = await client.fetch_inventory(self.bot.session, inventory_url)
         except client.InvalidHeaderError as e:
-            log.warning('Invalid inventory header at %s. Reason: %s', inventory_url, e)
+            log.warning("Invalid inventory header at %s. Reason: %s", inventory_url, e)
             return
 
         if not package:
@@ -260,16 +267,19 @@ class Documentation(Cog):
                 delay = FETCH_RESCHEDULE_DELAY.first
 
             if self.inv_retries[api_package_name] > 5:
-                log.error('Failed to fetch inventory for %s after 5 attempts.\n'
-                          'Refresh the inventory manually with `?docs refresh`.', api_package_name)
+                log.error(
+                    "Failed to fetch inventory for %s after 5 attempts.\n"
+                    "Refresh the inventory manually with `?docs refresh`.",
+                    api_package_name,
+                )
                 return
 
-            log.info('Failed to fetch inventory; attempting again in %s minutes.', delay)
+            log.info("Failed to fetch inventory; attempting again in %s minutes.", delay)
             self.inventory_scheduler.schedule_later(
                 delay * 60,
                 api_package_name,
                 self.update_or_reschedule_inventory(api_package_name, base_url, inventory_url),
-                )
+            )
         else:
             if not base_url:
                 base_url = self.base_url_from_inventory_url(inventory_url)
@@ -284,18 +294,19 @@ class Documentation(Cog):
         If the existing symbol was renamed or there was no conflict, the returned name is equivalent to `symbol_name`.
         """
         if self.doc_symbols.get(package_name) is None:
-            raise ValueError(f'Package `{package_name}` is somehow not supported.')
+            raise ValueError(f"Package `{package_name}` is somehow not supported.")
 
         if (item := self.doc_symbols[package_name].get(symbol_name)) is None:
             return symbol_name
 
         def _rename(prefix: str, *, rename_extant: bool = False) -> str:
-            new_name = f'{prefix}.{symbol_name}'
+            new_name = f"{prefix}.{symbol_name}"
             if new_name in self.doc_symbols[package_name]:
                 if rename_extant:
-                    new_name = f'{item.package}.{item.group}.{symbol_name}'
+                    assert item is not None
+                    new_name = f"{item.package}.{item.group}.{symbol_name}"
                 else:
-                    new_name = f'{package_name}.{group_name}.{symbol_name}'
+                    new_name = f"{package_name}.{group_name}.{symbol_name}"
 
             if rename_extant:
                 self.doc_symbols[package_name][new_name] = self.doc_symbols[package_name][symbol_name]
@@ -316,26 +327,25 @@ class Documentation(Cog):
 
         return _rename(item.group, rename_extant=True)
 
-    @lock('DocCache.refresh', 'inventory refresh task', wait=True, raise_error=True)
+    @lock("DocCache.refresh", "inventory refresh task", wait=True, raise_error=True)
     async def refresh_inventories(self) -> None:
         """Refresh internal documentation inventories."""
-        log.debug('Refreshing documentation inventory...')
+        log.debug("Refreshing documentation inventory...")
         await self.reset_cache()
 
         docs = self.bot.doc_links.all().items()
-        self.base_aliases = {alias: package for package, value in docs for alias in value['aliases']}
+        self.base_aliases = {alias: package for package, value in docs for alias in value["aliases"]}
 
         coros = [
-            self.update_or_reschedule_inventory(
-                package, value['base_url'], value['inventory_url']
-            ) for package, value in docs
+            self.update_or_reschedule_inventory(package, str(value["base_url"]), str(value["inventory_url"]))
+            for package, value in docs
         ]
         await asyncio.gather(*coros)
-        log.debug('Finished inventory refresh.')
+        log.debug("Finished inventory refresh.")
 
     @executor
     def get_symbol_item(
-            self, package_name: str, symbol_name: str, limit: int = 1
+        self, package_name: str, symbol_name: str, limit: int = 1
     ) -> tuple[str, list[DocItem] | DocItem | None]:
         """Get the :class:`DocItem` and the symbol name used to fetch it from the `doc_symbols` dict.
 
@@ -347,15 +357,13 @@ class Documentation(Cog):
         try:
             match = (symbol_name, self.doc_symbols[package_name][symbol_name])
         except KeyError:
-            results.extend(
-                fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
-            )
+            results.extend(fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit])
         else:
             results.append(match)
             results.extend(
                 filter(
                     lambda x: x[0] != symbol_name,
-                    fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit]
+                    fuzzy.finder(symbol_name, self.doc_symbols[package_name].items(), key=lambda x: x[0])[:limit],
                 )
             )
 
@@ -372,18 +380,18 @@ class Documentation(Cog):
         markdown = await doc_cache.get(doc_item)
 
         if markdown is None:
-            log.debug('Doc cache miss with %s.', doc_item)
+            log.debug("Doc cache miss with %s.", doc_item)
             try:
                 markdown = await self.item_fetcher.get_markdown(doc_item)
             except aiohttp.ClientError as e:
-                log.warning('A network error has occurred when requesting parsing of %s.', doc_item, exc_info=e)
-                return 'Unable to parse the requested symbol due to a network error.'
+                log.warning("A network error has occurred when requesting parsing of %s.", doc_item, exc_info=e)
+                return "Unable to parse the requested symbol due to a network error."
             except Exception:
-                log.exception('An unexpected error has occurred when requesting parsing of %s.', doc_item)
-                return 'Unable to parse the requested symbol due to an error.'
+                log.exception("An unexpected error has occurred when requesting parsing of %s.", doc_item)
+                return "Unable to parse the requested symbol due to an error."
             else:
                 if markdown is None:
-                    return 'Unable to parse the requested symbol.'
+                    return "Unable to parse the requested symbol."
         return markdown
 
     @lock_from(refresh_inventories, wait=True)
@@ -396,53 +404,45 @@ class Documentation(Cog):
         """
         with self.symbol_get_event:
             if item is None:
-                log.debug('Symbol does not exist.')
+                log.debug("Symbol does not exist.")
                 return None
 
             embed = discord.Embed(
                 title=discord.utils.escape_markdown(item.symbol_id),
-                url=f'{item.url}#{item.symbol_id}',
-                description=await self.get_symbol_markdown(item)
+                url=f"{item.url}#{item.symbol_id}",
+                description=await self.get_symbol_markdown(item),
             )
-            embed.set_author(
-                name=f'{item.package} Documentation', icon_url='https://klappstuhl.me/gallery/lVUYV.png')
+            embed.set_author(name=f"{item.package} Documentation", icon_url="https://klappstuhl.me/gallery/lVUYV.png")
 
             for name, value in item.resolved_fields.items():
                 embed.add_field(name=name, value=value, inline=False)
             return embed
 
-    @group(
-        'docs',
-        fallback='search',
-        alias='d',
-        description='Look up documentation for Python symbols.',
-        hybrid=True
-    )
-    @describe(
-        symbol_name='The symbol to look up documentation for.', package='The package to look up documentation for.')
-    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
+    @group("docs", fallback="search", alias="d", description="Look up documentation for Python symbols.", hybrid=True)
+    @describe(symbol_name="The symbol to look up documentation for.", package="The package to look up documentation for.")
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
     @lock_from(refresh_inventories, raise_error=True)
     async def docs(
-            self,
-            ctx: Context,
-            package: Annotated[str, PackageName(available=True)],  # type: ignore
-            *,
-            symbol_name: str | None = None
+        self,
+        ctx: Context,
+        package: Annotated[str, PackageName(available=True)],  # type: ignore
+        *,
+        symbol_name: str | None = None,
     ) -> None:
         """Return a documentation embed for a given symbol.
 
         If no symbol is given, return a list of all available inventories.
         """
         if symbol_name is None:
-            await ctx.send_error('Please provide a symbol to look up.')
+            await ctx.send_error("Please provide a symbol to look up.")
             return
 
-        symbol = symbol_name.strip('`')
+        symbol = symbol_name.strip("`")
         async with ctx.typing():
-            _, doc_items = await self.get_symbol_item(package, symbol, limit=12)  # type: str, list[DocItem]
+            _, doc_items = await self.get_symbol_item(package, symbol, limit=12)  # type: ignore
 
             if not doc_items:
-                await ctx.send_error(f'The symbol `{symbol_name}` was not found.')
+                await ctx.send_error(f"The symbol `{symbol_name}` was not found.")
                 return
 
         await DocPaginator.start(ctx, entries=doc_items, cog=self)
@@ -450,25 +450,17 @@ class Documentation(Cog):
     @staticmethod
     def base_url_from_inventory_url(inventory_url: str) -> str:
         """Get a base url from the url to an objects inventory by removing the last path segment."""
-        return inventory_url.removesuffix('/').rsplit('/', maxsplit=1)[0] + '/'
+        return inventory_url.removesuffix("/").rsplit("/", maxsplit=1)[0] + "/"
 
-    @docs.command(
-        'set',
-        description='Set a new documentation object.',
-        hidden=True,
-        with_app_command=False
-    )
-    @describe(
-        package_name='The name of the package to add.',
-        inventory='The inventory URL for the package.'
-    )
+    @docs.command("set", description="Set a new documentation object.", hidden=True, with_app_command=False)
+    @describe(package_name="The name of the package to add.", inventory="The inventory URL for the package.")
     @commands.is_owner()
-    @lock('Docs', 'set', raise_error=True)
+    @lock("Docs", "set", raise_error=True)
     async def set_command(
-            self,
-            ctx: Context,
-            package_name: Annotated[str, PackageName],
-            inventory: Annotated[str, Inventory],
+        self,
+        ctx: Context,
+        package_name: Annotated[str, PackageName],
+        inventory: Annotated[str, Inventory],
     ) -> None:
         """Adds a new documentation metadata object to the site's database.
 
@@ -477,74 +469,54 @@ class Documentation(Cog):
         """
         inventory_url, inventory_dict = inventory
         body = {
-            'base_url': self.base_url_from_inventory_url(inventory_url),
-            'inventory_url': inventory_url,
-            'aliases': [],
+            "base_url": self.base_url_from_inventory_url(inventory_url),
+            "inventory_url": inventory_url,
+            "aliases": [],
         }
         await self.bot.doc_links.put(package_name, body)
 
-        _items = '\n'.join(f'{key}: {value}' for key, value in body.items())
-        log.info('User @%s (ID: %s) added a new documentation package:\n%s', ctx.author, ctx.author.id, _items)
+        _items = "\n".join(f"{key}: {value}" for key, value in body.items())
+        log.info("User @%s (ID: %s) added a new documentation package:\n%s", ctx.author, ctx.author.id, _items)
 
-        self.update_single(package_name, body['base_url'], inventory_dict)
-        await ctx.send_success(f'Added the package `{package_name}` to the database and updated the inventories.')
+        self.update_single(package_name, str(body["base_url"]), inventory_dict)  # type: ignore
+        await ctx.send_success(f"Added the package `{package_name}` to the database and updated the inventories.")
 
     # alias setting command
-    @docs.command(
-        'alias',
-        description='Set an alias for a package.',
-        hidden=True,
-        with_app_command=False
-    )
-    @describe(
-        package_name='The name of the package to set an alias for.',
-        alias='The alias to set for the package.'
-    )
+    @docs.command("alias", description="Set an alias for a package.", hidden=True, with_app_command=False)
+    @describe(package_name="The name of the package to set an alias for.", alias="The alias to set for the package.")
     @commands.is_owner()
-    @lock('Docs', 'alias', raise_error=True)
-    async def alias_command(
-            self, ctx: Context, package_name: Annotated[str, PackageName], alias: str
-    ) -> None:
+    @lock("Docs", "alias", raise_error=True)
+    async def alias_command(self, ctx: Context, package_name: Annotated[str, PackageName], alias: str) -> None:
         """Set an alias for a package."""
         if not package_name:
-            await ctx.send_error(f'The package `{package_name}` was not found.')
+            await ctx.send_error(f"The package `{package_name}` was not found.")
             return
 
-        assert alias not in self.base_aliases, 'Alias already exists.'
+        assert alias not in self.base_aliases, "Alias already exists."
 
-        await self.bot.doc_links.add_deep(f'{package_name!r}.aliases', [alias])
-        await ctx.send_success(f'Successfully set the alias `{alias}` for the package `{package_name}`.')
+        await self.bot.doc_links.add_deep(f"{package_name!r}.aliases", [alias])
+        await ctx.send_success(f"Successfully set the alias `{alias}` for the package `{package_name}`.")
 
     @docs.command(
-        'delete',
-        aliases=['remove', 'rm'],
-        description='Delete a documentation object.',
-        hidden=True,
-        with_app_command=False
+        "delete", aliases=["remove", "rm"], description="Delete a documentation object.", hidden=True, with_app_command=False
     )
-    @describe(package_name='The name of the package to remove.')
+    @describe(package_name="The name of the package to remove.")
     @commands.is_owner()
-    @lock('Docs', 'delete', raise_error=True)
-    async def delete_command(
-            self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]  # type: ignore
-    ) -> None:
+    @lock("Docs", "delete", raise_error=True)
+    async def delete_command(self, ctx: Context, package_name: Annotated[str, PackageName(available=True)]) -> None:
         """Removes the specified package from the database."""
         await self.bot.doc_links.remove(package_name)
 
         async with ctx.typing():
             await self.refresh_inventories()
             await doc_cache.delete(package_name)
-        await ctx.send_success(f'Successfully deleted `{package_name}` and refreshed the inventories.')
+        await ctx.send_success(f"Successfully deleted `{package_name}` and refreshed the inventories.")
 
     @docs.command(
-        name='refresh',
-        aliases=['rfsh', 'r'],
-        description='Refresh the inventories.',
-        hidden=True,
-        with_app_command=False
+        name="refresh", aliases=["rfsh", "r"], description="Refresh the inventories.", hidden=True, with_app_command=False
     )
     @commands.is_owner()
-    @lock('Docs', 'refresh', raise_error=True)
+    @lock("Docs", "refresh", raise_error=True)
     async def refresh_command(self, ctx: Context) -> None:
         """Refresh inventories and show the difference."""
         old_inventories = set(self.base_urls)
@@ -553,60 +525,39 @@ class Documentation(Cog):
 
         new_inventories = set(self.base_urls)
 
-        if added := ', '.join(new_inventories - old_inventories):
-            added = '+ ' + added
+        if added := ", ".join(new_inventories - old_inventories):
+            added = "+ " + added
 
-        if removed := ', '.join(old_inventories - new_inventories):
-            removed = '- ' + removed
+        if removed := ", ".join(old_inventories - new_inventories):
+            removed = "- " + removed
 
         embed = discord.Embed(
-            title='Inventories refreshed',
-            description=f'```diff\n{added}\n{removed}```' if added or removed else ""
+            title="Inventories refreshed", description=f"```diff\n{added}\n{removed}```" if added or removed else ""
         )
         await ctx.send(embed=embed)
 
-    @docs.command(
-        'clearcache',
-        aliases=['deletecache', 'cc'],
-        description='Clear the cache for a package.',
-        hidden=True
-    )
-    @describe(package_name='The name of the package to clear the cache for.')
+    @docs.command("clearcache", aliases=["deletecache", "cc"], description="Clear the cache for a package.", hidden=True)
+    @describe(package_name="The name of the package to clear the cache for.")
     @commands.is_owner()
-    async def clear_cache_command(
-            self,
-            ctx: Context,
-            package_name: Annotated[str, PackageName(maybe_all=True)]  # type: ignore
-    ) -> None:
+    async def clear_cache_command(self, ctx: Context, package_name: Annotated[str, PackageName(maybe_all=True)]) -> None:
         """Clear the persistent redis cache for `package`."""
         if await doc_cache.delete(package_name):
             await self.item_fetcher.remove(package_name)
-            await ctx.send_success(f'Successfully cleared the cache for `{package_name}`.')
+            await ctx.send_success(f"Successfully cleared the cache for `{package_name}`.")
         else:
-            await ctx.send_error('No keys matching the package found.')
+            await ctx.send_error("No keys matching the package found.")
 
-    @command(
-        aliases=['rtfd'],
-        description='Searches some documentations for the given query. (Short)',
-        hybrid=True
-    )
-    @describe(
-        symbol_name='The object to search for', package='The package to search in.')
-    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)
+    @command(aliases=["rtfd"], description="Searches some documentations for the given query. (Short)", hybrid=True)
+    @describe(symbol_name="The object to search for", package="The package to search in.")
+    @app_commands.autocomplete(symbol_name=documentation_autocomplete, package=package_autocomplete)  # type: ignore
     @lock_from(refresh_inventories, raise_error=True)
-    async def rtfm(
-            self,
-            ctx: Context,
-            package: Annotated[str, PackageName(available=True)],  # type: ignore
-            *,
-            symbol_name: str
-    ) -> None:
+    async def rtfm(self, ctx: Context, package: Annotated[str, PackageName(available=True)], *, symbol_name: str) -> None:
         """Gives you a documentation link for a commands.py entity.
 
         Events, objects, and functions are all supported through
         a cruddy fuzzy algorithm.
         """
-        _, matches = await self.get_symbol_item(package, symbol_name, 8)  # type: DocItem, list[DocItem]
+        _, matches = await self.get_symbol_item(package, symbol_name, 8)  # type: ignore
 
         if len(matches) == 0:
             await ctx.send_error(f'The symbol `{symbol_name}` was not found.')

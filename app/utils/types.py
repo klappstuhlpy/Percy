@@ -13,7 +13,7 @@ _State = ConnectionState | _WebhookState
 # Type alias for Interaction where client is the custom Bot class.
 # At runtime this is just discord.Interaction; for type-checkers it's Interaction[Bot].
 if TYPE_CHECKING:
-    BotInteraction = discord.Interaction['Bot']
+    BotInteraction = discord.Interaction["Bot"]
 else:
     BotInteraction = discord.Interaction
 
@@ -24,12 +24,7 @@ class Asset(_Asset):
 
     @classmethod
     def _from_app_asset(cls, state: _State, object_id: int, asset_id: str, name: str) -> Self:
-        self = cls(
-            state,
-            url=f'{cls.BASE}/app-assets/{object_id}/{asset_id}.png?size=4096',
-            key=asset_id,
-            animated=False
-        )
+        self = cls(state, url=f"{cls.BASE}/app-assets/{object_id}/{asset_id}.png?size=4096", key=asset_id, animated=False)
         self.name = name
         return self
 
@@ -53,11 +48,11 @@ class RPCAppInfo(AppInfo):
 
     def __init__(self, *, state: ConnectionState, data: RPCAppInfoPayload) -> None:
         super().__init__(state=state, data=data)
-        self._permissions: int = data.get('permissions', 0)
-        self.type: Any | None = data.get('type')
-        self.is_monetized: bool | None = data.get('is_monetized')
-        self.category_ids: list[int] | None = data.get('category_ids')
-        self.approximate_guild_count: int | None = data.get('approximate_guild_count')
+        self._permissions: int = data.get("permissions", 0)
+        self.type: Any | None = data.get("type")
+        self.is_monetized: bool | None = data.get("is_monetized")
+        self.category_ids: list[int] | None = data.get("category_ids")
+        self.approximate_guild_count: int | None = data.get("approximate_guild_count")
 
     @property
     def permissions(self) -> Permissions | None:
@@ -76,13 +71,9 @@ class RPCAppInfo(AppInfo):
         :class:`dict`: The application's assets.
         """
         assets: list[AssetPayload] = await self._state.http.request(
-            Route(
-                'GET',
-                '/oauth2/applications/{app_id}/assets',
-                app_id=self.id
-            )
+            Route("GET", "/oauth2/applications/{app_id}/assets", app_id=self.id)
         )
-        return [Asset._from_app_asset(self._state, self.id, asset['id'], name=asset['name']) for asset in assets]
+        return [Asset._from_app_asset(self._state, self.id, asset["id"], name=asset["name"]) for asset in assets]
 
     async def edit(self, **kwargs: Any) -> Any:
         raise NotImplementedError('Editing RPCAppInfo is not supported.')

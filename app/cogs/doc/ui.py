@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
+from discord import Embed
 
 from app.core import Context
 from app.core.pagination import BasePaginator
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 class DocSelect(discord.ui.Select):
     def __init__(self, parent: BasePaginator[DocItemT]) -> None:
         super().__init__(
-            placeholder='Select a similar Documentation...',
+            placeholder="Select a similar Documentation...",
             max_values=1,
             row=1,
         )
@@ -41,16 +42,16 @@ class DocSelect(discord.ui.Select):
 class DocPaginator(BasePaginator[DocItemT]):
     """A View that represents a documentation page for a specific object."""
 
-    async def format_page(self, entries: list[DocItem]) -> discord.Embed:
+    async def format_page(self, entries: list[DocItem]) -> Embed | None:
         """Format the page for the given item."""
         item = entries[0]
 
         if item.embed is not None:
             return item.embed
 
-        cog: Documentation | None = self.extras.get('cog', None)
+        cog: Documentation | None = self.extras.get("cog", None)
         if cog is None:
-            raise ValueError('The cog was not passed to the paginator.')
+            raise ValueError("The cog was not passed to the paginator.")
 
         embed = await cog.create_symbol_embed(item)
         item.embed = embed
@@ -69,17 +70,17 @@ class DocPaginator(BasePaginator[DocItemT]):
 
     @classmethod
     async def start(
-            cls,
-            context: Context | discord.Interaction,
-            /,
-            *,
-            entries: list[DocItemT],
-            per_page: int = 1,
-            clamp_pages: bool = True,
-            timeout: int = 450,
-            search_for: bool = False,
-            ephemeral: bool = False,
-            **kwargs: Any
+        cls,
+        context: Context | discord.Interaction,
+        /,
+        *,
+        entries: list[DocItemT],
+        per_page: int = 1,
+        clamp_pages: bool = True,
+        timeout: int = 450,
+        search_for: bool = False,
+        ephemeral: bool = False,
+        **kwargs: Any,
     ) -> BasePaginator[DocItemT]:
         """Starts documentation paginator with optional selection menu"""
         self = cls(entries=entries, per_page=per_page, clamp_pages=clamp_pages, timeout=timeout)

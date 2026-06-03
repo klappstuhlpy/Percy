@@ -46,24 +46,24 @@ if TYPE_CHECKING:
 
 async def roulette_space_autocomplete(_, current: str) -> list[Choice[str | int | float]]:
     results = fuzzy.finder(current, list(Space), key=lambda p: str(p.value))
-    return [
-        app_commands.Choice(name=str(space.value), value=str(space.value)) for space in results[:20]
-    ]
+    return [app_commands.Choice(name=str(space.value), value=str(space.value)) for space in results[:20]]
 
 
 class HangmanFlags(Flags):
-    min_length: int = flag(description='The minimum length the word should have.', short='min', default=0)
-    max_length: int = flag(description='The maximum length the word should have.', short='max', default=25)
-    min_unique_letters: int = flag(description='The minimum amount of unique letters the word should have.',
-                                   aliases=['umin', 'uniquemin'], default=0)
-    max_unique_letters: int = flag(description='The maximum amount of unique letters the word should have.',
-                                   aliases=['umax', 'uniquemax'], default=25)
+    min_length: int = flag(description="The minimum length the word should have.", short="min", default=0)
+    max_length: int = flag(description="The maximum length the word should have.", short="max", default=25)
+    min_unique_letters: int = flag(
+        description="The minimum amount of unique letters the word should have.", aliases=["umin", "uniquemin"], default=0
+    )
+    max_unique_letters: int = flag(
+        description="The maximum amount of unique letters the word should have.", aliases=["umax", "uniquemax"], default=25
+    )
 
 
 class Games(Cog):
     """Play games against the bot or other players to earn money."""
 
-    emoji = '\N{VIDEO GAME}'
+    emoji = "\N{VIDEO GAME}"
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -73,25 +73,21 @@ class Games(Cog):
         self.poker_tables: dict[int, poker_bridge.PokerSession] = {}
 
     @command(
-        'tictactoe',
-        description='Play a TicTacToe party with another user.',
-        aliases=['ttt'],
-        guild_only=True,
-        hybrid=True
+        "tictactoe", description="Play a TicTacToe party with another user.", aliases=["ttt"], guild_only=True, hybrid=True
     )
-    @app_commands.rename(other='with')
-    @describe(other='The opponent to play with')
+    @app_commands.rename(other="with")
+    @describe(other="The opponent to play with")
     async def tictactoe(self, ctx: Context, *, other: discord.Member) -> None:
         """Play a TicTacToe party with another user."""
         if other.bot:
-            await ctx.send_error('You cannot play against a bot')
+            await ctx.send_error("You cannot play against a bot")
             return
 
         prompt = tictactoe_ui.Prompt(ctx.author, other)
         embed = discord.Embed(
-            title='TicTacToe',
-            description=f'{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n'
-                        f'Do you accept this party, {other.mention}?',
+            title="TicTacToe",
+            description=f"{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n"
+            f"Do you accept this party, {other.mention}?",
             colour=helpers.Colour.white(),
         )
         msg = await ctx.send(embed=embed, view=prompt)
@@ -99,48 +95,38 @@ class Games(Cog):
         await prompt.wait()
         await ctx.maybe_delete(msg, delay=1)
 
-    @command(
-        'minesweeper',
-        alias='ms',
-        description='Play a Minesweeper game.',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(mines='The amount of mines to play with')
+    @command("minesweeper", alias="ms", description="Play a Minesweeper game.", guild_only=True, hybrid=True)
+    @describe(mines="The amount of mines to play with")
     async def minesweeper(self, ctx: Context, *, mines: commands.Range[int, 3, 24] = 3) -> None:
         """Play a Minesweeper Game."""
         if mines < 3 or mines > 24:
-            await ctx.send_error('The amount of mines must be greater than equal to 3 and less than 25.')
+            await ctx.send_error("The amount of mines must be greater than equal to 3 and less than 25.")
             return
 
         ms = minesweeper_ui.Minesweeper(ctx, mines=mines)
         await ctx.send(embed=ms.build_embed(), view=ms)
 
-    @command(
-        'hangman',
-        description='Play a Hangman game.',
-        guild_only=True,
-        hybrid=True
-    )
+    @command("hangman", description="Play a Hangman game.", guild_only=True, hybrid=True)
     async def hangman(self, ctx: Context, *, flags: HangmanFlags) -> None:
         """Play hangman with the bot."""
-        word_list = txt(Path(path, 'assets/hangman_words.txt')).splitlines()
+        word_list = txt(Path(path, "assets/hangman_words.txt")).splitlines()
         if not word_list:
-            await ctx.send_error('No words found. :/')
+            await ctx.send_error("No words found. :/")
             return
 
         filtered_words = [
-            word for word in word_list
-            if flags.min_length < len(word) < flags.max_length and flags.min_unique_letters < len(
-                set(word)) < flags.max_unique_letters
+            word
+            for word in word_list
+            if flags.min_length < len(word) < flags.max_length
+            and flags.min_unique_letters < len(set(word)) < flags.max_unique_letters
         ]
 
         if not filtered_words:
-            await ctx.send_error('No words found with the given criteria.')
+            await ctx.send_error("No words found with the given criteria.")
             return
 
         word = random.choice(filtered_words)
-        hangman = hangman_ui.Hangman(cast('discord.Member', ctx.author), word)
+        hangman = hangman_ui.Hangman(cast("discord.Member", ctx.author), word)
 
         origin = await ctx.send(embed=hangman.build_embed())
 
@@ -149,15 +135,11 @@ class Games(Cog):
 
         while not hangman.finished:
             try:
-                message = await self.bot.wait_for(
-                    "message",
-                    timeout=60.0,
-                    check=check
-                )
+                message = await self.bot.wait_for("message", timeout=60.0, check=check)
             except TimeoutError:
                 await origin.edit(
-                    content=f'{Emojis.error} Time\'s up! The game has been aborted. You must send a letter within 60 seconds.',
-                    embed=hangman.build_embed(False)
+                    content=f"{Emojis.error} Time's up! The game has been aborted. You must send a letter within 60 seconds.",
+                    embed=hangman.build_embed(False),
                 )
                 return
 
@@ -165,7 +147,7 @@ class Games(Cog):
 
             await ctx.maybe_delete(message)
 
-            if content == 'abort':
+            if content == "abort":
                 await origin.edit(embed=hangman.build_embed(False))
                 return
 
@@ -208,17 +190,12 @@ class Games(Cog):
                 await origin.edit(embed=hangman.build_embed())
                 continue
 
-    @command(
-        'tower',
-        description='Play a round of Tower game.',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(bet='The amount of coins to bet.')
+    @command("tower", description="Play a round of Tower game.", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.")
     async def tower(self, ctx: Context, bet: int = 100) -> None:
         """Play a round of Tower game."""
         if bet < 0:
-            await ctx.send_error('You cannot bet negative coins.')
+            await ctx.send_error("You cannot bet negative coins.")
             return
 
         assert ctx.guild is not None
@@ -227,32 +204,26 @@ class Games(Cog):
 
         if bet > balance.cash:
             await ctx.send_error(
-                f'You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.')
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
             return
 
         await balance.remove(cash=bet)
 
-        tower = tower_ui.Tower(cast('discord.Member', ctx.author), bet)
+        tower = tower_ui.Tower(cast("discord.Member", ctx.author), bet)
         await ctx.send(embed=tower.build_embed(), view=tower)
 
-    @command(
-        'slots',
-        description='Play a game of slots.',
-        alias='slot',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(bet='The amount of coins to bet.')
+    @command("slots", description="Play a game of slots.", alias="slot", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.")
     async def slots(self, ctx: Context, bet: int) -> None:
         """Play a game of slots."""
         if bet < 0:
-            await ctx.send_error('You cannot bet negative coins.')
+            await ctx.send_error("You cannot bet negative coins.")
             return
 
         if bet < MinimumBet.BLACKJACK.value:
-            await ctx.send_error(
-                f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.')
+            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
             return
 
         assert ctx.guild is not None
@@ -261,30 +232,25 @@ class Games(Cog):
 
         if bet > balance.cash:
             await ctx.send_error(
-                f'You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.')
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
             return
 
         await balance.remove(cash=bet)
 
-        slots = slot_ui.SlotMachine(cast('discord.Member', ctx.author), bet)
+        slots = slot_ui.SlotMachine(cast("discord.Member", ctx.author), bet)
         await ctx.send(embed=slots.build_embed(), view=slots)
 
-    @command(
-        'blackjack',
-        description='Play a Blackjack game.',
-        alias='bj',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(bet='The amount of coins to bet.')
+    @command("blackjack", description="Play a Blackjack game.", alias="bj", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.")
     async def blackjack(self, ctx: Context, bet: int) -> None:
         if bet < 0:
-            await ctx.send_error('You cannot bet negative coins.')
+            await ctx.send_error("You cannot bet negative coins.")
             return
 
         if bet < MinimumBet.BLACKJACK.value:
-            await ctx.send_error(f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.')
+            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
             return
 
         assert ctx.guild is not None
@@ -293,8 +259,9 @@ class Games(Cog):
 
         if bet > balance.cash:
             await ctx.send_error(
-                f'You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.')
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
             return
 
         await balance.remove(cash=bet)
@@ -302,7 +269,7 @@ class Games(Cog):
         if ctx.author.id in self.blackjack_tables:
             blackjack = self.blackjack_tables[ctx.author.id]
             if blackjack.is_running:
-                await ctx.send_error('You are already playing a game of Blackjack.')
+                await ctx.send_error("You are already playing a game of Blackjack.")
                 return
 
             blackjack = blackjack.wake_up(ctx, bet)
@@ -313,9 +280,9 @@ class Games(Cog):
         # Shuffle cards, just for aesthetics
         embed = blackjack.build_embed(
             hand=blackjack.active_hand,
-            image_url='https://klappstuhl.me/gallery/TpjOl.gif',
+            image_url="https://klappstuhl.me/gallery/TpjOl.gif",
             colour=discord.Colour.light_grey(),
-            text='*Shuffling Cards...*'
+            text="*Shuffling Cards...*",
         )
         message = await ctx.send(embed=embed)
         blackjack.active_hand.message = message
@@ -326,12 +293,7 @@ class Games(Cog):
         if not await blackjack.view.check_for_winner(ctx):
             await message.edit(embed=blackjack.build_embed(blackjack.active_hand), view=blackjack.view)
 
-    @command(
-        'work',
-        description='Work for money.',
-        guild_only=True,
-        hybrid=True
-    )
+    @command("work", description="Work for money.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.WORK_COODLWON.value, commands.BucketType.member)
     async def work(self, ctx: Context) -> None:
         """Work for money.
@@ -346,14 +308,9 @@ class Games(Cog):
         assert balance is not None
         amount = round(random.randint(Payouts.WORK_PAYOUT_MIN.value, Payouts.WORK_PAYOUT_MAX.value))
         await balance.add(cash=amount)
-        await ctx.send_success(random.choice(WORKING_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
+        await ctx.send_success(random.choice(WORKING_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**"))
 
-    @command(
-        'crime',
-        description='Commit a crime for money. Higher risk, higher reward.',
-        guild_only=True,
-        hybrid=True
-    )
+    @command("crime", description="Commit a crime for money. Higher risk, higher reward.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
     async def crime(self, ctx: Context) -> None:
         """Commit a crime for money.
@@ -372,20 +329,16 @@ class Games(Cog):
         if rate > Payouts.CRIME_FAIL_RATE.value:
             await balance.add(cash=amount)
             await ctx.send_success(
-                random.choice(SUCCESSFULL_CRIME_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
+                random.choice(SUCCESSFULL_CRIME_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+            )
         else:
             amount = round(random.uniform(Payouts.CRIME_FINE_MIN.value, Payouts.CRIME_FINE_MAX.value) * amount)
             await balance.remove(cash=amount)
             await ctx.send_error(
-                random.choice(FAILED_CRIME_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
+                random.choice(FAILED_CRIME_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+            )
 
-    @command(
-        'slut',
-        description='Whip it out, for a bit of cash. ;) (NSFW)',
-        nsfw=True,
-        guild_only=True,
-        hybrid=True
-    )
+    @command("slut", description="Whip it out, for a bit of cash. ;) (NSFW)", nsfw=True, guild_only=True, hybrid=True)
     @cooldown(1, Payouts.SLUT_COODLWON.value, commands.BucketType.member)
     async def slut(self, ctx: Context) -> None:
         """Do some naughty work for cash. (NSFW)
@@ -404,21 +357,18 @@ class Games(Cog):
         if rate > Payouts.SLUT_FAIL_RATE.value:
             await balance.add(cash=amount)
             await ctx.send_success(
-                random.choice(SUCCESSFULL_SLUT_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
+                random.choice(SUCCESSFULL_SLUT_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+            )
         else:
             amount = round(random.uniform(Payouts.SLUT_FINE_MIN.value, Payouts.SLUT_FINE_MAX.value) * amount)
             await balance.remove(cash=amount)
             await ctx.send_error(
-                random.choice(FAILED_SLUT_RESPONSES).format(coins=f'{Emojis.Economy.cash} **{fnumb(amount)}**'))
+                random.choice(FAILED_SLUT_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
+            )
 
-    @command(
-        'rob',
-        description='Attempt to rob another user.',
-        guild_only=True,
-        hybrid=True
-    )
+    @command("rob", description="Attempt to rob another user.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
-    @describe(user='The user you want to rob.')
+    @describe(user="The user you want to rob.")
     async def rob(self, ctx: Context, user: discord.Member) -> None:
         """Rob another Users cash.
 
@@ -433,13 +383,13 @@ class Games(Cog):
         if user.bot:
             if ctx.command is not None:
                 ctx.command.reset_cooldown(ctx)
-            await ctx.send_error('Cannot rob a bot.')
+            await ctx.send_error("Cannot rob a bot.")
             return
 
         if user == ctx.author:
             if ctx.command is not None:
                 ctx.command.reset_cooldown(ctx)
-            await ctx.send_error('You cannot rob yourself.')
+            await ctx.send_error("You cannot rob yourself.")
             return
 
         assert ctx.guild is not None
@@ -451,7 +401,7 @@ class Games(Cog):
         if robbed_balance.cash == 0:
             if ctx.command is not None:
                 ctx.command.reset_cooldown(ctx)
-            await ctx.send_error(f'**{user.display_name}** has no cash to rob.')
+            await ctx.send_error(f"**{user.display_name}** has no cash to rob.")
             return
 
         ROB_FAIL_PROBABILLITY = robber_balance.total / (robbed_balance.cash + robbed_balance.total)
@@ -463,37 +413,30 @@ class Games(Cog):
             await robber_balance.add(cash=amount)
             await robbed_balance.remove(cash=amount)
             await ctx.send_success(
-                f'You were able to rob {Emojis.Economy.cash} **{fnumb(amount)}** from **{user.display_name}**.')
+                f"You were able to rob {Emojis.Economy.cash} **{fnumb(amount)}** from **{user.display_name}**."
+            )
         else:
             amount = round(random.uniform(Payouts.CRIME_FINE_MIN.value, Payouts.CRIME_FINE_MAX.value) * amount)
             await robber_balance.remove(cash=amount)
             await ctx.send_error(
-                f'You failed to rob **{user.display_name}** and lost {Emojis.Economy.cash} **{fnumb(amount)}**.')
+                f"You failed to rob **{user.display_name}** and lost {Emojis.Economy.cash} **{fnumb(amount)}**."
+            )
 
-    @command(
-        'roulette',
-        description='Play a game of roulette.',
-        guild_only=True,
-        hybrid=True
-    )
+    @command("roulette", description="Play a game of roulette.", guild_only=True, hybrid=True)
     @app_commands.choices(space=[])  # Do this because of the "Space" Class Enum
     @app_commands.autocomplete(space=roulette_space_autocomplete)
-    @describe(
-        bet='The amount of coins to bet.',
-        space='The space to bet on.'
-    )
+    @describe(bet="The amount of coins to bet.", space="The space to bet on.")
     async def roulette(self, ctx: Context, bet: int, space: Space) -> None:
         """Play a game of roulette.
 
         You can bet on a single space or a range of VALID_SPACES.
         """
         if bet < 0:
-            await ctx.send_error('You cannot bet negative coins.')
+            await ctx.send_error("You cannot bet negative coins.")
             return
 
         if bet < MinimumBet.ROULETTE.value:
-            await ctx.send_error(
-                f'You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.')
+            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.")
             return
 
         assert ctx.guild is not None
@@ -502,8 +445,9 @@ class Games(Cog):
 
         if bet > balance.cash:
             await ctx.send_error(
-                f'You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.')
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
             return
 
         await balance.remove(cash=bet)
@@ -512,43 +456,35 @@ class Games(Cog):
             roulette = self.roulette_tables[ctx.channel.id]
 
             if not roulette.open:
-                await ctx.send_error('**Bets are closed.** *Rien ne va plus*')
+                await ctx.send_error("**Bets are closed.** *Rien ne va plus*")
                 return
 
-            roulette.place(roulette_ui.Bet(cast('discord.Member', ctx.author), space, bet))
+            roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
             await ctx.maybe_edit(roulette.message, embed=roulette.build_embed())
         else:
             roulette = roulette_ui.Table(ctx)
-            roulette.place(roulette_ui.Bet(cast('discord.Member', ctx.author), space, bet))
+            roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
 
             message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
 
             if not message:
-                await ctx.send_error('The roulette game message has not been found.')
+                await ctx.send_error("The roulette game message has not been found.")
                 return
 
             roulette.message = message
             self.roulette_tables[ctx.channel.id] = roulette
 
             await self.bot.timers.create(
-                datetime.timedelta(seconds=60),
-                'roulette',
-                channel_id=ctx.channel.id,
-                message_id=message.id
+                datetime.timedelta(seconds=60), "roulette", channel_id=ctx.channel.id, message_id=message.id
             )
         await ctx.message.add_reaction(Emojis.success)
 
-    @command(
-        'poker',
-        description='Play a game of Texas Hold\'em Poker.',
-        guild_only=True,
-        hybrid=True
-    )
-    @describe(stack='The amount of coins to play with.')
+    @command("poker", description="Play a game of Texas Hold'em Poker.", guild_only=True, hybrid=True)
+    @describe(stack="The amount of coins to play with.")
     async def poker(self, ctx: Context, stack: int) -> None:
         """Play a game of Texas Hold'em Poker."""
         if stack < 0:
-            await ctx.send_error('You cannot bet negative coins.')
+            await ctx.send_error("You cannot bet negative coins.")
             return
 
         assert ctx.guild is not None
@@ -557,8 +493,9 @@ class Games(Cog):
 
         if stack > balance.cash:
             await ctx.send_error(
-                f'You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.')
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
             return
 
         await balance.remove(cash=stack)
@@ -566,30 +503,31 @@ class Games(Cog):
         if ctx.channel.id in self.poker_tables:
             poker = self.poker_tables[ctx.channel.id]
             if len(poker.players) == 4:
-                await ctx.send_error('The table is full.')
+                await ctx.send_error("The table is full.")
                 return
 
             if poker.state != poker_bridge.TableState.STOPPED:
                 await ctx.send_error(
-                    'The game is already running.\n'
-                    'Please wait for the next round or open a new game in a different channel.')
+                    "The game is already running.\nPlease wait for the next round or open a new game in a different channel."
+                )
                 return
 
             if any(player.member == ctx.author for player in poker.players):
-                await ctx.send_error('You are already playing.')
+                await ctx.send_error("You are already playing.")
                 return
 
             if stack < poker.min_buy_in or stack > poker.max_buy_in:
                 await ctx.send_error(
-                    f'The buy-in range for this table is {Emojis.Economy.cash} **{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**.')
+                    f"The buy-in range for this table is {Emojis.Economy.cash} **{fnumb(poker.min_buy_in)}** - **{fnumb(poker.max_buy_in)}**."
+                )
                 return
 
-            poker.add_player(cast('discord.Member', ctx.author), stack)
+            poker.add_player(cast("discord.Member", ctx.author), stack)
             poker.view.update_buttons()
             await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
         else:
             poker = poker_bridge.PokerSession(self, ctx, first_buy_in=stack)
-            poker.add_player(cast('discord.Member', ctx.author), stack)
+            poker.add_player(cast("discord.Member", ctx.author), stack)
             poker.view.update_buttons()
 
             message = await ctx.send(embed=poker.build_embed(), view=poker.view)
@@ -599,8 +537,8 @@ class Games(Cog):
     @Cog.listener()
     async def on_roulette_timer_complete(self, timer: Timer) -> None:
         """Handle the completion of a roulette timer."""
-        channel_id = timer['channel_id']
-        message_id = timer['message_id']
+        channel_id = timer["channel_id"]
+        message_id = timer["message_id"]
 
         if channel_id not in self.roulette_tables:
             return
@@ -620,14 +558,15 @@ class Games(Cog):
                     if balance is not None:
                         await balance.add(cash=bet.amount)
                 # give people their money back
-                await channel.send(f'{Emojis.warning} The roulette game message has not been found. *Returning bets.*')
+                await channel.send(f"{Emojis.warning} The roulette game message has not been found. *Returning bets.*")
                 self.roulette_tables.pop(channel_id)
                 return
 
+        assert roulette.message is not None
         # Note this is just for aesthetics
         await roulette.message.edit(
-            embed=roulette.build_embed(image_url='https://klappstuhl.me/gallery/KdKof.gif'),
-            view=roulette.view)
+            embed=roulette.build_embed(image_url="https://klappstuhl.me/gallery/KdKof.gif"), view=roulette.view
+        )
         await asyncio.sleep(5)
 
         result = roulette_engine.spin()

@@ -43,15 +43,15 @@ if TYPE_CHECKING:
 
     from app.core import Bot
 
-    DatabaseT = TypeVar('DatabaseT', bound='_Database')
+    DatabaseT = TypeVar("DatabaseT", bound="_Database")
 
 __all__ = (
-    'Balance',
-    'BaseRecord',
-    'Database',
-    'Gatekeeper',
-    'GuildConfig',
-    'UserConfig',
+    "Balance",
+    "BaseRecord",
+    "Database",
+    "Gatekeeper",
+    "GuildConfig",
+    "UserConfig",
 )
 
 
@@ -68,7 +68,7 @@ class _Database:
         The event loop to use for the database operations.
     """
 
-    __slots__ = ('_connect_task', '_internal_pool', 'bot', 'loop')
+    __slots__ = ("_connect_task", "_internal_pool", "bot", "loop")
 
     if TYPE_CHECKING:
         loop: asyncio.AbstractEventLoop
@@ -88,8 +88,8 @@ class _Database:
                 migrator = Migrations()
                 await migrator.upgrade(conn)  # type: ignore[arg-type]
         except (asyncpg.PostgresError, OSError, TimeoutError) as e:
-            logging.error('Failed to connect to the PostgreSQL database: %s', e)
-            logging.critical('Shutting down the bot due to database connection failure.')
+            logging.error("Failed to connect to the PostgreSQL database: %s", e)
+            logging.critical("Shutting down the bot due to database connection failure.")
             await self.bot.close()
 
     @classmethod
@@ -99,6 +99,7 @@ class _Database:
         This creates a connection pool to the PostgreSQL database using the asyncpg library.
         This also ensures the support for JSONB data type by encoding and decoding it.
         """
+
         def _encode_jsonb(value: Any) -> str:
             return json.dumps(value)
 
@@ -107,11 +108,11 @@ class _Database:
 
         async def init(con: asyncpg.Connection) -> None:
             await con.set_type_codec(
-                'jsonb',
-                schema='pg_catalog',
+                "jsonb",
+                schema="pg_catalog",
                 encoder=_encode_jsonb,
                 decoder=_decode_jsonb,
-                format='text',
+                format="text",
             )
 
         return await asyncpg.create_pool(  # type: ignore
@@ -155,7 +156,6 @@ class _Database:
 
 
 class Database(_Database):
-
     guilds: GuildsRepository
     users: UsersRepository
     polls: PollsRepository
@@ -349,14 +349,14 @@ class BaseRecord(ABC):
         __record: asyncpg.Record
         __ignore_record__: bool
 
-    __slots__ = ('__record',)
+    __slots__ = ("__record",)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Initializes the subclass."""
         if cls is BaseRecord:
-            raise TypeError('Class `BaseRecord` must be initialized by subclassing it.')
+            raise TypeError("Class `BaseRecord` must be initialized by subclassing it.")
 
-        cls.__ignore_record__ = kwargs.pop('ignore_record', False)
+        cls.__ignore_record__ = kwargs.pop("ignore_record", False)
         super().__init_subclass__(**kwargs)
 
     def __init__(self, **kwargs: dict[str, Any] | object | asyncpg.Record) -> None:
@@ -373,14 +373,13 @@ class BaseRecord(ABC):
             If a subclass of `BaseRecord` is instantiated without providing a `record` keyword argument, and the
             class does not specify to ignore the record.
         """
-        self.__record = record = kwargs.pop('record', None)  # type: ignore
+        self.__record = record = kwargs.pop("record", None)  # type: ignore
         if record is None and not self.__class__.__ignore_record__:
-            raise TypeError('Subclasses of `BaseRecord` must provide a `record` keyword-only argument.')
+            raise TypeError("Subclasses of `BaseRecord` must provide a `record` keyword-only argument.")
 
         if record:
             if not isinstance(record, (asyncpg.Record, dict)):  # dict-like is okay too
-                raise TypeError(
-                    f'The record must be an instance of `asyncpg.Record`, not `{record.__class__.__name__}`.')
+                raise TypeError(f"The record must be an instance of `asyncpg.Record`, not `{record.__class__.__name__}`.")
 
             for k, v in record.items():
                 self._set_item_safe(k, v)
@@ -397,11 +396,11 @@ class BaseRecord(ABC):
             setattr(self, key, value)
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Self:
         """|coro|
 
@@ -522,26 +521,26 @@ class BaseRecord(ABC):
     @classmethod
     def __subclasshook__(cls, subclass: type[Any]) -> bool:
         """Returns whether the subclass has a record attribute."""
-        return hasattr(subclass, '__record')
+        return hasattr(subclass, "__record")
 
     def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """An iterator over the record's keys (excluding private ones)."""
-        return iter(k for k in self.__record if not k.startswith('_'))
+        return iter(k for k in self.__record if not k.startswith("_"))
 
     def __repr__(self) -> str:
-        args = [f'{k}={v!r}' for k, v in (self.__record.items() if self.__record else self.__dict__.items())]
-        return '<{}.{}({})>'.format(self.__class__.__module__, self.__class__.__name__, ', '.join(args))
+        args = [f"{k}={v!r}" for k, v in (self.__record.items() if self.__record else self.__dict__.items())]
+        return "<{}.{}({})>".format(self.__class__.__module__, self.__class__.__name__, ", ".join(args))
 
     def __eq__(self, other: object) -> bool:
         """Returns whether the items base record is equal to the other item's base record."""
         if isinstance(other, self.__class__):
-            return getattr(self, '__record', None) == getattr(other, '__record', None)
+            return getattr(self, "__record", None) == getattr(other, "__record", None)
         return False
 
     def __getitem__(self, item: str) -> Any:
         """Returns the value of the item's record."""
         if not self.__record:
-            raise TypeError('Cannot get item from unresolved `BaseRecord` class without a record.')
+            raise TypeError("Cannot get item from unresolved `BaseRecord` class without a record.")
         return self.__record[item]
 
     def __setitem__(self, item: str, value: Any) -> None:
@@ -665,45 +664,45 @@ class GuildConfig(BaseRecord):
     linked_automod_rules: set[str]
 
     __slots__ = (
-        '_cs_alert_webhook',
-        '_cs_audit_log_webhook',
-        'alert_channel_id',
-        'alert_webhook_url',
-        'audit_log_channel_id',
-        'audit_log_flags',
-        'audit_log_webhook_url',
-        'bot',
-        'flags',
-        'id',
-        'linked_automod_rules',
-        'mention_count',
-        'music_panel_channel_id',
-        'music_panel_message_id',
-        'mute_role_id',
-        'muted_members',
-        'poll_channel_id',
-        'poll_ping_role_id',
-        'poll_reason_channel_id',
-        'prefixes',
-        'safe_automod_entity_ids',
-        'use_music_panel',
+        "_cs_alert_webhook",
+        "_cs_audit_log_webhook",
+        "alert_channel_id",
+        "alert_webhook_url",
+        "audit_log_channel_id",
+        "audit_log_flags",
+        "audit_log_webhook_url",
+        "bot",
+        "flags",
+        "id",
+        "linked_automod_rules",
+        "mention_count",
+        "music_panel_channel_id",
+        "music_panel_message_id",
+        "mute_role_id",
+        "muted_members",
+        "poll_channel_id",
+        "poll_ping_role_id",
+        "poll_reason_channel_id",
+        "prefixes",
+        "safe_automod_entity_ids",
+        "use_music_panel",
     )
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        self.flags = self.AutoModFlags(self.flags or 0)   # type: ignore
+        self.flags = self.AutoModFlags(self.flags or 0)  # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])
         self.muted_members = set(self.muted_members or [])
         self.prefixes = set(self.prefixes or [])
         self.linked_automod_rules = set(self.linked_automod_rules or [])
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Self:
         """|coro|
 
@@ -720,7 +719,7 @@ class GuildConfig(BaseRecord):
         """
         query = f"""
             UPDATE guild_config
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
+            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
             WHERE id = $1
             RETURNING *;
         """
@@ -757,14 +756,14 @@ class GuildConfig(BaseRecord):
             return guild.get_channel(self.music_panel_channel_id)  # type: ignore[return-value]
         return None
 
-    @discord.utils.cached_slot_property('_cs_audit_log_webhook')
+    @discord.utils.cached_slot_property("_cs_audit_log_webhook")
     def audit_log_webhook(self) -> discord.Webhook | None:
         """:class:`discord.Webhook`: The audit log webhook."""
         if self.audit_log_webhook_url is None:
             return None
         return discord.Webhook.from_url(self.audit_log_webhook_url, session=self.bot.session, client=self.bot)
 
-    @discord.utils.cached_slot_property('_cs_alert_webhook')
+    @discord.utils.cached_slot_property("_cs_alert_webhook")
     def alert_webhook(self) -> discord.Webhook | None:
         """:class:`discord.Webhook`: The alert webhook."""
         if self.alert_webhook_url is None:
@@ -825,9 +824,7 @@ class GuildConfig(BaseRecord):
         if self.mute_role_id:
             await member.add_roles(discord.Object(id=self.mute_role_id), reason=reason)
 
-    async def send_alert(
-            self, content: str = MISSING, *, force: bool = False, **kwargs: Any
-    ) -> discord.Message | None:
+    async def send_alert(self, content: str = MISSING, *, force: bool = False, **kwargs: Any) -> discord.Message | None:
         """|coro|
 
         Sends an alert to the alert webhook if enabled or the system channel
@@ -847,8 +844,8 @@ class GuildConfig(BaseRecord):
         if not alerts_available and not force:
             return
 
-        if content is not MISSING and not content.startswith('<:'):
-            content = f'{Emojis.info} {content}'
+        if content is not MISSING and not content.startswith("<:"):
+            content = f"{Emojis.info} {content}"
 
         try:
             if not alerts_available and force:
@@ -865,21 +862,20 @@ class GuildConfig(BaseRecord):
 
 
 class UserConfig(BaseRecord):
-
     bot: Bot
     id: int
     timezone: str
 
     track_presence: bool
 
-    __slots__ = ('bot', 'id', 'timezone', 'track_presence')
+    __slots__ = ("bot", "id", "timezone", "track_presence")
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Self:
         """|coro|
 
@@ -896,7 +892,7 @@ class UserConfig(BaseRecord):
         """
         query = f"""
             UPDATE user_settings
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
+            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
             WHERE id = $1
             RETURNING *;
         """
@@ -966,11 +962,12 @@ class Gatekeeper(BaseRecord):
 
     class GatekeeperRoleState(enum.Enum):
         """The state of a member in the gatekeeper."""
-        added = 'added'
-        pending_add = 'pending_add'
-        pending_remove = 'pending_remove'
 
-    log = logging.getLogger('mod')
+        added = "added"
+        pending_add = "pending_add"
+        pending_remove = "pending_remove"
+
+    log = logging.getLogger("mod")
 
     bot: Bot
     id: int
@@ -979,34 +976,34 @@ class Gatekeeper(BaseRecord):
     role_id: int | None
     starter_role_id: int | None
     message_id: int | None
-    bypass_action: Literal['ban', 'kick']
+    bypass_action: Literal["ban", "kick"]
     rate: tuple[int, int] | str | None
 
     __slots__ = (
-        '__members',
-        '__stop_event',
-        'bot',
-        'bypass_action',
-        'channel_id',
-        'id',
-        'members',
-        'message_id',
-        'queue',
-        'rate',
-        'role_id',
-        'started_at',
-        'starter_role_id',
-        'task',
+        "__members",
+        "__stop_event",
+        "bot",
+        "bypass_action",
+        "channel_id",
+        "id",
+        "members",
+        "message_id",
+        "queue",
+        "rate",
+        "role_id",
+        "started_at",
+        "starter_role_id",
+        "task",
     )
 
     def __init__(self, members: list[Any], **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.__members = members
-        self.members: set[int] = {r['user_id'] for r in members if r['state'] == 'added'}
+        self.members: set[int] = {r["user_id"] for r in members if r["state"] == "added"}
 
         if self.rate is not None:
             assert isinstance(self.rate, str)
-            rate, per = self.rate.split('/')
+            rate, per = self.rate.split("/")
             self.rate = (int(rate), int(per))
 
         # This event is used to stop the task because we can't
@@ -1015,47 +1012,49 @@ class Gatekeeper(BaseRecord):
         self.task: asyncio.Task = asyncio.create_task(self.role_loop())
         self.task._log_destroy_pending = False  # type: ignore[attr-defined]
 
-        self.log.debug('Gatekeeper %r has started.', self.id)
+        self.log.debug("Gatekeeper %r has started.", self.id)
         if self.started_at is not None:
             self.started_at = self.started_at.replace(tzinfo=datetime.UTC)
 
-        self.queue: CancellableQueue[int, tuple[int, Gatekeeper.GatekeeperRoleState]] = CancellableQueue(hook_check=self.__stop_event.is_set)
+        self.queue: CancellableQueue[int, tuple[int, Gatekeeper.GatekeeperRoleState]] = CancellableQueue(
+            hook_check=self.__stop_event.is_set
+        )
 
         for member in members:
-            state = self.GatekeeperRoleState(member['state'])
-            member_id = member['user_id']
+            state = self.GatekeeperRoleState(member["state"])
+            member_id = member["user_id"]
             if state is not self.GatekeeperRoleState.added:
                 self.queue.put(member_id, (member_id, state))
 
     def __repr__(self) -> str:
         attrs = [
-            ('id', self.id),
-            ('members', len(self.members)),
-            ('started_at', self.started_at),
-            ('role_id', self.role_id),
-            ('starter_role_id', self.starter_role_id),
-            ('channel_id', self.channel_id),
-            ('message_id', self.message_id),
-            ('bypass_action', self.bypass_action),
-            ('rate', self.rate),
+            ("id", self.id),
+            ("members", len(self.members)),
+            ("started_at", self.started_at),
+            ("role_id", self.role_id),
+            ("starter_role_id", self.starter_role_id),
+            ("channel_id", self.channel_id),
+            ("message_id", self.message_id),
+            ("bypass_action", self.bypass_action),
+            ("rate", self.rate),
         ]
-        joined = ' '.join('{}={!r}'.format(*t) for t in attrs)
-        return f'<{self.__class__.__name__} {joined}>'
+        joined = " ".join("{}={!r}".format(*t) for t in attrs)
+        return f"<{self.__class__.__name__} {joined}>"
 
     @property
     def status(self) -> str:
         """The status of the gatekeeper."""
         headers = [
-            ('Blocked Members', f'**{len(self.members)}**'),
-            ('Enabled', discord.utils.format_dt(self.started_at) if self.started_at is not None else 'False'),
-            ('Role', self.role.mention if self.role is not None else 'N/A'),
-            ('Starter Role', self.starter_role.mention if self.starter_role is not None else 'N/A'),
-            ('Channel', self.channel.mention if self.channel is not None else 'N/A'),
-            ('Message', self.message.jump_url if self.message is not None else 'N/A'),
-            ('Bypass Action', self.bypass_action.title()),
-            ('Auto Trigger', f'{self.rate[0]}/{self.rate[1]}s' if self.rate is not None else 'N/A'),
+            ("Blocked Members", f"**{len(self.members)}**"),
+            ("Enabled", discord.utils.format_dt(self.started_at) if self.started_at is not None else "False"),
+            ("Role", self.role.mention if self.role is not None else "N/A"),
+            ("Starter Role", self.starter_role.mention if self.starter_role is not None else "N/A"),
+            ("Channel", self.channel.mention if self.channel is not None else "N/A"),
+            ("Message", self.message.jump_url if self.message is not None else "N/A"),
+            ("Bypass Action", self.bypass_action.title()),
+            ("Auto Trigger", f"{self.rate[0]}/{self.rate[1]}s" if self.rate is not None else "N/A"),
         ]
-        return '\n'.join(f'{header}: {value}' for header, value in headers)
+        return "\n".join(f"{header}: {value}" for header, value in headers)
 
     def cancel_task(self) -> None:
         """Cancels the task."""
@@ -1068,11 +1067,11 @@ class Gatekeeper(BaseRecord):
             self.__stop_event.clear()
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> Self:
         """|coro|
 
@@ -1089,7 +1088,7 @@ class Gatekeeper(BaseRecord):
         """
         query = f"""
             UPDATE guild_gatekeeper
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
+            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
             WHERE id = $1
             RETURNING *;
         """
@@ -1098,15 +1097,15 @@ class Gatekeeper(BaseRecord):
         return self.__class__(self.__members, bot=self.bot, record=record)  # type: ignore[return-value]
 
     async def edit(
-            self,
-            *,
-            started_at: datetime.datetime | None = MISSING,
-            role_id: int | None = MISSING,
-            starter_role_id: int | None = MISSING,
-            channel_id: int | None = MISSING,
-            message_id: int | None = MISSING,
-            bypass_action: Literal['ban', 'kick'] = MISSING,
-            rate: tuple[int, int] | None = MISSING,
+        self,
+        *,
+        started_at: datetime.datetime | None = MISSING,
+        role_id: int | None = MISSING,
+        starter_role_id: int | None = MISSING,
+        channel_id: int | None = MISSING,
+        message_id: int | None = MISSING,
+        bypass_action: Literal["ban", "kick"] = MISSING,
+        rate: tuple[int, int] | None = MISSING,
     ) -> None:
         """|coro|
 
@@ -1135,19 +1134,19 @@ class Gatekeeper(BaseRecord):
             started_at = None
 
         if started_at is not MISSING:
-            form['started_at'] = started_at
+            form["started_at"] = started_at
         if role_id is not MISSING:
-            form['role_id'] = role_id
+            form["role_id"] = role_id
         if starter_role_id is not MISSING:
-            form['starter_role_id'] = starter_role_id
+            form["starter_role_id"] = starter_role_id
         if channel_id is not MISSING:
-            form['channel_id'] = channel_id
+            form["channel_id"] = channel_id
         if message_id is not MISSING:
-            form['message_id'] = message_id
+            form["message_id"] = message_id
         if bypass_action is not MISSING:
-            form['bypass_action'] = bypass_action
+            form["bypass_action"] = bypass_action
         if rate is not MISSING:
-            form['rate'] = '/'.join(map(str, rate)) if rate is not None else None
+            form["rate"] = "/".join(map(str, rate)) if rate is not None else None
 
         await self.update(**form)
 
@@ -1187,17 +1186,16 @@ class Gatekeeper(BaseRecord):
 
             try:
                 if action is self.GatekeeperRoleState.pending_remove:
-                    await self.bot.http.remove_role(
-                        self.id, member_id, role_id, reason='Completed Gatekeeper verification')
+                    await self.bot.http.remove_role(self.id, member_id, role_id, reason="Completed Gatekeeper verification")
                     query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
 
                     if self.starter_role:
                         await self.bot.http.add_role(
-                            self.id, member_id, self.starter_role_id, reason='Completed Gatekeeper verification')  # type: ignore[arg-type]
+                            self.id, member_id, self.starter_role_id, reason="Completed Gatekeeper verification"
+                        )  # type: ignore[arg-type]
                 elif action is self.GatekeeperRoleState.pending_add:
-                    await self.bot.http.add_role(
-                        self.id, member_id, role_id, reason='Started Gatekeeper verification')
+                    await self.bot.http.add_role(self.id, member_id, role_id, reason="Started Gatekeeper verification")
                     query = "UPDATE guild_gatekeeper_members SET state = 'added' WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
             except discord.DiscordServerError:
@@ -1209,18 +1207,18 @@ class Gatekeeper(BaseRecord):
                     # Unknown role, disable the gatekeeper.
                     config = await self.bot.db.get_guild_config(self.id)  # type: ignore
                     await config.send_alert(
-                        'A Role you\'ve set up for the gatekeeper was not found, please review! Disabling the gatekeeper.'
+                        "A Role you've set up for the gatekeeper was not found, please review! Disabling the gatekeeper."
                     )
                     needs_migration = {}
                     if self.role is None:
-                        needs_migration['role_id'] = None
+                        needs_migration["role_id"] = None
                     if self.starter_role is None:
-                        needs_migration['starter_role_id'] = None
+                        needs_migration["starter_role_id"] = None
                     await self.edit(started_at=None, **needs_migration)
                     break
                 continue
             except Exception:
-                self.log.exception('[Gatekeeper] An exception happened in the role loop of guild ID %d', self.id)
+                self.log.exception("[Gatekeeper] An exception happened in the role loop of guild ID %d", self.id)
                 continue
 
     async def cleanup_loop(self, members: set[int]) -> None:
@@ -1249,7 +1247,8 @@ class Gatekeeper(BaseRecord):
                 continue
             except Exception as exc:
                 self.log.exception(
-                    '[Gatekeeper] An exception happened in the role cleanup loop of guild ID %d: %r', self.id, exc)
+                    "[Gatekeeper] An exception happened in the role cleanup loop of guild ID %d: %r", self.id, exc
+                )
 
     @property
     def pending_members(self) -> int:

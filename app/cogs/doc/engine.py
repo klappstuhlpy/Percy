@@ -35,34 +35,29 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_WHITESPACE_AFTER_NEWLINES_RE = re.compile(r'(?<=\n\n)(\s+)')
-_PARAMETERS_RE = re.compile(r'\((.+)\)')
+_WHITESPACE_AFTER_NEWLINES_RE = re.compile(r"(?<=\n\n)(\s+)")
+_PARAMETERS_RE = re.compile(r"\((.+)\)")
 
 _NO_SIGNATURE_GROUPS = {
-    'envvar',
-    'setting',
-    'tempaltefilter',
-    'templatetag',
-    'term',
+    "envvar",
+    "setting",
+    "tempaltefilter",
+    "templatetag",
+    "term",
 }
-_HEADING_DESC_GROUPS = {
-    'dt',
-    'dl'
-}
-_NO_FIELD_GROUPS = {
-    'Parameters'
-}
+_HEADING_DESC_GROUPS = {"dt", "dl"}
+_NO_FIELD_GROUPS = {"Parameters"}
 _EMBED_CODE_BLOCK_LINE_LENGTH = 61
 _MAX_SIGNATURES_LENGTH = (_EMBED_CODE_BLOCK_LINE_LENGTH + 8) * MAX_SIGNATURE_AMOUNT
 _MAX_DESCRIPTION_LENGTH = 4096 - _MAX_SIGNATURES_LENGTH
-_TRUNCATE_STRIP_CHARACTERS = '!?:;.' + string.whitespace
+_TRUNCATE_STRIP_CHARACTERS = "!?:;." + string.whitespace
 
-BracketPair = namedtuple('BracketPair', ['opening_bracket', 'closing_bracket'])
+BracketPair = namedtuple("BracketPair", ["opening_bracket", "closing_bracket"])
 _BRACKET_PAIRS = {
-    '{': BracketPair('{', '}'),
-    '(': BracketPair('(', ')'),
-    '[': BracketPair('[', ']'),
-    '<': BracketPair('<', '>'),
+    "{": BracketPair("{", "}"),
+    "(": BracketPair("(", ")"),
+    "[": BracketPair("[", "]"),
+    "<": BracketPair("<", ">"),
 }
 
 
@@ -78,13 +73,13 @@ def _split_parameters(parameters_string: str) -> Iterator[str]:
 
     enumerated_string = enumerate(parameters_string)
     for index, character in enumerated_string:
-        if character in {''', '''}:
+        if character in {""", """}:
             quote_character = character
             preceding_backslashes = 0
             for _, character in enumerated_string:
                 if character == quote_character and not preceding_backslashes % 2:
                     break
-                if character == '\\':
+                if character == "\\":
                     preceding_backslashes += 1
                 else:
                     preceding_backslashes = 0
@@ -92,7 +87,7 @@ def _split_parameters(parameters_string: str) -> Iterator[str]:
         elif current_search is None:
             if (current_search := _BRACKET_PAIRS.get(character)) is not None:
                 depth = 1
-            elif character == ',':
+            elif character == ",":
                 yield parameters_string[last_split:index]
                 last_split = index + 1
 
@@ -125,7 +120,7 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
         signature = signature.strip()
         if len(signature) > max_signature_length:
             if (parameters_match := _PARAMETERS_RE.search(signature)) is None:
-                formatted_signatures.append(textwrap.shorten(signature, max_signature_length, placeholder='...'))
+                formatted_signatures.append(textwrap.shorten(signature, max_signature_length, placeholder="..."))
                 continue
 
             truncated_signature = []
@@ -136,8 +131,8 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
                     truncated_signature.append(parameter)
                     running_length += len(parameter) + 1
                 else:
-                    truncated_signature.append(' ...')
-                    formatted_signatures.append(signature.replace(parameters_string, ','.join(truncated_signature)))
+                    truncated_signature.append(" ...")
+                    formatted_signatures.append(signature.replace(parameters_string, ",".join(truncated_signature)))
                     break
         else:
             formatted_signatures.append(signature)
@@ -183,7 +178,7 @@ def _get_truncated_description(
     if not markdown_element_ends:
         return ""
 
-    newline_truncate_index = find_nth_occurrence(result, '\n', max_lines)
+    newline_truncate_index = find_nth_occurrence(result, "\n", max_lines)
     if newline_truncate_index is not None and newline_truncate_index < _MAX_DESCRIPTION_LENGTH - 3:
         truncate_index = newline_truncate_index
     else:
@@ -195,9 +190,9 @@ def _get_truncated_description(
     possible_truncation_indices = [cut for cut in markdown_element_ends if cut < truncate_index]
     if not possible_truncation_indices:
         force_truncated = result[:truncate_index]
-        if force_truncated.count('```') % 2:
-            force_truncated = force_truncated[:force_truncated.rfind('```')]
-        for string_ in ('\n\n', '\n', '. ', ', ', ',', ' '):
+        if force_truncated.count("```") % 2:
+            force_truncated = force_truncated[: force_truncated.rfind("```")]
+        for string_ in ("\n\n", "\n", ". ", ", ", ",", " "):
             cutoff = force_truncated.rfind(string_)
 
             if cutoff != -1:
@@ -210,38 +205,30 @@ def _get_truncated_description(
         markdown_truncate_index = possible_truncation_indices[-1]
         truncated_result = result[:markdown_truncate_index]
 
-    return truncated_result.strip(_TRUNCATE_STRIP_CHARACTERS) + '...'
+    return truncated_result.strip(_TRUNCATE_STRIP_CHARACTERS) + "..."
 
 
-_pagify_description = functools.partial(
-    pagify,
-    page_length=1024,
-    priority=True,
-    delims=['\n', ' ']
-)
+_pagify_description = functools.partial(pagify, page_length=1024, priority=True, delims=["\n", " "])
 
 
 def _create_markdown(
-        signatures: list[str] | None,
-        description: Iterable[Tag],
-        url: str,
-        *,
-        truncate: bool = True,
-        max_length: int = 2700,
-        max_lines: int = 13
+    signatures: list[str] | None,
+    description: Iterable[Tag],
+    url: str,
+    *,
+    truncate: bool = True,
+    max_length: int = 2700,
+    max_lines: int = 13,
 ) -> str:
     """Create a Markdown string with the signatures at the top, and the converted html description below them.
 
     The signatures are wrapped in python codeblocks, separated from the description by a newline.
     The result Markdown string is max 750 rendered characters for the description with signatures at the start.
     """
-    markdown_converter = DocMarkdownConverter(bullets='-', page_url=url)
+    markdown_converter = DocMarkdownConverter(bullets="-", page_url=url)
     if truncate:
         description = _get_truncated_description(
-            description,
-            markdown_converter=markdown_converter,
-            max_length=max_length,
-            max_lines=max_lines
+            description, markdown_converter=markdown_converter, max_length=max_length, max_lines=max_lines
         )
     else:
         iter = copy.copy(description)
@@ -254,8 +241,8 @@ def _create_markdown(
 
     description = _WHITESPACE_AFTER_NEWLINES_RE.sub("", description)
     if signatures is not None:
-        signature = "".join(f'```py\n{signature}```' for signature in _truncate_signatures(signatures))
-        return f'{signature}\n{description}'
+        signature = "".join(f"```py\n{signature}```" for signature in _truncate_signatures(signatures))
+        return f"{signature}\n{description}"
     return description
 
 
@@ -279,15 +266,14 @@ def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None
     else:
         if symbol_data.group not in _NO_SIGNATURE_GROUPS:
             signature = get_signatures(symbol_heading)
-        description = get_dd_description(
-            symbol_heading, attributes=FilterAttributes('div', 'ignore', class_='operations'))
+        description = get_dd_description(symbol_heading, attributes=FilterAttributes("div", "ignore", class_="operations"))
 
-    for description_element in description:
+    for description_element in description:  # type: ignore
         if isinstance(description_element, Tag):
-            for tag in description_element.find_all('a', class_='headerlink'):
+            for tag in description_element.find_all("a", class_="headerlink"):
                 tag.decompose()
 
-    return _create_markdown(signature, description, symbol_data.url).strip()
+    return _create_markdown(signature, description, symbol_data.url).strip()  # type: ignore
 
 
 @executor
@@ -305,35 +291,35 @@ def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, A
 
     fields: dict[str, str] = {}
 
-    operations = get_dd_description(
-        symbol_heading, attributes=FilterAttributes('div', 'return', class_='operations'))
+    operations = get_dd_description(symbol_heading, attributes=FilterAttributes("div", "return", class_="operations"))
     items: list[tuple[str, str]] = []
-    for operation in operations:
+    for operation in operations:  # type: ignore
         if isinstance(operation, Tag):
-            for tag in operation.find_all('a', class_='headerlink'):
+            for tag in operation.find_all("a", class_="headerlink"):
                 tag.decompose()
 
-            if operation.find('dt') and operation.find('dd'):
-                operation_name = operation.find('dt').text.strip()
-                operation_description = operation.find('dd').text.strip()
+            if operation.find("dt") and operation.find("dd"):
+                operation_name = operation.find("dt").text.strip()
+                operation_description = operation.find("dd").text.strip()
                 items.append((operation_name, operation_description))
 
     if items:
-        fields['**Supported Operations**'] = '\n'.join([f'`{name}` - {description}' for name, description in items])
+        fields["**Supported Operations**"] = "\n".join([f"`{name}` - {description}" for name, description in items])
 
-    parent_dd = symbol_heading.find_next('dd')
-    for field in parent_dd.find_all('dl', class_='field-list simple', recursive=False):
-        if field.find('dt') and field.find('dd'):
-            name = field.find('dt').text.strip()
+    parent_dd = symbol_heading.find_next("dd")
+    assert parent_dd is not None
+    for field in parent_dd.find_all("dl", class_="field-list simple", recursive=False):
+        if field.find("dt") and field.find("dd"):
+            name = field.find("dt").text.strip()
 
             if name in _NO_FIELD_GROUPS:
                 continue
 
-            description = _create_markdown(None, field.find_all('dd'), symbol_data.url, truncate=False)
+            description = _create_markdown(None, field.find_all("dd"), symbol_data.url, truncate=False)
 
             if len(description) > 1024:
                 for i, chunk in enumerate(_pagify_description(description)):
-                    fields[name if i == 0 else '\u200b'] = chunk
+                    fields[name if i == 0 else "\u200b"] = chunk
             else:
                 fields[name] = description
 
@@ -409,17 +395,18 @@ class BatchParser:
             self._item_futures[doc_item].user_requested = True
 
             async with self.bot.session.get(doc_item.url, raise_for_status=True) as response:
+
                 @executor
                 def bs4(text: str) -> BeautifulSoup:
-                    return BeautifulSoup(text, 'lxml')
+                    return BeautifulSoup(text, "lxml")
 
-                soup = await bs4(await response.text(encoding='utf8'))
+                soup = await bs4(await response.text(encoding="utf8"))
 
             self.queue.extendleft(QueueItem(item, soup) for item in self._page_doc_items[doc_item.url])
-            log.debug('Added items from %s to the parse queue.', doc_item.url)
+            log.debug("Added items from %s to the parse queue.", doc_item.url)
 
             if self.__task is None:
-                self.__task = self.bot.loop.create_task(self._parse_queue(), name='Doc Item parsing Queue')
+                self.__task = self.bot.loop.create_task(self._parse_queue(), name="Doc Item parsing Queue")
         else:
             self._item_futures[doc_item].user_requested = True
         with suppress(ValueError):
@@ -432,29 +419,29 @@ class BatchParser:
         Parse all items from the queue, setting their result Markdown on the futures and sending them to redis.
         The coroutine will run as long as the queue is not empty, resetting `self.__task` to None when finished.
         """
-        log.debug('Starting queue parsing.')
+        log.debug("Starting queue parsing.")
         try:
             while self.queue:
-                item, soup = self.queue.pop()  # type: DocItem, BeautifulSoup
+                item, soup = self.queue.pop()
                 markdown = None
 
                 if (future := self._item_futures[item]).done():
                     continue
 
                 try:
-                    fields_markdown = await get_field_markdown(soup, item)
-                    markdown = await get_symbol_markdown(soup, item)
+                    fields_markdown = await get_field_markdown(soup, item)  # type: ignore
+                    markdown = await get_symbol_markdown(soup, item)  # type: ignore
                     if markdown is not None:
                         item.resolved_fields = fields_markdown
                         await doc_cache.set(item, markdown)
                 except Exception:
-                    log.exception('Unexpected error when handling %s.', item)
+                    log.exception("Unexpected error when handling %s.", item)
                 future.set_result(markdown)
                 del self._item_futures[item]
                 await asyncio.sleep(0.1)
         finally:
             self.__task = None
-            log.debug('Finished parsing queue.')
+            log.debug("Finished parsing queue.")
 
     def _move_to_front(self, item: QueueItem | DocItem) -> None:
         """Move `item` to the front of the parse queue."""
@@ -463,7 +450,7 @@ class BatchParser:
         del self.queue[item_index]
 
         self.queue.append(queue_item)
-        log.debug('Moved %s to the front of the queue.', item)
+        log.debug("Moved %s to the front of the queue.", item)
 
     def add_item(self, doc_item: DocItem) -> None:
         """Map a DocItem to its page so that the symbol will be parsed once the page is requested."""

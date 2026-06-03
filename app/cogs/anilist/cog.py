@@ -9,8 +9,10 @@ from urllib.parse import urljoin
 import aiohttp
 import discord
 from discord import DiscordException, app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from discord.ext.commands import Range
+from discord.ext.commands.core import Check
 
 from app.core import Bot, Cog, Context, Flags, describe, flag, group
 from app.core.pagination import EmbedPaginator
@@ -47,7 +49,7 @@ class AniListRequestError(DiscordException):
         super().__init__(fmt.format(self.response, error, reason))
 
 
-def is_bearer_valid(reverse: bool = False) -> commands.core.Check:
+def is_bearer_valid(reverse: bool = False) -> Check[Any]:
     """Check if the user has a valid bearer token.
 
     This check will fail if the user does not have a bearer token or if the token has expired.
@@ -83,15 +85,21 @@ class AniList(Cog):
         try:
             data = await self.aniclient.media(page=1, perPage=50, type='ANIME', isAdult=False, sort='TRENDING_DESC')
             for item in data:
-                self._lookup_anime_table.append(item.get('title').get('romaji'))
+                title = item.get('title') or {}
+                romaji = title.get('romaji')
+                if romaji:
+                    self._lookup_anime_table.append(str(romaji))
 
             data = await self.aniclient.media(page=1, perPage=50, type='MANGA', isAdult=False, sort='TRENDING_DESC')
             for item in data:
-                self._lookup_manga_table.append(item.get('title').get('romaji'))
+                title = item.get('title') or {}
+                romaji = title.get('romaji')
+                if romaji:
+                    self._lookup_manga_table.append(str(romaji))
         except (AttributeError, KeyError, aiohttp.ClientError):
             log.exception('Failed to load AniList data')
 
-    async def cog_command_error(self, ctx: Context, error: commands.BadArgument) -> None:
+    async def cog_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CheckFailure):
             await ctx.send_error('You have not linked your AniList account to your Discord account or your Login has expired.\n'
                                  f'Use `{ctx.clean_prefix}anilist link` to link your account.')
@@ -134,7 +142,7 @@ class AniList(Cog):
 
     async def media_prompt_autocomplete(
             self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> list[Choice[str | int | float]]:
         table = self._lookup_anime_table if interaction.command.name == 'anime-search' else self._lookup_manga_table
 
         if not current:
@@ -164,7 +172,8 @@ class AniList(Cog):
         await ctx.defer(ephemeral=True)
 
         if self.access_tokens.get(ctx.author.id):
-            return await ctx.send_error('You have already linked your AniList account to your Discord account.')
+            await ctx.send_error('You have already linked your AniList account to your Discord account.')
+            return
 
         embed = discord.Embed(
             title='AniList Linking',
@@ -226,7 +235,7 @@ class AniList(Cog):
         hybrid=True
     )
     @describe(prompt='The title of the anime to search for')
-    @app_commands.autocomplete(prompt=media_prompt_autocomplete)
+    @app_commands.autocomplete(prompt=media_prompt_autocomplete)  # type: ignore
     async def manga(self, ctx: Context, *, prompt: str, flags: AniListSearchFlags) -> None:
         """Searches for a manga with the given title and displays information about the search results."""
         await ctx.defer(typing=True)

@@ -27,7 +27,7 @@ class HighlightConfig(BaseRecord):
     blocked: set[int]
     lookup: set[str]
 
-    __slots__ = ('blocked', 'bot', 'id', 'location_id', 'lookup', 'user_id')
+    __slots__ = ("blocked", "bot", "id", "location_id", "lookup", "user_id")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -35,11 +35,11 @@ class HighlightConfig(BaseRecord):
         self.lookup = set(self.lookup or [])
 
     async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ) -> HighlightConfig:
         record = await self.bot.db.highlights.update_config(self.id, key, values, connection=connection)
         return self.__class__(bot=self.bot, record=record)
@@ -76,7 +76,7 @@ class MessagedHighlight(NamedTuple):
 class Highlights(Cog):
     """Highlighting allows you to be notified when a specific word or phrase is mentioned in a message."""
 
-    emoji = '<:pen:1322507977583759390>'
+    emoji = "<:pen:1322507977583759390>"
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -89,7 +89,7 @@ class Highlights(Cog):
     async def cog_unload(self) -> None:
         self.bulk_send_loop.stop()
 
-    @lock('Highlight', 'batch', wait=True)
+    @lock("Highlight", "batch", wait=True)
     async def bulk_send(self) -> None:
         if not self._highlight_data_batch:
             return
@@ -108,22 +108,21 @@ class Highlights(Cog):
                 message = latest_triggered.message
 
                 previous = [
-                    f'[{utils.format_dt(m.created_at, "T")}] @{m.author}: {m.content}'
+                    f"[{utils.format_dt(m.created_at, 'T')}] @{m.author}: {m.content}"
                     async for m in message.channel.history(limit=3, before=message)
                 ]
 
                 embed = discord.Embed(
                     title=f'Highlight triggered for "{latest_triggered.trigger}"',
                     description=(
-                            '\n'.join(previous) +
-                            f'\n'
-                            f'[**{utils.format_dt(message.created_at, "T")}**] @{message.author}: {message.content}'
+                        "\n".join(previous) + f"\n"
+                        f"[**{utils.format_dt(message.created_at, 'T')}**] @{message.author}: {message.content}"
                     ),
                     color=helpers.Colour.white(),
-                    timestamp=message.created_at
+                    timestamp=message.created_at,
                 )
-                embed.add_field(name='Destination', value=message.jump_url, inline=False)
-                embed.set_footer(text=f'From {message.guild.name}')  # type: ignore[union-attr]
+                embed.add_field(name="Destination", value=message.jump_url, inline=False)
+                embed.set_footer(text=f"From {message.guild.name}")  # type: ignore[union-attr]
                 await user.send(embed=embed)
 
         self._highlight_data_batch.clear()
@@ -150,7 +149,9 @@ class Highlights(Cog):
         records = await self.bot.db.highlights.get_guild_configs(guild_id)
         return [HighlightConfig(bot=self.bot, record=record) for record in records]
 
-    async def get_highlight_config(self, guild_id: int, user_id: int, /, *, initialize: bool = True) -> HighlightConfig | None:
+    async def get_highlight_config(
+        self, guild_id: int, user_id: int, /, *, initialize: bool = True
+    ) -> HighlightConfig | None:
         """|coro|
 
         Get a user's highlight configuration in a guild.
@@ -176,7 +177,7 @@ class Highlights(Cog):
 
     @staticmethod
     def find_highlight(
-            highlights: list[HighlightConfig], message: discord.Message, /
+        highlights: list[HighlightConfig], message: discord.Message, /
     ) -> Generator[MessagedHighlight, None, None]:
         """|coro|
 
@@ -197,14 +198,14 @@ class Highlights(Cog):
         content = message.clean_content.casefold()
         for highlight in highlights:
             if (
-                    (match := highlight.match(content))
-                    and message.author.id != highlight.user_id
-                    and message.author.id not in highlight.blocked
-                    and message.channel.id not in highlight.blocked
+                (match := highlight.match(content))
+                and message.author.id != highlight.user_id
+                and message.author.id not in highlight.blocked
+                and message.channel.id not in highlight.blocked
             ):
                 yield MessagedHighlight(highlight, message, match)
 
-    @group('highlight', description='Manage highlight related commands.', hybrid=True, guild_only=True)
+    @group("highlight", description="Manage highlight related commands.", hybrid=True, guild_only=True)
     async def highlight(self, ctx: Context) -> None:
         """Manage highlight related commands.
 
@@ -215,121 +216,112 @@ class Highlights(Cog):
         This also works on for messages that have been deleted or edited.
         """
         if not ctx.invoked_subcommand:
-            await ctx.send_help('highlight')
+            await ctx.send_help("highlight")
 
-    @highlight.command('add', aliases=['+'], description='Adds a highlight word or phrase.')
-    @describe(trigger='The word or phrase to highlight. Not case-sensitive.')
+    @highlight.command("add", aliases=["+"], description="Adds a highlight word or phrase.")
+    @describe(trigger="The word or phrase to highlight. Not case-sensitive.")
     async def highlight_add(self, ctx: Context, *, trigger: str) -> None:
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         if trigger in highlight.lookup:  # type: ignore[union-attr]
-            await ctx.send_error('This highlight already exists.')
+            await ctx.send_error("This highlight already exists.")
             return
 
         await highlight.append(lookup=trigger.casefold())  # type: ignore[union-attr]
-        await ctx.send_success('Added highlight.', ephemeral=True)
+        await ctx.send_success("Added highlight.", ephemeral=True)
 
-    @highlight.command('remove', aliases=['rm', '-'], description='Removes a highlight word or phrase.')
-    @describe(trigger='The word or phrase to remove.')
+    @highlight.command("remove", aliases=["rm", "-"], description="Removes a highlight word or phrase.")
+    @describe(trigger="The word or phrase to remove.")
     async def highlight_remove(self, ctx: Context, *, trigger: str) -> None:
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         if trigger.casefold() not in highlight.lookup:  # type: ignore[union-attr]
-            await ctx.send_error('Such a highlight does not exist.')
+            await ctx.send_error("Such a highlight does not exist.")
             return
 
         await highlight.prune(lookup=trigger)  # type: ignore[union-attr]
-        await ctx.send_success('Removed highlight.', ephemeral=True)
+        await ctx.send_success("Removed highlight.", ephemeral=True)
 
-    @highlight.command(
-        'block',
-        description='Block an entity from triggering your highlights.',
-        with_app_command=False
-    )
-    @describe(entities='The entities to block.')
+    @highlight.command("block", description="Block an entity from triggering your highlights.", with_app_command=False)
+    @describe(entities="The entities to block.")
     async def highlight_block(self, ctx: Context, *entities: discord.TextChannel | discord.Member) -> None:
         """Block an entity from triggering your highlights."""
         if not entities:
-            await ctx.send_error('You need to provide at least one entity to block.')
+            await ctx.send_error("You need to provide at least one entity to block.")
             return
 
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         blocked = highlight.blocked  # type: ignore[union-attr]
         blocked.update(entity.id for entity in entities)
         await highlight.update(blocked=blocked)  # type: ignore[union-attr]
-        await ctx.send_success('Blocked entities from triggering highlights.', ephemeral=True)
+        await ctx.send_success("Blocked entities from triggering highlights.", ephemeral=True)
 
     @highlight_block.define_app_command()  # type: ignore[attr-defined]
-    @describe(entity='The entity to block.')
+    @describe(entity="The entity to block.")
     async def highlight_block_app_command(self, ctx: HybridContext, entity: str) -> None:
         await ctx.full_invoke(*validate_snowflakes(entity, guild=ctx.guild, to_obj=True))  # type: ignore[arg-type, misc]
 
-    @highlight.command(
-        'unblock',
-        description='Unblock an entity from triggering your highlights.',
-        with_app_command=False
-    )
-    @describe(entities='The entities to unblock.')
+    @highlight.command("unblock", description="Unblock an entity from triggering your highlights.", with_app_command=False)
+    @describe(entities="The entities to unblock.")
     async def highlight_unblock(self, ctx: Context, *entities: discord.TextChannel | discord.Member) -> None:
         """Unblock an entity from triggering your highlights."""
         if not entities:
-            await ctx.send_error('You need to provide at least one entity to unblock.')
+            await ctx.send_error("You need to provide at least one entity to unblock.")
             return
 
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         blocked = highlight.blocked  # type: ignore[union-attr]
         blocked.difference_update(entity.id for entity in entities)
         await highlight.update(blocked=blocked)  # type: ignore[union-attr]
-        await ctx.send_success('Unblocked entities from triggering highlights.', ephemeral=True)
+        await ctx.send_success("Unblocked entities from triggering highlights.", ephemeral=True)
 
     @highlight_unblock.define_app_command()  # type: ignore[attr-defined]
-    @describe(entity='The entity to unblock.')
+    @describe(entity="The entity to unblock.")
     async def highlight_unblock_app_command(self, ctx: HybridContext, entity: str) -> None:
         await ctx.full_invoke(*validate_snowflakes(entity, guild=ctx.guild, to_obj=True))  # type: ignore[arg-type, misc]
 
-    @highlight.command('list', aliases=['ls'], description='List all your highlights.')
+    @highlight.command("list", aliases=["ls"], description="List all your highlights.")
     async def highlight_list(self, ctx: Context) -> None:
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
-        embed = discord.Embed(
-            title='Triggers',
-            color=helpers.Colour.white()
-        )
+        embed = discord.Embed(title="Triggers", color=helpers.Colour.white())
         embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
-        await LinePaginator.start(ctx, entries=highlight.lookup, location='description', embed=embed, numerate=True, ephemeral=True)  # type: ignore[union-attr]
+        await LinePaginator.start(
+            ctx, entries=highlight.lookup, location="description", embed=embed, numerate=True, ephemeral=True
+        )  # type: ignore[union-attr]
 
-    @highlight.command('blocked', description='List all blocked entities from triggering your highlights.')
+    @highlight.command("blocked", description="List all blocked entities from triggering your highlights.")
     async def highlight_blocked(self, ctx: Context) -> None:
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         embed = discord.Embed(
-            title='Blocked Entities',
-            description='\n'.join(
-                f'`{ctx.guild.get_member(user_id) or ctx.guild.get_channel(user_id)}`'  # type: ignore[union-attr]
+            title="Blocked Entities",
+            description="\n".join(
+                f"`{ctx.guild.get_member(user_id) or ctx.guild.get_channel(user_id)}`"  # type: ignore[union-attr]
                 for user_id in highlight.blocked  # type: ignore[union-attr]
-            ) or 'No blocked entities.',
-            color=helpers.Colour.white()
+            )
+            or "No blocked entities.",
+            color=helpers.Colour.white(),
         )
         await ctx.send(embed=embed, ephemeral=True)
 
-    @highlight.command('import', description='Import highlights from another guild.')
-    @describe(guild='The guild to import highlights from.')
+    @highlight.command("import", description="Import highlights from another guild.")
+    @describe(guild="The guild to import highlights from.")
     async def highlight_import(self, ctx: Context, guild: discord.Guild) -> None:
         other = await self.get_highlight_config(guild.id, ctx.author.id, initialize=False)
         if not other:
-            await ctx.send_error('No highlights to import.')
+            await ctx.send_error("No highlights to import.")
             return
 
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
         await highlight.update(lookup=highlight.lookup | other.lookup)  # type: ignore[union-attr]
-        await ctx.send_success(f'Imported {len(other.lookup.difference(highlight.lookup))} highlights.', ephemeral=True)  # type: ignore[union-attr]
+        await ctx.send_success(f"Imported {len(other.lookup.difference(highlight.lookup))} highlights.", ephemeral=True)  # type: ignore[union-attr]
 
-    @highlight_import.autocomplete('guild')  # type: ignore[attr-defined]
+    @highlight_import.autocomplete("guild")  # type: ignore[attr-defined]
     async def highlight_import_guild_autocomplete(
-            self, interaction: discord.Interaction, current: str
+        self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        records = await self.bot.db.highlights.get_import_locations(
-            interaction.user.id, interaction.guild.id)  # type: ignore[union-attr]
+        records = await self.bot.db.highlights.get_import_locations(interaction.user.id, interaction.guild.id)  # type: ignore[union-attr]
         if not records:
             return []
 
-        guilds = [interaction.client.get_guild(record['location_id']) for record in records]
+        guilds = [interaction.client.get_guild(record["location_id"]) for record in records]
         results = fuzzy.finder(current, guilds, key=lambda x: x.name)  # type: ignore[union-attr]
         return [app_commands.Choice(name=guild.name, value=str(guild.id)) for guild in results if guild]  # type: ignore[union-attr]
 
@@ -344,11 +336,7 @@ class Highlights(Cog):
         message : discord.Message
             The message to check for highlights.
         """
-        if (
-                message.guild is None
-                or not isinstance(message.author, discord.Member)
-                or message.author.bot
-        ):
+        if message.guild is None or not isinstance(message.author, discord.Member) or message.author.bot:
             return
 
         highlights = await self.get_guild_highlights(message.guild.id)

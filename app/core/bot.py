@@ -107,7 +107,8 @@ class Bot(commands.Bot):
     )
 
     def __init__(self) -> None:
-        key = 'owner_id' if isinstance(owners, int) else 'owner_ids'
+        owner_kwargs: dict[str, Any]
+        owner_kwargs = {'owner_id': owners} if isinstance(owners, int) else {'owner_ids': owners}
 
         super().__init__(
             command_prefix=self.__class__.resolve_command_prefix,
@@ -119,7 +120,7 @@ class Bot(commands.Bot):
             intents=self.INTENTS,
             # status=discord.Status.dnd,
             max_messages=10,
-            **{key: owners}
+            **owner_kwargs
         )
 
         def _make_command_cache_key(ctx: Context) -> str:
@@ -145,7 +146,7 @@ class Bot(commands.Bot):
         if not message.guild:
             return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
 
-        config = await self.db.get_guild_config(message.guild.id)  # type: ignore[misc]
+        config = await self.db.get_guild_config(guild_id=message.guild.id)  # type: ignore[misc]
         if config is None:
             return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
 
@@ -178,7 +179,7 @@ class Bot(commands.Bot):
         await super().reload_extension(name, package=package)
         self.prepare_jishaku_flags()
 
-    def add_command(self, command: Command, /) -> None:
+    def add_command(self, command: Command, /) -> None:  # type: ignore[override]
         # Resolves custom flags to work with the command.
         if isinstance(command, Command):
             command.transform_flag_parameters()
@@ -237,7 +238,7 @@ class Bot(commands.Bot):
             /,
             *,
             cls: type[Context] = Context,
-    ) -> Context:
+    ) -> Context:  # type: ignore[override]
         return await super().get_context(origin, cls=cls)
 
     async def process_commands(self, message: discord.Message) -> None:
@@ -281,7 +282,7 @@ class Bot(commands.Bot):
             await guild.leave()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
-        if await self.db.get_guild_config(guild.id):  # type: ignore[misc]
+        if await self.db.get_guild_config(guild_id=guild.id):
             await self.db.guilds.delete_config(guild.id)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
@@ -320,9 +321,10 @@ class Bot(commands.Bot):
                 send = ctx.channel.send
             else:  # discord.Member
                 author = ctx
-                await ctx.create_dm()
-                assert ctx.dm_channel is not None
-                send = ctx.dm_channel.send
+                member = ctx
+                await member.create_dm()
+                assert member.dm_channel is not None
+                send = member.dm_channel.send
 
             if await self.is_owner(author):
                 await send(embed=embed)
@@ -330,7 +332,7 @@ class Bot(commands.Bot):
 
             await self.stats_webhook.send(embed=embed)
 
-    async def on_command_error(self, ctx: Context, error: Exception) -> Any:
+    async def on_command_error(self, ctx: Context, error: commands.CommandError) -> Any:  # type: ignore[override]
         """|coro|
 
         The default command error handler provided by the bot.
@@ -413,7 +415,7 @@ class Bot(commands.Bot):
 
         # Parameter-based errors.
 
-        command: Command = ctx.command
+        command: Command = ctx.command  # type: ignore
 
         if isinstance(error, (commands.BadArgument, AppBadArgument)):
             command.reset_cooldown(ctx)
@@ -658,7 +660,7 @@ class Bot(commands.Bot):
         If there are no mutual guilds for this user, then this will return `None`.
         Because ``None`` is a falsy value, this will behave as if it defaults to ``False``.
         """
-        member = self.find_member_from_user(user)
+        member = self.find_member_from_user(user=user)
         if member is not None:
             return member.is_on_mobile()
 
@@ -697,7 +699,7 @@ class Bot(commands.Bot):
     def stats_webhook(self) -> discord.Webhook:
         """:class:`discord.Webhook`: The stats webhook for the bot."""
         wh_id, wh_token = stats_webhook
-        hook = discord.Webhook.partial(id=wh_id, token=wh_token, session=self.session)
+        hook = discord.Webhook.partial(id=wh_id, token=str(wh_token), session=self.session)
         return hook
 
     async def add_to_blacklist(self, obj: discord.abc.Snowflake, *, duration: int | None = None) -> None:
@@ -754,5 +756,5 @@ class Bot(commands.Bot):
             except asyncio.CancelledError:
                 pass
 
-    async def start(self, token: str = resolved_token, *, reconnect: bool = True) -> None:
+    async def start(self, token: str = resolved_token, *, reconnect: bool = True) -> None:  # type: ignore
         await super().start(token, reconnect=reconnect)

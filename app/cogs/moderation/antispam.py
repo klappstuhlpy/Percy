@@ -50,7 +50,7 @@ class SpamChecker:
         self._join_rate: tuple[int, int] | None = None
         self.auto_gatekeeper: ListedRateLimit | None = None
         # Enabled if alerts are on but gatekeeper isn't
-        self._default_join_spam = ListedRateLimit(10, 5, key=attrgetter('joined_at'))
+        self._default_join_spam = ListedRateLimit(10, 5, key=attrgetter("joined_at"))
 
         self.last_created: datetime.datetime | None = None
 
@@ -84,8 +84,7 @@ class SpamChecker:
 
         mention_threshold = config.mention_count
         if self._by_mentions_rate != mention_threshold:
-            self._by_mentions = commands.CooldownMapping.from_cooldown(
-                mention_threshold, 15, commands.BucketType.member)
+            self._by_mentions = commands.CooldownMapping.from_cooldown(mention_threshold, 15, commands.BucketType.member)
             self._by_mentions_rate = mention_threshold
         return self._by_mentions
 
@@ -126,10 +125,9 @@ class SpamChecker:
                 return SpammerSequence(spammers)  # type: ignore[arg-type]
 
             if (
-                    (flagged.messages <= 10
-                    and message.raw_mentions)
-                    or '@everyone' in message.content
-                    or '@here' in message.content
+                (flagged.messages <= 10 and message.raw_mentions)
+                or "@everyone" in message.content
+                or "@here" in message.content
             ):
                 return SpamCheckerResult.flagged_mention()
 
@@ -239,8 +237,7 @@ class SpamChecker:
         current = message.created_at.timestamp()
         mention_bucket = mapping.get_bucket(message, current)
         mention_count = sum(not m.bot and m.id != message.author.id for m in message.mentions)
-        return mention_bucket is not None and mention_bucket.update_rate_limit(
-            current, tokens=mention_count) is not None
+        return mention_bucket is not None and mention_bucket.update_rate_limit(current, tokens=mention_count) is not None
 
     def check_gatekeeper(self, member: discord.Member, gatekeeper: Gatekeeper) -> list[discord.Member]:
         """Check if a member is ratelimited by the gatekeeper.
@@ -264,7 +261,7 @@ class SpamChecker:
 
         if rate != self._join_rate:
             # Might be worth considering swapping over the tat/member list? Probably complicated though
-            self.auto_gatekeeper = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter('joined_at'))
+            self.auto_gatekeeper = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter("joined_at"))
             self._join_rate = rate  # type: ignore[arg-type]
 
         if self.auto_gatekeeper is not None:
@@ -285,11 +282,11 @@ class SpamChecker:
 
 
 async def check_raid(
-        checker: SpamChecker,
-        config: GuildConfig,
-        guild: discord.Guild,
-        member: discord.Member,
-        message: discord.Message,
+    checker: SpamChecker,
+    config: GuildConfig,
+    guild: discord.Guild,
+    member: discord.Member,
+    message: discord.Message,
 ) -> None:
     """|coro|
 
@@ -321,16 +318,16 @@ async def check_raid(
         try:
             await guild.ban(user, reason=result.reason)
         except discord.HTTPException:
-            log.info('[Moderation] Failed to ban %s (ID: %s) from server %s.', member, member.id, member.guild)
+            log.info("[Moderation] Failed to ban %s (ID: %s) from server %s.", member, member.id, member.guild)
         else:
-            log.info('[Moderation] Banned %s (ID: %s) from server %s.', member, member.id, member.guild)
+            log.info("[Moderation] Banned %s (ID: %s) from server %s.", member, member.id, member.guild)
 
 
 async def mention_spam_ban(
-        mention_count: int,
-        guild_id: int,
-        member: discord.Member,
-        multiple: bool = False,
+    mention_count: int,
+    guild_id: int,
+    member: discord.Member,
+    multiple: bool = False,
 ) -> AsyncIterator[str]:
     """|coro|
 
@@ -354,14 +351,14 @@ async def mention_spam_ban(
         The result message for the performed ban on the a user.
     """
     if multiple:
-        reason = f'Spamming mentions over multiple messages ({mention_count} mentions)'
+        reason = f"Spamming mentions over multiple messages ({mention_count} mentions)"
     else:
-        reason = f'Spamming mentions ({mention_count} mentions)'
+        reason = f"Spamming mentions ({mention_count} mentions)"
 
     try:
         await member.ban(reason=reason)
     except discord.HTTPException:
-        log.info('[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s', member, member.id, guild_id)
+        log.info("[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s", member, member.id, guild_id)
     else:
-        yield f'{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions.'
-        log.info('[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s', member, member.id, guild_id)
+        yield f"{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions."
+        log.info("[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s", member, member.id, guild_id)

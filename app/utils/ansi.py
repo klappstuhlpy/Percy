@@ -14,13 +14,14 @@ if TYPE_CHECKING:
 
     from app.core import Context
 
-    type AnsiIdentifierKwargs = 'AnsiColor | AnsiBackgroundColor | bool'
+    type AnsiIdentifierKwargs = "AnsiColor | AnsiBackgroundColor | bool"
 
-INHERIT = sentinel('INHERIT', repr='INHERIT')
+INHERIT = sentinel("INHERIT", repr="INHERIT")
 
 
 class AnsiColor(IntEnum):
     """An enumeration of ANSI colors."""
+
     default = 39
     gray = 30
     red = 31
@@ -34,6 +35,7 @@ class AnsiColor(IntEnum):
 
 class AnsiStyle(IntEnum):
     """An enumeration of ANSI styles."""
+
     default = 0
     bold = 1
     underline = 4
@@ -41,6 +43,7 @@ class AnsiStyle(IntEnum):
 
 class AnsiBackgroundColor(IntEnum):
     """An enumeration of ANSI background colors."""
+
     default = 49
     black = 40
     red = 41
@@ -62,12 +65,12 @@ class AnsiChunkSpecs:
         underline: bool
 
     def __init__(
-            self,
-            *,
-            color: AnsiColor,
-            background_color: AnsiBackgroundColor,
-            bold: bool,
-            underline: bool,
+        self,
+        *,
+        color: AnsiColor,
+        background_color: AnsiBackgroundColor,
+        bold: bool,
+        underline: bool,
     ) -> None:
         self.color = color
         self.background_color = background_color
@@ -129,20 +132,20 @@ class AnsiChunk(NamedTuple):
             # this is to reset the previous bold/underline state
             # to avoid double bold/underline
             for entity in (
-                    previous_specs.color,
-                    previous_specs.background_color,
-                    AnsiStyle.bold if previous_specs.bold else None,
-                    AnsiStyle.underline if previous_specs.underline else None,
+                previous_specs.color,
+                previous_specs.background_color,
+                AnsiStyle.bold if previous_specs.bold else None,
+                AnsiStyle.underline if previous_specs.underline else None,
             ):
                 if entity is not None and entity not in specs:
                     specs.append(entity)
 
-            specs = [entity for entity in specs if entity.name != 'default']
+            specs = [entity for entity in specs if entity.name != "default"]
             specs.insert(0, AnsiStyle.default)
 
         if specs:
-            specs = ';'.join(str(spec.value) for spec in specs)
-            yield f'\x1b[{specs}m'
+            specs = ";".join(str(spec.value) for spec in specs)
+            yield f"\x1b[{specs}m"
 
         yield self.text
         yield previous_specs
@@ -161,13 +164,13 @@ class AnsiChunk(NamedTuple):
         """Returns a dictionary of the chunk's formatting."""
         result = {}
         if self.color is not INHERIT:
-            result['color'] = self.color
+            result["color"] = self.color
         if self.background_color is not INHERIT:
-            result['background_color'] = self.background_color
+            result["background_color"] = self.background_color
         if self.bold is not INHERIT:
-            result['bold'] = self.bold
+            result["bold"] = self.bold
         if self.underline is not INHERIT:
-            result['underline'] = self.underline
+            result["underline"] = self.underline
 
         return result
 
@@ -176,14 +179,14 @@ class AnsiStringBuilder:
     """A dynamic builder for ANSI strings."""
 
     __slots__ = (
-        '_chunks',
-        '_default_background_color',
-        '_default_bold',
-        '_default_color',
-        '_default_underline',
-        '_fallback_prefix',
-        '_prefix',
-        '_suffix',
+        "_chunks",
+        "_default_background_color",
+        "_default_bold",
+        "_default_color",
+        "_default_underline",
+        "_fallback_prefix",
+        "_prefix",
+        "_suffix",
     )
 
     if TYPE_CHECKING:
@@ -199,14 +202,14 @@ class AnsiStringBuilder:
     def __init__(self) -> None:
         # those should not be modified from outer scope
         self._chunks = []
-        self._prefix = self._fallback_prefix = self._suffix = ''
+        self._prefix = self._fallback_prefix = self._suffix = ""
         self._default_color = self._default_background_color = None
         self._default_bold = self._default_underline = False
 
     @property
     def previous(self) -> AnsiChunk:
         """:class:`AnsiChunk`: Returns the previous chunk."""
-        return self._chunks[-1] if self._chunks else AnsiChunk('')
+        return self._chunks[-1] if self._chunks else AnsiChunk("")
 
     @property
     def previous_color(self) -> AnsiColor:
@@ -253,18 +256,18 @@ class AnsiStringBuilder:
     @property
     def raw(self) -> str:
         """:class:`str`: The raw, unformatted content of this string."""
-        return self._fallback_prefix + ''.join(chunk.text for chunk in self._chunks) + self._suffix
+        return self._fallback_prefix + "".join(chunk.text for chunk in self._chunks) + self._suffix
 
     def append(
-            self,
-            text: str,
-            /,
-            *,
-            inherit: bool = False,
-            color: AnsiColor | None = None,
-            background_color: AnsiBackgroundColor | None = None,
-            bold: bool | None = None,
-            underline: bool | None = None,
+        self,
+        text: str,
+        /,
+        *,
+        inherit: bool = False,
+        color: AnsiColor | None = None,
+        background_color: AnsiBackgroundColor | None = None,
+        bold: bool | None = None,
+        underline: bool | None = None,
     ) -> AnsiStringBuilder:
         """Append a chunk of text to the builder.
 
@@ -313,15 +316,7 @@ class AnsiStringBuilder:
             else:
                 background_color = self.previous_background_color if inherit else AnsiBackgroundColor.default
 
-        self._chunks.append(
-            AnsiChunk(
-                text,
-                color=color,
-                background_color=background_color,
-                bold=bold,
-                underline=underline
-            )
-        )
+        self._chunks.append(AnsiChunk(text, color=color, background_color=background_color, bold=bold, underline=underline))
         return self
 
     def extend(self, other: AnsiStringBuilder, /) -> AnsiStringBuilder:
@@ -333,7 +328,7 @@ class AnsiStringBuilder:
             The builder to extend with.
         """
         if not isinstance(other, AnsiStringBuilder):
-            raise TypeError(f'Expected AnsiStringBuilder, got {other.__class__.__name__}')
+            raise TypeError(f"Expected AnsiStringBuilder, got {other.__class__.__name__}")
 
         self._chunks.extend(other._chunks)
         return self
@@ -362,7 +357,7 @@ class AnsiStringBuilder:
         count: :class:`int`
             The number of newlines to append.
         """
-        return self.append('\n' * count)
+        return self.append("\n" * count)
 
     def bold(self, text: str | None = None, **kwargs: Any) -> AnsiStringBuilder:
         """Appends and persists text in bold.
@@ -462,11 +457,11 @@ class AnsiStringBuilder:
         return self
 
     def background_color(
-            self,
-            background_color: AnsiBackgroundColor,
-            /,
-            text: str | None = None,
-            **kwargs: Any,
+        self,
+        background_color: AnsiBackgroundColor,
+        /,
+        text: str | None = None,
+        **kwargs: Any,
     ) -> AnsiStringBuilder:
         """Appends text in the given background color.
 
@@ -501,7 +496,7 @@ class AnsiStringBuilder:
 
         return self
 
-    def ensure_codeblock(self, *, fallback: str = '') -> AnsiStringBuilder:
+    def ensure_codeblock(self, *, fallback: str = "") -> AnsiStringBuilder:
         """Ensures that the string is wrapped in a codeblock.
 
         Parameters
@@ -510,12 +505,12 @@ class AnsiStringBuilder:
             The fallback language to use.
         """
         raw = self.raw
-        if raw.startswith('```') and raw.endswith('```'):
+        if raw.startswith("```") and raw.endswith("```"):
             return self
 
-        self._prefix = '```ansi\n'
-        self._fallback_prefix = f'```{fallback}\n'
-        self._suffix = '```'
+        self._prefix = "```ansi\n"
+        self._fallback_prefix = f"```{fallback}\n"
+        self._suffix = "```"
 
         return self
 
@@ -588,7 +583,7 @@ class AnsiStringBuilder:
                     continue
                 result.append(part)
 
-        return self._prefix + ''.join(result) + self._suffix
+        return self._prefix + "".join(result) + self._suffix
 
     def dynamic(self, ctx: Context) -> str:
         """Returns the built string only if the user of the given context is not on mobile."""

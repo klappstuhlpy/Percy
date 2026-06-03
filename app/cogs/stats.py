@@ -58,7 +58,7 @@ class AvatarBatchEntry(TypedDict):
 class CommandUsageCount:
     """A counter for command usage by :class:`asyncpg.Record`s."""
 
-    __slots__ = ('failed', 'success', 'total')
+    __slots__ = ("failed", "success", "total")
 
     def __init__(self) -> None:
         self.success = 0
@@ -66,8 +66,8 @@ class CommandUsageCount:
         self.total = 0
 
     def add(self, record: asyncpg.Record) -> None:
-        self.success += record['success']
-        self.failed += record['failed']
+        self.success += record["success"]
+        self.failed += record["failed"]
         self.total += record["total"]
 
 
@@ -77,7 +77,7 @@ class LoggingHandler(logging.Handler):
         super().__init__(logging.INFO)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return record.name in ('discord.gateway', 'bot')
+        return record.name in ("discord.gateway", "bot")
 
     def emit(self, record: logging.LogRecord) -> None:
         self.cog.add_record(record)
@@ -86,13 +86,13 @@ class LoggingHandler(logging.Handler):
 class Stats(Cog):
     """Bot Statistics and Information."""
 
-    emoji = '<:graph:1322354647910055967>'
+    emoji = "<:graph:1322354647910055967>"
 
     _presence_map: ClassVar[dict[discord.Status, str]] = {
-        discord.Status.online: 'Online',
-        discord.Status.idle: 'Idle',
-        discord.Status.dnd: 'Do Not Disturb',
-        discord.Status.offline: 'Offline'
+        discord.Status.online: "Online",
+        discord.Status.idle: "Idle",
+        discord.Status.dnd: "Do Not Disturb",
+        discord.Status.offline: "Offline",
     }
 
     def __init__(self, bot: Bot) -> None:
@@ -105,11 +105,7 @@ class Stats(Cog):
         self._logging_queue = asyncio.Queue()
         self.__loging_worker_task: asyncio.Task | None = None
 
-        self.__LOOPS: list[Any] = [
-            self.cleanup_presence_history,
-            self.command_insert,
-            self.avatar_insert
-        ]
+        self.__LOOPS: list[Any] = [self.cleanup_presence_history, self.command_insert, self.avatar_insert]
 
         # if we're on our beta instance, we don't want to start those tasks
         if not beta:
@@ -141,7 +137,7 @@ class Stats(Cog):
             await self.bot.db.stats.insert_commands(self._command_data_batch)
             total = len(self._command_data_batch)
             if total > 1:
-                log.info('Registered %s commands to the database.', total)
+                log.info("Registered %s commands to the database.", total)
             self._command_data_batch.clear()
 
     @tasks.loop(seconds=10.0)
@@ -153,7 +149,7 @@ class Stats(Cog):
         This task is automatically started after the cog is loaded.
         """
         for data in self._avatar_data_batch:
-            await self.bot.db.stats.insert_avatar(data['user_id'], data['name'], data['image'])
+            await self.bot.db.stats.insert_avatar(data["user_id"], data["name"], data["image"])
         self._avatar_data_batch.clear()
 
     def cog_unload(self) -> None:
@@ -179,7 +175,7 @@ class Stats(Cog):
         except asyncio.CancelledError:
             pass
         except Exception as exc:
-            log.exception('Unhandled exception in logging worker: %s', exc)
+            log.exception("Unhandled exception in logging worker: %s", exc)
             self.__loging_worker_task = self.bot.loop.create_task(self.logging_worker())
 
     def register_command(self, ctx: Context) -> None:
@@ -204,29 +200,29 @@ class Stats(Cog):
         self.bot.command_types_used[is_app_command] += 1
         message = ctx.message
         if ctx.guild is None:
-            destination = 'Private Message'
+            destination = "Private Message"
             guild_id = None
         else:
-            destination = f'#{message.channel} ({message.guild})'
+            destination = f"#{message.channel} ({message.guild})"
             guild_id = ctx.guild.id
 
         if ctx.is_interaction and ctx.interaction is not None and ctx.interaction.command:
-            content = f'/{ctx.interaction.command.qualified_name}'
+            content = f"/{ctx.interaction.command.qualified_name}"
         else:
             content = message.content
 
-        log.info('%s: %s in %s: %s', ctx.now.replace(tzinfo=None), message.author, destination, content)
+        log.info("%s: %s in %s: %s", ctx.now.replace(tzinfo=None), message.author, destination, content)
         self._command_data_batch.append(
             CommandBatchEntry(
                 guild=guild_id,
                 channel=ctx.channel.id,
                 author=ctx.author.id,
                 used=ctx.now.isoformat(),
-                prefix=ctx.prefix or '',
+                prefix=ctx.prefix or "",
                 command=cmd_name,
                 failed=ctx.command_failed,
                 app_command=is_app_command,
-                error=self.bot.command_error_cache.pop(self.bot.make_command_cache_key(ctx), None)
+                error=self.bot.command_error_cache.pop(self.bot.make_command_cache_key(ctx), None),
             )
         )
 
@@ -238,10 +234,10 @@ class Stats(Cog):
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         command = interaction.command
         if (
-                command is not None
-                and interaction.type is discord.InteractionType.application_command
-                and not command.__class__.__name__.startswith('Hybrid')
-                # ignore hybrid commands because they are handled elsewhere
+            command is not None
+            and interaction.type is discord.InteractionType.application_command
+            and not command.__class__.__name__.startswith("Hybrid")
+            # ignore hybrid commands because they are handled elsewhere
         ):
             ctx = await self.bot.get_context(interaction)
             ctx.command_failed = interaction.command_failed or ctx.command_failed
@@ -261,12 +257,10 @@ class Stats(Cog):
             The guild that joined.
         """
         await self.bot.wait_until_ready()
-        embed = discord.Embed(colour=helpers.Colour.lime_green(), title='New Guild')
+        embed = discord.Embed(colour=helpers.Colour.lime_green(), title="New Guild")
         await self.send_guild_stats(embed, guild)
 
-        members: Sequence[discord.Member] | list[discord.Member] = (
-            await guild.chunk() if guild.chunked else guild.members
-        )
+        members: Sequence[discord.Member] | list[discord.Member] = await guild.chunk() if guild.chunked else guild.members
         for member in members:
             try:
                 if len(member.mutual_guilds) > 1:
@@ -289,11 +283,7 @@ class Stats(Cog):
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
             self._avatar_data_batch.append(
-                AvatarBatchEntry(
-                    user_id=member.id,
-                    name=member.name,
-                    image=scaled_avatar.getvalue()
-                )
+                AvatarBatchEntry(user_id=member.id, name=member.name, image=scaled_avatar.getvalue())
             )
 
     @Cog.listener()
@@ -316,13 +306,7 @@ class Stats(Cog):
             return None
 
         scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
-        self._avatar_data_batch.append(
-            AvatarBatchEntry(
-                user_id=member.id,
-                name=member.name,
-                image=scaled_avatar.getvalue()
-            )
-        )
+        self._avatar_data_batch.append(AvatarBatchEntry(user_id=member.id, name=member.name, image=scaled_avatar.getvalue()))
 
     @Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -345,15 +329,11 @@ class Stats(Cog):
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
             self._avatar_data_batch.append(
-                AvatarBatchEntry(
-                    user_id=after.id,
-                    name=after.name,
-                    image=scaled_avatar.getvalue()
-                )
+                AvatarBatchEntry(user_id=after.id, name=after.name, image=scaled_avatar.getvalue())
             )
 
         if before.nick != after.nick and after.nick is not None:
-            await self.bot.db.stats.insert_item_history(after.id, 'nickname', after.nick)
+            await self.bot.db.stats.insert_item_history(after.id, "nickname", after.nick)
 
     @Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User) -> None:
@@ -372,7 +352,7 @@ class Stats(Cog):
         - Avatar
         """
         if before.name != after.name:
-            await self.bot.db.stats.insert_item_history(after.id, 'name', after.name)
+            await self.bot.db.stats.insert_item_history(after.id, "name", after.name)
 
         if before.avatar != after.avatar:
             avatar: bytes | None = await self._read_avatar(after)
@@ -381,17 +361,13 @@ class Stats(Cog):
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
             self._avatar_data_batch.append(
-                AvatarBatchEntry(
-                    user_id=after.id,
-                    name=after.name,
-                    image=scaled_avatar.getvalue()
-                )
+                AvatarBatchEntry(user_id=after.id, name=after.name, image=scaled_avatar.getvalue())
             )
 
     @Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         await self.bot.wait_until_ready()
-        embed = discord.Embed(colour=helpers.Colour.light_red(), title='Left Guild')
+        embed = discord.Embed(colour=helpers.Colour.light_red(), title="Left Guild")
         await self.send_guild_stats(embed, guild)
 
     @Cog.listener()
@@ -412,7 +388,7 @@ class Stats(Cog):
             return None
 
         def _make_key(member: discord.Member) -> str:
-            return f'status:{member.id}:{member.status}'
+            return f"status:{member.id}:{member.status}"
 
         if before.status != after.status:
             if self._presence_cache.get(_make_key(after)):
@@ -426,9 +402,7 @@ class Stats(Cog):
                 self._presence_map.get(before.status),
             )
 
-    async def _read_avatar(
-            self, member: discord.Member | discord.User
-    ) -> bytes | None:
+    async def _read_avatar(self, member: discord.Member | discord.User) -> bytes | None:
         """Reads the avatar of a member.
 
         Parameters
@@ -449,11 +423,12 @@ class Stats(Cog):
             if exc.status >= 500:
                 await asyncio.sleep(15.0)
                 await self._read_avatar(member)
-            return log.exception(
+            log.exception(
                 "Unhandled Discord HTTPException while getting avatar for %s (%s)",
                 member.name,
                 member.id,
             )
+            return
         return avatar
 
     def get_bot_uptime(self, *, brief: bool = False) -> str:
@@ -461,48 +436,48 @@ class Stats(Cog):
 
     @staticmethod
     def _format_commit(commit: pygit2.Commit) -> str:
-        short, _, _ = commit.message.partition('\n')
+        short, _, _ = commit.message.partition("\n")
         short_sha2 = str(commit.id)[0:6]
         commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 
-        offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), 'R')
-        return f'[`{short_sha2}`]({repo_url}commit/{commit.id!s}) {short} ({offset})'
+        offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), "R")
+        return f"[`{short_sha2}`]({repo_url}commit/{commit.id!s}) {short} ({offset})"
 
     def get_last_commits(self, count: int = 4, repo_path: str = str(path)) -> str:
-        repo = pygit2.Repository(Path(repo_path, '.git'))
+        repo = pygit2.Repository(Path(repo_path, ".git"))
         commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))  # type: ignore[arg-type]
-        return '\n'.join(self._format_commit(c) for c in commits)
+        return "\n".join(self._format_commit(c) for c in commits)
 
     @executor
     def project_stats_counter(self) -> str:
         root = Path(__file__).parent.parent
-        stats = count_code_stats(root, ignored=[root / 'venv'])
+        stats = count_code_stats(root, ignored=[root / "venv"])
 
         builder = AnsiStringBuilder()
-        builder.append('Files:       ', color=AnsiColor.gray)
+        builder.append("Files:       ", color=AnsiColor.gray)
         builder.append(str(stats.files), color=AnsiColor.green).newline()
-        builder.append('Classes:     ', color=AnsiColor.gray)
+        builder.append("Classes:     ", color=AnsiColor.gray)
         builder.append(str(stats.classes), color=AnsiColor.green).newline()
-        builder.append('Functions:   ', color=AnsiColor.gray)
+        builder.append("Functions:   ", color=AnsiColor.gray)
         builder.append(str(stats.functions), color=AnsiColor.green).newline()
-        builder.append('Comments:    ', color=AnsiColor.gray)
+        builder.append("Comments:    ", color=AnsiColor.gray)
         builder.append(str(stats.comments), color=AnsiColor.green).newline()
-        builder.append('Lines:       ', color=AnsiColor.gray)
+        builder.append("Lines:       ", color=AnsiColor.gray)
         builder.append(str(stats.lines), color=AnsiColor.green).newline()
-        builder.append('Characters:  ', color=AnsiColor.gray)
+        builder.append("Characters:  ", color=AnsiColor.gray)
         builder.append(str(stats.characters), color=AnsiColor.green)
 
         return str(builder)
 
     async def get_commands_stats(
-            self,
-            guild_id: int | None = None,
-            author_id: int | None = None,
-            *,
-            days: int | None = None,
-            group_by: Literal['author_id', 'command', 'guild_id'] = 'command',
-            limit: int = 5
+        self,
+        guild_id: int | None = None,
+        author_id: int | None = None,
+        *,
+        days: int | None = None,
+        group_by: Literal["author_id", "command", "guild_id"] = "command",
+        limit: int = 5,
     ) -> list[asyncpg.Record] | None:
         """|coro|
 
@@ -531,10 +506,9 @@ class Stats(Cog):
         `asyncpg.Record`
             The command usage statistics.
         """
-        return await self.bot.db.stats.get_command_usage(
-            guild_id, author_id, days=days, group_by=group_by, limit=limit)
+        return await self.bot.db.stats.get_command_usage(guild_id, author_id, days=days, group_by=group_by, limit=limit)
 
-    @command(hidden=True, description='Shows the current socket event statistics.')
+    @command(hidden=True, description="Shows the current socket event statistics.")
     async def socketstats(self, ctx: Context) -> None:
         """Shows the current socket event statistics."""
         await self.bot.wait_until_ready()
@@ -544,16 +518,18 @@ class Stats(Cog):
         cpm = total / minutes
         image = await self.bot.render.bar_chart(
             dict(sorted(self.bot.socket_stats.items(), key=lambda item: item[1], reverse=True)),
-            f'{total} socket events observed ({cpm:.2f}/minute)', merge=True)
+            f"{total} socket events observed ({cpm:.2f}/minute)",
+            merge=True,
+        )
         await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
 
-    @command(description='Tells you how long the bot has been up for.')
+    @command(description="Tells you how long the bot has been up for.")
     async def uptime(self, ctx: Context) -> None:
         """Tells you how long the bot has been up for."""
         await self.bot.wait_until_ready()
-        await ctx.send(f'Uptime: **{self.get_bot_uptime()}**')
+        await ctx.send(f"Uptime: **{self.get_bot_uptime()}**")
 
-    @command(description='Tells you information about the bot itself.')
+    @command(description="Tells you information about the bot itself.")
     async def about(self, ctx: Context) -> None:
         """Tells you information about the bot itself."""
         await ctx.typing()
@@ -561,30 +537,29 @@ class Stats(Cog):
         try:
             revision = self.get_last_commits()
         except pygit2.GitError:
-            revision = '*Not available.*'
+            revision = "*Not available.*"
 
         assert ctx.bot.user is not None
         url = discord.utils.oauth_url(
             client_id=ctx.bot.user.id,
             permissions=discord.Permissions(8),
-            scopes=('bot', 'applications.commands'),
+            scopes=("bot", "applications.commands"),
         )
 
         embed = discord.Embed(
             url=url,
-            title='Official Bot Invite',
-            description='[**Support Server Invite**](https://discord.com/3jSYQ9VNbA)\n\n'
-                        'Latest Changes:\n' + revision,
-            colour=helpers.Colour.white()
+            title="Official Bot Invite",
+            description="[**Support Server Invite**](https://discord.com/3jSYQ9VNbA)\n\nLatest Changes:\n" + revision,
+            colour=helpers.Colour.white(),
         )
 
         assert isinstance(config.owners, int)
         owner = ctx.bot.get_user(config.owners)
 
         embed.set_author(name=str(owner), icon_url=get_asset_url(owner) if owner else None)
-        embed.set_thumbnail(url=get_asset_url(self.bot.user) if self.bot.user else None)
+        embed.set_thumbnail(url=get_asset_url(self.bot.user) if self.bot.user else None)  # type: ignore
 
-        embed.add_field(name='Version', value=version, inline=False)
+        embed.add_field(name="Version", value=version, inline=False)
 
         total_members = 0
         total_unique = len(self.bot.users)
@@ -603,44 +578,47 @@ class Stats(Cog):
                     case discord.VoiceChannel:
                         voice += 1
 
-        embed.add_field(name='Members', value=f'`{total_members}` total\n`{total_unique}` unique\n'
-                                              f'Bot percentage: `{(total_unique / total_members):.2%}`')
-        embed.add_field(name='Channels', value=f'`{text + voice}` total\n`{text}` text\n`{voice}` voice')
+        embed.add_field(
+            name="Members",
+            value=f"`{total_members}` total\n`{total_unique}` unique\n"
+            f"Bot percentage: `{(total_unique / total_members):.2%}`",
+        )
+        embed.add_field(name="Channels", value=f"`{text + voice}` total\n`{text}` text\n`{voice}` voice")
 
-        memory_usage = self.process.memory_full_info().uss / 1024 ** 2
+        memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
 
-        embed.add_field(name='Guilds', value=guilds)
-        embed.add_field(name='Commands run since last reboot', value=sum(self.bot.command_stats.values()))
-        embed.add_field(name='Uptime', value=self.get_bot_uptime(brief=True))
-        embed.add_field(name='​', value='​')
+        embed.add_field(name="Guilds", value=guilds)
+        embed.add_field(name="Commands run since last reboot", value=sum(self.bot.command_stats.values()))
+        embed.add_field(name="Uptime", value=self.get_bot_uptime(brief=True))
+        embed.add_field(name="​", value="​")
 
         file_stats = await self.project_stats_counter()
-        embed.add_field(name='File Stats', value=f'```ansi\n{file_stats}```')
+        embed.add_field(name="File Stats", value=f"```ansi\n{file_stats}```")
 
         builder = AnsiStringBuilder()
-        builder.append('Memory Usage:  ', color=AnsiColor.gray)
-        builder.append(f'{memory_usage:.2f} MiB', color=AnsiColor.green).newline()
-        builder.append('CPU Usage:     ', color=AnsiColor.gray)
-        builder.append(f'{cpu_usage:.2f}%', color=AnsiColor.green).newline()
-        builder.append('Disk Usage:    ', color=AnsiColor.gray)
-        builder.append(f'{psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%', color=AnsiColor.green).newline()
-        embed.add_field(name='System Stats', value=f'```ansi\n{builder!s}```')
+        builder.append("Memory Usage:  ", color=AnsiColor.gray)
+        builder.append(f"{memory_usage:.2f} MiB", color=AnsiColor.green).newline()
+        builder.append("CPU Usage:     ", color=AnsiColor.gray)
+        builder.append(f"{cpu_usage:.2f}%", color=AnsiColor.green).newline()
+        builder.append("Disk Usage:    ", color=AnsiColor.gray)
+        builder.append(f"{psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%", color=AnsiColor.green).newline()
+        embed.add_field(name="System Stats", value=f"```ansi\n{builder!s}```")
 
         embed.set_footer(
-            text=f'Made with discord.py v{discord.__version__}',
-            icon_url='https://klappstuhl.me/gallery/lVUYV.png')
+            text=f"Made with discord.py v{discord.__version__}", icon_url="https://klappstuhl.me/gallery/lVUYV.png"
+        )
         embed.timestamp = discord.utils.utcnow()
         await ctx.send(embed=embed)
 
     @group(
-        name='stats',
-        description='Tells you command usage stats for the server or a member.',
+        name="stats",
+        description="Tells you command usage stats for the server or a member.",
         invoke_without_command=True,
-        guild_only=True
+        guild_only=True,
     )
     @cooldown(1, 5.0, commands.BucketType.guild)
-    @describe(member='The member to show stats for.')
+    @describe(member="The member to show stats for.")
     async def stats(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Tells you command usage stats for the server or a member."""
         assert ctx.guild is not None
@@ -648,117 +626,143 @@ class Stats(Cog):
             embed = discord.Embed()
 
             if member is None:
-                embed.title = 'Server Command Stats'
+                embed.title = "Server Command Stats"
                 embed.colour = helpers.Colour.white()
 
                 count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
-                    ctx.guild.id)
+                    ctx.guild.id
+                )
 
                 top_commands = await self.get_commands_stats(ctx.guild.id) or []
-                value = '\n'.join(
-                    f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
-                    enumerate(top_commands)
-                ) or '*No Command Usages available.*'
-                embed.add_field(name='Top Commands', value=value, inline=True)
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
+                        for i, record in enumerate(top_commands)
+                    )
+                    or "*No Command Usages available.*"
+                )
+                embed.add_field(name="Top Commands", value=value, inline=True)
 
                 top_commands_today = await self.get_commands_stats(ctx.guild.id, days=1) or []
-                value = '\n'.join(
-                    f'{medal_emoji(index)}: {cmd} (`{uses}` uses)' for (index, (cmd, uses)) in
-                    enumerate(top_commands_today)
-                ) or '*No Command Usages available.*'
-                embed.add_field(name='Top Commands Today', value=value, inline=True)
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(index)}: {cmd} (`{uses}` uses)"
+                        for (index, (cmd, uses)) in enumerate(top_commands_today)
+                    )
+                    or "*No Command Usages available.*"
+                )
+                embed.add_field(name="Top Commands Today", value=value, inline=True)
 
                 # placeholder
-                embed.add_field(name='\u200b', value='\u200b', inline=True)
+                embed.add_field(name="\u200b", value="\u200b", inline=True)
 
-                top_users = await self.get_commands_stats(ctx.guild.id, group_by='author_id') or []
-                value = '\n'.join(
-                    f'{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)' for i, record in
-                    enumerate(top_users)
-                ) or '*No Command Bot Users available.*'
-                embed.add_field(name='Top Command Users', value=value, inline=True)
+                top_users = await self.get_commands_stats(ctx.guild.id, group_by="author_id") or []
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)"
+                        for i, record in enumerate(top_users)
+                    )
+                    or "*No Command Bot Users available.*"
+                )
+                embed.add_field(name="Top Command Users", value=value, inline=True)
 
-                top_users_today = await self.get_commands_stats(ctx.guild.id, group_by='author_id', days=1) or []
-                value = '\n'.join(
-                    f'{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)' for i, record in
-                    enumerate(top_users_today)
-                ) or '*No Command Bot Users available.*'
-                embed.add_field(name='Top Command Users Today', value=value, inline=True)
+                top_users_today = await self.get_commands_stats(ctx.guild.id, group_by="author_id", days=1) or []
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(i)}: <@!{record['author_id']}> (`{record['uses']}` bot uses)"
+                        for i, record in enumerate(top_users_today)
+                    )
+                    or "*No Command Bot Users available.*"
+                )
+                embed.add_field(name="Top Command Users Today", value=value, inline=True)
 
-                embed.set_footer(text='Tracking command usage since')
+                embed.set_footer(text="Tracking command usage since")
             else:
-                embed.title = 'Command Stats'
+                embed.title = "Command Stats"
                 embed.colour = member.colour
                 embed.set_author(name=str(member), icon_url=get_asset_url(member))
 
                 count: tuple[int, datetime.datetime] = await ctx.db.stats.get_command_summary(  # type: ignore
-                    ctx.guild.id, member.id)
+                    ctx.guild.id, member.id
+                )
 
                 most_used = await self.get_commands_stats(ctx.guild.id, member.id) or []
-                value = '\n'.join(
-                    f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
-                    enumerate(most_used)
-                ) or '*No Command Usages available.*'
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
+                        for i, record in enumerate(most_used)
+                    )
+                    or "*No Command Usages available.*"
+                )
 
-                embed.add_field(name='Most Used Commands', value=value, inline=False)
+                embed.add_field(name="Most Used Commands", value=value, inline=False)
 
                 most_used_today = await self.get_commands_stats(ctx.guild.id, member.id, days=1) or []
-                value = '\n'.join(
-                    f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
-                    enumerate(most_used_today)
-                ) or '*No Command Usages available.*'
+                value = (
+                    "\n".join(
+                        f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)"
+                        for i, record in enumerate(most_used_today)
+                    )
+                    or "*No Command Usages available.*"
+                )
 
-                embed.add_field(name='Most Used Commands Today', value=value, inline=False)
+                embed.add_field(name="Most Used Commands Today", value=value, inline=False)
 
-                embed.set_footer(text='First command used')
+                embed.set_footer(text="First command used")
 
-            embed.description = f'Total of `{count[0]}` commands used.'
+            embed.description = f"Total of `{count[0]}` commands used."
             embed.timestamp = count[1].replace(tzinfo=datetime.UTC) if count[1] else discord.utils.utcnow()
 
             await ctx.send(embed=embed)
 
     @stats.command(
-        name='global',
-        description='Global all time command statistics.',
+        name="global",
+        description="Global all time command statistics.",
     )
     async def stats_global(self, ctx: Context) -> None:
         """Global all time command statistics."""
         await ctx.typing()
 
         total: int = await ctx.db.stats.count_all_commands()
-        embed = discord.Embed(title='Command Stats', colour=helpers.Colour.white())
-        embed.description = f'`{total}` commands used.'
+        embed = discord.Embed(title="Command Stats", colour=helpers.Colour.white())
+        embed.description = f"`{total}` commands used."
 
         top_commands = await self.get_commands_stats() or []
-        value = '\n'.join(
-            f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
-            enumerate(top_commands)
-        ) or '*No Command Usages available.*'
-        embed.add_field(name='Top Commands', value=value, inline=False)
+        value = (
+            "\n".join(
+                f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)" for i, record in enumerate(top_commands)
+            )
+            or "*No Command Usages available.*"
+        )
+        embed.add_field(name="Top Commands", value=value, inline=False)
 
-        top_guilds = await self.get_commands_stats(group_by='guild_id') or []
+        top_guilds = await self.get_commands_stats(group_by="guild_id") or []
         value = []
         for i, record in enumerate(top_guilds):
-            if record['guild_id'] is None:
-                guild = 'Private Message'
+            if record["guild_id"] is None:
+                guild = "Private Message"
             else:
-                guild = censor_object(self.bot.blacklist, self.bot.get_guild(record['guild_id']) or f'<Unknown {record['guild_id']}>')
-            value.append(f'{medal_emoji(i)}: {guild} (`{record['uses']}` uses)')
-        embed.add_field(name='Top Guilds', value='\n'.join(value), inline=False)
+                guild = censor_object(
+                    self.bot.blacklist, self.bot.get_guild(record["guild_id"]) or f"<Unknown {record['guild_id']}>"
+                )
+            value.append(f"{medal_emoji(i)}: {guild} (`{record['uses']}` uses)")
+        embed.add_field(name="Top Guilds", value="\n".join(value), inline=False)
 
         value.clear()
 
-        top_users = await self.get_commands_stats(group_by='author_id') or []
+        top_users = await self.get_commands_stats(group_by="author_id") or []
         for i, record in enumerate(top_users):
-            user = censor_object(self.bot.blacklist, self.bot.get_user(record['author_id']) or f'<Unknown {record['author_id']}>')
-            value.append(f'{medal_emoji(i)}: {user} (`{record['uses']}` uses)')
-        embed.add_field(name='Top Users', value='\n'.join(value), inline=False)
+            user = censor_object(
+                self.bot.blacklist, self.bot.get_user(record["author_id"]) or f"<Unknown {record['author_id']}>"
+            )
+            value.append(f"{medal_emoji(i)}: {user} (`{record['uses']}` uses)")
+        embed.add_field(name="Top Users", value="\n".join(value), inline=False)
 
         await ctx.send(embed=embed)
 
     @stats.command(
-        name='today',
-        description='Global command statistics for the day.',
+        name="today",
+        description="Global command statistics for the day.",
     )
     async def stats_today(self, ctx: Context) -> None:
         """Global command statistics for the day."""
@@ -775,49 +779,53 @@ class Stats(Cog):
                 case _:
                     question += count
 
-        embed = discord.Embed(title='Last 24 Hour Command Stats', colour=helpers.Colour.white())
+        embed = discord.Embed(title="Last 24 Hour Command Stats", colour=helpers.Colour.white())
         embed.description = (
-            f'`{failed + success + question}` commands used today. '
-            f'(`{success}` succeeded, `{failed}` failed, `{question}` unknown)'
+            f"`{failed + success + question}` commands used today. "
+            f"(`{success}` succeeded, `{failed}` failed, `{question}` unknown)"
         )
 
         top_commands = await self.get_commands_stats(days=1) or []
-        value = '\n'.join(
-            f'{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)' for i, record in
-            enumerate(top_commands)
-        ) or '*No Command Usages available.*'
-        embed.add_field(name='Top Commands', value=value, inline=False)
+        value = (
+            "\n".join(
+                f"{medal_emoji(i)}: {record['command']} (`{record['uses']}` uses)" for i, record in enumerate(top_commands)
+            )
+            or "*No Command Usages available.*"
+        )
+        embed.add_field(name="Top Commands", value=value, inline=False)
 
-        top_guilds = await self.get_commands_stats(group_by='guild_id', days=1) or []
+        top_guilds = await self.get_commands_stats(group_by="guild_id", days=1) or []
         value = []
         for i, record in enumerate(top_guilds):
-            if record['guild_id'] is None:
-                guild = 'Private Message'
+            if record["guild_id"] is None:
+                guild = "Private Message"
             else:
-                guild = censor_object(self.bot.blacklist,
-                                      self.bot.get_guild(record['guild_id']) or f'<Unknown {record['guild_id']}>')
-            value.append(f'{medal_emoji(i)}: {guild} (`{record['uses']}` uses)')
-        embed.add_field(name='Top Guilds', value='\n'.join(value), inline=False)
+                guild = censor_object(
+                    self.bot.blacklist, self.bot.get_guild(record["guild_id"]) or f"<Unknown {record['guild_id']}>"
+                )
+            value.append(f"{medal_emoji(i)}: {guild} (`{record['uses']}` uses)")
+        embed.add_field(name="Top Guilds", value="\n".join(value), inline=False)
 
-        top_users = await self.get_commands_stats(group_by='author_id', days=1) or []
+        top_users = await self.get_commands_stats(group_by="author_id", days=1) or []
         for i, record in enumerate(top_users):
-            user = censor_object(self.bot.blacklist,
-                                 self.bot.get_user(record['author_id']) or f'<Unknown {record['author_id']}>')
-            value.append(f'{medal_emoji(i)}: {user} (`{record['uses']}` uses)')
-        embed.add_field(name='Top Users', value='\n'.join(value), inline=False)
+            user = censor_object(
+                self.bot.blacklist, self.bot.get_user(record["author_id"]) or f"<Unknown {record['author_id']}>"
+            )
+            value.append(f"{medal_emoji(i)}: {user} (`{record['uses']}` uses)")
+        embed.add_field(name="Top Users", value="\n".join(value), inline=False)
 
         await ctx.send(embed=embed)
 
     async def send_guild_stats(self, embed: discord.Embed, guild: discord.Guild) -> None:
-        embed.add_field(name='Name', value=guild.name)
-        embed.add_field(name='ID', value=guild.id)
-        embed.add_field(name='Shard ID', value=guild.shard_id or 'N/A')
-        embed.add_field(name='Owner', value=f'{guild.owner} (ID: `{guild.owner_id}`)')
+        embed.add_field(name="Name", value=guild.name)
+        embed.add_field(name="ID", value=guild.id)
+        embed.add_field(name="Shard ID", value=guild.shard_id or "N/A")
+        embed.add_field(name="Owner", value=f"{guild.owner} (ID: `{guild.owner_id}`)")
 
         bots = sum(m.bot for m in guild.members)
         total = guild.member_count or 1
-        embed.add_field(name='Members', value=str(total))
-        embed.add_field(name='Bots', value=f'{bots} ({bots / total:.2%})')
+        embed.add_field(name="Members", value=str(total))
+        embed.add_field(name="Bots", value=f"{bots} ({bots / total:.2%})")
         embed.set_thumbnail(url=get_asset_url(guild))
 
         if guild.me:
@@ -828,7 +836,7 @@ class Stats(Cog):
     async def get_presence_history(self, user_id: int, /, *, days: int = 30) -> list[asyncpg.Record]:
         return await self.bot.db.stats.get_presence_history(user_id, days=days)
 
-    async def get_item_history(self, user_id: int, item_type: Literal['name', 'nickname']) -> list[asyncpg.Record]:
+    async def get_item_history(self, user_id: int, item_type: Literal["name", "nickname"]) -> list[asyncpg.Record]:
         """|coro|
 
         Fetches the item history for a user.
@@ -862,63 +870,45 @@ class Stats(Cog):
         """
         return await self.bot.db.stats.get_avatar_history(member.id)
 
-    @command(
-        'names',
-        alias='ns',
-        description='Shows the username history of a user.',
-        hybrid=True,
-        guild_only=True
-    )
-    @describe(member='The member to show the username history for.')
+    @command("names", alias="ns", description="Shows the username history of a user.", hybrid=True, guild_only=True)
+    @describe(member="The member to show the username history for.")
     async def names(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
 
-        usernames: list[asyncpg.Record] = await self.get_item_history(user.id, 'name')
-        nicknames: list[asyncpg.Record] = await self.get_item_history(user.id, 'nickname')
+        usernames: list[asyncpg.Record] = await self.get_item_history(user.id, "name")
+        nicknames: list[asyncpg.Record] = await self.get_item_history(user.id, "nickname")
 
         if not usernames and not nicknames:
-            await ctx.send_error('No name history found.')
+            await ctx.send_error("No name history found.")
             return
 
-        un_text = ', '.join(f'`{name}` {discord.utils.format_dt(changed_at, 'R')}' for name, changed_at in usernames)
-        nn_text = ', '.join(f'`{name}` {discord.utils.format_dt(changed_at, 'R')}' for name, changed_at in usernames)
+        un_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in usernames)
+        nn_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in usernames)
         await ctx.send(
             f"""
             ### Username History for {user}
-            **Usernames:** {un_text or '*No usernames found.*'}
-            **Nicknames:** {nn_text or '*No nicknames found.*'}
+            **Usernames:** {un_text or "*No usernames found.*"}
+            **Nicknames:** {nn_text or "*No nicknames found.*"}
             """
         )
 
-    @command(
-        'lastseen',
-        alias='ls',
-        description='Shows when a user was last seen.',
-        hybrid=True,
-        guild_only=True
-    )
-    @describe(member='The member to show the last seen for.')
+    @command("lastseen", alias="ls", description="Shows when a user was last seen.", hybrid=True, guild_only=True)
+    @describe(member="The member to show the last seen for.")
     async def last_seen(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
         records = await self.get_presence_history(user.id, days=30)
 
         if not records:
-            await ctx.send_error('No presence history found.')
+            await ctx.send_error("No presence history found.")
             return
 
-        last_seen = records[0]['changed_at']
+        last_seen = records[0]["changed_at"]
 
-        subject = 'You were' if user == ctx.author else f'{user} was'
-        await ctx.send(f'{subject} last seen *{discord.utils.format_dt(last_seen, 'R')}*')
+        subject = "You were" if user == ctx.author else f"{user} was"
+        await ctx.send(f"{subject} last seen *{discord.utils.format_dt(last_seen, 'R')}*")
 
-    @command(
-        'avatarhistory',
-        description='Shows the avatar history of a user.',
-        alias='avyh',
-        hybrid=True,
-        guild_only=True
-    )
-    @describe(member='The member to show the avatar history for.')
+    @command("avatarhistory", description="Shows the avatar history of a user.", alias="avyh", hybrid=True, guild_only=True)
+    @describe(member="The member to show the avatar history for.")
     async def avatar_history(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Shows the avatar history of a user."""
         user: discord.Member | discord.User = member or ctx.author
@@ -929,39 +919,33 @@ class Stats(Cog):
                 history = await self.get_avatar_history(user)
 
                 if not history:
-                    await ctx.send_error('No avatar history found.')
+                    await ctx.send_error("No avatar history found.")
                     return
 
                 fetching_time = timer.reset()
 
-                avatars = [x['avatar'] for x in history]
+                avatars = [x["avatar"] for x in history]
                 if not avatars:
                     return
 
                 file = await self.bot.render.avatar_collage(avatars)
 
         embed = discord.Embed(
-            title=f'Avatar Collage for {user}',
+            title=f"Avatar Collage for {user}",
             description=(
-                f'`{'Fetching':<{12}}:` {fetching_time:.3f}s\n'
-                f'`{'Generating':<{12}}:` {timer.seconds:.3f}s\n\n'
-                f'Showing `{len(history)}` of up to `100` changes.'
+                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
+                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s\n\n"
+                f"Showing `{len(history)}` of up to `100` changes."
             ),
-            timestamp=history[-1]['changed_at'],
-            colour=helpers.Colour.white()
+            timestamp=history[-1]["changed_at"],
+            colour=helpers.Colour.white(),
         )
-        embed.set_image(url=f'attachment://{file.filename if file else 'collage.png'}')
-        embed.set_footer(text='Last updated')
+        embed.set_image(url=f"attachment://{file.filename if file else 'collage.png'}")
+        embed.set_footer(text="Last updated")
         await ctx.send(embed=embed, file=file)
 
-    @command(
-        'presence',
-        alias='ps',
-        description='Shows the presence history of a user.',
-        hybrid=True,
-        guild_only=True
-    )
-    @describe(member='The member to show the presence history for.')
+    @command("presence", alias="ps", description="Shows the presence history of a user.", hybrid=True, guild_only=True)
+    @describe(member="The member to show the presence history for.")
     async def presence(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
         query_days = 30
@@ -971,24 +955,24 @@ class Stats(Cog):
                 history: list[asyncpg.Record] = await self.get_presence_history(user.id, days=query_days)
 
                 if not history:
-                    await ctx.send_error('No presence history found.')
+                    await ctx.send_error("No presence history found.")
                     return
 
                 fetching_time = timer.reset()
 
                 record_dict: dict[datetime.datetime, Any] = {
-                    record['changed_at']: [
-                        record['status'],
-                        record['status_before'],
+                    record["changed_at"]: [
+                        record["status"],
+                        record["status_before"],
                     ]
                     for record in history
                 }
 
                 status_timers: dict[str, float] = {
-                    'Online': 0,
-                    'Idle': 0,
-                    'Do Not Disturb': 0,
-                    'Offline': 0,
+                    "Online": 0,
+                    "Idle": 0,
+                    "Do Not Disturb": 0,
+                    "Offline": 0,
                 }
 
                 for i, (changed_at, statuses) in enumerate(record_dict.items()):
@@ -996,47 +980,41 @@ class Stats(Cog):
                         status_timers[statuses[1]] += (list(record_dict.keys())[i - 1] - changed_at).total_seconds()
 
                 if all(value == 0 for value in status_timers.values()):
-                    await ctx.send_error('Not enough data to generate a chart.')
+                    await ctx.send_error("Not enough data to generate a chart.")
                     return
 
                 analyzing_time = timer.reset()
 
                 canvas: discord.File = await self.bot.render.presence_chart(
-                    labels=['Online', 'Offline', 'DND', 'Idle'],
-                    colors=['#43b581', '#747f8d', '#f04747', '#fba31c'],
+                    labels=["Online", "Offline", "DND", "Idle"],
+                    colors=["#43b581", "#747f8d", "#f04747", "#fba31c"],
                     values=[
-                        int(status_timers['Online']),
-                        int(status_timers['Offline']),
-                        int(status_timers['Do Not Disturb']),
-                        int(status_timers['Idle']),
-                    ]
+                        int(status_timers["Online"]),
+                        int(status_timers["Offline"]),
+                        int(status_timers["Do Not Disturb"]),
+                        int(status_timers["Idle"]),
+                    ],
                 )
 
         embed = discord.Embed(
-            title=f'Past 1 Month User Activity of {user}',
+            title=f"Past 1 Month User Activity of {user}",
             description=(
-                f'`{'Fetching':<{12}}:` {fetching_time:.3f}s\n'
-                f'`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n'
-                f'`{'Generating':<{12}}:` {timer.seconds:.3f}s'
+                f"`{'Fetching':<{12}}:` {fetching_time:.3f}s\n"
+                f"`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n"
+                f"`{'Generating':<{12}}:` {timer.seconds:.3f}s"
             ),
             timestamp=min(record_dict.keys()),
-            colour=helpers.Colour.white()
+            colour=helpers.Colour.white(),
         )
-        embed.set_image(url=f'attachment://{canvas.filename}')
-        embed.set_footer(text='Watching since')
+        embed.set_image(url=f"attachment://{canvas.filename}")
+        embed.set_footer(text="Watching since")
         await ctx.send(embed=embed, file=canvas)
 
-    @command(
-        name='userinfo',
-        alias='ui',
-        description='Shows information about a user.',
-        hybrid=True,
-        guild_only=True
-    )
-    @describe(member='The member to show information for.')
+    @command(name="userinfo", alias="ui", description="Shows information about a user.", hybrid=True, guild_only=True)
+    @describe(member="The member to show information for.")
     async def userinfo(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         assert isinstance(ctx.author, discord.Member)
-        user: discord.Member = member or ctx.author
+        user: discord.Member | discord.User = member or ctx.author
         await ctx.defer()
 
         embed = discord.Embed(colour=helpers.Colour.white())
@@ -1046,46 +1024,48 @@ class Stats(Cog):
 
         embed.set_author(name=str(user))
 
-        informations.append(f'**Name:** {user.mention}')
-        informations.append(f'**ID:** `{user.id}`')
-        informations.append(f'**is Bot:** `{user.bot}`')
+        informations.append(f"**Name:** {user.mention}")
+        informations.append(f"**ID:** `{user.id}`")
+        informations.append(f"**is Bot:** `{user.bot}`")
 
         records = await self.get_presence_history(user.id, days=30)
-        last_seen = discord.utils.format_dt(records[0]['changed_at'], 'R') if records else '`Unknown`'
-        informations.append(f'**Last Seen:** {last_seen}')
+        last_seen = discord.utils.format_dt(records[0]["changed_at"], "R") if records else "`Unknown`"
+        informations.append(f"**Last Seen:** {last_seen}")
 
-        informations.append(f'**Created:** {discord.utils.format_dt(user.created_at, 'R')}')
-        informations.append(f'**Shared Servers:** {len(user.mutual_guilds)}')
-        informations.append(f'**System User:** `{user.system}`')
+        informations.append(f"**Created:** {discord.utils.format_dt(user.created_at, 'R')}")
+        informations.append(f"**Shared Servers:** {len(user.mutual_guilds)}")
+        informations.append(f"**System User:** `{user.system}`")
 
-        embed.add_field(name='User Information', value='\n'.join(informations), inline=False)
+        embed.add_field(name="User Information", value="\n".join(informations), inline=False)
 
-        guild_related.append(f'**Joined:** {discord.utils.format_dt(user.joined_at, 'R') if user.joined_at else "Unknown"}')
-        guild_related.append(f'**Join Position:** `{sum(m.joined_at < user.joined_at for m in user.guild.members if m.joined_at and user.joined_at) + 1}/{len(user.guild.members)}`')
-        guild_related.append(f'**Top Role:** {user.top_role.mention}')
-        guild_related.append(f'**Colour:** `{user.colour}`')
+        guild_related.append(f"**Joined:** {discord.utils.format_dt(user.joined_at, 'R') if user.joined_at else 'Unknown'}")
+        guild_related.append(
+            f"**Join Position:** `{sum(m.joined_at < user.joined_at for m in user.guild.members if m.joined_at and user.joined_at) + 1}/{len(user.guild.members)}`"  # type: ignore
+        )
+        guild_related.append(f"**Top Role:** {user.top_role.mention}")
+        guild_related.append(f"**Colour:** `{user.colour}`")
 
         badges_to_emoji = {
-            'partner': '<:partner:1322355086822735972>',  # Emoji Server
-            'verified_bot_developer': '<:earlydev:1322337994124034048>',  # Klappstuhl's Hideout
-            'hypesquad_balance': '<:balance:1322354569866383402>',  # Emoji Server
-            'hypesquad_bravery': '<:bravery:1322354587491110922>',  # Emoji Server
-            'hypesquad_brilliance': '<:brilliance:1322354595179135047>',  # Klappstuhl's Hideout
-            'bug_hunter': '<:bug_hunter_1:1322362990602883072>',  # Klappstuhl's Hideout
-            'hypesquad': '<:hypesquad_events:1322363349719060540>',  # Emoji Server
-            'early_supporter': '<:earlysupporter:1322363580867285013>',  # Klappstuhl's Hideout
-            'bug_hunter_level_2': '<:bug_hunter_2:1322362999314583602>',  # Klappstuhl's Hideout
-            'staff': '<:staff_badge:1322355128719769640>',  # Emoji Server
-            'discord_certified_moderator': '<:mod_badge:1322337933428260874>',  # Emoji Server
-            'active_developer': '<:active_developer:1322337889782202519>',  # Playground
+            "partner": "<:partner:1322355086822735972>",  # Emoji Server
+            "verified_bot_developer": "<:earlydev:1322337994124034048>",  # Klappstuhl's Hideout
+            "hypesquad_balance": "<:balance:1322354569866383402>",  # Emoji Server
+            "hypesquad_bravery": "<:bravery:1322354587491110922>",  # Emoji Server
+            "hypesquad_brilliance": "<:brilliance:1322354595179135047>",  # Klappstuhl's Hideout
+            "bug_hunter": "<:bug_hunter_1:1322362990602883072>",  # Klappstuhl's Hideout
+            "hypesquad": "<:hypesquad_events:1322363349719060540>",  # Emoji Server
+            "early_supporter": "<:earlysupporter:1322363580867285013>",  # Klappstuhl's Hideout
+            "bug_hunter_level_2": "<:bug_hunter_2:1322362999314583602>",  # Klappstuhl's Hideout
+            "staff": "<:staff_badge:1322355128719769640>",  # Emoji Server
+            "discord_certified_moderator": "<:mod_badge:1322337933428260874>",  # Emoji Server
+            "active_developer": "<:active_developer:1322337889782202519>",  # Playground
         }
 
         misc_flags_descriptions = {
-            'team_user': 'Application Team User',
-            'system': 'System User',
-            'spammer': 'Spammer',
-            'verified_bot': 'Verified Bot',
-            'bot_http_interactions': 'HTTP Interactions Bot',
+            "team_user": "Application Team User",
+            "system": "System User",
+            "spammer": "Spammer",
+            "verified_bot": "Verified Bot",
+            "bot_http_interactions": "HTTP Interactions Bot",
         }
 
         set_flags = {flag for flag, value in user.public_flags if value}
@@ -1093,40 +1073,39 @@ class Stats(Cog):
         badges = [badges_to_emoji[flag] for flag in subset_flags]
 
         if ctx.guild is not None and ctx.guild.owner_id == user.id:
-            badges.append('<:owner:1322355079109541940>')  # Emoji Server
+            badges.append("<:owner:1322355079109541940>")  # Emoji Server
 
         if isinstance(user, discord.Member) and user.premium_since is not None:
-            guild_related.append(f'**Boosting Since:** `{discord.utils.format_dt(user.premium_since, 'R')}`')
-            badges.append('<:booster:1322354580184633344>')  # Emoji Server
+            guild_related.append(f"**Boosting Since:** `{discord.utils.format_dt(user.premium_since, 'R')}`")
+            badges.append("<:booster:1322354580184633344>")  # Emoji Server
 
         if badges:
-            embed.description = ''.join(badges)
+            embed.description = "".join(badges)
 
-        custom_activity = next((act for act in getattr(user, 'activities', []) if isinstance(act, discord.CustomActivity)), None)
+        custom_activity = next(
+            (act for act in getattr(user, "activities", []) if isinstance(act, discord.CustomActivity)), None
+        )
         activity = (
-            f'`{discord.utils.remove_markdown(custom_activity.name)}`'
-            if custom_activity and custom_activity.name else None
+            f"`{discord.utils.remove_markdown(custom_activity.name)}`" if custom_activity and custom_activity.name else None
         )
         if activity:
-            guild_related.append(f'**Custom Activity:** {activity}')
+            guild_related.append(f"**Custom Activity:** {activity}")
 
-        voice = getattr(user, 'voice', None)
+        voice = getattr(user, "voice", None)
         if voice is not None:
             vc = voice.channel
             other_people = len(vc.members) - 1
-            voice = f'`{vc.name}` with {other_people} others' if other_people else f'`{vc.name}` by themselves'
-            guild_related.append(f'**Voice:** {voice}')
+            voice = f"`{vc.name}` with {other_people} others" if other_people else f"`{vc.name}` by themselves"
+            guild_related.append(f"**Voice:** {voice}")
 
         remaining_flags = (set_flags - subset_flags) & misc_flags_descriptions.keys()
         if remaining_flags:
-            guild_related.append(
-                f'**Flags:** {', '.join(misc_flags_descriptions[flag] for flag in remaining_flags)}'
-            )
+            guild_related.append(f"**Flags:** {', '.join(misc_flags_descriptions[flag] for flag in remaining_flags)}")
 
         perms = user.guild_permissions.value
-        guild_related.append(f'**Permissions:** [`{perms}`](https://discordapi.com/permissions.html#{perms})')
+        guild_related.append(f"**Permissions:** [`{perms}`](https://discordapi.com/permissions.html#{perms})")
 
-        embed.add_field(name='Guild Information', value='\n'.join(guild_related), inline=False)
+        embed.add_field(name="Guild Information", value="\n".join(guild_related), inline=False)
 
         if colour := user.colour.value:
             embed.colour = colour
@@ -1137,65 +1116,62 @@ class Stats(Cog):
         if user.banner:
             embed.set_image(url=user.banner.url)
 
-        embed.set_footer(
-            text='Buttons can also be called by using the commands: avyh, names, ps'
-        )
+        embed.set_footer(text="Buttons can also be called by using the commands: avyh, names, ps")
 
         await ctx.send(embed=embed, view=UserInfoView(ctx, user))
 
     @Cog.listener()
     async def on_command_error(self, ctx: Context, error: Exception) -> None:
         self.register_command(ctx)
-        error = getattr(error, 'original', error)
+        error = getattr(error, "original", error)
 
         if not isinstance(error, (commands.CommandInvokeError, commands.ConversionError)):
             return
 
-        blacklist = (
-            discord.Forbidden, discord.NotFound
-        )
+        blacklist = (discord.Forbidden, discord.NotFound)
         if isinstance(error, blacklist):
             return
 
-        embed = discord.Embed(title=f'{Emojis.warning} Command Error', colour=helpers.Colour.burgundy())
-        embed.add_field(name='Name', value=ctx.command.qualified_name)
-        embed.add_field(name='Author',
-                        value=f'[{ctx.author}](https://discord.com/users/{ctx.author.id}) (ID: {ctx.author.id})')
+        embed = discord.Embed(title=f"{Emojis.warning} Command Error", colour=helpers.Colour.burgundy())
+        embed.add_field(name="Name", value=ctx.command.qualified_name)
+        embed.add_field(
+            name="Author", value=f"[{ctx.author}](https://discord.com/users/{ctx.author.id}) (ID: {ctx.author.id})"
+        )
 
-        fmt = f'Channel: [#{ctx.channel}]({ctx.channel.jump_url}) (ID: {ctx.channel.id})\n'
+        fmt = f"Channel: [#{ctx.channel}]({ctx.channel.jump_url}) (ID: {ctx.channel.id})\n"
         if ctx.guild:
-            fmt += f'Guild: {ctx.guild} (ID: {ctx.guild.id})'
+            fmt += f"Guild: {ctx.guild} (ID: {ctx.guild.id})"
         else:
-            fmt += 'Guild: *<Private Message>*'
+            fmt += "Guild: *<Private Message>*"
 
-        embed.add_field(name='Location', value=fmt, inline=False)
-        embed.add_field(name='Content', value=textwrap.shorten(ctx.message.content, width=1024))
+        embed.add_field(name="Location", value=fmt, inline=False)
+        embed.add_field(name="Content", value=textwrap.shorten(ctx.message.content, width=1024))
 
-        exc = ''.join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
-        embed.description = f'```py\n{exc}\n```'
+        exc = "".join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
+        embed.description = f"```py\n{exc}\n```"
         embed.timestamp = discord.utils.utcnow()
-        embed.set_footer(text='occurred at')
+        embed.set_footer(text="occurred at")
         await self.bot.stats_webhook.send(embed=embed)
 
     def add_record(self, record: logging.LogRecord) -> None:
         self._logging_queue.put_nowait(record)
 
     async def send_log_record(self, record: logging.LogRecord) -> None:
-        attributes = {'INFO': Emojis.info, 'WARNING': Emojis.warning}
+        attributes = {"INFO": Emojis.info, "WARNING": Emojis.warning}
 
-        emoji = attributes.get(record.levelname, '\N{CROSS MARK}')
+        emoji = attributes.get(record.levelname, "\N{CROSS MARK}")
         dt = datetime.datetime.fromtimestamp(record.created, datetime.UTC)
-        msg = textwrap.shorten(f'{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}', width=1990)
-        if record.name == 'discord.gateway':
-            username = 'Gateway'
-            avatar_url = 'https://klappstuhl.me/gallery/xNZqq.png'
+        msg = textwrap.shorten(f"{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}", width=1990)
+        if record.name == "discord.gateway":
+            username = "Gateway"
+            avatar_url = "https://klappstuhl.me/gallery/xNZqq.png"
         else:
-            username = f'{record.name} Logger'
+            username = f"{record.name} Logger"
             avatar_url = discord.utils.MISSING
 
         await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url)
 
-    @command(hidden=True, description='Shows the current log level.')
+    @command(hidden=True, description="Shows the current log level.")
     @commands.is_owner()
     async def bothealth(self, ctx: Context) -> None:
         """Various bot health monitoring tools."""
@@ -1205,16 +1181,17 @@ class Stats(Cog):
         WARNING = helpers.Colour.energy_yellow()
         total_warnings = 0
 
-        embed = discord.Embed(title='Bot Health Report', colour=HEALTHY)
+        embed = discord.Embed(title="Bot Health Report", colour=HEALTHY)
 
         db = self.bot.db._internal_pool
         total_waiting = len(db._queue._getters)  # type: ignore[union-attr]
         current_generation = db._generation
 
         description = [
-            f'Total `Pool.acquire` Waiters: {total_waiting}',
-            f'Current Pool Generation: {current_generation}',
-            f'Connections In Use: {len(db._holders) - db._queue.qsize()}']  # type: ignore[union-attr]
+            f"Total `Pool.acquire` Waiters: {total_waiting}",
+            f"Current Pool Generation: {current_generation}",
+            f"Connections In Use: {len(db._holders) - db._queue.qsize()}",
+        ]  # type: ignore[union-attr]
 
         questionable_connections = 0
         connection_value = []
@@ -1222,17 +1199,17 @@ class Stats(Cog):
             generation = holder._generation
             in_use = holder._in_use is not None
             is_closed = holder._con is None or holder._con.is_closed()
-            display = f'gen={holder._generation} in_use={in_use} closed={is_closed}'
+            display = f"gen={holder._generation} in_use={in_use} closed={is_closed}"
             questionable_connections += any((in_use, generation != current_generation))
-            connection_value.append(f'<Holder i={index} {display}>')
+            connection_value.append(f"<Holder i={index} {display}>")
 
-        joined_value = '\n'.join(connection_value)
-        embed.add_field(name='Connections', value=f'```py\n{joined_value}\n```', inline=False)
+        joined_value = "\n".join(connection_value)
+        embed.add_field(name="Connections", value=f"```py\n{joined_value}\n```", inline=False)
 
         being_spammed = self.bot.spam_control.current_spammers
 
-        description.append(f'Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}')
-        description.append(f'Questionable Connections: {questionable_connections}')
+        description.append(f"Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}")
+        description.append(f"Questionable Connections: {questionable_connections}")
 
         total_warnings += questionable_connections
         if being_spammed:
@@ -1240,29 +1217,29 @@ class Stats(Cog):
             total_warnings += 1
 
         all_tasks = asyncio.all_tasks(loop=self.bot.loop)
-        event_tasks = [t for t in all_tasks if 'Client._run_event' in repr(t) and not t.done()]
+        event_tasks = [t for t in all_tasks if "Client._run_event" in repr(t) and not t.done()]
 
         cogs_directory = str(Path(__file__).parent)
-        tasks_directory = str(Path('discord', 'ext', 'tasks', '__init__.py'))
+        tasks_directory = str(Path("discord", "ext", "tasks", "__init__.py"))
         inner_tasks = [t for t in all_tasks if cogs_directory in repr(t) or tasks_directory in repr(t)]
 
-        bad_inner_tasks = ', '.join(hex(id(t)) for t in inner_tasks if t.done() and t._exception is not None)
+        bad_inner_tasks = ", ".join(hex(id(t)) for t in inner_tasks if t.done() and t._exception is not None)
         total_warnings += bool(bad_inner_tasks)
-        embed.add_field(name='Inner Tasks', value=f'Total: {len(inner_tasks)}\nFailed: {bad_inner_tasks or 'None'}')
-        embed.add_field(name='Events Waiting', value=f'Total: {len(event_tasks)}', inline=False)
+        embed.add_field(name="Inner Tasks", value=f"Total: {len(inner_tasks)}\nFailed: {bad_inner_tasks or 'None'}")
+        embed.add_field(name="Events Waiting", value=f"Total: {len(event_tasks)}", inline=False)
 
         command_waiters = len(self._command_data_batch)
-        description.append(f'Commands Waiting: {command_waiters}')
+        description.append(f"Commands Waiting: {command_waiters}")
 
         avatar_waiters = len(self._avatar_data_batch)
-        description.append(f'Avatars Waiting: {avatar_waiters}')
+        description.append(f"Avatars Waiting: {avatar_waiters}")
 
-        memory_usage = self.process.memory_full_info().uss / 1024 ** 2
+        memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
-        embed.add_field(name='Process', value=f'{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU', inline=False)
+        embed.add_field(name="Process", value=f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU", inline=False)
 
         global_rate_limit = not self.bot.http._global_over.is_set()
-        description.append(f'Global Rate Limit: {global_rate_limit}')
+        description.append(f"Global Rate Limit: {global_rate_limit}")
 
         if command_waiters >= 8:
             total_warnings += 1
@@ -1271,11 +1248,11 @@ class Stats(Cog):
         if global_rate_limit or total_warnings >= 9:
             embed.colour = UNHEALTHY
 
-        embed.set_footer(text=f'{total_warnings} warning(s)')
-        embed.description = '\n'.join(description)
+        embed.set_footer(text=f"{total_warnings} warning(s)")
+        embed.description = "\n".join(description)
         await ctx.send(embed=embed)
 
-    @command(hidden=True, description='Shows the current gateway traffic interaction with the bot.')
+    @command(hidden=True, description="Shows the current gateway traffic interaction with the bot.")
     @commands.is_owner()
     async def gateway(self, ctx: Context) -> None:
         """Gateway related stats."""
@@ -1285,8 +1262,8 @@ class Stats(Cog):
         traffic = summarize_gateway_traffic(self.bot.identifies, self.bot.resumes, since=yesterday)
 
         builder = [
-            f'Total RESUME(s): `{traffic.total_resumes}`',
-            f'Total IDENTIFY(s): `{traffic.total_identifies}`',
+            f"Total RESUME(s): `{traffic.total_resumes}`",
+            f"Total IDENTIFY(s): `{traffic.total_identifies}`",
         ]
 
         # shard_count = len(self.bot.shards)
@@ -1331,16 +1308,16 @@ class Stats(Cog):
         # else:
         #     colour = helpers.Colour.light_red()
 
-        embed = discord.Embed(colour=colour, title='Gateway (last 24 hours)')
-        embed.description = '\n'.join(builder)
-        embed.set_footer(text='None warnings')
+        embed = discord.Embed(colour=colour, title="Gateway (last 24 hours)")
+        embed.description = "\n".join(builder)
+        embed.set_footer(text="None warnings")
         await ctx.send(embed=embed)
 
     @staticmethod
     async def send_records_table(ctx: Context, records: list[asyncpg.Record]) -> None:
         """Renders a list of records as a plaintext table and sends it as a file."""
         if len(records) == 0:
-            await ctx.send_error('No results found.')
+            await ctx.send_error("No results found.")
             return
 
         headers = list(records[0].keys())
@@ -1349,22 +1326,22 @@ class Stats(Cog):
         table.add_rows(list(r.values()) for r in records)
         rendered = table.render()
 
-        fp = io.BytesIO(rendered.strip().encode('utf-8'))
-        await ctx.send('Too many results...', file=discord.File(fp, 'results.sql'))
+        fp = io.BytesIO(rendered.strip().encode("utf-8"))
+        await ctx.send("Too many results...", file=discord.File(fp, "results.sql"))
 
     @group(
-        'command',
+        "command",
         invoke_without_command=True,
         hidden=True,
-        description='Shows the current command usage statistics.',
+        description="Shows the current command usage statistics.",
     )
     async def _cmd(self, ctx: Context) -> None:
         """Shows the current command usage statistics."""
-        if self.bot.is_owner(ctx.author) and ctx.invoked_subcommand is None:
+        if await self.bot.is_owner(ctx.author) and ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @_cmd.command(name='stats', description='Shows the current command usage statistics.')
-    @describe(limit='The number of commands to display.')
+    @_cmd.command(name="stats", description="Shows the current command usage statistics.")
+    @describe(limit="The number of commands to display.")
     @commands.is_owner()
     async def command_stats(self, ctx: Context, *, limit: int = 12) -> None:
         """Shows the current command usage statistics.
@@ -1380,24 +1357,26 @@ class Stats(Cog):
 
         if limit > 0:
             common = counter.most_common(limit)
-            title = f'Top `{limit}` Commands'
+            title = f"Top `{limit}` Commands"
         else:
             common = counter.most_common()[limit:]
-            title = f'Bottom `{limit}` Commands'
+            title = f"Bottom `{limit}` Commands"
 
         image = await self.bot.render.bar_chart(
             dict(sorted(dict(common).items(), key=lambda item: item[1], reverse=True)),
-            f'{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)', merge=True)
-        await ctx.send(f'## {title}')
+            f"{total} total commands used ({slash_commands} slash command uses) ({cpm:.2f}/minute)",
+            merge=True,
+        )
+        await ctx.send(f"## {title}")
         await FilePaginator.start(ctx, entries=[image], per_page=1)  # type: ignore[arg-type]
 
     @_cmd.group(
-        name='history',
+        name="history",
         hidden=True,
         invoke_without_command=True,
-        description='Command history related commands.',
+        description="Command history related commands.",
     )
-    @describe(limit='The limit of records to show.')
+    @describe(limit="The limit of records to show.")
     @commands.is_owner()
     async def command_history(self, ctx: Context, limit: int = 15) -> None:
         """Command history."""
@@ -1406,26 +1385,25 @@ class Stats(Cog):
             await self.send_records_table(ctx, records)
 
     @command_history.command(
-        name='for',
+        name="for",
         hidden=True,
-        description='Command history for a command.',
+        description="Command history for a command.",
     )
-    @describe(days='The amount of days to look back.', command='The command to look for.')
+    @describe(days="The amount of days to look back.", command="The command to look for.")
     @commands.is_owner()
     async def command_history_for(self, ctx: Context, days: int = 7, *, command: str) -> None:
         """Command history for a command."""
         async with ctx.channel.typing():
-            records = await self.bot.db.stats.get_command_history_for(
-                command, datetime.timedelta(days=days))
+            records = await self.bot.db.stats.get_command_history_for(command, datetime.timedelta(days=days))
             await self.send_records_table(ctx, records)
 
     @command_history.command(
-        name='guild',
+        name="guild",
         hidden=True,
-        aliases=['server'],
-        description='Command history for a guild.',
+        aliases=["server"],
+        description="Command history for a guild.",
     )
-    @describe(guild_id='The guild to show the command history for.')
+    @describe(guild_id="The guild to show the command history for.")
     @commands.is_owner()
     async def command_history_guild(self, ctx: Context, guild_id: int) -> None:
         """Command history for a guild."""
@@ -1434,12 +1412,12 @@ class Stats(Cog):
             await self.send_records_table(ctx, records)
 
     @command_history.command(
-        name='user',
+        name="user",
         hidden=True,
-        aliases=['member'],
-        description='Command history for a user.',
+        aliases=["member"],
+        description="Command history for a user.",
     )
-    @describe(user_id='The user to show the command history for.')
+    @describe(user_id="The user to show the command history for.")
     @commands.is_owner()
     async def command_history_user(self, ctx: Context, user_id: int) -> None:
         """Command history for a user."""
@@ -1448,11 +1426,11 @@ class Stats(Cog):
             await self.send_records_table(ctx, records)
 
     @command_history.command(
-        name='log',
+        name="log",
         hidden=True,
-        description='Command history log for the last N days.',
+        description="Command history log for the last N days.",
     )
-    @describe(days='The amount of days to look back.')
+    @describe(days="The amount of days to look back.")
     @commands.is_owner()
     async def command_history_log(self, ctx: Context, days: int = 7) -> None:
         """Command history log for the last N days."""
@@ -1460,40 +1438,33 @@ class Stats(Cog):
             all_commands = {c.qualified_name: 0 for c in self.bot.walk_commands()}
             records = await self.get_commands_stats(days=days) or []
             for record in records:
-                if record['command'] in all_commands:
-                    all_commands[record['command']] = record['uses']
+                if record["command"] in all_commands:
+                    all_commands[record["command"]] = record["uses"]
 
             as_data = sorted(all_commands.items(), key=lambda t: t[1], reverse=True)
             table = TabularData()
-            table.set_columns(['Command', "uses"])
+            table.set_columns(["Command", "uses"])
             table.add_rows(tup for tup in as_data)
             rendered = table.render()
 
-            embed = discord.Embed(title='Summary', colour=discord.Colour.green())
-            embed.set_footer(text='Since').timestamp = discord.utils.utcnow() - datetime.timedelta(days=days)
+            embed = discord.Embed(title="Summary", colour=discord.Colour.green())
+            embed.set_footer(text="Since").timestamp = discord.utils.utcnow() - datetime.timedelta(days=days)
 
-            top_ten = '\n'.join(f'{record['command']}: {record['uses']}' for record in records[:10])
-            bottom_ten = '\n'.join(f'{record['command']}: {record['uses']}' for record in records[-10:])
-            embed.add_field(name='Top 10', value=top_ten)
-            embed.add_field(name='Bottom 10', value=bottom_ten)
+            top_ten = "\n".join(f"{record['command']}: {record['uses']}" for record in records[:10])
+            bottom_ten = "\n".join(f"{record['command']}: {record['uses']}" for record in records[-10:])
+            embed.add_field(name="Top 10", value=top_ten)
+            embed.add_field(name="Bottom 10", value=bottom_ten)
 
-            unused = ', '.join(name for name, uses in as_data if uses == 0)
+            unused = ", ".join(name for name, uses in as_data if uses == 0)
             if len(unused) > 1024:
-                unused = 'Way too many...'
+                unused = "Way too many..."
 
-            embed.add_field(name='Unused', value=unused, inline=False)
+            embed.add_field(name="Unused", value=unused, inline=False)
 
-            await ctx.send(
-                embed=embed,
-                file=discord.File(io.BytesIO(rendered.encode()), filename='full_results.accesslog')
-            )
+            await ctx.send(embed=embed, file=discord.File(io.BytesIO(rendered.encode()), filename="full_results.accesslog"))
 
-    @command_history.command(
-        name='cog',
-        hidden=True,
-        description='Command history for a cog or grouped by a cog.'
-    )
-    @describe(days='The amount of days to look back.', cog_name='The cog to show the command history for.')
+    @command_history.command(name="cog", hidden=True, description="Command history for a cog or grouped by a cog.")
+    @describe(days="The amount of days to look back.", cog_name="The cog to show the command history for.")
     @commands.is_owner()
     async def command_history_cog(self, ctx: Context, days: int = 7, *, cog_name: str | None = None) -> None:
         """Command history for a cog or grouped by a cog."""
@@ -1502,11 +1473,12 @@ class Stats(Cog):
             if cog_name is not None:
                 cog = self.bot.get_cog(cog_name)
                 if cog is None:
-                    await ctx.send_error(f'Unknown Cog: {cog_name}')
+                    await ctx.send_error(f"Unknown Cog: {cog_name}")
                     return
 
                 records = await self.bot.db.stats.get_command_history_by_cog(
-                    [c.qualified_name for c in cog.walk_commands()], interval)
+                    [c.qualified_name for c in cog.walk_commands()], interval
+                )
                 return await self.send_records_table(ctx, records)
 
             data = defaultdict(CommandUsageCount)

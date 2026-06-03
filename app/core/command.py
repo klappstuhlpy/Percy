@@ -24,22 +24,22 @@ if TYPE_CHECKING:
     from app.core.models import Cog
     from app.utils import AsyncCallable
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 __all__ = (
-    'Command',
-    'CommandInstance',
-    'GroupCommand',
-    'HybridCommand',
-    'HybridGroupCommand',
-    'ParamInfo',
-    'command',
-    'cooldown',
-    'describe',
-    'group',
-    'guild_max_concurrency',
-    'guilds',
-    'user_max_concurrency',
+    "Command",
+    "CommandInstance",
+    "GroupCommand",
+    "HybridCommand",
+    "HybridGroupCommand",
+    "ParamInfo",
+    "command",
+    "cooldown",
+    "describe",
+    "group",
+    "guild_max_concurrency",
+    "guilds",
+    "user_max_concurrency",
 )
 
 
@@ -101,16 +101,16 @@ class Command(commands.Command):
 
     def __init__(self, func: AsyncCallable[Any, Any], **kwargs: Any) -> None:
         self._permissions: PermissionSpec = PermissionSpec.new()
-        if user_permissions := kwargs.pop('user_permissions', {}):
-            self._permissions.update(user_permissions, 'user')
+        if user_permissions := kwargs.pop("user_permissions", {}):
+            self._permissions.update(user_permissions, "user")
 
-        if bot_permissions := kwargs.pop('bot_permissions', {}):
-            self._permissions.update(bot_permissions, 'bot')
+        if bot_permissions := kwargs.pop("bot_permissions", {}):
+            self._permissions.update(bot_permissions, "bot")
 
         self.custom_flags: FlagMeta[Any] | None = None
 
-        super().__init__(func, **kwargs)  # type: ignore[arg-type]
-        self.add_check(self._permissions.check)  # type: ignore[arg-type]
+        super().__init__(func, **kwargs)
+        self.add_check(self._permissions.check)
 
     @property
     def permissions(self) -> PermissionSpec:
@@ -118,7 +118,7 @@ class Command(commands.Command):
         return self._permissions
 
     def _ensure_assignment_on_copy(self, other: Command) -> Command:
-        super()._ensure_assignment_on_copy(other)  # type: ignore[arg-type]
+        super()._ensure_assignment_on_copy(other)
 
         other._permissions = self._permissions
         other.custom_flags = self.custom_flags
@@ -132,7 +132,7 @@ class Command(commands.Command):
 
         This still calls the original implementation to check if the command can be run.
         """
-        guild_ids_check = getattr(self.callback, '__guild_ids__', None)
+        guild_ids_check = getattr(self.callback, "__guild_ids__", None)
         if guild_ids_check and ctx.guild and ctx.guild.id not in guild_ids_check:
             return False
         return await super().can_run(ctx)
@@ -148,8 +148,8 @@ class Command(commands.Command):
         entries = []
         while cmd is not None:
             entries.append(cmd)
-            cmd = getattr(cmd, 'parent', None)
-        return sorted(entries, key=lambda x: len(x.qualified_name), reverse=True)  # type: ignore[attr-defined]
+            cmd = getattr(cmd, "parent", None)
+        return sorted(entries, key=lambda x: len(x.qualified_name), reverse=True)
 
     def transform_flag_parameters(self) -> None:
         """Transforms a with a subclass of `Flags` annotated parameter
@@ -192,7 +192,7 @@ class Command(commands.Command):
                 annotation = None if target.annotation is param.empty else target.annotation
 
                 self.params[first_consume_rest] = target.replace(
-                    annotation=ConsumeUntilFlag(annotation, default),  # type: ignore[arg-type]
+                    annotation=ConsumeUntilFlag(annotation, default),
                     kind=param.POSITIONAL_OR_KEYWORD,
                 )
                 break
@@ -201,6 +201,7 @@ class Command(commands.Command):
                 first_consume_rest = name
 
         if first_consume_rest and self.custom_flags:  # A kw-only has been transformed into a pos-or-kw, reverse this here
+
             @wraps(original := self.callback)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 """A wrapper to reverse the transformation of the first consume rest parameter."""
@@ -208,7 +209,7 @@ class Command(commands.Command):
 
                 for i, (arg, (k, v)) in enumerate(zip(args[idx:], self.params.items())):
                     if k == first_consume_rest:
-                        args = args[:i + idx]
+                        args = args[: i + idx]
                         kwargs[k] = arg
                         break
 
@@ -224,11 +225,11 @@ class Command(commands.Command):
         custom command class to avoid raising AttributeErrors.
         """
         if isinstance(command, cls):
-            return command.ansi_signature  # type: ignore
+            return command.ansi_signature
 
-        with TemporaryAttribute(command, attr='custom_flags', value=None):
+        with TemporaryAttribute(command, attr="custom_flags", value=None):
             assert cls.ansi_signature.fget is not None
-            return cls.ansi_signature.fget(command)  # type: ignore[arg-type]
+            return cls.ansi_signature.fget(command)
 
     @staticmethod
     def _disect_param(param: commands.Parameter) -> tuple:
@@ -243,7 +244,7 @@ class Command(commands.Command):
         # for typing.Literal[...], typing.Optional[typing.Literal[...]], and Greedy[typing.Literal[...]], the
         # parameter signature is a literal list of it's values
         annotation = param.annotation.converter if greedy else param.annotation
-        origin = getattr(annotation, '__origin__', None)
+        origin = getattr(annotation, "__origin__", None)
         if not greedy and origin is Union:
             none_cls = type(None)
             union_args = annotation.__args__
@@ -251,7 +252,7 @@ class Command(commands.Command):
 
             if len(union_args) == 2 and optional:
                 annotation = union_args[0]
-                origin = getattr(annotation, '__origin__', None)
+                origin = getattr(annotation, "__origin__", None)
 
         return annotation, greedy, optional, origin
 
@@ -277,7 +278,7 @@ class Command(commands.Command):
             if isinstance(annotation, FlagMeta) and self.custom_flags:
                 for flag in self.custom_flags.walk_flags():
                     optional = not flag.required
-                    name = '--' + flag.name
+                    name = "--" + flag.name
                     default = param.empty
 
                     if (not flag.store_true and flag.default) or flag.default is False:
@@ -296,7 +297,7 @@ class Command(commands.Command):
                     )
                 continue
 
-            choices = annotation.__args__ if origin is Literal else None  # type: ignore[attr-defined]
+            choices = annotation.__args__ if origin is Literal else None
 
             if default is not param.empty:
                 show_default = bool(default) if isinstance(default, str) else default is not None
@@ -342,73 +343,73 @@ class Command(commands.Command):
             if isinstance(annotation, FlagMeta) and self.custom_flags:
                 if annotation.__commands_flag_compress_usage__:
                     required = any(flag.required for flag in self.custom_flags.walk_flags())
-                    start, end = '<>' if required else '[]'
+                    start, end = "<>" if required else "[]"
                     result.append(start, color=AnsiColor.gray, bold=True)
-                    result.append(name + '...', color=AnsiColor.yellow if required else AnsiColor.blue)
-                    result.append(end + ' ', color=AnsiColor.gray, bold=True)
+                    result.append(name + "...", color=AnsiColor.yellow if required else AnsiColor.blue)
+                    result.append(end + " ", color=AnsiColor.gray, bold=True)
                     continue
 
                 for flag in self.custom_flags.walk_flags():
-                    start, end = '<>' if flag.required else '[]'
-                    base = '--' + flag.name
+                    start, end = "<>" if flag.required else "[]"
+                    base = "--" + flag.name
 
                     result.append(start, bold=True, color=AnsiColor.gray)
                     result.append(base, color=AnsiColor.yellow if flag.required else AnsiColor.blue)
 
                     if not flag.store_true:
-                        result.append(' <', color=AnsiColor.gray, bold=True)
+                        result.append(" <", color=AnsiColor.gray, bold=True)
                         result.append(flag.dest, color=AnsiColor.magenta)
 
                         if flag.default or flag.default is False:
-                            result.append('=', color=AnsiColor.gray)
+                            result.append("=", color=AnsiColor.gray)
                             result.append(str(flag.default), color=AnsiColor.cyan)
 
-                        result.append('>', color=AnsiColor.gray, bold=True)
+                        result.append(">", color=AnsiColor.gray, bold=True)
 
-                    result.append(end + ' ', color=AnsiColor.gray, bold=True)
+                    result.append(end + " ", color=AnsiColor.gray, bold=True)
 
                 continue
 
             if origin is Literal:
-                name = '|'.join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)  # type: ignore[attr-defined]
+                name = "|".join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)
 
             if param.default is not param.empty:
                 # We don't want None or '' to trigger the [name=value] case, and instead it should
                 # do [name] since [name=None] or [name=] are not exactly useful for the user.
                 should_print = param.default if isinstance(param.default, str) else param.default is not None
-                result.append('[', color=AnsiColor.gray, bold=True)
+                result.append("[", color=AnsiColor.gray, bold=True)
                 result.append(name, color=AnsiColor.blue)
 
                 if should_print:
-                    result.append('=', color=AnsiColor.gray, bold=True)
+                    result.append("=", color=AnsiColor.gray, bold=True)
                     result.append(str(param.default), color=AnsiColor.cyan)
-                    extra = '...' if greedy else ''
+                    extra = "..." if greedy else ""
                 else:
-                    extra = ''
+                    extra = ""
 
-                result.append(']' + extra + ' ', color=AnsiColor.gray, bold=True)
+                result.append("]" + extra + " ", color=AnsiColor.gray, bold=True)
                 continue
 
             elif param.kind == param.VAR_POSITIONAL:
                 if self.require_var_positional:
-                    start = '<'
-                    end = '...>'
+                    start = "<"
+                    end = "...>"
                 else:
-                    start = '['
-                    end = '...]'
+                    start = "["
+                    end = "...]"
 
             elif greedy:
-                start = '['
-                end = ']...'
+                start = "["
+                end = "]..."
 
             elif optional:
-                start, end = '[]'
+                start, end = "[]"
             else:
-                start, end = '<>'
+                start, end = "<>"
 
             result.append(start, color=AnsiColor.gray, bold=True)
-            result.append(name, color=AnsiColor.blue if start == '[' else AnsiColor.yellow)
-            result.append(end + ' ', color=AnsiColor.gray, bold=True)
+            result.append(name, color=AnsiColor.blue if start == "[" else AnsiColor.yellow)
+            result.append(end + " ", color=AnsiColor.gray, bold=True)
 
         return result
 
@@ -418,12 +419,13 @@ class _app_command_override(app_commands.Command):
 
     This is used to ensure that the application command is properly copied over to the hybrid command.
     """
+
     def copy(self) -> Self:
         """Ensure the app command is properly copied."""
         bindings = {
             self.binding: self.binding,
         }
-        return self._copy_with(  # type: ignore[return-value]
+        return self._copy_with(
             parent=self.parent,
             binding=self.binding,
             bindings=bindings,
@@ -432,47 +434,47 @@ class _app_command_override(app_commands.Command):
 
 
 def define_app_command_impl(
-        source: HybridCommand | HybridGroupCommand,
-        cls: type[app_commands.Command | app_commands.Group],
-        **kwargs: Any,
-) -> Callable[[AsyncCallable[..., Any]], None]:  # type: ignore[arg-type]
-    def decorator(func: AsyncCallable | AsyncCallable[..., Any]) -> None:  # type: ignore[arg-type]
+    source: HybridCommand | HybridGroupCommand,
+    cls: type[app_commands.Command | app_commands.Group],
+    **kwargs: Any,
+) -> Callable[[AsyncCallable], None]:
+    def decorator(func: AsyncCallable) -> None:
         @functools.wraps(func)
         async def wrapper(self: Cog, inter: discord.Interaction, *args: Any, **kwds: Any) -> Any:
             source.cog = self
             ctx = await self.bot.get_context(inter)
-            ctx.command = source  # type: ignore[arg-type]
+            ctx.command = source
 
             async def invoker(*iargs: Any, **ikwargs: Any) -> Any:
                 ctx.args = [ctx.cog, ctx, *iargs]
                 ctx.kwargs = ikwargs
 
-                with TemporaryAttribute(ctx.command, '_parse_arguments', _dummy_context):
+                with TemporaryAttribute(ctx.command, "_parse_arguments", _dummy_context):
                     return await ctx.bot.invoke(ctx)
 
-            ctx.full_invoke = invoker  # type: ignore[method-assign]
-            ctx.interaction = inter  # type: ignore[arg-type]
+            ctx.full_invoke = invoker
+            ctx.interaction = inter  # type: ignore
             return await func(self, ctx, *args, **kwds)
 
-        wrapper.__globals__.update(func.__globals__)  # type: ignore
-        source.app_command = cls(  # type: ignore[arg-type, call-arg]
+        wrapper.__globals__.update(func.__globals__)
+        source.app_command = cls(  # type: ignore
             name=source.name,
             # description cant be none!
             description=source.short_doc or truncate(source.description, 100),
-            parent=source.parent.app_command if isinstance(source.parent, HybridGroupCommand) else None,  # type: ignore[arg-type]
+            parent=source.parent.app_command if isinstance(source.parent, HybridGroupCommand) else None,
             callback=wrapper,
             **kwargs,
         )
 
         @source.app_command.error
-        async def on_error(_: Any, interaction: discord.Interaction, error: BaseException) -> None:  # type: ignore[arg-type]
-            interaction.client.dispatch('command_error', interaction._baton, error)
+        async def on_error(_: Any, interaction: discord.Interaction, error: BaseException) -> None:
+            interaction.client.dispatch("command_error", interaction._baton, error)
 
     return decorator
 
 
 @discord.utils.copy_doc(commands.HybridCommand)
-class HybridCommand(Command, commands.HybridCommand):  # type: ignore[misc]
+class HybridCommand(Command, commands.HybridCommand):
     def define_app_command(self, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], None]:
         """Define an application command for this hybrid command."""
         return define_app_command_impl(self, _app_command_override, **kwargs)
@@ -482,27 +484,27 @@ class HybridCommand(Command, commands.HybridCommand):  # type: ignore[misc]
 class GroupCommand(commands.Group, Command):
     @discord.utils.copy_doc(commands.Group.command)
     def command(self, *args: Any, **kwargs: Any) -> Callable[..., Command]:
-        def decorator(func: AsyncCallable[..., Any]) -> Command:  # type: ignore[arg-type]
+        def decorator(func: AsyncCallable) -> Command:
             _resolve_kwargs_inheritance(kwargs, self)
             result = command(*args, **kwargs)(func)
-            self.add_command(result)  # type: ignore
+            self.add_command(result)
             return result
 
         return decorator
 
     @discord.utils.copy_doc(commands.Group.group)
     def group(self, *args: Any, **kwargs: Any) -> Callable[..., GroupCommand]:
-        def decorator(func: AsyncCallable[..., Any]) -> GroupCommand:  # type: ignore[arg-type]
+        def decorator(func: AsyncCallable) -> GroupCommand:
             _resolve_kwargs_inheritance(kwargs, self)
             result = group(*args, **kwargs)(func)
-            self.add_command(result)  # type: ignore
+            self.add_command(result)
             return result
 
         return decorator
 
 
 @discord.utils.copy_doc(commands.HybridGroup)
-class HybridGroupCommand(GroupCommand, commands.HybridGroup):  # type: ignore[misc]
+class HybridGroupCommand(GroupCommand, commands.HybridGroup):
     def define_app_command(self, **kwargs: Any) -> Callable[[AsyncCallable[..., Any]], None]:
         return define_app_command_impl(self, app_commands.Group, **kwargs)
 
@@ -522,64 +524,63 @@ class HybridGroupCommand(GroupCommand, commands.HybridGroup):  # type: ignore[mi
 CommandInstance = Command | HybridCommand | HybridGroupCommand | GroupCommand
 
 
-# noinspection PyShadowingBuiltins
 def _resolve_command_kwargs(
-        cls: type,
-        *,
-        name: str = MISSING,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
+    cls: type,
+    *,
+    name: str = MISSING,
+    alias: str = MISSING,
+    aliases: Iterable[str] = MISSING,
+    usage: str = MISSING,
+    brief: str = MISSING,
+    help: str = MISSING,
 ) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {'cls': cls}
+    kwargs: dict[str, Any] = {"cls": cls}
 
     if name is not MISSING:
-        kwargs['name'] = name
+        kwargs["name"] = name
 
     if alias is not MISSING and aliases is not MISSING:
-        raise TypeError('cannot have alias and aliases kwarg filled')
+        raise TypeError("cannot have alias and aliases kwarg filled")
 
     if alias is not MISSING:
-        kwargs['aliases'] = (alias,)
+        kwargs["aliases"] = (alias,)
 
     if aliases is not MISSING:
-        kwargs['aliases'] = tuple(aliases)
+        kwargs["aliases"] = tuple(aliases)
 
     if usage is not MISSING:
-        kwargs['usage'] = usage
+        kwargs["usage"] = usage
 
     if brief is not MISSING:
-        kwargs['brief'] = brief
+        kwargs["brief"] = brief
 
     if help is not MISSING:
-        kwargs['help'] = help
+        kwargs["help"] = help
 
     return kwargs
 
 
 def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand) -> dict[str, Any]:
-    new.setdefault('guild_only', parent.__original_kwargs__.get('guild_only', False))
-    new.setdefault('parent', parent)
-    new.setdefault('hybrid', isinstance(parent, (HybridGroupCommand, HybridCommand)))
-    new.setdefault('hidden', parent.hidden)
+    new.setdefault("guild_only", parent.__original_kwargs__.get("guild_only", False))
+    new.setdefault("parent", parent)
+    new.setdefault("hybrid", isinstance(parent, (HybridGroupCommand, HybridCommand)))
+    new.setdefault("hidden", parent.hidden)
     return new
 
 
 def command(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        examples: list[str] = MISSING,
-        hybrid: bool = False,
-        guild_only: bool = False,
-        nsfw: bool = False,
-        **other_kwargs: Any,
+    name: str = MISSING,
+    *,
+    alias: str = MISSING,
+    aliases: Iterable[str] = MISSING,
+    usage: str = MISSING,
+    brief: str = MISSING,
+    help: str = MISSING,
+    examples: list[str] = MISSING,
+    hybrid: bool = False,
+    guild_only: bool = False,
+    nsfw: bool = False,
+    **other_kwargs: Any,
 ) -> Callable[..., Command | HybridCommand]:
     """A decorator that turns a function into a command.
 
@@ -587,40 +588,45 @@ def command(
     """
     kwargs = _resolve_command_kwargs(
         HybridCommand if hybrid else Command,
-        name=name, alias=alias, aliases=aliases, brief=brief, help=help, usage=usage,
+        name=name,
+        alias=alias,
+        aliases=aliases,
+        brief=brief,
+        help=help,
+        usage=usage,
     )
 
-    extras = other_kwargs.setdefault('extras', {})
+    extras = other_kwargs.setdefault("extras", {})
     if examples is not MISSING:
-        extras['examples'] = examples
+        extras["examples"] = examples
 
-    other_kwargs.setdefault('guild_only', guild_only)
-    other_kwargs.setdefault('nsfw', nsfw)
+    other_kwargs.setdefault("guild_only", guild_only)
+    other_kwargs.setdefault("nsfw", nsfw)
 
     # Apply decorators
-    def decorator(func: AsyncCallable[..., Any]) -> Command:  # type: ignore[arg-type]
-        func = commands.command(**kwargs, **other_kwargs)(func)  # type: ignore[assignment]
+    def decorator(func: AsyncCallable) -> Command:
+        func = commands.command(**kwargs, **other_kwargs)(func)
 
         if nsfw:
-            func = commands.is_nsfw()(func)  # type: ignore[assignment]
+            func = commands.is_nsfw()(func)
         if guild_only:
-            func = commands.guild_only()(func)  # type: ignore[assignment]
-        return func  # type: ignore[return-value]
+            func = commands.guild_only()(func)
+        return func
 
-    return decorator  # type: ignore[return-value]
+    return decorator
 
 
 def group(
-        name: str = MISSING,
-        *,
-        alias: str = MISSING,
-        aliases: Iterable[str] = MISSING,
-        usage: str = MISSING,
-        brief: str = MISSING,
-        help: str = MISSING,
-        hybrid: bool = False,
-        iwc: bool = True,
-        **other_kwargs: Any,
+    name: str = MISSING,
+    *,
+    alias: str = MISSING,
+    aliases: Iterable[str] = MISSING,
+    usage: str = MISSING,
+    brief: str = MISSING,
+    help: str = MISSING,
+    hybrid: bool = False,
+    iwc: bool = True,
+    **other_kwargs: Any,
 ) -> Callable[..., GroupCommand | HybridGroupCommand]:
     """A decorator that turns a function into a group command.
 
@@ -628,34 +634,39 @@ def group(
     """
     kwargs = _resolve_command_kwargs(
         HybridGroupCommand if hybrid else GroupCommand,
-        name=name, alias=alias, aliases=aliases, brief=brief, help=help, usage=usage,
+        name=name,
+        alias=alias,
+        aliases=aliases,
+        brief=brief,
+        help=help,
+        usage=usage,
     )
 
-    other_kwargs.setdefault('invoke_without_command', iwc)
+    other_kwargs.setdefault("invoke_without_command", iwc)
 
-    return commands.group(**kwargs, **other_kwargs)  # type: ignore[arg-type]
+    return commands.group(**kwargs, **other_kwargs)
 
 
 @discord.utils.copy_doc(commands.cooldown)
 def cooldown(rate: int, per: float, bucket: commands.BucketType = commands.BucketType.user) -> Any:
-    return commands.cooldown(rate, per, bucket)  # type: ignore[return-value]
+    return commands.cooldown(rate, per, bucket)
 
 
 @discord.utils.copy_doc(commands.max_concurrency)
 def user_max_concurrency(count: int, *, wait: bool = False) -> Any:
-    return commands.max_concurrency(count, commands.BucketType.user, wait=wait)  # type: ignore[return-value]
+    return commands.max_concurrency(count, commands.BucketType.user, wait=wait)
 
 
 @discord.utils.copy_doc(commands.max_concurrency)
 def guild_max_concurrency(count: int, *, wait: bool = False) -> Any:
-    return commands.max_concurrency(count, commands.BucketType.guild, wait=wait)  # type: ignore[return-value]
+    return commands.max_concurrency(count, commands.BucketType.guild, wait=wait)
 
 
 def guilds(*guild_ids: int) -> Any:
     """A decorator that adds guild specification for an (app)command."""
 
     def decorator(func: T) -> T:
-        func.__guild_ids__ = guild_ids  # type: ignore[attr-defined]
+        func.__guild_ids__ = guild_ids
         func = app_commands.guilds(*guild_ids)(func)
         return func
 
@@ -674,7 +685,7 @@ def describe(**parameters: str) -> Any:
                 if param.name in parameters and param.description is None:
                     param._description = parameters[param.name]
         else:
-            func = app_commands.describe(**parameters)(func)  # type: ignore[assignment]
+            func = app_commands.describe(**parameters)(func)
         return func
 
     return decorator

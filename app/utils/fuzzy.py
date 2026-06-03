@@ -21,15 +21,16 @@ if TYPE_CHECKING:
 
 try:
     import Levenshtein.StringMatcher as SM
+
     SequenceMatcher = SM.StringMatcher
 except ImportError:
-    if platform.python_implementation() != 'PyPy':
-        warnings.warn('Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning')
+    if platform.python_implementation() != "PyPy":
+        warnings.warn("Using slow pure-python SequenceMatcher. Install python-Levenshtein to remove this warning")
     from difflib import SequenceMatcher
 
-T = TypeVar('T')
+T = TypeVar("T")
 
-WORD_REGEX = re.compile(r'\W', re.IGNORECASE)
+WORD_REGEX = re.compile(r"\W", re.IGNORECASE)
 
 
 @checks.check_for_none
@@ -80,7 +81,7 @@ def partial_ratio(string1: str, string2: str) -> int:
 
         m2 = SequenceMatcher(None, shorter, long_substr)
         r = m2.ratio()
-        if r > .995:
+        if r > 0.995:
             return 100
         else:
             scores.append(r)
@@ -90,8 +91,8 @@ def partial_ratio(string1: str, string2: str) -> int:
 
 def _sorted_tokens(a: str, b: str) -> tuple[str, str]:
     def _sort_tokens(t: str) -> str:
-        t = WORD_REGEX.sub(' ', t).lower().strip()
-        return ' '.join(sorted(t.split()))
+        t = WORD_REGEX.sub(" ", t).lower().strip()
+        return " ".join(sorted(t.split()))
 
     a = _sort_tokens(a)
     b = _sort_tokens(b)
@@ -112,29 +113,27 @@ def partial_token_sort_ratio(a: str, b: str) -> int:
 
 @overload
 def _extraction_generator(
-        query: str,
-        choices: Sequence[str],
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> Generator[tuple[str, int], None, None]:
-    ...
+    query: str,
+    choices: Sequence[str],
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> Generator[tuple[str, int], None, None]: ...
 
 
 @overload
 def _extraction_generator[T](
-        query: str,
-        choices: dict[str, T],
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> Generator[tuple[str, int, T], None, None]:
-    ...
+    query: str,
+    choices: dict[str, T],
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> Generator[tuple[str, int, T], None, None]: ...
 
 
 def _extraction_generator[T](
-        query: str,
-        choices: Sequence[str] | dict[str, T],
-        scorer: Callable[[str, str], int] = quick_ratio,
-        score_cutoff: int = 0,
+    query: str,
+    choices: Sequence[str] | dict[str, T],
+    scorer: Callable[[str, str], int] = quick_ratio,
+    score_cutoff: int = 0,
 ) -> Generator[tuple[str, int, T] | tuple[str, int], None, None]:
     if isinstance(choices, dict):
         for key, value in choices.items():
@@ -150,35 +149,33 @@ def _extraction_generator[T](
 
 @overload
 def extract(
-        query: str,
-        choices: Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-        limit: int | None = ...,
-) -> list[tuple[str, int]]:
-    ...
+    query: str,
+    choices: Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+    limit: int | None = ...,
+) -> list[tuple[str, int]]: ...
 
 
 @overload
 def extract[T](
-        query: str,
-        choices: dict[str, T],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-        limit: int | None = ...,
-) -> list[tuple[str, int, T]]:
-    ...
+    query: str,
+    choices: dict[str, T],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+    limit: int | None = ...,
+) -> list[tuple[str, int, T]]: ...
 
 
 def extract[T](
-        query: str,
-        choices: dict[str, T] | Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = quick_ratio,
-        score_cutoff: int = 0,
-        limit: int | None = 10,
+    query: str,
+    choices: dict[str, T] | Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = quick_ratio,
+    score_cutoff: int = 0,
+    limit: int | None = 10,
 ) -> list[tuple[str, int]] | list[tuple[str, int, T]]:
     def key(t: tuple[str, int, T] | tuple[str, int]) -> int:
         return t[1]
@@ -191,32 +188,30 @@ def extract[T](
 
 @overload
 def extract_one(
-        query: str,
-        choices: Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> tuple[str, int] | None:
-    ...
+    query: str,
+    choices: Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> tuple[str, int] | None: ...
 
 
 @overload
 def extract_one[T](
-        query: str,
-        choices: dict[str, T],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> tuple[str, int, T] | None:
-    ...
+    query: str,
+    choices: dict[str, T],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> tuple[str, int, T] | None: ...
 
 
 def extract_one[T](
-        query: str,
-        choices: dict[str, T] | Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = quick_ratio,
-        score_cutoff: int = 0,
+    query: str,
+    choices: dict[str, T] | Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = quick_ratio,
+    score_cutoff: int = 0,
 ) -> tuple[str, int] | tuple[str, int, T] | None:
     def key(t: tuple[str, int, T] | tuple[str, int]) -> int:
         return t[1]
@@ -230,35 +225,33 @@ def extract_one[T](
 
 @overload
 def extract_or_exact(
-        query: str,
-        choices: Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-        limit: int | None = ...,
-) -> list[tuple[str, int]]:
-    ...
+    query: str,
+    choices: Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+    limit: int | None = ...,
+) -> list[tuple[str, int]]: ...
 
 
 @overload
 def extract_or_exact[T](
-        query: str,
-        choices: dict[str, T],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-        limit: int | None = ...,
-) -> list[tuple[str, int, T]]:
-    ...
+    query: str,
+    choices: dict[str, T],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+    limit: int | None = ...,
+) -> list[tuple[str, int, T]]: ...
 
 
 def extract_or_exact[T](
-        query: str,
-        choices: dict[str, T] | Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = quick_ratio,
-        score_cutoff: int = 0,
-        limit: int | None = None,
+    query: str,
+    choices: dict[str, T] | Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = quick_ratio,
+    score_cutoff: int = 0,
+    limit: int | None = None,
 ) -> list[tuple[str, int]] | list[tuple[str, int, T]]:
     matches = extract(query, choices, scorer=scorer, score_cutoff=score_cutoff, limit=limit)
     if len(matches) == 0:
@@ -279,32 +272,30 @@ def extract_or_exact[T](
 
 @overload
 def extract_matches(
-        query: str,
-        choices: Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> list[tuple[str, int]]:
-    ...
+    query: str,
+    choices: Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> list[tuple[str, int]]: ...
 
 
 @overload
 def extract_matches[T](
-        query: str,
-        choices: dict[str, T],
-        *,
-        scorer: Callable[[str, str], int] = ...,
-        score_cutoff: int = ...,
-) -> list[tuple[str, int, T]]:
-    ...
+    query: str,
+    choices: dict[str, T],
+    *,
+    scorer: Callable[[str, str], int] = ...,
+    score_cutoff: int = ...,
+) -> list[tuple[str, int, T]]: ...
 
 
 def extract_matches[T](
-        query: str,
-        choices: dict[str, T] | Sequence[str],
-        *,
-        scorer: Callable[[str, str], int] = quick_ratio,
-        score_cutoff: int = 0,
+    query: str,
+    choices: dict[str, T] | Sequence[str],
+    *,
+    scorer: Callable[[str, str], int] = quick_ratio,
+    score_cutoff: int = 0,
 ) -> list[tuple[str, int]] | list[tuple[str, int, T]]:
     matches = extract(query, choices, scorer=scorer, score_cutoff=score_cutoff, limit=None)
     if len(matches) == 0:
@@ -330,51 +321,48 @@ def extract_matches[T](
 
 @overload
 def finder[T](
-        text: str,
-        collection: Iterable[T],
-        *,
-        key: Callable[[T], str] | None = ...,
-        raw: Literal[True],
-        limit: int | None = ...,
-) -> list[tuple[int, int, T]]:
-    ...
+    text: str,
+    collection: Iterable[T],
+    *,
+    key: Callable[[T], str] | None = ...,
+    raw: Literal[True],
+    limit: int | None = ...,
+) -> list[tuple[int, int, T]]: ...
 
 
 @overload
 def finder[T](
-        text: str,
-        collection: Iterable[T],
-        *,
-        key: Callable[[T], str] | None = ...,
-        raw: Literal[False],
-        limit: int | None = ...,
-) -> list[T]:
-    ...
+    text: str,
+    collection: Iterable[T],
+    *,
+    key: Callable[[T], str] | None = ...,
+    raw: Literal[False],
+    limit: int | None = ...,
+) -> list[T]: ...
 
 
 @overload
 def finder[T](
-        text: str,
-        collection: Iterable[T],
-        *,
-        key: Callable[[T], str] | None = ...,
-        raw: bool = ...,
-        limit: int | None = ...,
-) -> T:
-    ...
+    text: str,
+    collection: Iterable[T],
+    *,
+    key: Callable[[T], str] | None = ...,
+    raw: bool = ...,
+    limit: int | None = ...,
+) -> T: ...
 
 
 def finder[T](
-        text: str,
-        collection: Iterable[T],
-        *,
-        key: Callable[[T], str] | None = None,
-        raw: bool = False,
-        limit: int | None = None,
+    text: str,
+    collection: Iterable[T],
+    *,
+    key: Callable[[T], str] | None = None,
+    raw: bool = False,
+    limit: int | None = None,
 ) -> list[tuple[int, int, T]] | list[T] | T:
     suggestions: list[tuple[int, int, T]] = []
     text = str(text)
-    pat = '.*?'.join(map(re.escape, text))
+    pat = ".*?".join(map(re.escape, text))
     regex = re.compile(pat, flags=re.IGNORECASE)
     for item in collection:
         if limit is not None and len(suggestions) >= limit:

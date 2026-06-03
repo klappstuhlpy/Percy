@@ -101,7 +101,7 @@ class MarvelObject:
         self.data: dict = data
 
     @staticmethod
-    def str_to_datetime(text: str) -> datetime.datetime:
+    def str_to_datetime(text: str) -> datetime | None:
         """Converts string to datetime object"""
         return utcparse(text)
 
@@ -133,7 +133,7 @@ class DataWrapper(MarvelObject):
         return self.data['type']
 
     @property
-    def date(self) -> datetime.datetime:
+    def date(self) -> datetime | None:
         return self.str_to_datetime(self.data['date'])
 
     @property
@@ -145,12 +145,12 @@ class DataWrapper(MarvelObject):
         return DataContainer(self.marvel, self.data['data'])
 
 
-class DataContainer[K_T: dict[str, Any]](MarvelObject):
+class DataContainer(MarvelObject):
     """Base DataContainer"""
 
-    data: K_T  # type: ignore[assignment]
+    data: dict[str, Any]
 
-    def __init__(self, marvel: Marvel, data: K_T) -> None:
+    def __init__(self, marvel: Marvel, data: dict[str, Any]) -> None:
         super().__init__(marvel, data)
 
     @property
@@ -184,10 +184,10 @@ class DataContainer[K_T: dict[str, Any]](MarvelObject):
         return [Comic(self.marvel, comic) for comic in self.data['results']]
 
 
-class List[K_T: dict[str, Any]](MarvelObject):
+class List(MarvelObject):
     """Base List object"""
 
-    data: K_T  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def available(self) -> int:
@@ -211,10 +211,10 @@ class List[K_T: dict[str, Any]](MarvelObject):
         return [Summary(self.marvel, item) for item in self.data['items']]
 
 
-class Summary[K_T: dict[str, Any]](MarvelObject):
+class Summary(MarvelObject):
     """Base Summary object"""
 
-    data: K_T  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def resourceURI(self) -> str:
@@ -232,10 +232,10 @@ class Summary[K_T: dict[str, Any]](MarvelObject):
         return self.data['role']
 
 
-class TextObject[K_T: dict[str, Any]](MarvelObject):
+class TextObject(MarvelObject):
     """Base TextObject object"""
 
-    data: K_T  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def type(self) -> str:
@@ -253,10 +253,10 @@ class TextObject[K_T: dict[str, Any]](MarvelObject):
         return self.data['text']
 
 
-class Image[K_T: dict[str, Any]](MarvelObject):
+class Image(MarvelObject):
     """Base Image object"""
 
-    data: K_T  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def path(self) -> str:
@@ -272,11 +272,11 @@ class Image[K_T: dict[str, Any]](MarvelObject):
         return f'{self.path}.{self.extension}'
 
 
-class Comic[K_T: dict[str, Any]](MarvelObject):
+class Comic(MarvelObject):
     """Comic object"""
 
     ENDPOINT: str = 'comics'
-    data: dict[str, K_T]  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def id(self) -> int:
@@ -299,7 +299,7 @@ class Comic[K_T: dict[str, Any]](MarvelObject):
         return self.data['description']
 
     @property
-    def modified(self) -> datetime.datetime:
+    def modified(self) -> Any | None:
         return self.str_to_datetime(self.data['modified'])
 
     @property
@@ -359,7 +359,7 @@ class Comic[K_T: dict[str, Any]](MarvelObject):
         return [Image(self.marvel, image) for image in self.data['images']]
 
     @property
-    def creators(self) -> List[DataWrapper]:
+    def creators(self) -> List:
         return List(self.marvel, self.data['creators'])
 
     @property
@@ -371,11 +371,11 @@ class Comic[K_T: dict[str, Any]](MarvelObject):
         return [DataWrapper(self.marvel, price) for price in self.data['prices']]
 
 
-class Creator[K_T: dict[str, Any]](MarvelObject):
+class Creator(MarvelObject):
     """Creator object for Marvel API."""
 
     ENDPOINT: str = 'creators'
-    data: dict[str, K_T]  # type: ignore[assignment]
+    data: dict[str, Any]
 
     @property
     def id(self) -> int:
@@ -402,7 +402,7 @@ class Creator[K_T: dict[str, Any]](MarvelObject):
         return self.data['fullName']
 
     @property
-    def modified(self) -> datetime.datetime:
+    def modified(self) -> Any | None:
         return self.str_to_datetime(self.data['modified'])
 
     @property
@@ -608,7 +608,7 @@ class Parser:
             links: Tag = soup.find('ul', class_='react-multi-carousel-track content-tray-slider')  # type: ignore[assignment]
 
             for item in links.contents:
-                branch = item.findNext(class_='card-button usePointer').get('href')  # type: ignore[union-attr]
+                branch = item.findNext(class_='card-button usePointer').get('href')
                 link = cls.DC_ENDPOINT + branch
 
                 async with session.get(link) as resp:
@@ -625,11 +625,11 @@ class Parser:
                 if not txt:
                     continue
 
-                c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()  # type: ignore[union-attr, arg-type]
+                c_type = ''.join(txt[0].find('p', class_='text-left').contents).strip()  # type: ignore
                 if c_type != 'COMIC BOOK':
                     continue
 
-                title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()  # type: ignore[union-attr, arg-type]
+                title = ''.join(txt[0].find('h1', class_='text-left').contents).strip()  # type: ignore
 
                 desc = None
                 if len(txt) > 1 and txt[1].find('p'):
@@ -648,8 +648,8 @@ class Parser:
                         if d_id not in details:
                             details[d_id] = []
                         details[d_id] += [
-                            i.contents[0].contents[0] if x else i.contents[0]  # type: ignore[union-attr]
-                            for i in dd.contents if type(i) is Tag]
+                            i.contents[0].contents[0] if x else i.contents[0]  # type: ignore
+                            for i in dd.contents if type(i) is Tag]  # type: ignore
 
                 creators = {}
                 if '24' in details:
@@ -672,6 +672,7 @@ class Parser:
                     soup.find('div', class_='small legal d-inline-block').contents[0].contents[0]  # type: ignore
                 )
 
+                assert page_count is not None
                 _cs_comic = GenericComic(
                     brand=Brand.DC,
                     _id=''.join(i for i in title if i.isalnum()),
@@ -761,9 +762,9 @@ class Parser:
         for cr in data.creators.items:
             role = cr.role.title()
             if role not in _cs_comic.creators:
-                _cs_comic.creators[role] = [cr.name]
+                _cs_comic.creators[role] = [cr.name]  # type: ignore
             else:
-                _cs_comic.creators[role].append(cr.name)
+                _cs_comic.creators[role].append(cr.name)  # type: ignore
         return _cs_comic
 
     @classmethod
@@ -788,7 +789,7 @@ class Parser:
         descs: dict[int, str] = await cls.bs4_marvel()
 
         for c in comics:
-            if description := descs.get(c.id):
+            if description := descs.get(c.id):  # type: ignore
                 c.description = description
 
         return comics

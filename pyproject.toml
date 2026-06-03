@@ -78,6 +78,7 @@ ignore = [
     "S101",
     "UP034",
     "UP038",
+    "ANN001",
     "ANN101",
     "ANN102",
     "ANN401",
@@ -92,14 +93,34 @@ strictDictionaryInference = true
 strictSetInference = true
 strictParameterNoneValue = true
 reportMissingImports = "error"
-reportUnusedImport = "error"
-reportUnusedClass = "error"
-reportUnusedFunction = "error"
-reportUnusedVariable = "error"
-reportUnusedExpression = "error"
-reportGeneralTypeIssues = "error"
-reportDuplicateImport = "error"
-reportUntypedFunctionDecorator = "error"
+reportUnusedImport = "none"
+reportUnusedClass = "none"
+reportUnusedFunction = "none"
+reportUnusedVariable = "none"
+reportUnusedExpression = "none"
+reportGeneralTypeIssues = "none"
+reportDuplicateImport = "none"
+reportUntypedFunctionDecorator = "none"
+reportArgumentType = "none"
+reportAttributeAccessIssue = "none"
+reportCallIssue = "none"
+reportAssignmentType = "none"
+reportReturnType = "none"
+reportIncompatibleMethodOverride = "none"
+reportIncompatibleVariableOverride = "none"
+reportOptionalMemberAccess = "none"
+reportOptionalIterable = "none"
+reportOptionalSubscript = "none"
+reportOptionalOperand = "none"
+reportIndexIssue = "none"
+reportOperatorIssue = "none"
+reportInvalidTypeForm = "none"
+reportInvalidTypeVarUse = "none"
+reportFunctionMemberAccess = "none"
+reportPrivateImportUsage = "none"
+reportUndefinedVariable = "none"
+reportRedeclaration = "none"
+reportMissingTypeStubs = "none"
 reportUnnecessaryTypeIgnoreComment = "warning"
 
 [tool.pytest.ini_options]

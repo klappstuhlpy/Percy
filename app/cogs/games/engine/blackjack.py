@@ -11,6 +11,7 @@ bridge uses to remember which Discord message renders the hand; the engine never
 it. Rendering (embeds), the economy payouts and the views live in that bridge / the
 ``app.cogs.games.blackjack_ui`` module.
 """
+
 from __future__ import annotations
 
 import enum
@@ -23,24 +24,25 @@ from app.cogs.games.cards import BaseCard, BaseHand, Deck, DisplayCard
 from config import Emojis
 
 __all__ = (
-    'BlackjackGame',
-    'Card',
-    'Hand',
-    'WinningType',
+    "BlackjackGame",
+    "Card",
+    "Hand",
+    "WinningType",
 )
 
 
 class WinningType(enum.Enum):
     """Enum for the winning type of a hand"""
-    PLAYER_WIN = 'Player Win'
-    PLAYER_BUST = 'Player Bust'
-    PLAYER_BLACKJACK = 'Player Blackjack'
 
-    DEALER_WIN = 'Dealer Win'
-    DEALER_BUST = 'Dealer Bust'
-    DEALER_BLACKJACK = 'Dealer Blackjack'
+    PLAYER_WIN = "Player Win"
+    PLAYER_BUST = "Player Bust"
+    PLAYER_BLACKJACK = "Player Blackjack"
 
-    PUSH = 'Push'
+    DEALER_WIN = "Dealer Win"
+    DEALER_BUST = "Dealer Bust"
+    DEALER_BLACKJACK = "Dealer Blackjack"
+
+    PUSH = "Push"
 
 
 class Card(BaseCard):
@@ -54,7 +56,7 @@ class Card(BaseCard):
             bottom = [Emojis.Card.cardback_bottom1, Emojis.Card.cardback_bottom2]
 
             emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
-            return '\n'.join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1], bottom=emojis[2])
+            return "\n".join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1], bottom=emojis[2])
         return super().display(size, formatted)
 
 
@@ -110,36 +112,29 @@ class Hand(BaseHand[Card]):
     @property
     def display_text(self) -> str:
         """Gets the display text for the hand"""
-        card_list = [
-            card.display('large', formatted=True).split('\n') for card in self.cards
-        ]
+        card_list = [card.display("large", formatted=True).split("\n") for card in self.cards]
         # Use zip_longest to handle different lengths of display elements in each card
         results = [
-            ' '.join(filter(None, elems))  # filter(None) removes empty strings
-            for elems in zip_longest(*card_list, fillvalue='')
+            " ".join(filter(None, elems))  # filter(None) removes empty strings
+            for elems in zip_longest(*card_list, fillvalue="")
         ]
-        return '\n'.join(results) + f'\n\nValue: `{self.value}`'
+        return "\n".join(results) + f"\n\nValue: `{self.value}`"
 
     @property
     def display_blocks(self) -> list[str]:
         """Returns display text split by whole cards (safe chunks).
         The hand value is appended ONLY to the first block.
         """
-        card_blocks = [
-            card.display('large', formatted=True).split('\n')
-            for card in self.cards
-        ]
+        card_blocks = [card.display("large", formatted=True).split("\n") for card in self.cards]
 
-        value_suffix = f'\n\nValue: `{self.value}`'
+        value_suffix = f"\n\nValue: `{self.value}`"
         value_len = len(value_suffix)
 
         blocks: list[str] = []
         current_cards: list[list[str]] = []
 
         def render(cards: list[list[str]]) -> str:
-            return '\n'.join(
-                ' '.join(row) for row in zip(*cards)
-            )
+            return "\n".join(" ".join(row) for row in zip(*cards))
 
         for card in card_blocks:
             rendered = render([*current_cards, card]) if current_cards else render([card])
@@ -168,7 +163,7 @@ class BlackjackGame:
     determination. No Discord, no IO."""
 
     def __init__(self, bet: int, decks: int = 1) -> None:
-        self.deck: Deck = Deck(game='blackjack', decks=decks, card_cls=Card)
+        self.deck: Deck = Deck(game="blackjack", decks=decks, card_cls=Card)
 
         self.dealer: Hand = Hand(bet=bet)
         self.player_hands: list[Hand] = [Hand(bet=bet)]
@@ -178,7 +173,7 @@ class BlackjackGame:
         self.deal()
 
     def __repr__(self) -> str:
-        return f'BlackjackGame(decks={self.deck.decks} dealer={self.dealer})'
+        return f"BlackjackGame(decks={self.deck.decks} dealer={self.dealer})"
 
     @property
     def is_running(self) -> bool:

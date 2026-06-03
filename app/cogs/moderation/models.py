@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class FlaggedMember:
-    __slots__ = ('display_name', 'id', 'joined_at', 'messages')
+    __slots__ = ("display_name", "id", "joined_at", "messages")
 
     def __init__(self, user: discord.abc.User | discord.Member, joined_at: datetime.datetime) -> None:
         self.id = user.id
@@ -36,17 +36,17 @@ class SpamCheckerResult:
 
     @classmethod
     def spammer(cls) -> SpamCheckerResult:
-        return cls('Auto-ban for spamming')
+        return cls("Auto-ban for spamming")
 
     @classmethod
     def flagged_mention(cls) -> SpamCheckerResult:
-        return cls('Auto-ban for suspicious mentions')
+        return cls("Auto-ban for suspicious mentions")
 
 
 class SpammerSequence(SpamCheckerResult):
     """A sequence of spammers."""
 
-    def __init__(self, members: Sequence[discord.abc.Snowflake], *, reason: str = 'Auto-ban for spamming') -> None:
+    def __init__(self, members: Sequence[discord.abc.Snowflake], *, reason: str = "Auto-ban for spamming") -> None:
         super().__init__(reason)
         self.members: Sequence[discord.abc.Snowflake] = members
 

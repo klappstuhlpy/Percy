@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
     from . import Bot
 
-    P = ParamSpec('P')
-    TimerT = TypeVar('TimerT', bound='Timer')
+    P = ParamSpec("P")
+    TimerT = TypeVar("TimerT", bound="Timer")
 
 log = logging.getLogger(__name__)
 
@@ -33,20 +33,20 @@ class Timer(BaseRecord):
     timezone: str
     metadata: dict[str, Any]
 
-    __slots__ = ('args', 'bot', 'created', 'event', 'expires', 'id', 'kwargs', 'metadata', 'timezone')
+    __slots__ = ("args", "bot", "created", "event", "expires", "id", "kwargs", "metadata", "timezone")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        self.args: Sequence[Any] = self.metadata.get('args', [])
-        self.kwargs: dict[str, Any] = self.metadata.get('kwargs', {})
+        self.args: Sequence[Any] = self.metadata.get("args", [])
+        self.kwargs: dict[str, Any] = self.metadata.get("kwargs", {})
 
     async def _update(  # noqa: ANN202
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
     ):
         """|coro|
 
@@ -65,11 +65,7 @@ class Timer(BaseRecord):
         return self.__class__(bot=self.bot, record=record)
 
     async def rerun(  # noqa: ANN201
-            self,
-            when: datetime.datetime | datetime.timedelta,
-            /,
-            *args: Any,
-            **kwargs: Any
+        self, when: datetime.datetime | datetime.timedelta, /, *args: Any, **kwargs: Any
     ):
         r"""|coro|
 
@@ -103,24 +99,19 @@ class Timer(BaseRecord):
         :class:`Timer`
             The timer that was rerun.
         """
-        new_kwargs = self.metadata['kwargs'].copy()
+        new_kwargs = self.metadata["kwargs"].copy()
         new_kwargs.update(kwargs)
 
-        new_args = self.metadata['args'] + args
+        new_args = self.metadata["args"] + args
 
-        return await self.bot.timers.create(
-            when,
-            self.event,
-            *new_args,
-            **new_kwargs
-        )
+        return await self.bot.timers.create(when, self.event, *new_args, **new_kwargs)
 
     @property
     def is_short_dispatch(self) -> bool:
         """Returns whether this timer should be dispatched as a short timer."""
         return self.id < 0
 
-    def human_delta(self, spec: Literal['f', 'F', 'd', 'D', 't', 'T', 'R'] = 'R') -> str:
+    def human_delta(self, spec: Literal["f", "F", "d", "D", "t", "T", "R"] = "R") -> str:
         """Return this timer formatted as <t:expires:spec>."""
         return format_dt(self.expires, spec)
 
@@ -146,7 +137,7 @@ class Timer(BaseRecord):
         return cls(bot=timer.bot, record=timer.to_record())
 
     def __repr__(self) -> str:
-        return f'<Timer id={self.id} event={self.event!r} expires={self.expires!r}>'
+        return f"<Timer id={self.id} event={self.event!r} expires={self.expires!r}>"
 
     def __eq__(self: TimerT, other: TimerT) -> bool:
         return self.id == other.id
@@ -197,7 +188,7 @@ class TimerManager:
             The timer if found, otherwise None.
         """
         if not kwargs:
-            raise ValueError('You must provide at least one keyword argument.')
+            raise ValueError("You must provide at least one keyword argument.")
 
         record = await self.bot.db.timers.fetch_by_kwargs(event, kwargs)
         return Timer(bot=self.bot, record=record) if record else None
@@ -216,7 +207,7 @@ class TimerManager:
             Keyword arguments to search for in the database.
         """
         if not kwargs:
-            raise ValueError('You must provide at least one keyword argument.')
+            raise ValueError("You must provide at least one keyword argument.")
 
         timer_id = await self.bot.db.timers.delete_by_kwargs(event, kwargs)
 
@@ -238,17 +229,10 @@ class TimerManager:
         else:
             await self.db.timers.delete_timer(timer.id)
 
-        event_name = f'{timer.event}_timer_complete'
+        event_name = f"{timer.event}_timer_complete"
         self._dispatch(event_name, timer)
 
-    async def create(
-            self,
-            when: datetime.datetime | datetime.timedelta,
-            event: str,
-            /,
-            *args: Any,
-            **kwargs: Any
-    ) -> Timer:
+    async def create(self, when: datetime.datetime | datetime.timedelta, event: str, /, *args: Any, **kwargs: Any) -> Timer:
         r"""|coro|
 
         Creates a timer to be dispatched at a given time.
@@ -283,10 +267,10 @@ class TimerManager:
         :class:`Timer`
             The timer that was created.
         """
-        now = kwargs.pop('created', discord.utils.utcnow())
-        tz = kwargs.pop('timezone', 'UTC')
-        if tz.__class__.__name__ == 'TimeZone':
-            tz = getattr(tz, 'key', 'UTC')
+        now = kwargs.pop("created", discord.utils.utcnow())
+        tz = kwargs.pop("timezone", "UTC")
+        if tz.__class__.__name__ == "TimeZone":
+            tz = getattr(tz, "key", "UTC")
 
         if isinstance(when, datetime.timedelta):
             when = now + when
@@ -301,7 +285,7 @@ class TimerManager:
             expires=when,
             created=now,
             timezone=tz,
-            metadata={'args': args, 'kwargs': kwargs}
+            metadata={"args": args, "kwargs": kwargs},
         )
 
         seconds = (when - now).total_seconds()
@@ -310,11 +294,10 @@ class TimerManager:
             self._short_timers[key] = timer
 
             self._loop.create_task(self.start_short_timer(seconds, timer))
-            log.debug(f'Short timer {timer.id} will fire in {seconds} seconds.')  # noqa: G004
+            log.debug(f"Short timer {timer.id} will fire in {seconds} seconds.")  # noqa: G004
             return timer
 
-        timer.id = await self.bot.db.timers.create_timer(
-            event, {'args': args, 'kwargs': kwargs}, when, now, tz)
+        timer.id = await self.bot.db.timers.create_timer(event, {"args": args, "kwargs": kwargs}, when, now, tz)
 
         if seconds <= self.MAX_DAYS * 86400:
             self.__event.set()
@@ -322,7 +305,7 @@ class TimerManager:
         if self._loaded_timer and when < self._loaded_timer.expires:
             self.reset_task()
 
-        log.debug(f'Timer {timer.id} will fire at {when}.')  # noqa: G004
+        log.debug(f"Timer {timer.id} will fire at {when}.")  # noqa: G004
         return timer
 
     async def decrement_atomic_key(self) -> int:
@@ -333,9 +316,7 @@ class TimerManager:
 
     # DISPATCHING
 
-    async def load_next_timer(
-            self, *, connection: asyncpg.Connection | None = None, days: int = 7
-    ) -> Timer | None:
+    async def load_next_timer(self, *, connection: asyncpg.Connection | None = None, days: int = 7) -> Timer | None:
         """|coro|
 
         Loads the next timer to be dispatched.
@@ -350,9 +331,7 @@ class TimerManager:
         record = await self.bot.db.timers.get_next_due(days, connection=connection)
         return Timer(bot=self.bot, record=record) if record else None
 
-    async def wait(
-            self, *, connection: asyncpg.Connection | None = None, days: int = 7
-    ) -> Timer:
+    async def wait(self, *, connection: asyncpg.Connection | None = None, days: int = 7) -> Timer:
         """|coro|
 
         Waits for the next timer to be dispatched.
@@ -372,13 +351,13 @@ class TimerManager:
         async with (connection or self.db).acquire(timeout=500.0) as con:
             timer = await self.load_next_timer(connection=con, days=days)
             if timer is not None:
-                log.debug('Loaded timer %r to fire at %s.', timer.id, timer.expires)
+                log.debug("Loaded timer %r to fire at %s.", timer.id, timer.expires)
                 self.__event.set()
                 return timer
 
             self.__event.clear()
             self._loaded_timer = None
-            log.debug('No timers to load, waiting for new timers to be created.')
+            log.debug("No timers to load, waiting for new timers to be created.")
             await self.__event.wait()
 
             return await self.load_next_timer(connection=con, days=days)  # type: ignore
@@ -409,7 +388,7 @@ class TimerManager:
                     to_sleep = (timer.expires - now).total_seconds()
                     await asyncio.sleep(to_sleep)
 
-                log.debug('Dispatching timer %r for event %s now.', timer.id, timer.event)
+                log.debug("Dispatching timer %r for event %s now.", timer.id, timer.event)
                 await self.call(timer)
         except asyncio.CancelledError:
             raise

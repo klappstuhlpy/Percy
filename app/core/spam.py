@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from app.core.bot import Bot
     from app.core.context import Context
 
-__all__ = ('SpamControl',)
+__all__ = ("SpamControl",)
 
 
 class SpamControl:
@@ -48,22 +48,22 @@ class SpamControl:
         return list(self._auto_spam_count.keys())
 
     async def log_spammer(
-            self, ctx: Context, message: discord.Message, retry_after: float, *, autoblock: bool = False
+        self, ctx: Context, message: discord.Message, retry_after: float, *, autoblock: bool = False
     ) -> None:
-        guild_name = getattr(ctx.guild, 'name', 'No Guild (DMs)')
-        guild_id = getattr(ctx.guild, 'id', None)
-        fmt = 'User %s (ID: %s) in guild %r (ID: %s) is spamming | retry_after: %.2fs | autoblock: %s'
+        guild_name = getattr(ctx.guild, "name", "No Guild (DMs)")
+        guild_id = getattr(ctx.guild, "id", None)
+        fmt = "User %s (ID: %s) in guild %r (ID: %s) is spamming | retry_after: %.2fs | autoblock: %s"
         self.bot.log.warning(fmt, message.author, message.author.id, guild_name, guild_id, retry_after, autoblock)
 
         if not autoblock:
             return
 
-        embed = discord.Embed(title='Auto-Blocked Member', colour=helpers.Colour.di_sierra())
-        embed.add_field(name='Member', value=f'{message.author} (ID: {message.author.id})', inline=False)
-        embed.add_field(name='Guild Info', value=f'{guild_name} (ID: {guild_id})', inline=False)
-        embed.add_field(name='Channel Info', value=f'{message.channel} (ID: {message.channel.id}', inline=False)
+        embed = discord.Embed(title="Auto-Blocked Member", colour=helpers.Colour.di_sierra())
+        embed.add_field(name="Member", value=f"{message.author} (ID: {message.author.id})", inline=False)
+        embed.add_field(name="Guild Info", value=f"{guild_name} (ID: {guild_id})", inline=False)
+        embed.add_field(name="Channel Info", value=f"{message.channel} (ID: {message.channel.id}", inline=False)
         embed.timestamp = discord.utils.utcnow()
-        await self.bot.stats_webhook.send(embed=embed, username='Bot Spam Control')
+        await self.bot.stats_webhook.send(embed=embed, username="Bot Spam Control")
 
     def calculate_penalty(self, user: discord.abc.Snowflake) -> int | None:
         """Calculate penalty based on frequency and recency of spamming.

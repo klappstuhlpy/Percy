@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import enum
 import inspect
@@ -16,20 +18,21 @@ from config import Emojis
 
 class Fruits(enum.Enum):
     """Enum class representing the fruits in the slot machine."""
-    MELON = '🍈'
-    BANANA = '🍌'
-    APPLE = '🍎'
-    TANGERINE = '🍊'
-    PEACH = '🍑'
-    WATERMELON = '🍉'
-    CHERRY = '🍒'
-    LEMON = '🍋'
-    STRAWBERRY = '🍓'
-    PEAR = '🍐'
-    PINEAPPLE = '🍍'
-    GRAPE = '🍇'
 
-    COOL = '🆒'
+    MELON = "🍈"
+    BANANA = "🍌"
+    APPLE = "🍎"
+    TANGERINE = "🍊"
+    PEACH = "🍑"
+    WATERMELON = "🍉"
+    CHERRY = "🍒"
+    LEMON = "🍋"
+    STRAWBERRY = "🍓"
+    PEAR = "🍐"
+    PINEAPPLE = "🍍"
+    GRAPE = "🍇"
+
+    COOL = "🆒"
 
 
 class SlotMachine(View):
@@ -38,7 +41,7 @@ class SlotMachine(View):
     This class uses numpy arrays to store slot values and perform calculations on winning etc.
     """
 
-    PLACEHOLDER: ClassVar[str] = '<a:slot:1322359593073905725>'
+    PLACEHOLDER: ClassVar[str] = "<a:slot:1322359593073905725>"
     DESC_TITLE: ClassVar[str] = inspect.cleandoc(
         r"""
         **
@@ -68,22 +71,21 @@ class SlotMachine(View):
 
     def build_embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title='🎰 Slot Machine',
-            description=self.DESC_TITLE + '\n' + self.build(),
-            colour=helpers.Colour.white()
+            title="🎰 Slot Machine", description=self.DESC_TITLE + "\n" + self.build(), colour=helpers.Colour.white()
         )
-        embed.set_footer(text=f'Player: {self.player}')
+        embed.set_footer(text=f"Player: {self.player}")
 
         embed.add_field(
-            name='\u200b',
-            value=f'Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}',
+            name="\u200b",
+            value=f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}",
         )
         return embed
 
     def roll(self) -> None:
         """Roll the slot machine."""
         self.slots = np.array(
-            [[random.choice(list(Fruits.__members__.values())) for _ in range(self.columns)] for _ in range(self.rows)])
+            [[random.choice(list(Fruits.__members__.values())) for _ in range(self.columns)] for _ in range(self.rows)]
+        )
 
     def build(self, reveal_to_row: int | None = None) -> str:
         """Create a 2D numpy array with the emojis in their positions."""
@@ -92,8 +94,13 @@ class SlotMachine(View):
 
         if reveal_to_row:
             return self._format_build(
-                np.array([[slot.value if i < reveal_to_row else self.PLACEHOLDER for i, slot in enumerate(row)]
-                          for row in self.slots]))
+                np.array(
+                    [
+                        [slot.value if i < reveal_to_row else self.PLACEHOLDER for i, slot in enumerate(row)]
+                        for row in self.slots
+                    ]
+                )
+            )
 
         return self._format_build(np.array([[slot.value for slot in row] for row in self.slots]))
 
@@ -109,26 +116,25 @@ class SlotMachine(View):
         ╚═══╩═══╩═══╝
           1   2   3
         """
-        one = '\N{DIGIT ONE}'
-        two = '\N{DIGIT TWO}'
-        three = '\N{DIGIT THREE}'
+        one = "\N{DIGIT ONE}"
+        two = "\N{DIGIT TWO}"
+        three = "\N{DIGIT THREE}"
 
-        val_arr = ['═' * (self.columns * self.rows)] * self.rows
+        val_arr = ["═" * (self.columns * self.rows)] * self.rows
         start = Emojis.empty * 6
-        sep = Emojis.empty + ' `║` ' + Emojis.empty
+        sep = Emojis.empty + " `║` " + Emojis.empty
 
         parts = [
-            start + '`╔' + '╦'.join(val_arr) + '╗`' + Emojis.empty,
-            '\n'.join(start + '`║` ' + Emojis.empty + sep.join(row) + sep for row in arr.tolist()),
-            start + '`╚' + '╩'.join(val_arr) + '╝`' + Emojis.empty
+            start + "`╔" + "╦".join(val_arr) + "╗`" + Emojis.empty,
+            "\n".join(start + "`║` " + Emojis.empty + sep.join(row) + sep for row in arr.tolist()),
+            start + "`╚" + "╩".join(val_arr) + "╝`" + Emojis.empty,
         ]
 
-        cl_text = EMOJI_REGEX.sub('x', parts[2])
-        _, _, end = find_word(cl_text, '╩')
+        cl_text = EMOJI_REGEX.sub("x", parts[2])
+        _, _, end = find_word(cl_text, "╩")
         middle = (end - ((self.columns * self.rows) / 2)) - 1
-        parts.append(
-            f'{start}`{one:^{middle}}{two:^{middle - self.columns - 1}}{three:^{middle - 1}}`{Emojis.empty}')
-        return '\n'.join(parts)
+        parts.append(f"{start}`{one:^{middle}}{two:^{middle - self.columns - 1}}{three:^{middle - 1}}`{Emojis.empty}")
+        return "\n".join(parts)
 
     async def walk_build(self) -> AsyncGenerator[str, None]:
         """Dynamically returns the next column of the slot machine with the actual emojis and not placeholders."""
@@ -185,7 +191,7 @@ class SlotMachine(View):
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.user.id != self.player.id:
-            await interaction.response.send_message(f'{Emojis.error} This isn\'t your game.', ephemeral=True)
+            await interaction.response.send_message(f"{Emojis.error} This isn't your game.", ephemeral=True)
             return False
         return True
 
@@ -196,15 +202,15 @@ class SlotMachine(View):
         else:
             self.add_item(self._start)
 
-    @discord.ui.button(label='Start', style=discord.ButtonStyle.blurple)
-    async def _start(self, interaction: discord.Interaction, _) -> None:
+    @discord.ui.button(label="Start", style=discord.ButtonStyle.blurple)
+    async def _start(self: SlotMachine, interaction: discord.Interaction, _) -> None:
         """Stops the rolling of the slot machine."""
         self.clear_items()
         await interaction.response.edit_message(view=self)
 
         embed = self.build_embed()
         async for build in self.walk_build():
-            embed.description = self.DESC_TITLE + '\n' + build
+            embed.description = self.DESC_TITLE + "\n" + build
             await interaction.edit_original_response(embed=embed)
 
         self.finished = True
@@ -214,23 +220,25 @@ class SlotMachine(View):
         if win:
             balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
             await balance.add(cash=win)
-            embed.add_field(name='\u200b', value=f'`✅ You won {multiplier}x your bet!`', inline=False)
+            embed.add_field(name="\u200b", value=f"`✅ You won {multiplier}x your bet!`", inline=False)
         else:
-            embed.add_field(name='\u200b', value='`❌ Better luck next time!`', inline=False)
+            embed.add_field(name="\u200b", value="`❌ Better luck next time!`", inline=False)
 
         self.update_buttons()
         await interaction.edit_original_response(embed=embed, view=self)
 
-    @discord.ui.button(label='Roll', style=discord.ButtonStyle.green)
-    async def _roll(self, interaction: discord.Interaction, _) -> None:
+    @discord.ui.button(label="Roll", style=discord.ButtonStyle.green)
+    async def _roll(self: SlotMachine, interaction: discord.Interaction, _) -> None:
         """Roll the slot machine."""
         self.reset()
 
         balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
         if self.bet > balance.cash:
             return await interaction.response.send_message(
-                f'{Emojis.error} You do not have enough money to bet that amount.\n'
-                f'You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.', ephemeral=True)
+                f"{Emojis.error} You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
+                ephemeral=True,
+            )
 
         await balance.remove(cash=self.bet)
 

@@ -5,16 +5,17 @@ import enum
 import functools
 import inspect
 import time
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, Protocol, TypeVar, cast
 
 from lru import LRU
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine, Generator, MutableMapping
+    from collections.abc import Callable, Coroutine, Generator, Hashable, MutableMapping
 
     from app.utils.constants import Coro, NCoro
 
-R = TypeVar('R')
+R = TypeVar("R")
+P = ParamSpec("P")
 
 # Can't use ParamSpec due to https://github.com/python/typing/discussions/946
 
@@ -32,7 +33,7 @@ Parameters
 """
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class AwaitableObj[T]:
@@ -43,10 +44,10 @@ class AwaitableObj[T]:
         return asyncio.sleep(0, result=self.value).__await__()
 
 
-class CacheProtocol(Protocol[R]):
-    cache: MutableMapping[str, asyncio.Task[R] | R]
+class CacheProtocol(Protocol[P, R]):
+    cache: MutableMapping[str, object] | LRU[Hashable, Any] | dict[Any, Any] | ExpiringCache
 
-    def __call__(self, *args: Any, **kwds: Any) -> asyncio.Task[R] | R: ...
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R] | R: ...
 
     def get_key(self, *args: Any, **kwargs: Any) -> str:
         """Builds the cache key for the given arguments."""
@@ -67,6 +68,7 @@ class CacheProtocol(Protocol[R]):
 
 class ExpiringCache(dict):
     """A cache that expires after a given amount of time."""
+
     def __init__(self, seconds: float) -> None:
         self.__ttl: float = seconds
         super().__init__()
@@ -86,7 +88,8 @@ class ExpiringCache(dict):
         self.__verify_cache_integrity()
         return super().__getitem__(key)
 
-    def get(self, key: str, default: Any = None):  # noqa: ANN201
+    def get(self, key: str, default: Any = None) -> Any:
+        self.__verify_cache_integrity()
         v = super().get(key, default)
         if v is default:
             return default
@@ -113,17 +116,21 @@ class Strategy(enum.Enum):
         The raw strategy.
     TIMED: int
         The timed strategy that expires after the given `maxsize`."""
+
     LRU = 1
     RAW = 2
     TIMED = 3
 
 
-def cache[T](
+def cache(
     maxsize: int = 128,
     strategy: Strategy = Strategy.LRU,
     ignore_kwargs: bool = False,
-    action: Callable[..., T] | None = None,
-) -> Callable[[Callable[..., Coroutine[Any, Any, R] | R]], CacheProtocol[R]]:
+    action: Callable[[Any], None] | None = None,
+) -> Callable[
+    [Callable[P, Coroutine[Any, Any, R] | R]],
+    CacheProtocol[P, R],
+]:
     """A decorator that caches the result of a coroutine to its internal cache.
 
     This can be used on both coroutines and regular functions.
@@ -147,7 +154,7 @@ def cache[T](
         The actual decorator.
     """
 
-    def decorator(func: Coro | NCoro) -> CacheProtocol[R]:
+    def decorator(func: Coro | NCoro) -> CacheProtocol[P, R]:
         """The actual decorator."""
         _stats: Callable[[], tuple[int, int]] | None = None
         match strategy:
@@ -159,9 +166,10 @@ def cache[T](
             case Strategy.TIMED:
                 _internal_cache = ExpiringCache(maxsize)
             case _:
-                raise ValueError(f'Invalid cache strategy {strategy!r}.')
+                raise ValueError(f"Invalid cache strategy {strategy!r}.")
 
         if _stats is None:
+
             def _stats() -> tuple[int, int]:
                 return len(_internal_cache), maxsize
 
@@ -171,39 +179,40 @@ def cache[T](
 
         def _make_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
             """Generate a cache key from the given arguments."""
+
             def _true_repr(o: Any) -> str:
                 if o.__class__.__repr__ is object.__repr__:
-                    return f'<{o.__class__.__module__}.{o.__class__.__name__}>'
+                    return f"<{o.__class__.__module__}.{o.__class__.__name__}>"
                 return repr(o)
 
-            key_parts = [f'{func.__module__}.{func.__name__}']
+            key_parts = [f"{func.__module__}.{func.__name__}"]
 
             for arg in args:
                 key_parts.append(_true_repr(arg))  # noqa: PERF401
 
             if not ignore_kwargs:
                 for k in kwargs:
-                    if k in ('connection', 'pool'):
+                    if k in ("connection", "pool"):
                         continue
-                    key_parts.append(f'{_true_repr(k)}={_true_repr(k)}')
+                    key_parts.append(f"{_true_repr(k)}={_true_repr(k)}")
 
-            return ':'.join(key_parts)
+            return ":".join(key_parts)
 
         # Compute once at decoration time rather than on every call.
-        _all_params: list[inspect.Parameter] = list(filter(
-            lambda x: x._kind != inspect.Parameter.KEYWORD_ONLY, inspect.signature(func).parameters.values()
-        ))
-        _skip_first_param: bool = any(p.name in ('self', 'cls') for p in _all_params)
-        _is_coroutine: bool = asyncio.iscoroutinefunction(func)
+        _all_params: list[inspect.Parameter] = list(
+            filter(lambda x: x._kind != inspect.Parameter.KEYWORD_ONLY, inspect.signature(func).parameters.values())
+        )
+        _skip_first_param: bool = any(p.name in ("self", "cls") for p in _all_params)
+        _is_coroutine: bool = inspect.iscoroutinefunction(func)
 
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> asyncio.Task[R] | R:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R] | R:
             """The actual wrapper for the cache to be assigned to the corresponding function."""
 
             # we only want to cache the positional arguments
             if _skip_first_param:
                 paired = zip(args, _all_params)
-                key = _make_key(tuple(arg for arg, param in paired if param.name not in ('self', 'cls')), kwargs)
+                key = _make_key(tuple(arg for arg, param in paired if param.name not in ("self", "cls")), kwargs)
             else:
                 key = _make_key(args, kwargs)
 
@@ -254,10 +263,10 @@ def cache[T](
             """Get the cache key for the given arguments."""
             return _make_key(args, kwargs)
 
-        result: CacheProtocol[R] = wrapper  # type: ignore[assignment]
-        result.cache = _internal_cache  # type: ignore[assignment]
+        wrapper: Callable[P, asyncio.Task[R] | R]
+        result = cast('CacheProtocol[P, R]', wrapper)
         result.get_key = _get_key
-        result.get_stats = _stats  # type: ignore[assignment]
+        result.get_stats = _stats
         result.invalidate = _invalidate
         result.invalidate_containing = _invalidate_containing
         return result

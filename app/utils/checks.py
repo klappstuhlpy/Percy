@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 else:
     Context = commands.Context
 
-T = TypeVar('T')
+T = TypeVar("T")
 PY3: bool = sys.version_info[0] == 3
 
 
@@ -21,31 +21,37 @@ PY3: bool = sys.version_info[0] == 3
 
 def check_for_equivalence[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if two strings are equivalent. If so, return 100."""
+
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
         if args[0] == args[1]:
             return 100
         return func(*args, **kwargs)
+
     return decorator
 
 
 def check_for_none[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if either string is None. If so, return 0."""
+
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
         if args[0] is None or args[1] is None:
             return 0
         return func(*args, **kwargs)
+
     return decorator
 
 
 def check_empty_string[T](func: Callable[[str, str], T]) -> Callable[[str], T]:
     """Check if either string is empty. If so, return 0."""
+
     @functools.wraps(func)
     def decorator(*args: str, **kwargs: T) -> T:
         if len(args[0]) == 0 or len(args[1]) == 0:
             return 0
         return func(*args, **kwargs)
+
     return decorator
 
 
@@ -81,9 +87,10 @@ def has_manage_roles_overwrite(member: discord.Member, channel: discord.abc.Guil
 
 def requires_timer() -> Callable[[T], T]:
     """Checks if the timer functionality is available."""
+
     async def predicate(ctx: Context) -> bool:
         if not ctx.bot.timers:
-            await ctx.send_error('The timer functionality is not available.')
+            await ctx.send_error("The timer functionality is not available.")
             return False
         return True
 
@@ -92,13 +99,14 @@ def requires_timer() -> Callable[[T], T]:
 
 def can_mute() -> Callable[[T], T]:
     """Check if the author can mute someone in the current context and adds support for the :class:`ModGuildContext`."""
+
     async def predicate(ctx: Context) -> bool:
         if ctx.guild is None:
             return False
 
-        config = await ctx.bot.db.get_guild_config(ctx.guild.id)
+        config = await ctx.bot.db.get_guild_config(guild_id=ctx.guild.id)
         if config.mute_role is None:
-            await ctx.send_error('The mute role has not been set up.')
+            await ctx.send_error("The mute role has not been set up.")
             return False
         return ctx.author.top_role > config.mute_role
 
@@ -107,13 +115,14 @@ def can_mute() -> Callable[[T], T]:
 
 # -- Music Checks --
 
+
 def is_player_connected() -> Callable[[T], T]:
     async def predicate(ctx: Context) -> bool:
         if not ctx.guild or (ctx.guild and not ctx.guild.me.voice):
             return True
 
         if not ctx.voice_client or not ctx.voice_client.channel:
-            await ctx.send_error('I\'m not connected to a voice channel right now.')
+            await ctx.send_error("I'm not connected to a voice channel right now.")
             return False
 
         return True
@@ -126,8 +135,8 @@ def is_player_playing() -> Callable[[T], T]:
         if not ctx.guild or (ctx.guild and not ctx.guild.me.voice):
             return True
 
-        if not ctx.voice_client or not getattr(ctx.voice_client, 'playing', False):
-            await ctx.send_error('I\'m not playing anything right now.')
+        if not ctx.voice_client or not getattr(ctx.voice_client, "playing", False):
+            await ctx.send_error("I'm not playing anything right now.")
             return False
         return True
 
@@ -142,10 +151,11 @@ def is_dj(member: discord.Member) -> bool:
 
 def is_listen_together() -> Callable[[T], T]:
     """Checks if a listen together activity is active."""
+
     async def predicate(ctx: Context) -> bool:
-        queue = getattr(ctx.voice_client, 'queue', None)
+        queue = getattr(ctx.voice_client, "queue", None)
         if ctx.voice_client and (queue and queue.listen_together is not MISSING):
-            await ctx.send_error('Please stop the listen-together activity before use this Command.')
+            await ctx.send_error("Please stop the listen-together activity before use this Command.")
             return False
         return True
 
@@ -154,6 +164,7 @@ def is_listen_together() -> Callable[[T], T]:
 
 def is_author_connected() -> Callable[[T], T]:
     """Checks if the author is connected to a Voice Channel."""
+
     async def predicate(ctx: Context) -> bool:
         assert isinstance(ctx.user, discord.Member)
 
@@ -170,11 +181,11 @@ def is_author_connected() -> Callable[[T], T]:
             return True
         if (author_vc and bot_vc) and (author_vc == bot_vc):
             if ctx.user.voice.deaf or ctx.user.voice.self_deaf:
-                await ctx.send_error('You are deafened, please undeafen yourself to use this command.')
+                await ctx.send_error("You are deafened, please undeafen yourself to use this command.")
                 return False
             return True
         if (not author_vc and bot_vc) or (author_vc and bot_vc):
-            await ctx.send_error(f'You must be in {bot_vc.mention} to use this command.')
+            await ctx.send_error(f"You must be in {bot_vc.mention} to use this command.")
             return False
         if not author_vc:
             await ctx.send_error('You must be in a voice channel to use this command.')

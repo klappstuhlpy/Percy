@@ -22,9 +22,9 @@ if TYPE_CHECKING:
 else:
     type Context = commands.Context
 
-units = _pdt_locales.load_locale('en_US').units
-units['minutes'].append('mins')
-units['seconds'].append('secs')
+units = _pdt_locales.load_locale("en_US").units
+units["minutes"].append("mins")
+units["seconds"].append("secs")
 
 
 class ShortTime:
@@ -53,23 +53,23 @@ class ShortTime:
         re.VERBOSE,
     )
 
-    DISCORD_UNIX_TS: ClassVar[re.Pattern] = re.compile(r'<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>')
+    DISCORD_UNIX_TS: ClassVar[re.Pattern] = re.compile(r"<t:(?P<ts>[0-9]+)(?::?[RFfDdTt])?>")
 
     dt: datetime.datetime
 
     def __init__(
-            self,
-            argument: str,
-            *,
-            now: datetime.datetime | None = None,
-            tzinfo: datetime.tzinfo = datetime.UTC,
-            as_timedelta: bool = False,
+        self,
+        argument: str,
+        *,
+        now: datetime.datetime | None = None,
+        tzinfo: datetime.tzinfo = datetime.UTC,
+        as_timedelta: bool = False,
     ) -> None:
         match = self.SHORT_TIME_COMPILED.fullmatch(argument)
         if match is None or not match.group(0):
             match = self.DISCORD_UNIX_TS.fullmatch(argument)
             if match is not None:
-                self.dt = datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.UTC)
+                self.dt = datetime.datetime.fromtimestamp(int(match.group("ts")), tz=datetime.UTC)
                 if tzinfo is not datetime.UTC:
                     self.dt = self.dt.astimezone(tzinfo)
                 return
@@ -121,11 +121,11 @@ class TimeDelta(ShortTime):
     dt: datetime.timedelta
 
     def __init__(
-            self,
-            argument: str,
-            *,
-            now: datetime.datetime | None = None,
-            tzinfo: datetime.tzinfo = datetime.UTC,
+        self,
+        argument: str,
+        *,
+        now: datetime.datetime | None = None,
+        tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         super().__init__(argument, now=now, tzinfo=tzinfo, as_timedelta=True)
 
@@ -141,14 +141,15 @@ class HumanTime:
     - 3 days
     - 2 weeks
     """
+
     CALENDER: ClassVar[pdt.Calendar] = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
 
     def __init__(
-            self,
-            argument: str,
-            *,
-            now: datetime.datetime | None = None,
-            tzinfo: datetime.tzinfo = datetime.UTC,
+        self,
+        argument: str,
+        *,
+        now: datetime.datetime | None = None,
+        tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         now = now or datetime.datetime.now(tzinfo)
         dt, status = self.CALENDER.parseDT(argument, sourceTime=now, tzinfo=None)  # type: ignore[assignment]
@@ -186,11 +187,11 @@ class Time(HumanTime):
     """A Converter that parses a time and ensures it is in the future."""
 
     def __init__(
-            self,
-            argument: str,
-            *,
-            now: datetime.datetime | None = None,
-            tzinfo: datetime.tzinfo = datetime.UTC,
+        self,
+        argument: str,
+        *,
+        now: datetime.datetime | None = None,
+        tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         try:
             time = ShortTime(argument, now=now, tzinfo=tzinfo)
@@ -206,16 +207,16 @@ class FutureTime(Time):
     """A Converter that ensures the time is in the future."""
 
     def __init__(
-            self,
-            argument: str,
-            *,
-            now: datetime.datetime | None = None,
-            tzinfo: datetime.tzinfo = datetime.UTC,
+        self,
+        argument: str,
+        *,
+        now: datetime.datetime | None = None,
+        tzinfo: datetime.tzinfo = datetime.UTC,
     ) -> None:
         super().__init__(argument, now=now, tzinfo=tzinfo)
 
         if self._past:
-            raise commands.BadArgument('This time is in the past.')
+            raise commands.BadArgument("This time is in the past.")
 
 
 class RelativeDelta(app_commands.Transformer, commands.Converter):
@@ -235,13 +236,13 @@ class RelativeDelta(app_commands.Transformer, commands.Converter):
         try:
             return self.__do_conversion(argument)
         except ValueError:
-            raise commands.BadArgument('Invalid time provided.') from None
+            raise commands.BadArgument("Invalid time provided.") from None
 
     async def transform(self, interaction: discord.Interaction, value: str) -> relativedelta:
         try:
             return self.__do_conversion(value)
         except ValueError:
-            raise app_commands.AppCommandError(f'{Emojis.error} Invalid time provided.') from None
+            raise app_commands.AppCommandError(f"{Emojis.error} Invalid time provided.") from None
 
 
 class FriendlyTimeResult:
@@ -250,21 +251,19 @@ class FriendlyTimeResult:
     dt: datetime.datetime
     arg: str
 
-    __slots__ = ('arg', 'dt')
+    __slots__ = ("arg", "dt")
 
     def __init__(self, dt: datetime.datetime) -> None:
         self.dt: datetime.datetime = dt
-        self.arg: str = ''
+        self.arg: str = ""
 
-    async def ensure_constraints(
-            self, ctx: Context, uft: UserFriendlyTime, now: datetime.datetime, remaining: str
-    ) -> None:
+    async def ensure_constraints(self, ctx: Context, uft: UserFriendlyTime, now: datetime.datetime, remaining: str) -> None:
         if self.dt < now:
-            raise commands.BadArgument('This time is in the past.')
+            raise commands.BadArgument("This time is in the past.")
 
         if not remaining:
             if uft.default is None:
-                raise commands.BadArgument('Missing argument after the time.')
+                raise commands.BadArgument("Missing argument after the time.")
             remaining = uft.default
 
         if uft.converter is not None:
@@ -292,16 +291,16 @@ class UserFriendlyTime(commands.Converter):
     """
 
     def __init__(
-            self,
-            converter: type[commands.Converter] | None = None,
-            *,
-            default: Any = None,
+        self,
+        converter: type[commands.Converter] | None = None,
+        *,
+        default: Any = None,
     ) -> None:
         if isinstance(converter, type) and issubclass(converter, commands.Converter):
             converter = converter()
 
         if converter is not None and not isinstance(converter, commands.Converter):
-            raise TypeError('Object `converter` needs to be subclass of commands.Converter.')
+            raise TypeError("Object `converter` needs to be subclass of commands.Converter.")
 
         self.converter: commands.Converter = converter  # type: ignore[assignment]
         self.default: Any = default
@@ -320,7 +319,7 @@ class UserFriendlyTime(commands.Converter):
         match = regex.match(argument)
         if match is not None and match.group(0):
             data = {k: int(v) for k, v in match.groupdict(default=0).items()}
-            remaining = argument[match.end():].strip()
+            remaining = argument[match.end() :].strip()
             dt = now + relativedelta(**data)  # type: ignore[arg-type]
             result = FriendlyTimeResult(dt.astimezone(tzinfo))
             await result.ensure_constraints(ctx, self, now, remaining)
@@ -330,16 +329,16 @@ class UserFriendlyTime(commands.Converter):
             match = ShortTime.DISCORD_UNIX_TS.match(argument)
             if match is not None:
                 result = FriendlyTimeResult(
-                    datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.UTC).astimezone(tzinfo)
+                    datetime.datetime.fromtimestamp(int(match.group("ts")), tz=datetime.UTC).astimezone(tzinfo)
                 )
-                remaining = argument[match.end():].strip()
+                remaining = argument[match.end() :].strip()
                 await result.ensure_constraints(ctx, self, now, remaining)
                 return result
 
-        if argument.endswith('from now'):
+        if argument.endswith("from now"):
             argument = argument[:-8].strip()
 
-        if argument[0:2] == 'me' and argument[0:6] in ('me to ', 'me in ', 'me at '):
+        if argument[0:2] == "me" and argument[0:6] in ("me to ", "me in ", "me at "):
             argument = argument[6:]
 
         now = now.astimezone(tzinfo)
@@ -354,9 +353,9 @@ class UserFriendlyTime(commands.Converter):
 
         if begin not in (0, 1) and end != len(argument):
             raise commands.BadArgument(
-                'Time is either in an inappropriate location, which '
-                'must be either at the end or beginning of your input, '
-                'or I just flat out did not understand what you meant. Sorry.'
+                "Time is either in an inappropriate location, which "
+                "must be either at the end or beginning of your input, "
+                "or I just flat out did not understand what you meant. Sorry."
             )
 
         dt = dt.replace(tzinfo=tzinfo)
@@ -370,19 +369,19 @@ class UserFriendlyTime(commands.Converter):
             dt = dt.replace(day=now.day + 1)
 
         result = FriendlyTimeResult(dt)
-        remaining = ''
+        remaining = ""
 
         if begin in (0, 1):
             if begin == 1:
                 if argument[0] != '"':
-                    raise commands.BadArgument('Expected quote before time input...')
+                    raise commands.BadArgument("Expected quote before time input...")
 
                 if not (end < len(argument) and argument[end] == '"'):
-                    raise commands.BadArgument('If the time is quoted, you must unquote it.')
+                    raise commands.BadArgument("If the time is quoted, you must unquote it.")
 
-                remaining = argument[end + 1:].lstrip(' ,.!')
+                remaining = argument[end + 1 :].lstrip(" ,.!")
             else:
-                remaining = argument[end:].lstrip(' ,.!')
+                remaining = argument[end:].lstrip(" ,.!")
         elif len(argument) == end:
             remaining = argument[:begin].strip()
 
@@ -391,12 +390,12 @@ class UserFriendlyTime(commands.Converter):
 
 
 def human_timedelta(
-        dt: datetime.datetime,
-        *,
-        source: datetime.datetime | None = None,
-        accuracy: int | None = 3,
-        brief: bool = False,
-        suffix: bool = True,
+    dt: datetime.datetime,
+    *,
+    source: datetime.datetime | None = None,
+    accuracy: int | None = 3,
+    brief: bool = False,
+    suffix: bool = True,
 ) -> str:
     """Returns a human-readable time difference between the given datetime and the current time.
 
@@ -433,40 +432,40 @@ def human_timedelta(
 
     if dt > now:
         delta = relativedelta(dt, now)
-        output_suffix = ''
+        output_suffix = ""
     else:
         delta = relativedelta(now, dt)
-        output_suffix = ' ago' if suffix else ''
+        output_suffix = " ago" if suffix else ""
 
     UNIT_MAP = [
-        ('year', 'y'),
-        ('month', 'mo'),
-        ('day', 'd'),
-        ('hour', 'h'),
-        ('minute', 'm'),
-        ('second', 's'),
+        ("year", "y"),
+        ("month", "mo"),
+        ("day", "d"),
+        ("hour", "h"),
+        ("minute", "m"),
+        ("second", "s"),
     ]
 
     output = []
     for attr, brief_attr in UNIT_MAP:
-        elem = getattr(delta, attr + 's')
+        elem = getattr(delta, attr + "s")
         if not elem:
             continue
 
-        if attr == 'day':
+        if attr == "day":
             weeks = delta.weeks
             if weeks:
                 elem -= weeks * 7
                 if not brief:
-                    output.append(format(pluralize(weeks), 'week'))
+                    output.append(format(pluralize(weeks), "week"))
                 else:
-                    output.append(f'{weeks}w')
+                    output.append(f"{weeks}w")
 
         if elem <= 0:
             continue
 
         if brief:
-            output.append(f'{elem}{brief_attr}')
+            output.append(f"{elem}{brief_attr}")
         else:
             output.append(format(pluralize(elem), attr))
 
@@ -474,12 +473,12 @@ def human_timedelta(
         output = output[:accuracy]
 
     if len(output) == 0:
-        return 'now'
+        return "now"
     else:
         if not brief:
-            return human_join(output, final='and') + output_suffix
+            return human_join(output, final="and") + output_suffix
         else:
-            return ' '.join(output) + output_suffix
+            return " ".join(output) + output_suffix
 
 
 def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
@@ -489,21 +488,19 @@ def get_timezone_offset(dt: datetime.datetime, with_name: bool = False) -> str:
     """
     offset = dt.utcoffset()
     if offset is None:
-        offset_format = '+00:00'
+        offset_format = "+00:00"
     else:
         minutes, _ = divmod(int(offset.total_seconds()), 60)
         hours, minutes = divmod(minutes, 60)
-        offset_format = f'{hours:+03d}:{minutes:02d}'
+        offset_format = f"{hours:+03d}:{minutes:02d}"
 
     if not with_name:
         return offset_format
 
-    return f'{dt.tzname()} {offset_format}'
+    return f"{dt.tzname()} {offset_format}"
 
 
-def ensure_future_time(
-        argument: str, now: datetime.datetime, tzinfo: datetime.tzinfo = datetime.UTC
-) -> datetime.datetime:
+def ensure_future_time(argument: str, now: datetime.datetime, tzinfo: datetime.tzinfo = datetime.UTC) -> datetime.datetime:
     """Ensures that the given argument is a valid time in the future. (At least 5 minutes from now)"""
     if now.tzinfo is not None:
         now = now.astimezone(datetime.UTC).replace(tzinfo=None)
@@ -512,11 +509,13 @@ def ensure_future_time(
         converter = Time(argument, now=now, tzinfo=tzinfo)
     except commands.BadArgument:
         random_future = now + datetime.timedelta(days=random.randint(3, 60))
-        raise commands.BadArgument(f'Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".')
+        raise commands.BadArgument(
+            f'Due date could not be parsed, sorry. Try something like "tomorrow" or "{random_future.date()}".'
+        )
 
     minimum_time = now + datetime.timedelta(minutes=5)
     if converter.dt < minimum_time:
-        raise commands.BadArgument('Due date must be at least 5 minutes in the future.')
+        raise commands.BadArgument("Due date must be at least 5 minutes in the future.")
 
     return converter.dt
 
@@ -526,7 +525,7 @@ def humanize_duration(seconds: float | datetime.timedelta, depth: int = 3) -> st
     if isinstance(seconds, datetime.timedelta):
         seconds = seconds.total_seconds()
     if seconds < 1:
-        return '<1 second'
+        return "<1 second"
 
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
@@ -538,9 +537,9 @@ def humanize_duration(seconds: float | datetime.timedelta, depth: int = 3) -> st
         return ">100 years"
 
     y, mo, d, h, m, s = (int(entity) for entity in (y, mo, d, h, m, s))
-    items = (y, 'year'), (mo, 'month'), (d, 'day'), (h, 'hour'), (m, 'minute'), (s, 'second')
+    items = (y, "year"), (mo, "month"), (d, "day"), (h, "hour"), (m, "minute"), (s, "second")
 
-    as_list = [f'{quantity} {unit}{'s' if quantity != 1 else ''}' for quantity, unit in items if quantity > 0]
+    as_list = [f"{quantity} {unit}{'s' if quantity != 1 else ''}" for quantity, unit in items if quantity > 0]
     return humanize_list(as_list[:depth])
 
 

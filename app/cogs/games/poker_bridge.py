@@ -29,9 +29,9 @@ if TYPE_CHECKING:
     from app.core import Context
 
 __all__ = (
-    'PokerSession',
-    'TableState',
-    'TexasHoldem',
+    "PokerSession",
+    "TableState",
+    "TexasHoldem",
 )
 
 
@@ -52,15 +52,7 @@ class PokerSession:
         The maximum number of players allowed in the game.
     """
 
-    def __init__(
-            self,
-            cog: Games,
-            ctx: Context,
-            *,
-            first_buy_in: int,
-            decks: int = 1,
-            max_players: int = 4
-    ) -> None:
+    def __init__(self, cog: Games, ctx: Context, *, first_buy_in: int, decks: int = 1, max_players: int = 4) -> None:
         self.cog: Games = cog
         self.ctx: Context = ctx
 
@@ -75,7 +67,7 @@ class PokerSession:
         self.running_autoplay_loop: asyncio.Task | None = None
 
     def __repr__(self) -> str:
-        return f'<PokerSession engine={self.engine!r}>'
+        return f"<PokerSession engine={self.engine!r}>"
 
     # -- Engine state proxies (read-only, for the renderer and cog) -------
 
@@ -212,25 +204,24 @@ class PokerSession:
         for player in removed:
             if self.message is not None:
                 await self.message.reply(
-                    f'\N{LEAF FLUTTERING IN WIND} {player.member.mention} has been removed from the game because they ran out of chips.')
+                    f"\N{LEAF FLUTTERING IN WIND} {player.member.mention} has been removed from the game because they ran out of chips."
+                )
 
     # -- Embed Builder ----------------------------------------------------
 
     def build_embed(self, with_autoplay: bool = False) -> discord.Embed:
         """Builds the embed for the table"""
-        embed = discord.Embed(title='Poker • Texas Hold\'em', color=helpers.Colour.white())
-        embed.description = (
-            '*Waiting for players to join...*\n\n' if self.state == TableState.PREPARED else ''
-        )
+        embed = discord.Embed(title="Poker • Texas Hold'em", color=helpers.Colour.white())
+        embed.description = "*Waiting for players to join...*\n\n" if self.state == TableState.PREPARED else ""
 
         embed.description += (
-            f'**Small Blind:** `{self.small_blind}`\n'
-            f'**Big Blind:** `{self.big_blind}`\n\n'
-            f'**Pot:** {Emojis.Economy.coin} `{self.pot}`\n'
+            f"**Small Blind:** `{self.small_blind}`\n"
+            f"**Big Blind:** `{self.big_blind}`\n\n"
+            f"**Pot:** {Emojis.Economy.coin} `{self.pot}`\n"
         )
 
         for i, side_pot in enumerate(self.side_pots, start=1):
-            embed.description += f'**Side Pot *#{i}*:** {Emojis.Economy.coin} `{side_pot}`\n'
+            embed.description += f"**Side Pot *#{i}*:** {Emojis.Economy.coin} `{side_pot}`\n"
 
         if self.state == TableState.STOPPED:
             self._build_stopped_embed(embed)
@@ -242,93 +233,97 @@ class PokerSession:
     def _build_stopped_embed(self, embed: discord.Embed) -> None:
         embed.colour = discord.Color.lighter_grey()
         embed.description = (
-            '*Waiting for players to join...*\n\n'
-            f'Poker requires `2-4` players. The small blind and big blind are set to `{self.small_blind}` and `{self.big_blind}` Chips.\n'
-            f'The minimum buy-in is `{self.min_buy_in}` Chips and the maximum buy-in is `{self.max_buy_in}` Chips.\n'
-            'You can join the game by clicking the **Join** button below or click **Start** as the host to start the game.'
+            "*Waiting for players to join...*\n\n"
+            f"Poker requires `2-4` players. The small blind and big blind are set to `{self.small_blind}` and `{self.big_blind}` Chips.\n"
+            f"The minimum buy-in is `{self.min_buy_in}` Chips and the maximum buy-in is `{self.max_buy_in}` Chips.\n"
+            "You can join the game by clicking the **Join** button below or click **Start** as the host to start the game."
         )
-        embed.set_footer(text=f'Players: {len(self.players)}/4')
+        embed.set_footer(text=f"Players: {len(self.players)}/4")
         self._add_players_raw_to_embed(embed)
 
     def _build_running_embed(self, embed: discord.Embed, with_autoplay: bool = False) -> None:
         for index, player in enumerate(self.players, 1):
-            name_parts = [f'Seat #{index}', player.member.display_name]
-            text = f'**Stack:** {Emojis.Economy.coin} `{player.stack}`\n'
+            name_parts = [f"Seat #{index}", player.member.display_name]
+            text = f"**Stack:** {Emojis.Economy.coin} `{player.stack}`\n"
 
             if self.state == TableState.RUNNING:
                 if index - 1 == self.player_index:
                     name_parts.insert(0, Emojis.Arrows.right)
 
                 assert self.blind_index is not None
-                blind = 'BB' if index == self.blind_index[1] + 1 else 'SB' if index == self.blind_index[0] + 1 else None
+                blind = "BB" if index == self.blind_index[1] + 1 else "SB" if index == self.blind_index[0] + 1 else None
                 if blind is not None:
                     name_parts.append(blind)
 
-                text += f'**Current Bet:** {Emojis.Economy.coin} `{player.bet}`\n'
+                text += f"**Current Bet:** {Emojis.Economy.coin} `{player.bet}`\n"
 
                 if self.players[self.player_index] == player and with_autoplay:
-                    text += f'*\N{ALARM CLOCK} Autoplay {discord.utils.format_dt(
-                        discord.utils.utcnow() + datetime.timedelta(seconds=20), 'R')}*\n'
+                    text += f"*\N{ALARM CLOCK} Autoplay {
+                        discord.utils.format_dt(discord.utils.utcnow() + datetime.timedelta(seconds=20), 'R')
+                    }*\n"
 
             if player.all_in:
-                name_parts.append('All In')
+                name_parts.append("All In")
 
             if player.folded:
-                name_parts.append('Folded')
+                name_parts.append("Folded")
             else:
                 if self.state == TableState.FINISHED:
-                    won_lost_chips = f'+{sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)}'
-                    if won_lost_chips == '+0':
-                        won_lost_chips = f'-{player.bet}'
+                    won_lost_chips = (
+                        f"+{sum(pot.amount // len(winners) for winners, pot in self.winners if player in winners)}"
+                    )
+                    if won_lost_chips == "+0":
+                        won_lost_chips = f"-{player.bet}"
 
-                    name_parts.append(f'{Emojis.Economy.coin} {won_lost_chips}')
+                    name_parts.append(f"{Emojis.Economy.coin} {won_lost_chips}")
 
                 # Check if there is only one player that has not folded,
                 # if there is, he does not need to show his cards and wins automatically
                 if len(self.playing_players) != 1:
                     text = self._append_finished_embed_text(player, text)
                 else:
-                    name_parts.append('👑')
+                    name_parts.append("👑")
 
-            embed.add_field(name=' • '.join(name_parts), value=text, inline=False)
+            embed.add_field(name=" • ".join(name_parts), value=text, inline=False)
 
         self._add_community_cards_to_embed(embed)
 
     def _add_players_raw_to_embed(self, embed: discord.Embed) -> None:
         for index, player in enumerate(self.players, 1):
-            name_parts = [f'Seat #{index}', player.member.display_name]
-            text = f'**Stack:** {Emojis.Economy.coin} `{player.stack}`\n'
+            name_parts = [f"Seat #{index}", player.member.display_name]
+            text = f"**Stack:** {Emojis.Economy.coin} `{player.stack}`\n"
 
-            embed.add_field(name=' • '.join(name_parts), value=text, inline=False)
+            embed.add_field(name=" • ".join(name_parts), value=text, inline=False)
 
     def _append_finished_embed_text(self, player: Player, text: str) -> str:
         if self.state == TableState.FINISHED:
-            raw_cards = [card.display('small') for card in player.hand.cards]
-            cards = [cast('DisplayCard', c) for c in raw_cards]
+            raw_cards = [card.display("small") for card in player.hand.cards]
+            cards = [cast("DisplayCard", c) for c in raw_cards]
             found = discord.utils.find(lambda x: x[0] == player, self.ranks)
             assert found is not None
             _, hand = found
             position = self.ranks.index((player, hand)) + 1
 
             hand_suffix = (
-                f'**{number_suffix(position)} Best Hand** 👑' if position == 1 else f'{number_suffix(position)} Best Hand'
-                if not self.tie else '**Tie**'
+                f"**{number_suffix(position)} Best Hand** 👑"
+                if position == 1
+                else f"{number_suffix(position)} Best Hand"
+                if not self.tie
+                else "**Tie**"
             )
-            text += (
-                f'{cards[0].top} {cards[1].top} {hand.name}\n'
-                f'{cards[0].bottom} {cards[1].bottom} {hand_suffix}'
-            )
+            text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
         return text
 
     def _add_community_cards_to_embed(self, embed: discord.Embed) -> None:
         cards = [Card.from_arr(arr) for arr in self.community_arr]
         if len(cards) >= 3:
-            card_list = [f'{elem1} {elem2} {elem3}' for elem1, elem2, elem3 in zip(
-                *[cast('str', card.display('large', formatted=True)).split('\n') for card in cards[:3]])]
-            embed.add_field(
-                name='The Flop',
-                value='\n'.join(card_list)
-            )
+            card_list = [
+                f"{elem1} {elem2} {elem3}"
+                for elem1, elem2, elem3 in zip(
+                    *[cast("str", card.display("large", formatted=True)).split("\n") for card in cards[:3]]
+                )
+            ]
+            embed.add_field(name="The Flop", value="\n".join(card_list))
         if len(cards) >= 4:
             embed.add_field(
                 name='The Turn',

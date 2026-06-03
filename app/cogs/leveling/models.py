@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from app.core import Bot
 
 __all__ = (
-    'CooldownManager',
-    'GainConfig',
-    'GuildLevelConfig',
-    'LevelConfig',
-    'LevelingSpec',
+    "CooldownManager",
+    "GainConfig",
+    "GuildLevelConfig",
+    "LevelConfig",
+    "LevelingSpec",
 )
 
 _MAX_LEVEL = 500

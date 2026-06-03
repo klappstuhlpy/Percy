@@ -11,21 +11,23 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, ParamSpec, Protocol, TypeVar
 
-warnings.filterwarnings('ignore', category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-T = TypeVar('T')
-P = ParamSpec('P')
+T = TypeVar("T")
+P = ParamSpec("P")
 
 __all__ = (
-    'Scheduler',
-    'executor',
-    'scheduled_coroutine',
+    "Scheduler",
+    "executor",
+    "scheduled_coroutine",
 )
 
 _background_tasks: set[asyncio.Task] = set()
 
 
-def executor[**P, T](sync_function: Callable[P, T]) -> Callable[..., Awaitable[T]] | Callable[P, Awaitable[T]] | Callable[..., Awaitable[T]]:
+def executor[**P, T](
+    sync_function: Callable[P, T],
+) -> Callable[..., Awaitable[T]] | Callable[P, Awaitable[T]] | Callable[..., Awaitable[T]]:
     """A decorator that wraps a sync function in an executor, changing it into an async function.
 
     This allows processing functions to be wrapped and used immediately as an async function.
@@ -62,42 +64,38 @@ def executor[**P, T](sync_function: Callable[P, T]) -> Callable[..., Awaitable[T
 
     @functools.wraps(sync_function)
     async def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        """Asynchronous function that wraps a sync function with an executor """
+        """Asynchronous function that wraps a sync function with an executor"""
 
         sync_function.__executor__ = True
         sync_function.__partial_async__ = True
 
         loop = asyncio.get_event_loop()
         internal_function = functools.partial(sync_function, *args, **kwargs)
-        return await loop.run_in_executor(None, internal_function)
+        return await loop.run_in_executor(None, internal_function)  # type: ignore
 
     return sync_wrapper
 
 
-C = TypeVar('C', bound=Callable[..., Coroutine])
+C = TypeVar("C", bound=Callable[..., Coroutine])
 
 
 def get_function_from_coroutine(coroutine: Coroutine) -> Callable:
     """Return the function that the coroutine was created from."""
     # this is a bit hacky and not very nice, but it works for now
     # maybe improve this in the future!
-    referrers = gc.get_referrers(coroutine.cr_code)
+    referrers = gc.get_referrers(coroutine.cr_code)  # type: ignore
     return next(filter(lambda ref: inspect.isfunction(ref), referrers))
 
 
 class ScheduledTaskProtocol(Protocol[C]):
+    async def __call__(self, *args: Any, **kwargs: Any) -> C: ...
 
-    async def __call__(self, *args: Any, **kwargs: Any) -> C:
-        ...
+    def before_task(self, coro: Coroutine) -> Coroutine: ...
 
-    def before_task(self, coro: Coroutine) -> Coroutine:
-        ...
-
-    def after_task(self, coro: Coroutine) -> Coroutine:
-        ...
+    def after_task(self, coro: Coroutine) -> Coroutine: ...
 
 
-def scheduled_coroutine(func: Callable[..., Coroutine]) -> ScheduledTaskProtocol[Coroutine]:
+def scheduled_coroutine(func: Callable[..., Coroutine]) -> Any:
     """A decorator that schedules a coroutine to run in the background.
 
     This decorator schedules a coroutine to run in the background. It can be awaited to
@@ -118,15 +116,15 @@ def scheduled_coroutine(func: Callable[..., Coroutine]) -> ScheduledTaskProtocol
 
     def _before_task(coro: Coroutine) -> Coroutine:
         if not inspect.iscoroutinefunction(coro):
-            raise TypeError(f'Expected coroutine function, received {coro.__class__.__name__}.')
-        func.__tasks__.before_task = coro  # type: ignore
-        return coro
+            raise TypeError(f"Expected coroutine function, received {coro.__class__.__name__}.")
+        func.__tasks__.before_task = coro
+        return coro  # type: ignore
 
     def _after_task(coro: Coroutine) -> Coroutine:
         if not inspect.iscoroutinefunction(coro):
-            raise TypeError(f'Expected coroutine function, received {coro.__class__.__name__}.')
-        func.__tasks__.after_task = coro  # type: ignore
-        return coro
+            raise TypeError(f"Expected coroutine function, received {coro.__class__.__name__}.")
+        func.__tasks__.after_task = coro
+        return coro  # type: ignore
 
     wrapper.before_task = _before_task
     wrapper.after_task = _after_task
@@ -163,12 +161,12 @@ class Scheduler(ABC):
         self.injected = None if isinstance(injected, str) else injected
         self.name = self.injected.__class__.__name__ if self.injected else injected
 
-        self.log = logging.getLogger(f'{__name__}.{self.name}')
+        self.log = logging.getLogger(f"{__name__}.{self.name}")
 
         self._origin_lookup: dict[Hashable, Callable] = {}
         self._scheduled_tasks: dict[Hashable, asyncio.Task] = {}
 
-    def get_args_from_cls(self) -> tuple[TypeVar, ...]:
+    def get_args_from_cls(self) -> tuple[()] | tuple[object | None]:
         """Return the arguments to use when calling the scheduler."""
         # resolve the `self` argument if the scheduler is injected (or provided) from a class
         return () if isinstance(self.injected, str) else (self.injected,)
@@ -224,13 +222,13 @@ class Scheduler(ABC):
         The task is added to the scheduler's internal dictionary of scheduled tasks. This allows the
         task to be cancelled prematurely with :obj:`cancel`.
         """
-        self.log.debug('Scheduling task #%s...', task_id)
+        self.log.debug("Scheduling task #%s...", task_id)
 
-        if inspect.getcoroutinestate(coroutine) != 'CORO_CREATED':
-            raise ValueError(f'Cannot schedule an already started coroutine for #{task_id}')
+        if inspect.getcoroutinestate(coroutine) != "CORO_CREATED":
+            raise ValueError(f"Cannot schedule an already started coroutine for #{task_id}")
 
         if task_id in self._scheduled_tasks:
-            self.log.debug('Did not schedule task #%s; task was already scheduled.', task_id)
+            self.log.debug("Did not schedule task #%s; task was already scheduled.", task_id)
             coroutine.close()
             return
 
@@ -238,14 +236,14 @@ class Scheduler(ABC):
             self._origin_lookup[task_id] = get_function_from_coroutine(coroutine)
 
         origin = self._origin_lookup[task_id]
-        if hasattr(origin, '__tasks__') and (before_task := origin.__tasks__.before_task):
-            self.schedule(f'{task_id}:before_task', before_task(*self.get_args_from_cls()))
+        if hasattr(origin, "__tasks__") and (before_task := origin.__tasks__.before_task):
+            self.schedule(f"{task_id}:before_task", before_task(*self.get_args_from_cls()))
 
-        task = asyncio.create_task(coroutine, name=f'{self.name}_{task_id}')
+        task = asyncio.create_task(coroutine, name=f"{self.name}_{task_id}")
         task.add_done_callback(functools.partial(self._task_done_callback, task_id))
 
         self._scheduled_tasks[task_id] = task
-        self.log.debug('Scheduled task #%s %s.', task_id, id(task))
+        self.log.debug("Scheduled task #%s %s.", task_id, id(task))
 
     def schedule_at(self, time: datetime, task_id: Hashable, coroutine: Coroutine) -> None:
         """Schedule `coroutine` to be executed at the given `time`.
@@ -281,12 +279,7 @@ class Scheduler(ABC):
 
         self.schedule(task_id, coroutine)
 
-    def schedule_later(
-        self,
-        delay: int | float,
-        task_id: Hashable,
-        coroutine: Coroutine
-    ) -> None:
+    def schedule_later(self, delay: int | float, task_id: Hashable, coroutine: Coroutine) -> None:
         """Schedule `coroutine` to be executed after `delay` seconds.
 
         Parameters
@@ -324,20 +317,20 @@ class Scheduler(ABC):
         -----
         If the task identified by `task_id` is already done, then this method does nothing.
         """
-        self.log.debug('Cancelling task #...', task_id)
+        self.log.debug("Cancelling task #...", task_id)
 
         try:
             task = self._scheduled_tasks.pop(task_id)
         except KeyError:
-            self.log.warning('Failed to unschedule %s (no task found).', task_id)
+            self.log.warning("Failed to unschedule %s (no task found).", task_id)
         else:
             task.cancel()
 
-            self.log.debug('Unscheduled task #%s %s.', task_id, id(task))
+            self.log.debug("Unscheduled task #%s %s.", task_id, id(task))
 
     def cancel_all(self) -> None:
         """Unschedule all known tasks."""
-        self.log.debug('Unscheduling all tasks')
+        self.log.debug("Unscheduling all tasks")
 
         for task_id, _ in self.walk_tasks():
             self.cancel(task_id)
@@ -346,12 +339,7 @@ class Scheduler(ABC):
         """Safely walk through all tasks and yield them."""
         yield from self._scheduled_tasks.copy().items()
 
-    async def _await_later(
-        self,
-        delay: int | float,
-        task_id: Hashable,
-        coroutine: Coroutine
-    ) -> None:
+    async def _await_later(self, delay: int | float, task_id: Hashable, coroutine: Coroutine) -> None:
         """|coro|
 
         Await `coroutine` after `delay` seconds.
@@ -380,11 +368,11 @@ class Scheduler(ABC):
         self._origin_lookup[task_id] = get_function_from_coroutine(coroutine)
 
         try:
-            self.log.debug('Waiting %r seconds before awaiting coroutine for #%s.', delay, task_id)
+            self.log.debug("Waiting %r seconds before awaiting coroutine for #%s.", delay, task_id)
             await asyncio.sleep(delay)
 
             # Use asyncio.shield to prevent the coroutine from cancelling itself.
-            self.log.debug('Done waiting for #%s; now awaiting the coroutine.',task_id)
+            self.log.debug("Done waiting for #%s; now awaiting the coroutine.", task_id)
             await asyncio.shield(coroutine)
         finally:
             # Close it to prevent unawaited coroutine warnings,
@@ -392,11 +380,11 @@ class Scheduler(ABC):
             # Only close it if it's not been awaited yet. This check is important because the
             # coroutine may cancel this task, which would also trigger the final block.
             state = inspect.getcoroutinestate(coroutine)
-            if state == 'CORO_CREATED':
-                self.log.debug('Explicitly closing the coroutine for #%s.', task_id)
+            if state == "CORO_CREATED":
+                self.log.debug("Explicitly closing the coroutine for #%s.", task_id)
                 coroutine.close()
             else:
-                self.log.debug('Finally block reached for #%s; %s', task_id, state)
+                self.log.debug("Finally block reached for #%s; %s", task_id, state)
 
     def _task_done_callback(self, task_id: Hashable, done_task: asyncio.Task) -> None:
         """Delete the task and raise its exception if one exists.
@@ -415,32 +403,32 @@ class Scheduler(ABC):
         If `done_task` and the task associated with `task_id` are different, then the latter
         will not be deleted. In this case, a new task was likely rescheduled with the same ID.
         """
-        self.log.debug('Performing done callback for task #%s %s.', task_id, id(done_task))
+        self.log.debug("Performing done callback for task #%s %s.", task_id, id(done_task))
 
         scheduled_task = self._scheduled_tasks.get(task_id)
 
         if scheduled_task and done_task is scheduled_task:
             # A task for the ID exists and is the same as the done task.
             # Since this is the done callback, the task is already done so no need to cancel it.
-            self.log.debug('Deleting task #%s %s.', task_id, id(done_task))
+            self.log.debug("Deleting task #%s %s.", task_id, id(done_task))
             del self._scheduled_tasks[task_id]
 
             origin = self._origin_lookup.pop(task_id, None)
-            if hasattr(origin, '__tasks__') and (after_task := origin.__tasks__.after_task):
-                self.schedule(f'{task_id}:after_task', after_task(*self.get_args_from_cls()))
+            if hasattr(origin, "__tasks__") and (after_task := origin.__tasks__.after_task):
+                self.schedule(f"{task_id}:after_task", after_task(*self.get_args_from_cls()))
 
         elif scheduled_task:
             # A new task was likely rescheduled with the same ID.
             self.log.debug(
-                'The scheduled task #%s %s and the done task %s differ.',
-                task_id, id(scheduled_task), id(done_task)
+                "The scheduled task #%s %s and the done task %s differ.", task_id, id(scheduled_task), id(done_task)
             )
 
         elif not done_task.cancelled():
             self.log.warning(
-                'Task #%s not found while handling task %s! '
-                'A task somehow got unscheduled improperly (i.e. deleted but not cancelled).',
-                task_id, id(done_task)
+                "Task #%s not found while handling task %s! "
+                "A task somehow got unscheduled improperly (i.e. deleted but not cancelled).",
+                task_id,
+                id(done_task),
             )
 
         with suppress(asyncio.CancelledError):

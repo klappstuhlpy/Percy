@@ -25,11 +25,12 @@ from app.rendering.primitives import Font, FontManager, get_dominant_color
 if TYPE_CHECKING:
     from app.cogs.leveling import LevelConfig
 
-__all__ = ('Captcha', 'RenderingService')
+__all__ = ("Captcha", "RenderingService")
 
 
 class Captcha(NamedTuple):
     """A generated captcha: the solution text and a ready-to-send image file."""
+
     text: str
     file: discord.File
 
@@ -42,7 +43,9 @@ class RenderingService:
 
     # -- Artifact rendering -------------------------------------------------
 
-    async def level_card(self, member: discord.Member, level_config: LevelConfig, *, font: Font = Font.RUBIK) -> discord.File:
+    async def level_card(
+        self, member: discord.Member, level_config: LevelConfig, *, font: Font = Font.RUBIK
+    ) -> discord.File:
         """Render a member's rank card."""
         data = LevelCardData(
             avatar=await member.display_avatar.read(),
@@ -57,7 +60,7 @@ class RenderingService:
             font=font,
         )
         buffer = await asyncio.to_thread(templates.draw_level_card, data, self._fonts)
-        return discord.File(buffer, filename=f'{member.id}.png')
+        return discord.File(buffer, filename=f"{member.id}.png")
 
     async def quote(self, member: discord.Member | discord.User, text: str, *, font: Font = Font.GINTO_BOLD) -> discord.File:
         """Render a quote image attributed to ``member``."""
@@ -68,20 +71,22 @@ class RenderingService:
             font=font,
         )
         buffer = await asyncio.to_thread(templates.draw_quote, data, self._fonts)
-        return discord.File(buffer, filename=f'{member.id}-quote.png')
+        return discord.File(buffer, filename=f"{member.id}-quote.png")
 
-    async def color_swatch(self, rgb: tuple[int, int, int], text: str | None = None, *, filename: str = 'color.png') -> discord.File:
+    async def color_swatch(
+        self, rgb: tuple[int, int, int], text: str | None = None, *, filename: str = "color.png"
+    ) -> discord.File:
         """Render a solid colour swatch with optional caption."""
         buffer = await asyncio.to_thread(templates.draw_color_swatch, ColorSwatchData(rgb=rgb, text=text))
         return discord.File(buffer, filename=filename)
 
-    async def equalizer(self, gains: list[float], *, filename: str = 'image.png') -> discord.File:
+    async def equalizer(self, gains: list[float], *, filename: str = "image.png") -> discord.File:
         """Render the music equalizer band graph."""
         buffer = await asyncio.to_thread(templates.draw_equalizer, gains)
         return discord.File(buffer, filename=filename)
 
     async def bar_chart(
-        self, data: dict[str, int | float], title: str, *, merge: bool = False, filename: str = 'bar_chart.png'
+        self, data: dict[str, int | float], title: str, *, merge: bool = False, filename: str = "bar_chart.png"
     ) -> discord.File | list[discord.File]:
         """Render a horizontal bar chart.
 
@@ -97,15 +102,16 @@ class RenderingService:
             files = []
             for i, image in enumerate(templates.render_bar_chart_images(spec, self._fonts)):
                 buffer = io.BytesIO()
-                image.save(buffer, 'png')
+                image.save(buffer, "png")
                 buffer.seek(0)
-                files.append(discord.File(buffer, filename=f'bar_chart_{i}.png'))
+                files.append(discord.File(buffer, filename=f"bar_chart_{i}.png"))
             return files
 
         return await asyncio.to_thread(_render)
 
-    async def merge_bar_charts(self, specs: list[BarChartData], *, filename: str = 'bar_chart.png') -> discord.File:
+    async def merge_bar_charts(self, specs: list[BarChartData], *, filename: str = "bar_chart.png") -> discord.File:
         """Render several bar charts and stack all their images into one file."""
+
         def _render() -> discord.File:
             images = []
             for spec in specs:
@@ -113,26 +119,26 @@ class RenderingService:
 
             merged = templates.merge_images_vertical(images)
             buffer = io.BytesIO()
-            merged.save(buffer, 'png')
+            merged.save(buffer, "png")
             buffer.seek(0)
             return discord.File(buffer, filename=filename)
 
         return await asyncio.to_thread(_render)
 
-    async def avatar_collage(self, avatars: list[bytes], *, filename: str = 'collage.png') -> discord.File:
+    async def avatar_collage(self, avatars: list[bytes], *, filename: str = "collage.png") -> discord.File:
         """Render a square collage of the given avatars."""
         buffer = await asyncio.to_thread(templates.draw_avatar_collage, avatars)
         return discord.File(buffer, filename=filename)
 
     async def presence_chart(
-        self, *, labels: list[str], values: list[int], colors: list[str], filename: str = 'presence.png'
+        self, *, labels: list[str], values: list[int], colors: list[str], filename: str = "presence.png"
     ) -> discord.File:
         """Render a presence/activity donut chart."""
         data = PresenceData(labels=labels, values=values, colors=colors)
         buffer = await asyncio.to_thread(templates.draw_presence_chart, data, self._fonts)
         return discord.File(buffer, filename=filename)
 
-    async def captcha(self, *, length: int = 6, filename: str = 'captcha.png') -> Captcha:
+    async def captcha(self, *, length: int = 6, filename: str = "captcha.png") -> Captcha:
         """Generate a random captcha image and its solution text."""
         text, buffer = await asyncio.to_thread(templates.generate_captcha, length=length)
         return Captcha(text=text, file=discord.File(buffer, filename=filename))

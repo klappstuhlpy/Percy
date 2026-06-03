@@ -43,7 +43,10 @@ class HelpPaginator(BasePaginator[AnyCommand]):
             prefix = (
                 origin.clean_prefix
                 if isinstance(origin, commands.Context)
-                else ((origin.client.user and origin.client.user.name) or "")
+                else (
+                    (getattr(origin, "client", None) and getattr(origin.client, "user", None) and origin.client.user.name)
+                    or ""
+                )
             )
             yield f"{Emojis.Command.more_info} » This command has more detailed help available with `{prefix}help <command>`."
 
@@ -186,9 +189,10 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
 
             _commands = self.mapping[cog]
             if not _commands:
-                return await interaction.response.send_message(
+                await interaction.response.send_message(
                     f"{Emojis.error} This category has no commands for you.", ephemeral=True
                 )
+                return None
 
             extras = self.view.extras
             extras.pop("group", None)
@@ -214,7 +218,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             **kwargs,  # type: ignore[arg-type]
         )
 
-    def get_bot_mapping(self) -> dict[Cog | None, list[Command[Any, Any, Any]]]:
+    def get_bot_mapping(self) -> dict[Cog | None, list[Command]]:
         mapping = super().get_bot_mapping()
         del mapping[None]
         return mapping
@@ -412,7 +416,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if no_signature:
             return f"{prefix}{command.qualified_name}"
 
-        signature = command.ansi_signature.raw if isinstance(command, AnyCommand) else command.signature
+        signature = getattr(command, "ansi_signature", None)
+        signature = signature.raw if signature is not None else command.signature
         hidden_tag = "[!]" if command.hidden else ""
 
         return f"{prefix}{command.qualified_name} {truncate(signature, 150)} {hidden_tag}".strip()
@@ -504,9 +509,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The front page of the help command.
         """
         ctx = self.context
-        prefix = ctx.clean_prefix
+        prefix = ctx.clean_prefix if isinstance(ctx, commands.Context) else ""
 
-        bot_user = ctx.bot.user
+        bot_user = ctx.bot.user if isinstance(ctx, commands.Context) else ctx.client.user
         embed = discord.Embed(
             title=f"{bot_user.name if bot_user else 'Percy'} Help",
             description=f"Use `{prefix}v2` to get more information about the Percy-v2 Release.\n\n"
@@ -622,19 +627,19 @@ class PaginatedHelpCommand(commands.HelpCommand):
         signature = AnsiStringBuilder()
         signature.append(ctx.clean_prefix, color=AnsiColor.white, bold=True)
         signature.append(command.qualified_name + " ", color=AnsiColor.green, bold=True)
-        signature.extend(Command.ansi_signature_of(command))  # type: ignore[arg-type]
+        signature.extend(Command.ansi_signature_of(command))  # type: ignore
 
         description = inspect.cleandoc(command.help or command.description or "No description provided.")
 
-        signature = signature.ensure_codeblock(fallback="md").dynamic(ctx)
+        signature = signature.ensure_codeblock(fallback="md").dynamic(ctx)  # type: ignore
         embed.description = f"{signature}\n{description}"
 
         sig_fields = self.get_command_signature(command, descripted=True)
         if isinstance(sig_fields, list):
-            embed.add_fields(sig_fields)  # type: ignore[arg-type]
+            embed.add_fields(sig_fields)
         flag_fields = self.get_command_flag_signature(command, descripted=True)
         if isinstance(flag_fields, list):
-            embed.add_fields(flag_fields)  # type: ignore[arg-type]
+            embed.add_fields(flag_fields)
 
         if getattr(command, "aliases", None):
             embed.add_field(
@@ -675,7 +680,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             command_signature = self.get_command_signature(command, no_signature=True)
             embed.add_field(
                 name=f"{Emojis.Command.example} | **Examples**",
-                value="\n".join(f"* `{command_signature} {example}`" for example in examples),
+                value="\n".join(f"* `{command_signature} {example}`" for example in examples),  # type: ignore
                 inline=False,
             )
 

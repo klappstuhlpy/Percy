@@ -8,20 +8,20 @@ from app.utils import helpers
 from app.utils.helpers import HealthBarBuilder
 from config import Emojis
 
-__all__ = ('Hangman',)
+__all__ = ("Hangman",)
 
 
 class Hangman:
     """A class to represent a hangman game."""
 
     IMAGES: Final[list[str]] = [
-        'https://klappstuhl.me/gallery/RaPNv.png',  # Hangman 0
-        'https://klappstuhl.me/gallery/YsDeg.png',
-        'https://klappstuhl.me/gallery/PnXlL.png',
-        'https://klappstuhl.me/gallery/WstIp.png',
-        'https://klappstuhl.me/gallery/FpYQR.png',
-        'https://klappstuhl.me/gallery/ZTKmW.png',
-        'https://klappstuhl.me/gallery/nJnEN.png'
+        "https://klappstuhl.me/gallery/RaPNv.png",  # Hangman 0
+        "https://klappstuhl.me/gallery/YsDeg.png",
+        "https://klappstuhl.me/gallery/PnXlL.png",
+        "https://klappstuhl.me/gallery/WstIp.png",
+        "https://klappstuhl.me/gallery/FpYQR.png",
+        "https://klappstuhl.me/gallery/ZTKmW.png",
+        "https://klappstuhl.me/gallery/nJnEN.png",
     ]
 
     def __init__(self, player: discord.Member, word: str) -> None:
@@ -35,7 +35,7 @@ class Hangman:
         self.finished: bool = False
         self.health_bar: HealthBarBuilder = HealthBarBuilder(self._tries)
 
-        self._last_input: str | None = '`\N{INFORMATION SOURCE} Type a letter or the word you want to guess.`'
+        self._last_input: str | None = "`\N{INFORMATION SOURCE} Type a letter or the word you want to guess.`"
 
     @property
     def tries(self) -> int:
@@ -46,17 +46,17 @@ class Hangman:
     def tries(self, value: int) -> None:
         """Set the amount of tries left."""
         if not isinstance(value, int):
-            raise TypeError('Tries must be an integer.')
+            raise TypeError("Tries must be an integer.")
 
         self._tries = value
         self.health_bar -= 1
 
     def build_embed(self, won: bool | None = None) -> discord.Embed:
         """Build the embed."""
-        guess = ''.join(letter.upper() if letter in self.used else '-' for letter in self.word)
+        guess = "".join(letter.upper() if letter in self.used else "-" for letter in self.word)
         embed = discord.Embed(
-            title='Hangman',
-            description=f'**Progress:** {Emojis.empty} {self.health_bar}\n```prolog\n{guess}```',
+            title="Hangman",
+            description=f"**Progress:** {Emojis.empty} {self.health_bar}\n```prolog\n{guess}```",
         )
 
         if won is True:
@@ -67,9 +67,11 @@ class Hangman:
             embed.colour = helpers.Colour.white()
 
         if won is not None:
-            embed.description += f'\nThe word was: **{self.word.upper()}**'
+            embed.description += f"\nThe word was: **{self.word.upper()}**"
         else:
-            embed.description += f'\nUsed letters: **{', '.join(letter.upper() for letter in self.used) if self.used else '...'}**\n\n'
+            embed.description += (
+                f"\nUsed letters: **{', '.join(letter.upper() for letter in self.used) if self.used else '...'}**\n\n"
+            )
             if self._last_input:
                 embed.description += self._last_input
 
