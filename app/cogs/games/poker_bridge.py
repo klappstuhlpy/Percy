@@ -200,9 +200,8 @@ class PokerSession:
         """
         stack_left = self.engine.remove_player(member)
         if stack_left > 0:
-            query = "UPDATE economy SET cash = cash + $1 WHERE user_id = $2 AND guild_id = $3;"
             assert self.ctx.guild is not None
-            await self.ctx.bot.db.execute(query, stack_left, member.id, self.ctx.guild.id)
+            await self.ctx.bot.db.users.add_cash(member.id, self.ctx.guild.id, stack_left)
 
     async def prepare_next_game(self) -> None:
         """|coro|

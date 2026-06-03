@@ -73,3 +73,9 @@ class UsersRepository(BaseRepository):
     async def get_guild_balance_records(self, guild_id: int) -> list[asyncpg.Record]:
         """Fetches every balance row for a guild."""
         return await self.fetch("SELECT * FROM economy WHERE guild_id = $1;", guild_id)
+
+    async def add_cash(self, user_id: int, guild_id: int, amount: int) -> None:
+        """Adds (or, with a negative ``amount``, removes) cash from a user's balance."""
+        await self.execute(
+            "UPDATE economy SET cash = cash + $1 WHERE user_id = $2 AND guild_id = $3;",
+            amount, user_id, guild_id)
