@@ -39,13 +39,8 @@ class TempChannel(BaseRecord):
             *,
             connection: asyncpg.Connection | None = None,
     ) -> TempChannel:
-        query = f"""
-            UPDATE temp_channels
-            SET {', '.join(map(key, enumerate(values.keys(), start=3)))}
-            WHERE guild_id = $1 AND channel_id = $2
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, self.guild_id, self.channel_id, *values.values())
+        record = await self.bot.db.temp_channels.update_channel(
+            self.guild_id, self.channel_id, key, values, connection=connection)
         return self.__class__(bot=self.bot, record=record)
 
     @property
@@ -65,13 +60,11 @@ class TempChannel(BaseRecord):
 
     async def delete(self) -> None:
         """Delete the temporary channel."""
-        query = "DELETE FROM temp_channels WHERE guild_id = $1 AND channel_id = $2;"
-        await self.bot.db.execute(query, self.guild_id, self.channel_id)
+        await self.bot.db.temp_channels.delete_channel(self.guild_id, self.channel_id)
 
     async def delete_all(self) -> None:
         """Delete all temporary channels."""
-        query = "DELETE FROM temp_channels WHERE guild_id = $1;"
-        await self.bot.db.execute(query, self.guild_id)
+        await self.bot.db.temp_channels.delete_guild_channels(self.guild_id)
 
 
 class TempChannels(Cog):
@@ -96,8 +89,7 @@ class TempChannels(Cog):
         list[TempChannel | discord.VoiceChannel]
             A list of temporary channels.
         """
-        query = "SELECT * FROM temp_channels WHERE guild_id = $1;"
-        records = await self.bot.db.fetch(query, guild_id)
+        records = await self.bot.db.temp_channels.get_guild_channels(guild_id)
         if convert:
             guild = self.bot.get_guild(guild_id)
             return [guild.get_channel(record['channel_id']) for record in records]  # type: ignore
@@ -120,8 +112,7 @@ class TempChannels(Cog):
         TempChannel
             A temporary channel.
         """
-        query = "SELECT * FROM temp_channels WHERE guild_id = $1 AND channel_id = $2;"
-        record = await self.bot.db.fetchrow(query, guild_id, channel_id)
+        record = await self.bot.db.temp_channels.get_channel(guild_id, channel_id)
         return TempChannel(bot=self.bot, record=record) if record else None
 
     async def temp_channel_id_autocomplete(
@@ -184,8 +175,7 @@ class TempChannels(Cog):
             await ctx.send_success(f'Successfully updated {channel.mention} with format **`{_format}`**.')
             return
 
-        query = "INSERT INTO temp_channels (guild_id, channel_id, format) VALUES ($1, $2, $3);"
-        await self.bot.db.execute(query, ctx.guild.id, channel.id, _format)
+        await self.bot.db.temp_channels.create_channel(ctx.guild.id, channel.id, _format or '⏳ | %name')
         await ctx.send_success(f'Successfully set {channel.mention} with format **`{_format}`**.')
 
     @temp.command(

@@ -10,6 +10,7 @@ from app.database.repositories.notes import NotesRepository
 from app.database.repositories.polls import PollsRepository
 from app.database.repositories.stats import StatsRepository
 from app.database.repositories.tags import TagsRepository
+from app.database.repositories.temp_channels import TempChannelsRepository
 from app.database.repositories.users import UsersRepository
 
 __all__ = (
@@ -25,5 +26,6 @@ __all__ = (
     'PollsRepository',
     'StatsRepository',
     'TagsRepository',
+    'TempChannelsRepository',
     'UsersRepository',
 )

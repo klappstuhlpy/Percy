@@ -25,6 +25,7 @@ from app.database.repositories import (
     PollsRepository,
     StatsRepository,
     TagsRepository,
+    TempChannelsRepository,
     UsersRepository,
 )
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
@@ -163,6 +164,7 @@ class Database(_Database):
     giveaways: GiveawaysRepository
     emoji_stats: EmojiStatsRepository
     highlights: HighlightsRepository
+    temp_channels: TempChannelsRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -178,6 +180,7 @@ class Database(_Database):
         self.giveaways = GiveawaysRepository(self)
         self.emoji_stats = EmojiStatsRepository(self)
         self.highlights = HighlightsRepository(self)
+        self.temp_channels = TempChannelsRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
