@@ -139,12 +139,6 @@ class Moderation(Cog):
 
         Bulk insert the mute data into the database.
         """
-        query = """
-            UPDATE guild_config
-            SET muted_members = x.result_array
-            FROM jsonb_to_recordset($1::jsonb) AS x(guild_id BIGINT, result_array BIGINT[])
-            WHERE guild_config.id = x.guild_id;
-        """
         if not self._mute_data_batch:
             return
 
@@ -163,7 +157,7 @@ class Moderation(Cog):
             final_data.append({'guild_id': guild_id, 'result_array': list(as_set)})
             self.bot.db.get_guild_config.invalidate(guild_id)
 
-        await self.bot.db.execute(query, final_data)
+        await self.bot.db.moderation.bulk_update_muted_members(final_data)
         self._mute_data_batch.clear()
 
     @Cog.listener()
@@ -742,19 +736,9 @@ class Moderation(Cog):
             return await ctx.send_error(
                 'An error occurred while creating the webhook. Note you can only have 10 webhooks per channel.')
 
-        query = """
-            INSERT INTO guild_config (id, flags, alert_channel_id, alert_webhook_url)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (id)
-                DO UPDATE SET flags             = guild_config.flags | EXCLUDED.flags,
-                              alert_channel_id  = EXCLUDED.alert_channel_id,
-                              alert_webhook_url = EXCLUDED.alert_webhook_url;
-        """
-
         flags = AutoModFlags()
         flags.alerts = True
-        await ctx.db.execute(query, ctx.guild.id, flags.value, channel_id, webhook.url)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.enable_alerts(ctx.guild.id, flags.value, channel_id, webhook.url)
         await ctx.send_success(f'Alert messages enabled. Sending alerts to <#{channel_id}>.')
 
     @moderation.group(
@@ -773,8 +757,7 @@ class Moderation(Cog):
         await ctx.defer()
         reason = f'{ctx.author} enabled mod audit log (ID: {ctx.author.id})'
 
-        query = "SELECT audit_log_webhook_url FROM guild_config WHERE id = $1;"
-        wh_url: str | None = await self.bot.db.fetchval(query, ctx.guild.id)
+        wh_url = await self.bot.db.moderation.get_audit_log_webhook_url(ctx.guild.id)
         if wh_url is not None:
             # Delete the old webhook if it exists
             with suppress(discord.HTTPException):
@@ -791,17 +774,8 @@ class Moderation(Cog):
             return await ctx.send_error('Failed to create a webhook in that channel. '
                                         'Note that the limit for webhooks in each channel is **10**.')
 
-        query = """
-            INSERT INTO guild_config (id, flags, audit_log_channel_id, audit_log_webhook_url)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (id)
-                DO UPDATE SET flags                 = guild_config.flags | $2,
-                              audit_log_channel_id  = $3,
-                              audit_log_webhook_url = $4;
-        """
-
-        await ctx.db.execute(query, ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.enable_audit_log(
+            ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
         await ctx.send_success(f'Audit log enabled. Broadcasting log events to <#{channel.id}>.')
 
     @moderation_auditlog.command(
@@ -835,17 +809,16 @@ class Moderation(Cog):
                 raise commands.BadArgument(f'Unknown flag **{flag}**')
 
         assert ctx.guild is not None
-        query = "UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;"
-        await ctx.db.execute(query, ctx.guild.id, ctx.guild_config.audit_log_flags)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.set_audit_log_flags(ctx.guild.id, ctx.guild_config.audit_log_flags)
         await ctx.send_success(content)
 
     @moderation_auditlog_alter.autocomplete('flag')  # type: ignore[attr-defined]
     async def moderation_auditlog_alter_autocomplete(
             self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        query = "SELECT audit_log_flags FROM guild_config WHERE id = $1;"
-        flags = list((await self.bot.db.fetchval(query, interaction.guild_id)).items())
+        assert interaction.guild_id is not None
+        flags_map = await self.bot.db.moderation.get_audit_log_flags(interaction.guild_id)
+        flags = list(flags_map.items()) if flags_map else []
 
         results = fuzzy.finder(current, flags, key=lambda x: x[0])
         return [
@@ -908,13 +881,10 @@ class Moderation(Cog):
         else:
             raise commands.BadArgument(f'Unknown protection {protection}')
 
-        query = f"UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url, alert_webhook_url;"
-
         assert ctx.guild is not None
         guild_id = ctx.guild.id
-        records = await self.bot.db.fetchrow(query, guild_id)
+        records = await self.bot.db.moderation.disable_protection(guild_id, updates)
         self._spam_check.pop(guild_id, None)
-        self.bot.db.get_guild_config.invalidate(guild_id)
 
         hooks = [
             [records.get('audit_log_webhook_url', None), 'Audit Log'],
@@ -970,23 +940,12 @@ class Moderation(Cog):
             previous.stop()
 
         gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[misc]
-        async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            if gatekeeper is None:
-                query = "INSERT INTO guild_gatekeeper(id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *;"
-                record = await conn.fetchrow(query, ctx.guild.id)
-                gatekeeper = Gatekeeper([], bot=self.bot, record=record)
+        gatekeeper_record, config_record = await self.bot.db.moderation.setup_gatekeeper(
+            ctx.guild.id, AutoModFlags.gatekeeper.flag, create_gatekeeper=gatekeeper is None)
 
-            query = """
-                INSERT INTO guild_config (id, flags)
-                VALUES ($1, $2)
-                ON CONFLICT (id)
-                    DO UPDATE SET flags = guild_config.flags | $2
-                RETURNING *;
-            """
-            record = await conn.fetchrow(query, ctx.guild.id, AutoModFlags.gatekeeper.flag)
-            config = GuildConfig(bot=self.bot, record=record)
-
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        if gatekeeper is None:
+            gatekeeper = Gatekeeper([], bot=self.bot, record=gatekeeper_record)
+        config = GuildConfig(bot=self.bot, record=config_record)
 
         embed = discord.Embed(
             title='Gatekeeper Configuration - Information',
@@ -1025,20 +984,9 @@ class Moderation(Cog):
         """Toggles raid protection on the server.
         Raid protection automatically bans members that spam messages in your server.
         """
-        query = """
-            INSERT INTO guild_config (id, flags)
-            VALUES ($1, $2)
-            ON CONFLICT (id)
-                DO UPDATE SET flags = CASE COALESCE($3, NOT (guild_config.flags & $2 = $2))
-                                          WHEN TRUE THEN guild_config.flags | $2
-                                          WHEN FALSE THEN guild_config.flags & ~$2
-                END
-            RETURNING COALESCE($3, (flags & $2 = $2));
-        """
-
         assert ctx.guild is not None
-        enabled = await self.bot.db.fetchval(query, ctx.guild.id, AutoModFlags.raid.flag, enabled)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        enabled = await self.bot.db.moderation.toggle_raid_protection(
+            ctx.guild.id, AutoModFlags.raid.flag, enabled)
         fmt = '*enabled*' if enabled else '*disabled*'
         await ctx.send_success(f'Raid protection {fmt}.')
 
@@ -1059,15 +1007,8 @@ class Moderation(Cog):
 
         Note: This applies to only for user mentions, role mentions are not counted.
         """
-        query = """
-            INSERT INTO guild_config (id, mention_count, safe_automod_entity_ids)
-            VALUES ($1, $2, '{}')
-            ON CONFLICT (id)
-                DO UPDATE SET mention_count = $2;
-        """
         assert ctx.guild is not None
-        await ctx.db.execute(query, ctx.guild.id, count)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.set_mention_count(ctx.guild.id, count)
         await ctx.send_success(f'Mention spam protection threshold set to `{count}`.')
 
     @moderation_mentions.error  # type: ignore[attr-defined]
@@ -1091,16 +1032,8 @@ class Moderation(Cog):
         if len(entities) == 0:
             raise commands.BadArgument('Missing entities to ignore.')
 
-        query = """
-            UPDATE guild_config
-            SET safe_automod_entity_ids =
-                    ARRAY(SELECT DISTINCT * FROM unnest(COALESCE(safe_automod_entity_ids, '{}') || $2::bigint[]))
-            WHERE id = $1;
-        """
         assert ctx.guild is not None
-        ids = [c.id for c in entities]
-        await ctx.db.execute(query, ctx.guild.id, ids)
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.add_safe_entities(ctx.guild.id, [c.id for c in entities])
 
         embed = discord.Embed(title='New Ignored Entities', color=helpers.Colour.white())
         embed.description = '\n'.join(f'- {c.mention}' for c in entities)
@@ -1122,18 +1055,8 @@ class Moderation(Cog):
         if len(entities) == 0:
             raise commands.BadArgument('Missing entities to unignore.')
 
-        query = """
-            UPDATE guild_config
-            SET safe_automod_entity_ids =
-                    ARRAY(SELECT element
-                          FROM unnest(safe_automod_entity_ids) AS element
-                          WHERE NOT (element = ANY ($2::bigint[])))
-            WHERE id = $1;
-        """
-
         assert ctx.guild is not None
-        await ctx.db.execute(query, ctx.guild.id, [c.id for c in entities])
-        self.bot.db.get_guild_config.invalidate(ctx.guild.id)
+        await ctx.db.moderation.remove_safe_entities(ctx.guild.id, [c.id for c in entities])
         embed = discord.Embed(title='Removed Ignored Entities', color=helpers.Colour.white())
         embed.description = '\n'.join(f'- {c.mention}' for c in entities)
         await ctx.send_success('Updated ignore list to no longer ignore:', embed=embed)
