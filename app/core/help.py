@@ -221,8 +221,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
     async def total_commands_invoked(self) -> int:
         """Returns the total amount of commands invoked."""
-        query = "SELECT COUNT(*) as total FROM commands;"
-        return await self.context.db.fetchval(query)  # type: ignore
+        return await self.context.db.stats.count_all_commands()  # type: ignore
 
     @staticmethod
     def command_requires_permissions(command: AnyCommand) -> bool:
