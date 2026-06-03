@@ -125,20 +125,20 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Notes**                    | Personal, user-installable notes (works in DMs and any server via a user-install app command).         |
 | **Temporary voice channels** | "Join-to-create" hub channels that spin up a personal voice channel on join and clean up when empty.   |
 | **Emoji management**         | Add, steal, rename and inspect server emojis, with per-guild emoji usage stats.                        |
-| **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                  |
+| **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                   |
 | **History tracking**         | Username/nickname history (`names`), `lastseen`, avatar history, and a rendered **presence chart**.    |
 
 ### Developer & Information
 
-| Feature                  | What it does                                                                                                                                            |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                       |
-| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)). |
-| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                               |
-| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                     |
-| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                 |
+| Feature                  | What it does                                                                                                                                                  |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                             |
+| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).       |
+| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                     |
+| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                           |
+| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                       |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection. |
-| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                             |
+| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                                   |
 
 ---
 
@@ -156,18 +156,18 @@ Use the built-in help to explore everything interactively:
 
 A few representative command groups:
 
-| Group         | Examples                                                                                                |
-|---------------|---------------------------------------------------------------------------------------------------------|
+| Group         | Examples                                                                                                           |
+|---------------|--------------------------------------------------------------------------------------------------------------------|
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …` |
-| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                         |
-| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                 |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `work`, `crime`, `rob`                     |
-| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`               |
-| Polls         | `polls create/end/edit/delete/search/history/config`                                                    |
-| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                      |
-| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`                  |
-| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                     |
-| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`                                                     |
+| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                    |
+| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                            |
+| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `work`, `crime`, `rob`                                |
+| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                          |
+| Polls         | `polls create/end/edit/delete/search/history/config`                                                               |
+| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                 |
+| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`                             |
+| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                |
+| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`                                                                |
 
 ---
 
