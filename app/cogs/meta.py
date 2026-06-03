@@ -10,7 +10,6 @@ import logging
 import pprint
 import re
 import textwrap
-import unicodedata
 from collections import Counter
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from urllib.parse import urljoin
@@ -27,6 +26,7 @@ from app.core.models import PermissionSpec, command, cooldown, describe, group, 
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
 from app.core.views import TrashView, View
 from app.rendering import get_dominant_color
+from app.services import MAX_CHARACTERS, get_char_info
 from app.utils import (
     AnsiColor,
     AnsiStringBuilder,
@@ -948,18 +948,16 @@ class Meta(Cog):
         if match:
             raise commands.BadArgument('Cannot get information on custom emoji.')
 
-        if len(characters) > 50:
-            raise commands.BadArgument(f'Too many characters ({len(characters)}/50)')
+        if len(characters) > MAX_CHARACTERS:
+            raise commands.BadArgument(f'Too many characters ({len(characters)}/{MAX_CHARACTERS})')
 
-        def char_info(char: str) -> tuple[str, str]:
-            digit = f'{ord(char):x}'
-            u_code = f'\\u{digit:>04}' if len(digit) <= 4 else f'\\U{digit:>08}'
-            url = f'https://www.compart.com/en/unicode/U+{digit:>04}'
-            name = f'[{unicodedata.name(char, '')}]({url})'
-            info = f'`{u_code.ljust(10)}`: {name} - {discord.utils.escape_markdown(char)}'
-            return info, u_code
+        def char_line(char: str) -> tuple[str, str]:
+            info = get_char_info(char)
+            name = f'[{info.name}]({info.url})'
+            line = f'`{info.escape.ljust(10)}`: {name} - {discord.utils.escape_markdown(char)}'
+            return line, info.escape
 
-        char_list, raw_list = zip(*(char_info(c) for c in characters), strict=True)
+        char_list, raw_list = zip(*(char_line(c) for c in characters), strict=True)
         embed = discord.Embed(title='Char Info', colour=helpers.Colour.white())
 
         if len(characters) > 1:

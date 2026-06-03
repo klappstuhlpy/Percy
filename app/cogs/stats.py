@@ -25,6 +25,7 @@ from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
 from app.core.views import UserInfoView
 from app.rendering import resize_to_limit
+from app.services import count_code_stats, summarize_gateway_traffic
 from app.utils import AnsiColor, AnsiStringBuilder, TabularData, Timer, censor_object, get_asset_url, helpers, medal_emoji
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
@@ -475,39 +476,22 @@ class Stats(Cog):
 
     @executor
     def project_stats_counter(self) -> str:
-        path = Path(__file__).parent.parent
-        ignored = [Path(path / 'venv')]
-        files = classes = funcs = comments = lines = characters = 0
-        for f in path.rglob('*.py'):
-            if any(parent in ignored for parent in f.parents):
-                continue
-            files += 1
-            f_path = Path(f)
-            with f_path.open(encoding='utf8', errors='ignore') as of:
-                characters += len(f_path.open(encoding='utf8', errors='ignore').read())
-                for line in of.readlines():
-                    line = line.strip()
-                    if line.startswith('class'):
-                        classes += 1
-                    if line.startswith('def') or line.startswith('async def'):
-                        funcs += 1
-                    if '#' in line:
-                        comments += 1
-                    lines += 1
+        root = Path(__file__).parent.parent
+        stats = count_code_stats(root, ignored=[root / 'venv'])
 
         builder = AnsiStringBuilder()
         builder.append('Files:       ', color=AnsiColor.gray)
-        builder.append(str(files), color=AnsiColor.green).newline()
+        builder.append(str(stats.files), color=AnsiColor.green).newline()
         builder.append('Classes:     ', color=AnsiColor.gray)
-        builder.append(str(classes), color=AnsiColor.green).newline()
+        builder.append(str(stats.classes), color=AnsiColor.green).newline()
         builder.append('Functions:   ', color=AnsiColor.gray)
-        builder.append(str(funcs), color=AnsiColor.green).newline()
+        builder.append(str(stats.functions), color=AnsiColor.green).newline()
         builder.append('Comments:    ', color=AnsiColor.gray)
-        builder.append(str(comments), color=AnsiColor.green).newline()
+        builder.append(str(stats.comments), color=AnsiColor.green).newline()
         builder.append('Lines:       ', color=AnsiColor.gray)
-        builder.append(str(lines), color=AnsiColor.green).newline()
+        builder.append(str(stats.lines), color=AnsiColor.green).newline()
         builder.append('Characters:  ', color=AnsiColor.gray)
-        builder.append(str(characters), color=AnsiColor.green)
+        builder.append(str(stats.characters), color=AnsiColor.green)
 
         return str(builder)
 
@@ -1298,20 +1282,11 @@ class Stats(Cog):
         yesterday = discord.utils.utcnow() - datetime.timedelta(days=1)
         colour = helpers.Colour.white()
 
-        identifies = {
-            shard_id: sum(1 for dt in dates if dt > yesterday)
-            for shard_id, dates in self.bot.identifies.items()
-        }
-        resumes = {
-            shard_id: sum(1 for dt in dates if dt > yesterday)
-            for shard_id, dates in self.bot.resumes.items()
-        }
-
-        total_identifies = sum(identifies.values())
+        traffic = summarize_gateway_traffic(self.bot.identifies, self.bot.resumes, since=yesterday)
 
         builder = [
-            f'Total RESUME(s): `{sum(resumes.values())}`',
-            f'Total IDENTIFY(s): `{total_identifies}`',
+            f'Total RESUME(s): `{traffic.total_resumes}`',
+            f'Total IDENTIFY(s): `{traffic.total_identifies}`',
         ]
 
         # shard_count = len(self.bot.shards)
