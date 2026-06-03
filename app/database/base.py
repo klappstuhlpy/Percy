@@ -28,6 +28,7 @@ from app.database.repositories import (
     StatsRepository,
     TagsRepository,
     TempChannelsRepository,
+    TimersRepository,
     UsersRepository,
 )
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
@@ -169,6 +170,7 @@ class Database(_Database):
     temp_channels: TempChannelsRepository
     playlists: PlaylistsRepository
     admin: AdminRepository
+    timers: TimersRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -187,6 +189,7 @@ class Database(_Database):
         self.temp_channels = TempChannelsRepository(self)
         self.playlists = PlaylistsRepository(self)
         self.admin = AdminRepository(self)
+        self.timers = TimersRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

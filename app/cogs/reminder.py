@@ -178,14 +178,7 @@ class Reminder(Cog):
     )
     async def reminder_list(self, ctx: Context) -> None:
         """Shows your currently running reminders."""
-        query = """
-            SELECT id, expires, metadata #>> '{args,2}'
-            FROM timers
-            WHERE event = 'reminder'
-              AND metadata #>> '{args,0}' = $1
-            ORDER BY expires;
-        """
-        records = await self.bot.db.fetch(query, str(ctx.author.id))
+        records = await self.bot.db.timers.get_user_reminders(ctx.author.id)
 
         if len(records) == 0:
             await ctx.send_error('No currently running reminders.')
@@ -215,12 +208,7 @@ class Reminder(Cog):
         To get a reminder ID, use the reminder list command.
         You must own the reminder to delete it, obviously.
         """
-        query = """
-            DELETE FROM timers WHERE id=$1
-            AND event = 'reminder'
-            AND metadata #>> '{args,0}' = $2;
-        """
-        status = await ctx.db.execute(query, reminder_id, str(ctx.author.id))
+        status = await ctx.db.timers.delete_reminder(reminder_id, ctx.author.id)
         if status == 'DELETE 0':
             await ctx.send_error('Could not delete any reminders with that ID.')
             return
@@ -237,12 +225,7 @@ class Reminder(Cog):
     )
     async def reminder_purge(self, ctx: Context) -> None:
         """Purges all reminders you have set."""
-        query = """
-            SELECT COUNT(*) FROM timers
-            WHERE event = 'reminder'
-            AND metadata #>> '{args,0}' = $1;
-        """
-        total: int = await self.bot.db.fetchval(query, str(ctx.author.id))
+        total = await self.bot.db.timers.count_user_reminders(ctx.author.id)
         if total == 0:
             await ctx.send_success('You do not have any reminders to delete.')
             return
@@ -251,8 +234,7 @@ class Reminder(Cog):
         if not confirm:
             return
 
-        query = "DELETE FROM timers WHERE event = 'reminder' AND metadata #>> '{args,0}' = $1;"
-        await ctx.db.execute(query, str(ctx.author.id))
+        await ctx.db.timers.delete_user_reminders(ctx.author.id)
 
         timers = self.bot.timers
         if timers and timers._loaded_timer and timers._loaded_timer.args[0] == ctx.author.id:
