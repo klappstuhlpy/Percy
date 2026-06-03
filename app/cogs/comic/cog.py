@@ -12,7 +12,6 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
-from app.cogs.comic import ComicFeed
 from app.core import Bot, Cog, Context, Flags, View, cooldown, describe, flag, group, store_true
 from app.utils import cache
 from app.utils.lock import lock, lock_arg, lock_from
