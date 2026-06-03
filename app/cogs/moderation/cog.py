@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
-import re
 from collections import Counter, defaultdict
 from contextlib import suppress
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
@@ -20,6 +19,7 @@ from app.core.models import BadArgument, Cog, PermissionTemplate, command, coold
 from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
 from app.database.base import Gatekeeper, GuildConfig
+from app.services import build_purge_predicate
 from app.utils import (
     checks,
     fuzzy,
@@ -51,8 +51,6 @@ from .lockdown import (
 from .ui import PreExistingMuteRoleView
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from app.core.timer import Timer
 
     class ModGuildContext(Context):
@@ -115,7 +113,7 @@ class Moderation(Cog):
         guild_ctx = cast("ModGuildContext", ctx)
         if ctx.guild is None:
             return
-        guild_ctx.guild_config = await self.bot.db.get_guild_config(guild_id=message.guild.id)  # type: ignore[arg-type]
+        guild_ctx.guild_config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
 
     async def bot_check(self, ctx: commands.Context) -> bool:
         if ctx.guild is None:
@@ -1079,53 +1077,22 @@ class Moderation(Cog):
         """
         await ctx.defer()
 
-        predicates: list[Callable[[discord.Message], Any]] = []
-        if flags.bot:
-            if flags.webhooks:
-                predicates.append(lambda m: m.author.bot)
-            else:
-                predicates.append(lambda m: (m.webhook_id is None or m.interaction is not None) and m.author.bot)
-        elif flags.webhooks:
-            predicates.append(lambda m: m.webhook_id is not None)
-
-        if flags.embeds:
-            predicates.append(lambda m: len(m.embeds))
-
-        if flags.files:
-            predicates.append(lambda m: len(m.attachments))
-
-        if flags.reactions:
-            predicates.append(lambda m: len(m.reactions))
-
-        if flags.emoji:
-            EMOJI_REGEX = re.compile(r"<:(\w+):(\d+)>")
-            predicates.append(lambda m: EMOJI_REGEX.search(m.content))
-
-        if flags.user:
-            predicates.append(lambda m: m.author == flags.user)
-
-        if flags.contains:
-            predicates.append(lambda m: flags.contains in m.content)  # type: ignore
-
-        if flags.prefix:
-            predicates.append(lambda m: m.content.startswith(flags.prefix))  # type: ignore
-
-        if flags.suffix:
-            predicates.append(lambda m: m.content.endswith(flags.suffix))  # type: ignore
-
-        if not flags.delete_pinned:
-            predicates.append(lambda m: not m.pinned)
-
-        require_prompt = False
-        if not predicates:
-            require_prompt = True
-            predicates.append(lambda m: True)
-
-        op = all if flags.require == "all" else any
-
-        def predicate(m: discord.Message) -> bool:
-            r = op(p(m) for p in predicates)
-            return r
+        plan = build_purge_predicate(
+            bot=flags.bot,
+            webhooks=flags.webhooks,
+            embeds=flags.embeds,
+            files=flags.files,
+            reactions=flags.reactions,
+            emoji=flags.emoji,
+            user=flags.user,
+            contains=flags.contains,
+            prefix=flags.prefix,
+            suffix=flags.suffix,
+            delete_pinned=flags.delete_pinned,
+            require=flags.require,
+        )
+        predicate = plan.predicate
+        require_prompt = plan.require_prompt
 
         if flags.after and search is None:
             search = 2000

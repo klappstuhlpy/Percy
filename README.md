@@ -53,9 +53,10 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 - **Hybrid commands everywhere** — almost every command works as both a slash command (`/ban`) and a prefix command (`?ban`), powered by a custom command framework on top of discord.py.
 - **Rich, helpful errors** — invalid input is answered with an ANSI-coloured "here's where your command broke" trace that points at the exact offending argument.
-- **Per-guild everything** — prefixes, automod, audit logging, leveling, polls and music panels are all configured per server and cached for speed.
-- **Layered, testable architecture** — a repository data-access layer, MVVM-style UI separation in the cogs, and pure (Discord-free) game engines that can be unit-tested in isolation.
-- **Image rendering** — rank cards, casino cards, poker odds bar charts and music panels are drawn server-side with Pillow.
+- **Per-guild everything** — prefixes, automod, audit logging, leveling, polls and music panels are all configured per server and cached in memory for speed.
+- **Layered, testable architecture** — a repository data-access layer, a Discord-free **service layer** for business logic, MVVM-style UI separation in the cogs, and pure game **engines** that are unit-tested in isolation.
+- **Resilient external APIs** — every third-party client (AniList, Marvel, …) shares one HTTP base with 429 handling, exponential backoff and a circuit breaker.
+- **Server-side image rendering** — rank cards, casino cards, poker odds charts, presence charts, captchas and music panels are all drawn with Pillow behind a single `RenderingService`.
 
 ---
 
@@ -65,12 +66,12 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 | Feature                  | What it does                                                                                                                                                                    |
 |--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Core moderation**      | `kick`, `ban`, `multiban`, `softban`, `unban`, `mute`/`unmute`, `selfmute`, `purge` (with rich filters), `slowmode`.                                                            |
-| **Mute role management** | Create, bind, sync and unbind a mute role; permission overwrites are applied across channels automatically.                                                                     |
+| **Core moderation**      | `kick`, `ban`, `multiban`, `softban`, `unban`, `mute`/`unmute`, `tempban`, `tempmute`, `selfmute`, `purge` (with rich filters), `slowmode`.                                     |
+| **Mute role management** | Create, bind, sync and unbind a mute role; permission overwrites are applied across channels automatically (and kept in sync as channels are created).                          |
 | **Lockdowns**            | Lock down individual channels or the whole server (`lockdown` group), with automatic, timed un-locking via the timer system and lockout protection for the bot.                 |
 | **Auto-moderation**      | Configurable automod rules linked to Discord's native AutoMod, mention-spam detection, and **raid protection** that auto-bans spammers.                                         |
 | **Gatekeeper**           | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
-| **Anti-spam**            | A global `SpamChecker` that throttles command abuse and flags mention spam.                                                                                                     |
+| **Anti-spam**            | A global `SpamChecker` that throttles command abuse, flags mention spam, and detects rapid-join raids.                                                                          |
 | **Audit logging**        | Broadcast a configurable subset of server audit-log events to a channel/webhook.                                                                                                |
 
 > Temporary bans, mutes and lockdowns are all backed by the persistent **timer system**, so they survive restarts and fire exactly when due.
@@ -101,8 +102,9 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | Feature              | What it does                                                                                                                                                  |
 |----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Lavalink player**  | High-quality audio playback backed by a [Lavalink](https://github.com/lavalink-devs/Lavalink) node ([wavelink](https://github.com/PythonistaGuild/Wavelink)). |
-| **Queue & controls** | Play, pause, skip, seek, loop, shuffle and a full queue.                                                                                                      |
-| **Playlists**        | Save, load and manage personal playlists (`PlaylistTools`).                                                                                                   |
+| **Queue & controls** | Play, pause, skip, seek, loop, shuffle, an equalizer and a full queue.                                                                                        |
+| **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                         |
+| **Playlists**        | Save, load and manage personal playlists (`PlaylistTools`), persisted in PostgreSQL.                                                                          |
 | **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                              |
 
 ### Community & Engagement
@@ -122,19 +124,21 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Reminders**                | `remind me in 2h to …` style reminders with natural-language time parsing; backed by the timer system. |
 | **Notes**                    | Personal, user-installable notes (works in DMs and any server via a user-install app command).         |
 | **Temporary voice channels** | "Join-to-create" hub channels that spin up a personal voice channel on join and clean up when empty.   |
-| **Emoji management**         | Add, steal, rename and inspect server emojis.                                                          |
-| **User & server info**       | Profile, avatar, server info, timezone settings, presence tracking.                                    |
+| **Emoji management**         | Add, steal, rename and inspect server emojis, with per-guild emoji usage stats.                        |
+| **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                  |
+| **History tracking**         | Username/nickname history (`names`), `lastseen`, avatar history, and a rendered **presence chart**.    |
 
 ### Developer & Information
 
 | Feature                  | What it does                                                                                                                                            |
 |--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories.                                                           |
+| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                       |
 | **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)). |
 | **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                               |
 | **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                     |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                 |
-| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help.                                                                                   |
+| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection. |
+| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                             |
 
 ---
 
@@ -154,14 +158,15 @@ A few representative command groups:
 
 | Group         | Examples                                                                                                |
 |---------------|---------------------------------------------------------------------------------------------------------|
-| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `purge`, `slowmode`, `lockdown start/end`, `moderation …` |
+| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …` |
 | Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                         |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                 |
 | Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `work`, `crime`, `rob`                     |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`               |
 | Polls         | `polls create/end/edit/delete/search/history/config`                                                    |
-| Music         | `play`, `pause`, `skip`, `queue`, `loop`, playlist tools                                                |
-| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`                                |
+| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                      |
+| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`                  |
+| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                     |
 | Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`                                                     |
 
 ---
@@ -349,48 +354,71 @@ The bot itself is not containerised by default — run it directly with Poetry a
 
 ## Architecture
 
-Percy is layered to keep data access, business logic and presentation (Discord UI) separate. The big picture:
+Percy is layered to keep data access, business logic and presentation (Discord UI) separate. Dependencies flow one way — **cog → ui → engine/service**, and the data layer is reached only through repositories — which keeps the inner layers free of `discord` and unit-testable. The big picture:
 
-```
+```text
 main.py                     CLI entry point (bot runner + DB migration commands)
-config.py                   Tokens, IDs, emoji definitions, version info
+config.py                   Tokens, IDs, emoji definitions, version, Lavalink nodes
 app/
-├── core/                   Framework layer
-│   ├── bot.py              The Bot class: extension loading, error handling, prefix resolution
-│   ├── models.py           Custom Command / Context / Cog, EmbedBuilder, permissions
+├── core/                   Custom command framework (subclasses discord.py)
+│   ├── bot.py              The Bot class: cog auto-discovery, error handling, prefix resolution
+│   ├── command.py          Command / GroupCommand / Hybrid* + @command / @group / @describe decorators
+│   ├── context.py          Context with send_success / send_error / send_info helpers
 │   ├── flags.py            Flag-based command argument system
+│   ├── permissions.py      PermissionSpec / PermissionTemplate
+│   ├── embeds.py           EmbedBuilder
+│   ├── converter.py        Custom argument converters
+│   ├── views.py            Shared persistent View base classes
 │   ├── help.py             Paginated help command
+│   ├── pagination.py       Paginators (line / file / text)
 │   ├── timer.py            Persistent TimerManager (reminders, temp-bans, lockdowns, …)
 │   ├── spam.py             Global spam control
-│   ├── tree.py / views.py / pagination.py
+│   ├── tree.py             Custom app-command tree
+│   └── models.py           Cog base class + errors (re-exports the above for back-compat)
 │
 ├── database/               Persistence layer
 │   ├── base.py             asyncpg pool wrapper + BaseRecord "mini-ORM" + domain records
 │   ├── migrations.py       Versioned SQL migration runner
-│   └── repositories/       Data-access layer (Repository pattern)
-│       ├── base.py         BaseRepository (pool helpers)
-│       ├── guilds.py · users.py · polls.py · leveling.py · moderation.py
+│   └── repositories/       Data-access layer (Repository pattern); all cog-reachable SQL lives here
+│       ├── base.py         BaseRepository (execute/fetch/fetchrow/fetchval/acquire)
+│       └── guilds · users · polls · leveling · moderation · tags · stats · incidents · notes
+│           · giveaways · emoji_stats · highlights · temp_channels · playlists · admin · timers · comics
+│
+├── services/               Discord-free business logic extracted from cogs (unit-tested)
+│       bot_health · char_info · code_stats · gateway_stats · presence_stats · purge
+│
+├── clients/                Shared HTTP layer
+│   └── base.py             BaseHTTPClient: 429 retries, backoff, circuit breaker, typed errors
+│
+├── rendering/              Pillow image generation behind a single service (self.bot.render)
+│   ├── primitives.py       Low-level toolkit (fonts, masks, colour helpers)
+│   ├── models.py           Prepared view-models
+│   ├── templates/          Pure drawing functions (data in → BytesIO out; no discord/DB)
+│   └── service.py          RenderingService: prepares data, draws off-thread, returns discord.File
 │
 ├── cogs/                   Feature modules (~27 cogs)
-│   ├── polls/              models.py · ui.py · cog.py  (MVVM-style split)
-│   ├── leveling/           models.py · ui.py · cog.py
-│   ├── games/              card games + poker_ui.py (Discord views)
-│   ├── music/ · anilist/ · comic/ · doc/ · snekbox/
-│   └── mod.py · automod.py · config.py · economy.py · … (single-file cogs)
+│   ├── moderation/          cog · antispam · gatekeeper · infractions · lockdown · models · ui
+│   ├── games/               cog · engine/ (poker, blackjack, roulette, tictactoe, minesweeper)
+│   │                        + *_bridge.py (state machines) + *_ui.py (Discord views)
+│   ├── polls/ · leveling/   models · ui · cog  (MVVM-style split)
+│   ├── music/               cog · player · models · ui
+│   ├── doc/                 cog · client · engine · html · cache · models · ui
+│   ├── anilist/ · comic/    cog · client · models · ui   (clients subclass BaseHTTPClient)
+│   ├── snekbox/             cog · eval · formatter
+│   └── admin · automod · config · economy · stats · meta · tags · reminder · … (single-file cogs)
 │
-├── games/                  Pure, framework-agnostic game logic (NO discord imports)
-│   └── engine/poker.py     TexasHoldem state machine, hand ranking, odds simulation
-│
-├── rendering/              Pillow image generation (rank cards, cards, charts, panels)
-└── utils/                  Helpers: formats, fuzzy, timetools, caching, ANSI builder, …
+└── utils/                  Helpers: formats, fuzzy, timetools, cache, ANSI builder, config store, …
 ```
 
 Key design decisions:
 
 - **Custom command framework.** Commands subclass a custom `Command`/`Context`/`Cog` (in `app/core`) rather than vanilla discord.py. This is what powers hybrid commands, the flag system, and the ANSI argument-error renderer in `Bot.on_command_error`. Define commands with the `@command`/`@group` decorators from `app.core` and reply with `ctx.send_success`/`send_error`/`send_info`.
-- **Repository data-access layer.** Cogs never write raw SQL where a repository method exists; they call e.g. `self.bot.db.moderation.clear_lockdowns(...)` or `self.bot.db.leveling.get_leaderboard(...)`. The cached config getters (`db.get_guild_config`, `db.get_user_config`, …) remain on the `Database` object and delegate to the repositories, so caching and `.invalidate()` are handled in one place.
-- **MVVM-style cogs.** Larger features are packages split into `models.py` (records + pure helpers), `ui.py` (Views/Modals) and `cog.py` (command routing/orchestration), with dependencies flowing one way: `cog → ui → models`. UI components receive their dependencies (bot, records, engines) through their constructors.
-- **Pure game engines.** Game rules live under `app/games/engine/` with **no `discord` imports**, returning plain data. The cogs feed them user input and map their output back to embeds/views — which also makes the engines unit-testable without Discord (see `tests/test_poker_engine.py`).
+- **Repository data-access layer.** Cogs never write raw SQL; they call e.g. `self.bot.db.moderation.clear_lockdowns(...)` or `self.bot.db.leveling.get_leaderboard(...)`. The cached config getters (`db.get_guild_config`, `db.get_user_config`, …) remain on the `Database` object and delegate to the repositories, so caching and `.invalidate()` are handled in one place.
+- **Service layer.** Non-trivial, Discord-free logic (counting, ranking, multi-step analysis) lives in `app/services/` and is called from the cog, which stays a thin controller. Services never import `discord`, so they are unit-tested directly (e.g. `summarize_presence`, `build_purge_predicate`, `assess_bot_health`).
+- **MVVM-style cogs.** Larger features are packages split into `models.py` (records + pure helpers), `ui.py` (Views/Modals) and `cog.py` (command routing/orchestration). Games add an `engine/` (rules) and `*_bridge.py` (state machine) layer on top.
+- **Pure game engines.** Game rules live under `app/cogs/games/engine/` with **no `discord` imports**, returning plain data. The cogs feed them user input and map their output back to embeds/views — which also makes the engines unit-testable without Discord (see `tests/test_poker_engine.py`).
+- **Uniform, resilient API clients.** External clients subclass `app/clients/base.py`'s `BaseHTTPClient`, which centralizes 429/`Retry-After` handling, exponential backoff, a per-client circuit breaker, and a standardized `HTTPClientError`. AniList and Marvel both route through it.
+- **Rendering service.** Cogs never touch Pillow directly — they call `self.bot.render.<artifact>(...)` (rank cards, charts, presence charts, captchas, music panels, …). The service prepares the data, runs the blocking draw off the event loop, and returns a ready `discord.File`.
 - **Persistent timers.** The `TimerManager` schedules future work in the database and dispatches `on_<event>_timer_complete` when due — the mechanism behind reminders, giveaways, temp-bans/mutes, lockdowns and blacklist expiry.
 
 For a contributor-oriented summary, see [`CLAUDE.md`](CLAUDE.md).
@@ -401,7 +429,7 @@ For a contributor-oriented summary, see [`CLAUDE.md`](CLAUDE.md).
 
 ### Code quality
 
-The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and [Pyright](https://github.com/microsoft/pyright) for type checking (configured in `pyproject.toml`).
+The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and [Pyright](https://github.com/microsoft/pyright) for type checking (configured in `pyproject.toml`, targeting Python 3.12 with a 125-char line length).
 
 ```bash
 poetry run ruff check .     # lint
@@ -410,7 +438,7 @@ poetry run pyright          # type check
 
 ### Tests
 
-The test suite lives in `tests/` and uses [pytest](https://docs.pytest.org/). It covers the pure helper modules (`formats`, `fuzzy`, `timetools`), the **repository layer**, and the **pure poker engine** — and is designed to grow as more logic is extracted from the cogs.
+The test suite lives in `tests/` and uses [pytest](https://docs.pytest.org/). It covers the pure helper modules (`formats`, `fuzzy`, `timetools`), the **service layer** (`bot_health`, `char_info`, `code_stats`, `gateway_stats`, `presence_stats`, `purge`), the **HTTP client** base, the **repository layer**, and the **pure poker engine** — and grows as more logic is extracted from the cogs.
 
 ```bash
 poetry run pytest                                   # run the whole suite
@@ -428,13 +456,14 @@ poetry run pytest tests/test_poker_engine.py::test_all_in_empties_stack_and_sets
 
 ## Project structure
 
-```
+```text
 Percy-v2/
 ├── main.py                # CLI entry point (bot runner + DB management)
 ├── config.py              # Tokens, IDs, emoji definitions, version info
 ├── pyproject.toml         # Poetry project, Ruff/Pyright/pytest config
 ├── docker-compose.yml     # Snekbox sandbox service
 ├── app/                   # Application package (see Architecture)
+│   ├── core/ · database/ · services/ · clients/ · rendering/ · cogs/ · utils/
 ├── migrations/            # Versioned SQL migrations (V1–V15)
 ├── tests/                 # pytest suite
 └── assets/                # Fonts, word lists, image templates

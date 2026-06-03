@@ -25,7 +25,14 @@ from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
 from app.core.views import UserInfoView
 from app.rendering import resize_to_limit
-from app.services import count_code_stats, summarize_gateway_traffic
+from app.services import (
+    ConnectionState,
+    HealthLevel,
+    assess_bot_health,
+    count_code_stats,
+    summarize_gateway_traffic,
+    summarize_presence,
+)
 from app.utils import AnsiColor, AnsiStringBuilder, TabularData, Timer, censor_object, get_asset_url, helpers, medal_emoji
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
@@ -960,26 +967,9 @@ class Stats(Cog):
 
                 fetching_time = timer.reset()
 
-                record_dict: dict[datetime.datetime, Any] = {
-                    record["changed_at"]: [
-                        record["status"],
-                        record["status_before"],
-                    ]
-                    for record in history
-                }
+                breakdown = summarize_presence((record["changed_at"], record["status_before"]) for record in history)
 
-                status_timers: dict[str, float] = {
-                    "Online": 0,
-                    "Idle": 0,
-                    "Do Not Disturb": 0,
-                    "Offline": 0,
-                }
-
-                for i, (changed_at, statuses) in enumerate(record_dict.items()):
-                    if i != 0:
-                        status_timers[statuses[1]] += (list(record_dict.keys())[i - 1] - changed_at).total_seconds()
-
-                if all(value == 0 for value in status_timers.values()):
+                if not breakdown.has_data:
                     await ctx.send_error("Not enough data to generate a chart.")
                     return
 
@@ -989,10 +979,10 @@ class Stats(Cog):
                     labels=["Online", "Offline", "DND", "Idle"],
                     colors=["#43b581", "#747f8d", "#f04747", "#fba31c"],
                     values=[
-                        int(status_timers["Online"]),
-                        int(status_timers["Offline"]),
-                        int(status_timers["Do Not Disturb"]),
-                        int(status_timers["Idle"]),
+                        int(breakdown.durations["Online"]),
+                        int(breakdown.durations["Offline"]),
+                        int(breakdown.durations["Do Not Disturb"]),
+                        int(breakdown.durations["Idle"]),
                     ],
                 )
 
@@ -1003,7 +993,7 @@ class Stats(Cog):
                 f"`{'Analyzing':<{12}}:` {analyzing_time:.3f}s\n"
                 f"`{'Generating':<{12}}:` {timer.seconds:.3f}s"
             ),
-            timestamp=min(record_dict.keys()),
+            timestamp=breakdown.earliest,
             colour=helpers.Colour.white(),
         )
         embed.set_image(url=f"attachment://{canvas.filename}")
@@ -1176,79 +1166,72 @@ class Stats(Cog):
     async def bothealth(self, ctx: Context) -> None:
         """Various bot health monitoring tools."""
 
-        HEALTHY = helpers.Colour.lime_green()
-        UNHEALTHY = helpers.Colour.darker_red()
-        WARNING = helpers.Colour.energy_yellow()
-        total_warnings = 0
+        LEVEL_COLOURS = {
+            HealthLevel.HEALTHY: helpers.Colour.lime_green(),
+            HealthLevel.WARNING: helpers.Colour.energy_yellow(),
+            HealthLevel.UNHEALTHY: helpers.Colour.darker_red(),
+        }
 
-        embed = discord.Embed(title="Bot Health Report", colour=HEALTHY)
+        embed = discord.Embed(title="Bot Health Report")
 
+        # Gather the raw runtime observations; the analysis is delegated to the service.
         db = self.bot.db._internal_pool
         total_waiting = len(db._queue._getters)  # type: ignore[union-attr]
         current_generation = db._generation
+        connections = [
+            ConnectionState(
+                generation=holder._generation,
+                in_use=holder._in_use is not None,
+                is_closed=holder._con is None or holder._con.is_closed(),
+            )
+            for holder in db._holders
+        ]
+
+        being_spammed = self.bot.spam_control.current_spammers
+        command_waiters = len(self._command_data_batch)
+        global_rate_limit = not self.bot.http._global_over.is_set()
+
+        all_tasks = asyncio.all_tasks(loop=self.bot.loop)
+        event_tasks = [t for t in all_tasks if "Client._run_event" in repr(t) and not t.done()]
+        cogs_directory = str(Path(__file__).parent)
+        tasks_directory = str(Path("discord", "ext", "tasks", "__init__.py"))
+        inner_tasks = [t for t in all_tasks if cogs_directory in repr(t) or tasks_directory in repr(t)]
+        bad_inner_tasks = ", ".join(hex(id(t)) for t in inner_tasks if t.done() and t._exception is not None)
+
+        report = assess_bot_health(
+            connections,
+            current_generation=current_generation,
+            is_being_spammed=bool(being_spammed),
+            command_waiters=command_waiters,
+            has_failed_inner_tasks=bool(bad_inner_tasks),
+            global_rate_limit=global_rate_limit,
+        )
 
         description = [
             f"Total `Pool.acquire` Waiters: {total_waiting}",
             f"Current Pool Generation: {current_generation}",
-            f"Connections In Use: {len(db._holders) - db._queue.qsize()}",
-        ]  # type: ignore[union-attr]
+            f"Connections In Use: {len(db._holders) - db._queue.qsize()}",  # type: ignore[union-attr]
+            f"Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}",
+            f"Questionable Connections: {report.questionable_connections}",
+            f"Commands Waiting: {command_waiters}",
+            f"Avatars Waiting: {len(self._avatar_data_batch)}",
+            f"Global Rate Limit: {global_rate_limit}",
+        ]
 
-        questionable_connections = 0
-        connection_value = []
-        for index, holder in enumerate(db._holders, start=1):
-            generation = holder._generation
-            in_use = holder._in_use is not None
-            is_closed = holder._con is None or holder._con.is_closed()
-            display = f"gen={holder._generation} in_use={in_use} closed={is_closed}"
-            questionable_connections += any((in_use, generation != current_generation))
-            connection_value.append(f"<Holder i={index} {display}>")
-
-        joined_value = "\n".join(connection_value)
-        embed.add_field(name="Connections", value=f"```py\n{joined_value}\n```", inline=False)
-
-        being_spammed = self.bot.spam_control.current_spammers
-
-        description.append(f"Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}")
-        description.append(f"Questionable Connections: {questionable_connections}")
-
-        total_warnings += questionable_connections
-        if being_spammed:
-            embed.colour = WARNING
-            total_warnings += 1
-
-        all_tasks = asyncio.all_tasks(loop=self.bot.loop)
-        event_tasks = [t for t in all_tasks if "Client._run_event" in repr(t) and not t.done()]
-
-        cogs_directory = str(Path(__file__).parent)
-        tasks_directory = str(Path("discord", "ext", "tasks", "__init__.py"))
-        inner_tasks = [t for t in all_tasks if cogs_directory in repr(t) or tasks_directory in repr(t)]
-
-        bad_inner_tasks = ", ".join(hex(id(t)) for t in inner_tasks if t.done() and t._exception is not None)
-        total_warnings += bool(bad_inner_tasks)
+        connection_value = "\n".join(
+            f"<Holder i={index} gen={c.generation} in_use={c.in_use} closed={c.is_closed}>"
+            for index, c in enumerate(connections, start=1)
+        )
+        embed.add_field(name="Connections", value=f"```py\n{connection_value}\n```", inline=False)
         embed.add_field(name="Inner Tasks", value=f"Total: {len(inner_tasks)}\nFailed: {bad_inner_tasks or 'None'}")
         embed.add_field(name="Events Waiting", value=f"Total: {len(event_tasks)}", inline=False)
-
-        command_waiters = len(self._command_data_batch)
-        description.append(f"Commands Waiting: {command_waiters}")
-
-        avatar_waiters = len(self._avatar_data_batch)
-        description.append(f"Avatars Waiting: {avatar_waiters}")
 
         memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
         embed.add_field(name="Process", value=f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU", inline=False)
 
-        global_rate_limit = not self.bot.http._global_over.is_set()
-        description.append(f"Global Rate Limit: {global_rate_limit}")
-
-        if command_waiters >= 8:
-            total_warnings += 1
-            embed.colour = WARNING
-
-        if global_rate_limit or total_warnings >= 9:
-            embed.colour = UNHEALTHY
-
-        embed.set_footer(text=f"{total_warnings} warning(s)")
+        embed.colour = LEVEL_COLOURS[report.level]
+        embed.set_footer(text=f"{report.warnings} warning(s)")
         embed.description = "\n".join(description)
         await ctx.send(embed=embed)
 
