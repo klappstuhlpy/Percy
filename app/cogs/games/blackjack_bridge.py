@@ -122,3 +122,30 @@ class Blackjack:
             embed.set_footer(text=f'Cards remaining: {len(self.deck)}')
 
         return embed
+
+    def build_container(
+        self,
+        hand: Hand,
+        colour: discord.Colour = helpers.Colour.white(),
+        text: str | None = None,
+        image_url: str | None = None,
+    ) -> discord.ui.Container:
+        """Build the Components V2 card for the blackjack table."""
+        container = discord.ui.Container(accent_colour=colour)
+        description = text or f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**"
+        container.add_item(discord.ui.TextDisplay(f"## Blackjack\n{description}"))
+
+        if image_url:
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image_url)))
+            return container
+
+        name = "Your Hand"
+        if len(self.player_hands) > 1:
+            name += f" #{self.player_hands.index(hand) + 1}"
+        container.add_item(discord.ui.TextDisplay(f"**{name}**\n" + "\n".join(hand.display_blocks)))
+        container.add_item(discord.ui.TextDisplay("**Dealer Hand**\n" + "\n".join(self.dealer.display_blocks)))
+
+        if colour == discord.Colour.blurple():
+            container.add_item(discord.ui.TextDisplay(f"-# Cards remaining: {len(self.deck)}"))
+
+        return container

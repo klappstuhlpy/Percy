@@ -278,20 +278,22 @@ class Games(Cog):
             self.blackjack_tables[ctx.author.id] = blackjack
 
         # Shuffle cards, just for aesthetics
-        embed = blackjack.build_embed(
-            hand=blackjack.active_hand,
-            image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
-            colour=discord.Colour.light_grey(),
-            text="*Shuffling Cards...*",
+        message = await ctx.send(
+            view=blackjack.view.render(
+                blackjack.active_hand,
+                colour=discord.Colour.light_grey(),
+                text="*Shuffling Cards...*",
+                image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
+                with_buttons=False,
+            )
         )
-        message = await ctx.send(embed=embed)
         blackjack.active_hand.message = message
 
         await asyncio.sleep(3)
 
         await blackjack.view.update_buttons(active=True)
         if not await blackjack.view.check_for_winner(ctx):
-            await message.edit(embed=blackjack.build_embed(blackjack.active_hand), view=blackjack.view)
+            await message.edit(view=blackjack.view.render(blackjack.active_hand))
 
     @command("work", description="Work for money.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.WORK_COODLWON.value, commands.BucketType.member)
