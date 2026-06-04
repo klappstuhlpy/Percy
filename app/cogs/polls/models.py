@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 import discord
 from discord.utils import MISSING
 
+from app.cogs.polls.ui import PollClearVoteButton, PollEnterButton, PollInfoButton
 from app.core.models import EmbedBuilder
 from app.database import BaseRecord
 from app.utils import helpers, pluralize
@@ -27,16 +28,10 @@ __all__ = (
     "PollEntry",
     "VoteOption",
     "lineformat",
-    "to_emoji",
     "uuid",
 )
 
 _MAX_VOTE_BAR_LENGTH = 10
-
-
-def to_emoji(index: int) -> str:
-    INDEX_TO_LETTER = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G", 7: "H"}
-    return getattr(Emojis.PollVoteBar, INDEX_TO_LETTER[index])
 
 
 def lineformat(x: int) -> str:
@@ -234,8 +229,8 @@ class Poll(BaseRecord):
             fields.append(
                 {
                     "name": f"{Emojis.PollVoteBar.corner} " + option["content"],
-                    "value": f"{to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({round(p * 100)}%)",
-                    "inline": False,
+                    "value": f"{self.to_emoji(option['index'])}{lineformat(x)} **{v}** {pluralize(v, pass_content=True):vote} ({round(p * 100)}%)",
+                    "inline": False
                 }
             )
 
@@ -265,6 +260,11 @@ class Poll(BaseRecord):
             if ping_message:
                 self.ping_message = ping_message
 
+    @staticmethod
+    def to_emoji(index: int) -> str:
+        INDEX_TO_LETTER = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G", 7: "H"}
+        return getattr(Emojis.PollVoteBar, INDEX_TO_LETTER[index])
+
     def to_embed(self) -> discord.Embed:
         """Converts the poll to an embed (used by the search/history command outputs)."""
         embed = EmbedBuilder(
@@ -292,21 +292,38 @@ class Poll(BaseRecord):
         container.add_item(discord.ui.TextDisplay(header))
         container.add_item(discord.ui.Separator())
 
-        for field in self.to_fields(extras=False):
-            container.add_item(discord.ui.TextDisplay(f"{field['name']}\n{field['value']}"))
+        running = self.kwargs.get("running") is True
+        for i, field in enumerate(self.to_fields(extras=False)):
+            if running:
+                item = discord.ui.Section(
+                    f"{field['name']}\n{field['value']}",
+                    accessory=PollEnterButton(self, i)
+                )
+            else:
+                item = discord.ui.TextDisplay(f"{field['name']}\n{field['value']}")
+            container.add_item(item)
 
         if image := self.kwargs.get("image"):
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image)))
 
         container.add_item(discord.ui.Separator())
-        running = self.kwargs.get("running") is True
         extras = [f"Total Votes: **{self.votes}**"]
         if self.expires:
             label = "Poll ends" if running else "Poll finished"
             extras.append(f"{label} {discord.utils.format_dt(self.expires, 'R')}")
         if thread := self.kwargs.get("thread"):
             extras.append(f"Thread: {thread}")
+
         container.add_item(discord.ui.TextDisplay(" • ".join(extras)))
+
+        container.add_item(discord.ui.Separator())
+
+        row = discord.ui.ActionRow()
+        if running:
+            row.add_item(PollClearVoteButton(self))
+        row.add_item(PollInfoButton(self))
+
+        container.add_item(row)
         container.add_item(discord.ui.TextDisplay(f"-# #{self.kwargs.get('index')} • [{self.id}]"))
         return container
 

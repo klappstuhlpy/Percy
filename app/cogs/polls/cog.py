@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
-from app.cogs.polls.models import Poll, VoteOption, to_emoji, uuid
+from app.cogs.polls.models import Poll, VoteOption, uuid
 from app.cogs.polls.ui import (
     EditModal,
     PollClearVoteButton,
@@ -387,16 +387,25 @@ class Polls(Cog):
                 await ctx.send_error("I do not have the `Manage Roles` permission in this channel.")
                 return
 
-            view = discord.ui.View(timeout=None)
-            view.add_item(PollRolePingButton(config.poll_ping_role_id))
+            role = ctx.guild.get_role(config.poll_ping_role_id)
+
+            view = discord.ui.LayoutView(timeout=None)
+            container = discord.ui.Container(accent_color=role.color if role else helpers.Colour.light_grey())
+            container.add_item(discord.ui.TextDisplay(f"<@&{config.poll_ping_role_id}>"))
+            container.add_item(discord.ui.Separator())
+            container.add_item(
+                discord.ui.TextDisplay(
+                    f"-# You wanna tell us your opinion?\n"
+                    f"-# To be notified when new polls are posted, click below!"
+                )
+            )
+            container.add_item(discord.ui.ActionRow(PollRolePingButton(config.poll_ping_role_id)))
+            view.add_item(container)
+
             assert ping_message is not None
             await ping_message.edit(
-                content=f"<@&{config.poll_ping_role_id}>",
-                embed=discord.Embed(
-                    description="You wanna tell us your opinion?\nTo be notified when new polls are posted, click below!",
-                    color=helpers.Colour.light_grey(),
-                ),
                 view=view,
+                content=None,
                 allowed_mentions=discord.AllowedMentions(roles=True),
             )
 
@@ -663,7 +672,8 @@ class Polls(Cog):
                     r
                     for r in records
                     if fuzzy.partial_ratio(
-                        flags.keyword.lower(), r["metadata"]["kwargs"].get("question").lower()  # type: ignore
+                        flags.keyword.lower(),
+                        r["metadata"]["kwargs"].get("question").lower(),  # type: ignore
                     )
                     > 70
                 ]
@@ -710,7 +720,7 @@ class Polls(Cog):
                     vote = next(option for (user, option) in poll.entries if user == member.id)
                     embed.add_field(
                         name=f"{poll.id} (#{poll.kwargs.get('index')}): {poll.question}",
-                        value=f"You've voted: {to_emoji(poll.options[vote]['index'])} - *{poll.options[vote]['content']}*",
+                        value=f"You've voted: {poll.to_emoji(poll.options[vote]['index'])} - *{poll.options[vote]['content']}*",
                         inline=False,
                     )
 

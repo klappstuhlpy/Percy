@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from app.cogs.polls.models import to_emoji
 from app.core import LayoutView
 from app.core.models import AppBadArgument
 from app.utils import get_asset_url, helpers
@@ -56,7 +55,7 @@ class PollReasonModal(discord.ui.Modal, title="The Reason for you choice."):
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
         embed.add_field(
             name="Selected Option",
-            value=f"{to_emoji(self.selected_option['index'])}: {self.selected_option['content']}",
+            value=f"{self.poll.to_emoji(self.selected_option['index'])}: {self.selected_option['content']}",
             inline=False,
         )
         embed.set_footer(text=f"#{self.poll.kwargs.get('index')} • [{self.poll.id}]")
@@ -226,7 +225,7 @@ class PollEnterButton(
         self.index: int = index
         super().__init__(
             discord.ui.Button(
-                emoji=to_emoji(index), style=discord.ButtonStyle.gray, custom_id=f"poll:enter:{poll.id}:option:{index}"
+                emoji=poll.to_emoji(index), style=discord.ButtonStyle.gray, custom_id=f"poll:enter:{poll.id}:option:{index}"
             )
         )
 
@@ -293,7 +292,7 @@ class PollEnterButton(
         await interaction.edit_original_response(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-            f"{to_emoji(option['index'])} - `{option['content']}`",
+            f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
             ephemeral=True,
         )
 
@@ -311,7 +310,7 @@ class PollEnterSelect(
                 custom_id=f"poll:select:{poll.id}",
                 options=[
                     discord.SelectOption(
-                        label=option["content"], value=str(option["index"]), emoji=to_emoji(option["index"])
+                        label=option["content"], value=str(option["index"]), emoji=poll.to_emoji(option["index"])
                     )
                     for option in poll.options
                 ],
@@ -320,7 +319,7 @@ class PollEnterSelect(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollEnterSelect:
-        cog: Polls | None = interaction.client.get_cog("Polls")
+        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore
         if cog is None:
             await interaction.response.send_message(
                 f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
@@ -347,7 +346,7 @@ class PollEnterSelect(
             option = next((i for i in self.poll.options if i["index"] == vote), None)
             await interaction.response.send_message(
                 f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-                f"{to_emoji(option['index'])} - `{option['content']}`",
+                f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
                 ephemeral=True,
             )
             return False
@@ -381,7 +380,7 @@ class PollEnterSelect(
         await interaction.edit_original_response(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-            f"{to_emoji(option['index'])} - `{option['content']}`",
+            f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
             ephemeral=True,
         )
 
@@ -398,7 +397,7 @@ class PollRolePingButton(
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, _, match: re.Match[str], /) -> PollRolePingButton:
-        cog: Polls | None = interaction.client.get_cog("Polls")
+        cog: Polls | None = interaction.client.get_cog("Polls")  # type: ignore
         if cog is None:
             await interaction.response.send_message(
                 f"{Emojis.error} Sorry, this button does not work at the moment. Try again later", ephemeral=True
@@ -436,13 +435,4 @@ def create_view(poll: Poll) -> LayoutView:
     """
     view = LayoutView(timeout=None)
     view.add_item(poll.to_container())
-
-    if poll.kwargs.get("running"):
-        if len(poll.options) <= 5:
-            view.add_item(discord.ui.ActionRow(*[PollEnterButton(poll, option["index"]) for option in poll.options]))
-        else:
-            view.add_item(discord.ui.ActionRow(PollEnterSelect(poll)))
-        view.add_item(discord.ui.ActionRow(PollClearVoteButton(poll), PollInfoButton(poll)))
-    else:
-        view.add_item(discord.ui.ActionRow(PollInfoButton(poll)))
     return view
