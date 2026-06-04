@@ -212,7 +212,7 @@ class Games(Cog):
         await balance.remove(cash=bet)
 
         tower = tower_ui.Tower(cast("discord.Member", ctx.author), bet)
-        await ctx.send(embed=tower.build_embed(), view=tower)
+        await ctx.send(view=tower)
 
     @command("slots", description="Play a game of slots.", alias="slot", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")
@@ -280,7 +280,7 @@ class Games(Cog):
         # Shuffle cards, just for aesthetics
         embed = blackjack.build_embed(
             hand=blackjack.active_hand,
-            image_url="https://klappstuhl.me/gallery/TpjOl.gif",
+            image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
             colour=discord.Colour.light_grey(),
             text="*Shuffling Cards...*",
         )
@@ -565,7 +565,7 @@ class Games(Cog):
         assert roulette.message is not None
         # Note this is just for aesthetics
         await roulette.message.edit(
-            embed=roulette.build_embed(image_url="https://klappstuhl.me/gallery/KdKof.gif"), view=roulette.view
+            embed=roulette.build_embed(image_url="https://klappstuhl.me/gallery/raw/KdKof.gif"), view=roulette.view
         )
         await asyncio.sleep(5)
 

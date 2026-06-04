@@ -5,14 +5,14 @@ from typing import ClassVar
 
 import discord
 
-from app.core.views import View
+from app.core.views import LayoutView
 from app.utils import fnumb, helpers
 from config import Emojis
 
 __all__ = ("Tower",)
 
 
-class Tower(View):
+class Tower(LayoutView):
     """Represents a tower building game with custom partially animated emojis."""
 
     GRASS: ClassVar[str] = "<:grass:1322337508381429904>"
@@ -36,7 +36,16 @@ class Tower(View):
         self.multiplier: float = 1.0
         self.finished: bool = False
 
-        self.update_buttons()
+        self.restart = discord.ui.Button(label="Restart", style=discord.ButtonStyle.green)
+        self.restart.callback = self._on_restart  # type: ignore[assignment]
+        self.stack = discord.ui.Button(
+            label="Stack Tower (Increase Multiplier by 0.5)", style=discord.ButtonStyle.blurple
+        )
+        self.stack.callback = self._on_stack  # type: ignore[assignment]
+        self.cash_out = discord.ui.Button(label="Cash Out", style=discord.ButtonStyle.red)
+        self.cash_out.callback = self._on_cash_out  # type: ignore[assignment]
+
+        self._compose()
 
     def __str__(self) -> str:
         return self.build()
@@ -69,33 +78,37 @@ class Tower(View):
 
         return "\n".join(parts)
 
-    def build_embed(self, failed: bool = False) -> discord.Embed:
-        embed = discord.Embed(
-            title="\N{BUILDING CONSTRUCTION} Tower", description=self.build(failed), colour=helpers.Colour.white()
-        )
-        embed.add_field(
-            name="\u200b", value=(f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}\nMultiplier: **x{self.multiplier}**")
-        )
+    def build_container(self, failed: bool = False) -> discord.ui.Container:
+        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container.add_item(discord.ui.TextDisplay(f"## \N{BUILDING CONSTRUCTION} Tower\n{self.build(failed)}"))
+        container.add_item(discord.ui.TextDisplay(
+            f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}\nMultiplier: **x{self.multiplier}**"
+        ))
 
         if failed:
-            embed.add_field(name="\u200b", value="`❌ Tower has fallen!`", inline=False)
+            container.add_item(discord.ui.TextDisplay("`\N{CROSS MARK} Tower has fallen!`"))
         if not failed and self.finished:
-            embed.add_field(
-                name="\u200b", value=f"`✅ Cashed out successfully with a multiplier of {self.multiplier}!`", inline=False
-            )
+            container.add_item(discord.ui.TextDisplay(
+                f"`\N{WHITE HEAVY CHECK MARK} Cashed out successfully with a multiplier of {self.multiplier}!`"
+            ))
 
-        embed.set_footer(text=f"Player: {self.player}")
-        return embed
+        container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player}"))
+        return container
 
     # View
 
-    def update_buttons(self) -> None:
+    def _compose(self, failed: bool = False) -> None:
+        """Recompose the layout: the tower card plus the appropriate control row.
+
+        ``build_container`` is added first because ``build(failed=True)`` flips
+        ``self.finished``, which decides whether the restart or stack/cash-out row shows.
+        """
         self.clear_items()
+        self.add_item(self.build_container(failed))
         if self.finished:
-            self.add_item(self.restart)
+            self.add_item(discord.ui.ActionRow(self.restart))
         else:
-            self.add_item(self.stack)
-            self.add_item(self.cash_out)
+            self.add_item(discord.ui.ActionRow(self.stack, self.cash_out))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.user.id != self.player.id:
@@ -103,46 +116,44 @@ class Tower(View):
             return False
         return True
 
-    @discord.ui.button(label="Restart", style=discord.ButtonStyle.green)
-    async def restart(self: Tower, interaction: discord.Interaction, _) -> None:
+    async def _on_restart(self, interaction: discord.Interaction) -> None:
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
 
         if self.bet > balance.cash:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"{Emojis.error} You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
                 ephemeral=True,
             )
+            return
 
         await balance.remove(cash=self.bet)
 
         self.reset()
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._compose()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="Stack Tower (Increase Multiplier by 0.5)", style=discord.ButtonStyle.blurple)
-    async def stack(self: Tower, interaction: discord.Interaction, _) -> None:
+    async def _on_stack(self, interaction: discord.Interaction) -> None:
         # Now calculate the probability of the tower crashing or not
         rate = random.uniform(0, 1)
         if rate > 0.7:
             # probability of 30% to crash
-            embed = self.build_embed(True)
-            self.update_buttons()
-            await interaction.response.edit_message(embed=embed, view=self)
+            self._compose(failed=True)
+            await interaction.response.edit_message(view=self)
             return
 
         self.add()
-        await interaction.response.edit_message(embed=self.build_embed())
+        self._compose()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="Cash Out", style=discord.ButtonStyle.red)
-    async def cash_out(self: Tower, interaction: discord.Interaction, _) -> None:
+    async def _on_cash_out(self, interaction: discord.Interaction) -> None:
         self.finished = True
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
         amount = round(self.bet * self.multiplier)
         await balance.add(cash=amount)
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._compose()
+        await interaction.response.edit_message(view=self)
 
         await interaction.followup.send(
-            f'\N{LEAF FLUTTERING IN WIND} You cashed out {Emojis.Economy.cash} **{fnumb(amount)}**.')
+            f"\N{LEAF FLUTTERING IN WIND} You cashed out {Emojis.Economy.cash} **{fnumb(amount)}**.")
