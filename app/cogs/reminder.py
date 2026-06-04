@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import datetime
 import textwrap
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.utils import MISSING
 
-from app.cogs.user import TimeZone
+from app.cogs.user import TimeZone  # noqa: TC001  (runtime-resolved flag annotation)
 from app.core import Context, Flags, View, flag, store_true
 from app.core.models import Cog, describe, group
 from app.core.timer import Timer
+from app.services.recurrence import advance_recurrence, describe_interval, interval_too_short, normalize_interval
 from app.utils import checks, formats, get_asset_url, helpers, pluralize, positive_reply, timetools
+from app.utils.timetools import RelativeDelta  # noqa: TC001  (runtime-resolved flag annotation)
 from config import Emojis
+
+if TYPE_CHECKING:
+    from dateutil.relativedelta import relativedelta
 
 
 class SnoozeModal(discord.ui.Modal, title="Snooze"):
@@ -101,10 +106,25 @@ class ReminderTimer(Timer):
             return self.args[2]
         return None
 
+    @property
+    def recurrence(self) -> dict[str, int] | None:
+        """The recurrence interval (relativedelta kwargs), if this reminder repeats."""
+        return self.get("recur")
+
 
 class ReminderFlags(Flags):
     timezone: TimeZone = flag(alias="tz", short="t", description="The timezone to use for the reminder.")
     dm: bool = store_true(alias="pm", short="d", description="Send the reminder as a direct message.")
+    every: RelativeDelta = flag(
+        aliases=("repeat", "recurring", "interval"),
+        short="e",
+        description="Repeat the reminder on this interval, e.g. '1d', '1w' or '12h'.",
+    )
+    count: int = flag(
+        aliases=("times",),
+        short="c",
+        description="Stop a recurring reminder after this many times (requires --every).",
+    )
 
 
 class Reminder(Cog):
@@ -154,6 +174,8 @@ class Reminder(Cog):
         if ctx.replied_message is not None and ctx.replied_message.content:
             to_remind = ctx.replied_message.content
 
+        recur, recur_label, recur_remaining = self._build_recurrence(flags, reference=prompt.dt)
+
         zone = flags.timezone or await self.bot.db.get_user_timezone(ctx.author.id)
 
         channel = ctx.channel
@@ -171,10 +193,55 @@ class Reminder(Cog):
             created=ctx.message.created_at,
             message_id=ctx.message.id,
             timezone=zone or "UTC",
+            recur=recur,
+            recur_label=recur_label,
+            recur_remaining=recur_remaining,
         )
-        await ctx.send_success(
-            f"{positive_reply()} {ctx.author.mention}, I'll remind you {discord.utils.format_dt(prompt.dt, 'R')} for *{to_remind}*"
+
+        message = (
+            f"{positive_reply()} {ctx.author.mention}, I'll remind you "
+            f"{discord.utils.format_dt(prompt.dt, 'R')} for *{to_remind}*"
         )
+        if recur_label:
+            suffix = f" ({pluralize(recur_remaining + 1):time} total)" if recur_remaining is not None else ""
+            message += f"\n{Emojis.success} Then repeating every **{recur_label}**{suffix}."
+        await ctx.send_success(message)
+
+    @staticmethod
+    def _build_recurrence(
+        flags: ReminderFlags, *, reference: datetime.datetime
+    ) -> tuple[dict[str, int] | None, str | None, int | None]:
+        """Validate the recurrence flags and return ``(interval, label, remaining)``.
+
+        ``interval`` is a JSON-serializable relativedelta mapping (or ``None`` for a
+        one-shot reminder), ``label`` is its human description, and ``remaining`` is the
+        number of repeats owed *after* the first fire (``None`` for unbounded).
+        """
+        # The flag annotations resolve as non-optional, but the parser leaves them None
+        # when the flag is absent; cast back to the real runtime types.
+        every = cast("relativedelta | None", flags.every)
+        count = cast("int | None", flags.count)
+
+        if every is None:
+            if count is not None:
+                raise commands.BadArgument("`--count` only applies to recurring reminders (use `--every`).")
+            return None, None, None
+
+        try:
+            interval = normalize_interval(every)
+        except ValueError as exc:
+            raise commands.BadArgument(str(exc))
+
+        if interval_too_short(interval, reference=reference):
+            raise commands.BadArgument("Recurring reminders must repeat at least once a minute.")
+
+        remaining: int | None = None
+        if count is not None:
+            if count < 1:
+                raise commands.BadArgument("`--count` must be at least 1.")
+            remaining = count - 1
+
+        return interval, describe_interval(interval), remaining
 
     @reminder.command(
         name="list",
@@ -196,9 +263,11 @@ class Reminder(Cog):
         embed.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
         embed.set_footer(text=f"Showing {pluralize(len(records)):Reminder}")
 
-        for index, (reminder_id, expires, message) in enumerate(records, 1):
+        for index, (reminder_id, expires, message, recur_label) in enumerate(records, 1):
             shorten = textwrap.shorten(message, width=512)
             value = f"*{shorten!r}* expires {discord.utils.format_dt(expires, style='R')}"
+            if recur_label:
+                value += f"\n\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS} repeats every **{recur_label}**"
             embed.add_field(name=f"#{index} • [{reminder_id}]", value=value, inline=False)
 
         await ctx.send(embed=embed)
@@ -248,6 +317,36 @@ class Reminder(Cog):
 
         await ctx.send_success(f"Successfully deleted {pluralize(total):reminder}.", ephemeral=True)
 
+    async def _reschedule_recurrence(self, timer: ReminderTimer) -> None:
+        """Re-arm a recurring reminder for its next occurrence, if any remain.
+
+        The just-fired timer has already been deleted by the scheduler, so a fresh timer
+        is created carrying the same recurrence metadata with the decremented count.
+        """
+        recur = timer.recurrence
+        if not recur:
+            return
+
+        now = discord.utils.utcnow()
+        last = timer.expires.replace(tzinfo=datetime.UTC)
+        result = advance_recurrence(last, recur, now=now, remaining=timer.get("recur_remaining"))
+        if result is None:
+            return
+
+        await self.bot.timers.create(
+            result.next_run,
+            "reminder",
+            timer.author_id,
+            timer.channel_id,
+            timer.text,
+            created=now,
+            message_id=timer["message_id"],
+            timezone=timer.timezone,
+            recur=recur,
+            recur_label=timer.get("recur_label"),
+            recur_remaining=result.remaining,
+        )
+
     @Cog.listener()
     async def on_reminder_timer_complete(self, timer: Timer) -> None:
         """|coro|
@@ -265,6 +364,10 @@ class Reminder(Cog):
             channel = self.bot.get_channel(timer.channel_id) or (await self.bot.fetch_channel(timer.channel_id))
         except discord.HTTPException:
             return
+
+        # Schedule the next occurrence before sending so a transient send failure
+        # doesn't break the series (a permanently missing channel already returned above).
+        await self._reschedule_recurrence(timer)
 
         guild_id = channel.guild.id if isinstance(channel, (discord.TextChannel, discord.Thread)) else "@me"
         message_id = timer["message_id"]

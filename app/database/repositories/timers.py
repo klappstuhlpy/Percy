@@ -99,9 +99,13 @@ class TimersRepository(BaseRepository):
     # -- Reminder-specific queries (Reminder cog) -------------------------
 
     async def get_user_reminders(self, user_id: int) -> list[asyncpg.Record]:
-        """Fetches a user's running reminders (id, expiry and message), soonest first."""
+        """Fetches a user's running reminders, soonest first.
+
+        Returns ``(id, expires, message, recurrence_label)`` per row; the label is
+        ``NULL`` for one-shot reminders.
+        """
         query = """
-            SELECT id, expires, metadata #>> '{args,2}'
+            SELECT id, expires, metadata #>> '{args,2}', metadata #>> '{kwargs,recur_label}'
             FROM timers
             WHERE event = 'reminder'
               AND metadata #>> '{args,0}' = $1
