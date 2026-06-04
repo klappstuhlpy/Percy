@@ -38,7 +38,7 @@ class RoleMenus(Cog):
         embed = ui.build_menu_embed(
             menu['title'], menu['description'], entries, unique=menu['unique_roles']
         )
-        view = ui.build_menu_view(menu['id'], entries)
+        view = ui.build_menu_view(menu['id'], entries, channel.guild)
         try:
             message = await channel.fetch_message(menu['message_id'])
             await message.edit(embed=embed, view=view)
@@ -84,7 +84,7 @@ class RoleMenus(Cog):
 
         embed = ui.build_menu_embed(title, description, [], unique=False)
         try:
-            message = await channel.send(embed=embed, view=ui.build_menu_view(record['id'], []))
+            message = await channel.send(embed=embed, view=ui.build_menu_view(record['id'], [], channel.guild))
         except discord.HTTPException:
             await self.bot.db.rolemenu.delete_menu(record['id'])
             await ctx.send_error(f"I couldn't post a message in {channel.mention}.")

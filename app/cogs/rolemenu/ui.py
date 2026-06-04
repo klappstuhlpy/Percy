@@ -116,11 +116,20 @@ def build_menu_embed(
     return embed
 
 
-def build_menu_view(menu_id: int, entries: list[asyncpg.Record]) -> discord.ui.View:
-    """Builds the (timeout-free) button view for a role menu."""
+def build_menu_view(
+    menu_id: int, entries: list[asyncpg.Record], guild: discord.Guild
+) -> discord.ui.View:
+    """Builds the (timeout-free) button view for a role menu.
+
+    Each button is labelled with its role's current name (falling back to the stored
+    label, then a placeholder, if the role was deleted). Discord caps button labels at
+    80 characters.
+    """
     view = discord.ui.View(timeout=None)
     for entry in entries:
+        role = guild.get_role(entry['role_id'])
+        label = role.name if role is not None else (entry['label'] or 'Unknown role')
         view.add_item(
-            RoleMenuButton(menu_id, entry['role_id'], label=entry['label'], emoji=entry['emoji'])
+            RoleMenuButton(menu_id, entry['role_id'], label=label[:80], emoji=entry['emoji'])
         )
     return view
