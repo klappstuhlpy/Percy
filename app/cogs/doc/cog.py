@@ -17,11 +17,11 @@ from discord.ext import commands
 from app.cogs.doc import client, engine
 from app.cogs.doc.cache import doc_cache
 from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem
-from app.cogs.doc.ui import DocPaginator
+from app.cogs.doc.ui import DocView
 from app.core import Bot, Cog, Context
 from app.core.models import command, describe, group
 from app.core.pagination import LinePaginator
-from app.utils import fuzzy, helpers, pluralize
+from app.utils import fuzzy, helpers, pluralize, truncate
 from app.utils.lock import SharedEvent, lock, lock_from
 from app.utils.tasks import Scheduler, executor
 from config import Emojis
@@ -395,28 +395,45 @@ class Documentation(Cog):
         return markdown
 
     @lock_from(refresh_inventories, wait=True)
-    async def create_symbol_embed(self, item: DocItem) -> discord.Embed | None:
-        """Attempt to scrape and fetch the data for the given `symbol_name`, and build an embed from its contents.
+    async def create_symbol_container(self, item: DocItem) -> discord.ui.Container | None:
+        """Scrape (once) the docs for `item` and build a Components V2 card from its contents.
 
-        If the symbol is known, an Embed with documentation about it is returned.
-
-        First check the DocRedisCache before querying the cog's `BatchParser`.
+        The scraped markdown is cached on the :class:`DocItem`, so switching between similar
+        symbols and re-rendering never re-scrapes. Returns ``None`` if the symbol is unknown.
         """
         with self.symbol_get_event:
             if item is None:
                 log.debug("Symbol does not exist.")
                 return None
 
-            embed = discord.Embed(
-                title=discord.utils.escape_markdown(item.symbol_id),
-                url=f"{item.url}#{item.symbol_id}",
-                description=await self.get_symbol_markdown(item),
-            )
-            embed.set_author(name=f"{item.package} Documentation", icon_url="https://klappstuhl.me/gallery/lVUYV.png")
+            if item.markdown is None:
+                item.markdown = await self.get_symbol_markdown(item)
 
-            for name, value in item.resolved_fields.items():
-                embed.add_field(name=name, value=value, inline=False)
-            return embed
+            container = discord.ui.Container(accent_colour=helpers.Colour.white())
+            container.add_item(
+                discord.ui.Section(
+                    f"## {discord.utils.escape_markdown(item.symbol_id)}\n-# {item.package} Documentation",
+                    accessory=discord.ui.Thumbnail("https://klappstuhl.me/gallery/lVUYV.png"),
+                )
+            )
+            if item.markdown:
+                container.add_item(discord.ui.TextDisplay(truncate(item.markdown, 3500)))
+
+            if item.resolved_fields:
+                container.add_item(discord.ui.Separator())
+                for name, value in item.resolved_fields.items():
+                    container.add_item(discord.ui.TextDisplay(f"**{name}**\n{value}"))
+
+            container.add_item(
+                discord.ui.ActionRow(
+                    discord.ui.Button(
+                        label="View Documentation",
+                        style=discord.ButtonStyle.link,
+                        url=f"{item.url}#{item.symbol_id}",
+                    )
+                )
+            )
+            return container
 
     @group("docs", fallback="search", alias="d", description="Look up documentation for Python symbols.", hybrid=True)
     @describe(symbol_name="The symbol to look up documentation for.", package="The package to look up documentation for.")
@@ -445,7 +462,7 @@ class Documentation(Cog):
                 await ctx.send_error(f"The symbol `{symbol_name}` was not found.")
                 return
 
-        await DocPaginator.start(ctx, entries=doc_items, cog=self)
+        await DocView.start(ctx, entries=doc_items, cog=self)
 
     @staticmethod
     def base_url_from_inventory_url(inventory_url: str) -> str:

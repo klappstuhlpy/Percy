@@ -1,4 +1,5 @@
-from collections.abc import Awaitable, Callable, Generator, Iterable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Generator, Iterable
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import discord
@@ -17,6 +18,7 @@ else:
 __all__ = (
     "ConfirmationView",
     "DisambiguatorView",
+    "LayoutView",
     "TrashView",
     "UserInfoView",
     "View",
@@ -161,6 +163,51 @@ class View(discord.ui.View):
         for item in items:
             view.add_item(item)
         return view
+
+
+class LayoutView(discord.ui.LayoutView):
+    """Base Components V2 layout view — the CV2 analog of :class:`View`.
+
+    Extends :class:`discord.ui.LayoutView` (a different base from :class:`discord.ui.View`)
+    so a single message can mix text, media and interactive components. Ports the
+    member-gating ``interaction_check`` and ``message``/timeout handling from :class:`View`.
+
+    Because a CV2 message cannot be converted back to a classic content/embed message, the
+    timeout default is to leave the message untouched (just stop listening); pass
+    ``delete_on_timeout=True`` to remove it instead.
+    """
+
+    def __init__(
+        self,
+        *,
+        timeout: float | None = 180.0,
+        members: discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | None = None,
+        delete_on_timeout: bool = False,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        self.members = members
+        self.message: discord.Message | None = None
+        self._delete_on_timeout = delete_on_timeout
+
+    async def interaction_check(self, interaction: Interaction, /) -> bool:
+        """Member-gating check, identical to :meth:`View.interaction_check`."""
+        if not self.members:
+            return True
+
+        members = self.members
+        is_iterable = isinstance(members, Iterable) and not isinstance(members, discord.abc.Snowflake)
+        if (
+            (is_iterable and not discord.utils.get(members, id=interaction.user.id))  # type: ignore[arg-type]
+            or (not is_iterable and interaction.user.id != members.id)
+        ):
+            await interaction.response.send_message(f"{Emojis.error} This view is not meant for you.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        if self._delete_on_timeout and self.message:
+            with suppress(discord.HTTPException):
+                await self.message.delete()
 
 
 class TrashView(View):

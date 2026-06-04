@@ -27,6 +27,8 @@ class DocItem:
         self.relative_url_path: str = relative_url_path
         self.symbol_id: str = symbol_id
         self.embed: discord.Embed | None = embed
+        #: Cached scraped markdown body, so re-rendering the CV2 card never re-scrapes.
+        self.markdown: str | None = None
 
         self.resolved_fields: dict[str, Any] = resolved_fields or {}
 
