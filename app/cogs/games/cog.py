@@ -240,7 +240,7 @@ class Games(Cog):
         await balance.remove(cash=bet)
 
         slots = slot_ui.SlotMachine(cast("discord.Member", ctx.author), bet)
-        await ctx.send(embed=slots.build_embed(), view=slots)
+        await ctx.send(view=slots)
 
     @command("blackjack", description="Play a Blackjack game.", alias="bj", guild_only=True, hybrid=True)
     @describe(bet="The amount of coins to bet.")

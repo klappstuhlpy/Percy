@@ -11,7 +11,7 @@ import discord
 import numpy as np
 
 from app.cogs.emoji import EMOJI_REGEX
-from app.core.views import View
+from app.core.views import LayoutView
 from app.utils import find_word, fnumb, helpers
 from config import Emojis
 
@@ -35,7 +35,7 @@ class Fruits(enum.Enum):
     COOL = "🆒"
 
 
-class SlotMachine(View):
+class SlotMachine(LayoutView):
     """Represents a slot machine with fruits representing each slot.
 
     This class uses numpy arrays to store slot values and perform calculations on winning etc.
@@ -64,22 +64,30 @@ class SlotMachine(View):
         self.slots: np.ndarray | None = None
         self.finished: bool = False
 
-        self.update_buttons()
+        self._start = discord.ui.Button(label="Start", style=discord.ButtonStyle.blurple)
+        self._start.callback = self._on_start  # type: ignore[assignment]
+        self._roll = discord.ui.Button(label="Roll", style=discord.ButtonStyle.green)
+        self._roll.callback = self._on_roll  # type: ignore[assignment]
+
+        self._compose()
 
     def __str__(self) -> str:
         return self.build()
 
-    def build_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title="🎰 Slot Machine", description=self.DESC_TITLE + "\n" + self.build(), colour=helpers.Colour.white()
-        )
-        embed.set_footer(text=f"Player: {self.player}")
+    def build_container(self, display: str | None = None, status: str | None = None) -> discord.ui.Container:
+        """Builds the Components V2 slot-machine card.
 
-        embed.add_field(
-            name="\u200b",
-            value=f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}",
-        )
-        return embed
+        ``display`` overrides the reel art (used during the reveal animation); ``status``
+        is the optional win/loss line shown after a spin resolves.
+        """
+        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        reels = display if display is not None else self.build()
+        container.add_item(discord.ui.TextDisplay(f"## 🎰 Slot Machine\n{self.DESC_TITLE}\n{reels}"))
+        container.add_item(discord.ui.TextDisplay(f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}"))
+        if status:
+            container.add_item(discord.ui.TextDisplay(status))
+        container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player}"))
+        return container
 
     def roll(self) -> None:
         """Roll the slot machine."""
@@ -195,52 +203,49 @@ class SlotMachine(View):
             return False
         return True
 
-    def update_buttons(self) -> None:
+    def _compose(self, display: str | None = None, status: str | None = None, *, buttons: bool = True) -> None:
+        """Recompose the layout: the slot card plus the control row (omitted while rolling)."""
         self.clear_items()
-        if self.finished:
-            self.add_item(self._roll)
-        else:
-            self.add_item(self._start)
+        self.add_item(self.build_container(display, status))
+        if buttons:
+            self.add_item(discord.ui.ActionRow(self._roll if self.finished else self._start))
 
-    @discord.ui.button(label="Start", style=discord.ButtonStyle.blurple)
-    async def _start(self: SlotMachine, interaction: discord.Interaction, _) -> None:
-        """Stops the rolling of the slot machine."""
-        self.clear_items()
+    async def _on_start(self, interaction: discord.Interaction) -> None:
+        """Spins the slot machine, revealing one row at a time."""
+        self._compose(buttons=False)
         await interaction.response.edit_message(view=self)
 
-        embed = self.build_embed()
         async for build in self.walk_build():
-            embed.description = self.DESC_TITLE + "\n" + build
-            await interaction.edit_original_response(embed=embed)
+            self._compose(display=build, buttons=False)
+            await interaction.edit_original_response(view=self)
 
         self.finished = True
 
         win, multiplier = self.get_winning(self.bet)
-
         if win:
             balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
             await balance.add(cash=win)
-            embed.add_field(name="\u200b", value=f"`✅ You won {multiplier}x your bet!`", inline=False)
+            status = f"`\N{WHITE HEAVY CHECK MARK} You won {multiplier}x your bet!`"
         else:
-            embed.add_field(name="\u200b", value="`❌ Better luck next time!`", inline=False)
+            status = "`\N{CROSS MARK} Better luck next time!`"
 
-        self.update_buttons()
-        await interaction.edit_original_response(embed=embed, view=self)
+        self._compose(status=status)
+        await interaction.edit_original_response(view=self)
 
-    @discord.ui.button(label="Roll", style=discord.ButtonStyle.green)
-    async def _roll(self: SlotMachine, interaction: discord.Interaction, _) -> None:
-        """Roll the slot machine."""
+    async def _on_roll(self, interaction: discord.Interaction) -> None:
+        """Reset and re-bet for another spin."""
         self.reset()
 
         balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
         if self.bet > balance.cash:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"{Emojis.error} You do not have enough money to bet that amount.\n"
                 f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**.",
                 ephemeral=True,
             )
+            return
 
         await balance.remove(cash=self.bet)
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._compose()
+        await interaction.response.edit_message(view=self)
