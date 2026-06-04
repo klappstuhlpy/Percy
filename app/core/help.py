@@ -111,15 +111,18 @@ class HelpPaginator(BasePaginator[AnyCommand]):
         if self.current_page == 1 and self.extras.get("group") is None:
             self.clear_items()
 
-        def prepare_select(items: dict[Cog, list[AnyCommand]] | list[AnyCommand]) -> CategorySelect:
-            return CategorySelect(context.client, mapping=items, with_index=self.extras.get("with_index", True))  # type: ignore[arg-type, union-attr]
+        def add_selects(items: dict[Cog, list[AnyCommand]]) -> None:
+            for select in build_category_selects(
+                context.client, items, with_index=self.extras.get("with_index", True)
+            ):
+                self.add_item(select)
 
         if isinstance(entries, dict):
             self.extras["groups"] = entries
-            self.add_item(prepare_select(entries))
+            add_selects(entries)
         elif isinstance(entries, list):
             if (groups := self.extras.get("groups")) is not None:
-                self.add_item(prepare_select(groups))  # type: ignore[arg-type]
+                add_selects(groups)  # type: ignore[arg-type]
         else:
             raise commands.BadArgument("The entries attribute is missing.")
 
@@ -138,7 +141,13 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
     """A select menu for the HelpPaginator to navigate through categories."""
 
     def __init__(
-        self, bot: Bot, mapping: dict[Cog, list[AnyCommand]], *, with_index: bool = True, default: Cog | None = None
+        self,
+        bot: Bot,
+        mapping: dict[Cog, list[AnyCommand]],
+        *,
+        cogs: list[Cog] | None = None,
+        with_index: bool = True,
+        default: Cog | None = None,
     ) -> None:
         super().__init__(placeholder="Select a category to view...")
         self.bot: Bot = bot
@@ -146,8 +155,13 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
         self.with_index: bool = with_index
         self.default: Cog | None = default
 
+        # ``mapping`` is the full category map (used by the callback / index page);
+        # ``cogs`` is the subset of categories this particular select renders as options,
+        # so the categories can be spread across several selects when there are too many
+        # to fit Discord's 25-option limit on a single select.
         self.mapping: dict[Cog, list[AnyCommand]] = mapping
         self.cog_mapping: dict[str, Cog] = {cog.qualified_name: cog for cog in mapping}
+        self.option_cogs: list[Cog] = cogs if cogs is not None else list(mapping)
 
         self.__fill_options()
 
@@ -160,7 +174,7 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
                 description="The front page of the Help Menu.",
             )
 
-        for cog in self.mapping:
+        for cog in self.option_cogs:
             emoji = getattr(cog, "emoji", None)
             self.add_option(
                 label=cog.qualified_name,
@@ -198,6 +212,53 @@ class CategorySelect(discord.ui.Select[HelpPaginator]):
             extras.pop("group", None)
             await HelpPaginator.start(interaction, entries=_commands, edit=True, group=cog, **self.view.extras)
         return None
+
+
+#: Discord allows at most 25 options per select.
+MAX_SELECT_OPTIONS = 25
+#: Cap on category selects, leaving room in the view's 5 rows for navigation buttons.
+MAX_HELP_SELECTS = 3
+
+
+def partition_categories(
+    total: int, *, with_index: bool, max_options: int = MAX_SELECT_OPTIONS, max_selects: int = MAX_HELP_SELECTS
+) -> list[tuple[int, int]]:
+    """Split ``total`` categories into ``(start, end)`` slices that each fit one select.
+
+    The first slice reserves one option for the "Start Page" entry when ``with_index`` is
+    set. At most ``max_selects`` slices are produced; any categories beyond that are
+    dropped (well above any realistic category count).
+    """
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    for index in range(max_selects):
+        capacity = max_options - (1 if with_index and index == 0 else 0)
+        end = min(start + capacity, total)
+        if start >= end:
+            break
+        ranges.append((start, end))
+        start = end
+        if start >= total:
+            break
+    return ranges
+
+
+def build_category_selects(
+    bot: Bot, mapping: dict[Cog, list[AnyCommand]], *, with_index: bool = True, default: Cog | None = None
+) -> list[CategorySelect]:
+    """Build one or more :class:`CategorySelect`s, chunked to fit Discord's option limit."""
+    cogs = list(mapping)
+    selects: list[CategorySelect] = []
+    for offset, (start, end) in enumerate(partition_categories(len(cogs), with_index=with_index)):
+        chunk = cogs[start:end]
+        select = CategorySelect(
+            bot, mapping, cogs=chunk, with_index=with_index and offset == 0, default=default
+        )
+        if len(cogs) > end or start > 0:
+            # More than one select is in play; label each with its category range.
+            select.placeholder = f"Categories: {chunk[0].qualified_name} – {chunk[-1].qualified_name}"
+        selects.append(select)
+    return selects
 
 
 class PaginatedHelpCommand(commands.HelpCommand):
