@@ -1315,6 +1315,7 @@ class Moderation(Cog):
             return await ctx.send_error(error)
 
         await ctx.guild.kick(member, reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "kick", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Kicked {member}.")
 
     @command(
@@ -1347,6 +1348,7 @@ class Moderation(Cog):
             return await ctx.send_error(error)
 
         await ctx.guild.ban(member, reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Successfully banned `{member}`.")
 
     @command(
@@ -1422,6 +1424,7 @@ class Moderation(Cog):
 
         await ctx.guild.ban(member, reason=reason)
         await ctx.guild.unban(member, reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "softban", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Successfully soft-banned **{member}**.")
 
     @command(
@@ -1449,6 +1452,7 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         await ctx.guild.unban(member.user, reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "unban", member.user.id, ctx.author.id, reason)
         if member.reason:
             await ctx.send_success(
                 f"Unbanned {member.user} (ID: `{member.user.id}`); Previously banned for **{member.reason}**."
@@ -1508,6 +1512,7 @@ class Moderation(Cog):
         reason = safe_reason_append(reason, until)
         zone = await self.bot.db.get_user_timezone(ctx.author.id)
         await ctx.guild.ban(member, reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "tempban", member.id, ctx.author.id, reason)
         await self.bot.timers.create(
             duration.dt,
             "tempban",
@@ -1587,6 +1592,8 @@ class Moderation(Cog):
                 await member.add_roles(role, reason=reason)
             except discord.HTTPException:
                 failed += 1
+            else:
+                self.bot.dispatch("mod_action", ctx.guild.id, "mute", member.id, ctx.author.id, reason)
 
         await ctx.send_success(f"Muted [`{abs(total - failed)}`/`{total}`] members.")
 
@@ -1631,6 +1638,8 @@ class Moderation(Cog):
                 await member.remove_roles(role, reason=reason)
             except discord.HTTPException:
                 failed += 1
+            else:
+                self.bot.dispatch("mod_action", ctx.guild.id, "unmute", member.id, ctx.author.id, reason)
 
         await ctx.send_success(f"Unmuted [`{total - failed}`/`{total}`] members.")
 
@@ -1680,10 +1689,11 @@ class Moderation(Cog):
         role_id = ctx.guild_config.mute_role_id
         assert role_id is not None
 
-        if ctx.guild.me.top_role < discord.Object(id=role_id):
+        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
             return await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
 
         await member.add_roles(discord.Object(id=role_id), reason=reason)
+        self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason)
 
         zone = await self.bot.db.get_user_timezone(ctx.author.id)
         await self.bot.timers.create(
