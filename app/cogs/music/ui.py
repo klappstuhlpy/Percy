@@ -9,7 +9,7 @@ from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import QueueMode
 
-from app.core import Context, View
+from app.core import Context, LayoutView, View
 from app.core.pagination import BasePaginator
 from app.utils import (
     PlayerStamp,
@@ -45,7 +45,7 @@ EMOJI_KEYS: dict[str, dict[ShuffleMode, str] | dict[bool, str] | dict[QueueMode,
 }
 
 
-class PlayerPanel(View):
+class PlayerPanel(LayoutView):
     """The Main Class for a Player Panel.
 
     Attributes
@@ -86,102 +86,137 @@ class PlayerPanel(View):
         self.cooldown = commands.CooldownMapping.from_cooldown(3, 5, lambda ctx: ctx.user)
         self.__is_temporary__: bool = False
 
+        # -- control buttons (stable instances, mutated by update_buttons) --
+        self.on_shuffle = discord.ui.Button(
+            style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["shuffle"][ShuffleMode.off], disabled=True
+        )
+        self.on_shuffle.callback = self._on_shuffle  # type: ignore[assignment]
+        self.on_back = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏮️", disabled=True)
+        self.on_back.callback = self._on_back  # type: ignore[assignment]
+        self.on_pause_play = discord.ui.Button(
+            style=discord.ButtonStyle.blurple, emoji=EMOJI_KEYS["pause_play"][False], disabled=True
+        )
+        self.on_pause_play.callback = self._on_pause_play  # type: ignore[assignment]
+        self.on_forward = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏭", disabled=True)
+        self.on_forward.callback = self._on_forward  # type: ignore[assignment]
+        self.on_loop = discord.ui.Button(
+            style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["loop"][QueueMode.normal], disabled=True
+        )
+        self.on_loop.callback = self._on_loop  # type: ignore[assignment]
+        self.on_stop = discord.ui.Button(style=discord.ButtonStyle.red, emoji="⏹️", label="Stop", disabled=True)
+        self.on_stop.callback = self._on_stop  # type: ignore[assignment]
+        self.on_volume = discord.ui.Button(
+            style=discord.ButtonStyle.grey, emoji="🔊", label="Adjust Volume", disabled=True
+        )
+        self.on_volume.callback = self._on_volume  # type: ignore[assignment]
+        self.on_like = discord.ui.Button(style=discord.ButtonStyle.green, emoji=EMOJI_KEYS["like"], disabled=True)
+        self.on_like.callback = self._on_like  # type: ignore[assignment]
+
         self.update_buttons()
 
-    def build_embed(self) -> discord.Embed:
-        """Builds the embed for the panel."""
-        embed = discord.Embed(title="Music Player Panel", timestamp=discord.utils.utcnow(), color=helpers.Colour.white())
+    def _rebuild(self) -> None:
+        """Recompose the layout: a fresh now-playing card plus the (mutated) control rows.
+
+        The card is rebuilt every refresh because it shows live data (position, volume,
+        queue), while the button instances are stable and only have their disabled/emoji
+        state mutated by :meth:`update_buttons`.
+        """
+        self.update_buttons()
+        self.clear_items()
+        self.add_item(self.build_container())
+        self.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
+        self.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
+
+    def build_container(self) -> discord.ui.Container:
+        """Builds the Components V2 now-playing card for the panel."""
+        container = discord.ui.Container(accent_colour=helpers.Colour.white())
 
         if self.state == PlayerState.PLAYING:
-            embed.description = (
-                "This is the Bot's control panel where you can easily perform actions of the bot without using a command."
-            )
-
             assert self.player.current is not None
             assert self.player.guild is not None
             track = self.player.current
             artist = f"[{track.author}]({track.artist.url})" if track.artist.url else track.author
 
-            embed.add_field(
-                name="╔ Now Playing:",
-                value=f"╠ **Track:** [{track.title}]({track.uri})\n"
-                f"╠ **Artist:** {artist}\n"
-                f"╠ **Bound to:** {self.player.channel.mention}\n"
-                f"╠ **Position in Queue:** {self.player.queue.all.index(self.player.current) + 1}/{len(self.player.queue.all)}",
-                inline=False,
+            heading = (
+                "## Music Player Panel\n"
+                "This is the Bot's control panel where you can easily perform actions of the bot without using a command."
             )
+            if artwork := track.artwork:
+                container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(artwork)))
+            else:
+                container.add_item(discord.ui.TextDisplay(heading))
 
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                f"**Now Playing**\n"
+                f"**Track:** [{track.title}]({track.uri})\n"
+                f"**Artist:** {artist}\n"
+                f"**Bound to:** {self.player.channel.mention}\n"
+                f"**Position in Queue:** "
+                f"{self.player.queue.all.index(self.player.current) + 1}/{len(self.player.queue.all)}"
+            ))
+
+            details: list[str] = []
             if track.album and track.album.name:
-                embed.add_field(
-                    name="╠ Album:",
-                    value=f"[{track.album.name}]({track.album.url})" if track.album.url else track.album.name,
-                    inline=False,
-                )
+                album = f"[{track.album.name}]({track.album.url})" if track.album.url else track.album.name
+                details.append(f"**Album:** {album}")
             if track.playlist:
-                embed.add_field(
-                    name="╠ Playlist:",
-                    value=f"[{track.playlist.name}]({track.playlist.url})" if track.playlist.url else track.playlist.name,
-                    inline=False,
+                playlist = (
+                    f"[{track.playlist.name}]({track.playlist.url})" if track.playlist.url else track.playlist.name
                 )
+                details.append(f"**Playlist:** {playlist}")
             if self.player.queue.listen_together is not MISSING:
                 user = self.player.guild.get_member(self.player.queue.listen_together)
                 user_mention = user.mention if user is not None else "Unknown"
-                embed.add_field(name="╠ Listening-together with:", value=f"{user_mention}'s Spotify", inline=False)
+                details.append(f"**Listening-together with:** {user_mention}'s Spotify")
+            if details:
+                container.add_item(discord.ui.TextDisplay("\n".join(details)))
 
-            embed.add_field(
-                name="╠ Status:",
-                value=f"```swift\n{PlayerStamp(track.length, self.player.position)}```"
+            status = (
+                f"```swift\n{PlayerStamp(track.length, self.player.position)}```"
                 if not track.is_stream
-                else "```swift\n[ 🔴 LIVE STREAM ]```",
-                inline=False,
+                else "```swift\n[ 🔴 LIVE STREAM ]```"
             )
-
             loop_mode = self.player.queue.mode.name.replace("_", " ").upper()
-            embed.add_field(name="╠ Loop Mode:", value=f"`{loop_mode}`")
-            embed.add_field(
-                name="═ Shuffle Mode:",
-                value={
-                    ShuffleMode.off: "<:off1:1322338488443736257> **``Off``**",
-                    ShuffleMode.on: "<:on1:1322338500300771458> **``On``**",
-                }.get(self.player.queue.shuffle),
-            )
-            embed.add_field(
-                name="╠ Volume:",
-                value=f"```swift\n{ProgressBar(0, 100, self.player.volume)} [ {self.player.volume}% ]```",
-                inline=False,
-            )
+            shuffle = {
+                ShuffleMode.off: "<:off1:1322338488443736257> **``Off``**",
+                ShuffleMode.on: "<:on1:1322338500300771458> **``On``**",
+            }.get(self.player.queue.shuffle)
+            container.add_item(discord.ui.TextDisplay(
+                f"**Status**\n{status}\n"
+                f"**Loop Mode:** `{loop_mode}`  •  **Shuffle Mode:** {shuffle}\n"
+                f"**Volume**\n```swift\n{ProgressBar(0, 100, self.player.volume)} [ {self.player.volume}% ]```"
+            ))
 
+            extras: list[str] = []
             if track.recommended:
-                embed.add_field(
-                    name="╠ Recommended via:", value=f"{EMOJI_KEYS[track.source]} **`{track.source.title()}`**", inline=False
-                )
-
+                extras.append(f"**Recommended via:** {EMOJI_KEYS[track.source]} **`{track.source.title()}`**")
             if not self.player.queue.is_empty and (upcoming := self.player.queue.peek(0)):
                 eta = discord.utils.utcnow() + datetime.timedelta(milliseconds=(track.length - self.player.position))
-                embed.add_field(
-                    name="╠ Next Track:", value=f"[{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, 'R')}"
-                )
+                extras.append(f"**Next Track:** [{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, 'R')}")
+            if extras:
+                container.add_item(discord.ui.TextDisplay("\n".join(extras)))
 
-            if artwork := track.artwork:
-                embed.set_thumbnail(url=artwork)
-
-            # Add '╚' to the last field's name
-            field = getattr(embed, "_fields", [])[-1]
-            field["name"] = "╚ " + field["name"][1:]
-
-            embed.set_footer(text=f"{'Auto-Playing' if self.player.autoplay != 2 else 'Manual-Playing'} • last updated")
+            container.add_item(discord.ui.Separator())
+            mode = "Auto-Playing" if self.player.autoplay != 2 else "Manual-Playing"
+            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')}"))
         else:
-            embed.description = (
+            heading = (
+                "## Music Player Panel\n"
                 "The control panel was closed, the queue is currently empty and I got nothing to do.\n"
                 "You can start a new player session by invoking the </play:1070054930125176923> command.\n\n"
                 "*Once you play a new track, this message is going to be the new player panel if it's not deleted, "
                 "otherwise I'm going to create a new panel.*"
             )
-            embed.set_footer(text="last updated")
-            if self.player.guild is not None and self.player.guild.icon:
-                embed.set_thumbnail(url=self.player.guild.icon.url)
+            icon = self.player.guild.icon.url if self.player.guild is not None and self.player.guild.icon else None
+            if icon is not None:
+                container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(icon)))
+            else:
+                container.add_item(discord.ui.TextDisplay(heading))
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay("-# last updated"))
 
-        return embed
+        return container
 
     def disabled_state(self, check: bool | None = None) -> bool:
         """Returns True if the button should be disabled.
@@ -331,15 +366,15 @@ class PlayerPanel(View):
         if self.state != state:
             self.state = state
 
-        self.update_buttons()
+        self._rebuild()
 
         if self.msg is MISSING and not self.__is_temporary__:
             await self.get_player_message()
 
         if self.msg is not MISSING:
-            await self.msg.edit(embed=self.build_embed(), view=self)
+            await self.msg.edit(view=self)
         else:
-            self.msg = await self.channel.send(embed=self.build_embed(), view=self)
+            self.msg = await self.channel.send(view=self)
 
         return self.msg
 
@@ -350,32 +385,29 @@ class PlayerPanel(View):
 
         super().stop()
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["shuffle"][ShuffleMode.off], disabled=True)
-    async def on_shuffle(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_shuffle(self, interaction: discord.Interaction) -> None:
         TOGGLE = {ShuffleMode.off: ShuffleMode.on, ShuffleMode.on: ShuffleMode.off}
         self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(style=discord.ButtonStyle.blurple, emoji="⏮️", disabled=True)
-    async def on_back(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_back(self, interaction: discord.Interaction) -> None:
+        self._rebuild()
         await interaction.response.edit_message(view=self)
         await self.player.back()
 
-    @discord.ui.button(style=discord.ButtonStyle.blurple, emoji=EMOJI_KEYS["pause_play"][False], disabled=True)
-    async def on_pause_play(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_pause_play(self, interaction: discord.Interaction) -> None:
         await self.player.pause(not self.player.paused)
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(style=discord.ButtonStyle.blurple, emoji="⏭", disabled=True)
-    async def on_forward(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_forward(self, interaction: discord.Interaction) -> None:
+        self._rebuild()
         await interaction.response.edit_message(view=self)
         await self.player.skip()
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["loop"][QueueMode.normal], disabled=True)
-    async def on_loop(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_loop(self, interaction: discord.Interaction) -> None:
         TRANSITIONS = {
             QueueMode.normal: QueueMode.loop,
             QueueMode.loop: QueueMode.loop_all,
@@ -383,20 +415,17 @@ class PlayerPanel(View):
         }
         self.player.queue.mode = TRANSITIONS.get(self.player.queue.mode)
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(style=discord.ButtonStyle.red, emoji="⏹️", label="Stop", disabled=True)
-    async def on_stop(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_stop(self, interaction: discord.Interaction) -> None:
         await self.player.disconnect()
         await interaction.response.send_message(f"{Emojis.success} Stopped Track and cleaned up queue.", delete_after=10)
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji="🔊", label="Adjust Volume", disabled=True)
-    async def on_volume(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_volume(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(AdjustVolumeModal(self))
 
-    @discord.ui.button(style=discord.ButtonStyle.green, emoji=EMOJI_KEYS["like"], disabled=True)
-    async def on_like(self: PlayerPanel, interaction: discord.Interaction, _) -> None:
+    async def _on_like(self, interaction: discord.Interaction) -> None:
         playlist_tools: Any = self.bot.get_cog("PlaylistTools")
         if not playlist_tools:
             await interaction.response.send_message("This feature is currently disabled.", ephemeral=True)
@@ -483,7 +512,8 @@ class AdjustVolumeModal(discord.ui.Modal, title="Volume Adjuster"):
         value = int(self.number.value)
         await self._view.player.set_volume(value)
         if interaction.message is not None:
-            await interaction.message.edit(embed=self._view.build_embed(), view=self._view)
+            self._view._rebuild()
+            await interaction.message.edit(view=self._view)
 
 
 class TrackDisambiguatorView[T](View):
