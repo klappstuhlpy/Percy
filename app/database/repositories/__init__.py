@@ -1,4 +1,5 @@
 from app.database.repositories.admin import AdminRepository
+from app.database.repositories.autoresponders import AutoRespondersRepository
 from app.database.repositories.base import BaseRepository
 from app.database.repositories.cases import CasesRepository
 from app.database.repositories.comics import ComicsRepository
@@ -15,6 +16,7 @@ from app.database.repositories.playlists import PlaylistsRepository
 from app.database.repositories.polls import PollsRepository
 from app.database.repositories.role_menus import RoleMenusRepository
 from app.database.repositories.starboard import StarboardRepository
+from app.database.repositories.stat_counters import StatCountersRepository
 from app.database.repositories.stats import StatsRepository
 from app.database.repositories.tags import TagsRepository
 from app.database.repositories.temp_channels import TempChannelsRepository
@@ -23,6 +25,7 @@ from app.database.repositories.users import UsersRepository
 
 __all__ = (
     'AdminRepository',
+    'AutoRespondersRepository',
     'BaseRepository',
     'CasesRepository',
     'ComicsRepository',
@@ -39,6 +42,7 @@ __all__ = (
     'PollsRepository',
     'RoleMenusRepository',
     'StarboardRepository',
+    'StatCountersRepository',
     'StatsRepository',
     'TagsRepository',
     'TempChannelsRepository',

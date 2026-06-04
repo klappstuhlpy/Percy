@@ -15,6 +15,7 @@ from discord.utils import MISSING
 
 from app.database.repositories import (
     AdminRepository,
+    AutoRespondersRepository,
     CasesRepository,
     ComicsRepository,
     EconomyRepository,
@@ -30,6 +31,7 @@ from app.database.repositories import (
     PollsRepository,
     RoleMenusRepository,
     StarboardRepository,
+    StatCountersRepository,
     StatsRepository,
     TagsRepository,
     TempChannelsRepository,
@@ -181,6 +183,8 @@ class Database(_Database):
     cases: CasesRepository
     economy: EconomyRepository
     rolemenu: RoleMenusRepository
+    autoresponders: AutoRespondersRepository
+    stat_counters: StatCountersRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -205,6 +209,8 @@ class Database(_Database):
         self.cases = CasesRepository(self)
         self.economy = EconomyRepository(self)
         self.rolemenu = RoleMenusRepository(self)
+        self.autoresponders = AutoRespondersRepository(self)
+        self.stat_counters = StatCountersRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

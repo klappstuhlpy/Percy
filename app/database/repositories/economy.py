@@ -116,3 +116,54 @@ class EconomyRepository(BaseRepository):
                 DO UPDATE SET last_claim = EXCLUDED.last_claim, streak = EXCLUDED.streak;
         """
         await self.execute(query, user_id, guild_id, last_claim, streak)
+
+    # -- lottery ----------------------------------------------------------
+
+    async def get_lottery(self, guild_id: int) -> asyncpg.Record | None:
+        """Fetches the active lottery for a guild, or ``None`` if none is running."""
+        return await self.fetchrow('SELECT * FROM economy_lottery WHERE guild_id = $1;', guild_id)
+
+    async def create_lottery(
+        self, guild_id: int, channel_id: int, ticket_price: int, ends_at: datetime.datetime
+    ) -> asyncpg.Record | None:
+        """Starts a lottery, returning the row (or ``None`` if one already runs)."""
+        query = """
+            INSERT INTO economy_lottery (guild_id, channel_id, ticket_price, ends_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id) DO NOTHING
+            RETURNING *;
+        """
+        return await self.fetchrow(query, guild_id, channel_id, ticket_price, ends_at)
+
+    async def add_lottery_tickets(self, guild_id: int, user_id: int, tickets: int, cost: int) -> int:
+        """Adds tickets for a member and grows the jackpot; returns the member's new ticket total."""
+        async with self.acquire() as conn, conn.transaction():
+            await conn.execute(
+                'UPDATE economy_lottery SET jackpot = jackpot + $2 WHERE guild_id = $1;', guild_id, cost)
+            return await conn.fetchval(
+                """
+                INSERT INTO economy_lottery_entries (guild_id, user_id, tickets)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET tickets = economy_lottery_entries.tickets + EXCLUDED.tickets
+                RETURNING tickets;
+                """,
+                guild_id, user_id, tickets,
+            )
+
+    async def get_lottery_entries(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches every (user_id, tickets) entry for a guild's lottery."""
+        return await self.fetch(
+            'SELECT user_id, tickets FROM economy_lottery_entries WHERE guild_id = $1;', guild_id)
+
+    async def get_lottery_tickets(self, guild_id: int, user_id: int) -> int:
+        """Returns how many tickets a member holds in the current lottery (0 if none)."""
+        value = await self.fetchval(
+            'SELECT tickets FROM economy_lottery_entries WHERE guild_id = $1 AND user_id = $2;',
+            guild_id, user_id,
+        )
+        return value or 0
+
+    async def delete_lottery(self, guild_id: int) -> None:
+        """Ends a lottery, removing it and its entries (entries cascade)."""
+        await self.execute('DELETE FROM economy_lottery WHERE guild_id = $1;', guild_id)

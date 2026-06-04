@@ -8,7 +8,12 @@ so it can be reasoned about and unit-tested in isolation.
 from __future__ import annotations
 
 import datetime
+import random
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 __all__ = (
     'DAILY_BASE',
@@ -16,9 +21,17 @@ __all__ = (
     'DAILY_RESET',
     'DAILY_STREAK_BONUS',
     'DAILY_STREAK_CAP',
+    'FISHING_COOLDOWN',
+    'FISHING_TABLE',
+    'HUNTING_COOLDOWN',
+    'HUNTING_TABLE',
     'SELL_RATE',
+    'Catch',
     'DailyResult',
+    'LootEntry',
     'compute_daily',
+    'pick_weighted_winner',
+    'roll_loot',
     'sell_price',
 )
 
@@ -94,3 +107,74 @@ def compute_daily(
 def sell_price(price: int, *, rate: float = SELL_RATE) -> int:
     """The amount returned for selling an item bought at ``price`` (floored, ≥ 0)."""
     return max(int(price * rate), 0)
+
+
+# -- earning activities (fishing / hunting) -------------------------------
+
+#: Minimum seconds between ``fish`` claims.
+FISHING_COOLDOWN = 60
+#: Minimum seconds between ``hunt`` claims.
+HUNTING_COOLDOWN = 90
+
+
+@dataclass(frozen=True, slots=True)
+class LootEntry:
+    """A single weighted outcome of an earning activity."""
+
+    name: str
+    emoji: str
+    min_value: int
+    max_value: int
+    weight: int
+
+
+@dataclass(frozen=True, slots=True)
+class Catch:
+    """The resolved result of one earning roll."""
+
+    name: str
+    emoji: str
+    amount: int
+
+
+#: Fishing outcomes - common low payouts down to rare jackpots, plus a "junk" miss.
+FISHING_TABLE: tuple[LootEntry, ...] = (
+    LootEntry('an old boot', '\N{ATHLETIC SHOE}', 0, 5, 18),
+    LootEntry('a school of sardines', '\N{FISH}', 40, 90, 40),
+    LootEntry('a plump salmon', '\N{FISH}', 90, 180, 25),
+    LootEntry('a pufferfish', '\N{BLOWFISH}', 150, 280, 12),
+    LootEntry('a treasure chest', '\N{NAZAR AMULET}', 400, 800, 4),
+    LootEntry('a rare pearl', '\N{OYSTER}', 900, 1600, 1),
+)
+
+#: Hunting outcomes - higher variance and a longer cooldown than fishing.
+HUNTING_TABLE: tuple[LootEntry, ...] = (
+    LootEntry('nothing but tracks', '\N{PAW PRINTS}', 0, 10, 20),
+    LootEntry('a rabbit', '\N{RABBIT}', 60, 120, 38),
+    LootEntry('a wild boar', '\N{BOAR}', 130, 240, 22),
+    LootEntry('a deer', '\N{DEER}', 220, 380, 13),
+    LootEntry('a bear', '\N{BEAR FACE}', 500, 950, 5),
+    LootEntry('a trophy stag', '\N{DEER}', 1100, 2000, 2),
+)
+
+
+def roll_loot(table: Sequence[LootEntry], *, rng: random.Random | None = None) -> Catch:
+    """Pick a weighted outcome from ``table`` and roll its payout amount."""
+    chooser = rng or random
+    entry = chooser.choices(table, weights=[e.weight for e in table], k=1)[0]
+    amount = chooser.randint(entry.min_value, entry.max_value)
+    return Catch(entry.name, entry.emoji, amount)
+
+
+def pick_weighted_winner(
+    entries: Sequence[tuple[int, int]], *, rng: random.Random | None = None
+) -> int | None:
+    """Draw a winner id from ``(user_id, tickets)`` pairs, weighted by ticket count.
+
+    Returns ``None`` if there are no entries or every ticket count is non-positive.
+    """
+    pool = [(uid, tickets) for uid, tickets in entries if tickets > 0]
+    if not pool:
+        return None
+    chooser = rng or random
+    return chooser.choices([uid for uid, _ in pool], weights=[t for _, t in pool], k=1)[0]

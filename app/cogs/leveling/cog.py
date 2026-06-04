@@ -4,7 +4,7 @@ from typing import Annotated
 
 import discord
 from discord import AppCommandOptionType, app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.commands import Range
 
 from app.cogs.leveling.models import _MAX_LEVEL, _MAX_XP, GuildLevelConfig, LevelConfig
@@ -36,6 +36,45 @@ class Leveling(Cog):
     """Leveling system, commands and utilities."""
 
     emoji = Emojis.level_up
+
+    def __init__(self, bot: Bot) -> None:
+        super().__init__(bot)
+        self.award_voice_xp.start()
+
+    async def cog_unload(self) -> None:
+        self.award_voice_xp.cancel()
+
+    @tasks.loop(minutes=1)
+    async def award_voice_xp(self) -> None:
+        """Grant voice XP each minute to active, non-idle members in populated channels.
+
+        Members are skipped if they are alone (fewer than two humans in the channel),
+        AFK, server- or self-deafened, or blacklisted — mirroring the message-XP rules.
+        """
+        for guild in self.bot.guilds:
+            config: GuildLevelConfig | None = await self.get_guild_level_config(guild.id)  # type: ignore[misc]
+            if config is None or not config.enabled or not config.voice_enabled:
+                continue
+
+            for channel in (*guild.voice_channels, *guild.stage_channels):
+                humans = [m for m in channel.members if not m.bot]
+                if len(humans) < 2:
+                    continue
+
+                for member in humans:
+                    voice = member.voice
+                    if voice is None or voice.afk or voice.self_deaf or voice.deaf:
+                        continue
+
+                    level_config = await self.get_level_config(member.id, guild.id)
+                    if level_config is None or not level_config.can_gain_voice(channel):
+                        continue
+
+                    await level_config.add_voice_xp(config.voice_xp, channel=channel)
+
+    @award_voice_xp.before_loop
+    async def _before_award_voice_xp(self) -> None:
+        await self.bot.wait_until_ready()
 
     @cache.cache()
     async def get_guild_level_config(self, guild_id: int, /) -> GuildLevelConfig | None:
@@ -236,6 +275,8 @@ class Leveling(Cog):
             colour=helpers.Colour.white(),
             description=f"**Enabled:** {to_emoji(config.enabled)} `{config.enabled}`\n"
             f"**Delete User Data After Leave:** {to_emoji(config.delete_after_leave)} `{config.delete_after_leave}`\n"
+            f"**Voice XP:** {to_emoji(config.voice_enabled)} `{config.voice_enabled}` "
+            f"({config.voice_xp} XP/min)\n"
             f"**Level Up Message:** ```\n{config.level_up_message}```\n"
             f"**Level Up Channel:** {channel}\n\n"
             f"**Level Roles:**\n"
@@ -494,6 +535,39 @@ class Leveling(Cog):
 
         view = InteractiveMultiplierView(ctx, config=config)
         await ctx.send(embed=view.make_embed(), view=view)
+
+    @level_config.command(
+        "voice",
+        description="Toggle voice-activity XP and set the per-minute gain.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(
+        enabled="Whether members earn XP while active in voice channels.",
+        xp_per_minute="XP granted each minute spent active in voice (defaults unchanged).",
+    )
+    async def level_config_voice(
+        self, ctx: Context, enabled: bool, xp_per_minute: Range[int, 1, 1000] | None = None
+    ) -> None:
+        """Toggle voice-activity XP.
+
+        Members earn XP each minute they are active (not alone, AFK or deafened) in a
+        voice channel. The same blacklists and level-roles as message XP apply.
+        """
+        assert ctx.guild is not None
+        config = await self.get_guild_level_config(ctx.guild.id)  # type: ignore[misc]
+        if not config:
+            await ctx.send_error("Leveling is not enabled in this server.")
+            return
+
+        values: dict[str, object] = {"voice_enabled": enabled}
+        if xp_per_minute is not None:
+            values["voice_xp"] = xp_per_minute
+        await config.update(**values)
+
+        fmt = "*enabled*" if enabled else "*disabled*"
+        suffix = f" ({xp_per_minute} XP/min)" if xp_per_minute is not None else ""
+        await ctx.send_success(f"Voice-activity XP {fmt}{suffix}.")
 
 
 async def setup(bot: Bot) -> None:

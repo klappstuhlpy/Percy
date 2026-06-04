@@ -843,7 +843,7 @@ class Meta(Cog):
         file = await self.bot.render.quote(user, message)  # type: ignore
         await ctx.send(file=file)
 
-    @command(name="appinfo", aliases=["ai"], description="Shows information about a discord application.")
+    @command(name="appinfo", description="Shows information about a discord application.")
     @describe(app_id="The ID of the application to show info about.")
     async def appinfo(self, ctx: Context, *, app_id: str) -> None:
         """Displays information about a discord application."""

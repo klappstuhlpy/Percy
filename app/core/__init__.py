@@ -14,6 +14,7 @@ from .command import (
     guilds,
     user_max_concurrency,
 )
+from .components_v2 import Accent, NoticeView, make_notice
 from .context import Context, HybridContext, HybridContextProtocol
 from .converter import *
 from .embeds import EmbedBuilder

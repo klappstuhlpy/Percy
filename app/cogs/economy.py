@@ -3,12 +3,23 @@ from typing import Annotated, Literal
 
 import discord
 from discord.ext import commands
+from discord.ext.commands import Range
 
-from app.core import Bot, Cog, converter
-from app.core.models import Context, PermissionTemplate, command, describe, group
+from app.core import Accent, Bot, Cog, converter, make_notice
+from app.core.models import Context, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator
-from app.services.economy import compute_daily, sell_price
-from app.utils import fnumb, get_asset_url, helpers, pluralize
+from app.core.timer import Timer
+from app.services.economy import (
+    FISHING_COOLDOWN,
+    FISHING_TABLE,
+    HUNTING_COOLDOWN,
+    HUNTING_TABLE,
+    compute_daily,
+    pick_weighted_winner,
+    roll_loot,
+    sell_price,
+)
+from app.utils import fnumb, get_asset_url, helpers, pluralize, timetools
 from config import Emojis
 
 
@@ -389,6 +400,171 @@ class Economy(Cog):
 
         await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], 1)
         await ctx.send_success(f"You used **{item['name']}**. You have **{owned - 1}** left.")
+
+    # -- earning activities ----------------------------------------------
+
+    @command("fish", description="Cast a line and earn a random catch.", guild_only=True, hybrid=True)
+    @cooldown(1, FISHING_COOLDOWN)
+    async def fish(self, ctx: Context) -> None:
+        """Go fishing for a chance at cash — outcomes range from junk to a rare pearl."""
+        assert ctx.guild is not None
+        catch = roll_loot(FISHING_TABLE)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=catch.amount)
+
+        if catch.amount <= 5:
+            await ctx.send_info(f"{catch.emoji} You reeled in **{catch.name}** — barely worth it.")
+            return
+        await ctx.send_success(
+            f"{catch.emoji} You caught **{catch.name}** and sold it for "
+            f"{Emojis.Economy.cash} **{fnumb(catch.amount)}**!"
+        )
+
+    @command("hunt", description="Head out hunting for a bigger, riskier payout.", guild_only=True, hybrid=True)
+    @cooldown(1, HUNTING_COOLDOWN)
+    async def hunt(self, ctx: Context) -> None:
+        """Go hunting — higher payouts and variance than fishing, on a longer cooldown."""
+        assert ctx.guild is not None
+        catch = roll_loot(HUNTING_TABLE)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=catch.amount)
+
+        if catch.amount <= 10:
+            await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.")
+            return
+        await ctx.send_success(
+            f"{catch.emoji} You bagged **{catch.name}** worth "
+            f"{Emojis.Economy.cash} **{fnumb(catch.amount)}**!"
+        )
+
+    # -- lottery ----------------------------------------------------------
+
+    @group("lottery", fallback="status", description="View the server lottery.", guild_only=True, hybrid=True)
+    async def lottery(self, ctx: Context) -> None:
+        """Show the current lottery: jackpot, ticket price, time left and your tickets."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.get_lottery(ctx.guild.id)
+        if record is None:
+            await ctx.send_info("No lottery is running. An admin can start one with `lottery start`.")
+            return
+
+        entries = await self.bot.db.economy.get_lottery_entries(ctx.guild.id)
+        total_tickets = sum(e["tickets"] for e in entries)
+        yours = await self.bot.db.economy.get_lottery_tickets(ctx.guild.id, ctx.author.id)
+        ends_at = record["ends_at"].replace(tzinfo=datetime.UTC)
+        odds = f"{yours / total_tickets:.1%}" if total_tickets else "0%"
+
+        view = make_notice(
+            "Server Lottery",
+            "The pot grows with every ticket sold. Buy in with `lottery buy <amount>`.",
+            accent=Accent.info,
+            thumbnail=get_asset_url(ctx.guild),
+            fields=[
+                ("Jackpot", f"{Emojis.Economy.cash} **{fnumb(record['jackpot'])}**"),
+                ("Ticket Price", f"{Emojis.Economy.cash} **{fnumb(record['ticket_price'])}**"),
+                ("Tickets Sold", f"**{fnumb(total_tickets)}**"),
+                ("Your Tickets", f"**{fnumb(yours)}** ({odds} chance)"),
+                ("Drawing", discord.utils.format_dt(ends_at, "R")),
+            ],
+        )
+        await ctx.send(view=view)
+
+    @lottery.command(
+        "start",
+        description="Start a server lottery.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(duration='How long entries stay open, e.g. "2h" or "1 day".', ticket_price="Cost per ticket.")
+    async def lottery_start(self, ctx: Context, duration: str, ticket_price: Range[int, 1]) -> None:
+        """Start a lottery that draws a weighted-random winner when the timer ends."""
+        assert ctx.guild is not None
+        try:
+            when = timetools.FutureTime(duration).dt
+        except commands.BadArgument:
+            await ctx.send_error('Could not parse that duration. Try something like "2h" or "1 day".')
+            return
+
+        now = ctx.message.created_at
+        if when - now < datetime.timedelta(minutes=5):
+            await ctx.send_error("The lottery must run for at least **5 minutes**.")
+            return
+        if when - now > datetime.timedelta(days=30):
+            await ctx.send_error("The lottery can run for at most **30 days**.")
+            return
+
+        record = await self.bot.db.economy.create_lottery(
+            ctx.guild.id, ctx.channel.id, int(ticket_price), when.replace(tzinfo=None)
+        )
+        if record is None:
+            await ctx.send_error("A lottery is already running. End it before starting another.")
+            return
+
+        await self.bot.timers.create(when, "lottery", ctx.guild.id)
+        await ctx.send_success(
+            f"Lottery started! Tickets are {Emojis.Economy.cash} **{fnumb(int(ticket_price))}** each. "
+            f"Drawing {discord.utils.format_dt(when, 'R')}."
+        )
+
+    @lottery.command("buy", description="Buy lottery tickets.", guild_only=True, hybrid=True)
+    @describe(amount="How many tickets to buy.")
+    async def lottery_buy(self, ctx: Context, amount: Range[int, 1, 1000] = 1) -> None:
+        """Buy tickets for the active lottery; more tickets mean better odds."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.get_lottery(ctx.guild.id)
+        if record is None:
+            await ctx.send_error("No lottery is running right now.")
+            return
+
+        cost = record["ticket_price"] * amount
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        if balance.cash < cost:
+            await ctx.send_error(
+                f"You need {Emojis.Economy.cash} **{fnumb(cost)}** but only have **{fnumb(balance.cash)}**."
+            )
+            return
+
+        await balance.remove(cash=cost)
+        total = await self.bot.db.economy.add_lottery_tickets(ctx.guild.id, ctx.author.id, amount, cost)
+        await ctx.send_success(
+            f"Bought **{pluralize(amount):ticket}** for {Emojis.Economy.cash} **{fnumb(cost)}**. "
+            f"You now hold **{fnumb(total)}**."
+        )
+
+    @Cog.listener()
+    async def on_lottery_timer_complete(self, timer: Timer) -> None:
+        guild_id: int = timer.args[0]
+        record = await self.bot.db.economy.get_lottery(guild_id)
+        if record is None:
+            return
+
+        entries = await self.bot.db.economy.get_lottery_entries(guild_id)
+        jackpot: int = record["jackpot"]
+        channel = self.bot.get_channel(record["channel_id"])
+        await self.bot.db.economy.delete_lottery(guild_id)
+
+        if not isinstance(channel, discord.abc.Messageable):
+            return
+
+        winner_id = pick_weighted_winner([(e["user_id"], e["tickets"]) for e in entries])
+        if winner_id is None or jackpot <= 0:
+            view = make_notice(
+                "Lottery Ended",
+                "The lottery ended with no tickets sold. Better luck next time!",
+                accent=Accent.warning,
+            )
+            await channel.send(view=view)
+            return
+
+        balance = await self.bot.db.get_user_balance(winner_id, guild_id)
+        await balance.add(cash=jackpot)
+        # The mention lives inside the container's text display, which still pings.
+        view = make_notice(
+            "\N{PARTY POPPER} Lottery Winner!",
+            f"<@{winner_id}> won the jackpot of {Emojis.Economy.cash} **{fnumb(jackpot)}**!",
+            accent=Accent.success,
+        )
+        await channel.send(view=view, allowed_mentions=discord.AllowedMentions(users=True))
 
 
 async def setup(bot: Bot) -> None:

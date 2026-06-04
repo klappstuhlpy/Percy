@@ -84,6 +84,7 @@ class DatabaseConfig:
 
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
+groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or 'llama-3.3-70b-versatile')
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
 images_key: str | None = env('IMAGES_API_TOKEN')

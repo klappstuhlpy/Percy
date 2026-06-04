@@ -104,6 +104,8 @@ class GuildLevelConfig(BaseRecord):
     multiplier_roles: dict[int, int]
     multiplier_channels: dict[int, int]
     delete_after_leave: bool
+    voice_enabled: bool
+    voice_xp: int
 
     __slots__ = (
         'base',
@@ -128,7 +130,9 @@ class GuildLevelConfig(BaseRecord):
         'multiplier_roles',
         'role_stack',
         'spec',
-        'special_level_up_messages'
+        'special_level_up_messages',
+        'voice_enabled',
+        'voice_xp',
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -297,6 +301,79 @@ class LevelConfig(BaseRecord):
         multiplier = self.get_multiplier(message)
         gain = self.config.spec.get_xp_gain(multiplier)
         await self.add_xp(gain, message=message)
+
+    def can_gain_voice(self, channel: discord.VoiceChannel | discord.StageChannel) -> bool:
+        """Whether this member may earn voice XP in ``channel`` right now.
+
+        Mirrors :meth:`can_gain` for voice: honours the same blacklists but uses the
+        voice channel instead of a message and has no per-message cooldown.
+        """
+        user = self.user
+        if user is None:
+            return False
+        return (
+            user.id not in self.config.blacklisted_users
+            and channel.id not in self.config.blacklisted_channels
+            and not any(user._roles.has(role) for role in self.config.blacklisted_roles)
+        )
+
+    async def add_voice_xp(
+        self, xp: int, *, channel: discord.abc.Messageable | None = None
+    ) -> tuple[int, int]:
+        """Award voice XP (no message), handling level-ups, roles and announcement.
+
+        Unlike :meth:`add_xp` this does not increment the message counter. ``channel`` is
+        the voice channel used as the announcement target when the guild is configured to
+        announce in the "source" location.
+        """
+        if xp <= 0:
+            return self.level, self.xp
+
+        self.xp += xp
+        leveled = False
+        while self.xp > self.max_xp:
+            self.xp -= self.max_xp
+            self.level += 1
+            leveled = True
+
+        await self.update(xp=self.xp, level=self.level)
+        if leveled:
+            await self.update_roles(self.level)
+            await self._announce_voice_level_up(self.level, channel)
+
+        return self.level, self.xp
+
+    async def _announce_voice_level_up(
+        self, level: int, channel: discord.abc.Messageable | None
+    ) -> None:
+        if not self.config.level_up_channel or not self.config.level_up_message:
+            return
+
+        func: Callable[..., Awaitable[Any]]
+        match self.config.level_up_channel:
+            case 0:
+                return
+            case 1:
+                if channel is None:
+                    return
+                func = channel.send
+            case 2:
+                user = self.user
+                if user is None:
+                    return
+                dm_channel = await user.create_dm()
+                func = dm_channel.send
+            case custom:
+                target = self.cog.bot.get_channel(custom)
+                if not isinstance(target, discord.abc.Messageable):
+                    return
+                func = target.send
+
+        content = self.config.special_level_up_messages.get(
+            level, self.config.level_up_message
+        ).format(user=self.user, level=level)
+        with suppress(discord.HTTPException):
+            await func(content)
 
     async def update_roles(self, level: int) -> None:
         user = self.user

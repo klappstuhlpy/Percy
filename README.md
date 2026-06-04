@@ -57,6 +57,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 - **Layered, testable architecture** — a repository data-access layer, a Discord-free **service layer** for business logic, MVVM-style UI separation in the cogs, and pure game **engines** that are unit-tested in isolation.
 - **Resilient external APIs** — every third-party client (AniList, Marvel, …) shares one HTTP base with 429 handling, exponential backoff and a circuit breaker.
 - **Server-side image rendering** — rank cards, casino cards, poker odds charts, presence charts, captchas and music panels are all drawn with Pillow behind a single `RenderingService`.
+- **Components V2 UI** — newer features (translation, AI assistant, autoresponder/stat-counter lists, lottery results) render with Discord's Components V2 layouts via a shared `app.core` helper.
 
 ---
 
@@ -86,6 +87,8 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Blackjack**               | Play against the dealer with the standard hit/stand/double flow.                                                                                                                                         |
 | **Roulette, Slots & Tower** | Classic casino gambling games with rendered results.                                                                                                                                                     |
 | **Mini-games**              | Tic-Tac-Toe, Minesweeper and Hangman.                                                                                                                                                                    |
+| **Earning activities**      | `daily` (with streak bonus), plus `fish` and `hunt` — cooldown-gated, weighted risk/reward loot tables from junk to rare jackpots.                                                                       |
+| **Server lottery**          | Admins start a timed `lottery`; members buy weighted tickets, the pot grows, and a winner is drawn automatically via the persistent timer system (announced with a Components V2 card).                   |
 
 ### Leveling
 
@@ -95,6 +98,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                        |
 | **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                       |
 | **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                 |
+| **Voice XP**             | Opt-in XP for time spent active in voice (`/level config voice`); skips members who are alone, AFK or deafened, and honours the same blacklists.       |
 | **Fine-grained control** | Toggle leveling, set the level-up message and channel (or DM), blacklist roles/channels/users, and optionally delete a member's data when they leave. |
 
 ### Music
@@ -115,6 +119,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Giveaways**  | Create and manage giveaways through modals; entries via a persistent button, automatic winner draw and reroll.                                                            |
 | **Tags**       | Per-guild custom tags with aliases, fuzzy search, ownership transfer and usage stats.                                                                                     |
 | **Highlights** | Get a DM when a word or phrase you subscribed to is mentioned.                                                                                                            |
+| **Autoresponders** | Canned replies that fire when a message matches a trigger (`contains`/`exact`/`startswith`/`regex`), with placeholders like `{user}` and `{count}` (`autoresponder …`). |
 | **Gimmicks**   | Fun/flavour annotation commands.                                                                                                                                          |
 
 ### Utility & Productivity
@@ -127,6 +132,8 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Emoji management**         | Add, steal, rename and inspect server emojis, with per-guild emoji usage stats.                        |
 | **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                   |
 | **History tracking**         | Username/nickname history (`names`), `lastseen`, avatar history, and a rendered **presence chart**.    |
+| **Translation**              | `translate` text into any language (ISO code or name), with the source auto-detected; keyless backend. |
+| **Stat counters**            | Self-updating voice channels that display a live server statistic — members, humans, bots, online, boosts, roles or channels (`statcounter …`). |
 
 ### Developer & Information
 
@@ -136,6 +143,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).       |
 | **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                     |
 | **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                           |
+| **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set. |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                       |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection. |
 | **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                                   |
@@ -144,7 +152,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 ## Commands
 
-Percy ships with **27 feature modules (cogs)**. Most commands are **hybrid** — available as both slash and prefix commands. The default prefix is `?` (configurable per guild), and the bot also responds to a mention.
+Percy ships with **31 feature modules (cogs)**. Most commands are **hybrid** — available as both slash and prefix commands. The default prefix is `?` (configurable per guild), and the bot also responds to a mention.
 
 Use the built-in help to explore everything interactively:
 
@@ -161,13 +169,13 @@ A few representative command groups:
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …` |
 | Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                    |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                            |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `work`, `crime`, `rob`                                |
+| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop`, `lottery …`          |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                          |
 | Polls         | `polls create/end/edit/delete/search/history/config`                                                               |
 | Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                 |
-| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`                             |
+| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`, `translate`, `statcounter …`, `autoresponder …` |
 | Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                |
-| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`                                                                |
+| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`, `ask` (AI assistant)                                          |
 
 ---
 
@@ -259,6 +267,8 @@ ANILIST_CLIENT_SECRET=
 # ── Optional integrations ────────────────────────────────
 STATS_WEBHOOK_TOKEN=                 # webhook token for posting bot stats/errors
 GENIUS_TOKEN=                        # Genius API (music lyrics)
+GROQ_API_KEY=                        # Groq API key (AI assistant — /ask); disabled if blank
+GROQ_MODEL=                          # optional Groq model override (default: llama-3.3-70b-versatile)
 GITHUB_TOKEN=                        # GitHub API (source links, gists)
 DBOTS_TOKEN=                         # discord.bots.gg stats posting
 TOPGG_TOKEN=                         # top.gg stats posting
