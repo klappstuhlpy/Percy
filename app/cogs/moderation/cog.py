@@ -13,7 +13,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands, tasks
 
-from app.core import Bot, Context, Flags, flag, store_true
+from app.core import Bot, Context, Flags, NoticeView, flag, store_true
 from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, IgnoreEntity, MemberID
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator, TextSource
@@ -613,27 +613,24 @@ class Moderation(Cog):
         if ctx.guild_config is None:
             return await ctx.send_error("This server does not have moderation enabled.")
 
-        embed = discord.Embed(
-            title=f"{ctx.guild.name} Moderation Configuration",
-            description=(
+        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container.add_item(
+            discord.ui.Section(
+                f"## {ctx.guild.name} Moderation Configuration\n"
                 "This is the current Bot-Automatic-Moderation configuration for this server.\n"
-                "You can use the commands in this category to modify these settings."
-            ),
-            timestamp=discord.utils.utcnow(),
-            color=helpers.Colour.white(),
+                "You can use the commands in this category to modify these settings.",
+                accessory=discord.ui.Thumbnail(get_asset_url(ctx.guild)),
+            )
         )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
+        container.add_item(discord.ui.Separator())
 
         enabled = 0
 
         if ctx.guild_config.flags.audit_log:
-            channel = f"<#{ctx.guild_config.audit_log_channel_id}>"
-            audit_log_broadcast = f"Bound to {channel}"
+            audit_log_broadcast = f"Bound to <#{ctx.guild_config.audit_log_channel_id}>"
             enabled += 1
         else:
             audit_log_broadcast = "*Disabled*"
-
-        embed.add_field(name="\N{IDENTIFICATION CARD} Audit Log", value=audit_log_broadcast)
 
         if ctx.guild_config.flags.alerts:
             alerts = f"Bound to <#{ctx.guild_config.alert_channel_id}>"
@@ -641,15 +638,11 @@ class Moderation(Cog):
         else:
             alerts = "Disabled"
 
-        embed.add_field(name="⚠️ Mod Alerts", value=alerts)
-
         if ctx.guild_config.flags.raid:
             raid = "Enabled"
             enabled += 1
         else:
             raid = "*Disabled*"
-
-        embed.add_field(name="\N{SHIELD} Raid Protection", value=raid)
 
         if ctx.guild_config.mention_count:
             mention_spam = f"Set to **{ctx.guild_config.mention_count}** mentions"
@@ -657,7 +650,12 @@ class Moderation(Cog):
         else:
             mention_spam = "*Disabled*"
 
-        embed.add_field(name="\N{PUBLIC ADDRESS LOUDSPEAKER} Mention Spam Protection", value=mention_spam)
+        container.add_item(discord.ui.TextDisplay(
+            f"**\N{IDENTIFICATION CARD} Audit Log**\n{audit_log_broadcast}\n"
+            f"**⚠️ Mod Alerts**\n{alerts}\n"
+            f"**\N{SHIELD} Raid Protection**\n{raid}\n"
+            f"**\N{PUBLIC ADDRESS LOUDSPEAKER} Mention Spam Protection**\n{mention_spam}"
+        ))
 
         if ctx.guild_config.flags.gatekeeper:
             enabled += 1
@@ -669,7 +667,8 @@ class Moderation(Cog):
         else:
             gatekeeper_status = "Completely Disabled"
 
-        embed.add_field(name="\N{LOCK} Gatekeeper", value=gatekeeper_status, inline=False)
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"**\N{LOCK} Gatekeeper**\n{gatekeeper_status}"))
 
         if ctx.guild_config.safe_automod_entity_ids:
             resolved = [resolve_entity_id(c, guild=ctx.guild) for c in ctx.guild_config.safe_automod_entity_ids]  # type: ignore[arg-type]
@@ -682,10 +681,11 @@ class Moderation(Cog):
         else:
             ignored = "*N/A*"
 
-        embed.add_field(name="\N{BUSTS IN SILHOUETTE} Ignored Entities", value=ignored, inline=False)
+        container.add_item(discord.ui.TextDisplay(f"**\N{BUSTS IN SILHOUETTE} Ignored Entities**\n{ignored}"))
 
-        embed.set_footer(text=f"Enabled Features: {enabled}/5")
-        await ctx.send(embed=embed)
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Enabled Features: {enabled}/5"))
+        await ctx.send(view=NoticeView(container))
 
     @moderation.command(
         "alerts",
