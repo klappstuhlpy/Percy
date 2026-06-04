@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 
 from app.database import BaseRecord
-from app.utils import fnumb
+from app.utils import fnumb, truncate
 from app.utils.helpers import NotCaseSensitiveEnum
 
 if TYPE_CHECKING:
@@ -195,40 +195,53 @@ class GenericComic:
             if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
         )
 
-    def to_embed(self, full_img: bool = True) -> discord.Embed:
-        embed = discord.Embed(
-            title=self.title or "",
-            colour=self.brand.colour if self.brand is not None else 0,
-            description=self.description or "",
-            url=self.url,
-        )
+    def to_container(self, full_img: bool = True) -> discord.ui.Container:
+        """Build the Components V2 release card for this comic.
+
+        ``full_img`` shows the cover as a full-width :class:`~discord.ui.MediaGallery`;
+        otherwise it is a compact :class:`~discord.ui.Thumbnail` beside the heading.
+        """
+        colour = self.brand.colour if self.brand is not None else 0
+        container = discord.ui.Container(accent_colour=colour)
+
+        heading = f'## [{self.title or "Untitled"}]({self.url})' if self.url else f'## {self.title or "Untitled"}'
+
+        if not full_img and self.image_url:
+            body = heading
+            if self.description:
+                body += f'\n{truncate(self.description, 1200)}'
+            container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(self.image_url)))
+        else:
+            container.add_item(discord.ui.TextDisplay(heading))
+            if self.description:
+                container.add_item(discord.ui.TextDisplay(truncate(self.description, 1500)))
+
+        container.add_item(discord.ui.Separator())
 
         if self.brand == Brand.MANGA:
-            embed.add_field(name='General Info',
-                            value=f'Price: {self.price_format}\n'
-                                  f'Pages: {self.page_count}\n'
-                                  f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
-                                  f"Category: {self.kwargs.get('category')}\n"
-                                  f"Age Rating: {self.kwargs.get('age_rating')}")
-
+            container.add_item(discord.ui.TextDisplay(
+                f'**General Info**\n'
+                f'Price: {self.price_format}\n'
+                f'Pages: {self.page_count}\n'
+                f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
+                f"Category: {self.kwargs.get('category')}\n"
+                f"Age Rating: {self.kwargs.get('age_rating')}"
+            ))
             if self.creators:
-                embed.add_field(name='Creators', value=self.format_creators())
+                container.add_item(discord.ui.TextDisplay(f'**Creators**\n{self.format_creators()}'))
         else:
             if self.creators:
-                embed.add_field(name='Creators', value=self.format_creators())
+                container.add_item(discord.ui.TextDisplay(f'**Creators**\n{self.format_creators()}'))
+            container.add_item(discord.ui.TextDisplay(
+                f'**General Info**\nPrice: {self.price_format}\nPages: {self.page_count}'
+            ))
 
-            embed.add_field(name='General Info',
-                            value=f'Price: {self.price_format}\n'
-                                  f'Pages: {self.page_count}')
+        if full_img and self.image_url:
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(self.image_url)))
 
-        embed.set_footer(text=f'{self.title or ""} • {self.copyright or ""}', icon_url=self.brand.icon_url if self.brand else "")
-
-        if full_img:
-            embed.set_image(url=self.image_url)
-        else:
-            embed.set_thumbnail(url=self.image_url)
-
-        return embed
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f'-# {self.title or ""} • {self.copyright or ""}'))
+        return container
 
     def to_instance(self, message: discord.Message) -> GenericComicMessage:
         return GenericComicMessage(self, message)
@@ -287,29 +300,32 @@ class ComicFeed(BaseRecord):
             'next_pull': self.next_pull,
         }
 
-    def to_embed(self) -> discord.Embed:
-        """Returns an Embed Representation of the Comic Feed Configuration.
+    def to_container(self, *, header: str | None = None) -> discord.ui.Container:
+        """Build the Components V2 card for this feed configuration.
 
-        Returns
-        -------
-        discord.Embed
-            The Embed Representation of the Comic Feed Configuration
+        ``header`` prepends an optional line (e.g. a success notice) above the title, so
+        the card can replace a ``send_success(..., embed=...)`` call in a single message.
         """
-        embed = discord.Embed(
-            title=f'{self.brand.value} Feed Configuration',
-            color=self.brand.colour
-        )
-        if self.brand == Brand.MANGA:
-            embed.description = 'Mangas are only published once in the first week of a month.'
+        container = discord.ui.Container(accent_colour=self.brand.colour)
 
-        embed.add_field(name='Publish Channel', value=f'<#{self.channel_id}>')
-        embed.add_field(name='Format', value=f'{self.format.value}')
-        embed.add_field(name='Next Scheduled', value=discord.utils.format_dt(self.next_pull, 'D'))
-        embed.add_field(name='Ping Role', value=f'<@&{self.ping}>' if self.ping else None)
-        embed.add_field(name='Message Pin', value='Enabled' if self.pin else 'Disabled')
-        embed.set_footer(text=f'[{self.guild_id}] • {self.brand.name}')
-        embed.set_thumbnail(url=self.brand.icon_url)
-        return embed
+        body = f'## {self.brand.value} Feed Configuration'
+        if header:
+            body = f'{header}\n{body}'
+        if self.brand == Brand.MANGA:
+            body += '\nMangas are only published once in the first week of a month.'
+        container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(self.brand.icon_url)))
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            f'**Publish Channel**\n<#{self.channel_id}>\n'
+            f'**Format**\n{self.format.value}\n'
+            f'**Next Scheduled**\n{discord.utils.format_dt(self.next_pull, "D")}\n'
+            f'**Ping Role**\n{f"<@&{self.ping}>" if self.ping else "None"}\n'
+            f'**Message Pin**\n{"Enabled" if self.pin else "Disabled"}'
+        ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f'-# [{self.guild_id}] • {self.brand.name}'))
+        return container
 
     async def delete(self) -> None:
         """|coro|

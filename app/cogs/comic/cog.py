@@ -12,8 +12,8 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
-from app.core import Bot, Cog, Context, Flags, View, cooldown, describe, flag, group, store_true
-from app.utils import cache
+from app.core import Bot, Cog, Context, Flags, NoticeView, cooldown, describe, flag, group, make_notice, store_true
+from app.utils import cache, truncate
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
 from config import Emojis, default_prefix
@@ -287,35 +287,35 @@ class Comics(Cog):
                     await channel.send(f'<@&{config.ping}>')
 
                 if config.format in [Format.FULL, Format.COMPACT]:
-                    embeds = {comic.id: comic.to_embed(config.format == Format.FULL) for comic in comics}
+                    full = config.format == Format.FULL
 
                     instances: dict[int, GenericComicMessage] = {}
                     for entry in comics:
                         try:
-                            msg = await channel.send(embed=embeds[entry.id])
+                            msg = await channel.send(view=NoticeView(entry.to_container(full)))
                         except discord.DiscordServerError as exc:
                             if exc.code == 503:
                                 # Service Unavailable, we try again in after some time
                                 await asyncio.sleep(3)
-                                msg = await channel.send(embed=embeds[entry.id])
+                                msg = await channel.send(view=NoticeView(entry.to_container(full)))
                             else:
                                 continue
                         instances[entry.id] = entry.to_instance(msg)  # type: ignore
 
-                summary_embeds = await self.build_summary_embeds(comics, config.brand)
+                summary = self.build_summary_container(comics, config.brand, jump_button=JumpToTopButton(lead_msg))
                 summ_msg = await channel.send(
-                    embeds=summary_embeds, allowed_mentions=discord.AllowedMentions(roles=True),
-                    view=View.from_items(JumpToTopButton(lead_msg), timeout=None)
+                    view=NoticeView(summary), allowed_mentions=discord.AllowedMentions(roles=True),
                 )
                 if config.pin and config.format == Format.SUMMARY:
                     await self.pin(summ_msg)
             else:
                 await channel.send(
-                    embed=discord.Embed(
-                        description=f'*{Emojis.info} There are no new **{config.brand.name}** comics for this week.*',
-                        timestamp=discord.utils.utcnow(),
-                        colour=config.brand.colour
-                    ).set_thumbnail(url=config.brand.icon_url)
+                    view=make_notice(
+                        f'{config.brand.value} Comics',
+                        f'{Emojis.info} There are no new **{config.brand.name}** comics for this week.',
+                        accent=config.brand.colour,
+                        thumbnail=config.brand.icon_url,
+                    )
                 )
         except discord.Forbidden:
             guild_config: GuildConfig = await self.bot.db.get_guild_config(config.guild_id)  # type: ignore[misc]
@@ -325,48 +325,48 @@ class Comics(Cog):
                 force=True
             )
 
-    async def build_summary_embeds(self, comics: list[AnyComic], brand: Brand) -> list[discord.Embed]:
-        """|coro|
-
-        Builds the summary embeds for the comic feed.
+    def build_summary_container(
+        self, comics: list[AnyComic], brand: Brand, *, jump_button: discord.ui.Button | None = None
+    ) -> discord.ui.Container:
+        """Build the Components V2 summary card listing every comic for a brand.
 
         Parameters
         ----------
         comics: :class:`list`
-            The list of comics to build the summary for.
+            The list of comics to summarise.
         brand: :class:`Brand`
             The brand to build the summary for.
+        jump_button: :class:`discord.ui.Button` | None
+            Optional link button (e.g. "jump to top") appended to the card.
 
         Returns
         -------
-        :class:`list`
-            The list of embeds for the comic feed.
+        :class:`discord.ui.Container`
+            The summary card.
         """
-        embed = discord.Embed(colour=brand.colour)
-        embeds: list[discord.Embed] = []
+        container = discord.ui.Container(accent_colour=brand.colour)
+        container.add_item(discord.ui.TextDisplay(f'## {brand.value} Comics • Summary'))
+        container.add_item(discord.ui.Separator())
 
-        for fi, cid in enumerate(self.comic_cache.get(brand) or []):
-            if not fi % 25 and fi != 0:
-                embeds.append(embed)
-                embed = discord.Embed(colour=brand.colour)
+        lines: list[str] = []
+        for cid in self.comic_cache.get(brand) or []:
+            cs_cm = discord.utils.get(comics, id=cid.id)
+            if cs_cm is None:
+                continue
+            info = [cs_cm.writer] if cs_cm.writer else []
+            if cs_cm.url:
+                info.append(f'[Read More]({cs_cm.url})')
+            lines.append(f'**{cs_cm.title}** — {" • ".join(info) if info else "…"}')
 
-            if cid in comics:
-                cs_cm = discord.utils.get(comics, id=cid.id)
-                if cs_cm is None:
-                    continue
+        container.add_item(discord.ui.TextDisplay(truncate('\n'.join(lines), 3500) or '…'))
 
-                info = [f'{cs_cm.writer}'] if cs_cm.writer else []
-                if cs_cm.url:
-                    info.append(f'[Read More]({cs_cm.url})')
-
-                embed.add_field(name=cs_cm.title, value=' • '.join(info) if info else '…')
-        embeds.append(embed)
-
-        embeds[0].title = f'{brand.value} Comics • Summary'
         if brand.copyright:
-            embeds[-1].set_footer(text=brand.copyright, icon_url=brand.icon_url)
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(f'-# {brand.copyright}'))
 
-        return embeds
+        if jump_button is not None:
+            container.add_item(discord.ui.ActionRow(jump_button))
+        return container
 
     @cache.cache()
     async def get_comic_config(self, guild_id: int, brand: Brand) -> ComicFeed | None:
@@ -411,8 +411,8 @@ class Comics(Cog):
     async def comics(self, ctx: Context, brand: Brand) -> None:
         """Lists this week's/month's comics!"""
         await ctx.defer(ephemeral=True)
-        embeds = await self.build_summary_embeds(self.comic_cache.get(brand) or [], brand)
-        await ctx.send(embeds=embeds, ephemeral=True)
+        container = self.build_summary_container(self.comic_cache.get(brand) or [], brand)
+        await ctx.send(view=NoticeView(container), ephemeral=True)
 
     @_comics.command(
         'push',
@@ -485,7 +485,11 @@ class Comics(Cog):
         self.get_comic_config.invalidate_containing(str(ctx.guild.id))
         self.reset_task()
 
-        await ctx.send_success(f'Set **{brand.name}** feed in Channel {channel.mention}.', embed=new_config.to_embed())  # type: ignore[union-attr]
+        await ctx.send(
+            view=NoticeView(
+                new_config.to_container(header=f'{Emojis.success} Set **{brand.name}** feed in Channel {channel.mention}.')
+            )
+        )
 
     @_comics.command(
         'config',
@@ -518,7 +522,7 @@ class Comics(Cog):
             return
 
         if not any([flags.channel, flags.format, flags.ping, flags.day, flags.pin]):
-            await ctx.send(embed=config.to_embed())
+            await ctx.send(view=NoticeView(config.to_container()))
             return
 
         form: dict = {}
