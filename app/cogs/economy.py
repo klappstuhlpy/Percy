@@ -1,3 +1,4 @@
+import datetime
 from typing import Annotated, Literal
 
 import discord
@@ -6,7 +7,8 @@ from discord.ext import commands
 from app.core import Bot, Cog, converter
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.core.pagination import LinePaginator
-from app.utils import fnumb, get_asset_url, helpers
+from app.services.economy import compute_daily, sell_price
+from app.utils import fnumb, get_asset_url, helpers, pluralize
 from config import Emojis
 
 
@@ -204,6 +206,173 @@ class Economy(Cog):
             text=f"Total Server Money: {fnumb(total)}", icon_url=discord.PartialEmoji.from_str(Emojis.Economy.cash).url
         )
         await LinePaginator.start(ctx, entries=users, embed=embed, location='description')
+
+    @command("daily", description="Claim your daily reward and build a streak.", guild_only=True, hybrid=True)
+    async def daily(self, ctx: Context) -> None:
+        """Claim your daily reward. Claim on consecutive days to grow your streak bonus."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.get_daily(ctx.author.id, ctx.guild.id)
+
+        last_claim = record["last_claim"].replace(tzinfo=datetime.UTC) if record else None
+        streak = record["streak"] if record else 0
+        now = ctx.message.created_at
+
+        result = compute_daily(last_claim, streak, now=now)
+        if not result.claimed:
+            assert result.next_available is not None
+            await ctx.send_error(
+                f"You've already claimed your daily reward. Come back {discord.utils.format_dt(result.next_available, 'R')}."
+            )
+            return
+
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=result.amount)
+        await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now.replace(tzinfo=None), result.streak)
+
+        await ctx.send_success(
+            f"You claimed {Emojis.Economy.cash} **{fnumb(result.amount)}**! "
+            f"\N{FIRE} Streak: **{pluralize(result.streak):day}**."
+        )
+
+    @group("shop", fallback="list", description="Browse the server shop.", guild_only=True, hybrid=True)
+    async def shop(self, ctx: Context) -> None:
+        """Browse the items available in the server shop."""
+        assert ctx.guild is not None
+        items = await self.bot.db.economy.get_items(ctx.guild.id)
+        if not items:
+            await ctx.send_info("The shop is empty. Admins can add items with `shop add`.")
+            return
+
+        entries = [
+            f"**{item['name']}** • {Emojis.Economy.cash} {fnumb(item['price'])}\n"
+            f"{item['description'] or '*No description.*'}"
+            for item in items
+        ]
+        embed = discord.Embed(title="Server Shop", description="", colour=helpers.Colour.white())
+        embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
+        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
+
+    @shop.command(
+        "add",
+        description="Add an item to the shop.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(name="The item name (quote it if it has spaces).", price="The purchase price.", description="A description.")
+    async def shop_add(
+        self, ctx: Context, name: str, price: commands.Range[int, 1], *, description: str | None = None
+    ) -> None:
+        """Add an item to the server shop."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.create_item(ctx.guild.id, name, description, price)
+        if record is None:
+            await ctx.send_error(f"An item named **{name}** already exists.")
+            return
+        await ctx.send_success(f"Added **{name}** to the shop for {Emojis.Economy.cash} **{fnumb(price)}**.")
+
+    @shop.command(
+        "remove",
+        aliases=["delete", "rm"],
+        description="Remove an item from the shop.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.admin,
+    )
+    @describe(name="The item to remove.")
+    async def shop_remove(self, ctx: Context, *, name: str) -> None:
+        """Remove an item from the server shop (also clears it from inventories)."""
+        assert ctx.guild is not None
+        record = await self.bot.db.economy.delete_item(ctx.guild.id, name)
+        if record is None:
+            await ctx.send_error(f"No item named **{name}** exists.")
+            return
+        await ctx.send_success(f"Removed **{record['name']}** from the shop.")
+
+    @command("buy", description="Buy an item from the shop.", guild_only=True, hybrid=True)
+    @describe(name="The item to buy.", quantity="How many to buy.")
+    async def buy(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
+        """Buy an item from the shop with your cash."""
+        assert ctx.guild is not None
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
+            await ctx.send_error(f"No item named **{name}** exists in the shop.")
+            return
+
+        total = item["price"] * quantity
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        if balance.cash < total:
+            await ctx.send_error(
+                f"You need {Emojis.Economy.cash} **{fnumb(total)}** but only have **{fnumb(balance.cash)}**."
+            )
+            return
+
+        await balance.remove(cash=total)
+        await self.bot.db.economy.add_to_inventory(ctx.author.id, ctx.guild.id, item["id"], quantity)
+        await ctx.send_success(
+            f"Bought **{quantity}× {item['name']}** for {Emojis.Economy.cash} **{fnumb(total)}**."
+        )
+
+    @command("sell", description="Sell an item back to the shop.", guild_only=True, hybrid=True)
+    @describe(name="The item to sell.", quantity="How many to sell.")
+    async def sell(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
+        """Sell an item from your inventory back for half its price."""
+        assert ctx.guild is not None
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
+            await ctx.send_error(f"No item named **{name}** exists in the shop.")
+            return
+
+        owned = await self.bot.db.economy.get_quantity(ctx.author.id, ctx.guild.id, item["id"])
+        if owned < quantity:
+            await ctx.send_error(f"You only own **{owned}× {item['name']}**.")
+            return
+
+        payout = sell_price(item["price"]) * quantity
+        await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], quantity)
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        await balance.add(cash=payout)
+        await ctx.send_success(
+            f"Sold **{quantity}× {item['name']}** for {Emojis.Economy.cash} **{fnumb(payout)}**."
+        )
+
+    @command("inventory", aliases=["inv"], description="Show your or another member's items.", guild_only=True, hybrid=True)
+    @describe(member="The member whose inventory to show.")
+    async def inventory(
+        self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None
+    ) -> None:
+        """Show the items a member owns."""
+        assert ctx.guild is not None
+        user = member or ctx.author
+        rows = await self.bot.db.economy.get_inventory(user.id, ctx.guild.id)
+        if not rows:
+            await ctx.send_info(f"**{user.display_name}** doesn't own any items.")
+            return
+
+        entries = [
+            f"**{row['quantity']}× {row['name']}** • worth "
+            f"{Emojis.Economy.cash} {fnumb(sell_price(row['price']) * row['quantity'])}"
+            for row in rows
+        ]
+        embed = discord.Embed(description="", colour=helpers.Colour.white())
+        embed.set_author(name=f"{user.display_name}'s Inventory", icon_url=get_asset_url(user))
+        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
+
+    @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True)
+    @describe(name="The item to use.")
+    async def use(self, ctx: Context, *, name: str) -> None:
+        """Use (consume one of) an item you own."""
+        assert ctx.guild is not None
+        item = await self.bot.db.economy.get_item(ctx.guild.id, name)
+        if item is None:
+            await ctx.send_error(f"No item named **{name}** exists in the shop.")
+            return
+
+        owned = await self.bot.db.economy.get_quantity(ctx.author.id, ctx.guild.id, item["id"])
+        if owned < 1:
+            await ctx.send_error(f"You don't own any **{item['name']}**.")
+            return
+
+        await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], 1)
+        await ctx.send_success(f"You used **{item['name']}**. You have **{owned - 1}** left.")
 
 
 async def setup(bot: Bot) -> None:
