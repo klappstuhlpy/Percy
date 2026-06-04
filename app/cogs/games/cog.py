@@ -460,12 +460,12 @@ class Games(Cog):
                 return
 
             roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
-            await ctx.maybe_edit(roulette.message, embed=roulette.build_embed())
+            await ctx.maybe_edit(roulette.message, view=roulette.view.render())
         else:
             roulette = roulette_ui.Table(ctx)
             roulette.place(roulette_ui.Bet(cast("discord.Member", ctx.author), space, bet))
 
-            message = await ctx.send(embed=roulette.build_embed(), view=roulette.view)
+            message = await ctx.send(view=roulette.view.render())
 
             if not message:
                 await ctx.send_error("The roulette game message has not been found.")
@@ -565,7 +565,7 @@ class Games(Cog):
         assert roulette.message is not None
         # Note this is just for aesthetics
         await roulette.message.edit(
-            embed=roulette.build_embed(image_url="https://klappstuhl.me/gallery/raw/KdKof.gif"), view=roulette.view
+            view=roulette.view.render(image_url="https://klappstuhl.me/gallery/raw/KdKof.gif")
         )
         await asyncio.sleep(5)
 
@@ -584,7 +584,9 @@ class Games(Cog):
                     await balance.add(cash=payout)
 
         try:
-            await roulette.message.edit(embed=roulette.build_embed(winning_spaces, result=result), view=None)
+            await roulette.message.edit(
+                view=roulette.view.render(winning_spaces, result=result, with_buttons=False)
+            )
         except discord.HTTPException:
             return
         finally:

@@ -9,7 +9,7 @@ import discord
 
 from app.cogs.games.engine import roulette as engine
 from app.cogs.games.engine.roulette import Payout
-from app.core.views import View
+from app.core.views import LayoutView
 from app.utils import NotCaseSensitiveEnum, fnumb, helpers, pluralize
 from config import Emojis
 
@@ -139,11 +139,8 @@ class Table:
         return f"<RouletteTable spaces={len(self.bets)}>"
 
     def close(self) -> None:
-        """Close the roulette table."""
+        """Close the roulette table (betting buttons are dropped on the next render)."""
         self.open = False
-
-        for item in self.view.children:
-            item.disabled = True
 
     @staticmethod
     def get_winning_spaces(result: int) -> list[Space]:
@@ -163,41 +160,45 @@ class Table:
         """Place a bet on the table."""
         self.bets.append(bet)
 
-    def build_embed(self, winning_spaces: list[Space] = [], image_url: str = None, result: int = None) -> discord.Embed:  # noqa
-        """Build the embed for the roulette table."""
-        embed = discord.Embed(title="Roulette Table", color=helpers.Colour.white())
-        embed.set_image(url="https://klappstuhl.me/gallery/WgBZIzmNPw.png")
-        embed.set_footer(text=f"Total of {pluralize(len(self.bets)):bet} placed.")
+    def build_container(
+        self, winning_spaces: list[Space] = [], image_url: str | None = None, result: int | None = None
+    ) -> discord.ui.Container:
+        """Build the Components V2 card for the roulette table."""
+        image = "https://klappstuhl.me/gallery/raw/WgBZIzmNPw.png"
+        colour = helpers.Colour.white()
 
         if self.open:
             time_left = datetime.timedelta(seconds=60 - (time.time() - self.start_time))
-            embed.description = (
-                f"*Bets are closing {discord.utils.format_dt(datetime.datetime.now() + time_left, style='R')}*"
-            )
+            description = f"*Bets are closing {discord.utils.format_dt(datetime.datetime.now() + time_left, style='R')}*"
         else:
             if Space.RED in winning_spaces:
-                embed.colour = helpers.Colour.red()
+                colour = helpers.Colour.red()
             elif Space.BLACK in winning_spaces:
-                embed.colour = helpers.Colour.black()
+                colour = helpers.Colour.black()
             elif Space.SINGLE_0 in winning_spaces:
-                embed.colour = helpers.Colour.green()
-
-            embed.description = f"`⚪` The ball has landed on **{result}**."
+                colour = helpers.Colour.green()
+            description = f"`⚪` The ball has landed on **{result}**."
 
         if image_url:
-            embed.description = "*Spinning the wheel...*\n\nBets are closed. **Rien ne va plus!**"
-            embed.colour = helpers.Colour.lighter_grey()
-            embed.set_image(url=image_url)
+            description = "*Spinning the wheel...*\n\nBets are closed. **Rien ne va plus!**"
+            colour = helpers.Colour.lighter_grey()
+            image = image_url
 
-        for space in SOWCASE_SPACES:
-            is_numbered_space = space == "Single Numbers"
-            space: Space = Space(space)
+        container = discord.ui.Container(accent_colour=colour)
+        container.add_item(discord.ui.TextDisplay(f"## Roulette Table\n{description}"))
+        container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image)))
+        container.add_item(discord.ui.Separator())
 
+        blocks: list[str] = []
+        for space_name in SOWCASE_SPACES:
+            space = Space(space_name)
             bets = [
                 bet
                 for bet in self.bets
                 if (bet.space == space if space != Space.SINGLE_NUMBERS__ else (bet.space.name.startswith("SINGLE")))
             ]
+            if not bets:
+                continue
 
             value = []
             for bet in bets:
@@ -208,17 +209,13 @@ class Table:
                     if not self.open and not image_url
                     else ""
                 )
-
                 value.append(space_value_part + mention_part + result_part)
+            blocks.append(f"**{space.value}**\n" + "\n".join(value))
 
-            if not value:
-                value = ["*Not bets placed.*"]
-
-            embed.add_field(name=space.value, value="\n".join(value), inline=bool(not is_numbered_space))
-            for _ in range(space.placeholder_field):
-                embed.add_field(name="\u200b", value="\u200b")
-
-        return embed
+        container.add_item(discord.ui.TextDisplay("\n\n".join(blocks) if blocks else "*No bets placed.*"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Total of {pluralize(len(self.bets)):bet} placed."))
+        return container
 
 
 class PlaceBetModal(discord.ui.Modal, title="Place Bet"):
@@ -234,12 +231,37 @@ class PlaceBetModal(discord.ui.Modal, title="Place Bet"):
         self.stop()
 
 
-class RouletteView(View):
-    """Represents the view for the roulette table."""
+class RouletteView(LayoutView):
+    """The Components V2 view for the roulette table (card + betting controls)."""
 
     def __init__(self, table: Table) -> None:
         super().__init__(timeout=None)
         self.table: Table = table
+
+        self.place_bet = discord.ui.Button(label="Place Bet", style=discord.ButtonStyle.green)
+        self.place_bet.callback = self._on_place_bet  # type: ignore[assignment]
+        self.help = discord.ui.Button(
+            label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}"
+        )
+        self.help.callback = self._on_help  # type: ignore[assignment]
+
+        self.render()
+
+    def render(
+        self,
+        winning_spaces: list[Space] = [],
+        image_url: str | None = None,
+        result: int | None = None,
+        *,
+        with_buttons: bool = True,
+    ) -> RouletteView:
+        """Recompose the layout: the table card plus the betting controls (dropped on close)."""
+        self.clear_items()
+        self.add_item(self.table.build_container(winning_spaces, image_url, result))
+        if with_buttons:
+            self.place_bet.disabled = not self.table.open
+            self.add_item(discord.ui.ActionRow(self.place_bet, self.help))
+        return self
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if not self.table.open:
@@ -247,8 +269,7 @@ class RouletteView(View):
             return False
         return True
 
-    @discord.ui.button(label="Place Bet", style=discord.ButtonStyle.green)
-    async def place_bet(self: RouletteView, interaction: discord.Interaction, _) -> None:
+    async def _on_place_bet(self, interaction: discord.Interaction) -> None:
         """Place a bet on the roulette table."""
         modal = PlaceBetModal()
         await interaction.response.send_modal(modal)
@@ -258,27 +279,28 @@ class RouletteView(View):
         try:
             bet = int(modal.bet_amount.value)
         except ValueError:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"{Emojis.error} Invalid bet amount. Please provide a valid number.", ephemeral=True
             )
+            return
 
         if (space := await Space.convert(interaction, modal.space.value)) is None:
-            return await interaction.response.send_message(
+            await interaction.response.send_message(
                 f"{Emojis.error} Could not determine space, please use a space from above.", ephemeral=True
             )
+            return
 
         self.table.place(Bet(interaction.user, space, bet))
         await interaction.response.send_message(
             f"{Emojis.success} You have placed a bet on **{space.value}** with {Emojis.Economy.cash} **{fnumb(bet)}**.",
             ephemeral=True,
         )
-        await self.table.message.edit(embed=self.table.build_embed())
+        await self.table.message.edit(view=self.render())
 
-    @discord.ui.button(label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}")
-    async def help(self: RouletteView, interaction: discord.Interaction, _) -> None:
+    async def _on_help(self, interaction: discord.Interaction) -> None:
         """Show the help menu."""
         embed = discord.Embed(title="Roulette Help", color=discord.Color.blurple())
-        embed.set_thumbnail(url="https://klappstuhl.me/gallery/KdKof.gif")
+        embed.set_thumbnail(url="https://klappstuhl.me/gallery/raw/KdKof.gif")
         embed.description = (
             "Roulette is a game where you bet on a space on the table. "
             "The dealer will spin the wheel, and if the ball lands on your space, you win!\n\n"
@@ -290,8 +312,8 @@ class RouletteView(View):
         embed.add_field(name="Column", value=f"Bet on a column. Payout: **{Payout.COLUMN}x**")
         embed.add_field(name="Half", value=f"Bet on a half. Payout: **{Payout.HALF}x**")
         embed.add_field(name="Color", value=f"Bet on a color. Payout: **{Payout.COLOR}x**")
-        embed.add_field(name='Odd/Even', value=f'Bet on odd or even. Payout: **{Payout.ODD_EVEN}x**')
+        embed.add_field(name="Odd/Even", value=f"Bet on odd or even. Payout: **{Payout.ODD_EVEN}x**")
 
-        embed.set_footer(text='You have 60 seconds to place your bets.')
+        embed.set_footer(text="You have 60 seconds to place your bets.")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
