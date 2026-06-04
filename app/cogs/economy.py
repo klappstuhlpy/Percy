@@ -347,14 +347,30 @@ class Economy(Cog):
             await ctx.send_info(f"**{user.display_name}** doesn't own any items.")
             return
 
-        entries = [
-            f"**{row['quantity']}× {row['name']}** • worth "
-            f"{Emojis.Economy.cash} {fnumb(sell_price(row['price']) * row['quantity'])}"
-            for row in rows
-        ]
-        embed = discord.Embed(description="", colour=helpers.Colour.white())
+        total_value = sum(sell_price(row["price"]) * row["quantity"] for row in rows)
+        total_items = sum(row["quantity"] for row in rows)
+
+        entries = []
+        for row in rows:
+            unit = sell_price(row["price"])
+            line_value = unit * row["quantity"]
+            entries.append(
+                f"**{row['name']}**  ×{row['quantity']}\n"
+                f"\N{SMALL ORANGE DIAMOND} {Emojis.Economy.cash} **{fnumb(line_value)}** "
+                f"*(sell {fnumb(unit)} each)*"
+            )
+
+        embed = discord.Embed(
+            description=(
+                f"{Emojis.Economy.cash} Total sell value: **{fnumb(total_value)}**\n"
+                f"\N{PACKAGE} **{pluralize(total_items):item}** across "
+                f"**{pluralize(len(rows)):unique type}**\n\n"
+            ),
+            colour=helpers.Colour.white(),
+        )
         embed.set_author(name=f"{user.display_name}'s Inventory", icon_url=get_asset_url(user))
-        await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
+        embed.set_thumbnail(url=get_asset_url(user))
+        await LinePaginator.start(ctx, entries=entries, embed=embed, location="description")
 
     @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True)
     @describe(name="The item to use.")
