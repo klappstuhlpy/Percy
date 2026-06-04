@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 
+from app.services.spam_penalty import LOOKBACK_WINDOW, compute_spam_penalty
 from app.utils import helpers
 
 if TYPE_CHECKING:
@@ -65,25 +67,30 @@ class SpamControl:
         embed.timestamp = discord.utils.utcnow()
         await self.bot.stats_webhook.send(embed=embed, username="Bot Spam Control")
 
-    def calculate_penalty(self, user: discord.abc.Snowflake) -> int | None:
-        """Calculate penalty based on frequency and recency of spamming.
+    def _record_offense(self, user_id: int, timestamp: float) -> None:
+        """Logs a spam offense, pruning entries outside the lookback window.
 
-        Note: Only applies to one day currently.
-        TODO: Advance it to be calculated based on the recency of spamming.
+        Unlike ``_auto_spam_count`` (which resets after every applied penalty), this
+        history persists across penalties so repeat offenders escalate over time.
+        """
+        offenses = self.spam_details[user_id]
+        offenses.append(timestamp)
+        cutoff = timestamp - LOOKBACK_WINDOW
+        self.spam_details[user_id] = [t for t in offenses if t >= cutoff]
+
+    def calculate_penalty(self, user: discord.abc.Snowflake) -> int | None:
+        """Calculate a blacklist duration from the frequency and recency of spamming.
+
+        Escalates from a day up to a week — and ultimately a permanent block — the more
+        often and more recently the user has tripped the spam filter. The actual curve
+        lives in :func:`~app.services.spam_penalty.compute_spam_penalty`.
 
         Returns
         --------
-        int
-            The penalty to apply in seconds.
+        int | None
+            The penalty to apply in seconds, or ``None`` for a permanent block.
         """
-        frequency = self._auto_spam_count[user.id]
-
-        if frequency > 15:
-            return None
-        elif 15 > frequency > 10:
-            return 7 * 24 * 60 * 60  # 1 week in seconds
-        else:
-            return 24 * 60 * 60  # 1 day in seconds
+        return compute_spam_penalty(self.spam_details[user.id], now=time.time())
 
     async def apply_penalty(self, user: discord.abc.Snowflake) -> None:
         """Apply penalty to the user."""
@@ -112,6 +119,7 @@ class SpamControl:
         author_id = message.author.id
 
         if retry_after and author_id != self.bot.owner_id:
+            self._record_offense(author_id, message.created_at.timestamp())
             self._auto_spam_count[author_id] += 1
             if self._auto_spam_count[author_id] >= 5:
                 await self.apply_penalty(message.author)
