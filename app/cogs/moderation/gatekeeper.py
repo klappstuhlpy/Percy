@@ -10,9 +10,9 @@ import discord
 
 from app.core import Bot
 from app.core.models import AppBadArgument
-from app.core.views import ConfirmationView, View
+from app.core.views import ConfirmationView, LayoutView, View
 from app.database.base import Gatekeeper, GuildConfig
-from app.utils import checks, helpers, merge_perms, pluralize
+from app.utils import checks, get_asset_url, helpers, merge_perms, pluralize
 from config import Emojis
 
 from .infractions import update_role_permissions
@@ -270,7 +270,6 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             default_values=default_values,
             placeholder="Select a channel to force members to see when joining",
-            row=0,
         )
         self.bot: Bot = gatekeeper.bot
         self.gatekeeper: Gatekeeper = gatekeeper
@@ -368,7 +367,36 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
         await interaction.edit_original_response(view=self.view)
 
 
-class GatekeeperSetUpView(View):
+#: The explanatory text shown at the top of the gatekeeper setup dashboard.
+GATEKEEPER_INFO = (
+    "Gatekeeper is a feature that automatically assigns a role to a member when they join, "
+    "for the sole purpose of blocking them from accessing the server.\n"
+    "The user must press a button in order to verify themselves and have their role removed.\n\n"
+    "**In order to set up gatekeeper, a few things are required:**\n"
+    "- A channel that locked users will see but regular users will not.\n"
+    "- A role that is assigned when users join.\n"
+    "- A message that the bot sends in the channel with the verify button.\n\n"
+    "**Optional Settings:**\n"
+    "- A role that is assigned when users finish the verification. (Starter Role)\n\n"
+    "**There are also settings to help configure some aspects of it:**\n"
+    '- "Auto" automatically triggers the gatekeeper if N members join in a span of M seconds\n'
+    '- "Bypass Action" configures what action is taken when a user talks or joins voice before verifying\n\n'
+    "Note that once gatekeeper is enabled, even by auto, it must be manually disabled.\n\n"
+    f"{Emojis.info} The Users can verify by solving an image captcha consisting of 6 random letters "
+    "they need to type into the chat."
+)
+
+
+class GatekeeperSetUpView(LayoutView):
+    """The gatekeeper setup dashboard, rendered with Components V2.
+
+    The explanatory header lives in a :class:`~discord.ui.Container`; the channel/role
+    selects, bypass-action select and the role/message/auto/toggle buttons live in
+    :class:`~discord.ui.ActionRow`s beneath it. The control components are stable
+    instances mutated in place by :meth:`update_state` (then the message is re-edited),
+    so navigation behaves exactly like the old embed-based view.
+    """
+
     def __init__(self, cog: Moderation, member: discord.Member, config: GuildConfig, gatekeeper: Gatekeeper) -> None:
         super().__init__(timeout=900.0, members=member, delete_on_timeout=True)
         self.cog = cog
@@ -384,23 +412,62 @@ class GatekeeperSetUpView(View):
         assert guild is not None
         self.guild: discord.Guild = guild
 
+        # -- control components (stable instances, mutated by update_state) --
         self.channel_select = GatekeeperChannelSelect(gatekeeper)
-        self.add_item(self.channel_select)
-        self.setup_bypass_action.options = [
-            discord.SelectOption(
-                label="Kick User",
-                value="kick",
-                emoji=Emojis.leave,
-                description="Kick the member if they talk before verifying.",
-            ),
-            discord.SelectOption(
-                label="Ban User",
-                value="ban",
-                emoji=Emojis.banhammer,
-                description="Ban the member if they talk before verifying.",
-            ),
-        ]
+
+        self.starter_role_select: discord.ui.RoleSelect = discord.ui.RoleSelect(
+            min_values=1, max_values=1, placeholder="Choose the automatically assigned starter role"
+        )
+        self.starter_role_select.callback = self._on_starter_role  # type: ignore[assignment]
+
+        self.setup_bypass_action: discord.ui.Select = discord.ui.Select(
+            placeholder="Select a bypass action...",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label="Kick User", value="kick", emoji=Emojis.leave,
+                    description="Kick the member if they talk before verifying.",
+                ),
+                discord.SelectOption(
+                    label="Ban User", value="ban", emoji=Emojis.banhammer,
+                    description="Ban the member if they talk before verifying.",
+                ),
+            ],
+        )
+        self.setup_bypass_action.callback = self._on_bypass_action  # type: ignore[assignment]
+
+        self.setup_role: discord.ui.Button = discord.ui.Button(label="Set up Role", style=discord.ButtonStyle.blurple)
+        self.setup_role.callback = self._on_setup_role  # type: ignore[assignment]
+
+        self.setup_message: discord.ui.Button = discord.ui.Button(
+            label="Send Starter Message", style=discord.ButtonStyle.blurple
+        )
+        self.setup_message.callback = self._on_setup_message  # type: ignore[assignment]
+
+        self.setup_auto: discord.ui.Button = discord.ui.Button(label="Auto", style=discord.ButtonStyle.blurple)
+        self.setup_auto.callback = self._on_setup_auto  # type: ignore[assignment]
+
+        self.toggle_flag: discord.ui.Button = discord.ui.Button(label="Enable", style=discord.ButtonStyle.green)
+        self.toggle_flag.callback = self._on_toggle_flag  # type: ignore[assignment]
+
         self.update_state(invalidate=False)
+        self._build_layout()
+
+    def _build_layout(self) -> None:
+        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container.add_item(
+            discord.ui.Section(
+                f"## Gatekeeper Configuration\n{GATEKEEPER_INFO}",
+                accessory=discord.ui.Thumbnail(get_asset_url(self.guild)),
+            )
+        )
+        self.add_item(container)
+        self.add_item(discord.ui.ActionRow(self.channel_select))
+        self.add_item(discord.ui.ActionRow(self.starter_role_select))
+        self.add_item(discord.ui.ActionRow(self.setup_bypass_action))
+        self.add_item(discord.ui.ActionRow(self.setup_role, self.setup_message))
+        self.add_item(discord.ui.ActionRow(self.setup_auto, self.toggle_flag))
 
     def update_state(self, *, invalidate: bool = True) -> None:
         if invalidate:
@@ -463,17 +530,10 @@ class GatekeeperSetUpView(View):
         super().stop()
         self.cog._gatekeeper_menus.pop(self.gatekeeper.id, None)
 
-    @discord.ui.select(
-        cls=discord.ui.RoleSelect,
-        min_values=1,
-        max_values=1,
-        placeholder="Choose the automatically assigned starter role",
-        row=1,
-    )
-    async def starter_role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect) -> None:
+    async def _on_starter_role(self, interaction: discord.Interaction) -> None:
         assert interaction.guild is not None
         assert isinstance(interaction.user, discord.Member)
-        role = select.values[0]
+        role = self.starter_role_select.values[0]
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(
                 f"{Emojis.error} Cannot use this role as it is higher than my role in the hierarchy.", ephemeral=True
@@ -507,15 +567,13 @@ class GatekeeperSetUpView(View):
         if interaction.message is not None:
             await interaction.message.edit(view=self)
 
-    @discord.ui.select(placeholder="Select a bypass action...", row=2, min_values=1, max_values=1, options=[])
-    async def setup_bypass_action(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+    async def _on_bypass_action(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        value: Literal["ban", "kick"] = select.values[0]  # type: ignore[arg-type]
+        value: Literal["ban", "kick"] = self.setup_bypass_action.values[0]  # type: ignore[arg-type]
         await self.gatekeeper.edit(bypass_action=value)
         await interaction.followup.send(f"{Emojis.success} Successfully set bypass action to {value}", ephemeral=True)
 
-    @discord.ui.button(label="Set up Role", style=discord.ButtonStyle.blurple, row=3)
-    async def setup_role(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def _on_setup_role(self, interaction: discord.Interaction) -> None:
         if not interaction.app_permissions.manage_roles:
             await interaction.response.send_message(f"{Emojis.error} Bot requires Manage Roles permission for this to work.")
             return
@@ -547,8 +605,7 @@ class GatekeeperSetUpView(View):
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
-    @discord.ui.button(label="Send Starter Message", style=discord.ButtonStyle.blurple, row=3)
-    async def setup_message(self, interaction: discord.Interaction, _) -> None:
+    async def _on_setup_message(self, interaction: discord.Interaction) -> None:
         channel = self.gatekeeper.channel
         if self.gatekeeper.role is None:
             await interaction.response.send_message(
@@ -607,8 +664,7 @@ class GatekeeperSetUpView(View):
             return modal.final_rate
         return None
 
-    @discord.ui.button(label="Auto", style=discord.ButtonStyle.blurple, row=4)
-    async def setup_auto(self, interaction: discord.Interaction, _) -> None:
+    async def _on_setup_auto(self, interaction: discord.Interaction) -> None:
         rate = self.gatekeeper.rate
         if rate is not None:
             view = ConfirmationView(
@@ -639,8 +695,7 @@ class GatekeeperSetUpView(View):
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
-    @discord.ui.button(label="Enable", style=discord.ButtonStyle.green, row=4)
-    async def toggle_flag(self, interaction: discord.Interaction, _) -> None:
+    async def _on_toggle_flag(self, interaction: discord.Interaction) -> None:
         enabled = self.gatekeeper.started_at is not None
         if enabled:
             newest = await self.cog.bot.db.get_guild_gatekeeper(self.gatekeeper.id)  # type: ignore[arg-type]

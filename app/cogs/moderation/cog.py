@@ -931,30 +931,9 @@ class Moderation(Cog):
             gatekeeper = Gatekeeper([], bot=self.bot, record=gatekeeper_record)
         config = GuildConfig(bot=self.bot, record=config_record)
 
-        embed = discord.Embed(
-            title="Gatekeeper Configuration - Information",
-            description=(
-                "Gatekeeper is a feature that automatically assigns a role to a member when they join, "
-                "for the sole purpose of blocking them from accessing the server.\n"
-                "The user must press a button in order to verify themselves and have their role removed.\n\n"
-                "**In order to set up gatekeeper, a few things are required:**\n"
-                "- A channel that locked users will see but regular users will not.\n"
-                "- A role that is assigned when users join.\n"
-                "- A message that the bot sends in the channel with the verify button.\n\n"
-                "**Optional Settings:**\n"
-                "- A role that is assigned when users finish the verification. (Starter Role)\n\n"
-                "**There are also settings to help configure some aspects of it:**\n"
-                '- "Auto" automatically triggers the gatekeeper if N members join in a span of M seconds\n'
-                '- "Bypass Action" configures what action is taken when a user talks or joins voice before verifying\n\n'
-                "Note that once gatekeeper is enabled, even by auto, it must be manually disabled.\n\n"
-                f"{Emojis.info} The Users can verify by solving an image captcha consisting of 6 random letters they need to type into the chat."
-            ),
-            colour=helpers.Colour.white(),
-        )
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-
+        # The explanatory header now lives inside the Components V2 view's container.
         self._gatekeeper_menus[ctx.guild.id] = view = GatekeeperSetUpView(self, ctx.author, config, gatekeeper)  # type: ignore[arg-type]
-        view.message = await ctx.send(embed=embed, view=view)
+        view.message = await ctx.send(view=view)
 
     @moderation.command(
         "raid",
