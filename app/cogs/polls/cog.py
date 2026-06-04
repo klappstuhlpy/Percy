@@ -267,23 +267,14 @@ class Polls(Cog):
             await poll.fetch_message()
 
         if poll.message:
-            embed = poll.message.embeds[0]
-
-            field = discord.utils.get(embed.fields, name="Poll ends")
-            if field is not None:
-                embed.set_field_at(
-                    embed.fields.index(field),
-                    name="Poll finished",
-                    value=discord.utils.format_dt(discord.utils.utcnow(), "R"),
-                    inline=True,
-                )
-
             open_thread: bool = bool(poll.kwargs.get("thread") and poll.message.thread)
             if open_thread and poll.channel and poll.message.thread:
                 await poll.message.thread.edit(archived=True, locked=True)
 
             try:
-                await poll.message.edit(embed=embed, view=create_view(poll))
+                # ``poll`` is already running=False, so the rebuilt CV2 card shows
+                # "Poll finished" and drops the voting controls.
+                await poll.message.edit(view=create_view(poll))
                 if poll.ping_message:
                     await poll.ping_message.delete()
             except discord.HTTPException:
@@ -335,7 +326,7 @@ class Polls(Cog):
 
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
 
-        message = await channel.send(embed=discord.Embed(description="*Preparing Poll...*"))
+        message = await channel.send(content="*Preparing Poll...*")
         ping_message = None
         if flags.ping:
             ping_message = await channel.send("*...*")
@@ -387,7 +378,8 @@ class Polls(Cog):
 
         await ctx.send_success(f"Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}")
 
-        await message.edit(embed=poll.to_embed(), view=create_view(poll))
+        # Switch the placeholder message over to its Components V2 layout.
+        await message.edit(content=None, embed=None, view=create_view(poll))
 
         if flags.ping:
             assert ctx.guild.me is not None
@@ -554,7 +546,7 @@ class Polls(Cog):
         form["options"] = options
 
         poll = await poll.edit(**form)
-        await poll.message.edit(embed=poll.to_embed(), view=create_view(poll))
+        await poll.message.edit(view=create_view(poll))
         await ctx.send_success(f"Poll [`{poll.id}`] edited successfully.", ephemeral=True)
 
     @polls_edit.define_app_command()
@@ -751,7 +743,6 @@ class Polls(Cog):
             await ctx.send_error("Poll channel not found.")
             return
 
-        embed = poll.to_embed()
         await poll.fetch_message()
 
         if not poll.message:
@@ -764,7 +755,7 @@ class Polls(Cog):
             await ctx.send_error(f"Failed to create view.: {exc}")
             return
 
-        await poll.message.edit(embed=embed, view=view)
+        await poll.message.edit(view=view)
 
         await ctx.send_success(f"Poll [`{poll.id}`] debugged.", ephemeral=True)
 

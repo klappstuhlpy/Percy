@@ -266,7 +266,7 @@ class Poll(BaseRecord):
                 self.ping_message = ping_message
 
     def to_embed(self) -> discord.Embed:
-        """Converts the poll to an embed."""
+        """Converts the poll to an embed (used by the search/history command outputs)."""
         embed = EmbedBuilder(
             title=self.question,
             description=self.description,
@@ -277,6 +277,38 @@ class Poll(BaseRecord):
         embed.set_image(url=self.kwargs.get("image", None))
         embed.set_footer(text=f"#{self.kwargs.get('index')} • [{self.id}]")
         return embed
+
+    def to_container(self) -> discord.ui.Container:
+        """Build the Components V2 card for the live poll message (the voting surface).
+
+        Renders the question, the animated vote bars, an optional image gallery and a
+        status line that reads "Poll ends" while running and "Poll finished" once closed.
+        """
+        container = discord.ui.Container(accent_colour=self.color)
+
+        header = f"## {self.question}"
+        if self.description and self.description != "N/A":
+            header += f"\n{self.description}"
+        container.add_item(discord.ui.TextDisplay(header))
+        container.add_item(discord.ui.Separator())
+
+        for field in self.to_fields(extras=False):
+            container.add_item(discord.ui.TextDisplay(f"{field['name']}\n{field['value']}"))
+
+        if image := self.kwargs.get("image"):
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image)))
+
+        container.add_item(discord.ui.Separator())
+        running = self.kwargs.get("running") is True
+        extras = [f"Total Votes: **{self.votes}**"]
+        if self.expires:
+            label = "Poll ends" if running else "Poll finished"
+            extras.append(f"{label} {discord.utils.format_dt(self.expires, 'R')}")
+        if thread := self.kwargs.get("thread"):
+            extras.append(f"Thread: {thread}")
+        container.add_item(discord.ui.TextDisplay(" • ".join(extras)))
+        container.add_item(discord.ui.TextDisplay(f"-# #{self.kwargs.get('index')} • [{self.id}]"))
+        return container
 
     def remove_option(self, option: VoteOption = MISSING) -> list[VoteOption] | None:
         """Removes an option from the poll by erasing the votes and removing the option.

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.polls.models import to_emoji
-from app.core import View
+from app.core import LayoutView
 from app.core.models import AppBadArgument
 from app.utils import get_asset_url, helpers
 from config import Emojis
@@ -155,7 +155,7 @@ class PollClearVoteButton(
         options[entry[1]]["votes"] -= 1  # type: ignore[index]
         self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
-        await interaction.response.edit_message(embed=self.poll.to_embed())
+        await interaction.response.edit_message(view=create_view(self.poll))
 
 
 class PollInfoButton(
@@ -290,7 +290,7 @@ class PollEnterButton(
         options[option["index"]]["votes"] += 1
         self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
-        await interaction.edit_original_response(embed=self.poll.to_embed())
+        await interaction.edit_original_response(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
             f"{to_emoji(option['index'])} - `{option['content']}`",
@@ -378,7 +378,7 @@ class PollEnterSelect(
         options[option["index"]]["votes"] += 1
         self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
-        await interaction.edit_original_response(embed=self.poll.to_embed())
+        await interaction.edit_original_response(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
             f"{to_emoji(option['index'])} - `{option['content']}`",
@@ -428,14 +428,21 @@ class PollRolePingButton(
             )
 
 
-def create_view(poll: Poll) -> discord.ui.View:
-    view = View(timeout=None)
+def create_view(poll: Poll) -> LayoutView:
+    """Build the Components V2 poll message: the card plus its (persistent) vote controls.
+
+    The vote buttons/select, clear-vote and info buttons keep their stable ``custom_id``s,
+    so the persistent ``DynamicItem`` registration survives restarts exactly as before.
+    """
+    view = LayoutView(timeout=None)
+    view.add_item(poll.to_container())
+
     if poll.kwargs.get("running"):
         if len(poll.options) <= 5:
-            for option in poll.options:
-                view.add_item(PollEnterButton(poll, option["index"]))
+            view.add_item(discord.ui.ActionRow(*[PollEnterButton(poll, option["index"]) for option in poll.options]))
         else:
-            view.add_item(PollEnterSelect(poll))
-        view.add_item(PollClearVoteButton(poll))
-    view.add_item(PollInfoButton(poll))
+            view.add_item(discord.ui.ActionRow(PollEnterSelect(poll)))
+        view.add_item(discord.ui.ActionRow(PollClearVoteButton(poll), PollInfoButton(poll)))
+    else:
+        view.add_item(discord.ui.ActionRow(PollInfoButton(poll)))
     return view
