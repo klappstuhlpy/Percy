@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from operator import ne
 import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -8,7 +9,7 @@ import discord
 from discord import PartialEmoji
 
 from app.cogs.games.engine.tictactoe import Board, BoardKind
-from app.core import View
+from app.core import LayoutView, View
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
 
@@ -95,8 +96,6 @@ class TicTacToeButton(discord.ui.Button["TicTacToe"]):
         next_player = self.view.swap_player()
         player.current_selection = None
 
-        embed = self.view.embed
-
         winner = self.view.engine.winner()
         if winner is not None:
             if winner is not BoardKind.Empty:
@@ -105,26 +104,18 @@ class TicTacToeButton(discord.ui.Button["TicTacToe"]):
                 await user_balance.add(cash=amount)
 
                 winning_player = next_player if next_player.kind is winner else player
-                loser = player if next_player is winning_player else next_player
 
-                embed.colour = kind_colour(winning_player.kind)
-                embed.description = (
-                    f"{kind_emoji(winner)} {winning_player.member.mention} won and earned {Emojis.Economy.cash} **{fnumb(amount)}**!\n"
-                    f"*Maybe next time, {loser.member.mention}!*"
-                )
-                embed.set_footer()
+                self.view.build_container(winner=winning_player, amount=amount)
             else:
-                embed.colour = helpers.Colour.light_red()
-                embed.description = "It's a tie!"
-                embed.set_footer(text="How boring...")
+                self.view.build_container(winner=[player, next_player])
 
             self.view.disable_all()
             self.view.stop()
 
-        await interaction.response.edit_message(embed=embed, view=self.view)
+        await interaction.response.edit_message(view=self.view)
 
 
-class TicTacToe(View):
+class TicTacToe(LayoutView):
     children: list[TicTacToeButton]
 
     def __init__(self, players: tuple[Player, ...]) -> None:
@@ -133,42 +124,80 @@ class TicTacToe(View):
         self.player_index: int = 0
         self.engine: Board = Board()
 
+        self.items: list[TicTacToeButton] = []
+
         for x in range(3):
             for y in range(3):
-                self.add_item(TicTacToeButton(x, y))
+                self.items.append(TicTacToeButton(x, y))
+
+        self.container: discord.ui.Container = self.build_container(initial=True)
 
     def disable_all(self) -> None:
-        for child in self.children:
+        for child in self.container.walk_children():
             child.disabled = True
 
     @property
-    def embed(self) -> discord.Embed:
-        next_player = self.players[(self.player_index + 1) % len(self.players)]
-        embed = discord.Embed(
-            title="TicTacToe",
-            description=f"It is now {kind_emoji(self.current_player.kind)} {self.current_player.member.mention}'s turn with "
-            f"currently {pluralize(self.get_player_fields):field}.",
-            colour=helpers.Colour.light_orange(),
-        )
-        embed.set_footer(text=f"Next Player: {next_player.member.name}")
-        return embed
-
-    @property
     def current_player(self) -> Player:
-        return self.players[self.player_index]
-
-    def swap_player(self) -> Player:
-        self.player_index = (self.player_index + 1) % len(self.players)
         return self.players[self.player_index]
 
     @property
     def get_player_fields(self) -> int:
         return self.engine.count(self.current_player.kind)
 
+    def swap_player(self) -> Player:
+        self.player_index = (self.player_index + 1) % len(self.players)
+        return self.players[self.player_index]
+
+    def build_container(self, winner: list[Player] | Player | None = None, amount: int | None = None, initial: bool = False) -> discord.ui.Container:
+        self.clear_items()
+
+        next_player = self.players[(self.player_index + 1) % len(self.players)]
+        last_player = self.players[(self.player_index - 1) % len(self.players)]
+
+        container = discord.ui.Container(accent_color=helpers.Colour.light_orange())
+        container.add_item(discord.ui.TextDisplay("## TicTacToe"))
+
+        description = (
+            f"It is now {kind_emoji(self.current_player.kind)} {self.current_player.member.mention}'s turn with "
+            f"currently {pluralize(self.get_player_fields):field}."
+        )
+
+        if initial:
+            description = f"Challenge accepted! {next_player.member.mention} goes first and {last_player.member.mention} goes second.\n\n" + description
+
+        if winner and amount:
+            if isinstance(winner, Player):
+                loser = self.players[(self.player_index - 1) % len(self.players)]
+
+                container.accent_colour = kind_colour(winner.kind)
+                description = (
+                    f"{kind_emoji(winner.kind)} {winner.member.mention} won and earned {Emojis.Economy.cash} **{fnumb(amount)}**!\n"
+                    f"*Maybe next time, {loser.member.mention}!*"
+                )
+            else:
+                description = "It's a tie! No one wins, but at least no one loses!"
+
+        container.add_item(discord.ui.TextDisplay(description))
+        container.add_item(discord.ui.Separator())
+
+        for x in range(3):
+            row = discord.ui.ActionRow()
+            for y in range(3):
+                row.add_item(self.items[x * 3 + y])
+            container.add_item(row)
+
+        if not initial:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(f"-# Player: {self.current_player.member} | Next: {next_player.member}"))
+
+        self.container = container
+        self.add_item(container)
+        return container
+
 
 class Prompt(View):
     def __init__(self, first: discord.abc.User, second: discord.abc.User) -> None:
-        super().__init__(timeout=180.0, members=second)
+        super().__init__(members=second)
         self.first: discord.abc.User = first
         self.second: discord.abc.User = second
 
@@ -185,12 +214,7 @@ class Prompt(View):
         )
 
         view = TicTacToe(players)
-        embed = view.embed
-        embed.description = (
-            f"Challenge accepted! {order[0].mention} goes first and {order[1].mention} goes second.\n" + embed.description
-        )
-
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(view=view)
         self.confirmed = True
         self.stop()
 

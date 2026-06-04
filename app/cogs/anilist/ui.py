@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 
     from .cog import AniList
 
-ANILIST_LOGO = 'https://klappstuhl.me/gallery/ufXiq.png'
-ANILIST_ICON = 'https://klappstuhl.me/gallery/sngjJ.png'
+ANILIST_LOGO = 'https://klappstuhl.me/gallery/raw/ufXiq.png'
+ANILIST_ICON = 'https://klappstuhl.me/gallery/raw/sngjJ.png'
 
 
 def _mapping(value: Any) -> dict[str, Any]:

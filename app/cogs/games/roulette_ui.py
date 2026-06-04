@@ -124,6 +124,8 @@ class Table:
     """Discord-facing roulette table: owns the message, view and placed bets, delegating
     the wheel rules to :mod:`app.cogs.games.engine.roulette`."""
 
+    __slots__ = ("ctx", "start_time", "message", "bets", "view", "open")
+
     def __init__(self, ctx: Context) -> None:
         self.ctx: Context = ctx
 
@@ -131,9 +133,9 @@ class Table:
 
         self.message: discord.Message | None = None
         self.bets: list[Bet] = []
-        self.view: RouletteView = RouletteView(self)
-
         self.open: bool = True
+
+        self.view: RouletteView = RouletteView(self)
 
     def __repr__(self) -> str:
         return f"<RouletteTable spaces={len(self.bets)}>"
@@ -161,10 +163,16 @@ class Table:
         self.bets.append(bet)
 
     def build_container(
-        self, winning_spaces: list[Space] = [], image_url: str | None = None, result: int | None = None
+        self,
+        winning_spaces: list[Space] = [],
+        image_url: str | None = None,
+        result: int | None = None,
+        view: RouletteView | None = None,
+        *,
+        with_buttons: bool = True,
     ) -> discord.ui.Container:
         """Build the Components V2 card for the roulette table."""
-        image = "https://klappstuhl.me/gallery/raw/WgBZIzmNPw.png"
+        image = "https://klappstuhl.me/gallery/raw/kZqGt.jpeg"
         colour = helpers.Colour.white()
 
         if self.open:
@@ -213,6 +221,12 @@ class Table:
             blocks.append(f"**{space.value}**\n" + "\n".join(value))
 
         container.add_item(discord.ui.TextDisplay("\n\n".join(blocks) if blocks else "*No bets placed.*"))
+
+        if with_buttons and view:
+            container.add_item(discord.ui.Separator())
+            view.place_bet.disabled = not self.open
+            container.add_item(discord.ui.ActionRow(view.place_bet, view.help))  # type: ignore
+
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Total of {pluralize(len(self.bets)):bet} placed."))
         return container
@@ -240,9 +254,7 @@ class RouletteView(LayoutView):
 
         self.place_bet = discord.ui.Button(label="Place Bet", style=discord.ButtonStyle.green)
         self.place_bet.callback = self._on_place_bet  # type: ignore[assignment]
-        self.help = discord.ui.Button(
-            label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}"
-        )
+        self.help = discord.ui.Button(label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}")
         self.help.callback = self._on_help  # type: ignore[assignment]
 
         self.render()
@@ -257,10 +269,7 @@ class RouletteView(LayoutView):
     ) -> RouletteView:
         """Recompose the layout: the table card plus the betting controls (dropped on close)."""
         self.clear_items()
-        self.add_item(self.table.build_container(winning_spaces, image_url, result))
-        if with_buttons:
-            self.place_bet.disabled = not self.table.open
-            self.add_item(discord.ui.ActionRow(self.place_bet, self.help))
+        self.add_item(self.table.build_container(winning_spaces, image_url, result, self, with_buttons=with_buttons))
         return self
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:

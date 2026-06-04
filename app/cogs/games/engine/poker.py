@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from itertools import chain, combinations
 from typing import Any, Literal, NamedTuple, cast
 
+import discord
 import numpy as np
 from joblib import Parallel, delayed
 from scipy.special import comb
@@ -459,8 +460,8 @@ class Player:
     ``discord.Member`` at runtime); the engine only uses it for equality/identity.
     """
 
-    def __init__(self, member: Any, stack: int) -> None:
-        self.member: Any = member
+    def __init__(self, member: discord.Member, stack: int) -> None:
+        self.member: discord.Member = member
         self.hand: Hand = Hand()
 
         self.stack: int = stack
@@ -724,7 +725,7 @@ class TexasHoldem:
 
             self.winners.append((pot_winners, pot))
 
-    def add_player(self, member: Any, stack: int) -> None:
+    def add_player(self, member: discord.Member, stack: int) -> None:
         """Adds a player to the table.
 
         Parameters
@@ -736,7 +737,7 @@ class TexasHoldem:
         """
         self.players.append(Player(member=member, stack=stack))
 
-    def remove_player(self, member: Any) -> int:
+    def remove_player(self, member: discord.Member) -> int:
         """Removes a player from the table and returns their leftover stack.
 
         The caller (bridge) is responsible for refunding the returned amount.

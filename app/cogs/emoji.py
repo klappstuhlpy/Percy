@@ -318,7 +318,7 @@ class Emoji(Cog):
             if resp.status == 404:
                 embed.description = "This isn't a valid emoji."
                 embed.colour = 0x000000
-                embed.set_thumbnail(url="https://klappstuhl.me/gallery/LHIcq.jpeg")
+                embed.set_thumbnail(url="https://klappstuhl.me/gallery/raw/LHIcq.jpeg")
                 await ctx.send(embed=embed)
                 return
             embed.colour = discord.Colour.from_rgb(*get_dominant_color(io.BytesIO(await resp.read())))

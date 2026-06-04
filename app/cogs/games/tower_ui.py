@@ -80,7 +80,11 @@ class Tower(LayoutView):
 
     def build_container(self, failed: bool = False) -> discord.ui.Container:
         container = discord.ui.Container(accent_colour=helpers.Colour.white())
-        container.add_item(discord.ui.TextDisplay(f"## \N{BUILDING CONSTRUCTION} Tower\n{self.build(failed)}"))
+        container.add_item(discord.ui.TextDisplay(f"## \N{BUILDING CONSTRUCTION} Tower"))
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(self.build(failed=failed)))
+
         container.add_item(discord.ui.TextDisplay(
             f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}\nMultiplier: **x{self.multiplier}**"
         ))
@@ -92,6 +96,14 @@ class Tower(LayoutView):
                 f"`\N{WHITE HEAVY CHECK MARK} Cashed out successfully with a multiplier of {self.multiplier}!`"
             ))
 
+        container.add_item(discord.ui.Separator())
+
+        if self.finished:
+            container.add_item(discord.ui.ActionRow(self.restart))
+        else:
+            container.add_item(discord.ui.ActionRow(self.stack, self.cash_out))
+
+        container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player}"))
         return container
 
@@ -105,10 +117,6 @@ class Tower(LayoutView):
         """
         self.clear_items()
         self.add_item(self.build_container(failed))
-        if self.finished:
-            self.add_item(discord.ui.ActionRow(self.restart))
-        else:
-            self.add_item(discord.ui.ActionRow(self.stack, self.cash_out))
 
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if interaction.user.id != self.player.id:

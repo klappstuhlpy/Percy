@@ -157,7 +157,7 @@ class Admin(Cog):
             headers = {
                 "Content-Type": "multipart/form-data",
             }
-            async with self.bot.session.get(f"https://klappstuhl.me/gallery/raw/{_id}", headers=headers) as resp:
+            async with self.bot.session.get(f"https://klappstuhl.me/gallery/raw/raw/{_id}", headers=headers) as resp:
                 if resp.status == 200:
                     file = discord.File(fp=io.BytesIO(await resp.read()), filename=resp.url.name)
                     await ctx.send_success(f"Image [**{resp.url.name}**]", file=file)

@@ -89,46 +89,14 @@ class Blackjack:
 
     # -- Rendering -----------------------------------------------------------------
 
-    def build_embed(
-        self,
-        hand: Hand,
-        colour: discord.Colour = helpers.Colour.white(),
-        text: str | None = None,
-        image_url: str | None = None,
-    ) -> discord.Embed:
-        """Gets the embed for the game"""
-        embed = discord.Embed(
-            title="Blackjack", description=text or f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**", colour=colour
-        )
-        if image_url:
-            embed.set_image(url=image_url)
-            return embed
-
-        name = "Your Hand"
-        if len(self.player_hands) > 1:
-            name += f" #{self.player_hands.index(hand) + 1}"
-
-        p_blocks = hand.display_blocks
-        embed.add_field(name=name, value=p_blocks[0], inline=True)
-        for block in p_blocks[1:]:
-            embed.add_field(name="\u200b", value=block, inline=True)
-
-        d_blocks = self.dealer.display_blocks
-        embed.add_field(name="Dealer Hand", value=d_blocks[0], inline=True)
-        for block in d_blocks[1:]:
-            embed.add_field(name="\u200b", value=block, inline=True)
-
-        if colour == discord.Colour.blurple():
-            embed.set_footer(text=f'Cards remaining: {len(self.deck)}')
-
-        return embed
-
     def build_container(
         self,
+        view: TableView,
         hand: Hand,
         colour: discord.Colour = helpers.Colour.white(),
         text: str | None = None,
         image_url: str | None = None,
+        with_buttons: bool = True,
     ) -> discord.ui.Container:
         """Build the Components V2 card for the blackjack table."""
         container = discord.ui.Container(accent_colour=colour)
@@ -139,13 +107,30 @@ class Blackjack:
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image_url)))
             return container
 
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay("**Dealer Hand**\n" + "\n".join(self.dealer.display_blocks)))
+        container.add_item(discord.ui.Separator())
+
         name = "Your Hand"
         if len(self.player_hands) > 1:
             name += f" #{self.player_hands.index(hand) + 1}"
         container.add_item(discord.ui.TextDisplay(f"**{name}**\n" + "\n".join(hand.display_blocks)))
-        container.add_item(discord.ui.TextDisplay("**Dealer Hand**\n" + "\n".join(self.dealer.display_blocks)))
+
+        if with_buttons:
+            container.add_item(discord.ui.ActionRow(view.hit, view.stand, view.double_down, view.split))
 
         if colour == discord.Colour.blurple():
+            container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay(f"-# Cards remaining: {len(self.deck)}"))
+
+        if with_buttons:
+            container.add_item(discord.ui.Separator())
+            row = discord.ui.ActionRow()
+            row.add_item(view.help)
+
+            if view._game_over:
+                row.add_item(view.NewGameButton(view.table))
+
+            container.add_item(row)
 
         return container

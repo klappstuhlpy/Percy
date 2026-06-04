@@ -84,7 +84,7 @@ class UrbanDictionaryPaginator(BasePaginator[dict]):
             colour=helpers.Colour.mirage(),
             url=entry["permalink"],
         )
-        embed.set_thumbnail(url="https://klappstuhl.me/gallery/YTgKe.png")
+        embed.set_thumbnail(url="https://klappstuhl.me/gallery/raw/YTgKe.png")
         embed.set_footer(text=f"by {entry['author']}")
         embed.description = self.cleanup_definition(entry["definition"])
 

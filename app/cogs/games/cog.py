@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import random
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -104,7 +105,7 @@ class Games(Cog):
             return
 
         ms = minesweeper_ui.Minesweeper(ctx, mines=mines)
-        await ctx.send(embed=ms.build_embed(), view=ms)
+        await ctx.send(view=ms)
 
     @command("hangman", description="Play a Hangman game.", guild_only=True, hybrid=True)
     async def hangman(self, ctx: Context, *, flags: HangmanFlags) -> None:
@@ -128,7 +129,7 @@ class Games(Cog):
         word = random.choice(filtered_words)
         hangman = hangman_ui.Hangman(cast("discord.Member", ctx.author), word)
 
-        origin = await ctx.send(embed=hangman.build_embed())
+        origin = await ctx.send(view=hangman.render())
 
         def check(msg: discord.Message) -> bool:
             return msg.author == ctx.author and msg.channel == ctx.channel
@@ -137,9 +138,9 @@ class Games(Cog):
             try:
                 message = await self.bot.wait_for("message", timeout=60.0, check=check)
             except TimeoutError:
+                await ctx.send(f"{Emojis.error} Time's up! The game has been aborted. You must send a letter within **60** seconds. :/", reference=origin)
                 await origin.edit(
-                    content=f"{Emojis.error} Time's up! The game has been aborted. You must send a letter within 60 seconds.",
-                    embed=hangman.build_embed(False),
+                    view=hangman.render(False),
                 )
                 return
 
@@ -148,7 +149,7 @@ class Games(Cog):
             await ctx.maybe_delete(message)
 
             if content == "abort":
-                await origin.edit(embed=hangman.build_embed(False))
+                await origin.edit(view=hangman.render(False))
                 return
 
             if (len(content) != 1 and content != word) or not content.isalpha():
@@ -156,13 +157,13 @@ class Games(Cog):
 
             if content == word:
                 hangman.finished = True
-                await origin.edit(embed=hangman.build_embed(True))
+                await origin.edit(view=hangman.render(True))
                 return
 
             if content in hangman.used:
                 hangman.tries -= 1
                 hangman._last_input = f'`❌ "{content}" has already been used.`'
-                await origin.edit(embed=hangman.build_embed())
+                await origin.edit(view=hangman.render())
                 continue
 
             hangman.used.add(content)
@@ -170,24 +171,24 @@ class Games(Cog):
             if content in hangman.letters:
                 if hangman.letters.issubset(hangman.used):
                     hangman.finished = True
-                    await origin.edit(embed=hangman.build_embed(True))
+                    await origin.edit(view=hangman.render(True))
                     return
                 else:
                     hangman._last_input = f'`✅ "{content}" is correct.`'
 
-                await origin.edit(embed=hangman.build_embed())
+                await origin.edit(view=hangman.render())
                 continue
 
             if content not in hangman.letters:
                 hangman.tries -= 1
                 if hangman.tries == 0:
                     hangman.finished = True
-                    await origin.edit(embed=hangman.build_embed(False))
+                    await origin.edit(view=hangman.render(False))
                     return
                 else:
                     hangman._last_input = f'`❌ "{content}" is wrong.`'
 
-                await origin.edit(embed=hangman.build_embed())
+                await origin.edit(view=hangman.render())
                 continue
 
     @command("tower", description="Play a round of Tower game.", guild_only=True, hybrid=True)
@@ -479,7 +480,9 @@ class Games(Cog):
             await self.bot.timers.create(
                 datetime.timedelta(seconds=60), "roulette", channel_id=ctx.channel.id, message_id=message.id
             )
-        await ctx.message.add_reaction(Emojis.success)
+
+        with suppress(discord.HTTPException):
+            await ctx.message.add_reaction(Emojis.success)
 
     @command("poker", description="Play a game of Texas Hold'em Poker.", guild_only=True, hybrid=True)
     @describe(stack="The amount of coins to play with.")
@@ -525,14 +528,12 @@ class Games(Cog):
                 return
 
             poker.add_player(cast("discord.Member", ctx.author), stack)
-            poker.view.update_buttons()
-            await ctx.maybe_edit(poker.message, embed=poker.build_embed(), view=poker.view)
+            await ctx.maybe_edit(poker.message, view=poker.view.render())
         else:
             poker = poker_bridge.PokerSession(self, ctx, first_buy_in=stack)
             poker.add_player(cast("discord.Member", ctx.author), stack)
-            poker.view.update_buttons()
 
-            message = await ctx.send(embed=poker.build_embed(), view=poker.view)
+            message = await ctx.send(view=poker.view.render())
             poker.message = message
             self.poker_tables[ctx.channel.id] = poker
 

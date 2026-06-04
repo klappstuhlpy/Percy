@@ -402,27 +402,26 @@ class Documentation(Cog):
         symbols and re-rendering never re-scrapes. Returns ``None`` if the symbol is unknown.
         """
         with self.symbol_get_event:
-            if item is None:
-                log.debug("Symbol does not exist.")
-                return None
-
             if item.markdown is None:
                 item.markdown = await self.get_symbol_markdown(item)
 
             container = discord.ui.Container(accent_colour=helpers.Colour.white())
-            container.add_item(
-                discord.ui.Section(
-                    f"## {discord.utils.escape_markdown(item.symbol_id)}\n-# {item.package} Documentation",
-                    accessory=discord.ui.Thumbnail("https://klappstuhl.me/gallery/lVUYV.png"),
-                )
-            )
+
+            body = f"## {discord.utils.escape_markdown(item.symbol_id)}\n"
+
             if item.markdown:
-                container.add_item(discord.ui.TextDisplay(truncate(item.markdown, 3500)))
+                body += truncate(item.markdown, 3500 - len(body))
+
+            container.add_item(
+                discord.ui.Section(body, accessory=discord.ui.Thumbnail("https://klappstuhl.me/gallery/raw/lVUYV.png"))
+            )
 
             if item.resolved_fields:
                 container.add_item(discord.ui.Separator())
                 for name, value in item.resolved_fields.items():
-                    container.add_item(discord.ui.TextDisplay(f"**{name}**\n{value}"))
+                    container.add_item(discord.ui.TextDisplay(f"### {name}\n{value}"))
+
+            container.add_item(discord.ui.Separator())
 
             container.add_item(
                 discord.ui.ActionRow(
@@ -433,6 +432,9 @@ class Documentation(Cog):
                     )
                 )
             )
+            container.add_item(discord.ui.Separator())
+
+            container.add_item(discord.ui.TextDisplay(f"-# {item.package} Documentation"))
             return container
 
     @group("docs", fallback="search", alias="d", description="Look up documentation for Python symbols.", hybrid=True)

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 import discord
 
 from app.cogs.games.engine.poker import TableState
-from app.core.views import View
+from app.core.views import LayoutView
 from app.rendering.models import BarChartData
 from app.utils import fnumb, helpers
 from config import Emojis
@@ -60,20 +60,45 @@ class SetBlindsModal(discord.ui.Modal, title="Set Custom Big Blind"):
         self.stop()
 
 
-class TableView(View):
-    """Represents a view for a poker table.
+class TableView(LayoutView):
+    """The Components V2 view for a poker table.
 
-    Holds a reference to the :class:`~app.cogs.games._poker.PokerSession` bridge.
-    Button callbacks trigger actions on the pure engine (``self.engine``) and ask
-    the session (``self.session``) to render embeds and drive the autoplay timer.
+    Holds a reference to the :class:`~app.cogs.games.poker_bridge.PokerSession` bridge.
+    Button callbacks trigger actions on the pure engine (``self.engine``); :meth:`render`
+    recomposes the table card (from the session) plus the state-appropriate control rows.
     """
 
     def __init__(self, session: PokerSession) -> None:
         self.session: PokerSession = session
         self.engine: TexasHoldem = session.engine
-        super().__init__(timeout=500.0)
+        super().__init__(timeout=500.0, members=[p.member for p in session.players])
 
-        self.update_buttons()
+        self.join = discord.ui.Button(label="Join", style=discord.ButtonStyle.grey)
+        self.join.callback = self._on_join
+        self.my_hand = discord.ui.Button(label="My Hand", style=discord.ButtonStyle.blurple)
+        self.my_hand.callback = self._on_my_hand
+        self.start_next_round = discord.ui.Button(label="Start", style=discord.ButtonStyle.green, disabled=True)
+        self.start_next_round.callback = self._on_start_next_round
+        self.fold = discord.ui.Button(label="Fold", style=discord.ButtonStyle.red)
+        self.fold.callback = self._on_fold
+        self.check_call = discord.ui.Button(label="Check", style=discord.ButtonStyle.grey)
+        self.check_call.callback = self._on_check_call
+        self.raise_bet = discord.ui.Button(label="Raise", style=discord.ButtonStyle.blurple)
+        self.raise_bet.callback = self._on_raise_bet
+        self.all_in = discord.ui.Button(label="All In", style=discord.ButtonStyle.red)
+        self.all_in.callback = self._on_all_in
+        self.analysis_button = discord.ui.Button(
+            label="Show Analysis", style=discord.ButtonStyle.blurple, emoji="\N{BAR CHART}"
+        )
+        self.analysis_button.callback = self._on_analysis
+        self.leave_button = discord.ui.Button(label="Leave", style=discord.ButtonStyle.red)
+        self.leave_button.callback = self._on_leave
+        self.set_blinds_button = discord.ui.Button(label="Set Blinds", style=discord.ButtonStyle.blurple)
+        self.set_blinds_button.callback = self._on_set_blinds
+
+        self.container: discord.ui.Container = discord.ui.Container(id=1)
+
+        self.render()
 
     async def on_timeout(self) -> None:
         """Called when the view times out."""
@@ -88,71 +113,39 @@ class TableView(View):
                 await self.session.message.reply(f"{Emojis.error} The table has been closed due to inactivity.")
                 await self.session.message.delete()
 
-    # Button Updating
+    # Composition
+
+    def render(self, with_autoplay: bool = False) -> TableView:
+        """Recompose the layout: the table card plus the state-appropriate control rows."""
+        self.clear_items()
+        self.add_item(self.session.build_container(with_autoplay, self._button_rows()))
+        return self
 
     def update_buttons(self) -> None:
-        if self.engine.state != TableState.RUNNING:
-            self._update_buttons_not_running()
-            return
+        """Backwards-compatible alias; recomposition now happens in :meth:`render`."""
+        self.render()
 
-        self._update_buttons_running()
-
-    def _update_buttons_not_running(self) -> None:
-        """Updates the buttons when the table is not running"""
+    def _button_rows(self) -> list[discord.ui.ActionRow]:
         engine = self.engine
-        self.clear_items()
+        if engine.state != TableState.RUNNING:
+            stopped_or_prepared = engine.state in (TableState.STOPPED, TableState.PREPARED)
+            self.start_next_round.label = "Start" if stopped_or_prepared else "Next Round"
+            self.start_next_round.disabled = len(engine.players) < 2
+            self.join.disabled = len(engine.players) == 4
 
-        self.add_item(self.join)
-        self.add_item(self.start_next_round)
-        self.add_item(self.leave_button)
+            rows = [discord.ui.ActionRow(self.join, self.start_next_round, self.leave_button)]
+            second: list[discord.ui.Button] = []
+            if stopped_or_prepared:
+                second.append(self.set_blinds_button)
+            if engine.state == TableState.FINISHED:
+                second.append(self.analysis_button)
+            if second:
+                rows.append(discord.ui.ActionRow(*second))
+            return rows
 
-        stopped_or_prepared = engine.state in (TableState.STOPPED, TableState.PREPARED)
-
-        if stopped_or_prepared:
-            self.add_item(self.set_blinds_button)
-
-        self.start_next_round.label = "Start" if stopped_or_prepared else "Next Round"
-
-        if engine.state == TableState.FINISHED:
-            self.add_item(self.analysis_button)
-        if engine.state == TableState.PREPARED:
-            self.remove_item(self.analysis_button)
-
-        if len(engine.players) < 2:
-            self.start_next_round.disabled = True
-        else:
-            self.start_next_round.disabled = False
-
-        if len(engine.players) == 4:
-            self.join.disabled = True
-        else:
-            self.join.disabled = False
-
-    def _update_buttons_running(self) -> None:
-        """Updates the buttons when the table is running"""
-        engine = self.engine
-
-        RUNNING_BUTTONS = [
-            self.join,  # disabled
-            self.my_hand,
-            self.start_next_round,  # disabled
-            self.fold,
-            self.check_call,
-            self.raise_bet,
-            self.all_in,
-        ]
-
-        # check if buttons are in the view
-        if any(button not in self.children for button in RUNNING_BUTTONS):
-            self.clear_items()
-            for button in RUNNING_BUTTONS:
-                self.add_item(button)
-
+        # running
         self.join.disabled = True
-        if engine.state == TableState.PREPARED:
-            self.start_next_round.label = "Start"
-        else:
-            self.start_next_round.label = "Next Round"
+        self.start_next_round.label = "Start" if engine.state == TableState.PREPARED else "Next Round"
         self.start_next_round.disabled = True
 
         # Big/Small Blind can't raise/bet in the first round
@@ -162,9 +155,8 @@ class TableView(View):
         self.raise_bet.disabled = is_first_round_and_blind
         self.raise_bet.label = "Bet" if all(player.bet <= engine.big_blind for player in engine.playing_players) else "Raise"
 
-        # Setting the check/call button
-        is_check = engine.players[engine.player_index].bet == max([player.bet for player in engine.players])
-        call_amount = max([player.bet for player in engine.players]) - engine.players[engine.player_index].bet
+        is_check = engine.players[engine.player_index].bet == max(player.bet for player in engine.players)
+        call_amount = max(player.bet for player in engine.players) - engine.players[engine.player_index].bet
         self.check_call.label = "Check" if is_check else f"Call ({call_amount} Chips)"
         self.check_call.emoji = None if is_check else Emojis.Economy.coin
 
@@ -175,10 +167,14 @@ class TableView(View):
             self.check_call.disabled = False
             self.check_call.style = discord.ButtonStyle.grey if is_check else discord.ButtonStyle.green
 
+        return [
+            discord.ui.ActionRow(self.join, self.my_hand, self.start_next_round),
+            discord.ui.ActionRow(self.fold, self.check_call, self.raise_bet, self.all_in),
+        ]
+
     # Buttons
 
-    @discord.ui.button(label="Join", style=discord.ButtonStyle.grey)
-    async def join(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_join(self, interaction: discord.Interaction) -> None:
         """Joins the table"""
         if self.engine.state != TableState.STOPPED:
             await interaction.response.send_message(f"{Emojis.error} The table is already running.", ephemeral=True)
@@ -214,16 +210,16 @@ class TableView(View):
         await balance.remove(cash=amount)
         self.engine.add_player(cast("discord.Member", interaction.user), stack=amount)
 
+        view = self
         if len(self.engine.players) == 4:
             self.engine.start()
-            self = TableView(session=self.session)  # type: ignore
+            view = TableView(session=self.session)
             self.session.restart_timer()
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        self.members = [player.member for player in self.engine.players]
+        await interaction.response.edit_message(view=view.render())
 
-    @discord.ui.button(label="My Hand", style=discord.ButtonStyle.blurple)
-    async def my_hand(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_my_hand(self, interaction: discord.Interaction) -> None:
         """Shows the player's hand"""
         player = discord.utils.get(self.engine.players, member=interaction.user)
         if not player:
@@ -258,8 +254,7 @@ class TableView(View):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="Start", style=discord.ButtonStyle.green, disabled=True)
-    async def start_next_round(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_start_next_round(self, interaction: discord.Interaction) -> None:
         """Starts the game"""
         await interaction.response.defer()
 
@@ -279,18 +274,17 @@ class TableView(View):
             await interaction.followup.send(f"{Emojis.error} You need at least 2 players to start the game.", ephemeral=True)
             return
 
+        view = self
         if self.start_next_round.label == "Next Round":
             await self.session.prepare_next_game()
         else:
-            self.session.view = self = TableView(session=self.session)
+            self.session.view = view = TableView(session=self.session)
             self.engine.start()
             self.session.restart_timer()
 
-        self.update_buttons()
-        await interaction.edit_original_response(embed=self.session.build_embed(), view=self)
+        await interaction.edit_original_response(view=view.render())
 
-    @discord.ui.button(label="Fold", style=discord.ButtonStyle.red, row=1)
-    async def fold(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_fold(self, interaction: discord.Interaction) -> None:
         """Folds the player's hand"""
         player = await self.get_player(interaction)
         if not player:
@@ -302,11 +296,9 @@ class TableView(View):
         self.engine.switch_player()
         self.session.restart_timer()
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())
 
-    @discord.ui.button(label="Check", style=discord.ButtonStyle.grey, row=1)
-    async def check_call(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_check_call(self, interaction: discord.Interaction) -> None:
         """Checks or calls"""
         player = await self.get_player(interaction)
         if not player:
@@ -314,7 +306,7 @@ class TableView(View):
 
         self.session.cancel_timer()
 
-        max_bet = max([p.bet for p in self.engine.players])
+        max_bet = max(p.bet for p in self.engine.players)
         if player.bet == max_bet:
             self.engine.Check()
         else:
@@ -328,11 +320,9 @@ class TableView(View):
 
         self.engine.switch_player()
         self.session.restart_timer()
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())
 
-    @discord.ui.button(label="Raise", style=discord.ButtonStyle.blurple, row=1)
-    async def raise_bet(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_raise_bet(self, interaction: discord.Interaction) -> None:
         """Raises the bet"""
         player = await self.get_player(interaction)
         if not player:
@@ -364,7 +354,7 @@ class TableView(View):
                 return
         else:
             # Raise must be at least twice the current bet
-            previous_bet = max([player.bet for player in self.engine.players])
+            previous_bet = max(player.bet for player in self.engine.players)
             if amount < previous_bet * 2:
                 await interaction.response.send_message(
                     f"You have to raise by at least twice the current bet (**{previous_bet * 2}** Chips).", ephemeral=True
@@ -384,11 +374,9 @@ class TableView(View):
         self.engine.switch_player(by_raise=True)
         self.session.restart_timer()
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())
 
-    @discord.ui.button(label="All In", style=discord.ButtonStyle.red, row=1)
-    async def all_in(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_all_in(self, interaction: discord.Interaction) -> None:
         """Goes all in"""
         player = await self.get_player(interaction)
         if not player:
@@ -400,10 +388,9 @@ class TableView(View):
         self.engine.switch_player(by_raise=True)
         self.session.restart_timer()
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())
 
-    async def get_player(self: TableView, interaction: discord.Interaction) -> Player | None:
+    async def get_player(self, interaction: discord.Interaction) -> Player | None:
         player = self.engine.players[self.engine.player_index]
         if not player:
             await interaction.response.send_message(f"{Emojis.error} You are not in the game.", ephemeral=True)
@@ -415,8 +402,7 @@ class TableView(View):
 
         return player
 
-    @discord.ui.button(label="Show Analysis", style=discord.ButtonStyle.blurple, emoji="\N{BAR CHART}", row=2)
-    async def analysis_button(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_analysis(self, interaction: discord.Interaction) -> None:
         """Callback for the analysis button"""
         await interaction.response.defer()
 
@@ -471,8 +457,7 @@ class TableView(View):
 
         await interaction.followup.send(embeds=embeds, files=files, ephemeral=True)
 
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
-    async def leave_button(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_leave(self, interaction: discord.Interaction) -> None:
         """Callback for the leave button"""
         if self.engine.state == TableState.RUNNING:
             await interaction.response.send_message(
@@ -499,15 +484,13 @@ class TableView(View):
             )
             return
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())
         if self.session.message is not None:
             await self.session.message.reply(
                 f"\N{LEAF FLUTTERING IN WIND} {interaction.user.mention} has left the table.", delete_after=10
             )
 
-    @discord.ui.button(label="Set Blinds", style=discord.ButtonStyle.blurple, row=1)
-    async def set_blinds_button(self: TableView, interaction: discord.Interaction, _) -> None:
+    async def _on_set_blinds(self, interaction: discord.Interaction) -> None:
         """Callback for the set blinds button"""
         if self.engine.state == TableState.RUNNING:
             await interaction.response.send_message(
@@ -546,5 +529,4 @@ class TableView(View):
         self.engine.big_blind = big_blind
         self.engine.small_blind = big_blind // 2
 
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.session.build_embed(), view=self)
+        await interaction.response.edit_message(view=self.render())

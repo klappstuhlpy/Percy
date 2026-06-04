@@ -166,7 +166,7 @@ class PokerSession:
                 return
 
             if timer == 100 and self.message is not None:
-                await self.message.edit(embed=self.build_embed(with_autoplay=True))
+                await self.message.edit(view=self.view.render(with_autoplay=True))
 
         await self.autoplay(player)
 
@@ -178,10 +178,9 @@ class PokerSession:
         if not self.engine.autoplay_turn(player):
             return
 
-        self.view.update_buttons()
         self.restart_timer()
         if self.message is not None:
-            await self.message.edit(embed=self.build_embed(), view=self.view)
+            await self.message.edit(view=self.view.render())
 
     # -- Player management with side effects ------------------------------
 
@@ -209,39 +208,63 @@ class PokerSession:
 
     # -- Embed Builder ----------------------------------------------------
 
-    def build_embed(self, with_autoplay: bool = False) -> discord.Embed:
-        """Builds the embed for the table"""
-        embed = discord.Embed(title="Poker • Texas Hold'em", color=helpers.Colour.white())
-        embed.description = "*Waiting for players to join...*\n\n" if self.state == TableState.PREPARED else ""
+    def build_container(self, with_autoplay: bool = False, rows: list[discord.ui.ActionRow] | None = None) -> discord.ui.Container:
+        """Build the Components V2 card for the table.
 
-        embed.description += (
+        Reuses the embed-field helpers by passing them a tiny collector that records
+        ``add_field``/``set_footer``/``description``/``colour`` calls, then renders the
+        collected fields as text displays inside a container.
+        """
+        container = discord.ui.Container(id=1)
+
+        if self.state == TableState.STOPPED:
+            self._build_stopped_container(container)
+        else:
+            self._build_running_container(container, with_autoplay)
+
+        if rows:
+            container.add_item(discord.ui.Separator())
+            for row in rows:
+                container.add_item(row)
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Players: {len(self.players)}/4"))
+        return container
+
+    def _build_stopped_container(self, container: discord.ui.Container) -> None:
+        container.accent_colour = discord.Color.lighter_grey()
+
+        container.add_item(discord.ui.TextDisplay("## Poker • Texas Hold'em"))
+        container.add_item(discord.ui.Separator())
+
+        container.add_item(discord.ui.TextDisplay(
+            "*Waiting for players to join...*\n\n"
+            f"Poker requires `2-4` players. The small blind and big blind are set to `{self.small_blind}` and `{self.big_blind}` Chips.\n"
+            f"The minimum buy-in is `{self.min_buy_in}` Chips and the maximum buy-in is `{self.max_buy_in}` Chips.\n"
+            "You can join the game by clicking the **Join** button below or click **Start** as the host to start the game."
+        ))
+
+        container.add_item(discord.ui.Separator())
+        self._add_players_raw_to_container(container)
+
+    def _build_running_container(self, container: discord.ui.Container, with_autoplay: bool = False) -> None:
+        container.accent_colour = helpers.Colour.white()
+
+        container.add_item(discord.ui.TextDisplay("## Poker • Texas Hold'em"))
+        container.add_item(discord.ui.Separator())
+
+        description = (
             f"**Small Blind:** `{self.small_blind}`\n"
             f"**Big Blind:** `{self.big_blind}`\n\n"
             f"**Pot:** {Emojis.Economy.coin} `{self.pot}`\n"
         )
 
         for i, side_pot in enumerate(self.side_pots, start=1):
-            embed.description += f"**Side Pot *#{i}*:** {Emojis.Economy.coin} `{side_pot}`\n"
+            description += f"**Side Pot *#{i}*:** {Emojis.Economy.coin} `{side_pot}`\n"
 
-        if self.state == TableState.STOPPED:
-            self._build_stopped_embed(embed)
-        else:
-            self._build_running_embed(embed, with_autoplay)
+        container.add_item(discord.ui.TextDisplay(description))
+        container.add_item(discord.ui.Separator())
 
-        return embed
-
-    def _build_stopped_embed(self, embed: discord.Embed) -> None:
-        embed.colour = discord.Color.lighter_grey()
-        embed.description = (
-            "*Waiting for players to join...*\n\n"
-            f"Poker requires `2-4` players. The small blind and big blind are set to `{self.small_blind}` and `{self.big_blind}` Chips.\n"
-            f"The minimum buy-in is `{self.min_buy_in}` Chips and the maximum buy-in is `{self.max_buy_in}` Chips.\n"
-            "You can join the game by clicking the **Join** button below or click **Start** as the host to start the game."
-        )
-        embed.set_footer(text=f"Players: {len(self.players)}/4")
-        self._add_players_raw_to_embed(embed)
-
-    def _build_running_embed(self, embed: discord.Embed, with_autoplay: bool = False) -> None:
         for index, player in enumerate(self.players, 1):
             name_parts = [f"Seat #{index}", player.member.display_name]
             text = f"**Stack:** {Emojis.Economy.coin} `{player.stack}`\n"
@@ -250,6 +273,7 @@ class PokerSession:
                 if index - 1 == self.player_index:
                     name_parts.insert(0, Emojis.Arrows.right)
 
+                name_parts[0] = f"### {name_parts[0]}"
                 assert self.blind_index is not None
                 blind = "BB" if index == self.blind_index[1] + 1 else "SB" if index == self.blind_index[0] + 1 else None
                 if blind is not None:
@@ -280,22 +304,26 @@ class PokerSession:
                 # Check if there is only one player that has not folded,
                 # if there is, he does not need to show his cards and wins automatically
                 if len(self.playing_players) != 1:
-                    text = self._append_finished_embed_text(player, text)
+                    text = self._append_finished_container_text(player, text)
                 else:
                     name_parts.append("👑")
 
-            embed.add_field(name=" • ".join(name_parts), value=text, inline=False)
+            container.add_item(
+                discord.ui.TextDisplay(
+                    " • ".join(name_parts) + "\n" + text
+                )
+            )
 
-        self._add_community_cards_to_embed(embed)
+        self._add_community_cards_to_container(container)
 
-    def _add_players_raw_to_embed(self, embed: discord.Embed) -> None:
+    def _add_players_raw_to_container(self, container: discord.ui.Container) -> None:
         for index, player in enumerate(self.players, 1):
-            name_parts = [f"Seat #{index}", player.member.display_name]
-            text = f"**Stack:** {Emojis.Economy.coin} `{player.stack}`\n"
+            name = f"### Seat #{index} • {player.member.display_name}"
+            text = f"**Stack:** {Emojis.Economy.coin} `{player.stack}`"
 
-            embed.add_field(name=" • ".join(name_parts), value=text, inline=False)
+            container.add_item(discord.ui.TextDisplay(f"{name}\n{text}"))
 
-    def _append_finished_embed_text(self, player: Player, text: str) -> str:
+    def _append_finished_container_text(self, player: Player, text: str) -> str:
         if self.state == TableState.FINISHED:
             raw_cards = [card.display("small") for card in player.hand.cards]
             cards = [cast("DisplayCard", c) for c in raw_cards]
@@ -314,23 +342,22 @@ class PokerSession:
             text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
         return text
 
-    def _add_community_cards_to_embed(self, embed: discord.Embed) -> None:
+    def _add_community_cards_to_container(self, container: discord.ui.Container) -> None:
         cards = [Card.from_arr(arr) for arr in self.community_arr]
+
         if len(cards) >= 3:
+            container.add_item(discord.ui.Separator())
+
             card_list = [
                 f"{elem1} {elem2} {elem3}"
                 for elem1, elem2, elem3 in zip(
                     *[cast("str", card.display("large", formatted=True)).split("\n") for card in cards[:3]]
                 )
             ]
-            embed.add_field(name="The Flop", value="\n".join(card_list))
+            container.add_item(discord.ui.TextDisplay('### The Flop\n' + '\n'.join(card_list)))
+
         if len(cards) >= 4:
-            embed.add_field(
-                name='The Turn',
-                value=cards[3].display('large', formatted=True)
-            )
+            container.add_item(discord.ui.TextDisplay('### The Turn\n' + cards[3].display('large', formatted=True)))
+
         if len(cards) == 5:
-            embed.add_field(
-                name='The River',
-                value=cards[4].display('large', formatted=True)
-            )
+            container.add_item(discord.ui.TextDisplay('### The River\n' + cards[4].display('large', formatted=True)))

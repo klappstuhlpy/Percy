@@ -312,7 +312,8 @@ class Comics(Cog):
                 await channel.send(
                     view=make_notice(
                         f'{config.brand.value} Comics',
-                        f'{Emojis.info} There are no new **{config.brand.name}** comics for this week.',
+                        f'{Emojis.info} There are no new **{config.brand.name}** comics for this week. :/\n'
+                        f'-# {config.brand.copyright}',
                         accent=config.brand.colour,
                         thumbnail=config.brand.icon_url,
                     )
@@ -356,16 +357,18 @@ class Comics(Cog):
             info = [cs_cm.writer] if cs_cm.writer else []
             if cs_cm.url:
                 info.append(f'[Read More]({cs_cm.url})')
-            lines.append(f'**{cs_cm.title}** — {" • ".join(info) if info else "…"}')
+            lines.append(f'**{cs_cm.title}** — {" **×** ".join(info) if info else "…"}')
 
         container.add_item(discord.ui.TextDisplay(truncate('\n'.join(lines), 3500) or '…'))
+
+        if jump_button is not None:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(jump_button))
 
         if brand.copyright:
             container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay(f'-# {brand.copyright}'))
 
-        if jump_button is not None:
-            container.add_item(discord.ui.ActionRow(jump_button))
         return container
 
     @cache.cache()

@@ -753,7 +753,7 @@ class Parser:
         _cs_comic.creators = {}
         _cs_comic.image_url = (
             data.images[0].path + '/clean.jpg'
-            if data.images else 'https://klappstuhl.me/gallery/hopxF.jpeg')
+            if data.images else 'https://klappstuhl.me/gallery/raw/hopxF.jpeg')
 
         _cs_comic.url = next((i['url'] for i in data.urls if i['type'] == 'detail'), '') or ''
         _cs_comic.price = next((i.price for i in data.prices if i.type == 'printPrice'), None)

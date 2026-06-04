@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, override, Iterable
 
 import discord
 
@@ -42,12 +42,12 @@ class EmbedBuilder(discord.Embed):
     @staticmethod
     def _resolve_field_dicts(
         fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]],
-    ) -> Iterable[tuple[str, str, bool]]:
+    ) -> list[tuple[str, str, bool]] | Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]]:
         first_item_checker = type(next(iter(fields), None))
         if first_item_checker is dict:
             dict_fields: list[dict[str, str | bool]] = fields  # type: ignore
             return [(str(f["name"]), str(f["value"]), bool(f["inline"])) for f in dict_fields]
-        return fields  # type: ignore[return-value]
+        return fields
 
     def add_fields(self, fields: Iterable[tuple[str, str, bool]] | list[dict[str, str | bool]]) -> EmbedBuilder:
         """Adds multiple fields to the embed.

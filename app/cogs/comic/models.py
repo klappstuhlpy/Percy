@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
     from app.core import Cog
 
-MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/HTBFL.png'
-DC_ICON_URL = 'https://klappstuhl.me/gallery/VmiCY.png'
-VIZ_ICON_URL = 'https://klappstuhl.me/gallery/nsTxu.png'
+MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/raw/HTBFL.png'
+DC_ICON_URL = 'https://klappstuhl.me/gallery/raw/VmiCY.png'
+VIZ_ICON_URL = 'https://klappstuhl.me/gallery/raw/nsTxu.png'
 
 MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 
@@ -220,21 +220,22 @@ class GenericComic:
 
         if self.brand == Brand.MANGA:
             container.add_item(discord.ui.TextDisplay(
-                f'**General Info**\n'
+                f'### General Info\n'
                 f'Price: {self.price_format}\n'
                 f'Pages: {self.page_count}\n'
                 f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
                 f"Category: {self.kwargs.get('category')}\n"
                 f"Age Rating: {self.kwargs.get('age_rating')}"
             ))
-            if self.creators:
-                container.add_item(discord.ui.TextDisplay(f'**Creators**\n{self.format_creators()}'))
         else:
-            if self.creators:
-                container.add_item(discord.ui.TextDisplay(f'**Creators**\n{self.format_creators()}'))
             container.add_item(discord.ui.TextDisplay(
-                f'**General Info**\nPrice: {self.price_format}\nPages: {self.page_count}'
+                f'### General Info\n'
+                f'Price: {self.price_format}\n'
+                f'Pages: {self.page_count}'
             ))
+
+        if self.creators:
+            container.add_item(discord.ui.TextDisplay(f'### Creators\n{self.format_creators()}'))
 
         if full_img and self.image_url:
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(self.image_url)))
@@ -317,11 +318,11 @@ class ComicFeed(BaseRecord):
 
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
-            f'**Publish Channel**\n<#{self.channel_id}>\n'
-            f'**Format**\n{self.format.value}\n'
-            f'**Next Scheduled**\n{discord.utils.format_dt(self.next_pull, "D")}\n'
-            f'**Ping Role**\n{f"<@&{self.ping}>" if self.ping else "None"}\n'
-            f'**Message Pin**\n{"Enabled" if self.pin else "Disabled"}'
+            f'**Publish Channel** • <#{self.channel_id}>\n'
+            f'**Format** • {self.format.value}\n'
+            f'**Next Scheduled** • {discord.utils.format_dt(self.next_pull, "D")}\n'
+            f'**Ping Role** • {f"<@&{self.ping}>" if self.ping else "None"}\n'
+            f'**Message Pin** • {"Enabled" if self.pin else "Disabled"}'
         ))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f'-# [{self.guild_id}] • {self.brand.name}'))

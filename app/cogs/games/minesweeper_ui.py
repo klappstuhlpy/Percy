@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.games.engine.minesweeper import Board, MSField
-from app.core.views import View
+from app.core.views import LayoutView
 from app.utils import fnumb, helpers, humanize_duration
 from config import Emojis
 
@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 __all__ = ("Minesweeper", "MinesweeperButton")
 
 
-class Minesweeper(View):
+class Minesweeper(LayoutView):
     def __init__(self, ctx: Context | discord.Interaction, mines: int) -> None:
-        super().__init__(timeout=250.0, members=ctx.author)
+        super().__init__(timeout=250.0, members=[ctx.author])
 
         self.ctx: Context | discord.Interaction = ctx
         self.moves: int = 0
@@ -29,9 +29,15 @@ class Minesweeper(View):
 
         self.engine: Board = Board(mines)
 
+        self.items: list[MinesweeperButton] = []
+
         for x in range(Board.SIZE):
             for y in range(Board.SIZE):
-                self.add_item(MinesweeperButton(self.engine.board[x][y], (x, y)))
+                self.items.append(MinesweeperButton(self.engine.board[x][y], (x, y)))
+
+        self.container: discord.ui.Container = discord.ui.Container(id=1)
+
+        self.refresh_container()
 
     @property
     def board(self) -> list[list[MSField]]:
@@ -45,14 +51,12 @@ class Minesweeper(View):
         self, interaction: discord.Interaction | None = None, won: bool = False, *, field: MSField | None = None
     ) -> None:
         """End the game."""
-        duration = time.perf_counter() - self.start
-
-        for item in self.children:
+        for item in self.container.walk_children():
             if isinstance(item, MinesweeperButton):
                 item.disabled = True
 
                 if item.cell.mine:
-                    if item.cell == field:
+                    if not won and item.cell == field:
                         item.label = "\N{COLLISION SYMBOL}"
                     else:
                         item.label = "\N{TRIANGULAR FLAG ON POST}" if won else "\N{BOMB}"
@@ -61,41 +65,67 @@ class Minesweeper(View):
                     item.style = discord.ButtonStyle.gray
                     item.label = str(item.cell.value) if item.cell.value != 0 else "‎"  # Zero width space
 
-        embed = discord.Embed(
-            title="Minesweeper",
-            description=(
-                f"You {'found all' if won else 'exploded by'} **{self.mines}** mines in **{self.moves}** moves.\n"
-                f"Time: {humanize_duration(duration)}"
-            ),
-            colour=helpers.Colour.lime_green() if won else helpers.Colour.light_red(),
-        )
-        embed.set_footer(text=f"Player: {self.ctx.author}")
-
+        amount: int = 0
         if won:
-            user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
+            user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)  # type: ignore
             amount: int = random.randint(25, 100)
             await user_balance.add(cash=amount)
-            embed.description += f"\nEarned: {Emojis.Economy.cash} **{fnumb(amount)}**"
+
+        self.refresh_container(won, fnumb(amount) if won else None)
 
         with suppress(discord.NotFound, discord.HTTPException):
             if interaction:
-                await interaction.response.edit_message(embed=embed, view=self)
+                await interaction.response.edit_message(view=self)
 
         self.stop()
 
-    def build_embed(self) -> discord.Embed:
-        """Builds the base embed for the game."""
-        embed = discord.Embed(
-            title="Minesweeper",
-            description=f"Moves: **{self.moves}**\nMines: **{self.mines}**",
-            colour=helpers.Colour.white(),
+    def refresh_container(self, won: bool | None = None, amount: str | None = None) -> None:
+        """Builds the container for the game."""
+        self.clear_items()
+
+        container = discord.ui.Container(
+            accent_color=helpers.Colour.white()
+            if won is None
+            else (helpers.Colour.lime_green() if won else helpers.Colour.light_red()),
+            id=1,
         )
-        assert isinstance(self.ctx, Context)
-        embed.set_footer(text=f"Player: {self.ctx.author}")
-        return embed
+
+        duration = time.perf_counter() - self.start
+        description = "## Minesweeper\n"
+
+        if won is not None:
+            description += (
+                f"You {'found all' if won else 'exploded by'} **{self.mines}** mines in **{self.moves}** moves.\n"
+                f"Time: {humanize_duration(duration)}"
+            )
+        else:
+            description += f"**{self.mines}** mines to be found in **{self.moves}** moves."
+
+        if amount:
+            description += f"\nEarned: {Emojis.Economy.cash} **{amount}**"
+
+        container.add_item(discord.ui.TextDisplay(description))
+        container.add_item(discord.ui.Separator())
+
+        # acutal buttons
+        for x in range(Board.SIZE):
+            row = discord.ui.ActionRow()
+            for y in range(Board.SIZE):
+                row.add_item(self.items[x * Board.SIZE + y])
+            container.add_item(row)
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Player: {self.ctx.author}"))
+
+        self.container = container
+        self.add_item(container)
 
 
 class MinesweeperButton(discord.ui.Button["Minesweeper"]):
+    """A button for the minesweeper game."""
+
+    view: Minesweeper
+
     def __init__(self, field: MSField, position: tuple[int, int]) -> None:
         self.position: tuple[int, int] = position
         self.cell: MSField = field
@@ -116,7 +146,7 @@ class MinesweeperButton(discord.ui.Button["Minesweeper"]):
 
         self.disabled = self.cell.revealed
 
-    async def callback(self, interaction: discord.Interaction) -> None:
+    async def callback(self: MinesweeperButton, interaction: discord.Interaction) -> None:
         assert self.view is not None
 
         self.view.moves += 1
@@ -126,16 +156,19 @@ class MinesweeperButton(discord.ui.Button["Minesweeper"]):
         field = self.view.board[x][y]
 
         if not self.view.engine.mark(field):
-            return await self.view.end(interaction, field=field)
+            await self.view.end(interaction, field=field)
+            return
 
         if self.cell.value == 0:
-            for button in self.view.children:
+            for button in self.view.container.walk_children():
                 if isinstance(button, MinesweeperButton) and not button.disabled:
                     button._update_labels()
         else:
             self._update_labels()
 
         if self.view.engine.is_won:
-            return await self.view.end(interaction, True)
+            await self.view.end(interaction, True)
+            return
 
-        await interaction.response.edit_message(embed=self.view.build_embed(), view=self.view)
+        self.view.refresh_container()
+        await interaction.response.edit_message(view=self.view)

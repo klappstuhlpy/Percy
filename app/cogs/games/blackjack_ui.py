@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.cogs.games.engine.blackjack import Hand
     from app.database.base import Balance
 
-__all__ = ("NewGameButton", "TableView")
+__all__ = ("TableView",)
 
 
 class TableView(LayoutView):
@@ -27,6 +27,37 @@ class TableView(LayoutView):
     shows its own card. The action buttons are stable instances whose enabled state is
     managed by :meth:`update_buttons` (mirroring the old in-place mutation).
     """
+
+    class NewGameButton(discord.ui.Button):
+        """Button to start a new game with a different bet"""
+
+        def __init__(self, table: Blackjack) -> None:
+            super().__init__(label="New game (same Bet)", style=discord.ButtonStyle.green, emoji="\U0001f501")
+            self.table: Blackjack = table
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            """Starts a new game with the same bet"""
+            table = self.table.wake_up(self.table.ctx, self.table.active_hand.bet)
+
+            # Shuffle cards, just for aesthetics
+            await interaction.response.edit_message(
+                view=table.view.render(
+                    table.active_hand,
+                    colour=discord.Colour.light_grey(),
+                    text="*Shuffling Cards...*",
+                    image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
+                    with_buttons=False,
+                )
+            )
+            table.active_hand.message = interaction.message
+
+            await asyncio.sleep(3)
+
+            await table.view.update_buttons(active=True)
+            if not await table.view.check_for_winner(interaction):
+                await interaction.message.edit(view=table.view.render(table.active_hand))
+
+            table.ctx.bot.get_cog("Games").blackjack_tables[table.ctx.user.id] = table
 
     def __init__(self, table: Blackjack) -> None:
         super().__init__(timeout=300.0, members=table.ctx.user)
@@ -59,13 +90,7 @@ class TableView(LayoutView):
     ) -> TableView:
         """Recompose the layout for ``hand``: the card plus (optionally) the controls."""
         self.clear_items()
-        self.add_item(self.table.build_container(hand, colour, text, image_url))
-        if with_buttons:
-            self.add_item(discord.ui.ActionRow(self.hit, self.stand, self.double_down, self.split))
-            second_row: list[discord.ui.Button] = [self.help]
-            if self._game_over:
-                second_row.append(NewGameButton(self.table))
-            self.add_item(discord.ui.ActionRow(*second_row))
+        self.add_item(self.table.build_container(self, hand, colour, text, image_url, with_buttons))
         return self
 
     async def finish_winner(self, interaction: discord.Interaction, winner: WinningType) -> tuple[str, discord.Colour]:
@@ -209,35 +234,3 @@ class TableView(LayoutView):
         embed.add_field(name="Split", value="Splits the current hand into two hands. Doubles the bet.")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-class NewGameButton(discord.ui.Button):
-    """Button to start a new game with a different bet"""
-
-    def __init__(self, table: Blackjack) -> None:
-        super().__init__(label="New game (same Bet)", style=discord.ButtonStyle.green, emoji="\U0001f501")
-        self.table: Blackjack = table
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        """Starts a new game with the same bet"""
-        table = self.table.wake_up(self.table.ctx, self.table.active_hand.bet)
-
-        # Shuffle cards, just for aesthetics
-        await interaction.response.edit_message(
-            view=table.view.render(
-                table.active_hand,
-                colour=discord.Colour.light_grey(),
-                text="*Shuffling Cards...*",
-                image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
-                with_buttons=False,
-            )
-        )
-        table.active_hand.message = interaction.message
-
-        await asyncio.sleep(3)
-
-        await table.view.update_buttons(active=True)
-        if not await table.view.check_for_winner(interaction):
-            await interaction.message.edit(view=table.view.render(table.active_hand))
-
-        table.ctx.bot.get_cog("Games").blackjack_tables[table.ctx.user.id] = table

@@ -53,7 +53,7 @@ class SlotMachine(LayoutView):
     )
 
     def __init__(self, player: discord.Member, bet: int, *, rows: int = 3, columns: int = 3) -> None:
-        super().__init__()
+        super().__init__(members=[player])
         self.player: discord.Member = player
         self.bet: int = bet
 
@@ -66,15 +66,16 @@ class SlotMachine(LayoutView):
 
         self._start = discord.ui.Button(label="Start", style=discord.ButtonStyle.blurple)
         self._start.callback = self._on_start  # type: ignore[assignment]
-        self._roll = discord.ui.Button(label="Roll", style=discord.ButtonStyle.green)
-        self._roll.callback = self._on_roll  # type: ignore[assignment]
+        self._reset = discord.ui.Button(label="Reset", style=discord.ButtonStyle.green)
+        self._reset.callback = self._on_reset  # type: ignore[assignment]
+        self._reset.disabled = True
 
         self._compose()
 
     def __str__(self) -> str:
         return self.build()
 
-    def build_container(self, display: str | None = None, status: str | None = None) -> discord.ui.Container:
+    def build_container(self, display: str | None = None, status: str | None = None, *, buttons: bool = True) -> discord.ui.Container:
         """Builds the Components V2 slot-machine card.
 
         ``display`` overrides the reel art (used during the reveal animation); ``status``
@@ -82,11 +83,25 @@ class SlotMachine(LayoutView):
         """
         container = discord.ui.Container(accent_colour=helpers.Colour.white())
         reels = display if display is not None else self.build()
-        container.add_item(discord.ui.TextDisplay(f"## 🎰 Slot Machine\n{self.DESC_TITLE}\n{reels}"))
+
+        container.add_item(discord.ui.TextDisplay(f"## 🎰 Slot Machine\n{self.DESC_TITLE}"))
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(reels))
+        container.add_item(discord.ui.Separator())
+
         container.add_item(discord.ui.TextDisplay(f"Bet: **{fnumb(self.bet)}** {Emojis.Economy.cash}"))
+
         if status:
             container.add_item(discord.ui.TextDisplay(status))
+
+        if buttons:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(self._start, self._reset))
+
+        container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player}"))
+
         return container
 
     def roll(self) -> None:
@@ -206,12 +221,13 @@ class SlotMachine(LayoutView):
     def _compose(self, display: str | None = None, status: str | None = None, *, buttons: bool = True) -> None:
         """Recompose the layout: the slot card plus the control row (omitted while rolling)."""
         self.clear_items()
-        self.add_item(self.build_container(display, status))
-        if buttons:
-            self.add_item(discord.ui.ActionRow(self._roll if self.finished else self._start))
+        self.add_item(self.build_container(display, status, buttons=buttons))
 
     async def _on_start(self, interaction: discord.Interaction) -> None:
         """Spins the slot machine, revealing one row at a time."""
+        self._start.disabled = True
+        self._reset.disabled = False
+
         self._compose(buttons=False)
         await interaction.response.edit_message(view=self)
 
@@ -232,9 +248,12 @@ class SlotMachine(LayoutView):
         self._compose(status=status)
         await interaction.edit_original_response(view=self)
 
-    async def _on_roll(self, interaction: discord.Interaction) -> None:
+    async def _on_reset(self, interaction: discord.Interaction) -> None:
         """Reset and re-bet for another spin."""
         self.reset()
+
+        self._start.disabled = False
+        self._reset.disabled = True
 
         balance = await interaction.client.db.get_user_balance(self.player.id, interaction.guild_id)
         if self.bet > balance.cash:

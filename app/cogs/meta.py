@@ -573,7 +573,9 @@ class Meta(Cog):
 
         def add_content(title: str, content: str) -> None:
             paginator.add_line(f"== {title} ==\n")
-            paginator.add_line(content.replace("`", "`\u200b"))
+            # split up if content exceeds 1988 chars
+            for i in range(0, len(content), 1988):
+                paginator.add_line(content[i : i + 1988].replace("`", "`\u200b"))
             paginator.close_page()
 
         transformer = pprint.pformat if json else format_fields
