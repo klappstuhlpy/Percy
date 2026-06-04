@@ -90,27 +90,27 @@ class PlayerPanel(LayoutView):
         self.on_shuffle = discord.ui.Button(
             style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["shuffle"][ShuffleMode.off], disabled=True
         )
-        self.on_shuffle.callback = self._on_shuffle  # type: ignore[assignment]
+        self.on_shuffle.callback = self._on_shuffle
         self.on_back = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏮️", disabled=True)
-        self.on_back.callback = self._on_back  # type: ignore[assignment]
+        self.on_back.callback = self._on_back
         self.on_pause_play = discord.ui.Button(
             style=discord.ButtonStyle.blurple, emoji=EMOJI_KEYS["pause_play"][False], disabled=True
         )
-        self.on_pause_play.callback = self._on_pause_play  # type: ignore[assignment]
+        self.on_pause_play.callback = self._on_pause_play
         self.on_forward = discord.ui.Button(style=discord.ButtonStyle.blurple, emoji="⏭", disabled=True)
-        self.on_forward.callback = self._on_forward  # type: ignore[assignment]
+        self.on_forward.callback = self._on_forward
         self.on_loop = discord.ui.Button(
             style=discord.ButtonStyle.grey, emoji=EMOJI_KEYS["loop"][QueueMode.normal], disabled=True
         )
-        self.on_loop.callback = self._on_loop  # type: ignore[assignment]
+        self.on_loop.callback = self._on_loop
         self.on_stop = discord.ui.Button(style=discord.ButtonStyle.red, emoji="⏹️", label="Stop", disabled=True)
-        self.on_stop.callback = self._on_stop  # type: ignore[assignment]
+        self.on_stop.callback = self._on_stop
         self.on_volume = discord.ui.Button(
             style=discord.ButtonStyle.grey, emoji="🔊", label="Adjust Volume", disabled=True
         )
-        self.on_volume.callback = self._on_volume  # type: ignore[assignment]
+        self.on_volume.callback = self._on_volume
         self.on_like = discord.ui.Button(style=discord.ButtonStyle.green, emoji=EMOJI_KEYS["like"], disabled=True)
-        self.on_like.callback = self._on_like  # type: ignore[assignment]
+        self.on_like.callback = self._on_like
 
         self.update_buttons()
 
@@ -124,8 +124,6 @@ class PlayerPanel(LayoutView):
         self.update_buttons()
         self.clear_items()
         self.add_item(self.build_container())
-        self.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
-        self.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
     def build_container(self) -> discord.ui.Container:
         """Builds the Components V2 now-playing card for the panel."""
@@ -134,6 +132,7 @@ class PlayerPanel(LayoutView):
         if self.state == PlayerState.PLAYING:
             assert self.player.current is not None
             assert self.player.guild is not None
+
             track = self.player.current
             artist = f"[{track.author}]({track.artist.url})" if track.artist.url else track.author
 
@@ -148,7 +147,7 @@ class PlayerPanel(LayoutView):
 
             container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay(
-                f"**Now Playing**\n"
+                f"### Now Playing\n"
                 f"**Track:** [{track.title}]({track.uri})\n"
                 f"**Artist:** {artist}\n"
                 f"**Bound to:** {self.player.channel.mention}\n"
@@ -182,10 +181,19 @@ class PlayerPanel(LayoutView):
                 ShuffleMode.off: "<:off1:1322338488443736257> **``Off``**",
                 ShuffleMode.on: "<:on1:1322338500300771458> **``On``**",
             }.get(self.player.queue.shuffle)
+
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(f"### Status\n{status}"))
+            container.add_item(discord.ui.Separator())
+
             container.add_item(discord.ui.TextDisplay(
-                f"**Status**\n{status}\n"
-                f"**Loop Mode:** `{loop_mode}`  •  **Shuffle Mode:** {shuffle}\n"
-                f"**Volume**\n```swift\n{ProgressBar(0, 100, self.player.volume)} [ {self.player.volume}% ]```"
+                f"**Loop Mode:** `{loop_mode}` {Emojis.empty} • {Emojis.empty} **Shuffle Mode:** {shuffle}"
+            ))
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                f"### Volume\n"
+                f"```swift\n"
+                f"{ProgressBar(0, 100, self.player.volume)} [ {self.player.volume}% ]```"
             ))
 
             extras: list[str] = []
@@ -196,6 +204,11 @@ class PlayerPanel(LayoutView):
                 extras.append(f"**Next Track:** [{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, 'R')}")
             if extras:
                 container.add_item(discord.ui.TextDisplay("\n".join(extras)))
+
+            container.add_item(discord.ui.Separator())
+
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
+            container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
             mode = "Auto-Playing" if self.player.autoplay != 2 else "Manual-Playing"
@@ -213,6 +226,12 @@ class PlayerPanel(LayoutView):
                 container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(icon)))
             else:
                 container.add_item(discord.ui.TextDisplay(heading))
+
+            container.add_item(discord.ui.Separator())
+
+            container.add_item(discord.ui.ActionRow(self.on_shuffle, self.on_back, self.on_pause_play, self.on_forward, self.on_loop))
+            container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
+
             container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay("-# last updated"))
 
