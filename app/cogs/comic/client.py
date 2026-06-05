@@ -34,7 +34,7 @@ class Marvel(BaseHTTPClient):
     timestamp/hash Marvel requires) and surfaces failures as :class:`MarvelError`.
     """
 
-    BASE_URL = 'http://gateway.marvel.com/v1/public/'
+    BASE_URL = 'https://gateway.marvel.com/v1/public/'
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot.session, name='Marvel')
@@ -69,7 +69,8 @@ class Marvel(BaseHTTPClient):
         }
 
         hdrs = {
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': 'Percy/1.0 (https://github.com/klappstuhlpy/Percy)'
         }
 
         if headers is not None and isinstance(headers, dict):
@@ -492,6 +493,7 @@ def remove_html_tags(content: str) -> str:
 
 
 class Parser:
+    HEADERS: ClassVar[dict[str, str]] = {'User-Agent': 'Percy/1.0 (https://github.com/klappstuhlpy/Percy)'}
     """Parser object for comic fetching."""
 
     DC_ENDPOINT: ClassVar[str] = 'https://www.dc.com'
@@ -579,7 +581,7 @@ class Parser:
 
         mangas = []
         async with aiohttp.ClientSession() as session:
-            async with session.get(ref) as resp:
+            async with session.get(ref, headers=cls.HEADERS) as resp:
                 soup = BeautifulSoup(await resp.text(), 'html.parser')
                 elements = [
                     urljoin(cls.RAW_VIZ_ENDPOINT, i.get('href'))  # type: ignore[arg-type]
@@ -587,7 +589,7 @@ class Parser:
                 ]
 
             for index, element in enumerate(elements):
-                async with session.get(element) as resp:
+                async with session.get(element, headers=cls.HEADERS) as resp:
                     _cs_manga = await cls._bs4_parse_dc(await resp.text(), index=index, element=element)
                     if _cs_manga is not None:
                         mangas.append(_cs_manga)
@@ -597,7 +599,7 @@ class Parser:
     @classmethod
     async def bs4_dc(cls) -> list[GenericComic]:
         async with aiohttp.ClientSession() as session:
-            async with session.get(cls.DC_ENDPOINT + '/comics') as resp:
+            async with session.get(cls.DC_ENDPOINT + '/comics', headers=cls.HEADERS) as resp:
                 if resp.status != 200:
                     resp.raise_for_status()
 
@@ -611,7 +613,7 @@ class Parser:
                 branch = item.findNext(class_='card-button usePointer').get('href')
                 link = cls.DC_ENDPOINT + branch
 
-                async with session.get(link) as resp:
+                async with session.get(link, headers=cls.HEADERS) as resp:
                     if resp.status != 200:
                         resp.raise_for_status()
 
@@ -695,7 +697,7 @@ class Parser:
         descs: dict[int, str] = {}
 
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://marvel.com/comics/calendar/') as resp:
+            async with session.get('https://marvel.com/comics/calendar/', headers=cls.HEADERS) as resp:
                 if resp.status != 200:
                     resp.raise_for_status()
                 page = await resp.text()
@@ -709,7 +711,7 @@ class Parser:
                 page = None
                 for _ in range(10):
                     try:
-                        async with session.get(plink) as resp:
+                        async with session.get(plink, headers=cls.HEADERS) as resp:
                             if resp.status != 200:
                                 resp.raise_for_status()
                             page = await resp.text()
