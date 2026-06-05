@@ -579,7 +579,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if command.hidden or not self.is_available(command):
             return await self.context.send(self.command_not_found(command.name), silent=True)
 
-        container = self.build_command_container(command)
+        container = await self.build_command_container(command)
         await self.context.send(view=NoticeView(container), silent=True)
         return None
 
@@ -616,14 +616,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
         )
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
-            "**More Help**\n"
+            "### More Help\n"
             "Alternatively you can use the following commands to get information about a specific command or category:\n"
             f"- `{prefix}help <command>`\n"
             f"- `{prefix}help <category>`\n\n"
             f"You can also use `{prefix}help flags` to get an overview of how to use flags."
         ))
         container.add_item(discord.ui.TextDisplay(
-            f"**Stats**\n"
+            f"### Stats\n"
             f"**Total Commands:** `{len(ctx.bot.commands)}`\n"
             f"**Total Commands Invoked:** `{await self.total_commands_invoked()}`"
         ))
@@ -700,7 +700,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         escaped_asterisk = discord.utils.escape_markdown("*")
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
-            "**Command Flags**\n"
+            "## Command Flags\n"
             "Flags are POSIX-like arguments that can be passed to a command.\n"
             "They are prefixed with `--` and can be used in any order.\n\n"
             "Flags that take no value (shown as `[--flag1]`) and represent a boolean value are called **store-true** flags. "
@@ -716,18 +716,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
         ))
         return container
 
-    def build_command_container(self, command: AnyCommand) -> discord.ui.Container:
+    async def build_command_container(self, command: AnyCommand) -> discord.ui.Container:
         """Build the Components V2 detail card for a single command."""
         from app.core import Command, HybridCommand
 
         ctx = self.context
         container = discord.ui.Container(accent_colour=helpers.Colour.white())
-        container.add_item(
-            discord.ui.Section(
-                f"## Command Help\n`{command.qualified_name}`",
-                accessory=discord.ui.Thumbnail(COMMAND_ICON_URL),
-            )
-        )
 
         signature = AnsiStringBuilder()
         signature.append(ctx.clean_prefix, color=AnsiColor.white, bold=True)
@@ -736,7 +730,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         description = inspect.cleandoc(command.help or command.description or "No description provided.")
         rendered = signature.ensure_codeblock(fallback="md").dynamic(ctx)  # type: ignore
-        container.add_item(discord.ui.TextDisplay(f"{rendered}\n{description}"))
+        container.add_item(
+            discord.ui.Section(
+                f"## Command Help\n"
+                f"{rendered}\n"
+                f"{description}",
+                accessory=discord.ui.Thumbnail(COMMAND_ICON_URL)
+            )
+        )
 
         sig_fields = self.get_command_signature(command, descripted=True)
         if isinstance(sig_fields, list) and sig_fields:
@@ -771,9 +772,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             spec = command.permissions
             parts = []
             if user := spec.user:
-                parts.append("User: " + ", ".join(map(spec.permission_as_str, user)))
+                parts.append("**User:** " + ", ".join(map(spec.permission_as_str, user)))
             if bot := spec.bot:
-                parts.append("Bot: " + ", ".join(map(spec.permission_as_str, bot)))
+                parts.append("**Bot:** " + ", ".join(map(spec.permission_as_str, bot)))
             if parts:
                 extra.append(f"**{Emojis.Command.locked} | Required Permissions**\n" + "\n".join(parts))
 
@@ -788,6 +789,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             container.add_item(discord.ui.Separator())
             for block in extra:
                 container.add_item(discord.ui.TextDisplay(block))
+                container.add_item(discord.ui.Separator())
+
+        invoked: int = await ctx.bot.db.stats.get_command_invokation_count(command.qualified_name)
+        footer = f"-# {command.qualified_name}"
+        if invoked > 1:
+            footer += f" • {invoked}x invoked"
+
+        container.add_item(discord.ui.TextDisplay(footer))
 
         return container
 
