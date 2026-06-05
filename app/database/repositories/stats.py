@@ -82,6 +82,10 @@ class StatsRepository(BaseRepository):
         query += f" GROUP BY {group_by} ORDER BY uses DESC LIMIT {limit};"
         return await self.fetch(query, *args)
 
+    async def get_command_invokation_count(self, command: str) -> int:
+        """Returns the number of times a command has been invoked."""
+        return await self.fetchval("SELECT COUNT(*) FROM commands WHERE command = $1;", command)
+
     async def get_command_summary(
             self, guild_id: int, author_id: int | None = None
     ) -> asyncpg.Record:
