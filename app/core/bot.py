@@ -16,7 +16,7 @@ import wavelink
 from aiohttp import ClientSession
 from discord.ext import commands
 from discord.http import Route
-from discord.utils import MISSING
+from discord.utils import MISSING, get
 from expiringdict import ExpiringDict
 
 from app.cogs import EXTENSIONS
@@ -144,11 +144,11 @@ class Bot(commands.Bot):
             return commands.when_mentioned_or('b.')(self, message)
 
         if not message.guild:
-            return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
+            return commands.when_mentioned_or(default_prefix)(self, message)
 
-        config = await self.db.get_guild_config(guild_id=message.guild.id)  # type: ignore[misc]
+        config = await self.db.get_guild_config(guild_id=message.guild.id)
         if config is None:
-            return commands.when_mentioned_or(default_prefix)(self, message)  # type: ignore[arg-type]
+            return commands.when_mentioned_or(default_prefix)(self, message)
 
         if not config.prefixes:
             return commands.when_mentioned(self, message)
@@ -179,7 +179,7 @@ class Bot(commands.Bot):
         await super().reload_extension(name, package=package)
         self.prepare_jishaku_flags()
 
-    def add_command(self, command: Command, /) -> None:  # type: ignore[override]
+    def add_command(self, command: Command, /) -> None:
         # Resolves custom flags to work with the command.
         if isinstance(command, Command):
             command.transform_flag_parameters()
@@ -189,7 +189,7 @@ class Bot(commands.Bot):
                 if isinstance(child, Command):
                     child.transform_flag_parameters()  # type: ignore
 
-        super().add_command(command)  # type: ignore
+        super().add_command(command)
 
     async def setup_hook(self) -> None:
         """Prepares the bot for startup."""
@@ -241,17 +241,47 @@ class Bot(commands.Bot):
     ) -> Context:  # type: ignore[override]
         return await super().get_context(origin, cls=cls)
 
+    def get_slash_command_payloads(self, shortened: bool = False) -> list[dict]:
+        """Return the application (slash) command payloads for all registered app commands.
+
+        This iterates over the bot's commands and collects the app command representation
+        (as produced by discord.app_commands Command.to_dict) for any hybrid/group commands
+        that declare an .app_command attribute.
+        """
+        payloads: list[dict] = []
+        for cmd in self.walk_commands():
+            app_cmd = getattr(cmd, "app_command", None)
+            if app_cmd is None:
+                continue
+
+            try:
+                payload = app_cmd.to_dict(tree=self.tree)
+            except:
+                app_cmd = getattr(app_cmd, "app_command", None)
+                if app_cmd is None:
+                    continue
+                payload = app_cmd.to_dict(tree=self.tree)
+
+            if shortened:
+                payload = {
+                    "name": app_cmd.qualified_name,
+                    "description": payload["description"]
+                }
+
+            payloads.append(payload)
+        return payloads
+
     async def process_commands(self, message: discord.Message) -> None:
         ctx = await self.get_context(message)
 
         if ctx.command is None:
-            return None
+            return
 
         if ctx.author.id in self.blacklist:
-            return None
+            return
 
         if ctx.guild is not None and ctx.guild.id in self.blacklist:
-            return None
+            return
 
         if await self.spam_control.is_spam(ctx, message):
             return
@@ -332,7 +362,7 @@ class Bot(commands.Bot):
 
             await self.stats_webhook.send(embed=embed)
 
-    async def on_command_error(self, ctx: Context, error: commands.CommandError) -> Any:  # type: ignore[override]
+    async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         """|coro|
 
         The default command error handler provided by the bot.
@@ -359,20 +389,21 @@ class Bot(commands.Bot):
             commands.CommandNotFound, commands.CheckFailure, discord.Forbidden
         )
         if isinstance(error, blacklist):
-            return None
+            return
 
         if isinstance(error, commands.CommandOnCooldown):
             if not ctx.guild and ctx.bot_permissions.add_reactions:
-                return await ctx.message.add_reaction('\U000023f3')
+                await ctx.message.add_reaction('\U000023f3')
+                return
 
             await ctx.send_warning(f'Slow down, you\'re on cooldown. Retry again in **{humanize_duration(error.retry_after)}**.')
-            return None
+            return
         if isinstance(error, commands.NSFWChannelRequired):
             await ctx.send(
                 '\N{NO ENTRY SIGN} This command can only be run in channels that are marked **NSFW**.',
                 reference=ctx.message, delete_after=15, ephemeral=True,
             )
-            return None
+            return
 
         if isinstance(error, (commands.MissingPermissions, commands.BotMissingPermissions)):
             if isinstance(error, commands.MissingPermissions):
@@ -388,14 +419,14 @@ class Bot(commands.Bot):
                     permissions.administrator or (permissions.send_messages and permissions.read_message_history)
             ):
                 await ctx.send(message, reference=ctx.message, ephemeral=True)
-                return None
+                return
 
             if permissions.administrator or permissions.add_reactions:
                 await ctx.message.add_reaction('\U000026a0')
 
             with suppress(discord.HTTPException):
                 await ctx.author.send(message)
-            return None
+            return
 
         # Look for errors we send directly into the channel.
         to_send_error_lookup = deep_to_with(error, '__cause__')
@@ -409,7 +440,8 @@ class Bot(commands.Bot):
             content = str(to_send_error_lookup)
             if not content.startswith('<:'):
                 content = f'{Emojis.error} {content}'
-            return await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True)
+            await ctx.send(content, reference=ctx.message, delete_after=15, ephemeral=True)
+            return
 
         error = getattr(error, 'original', error)
 
