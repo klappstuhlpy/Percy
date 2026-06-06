@@ -275,7 +275,27 @@ TOPGG_TOKEN=                         # top.gg stats posting
 IMAGES_API_TOKEN=                    # image API integrations
 MARVEL_API_PUBLIC_KEY=               # Marvel API (comic subscriptions)
 MARVEL_API_PRIVATE_KEY=
+
+# ── Web Dashboard (klappstuhl.me BFF) ───────────────────
+INTERNAL_API_TOKEN=                  # pre-shared bearer token for the dashboard BFF
+INTERNAL_API_PORT=8090               # port for internal API (default 8090)
 ```
+
+### Internal API (Web Dashboard)
+
+When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (default `127.0.0.1:8090`) exposing guild data to the klappstuhl.me web dashboard. The dashboard proxies user actions through this API so all mutations go through Percy's repository layer and cache invalidation.
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/internal/guilds/{id}` | Guild config with resolved channel/role names |
+| PATCH | `/api/internal/guilds/{id}/config` | Update config fields + cache invalidation |
+| GET | `/api/internal/guilds/{id}/roles` | All guild roles |
+| GET | `/api/internal/guilds/{id}/channels` | All guild channels |
+| GET | `/api/internal/guilds/{id}/members?limit=N&after=ID` | Paginated member list |
+| GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
+
+All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
 

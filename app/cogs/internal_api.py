@@ -77,6 +77,28 @@ class InternalAPI(Cog):
 
     # -- Endpoints ------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_channel(guild, channel_id: int | None) -> dict | None:
+        if channel_id is None:
+            return None
+        ch = guild.get_channel(channel_id)
+        return {
+            'id': str(channel_id),
+            'name': ch.name if ch else 'deleted-channel',
+            'type': str(ch.type) if ch else 'unknown',
+        }
+
+    @staticmethod
+    def _resolve_role(guild, role_id: int | None) -> dict | None:
+        if role_id is None:
+            return None
+        role = guild.get_role(role_id)
+        return {
+            'id': str(role_id),
+            'name': role.name if role else 'deleted-role',
+            'color': role.color.value if role else 0,
+        }
+
     async def _get_guild_config(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
 
@@ -97,14 +119,14 @@ class InternalAPI(Cog):
                 'alerts': guild_config.flags.alerts,
                 'gatekeeper': guild_config.flags.gatekeeper,
             },
-            'audit_log_channel_id': guild_config.audit_log_channel_id,
-            'poll_channel_id': guild_config.poll_channel_id,
-            'poll_ping_role_id': guild_config.poll_ping_role_id,
-            'poll_reason_channel_id': guild_config.poll_reason_channel_id,
+            'audit_log_channel': self._resolve_channel(guild, guild_config.audit_log_channel_id),
+            'poll_channel': self._resolve_channel(guild, guild_config.poll_channel_id),
+            'poll_ping_role': self._resolve_role(guild, guild_config.poll_ping_role_id),
+            'poll_reason_channel': self._resolve_channel(guild, guild_config.poll_reason_channel_id),
             'mention_count': guild_config.mention_count,
-            'mute_role_id': guild_config.mute_role_id,
-            'alert_channel_id': guild_config.alert_channel_id,
-            'music_panel_channel_id': guild_config.music_panel_channel_id,
+            'mute_role': self._resolve_role(guild, guild_config.mute_role_id),
+            'alert_channel': self._resolve_channel(guild, guild_config.alert_channel_id),
+            'music_panel_channel': self._resolve_channel(guild, guild_config.music_panel_channel_id),
             'use_music_panel': guild_config.use_music_panel,
             'prefixes': list(guild_config.prefixes),
         }
