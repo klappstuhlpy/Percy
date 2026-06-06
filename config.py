@@ -82,6 +82,10 @@ class DatabaseConfig:
 
 # API Keys
 
+# Internal API (used by the klappstuhl_me BFF dashboard)
+internal_api_token: str | None = env('INTERNAL_API_TOKEN')
+internal_api_port: int = int(env('INTERNAL_API_PORT') or '8090')
+
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
 groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or 'llama-3.3-70b-versatile')
