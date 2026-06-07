@@ -524,6 +524,18 @@ class Meta(Cog):
         )
 
     @command(
+        'dashboard',
+        description="Shows the dashboard of the bot.",
+        guild_only=True,
+        hybrid=True
+    )
+    async def dashboard(self, ctx: Context) -> None:
+        """Shows the dashboard of the bot."""
+        url = f"https://klappstuhl.me/percy/dashboard/guild/{ctx.guild.id}"
+        await ctx.send(f"You can find the dashboard here: <{url}>\n"
+                       f"*Note: If you have no account, you can create one by linking your Discord account.*")
+
+    @command(
         "solved",
         description="Marks a thread as solved.",
         guild_only=True,

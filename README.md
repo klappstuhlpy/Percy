@@ -88,18 +88,18 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Roulette, Slots & Tower** | Classic casino gambling games with rendered results.                                                                                                                                                     |
 | **Mini-games**              | Tic-Tac-Toe, Minesweeper and Hangman.                                                                                                                                                                    |
 | **Earning activities**      | `daily` (with streak bonus), plus `fish` and `hunt` — cooldown-gated, weighted risk/reward loot tables from junk to rare jackpots.                                                                       |
-| **Server lottery**          | Admins start a timed `lottery`; members buy weighted tickets, the pot grows, and a winner is drawn automatically via the persistent timer system (announced with a Components V2 card).                   |
+| **Server lottery**          | Admins start a timed `lottery`; members buy weighted tickets, the pot grows, and a winner is drawn automatically via the persistent timer system (announced with a Components V2 card).                  |
 
 ### Leveling
 
-| Feature                  | What it does                                                                                                                                          |
-|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **XP & ranks**           | Earn XP per message (with cooldowns and configurable gain), level up, and view a **rendered rank card** (`/level`).                                   |
-| **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                        |
-| **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                       |
-| **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                 |
-| **Voice XP**             | Opt-in XP for time spent active in voice (`/level config voice`); skips members who are alone, AFK or deafened, and honours the same blacklists.       |
-| **Fine-grained control** | Toggle leveling, set the level-up message and channel (or DM), blacklist roles/channels/users, and optionally delete a member's data when they leave. |
+| Feature                  | What it does                                                                                                                                            |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **XP & ranks**           | Earn XP per message (with cooldowns and configurable gain), level up, and view a **rendered rank card** (`/level`).                                     |
+| **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                          |
+| **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                         |
+| **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                   |
+| **Voice XP**             | Opt-in XP for time spent active in voice (`/level config voice`); skips members who are alone, AFK or deafened, and honours the same blacklists.        |
+| **Fine-grained control** | Toggle leveling, set the level-up message and channel (or DM), blacklist roles/channels/users, and optionally delete a member's data when they leave.   |
 
 ### Music
 
@@ -113,40 +113,40 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 ### Community & Engagement
 
-| Feature        | What it does                                                                                                                                                              |
-|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Polls**      | Rich polls with up to 8 options, animated vote bars, optional vote reasons, role-ping opt-in, threads, scheduling and live odds. Search, edit and inspect existing polls. |
-| **Giveaways**  | Create and manage giveaways through modals; entries via a persistent button, automatic winner draw and reroll.                                                            |
-| **Tags**       | Per-guild custom tags with aliases, fuzzy search, ownership transfer and usage stats.                                                                                     |
-| **Highlights** | Get a DM when a word or phrase you subscribed to is mentioned.                                                                                                            |
-| **Autoresponders** | Canned replies that fire when a message matches a trigger (`contains`/`exact`/`startswith`/`regex`), with placeholders like `{user}` and `{count}` (`autoresponder …`). |
-| **Gimmicks**   | Fun/flavour annotation commands.                                                                                                                                          |
+| Feature            | What it does                                                                                                                                                              |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Polls**          | Rich polls with up to 8 options, animated vote bars, optional vote reasons, role-ping opt-in, threads, scheduling and live odds. Search, edit and inspect existing polls. |
+| **Giveaways**      | Create and manage giveaways through modals; entries via a persistent button, automatic winner draw and reroll.                                                            |
+| **Tags**           | Per-guild custom tags with aliases, fuzzy search, ownership transfer and usage stats.                                                                                     |
+| **Highlights**     | Get a DM when a word or phrase you subscribed to is mentioned.                                                                                                            |
+| **Autoresponders** | Canned replies that fire when a message matches a trigger (`contains`/`exact`/`startswith`/`regex`), with placeholders like `{user}` and `{count}` (`autoresponder …`).   |
+| **Gimmicks**       | Fun/flavour annotation commands.                                                                                                                                          |
 
 ### Utility & Productivity
 
-| Feature                      | What it does                                                                                           |
-|------------------------------|--------------------------------------------------------------------------------------------------------|
-| **Reminders**                | `remind me in 2h to …` style reminders with natural-language time parsing; backed by the timer system. |
-| **Notes**                    | Personal, user-installable notes (works in DMs and any server via a user-install app command).         |
-| **Temporary voice channels** | "Join-to-create" hub channels that spin up a personal voice channel on join and clean up when empty.   |
-| **Emoji management**         | Add, steal, rename and inspect server emojis, with per-guild emoji usage stats.                        |
-| **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                   |
-| **History tracking**         | Username/nickname history (`names`), `lastseen`, avatar history, and a rendered **presence chart**.    |
-| **Translation**              | `translate` text into any language (ISO code or name), with the source auto-detected; keyless backend. |
+| Feature                      | What it does                                                                                                                                    |
+|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Reminders**                | `remind me in 2h to …` style reminders with natural-language time parsing; backed by the timer system.                                          |
+| **Notes**                    | Personal, user-installable notes (works in DMs and any server via a user-install app command).                                                  |
+| **Temporary voice channels** | "Join-to-create" hub channels that spin up a personal voice channel on join and clean up when empty.                                            |
+| **Emoji management**         | Add, steal, rename and inspect server emojis, with per-guild emoji usage stats.                                                                 |
+| **User & server info**       | Profile, avatar, `serverinfo`, `userinfo`, timezone settings, and per-user settings.                                                            |
+| **History tracking**         | Username/nickname history (`names`), `lastseen`, avatar history, and a rendered **presence chart**.                                             |
+| **Translation**              | `translate` text into any language (ISO code or name), with the source auto-detected; keyless backend.                                          |
 | **Stat counters**            | Self-updating voice channels that display a live server statistic — members, humans, bots, online, boosts, roles or channels (`statcounter …`). |
 
 ### Developer & Information
 
-| Feature                  | What it does                                                                                                                                                  |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                             |
-| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).       |
-| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                     |
-| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                           |
+| Feature                  | What it does                                                                                                                                                                  |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                                             |
+| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).                       |
+| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                     |
+| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                                           |
 | **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set. |
-| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                       |
-| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection. |
-| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                                   |
+| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                       |
+| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                 |
+| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                                                   |
 
 ---
 
@@ -164,18 +164,18 @@ Use the built-in help to explore everything interactively:
 
 A few representative command groups:
 
-| Group         | Examples                                                                                                           |
-|---------------|--------------------------------------------------------------------------------------------------------------------|
-| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …` |
-| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                    |
-| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                            |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop`, `lottery …`          |
-| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                          |
-| Polls         | `polls create/end/edit/delete/search/history/config`                                                               |
-| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                 |
+| Group         | Examples                                                                                                                                |
+|---------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                      |
+| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                         |
+| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                 |
+| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop`, `lottery …`                               |
+| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                               |
+| Polls         | `polls create/end/edit/delete/search/history/config`                                                                                    |
+| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                      |
 | Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`, `translate`, `statcounter …`, `autoresponder …` |
-| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                |
-| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`, `ask` (AI assistant)                                          |
+| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                                     |
+| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`, `ask` (AI assistant)                                                               |
 
 ---
 
