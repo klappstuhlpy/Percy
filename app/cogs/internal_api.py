@@ -94,9 +94,9 @@ class InternalAPI(Cog):
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
-        self._site = web.TCPSite(self._runner, '127.0.0.1', config.internal_api_port)
+        self._site = web.TCPSite(self._runner, config.internal_api_host, config.internal_api_port)
         await self._site.start()
-        log.info('Internal API listening on 127.0.0.1:%d', config.internal_api_port)
+        log.info('Internal API listening on %s:%d', config.internal_api_host, config.internal_api_port)
 
     async def cog_unload(self) -> None:
         if self._site is not None:

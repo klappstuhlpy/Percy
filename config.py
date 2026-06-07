@@ -85,6 +85,7 @@ class DatabaseConfig:
 # Internal API (used by the klappstuhl_me BFF dashboard)
 internal_api_token: str | None = env('INTERNAL_API_TOKEN')
 internal_api_port: int = int(env('INTERNAL_API_PORT') or '8090')
+internal_api_host: str = env('INTERNAL_API_HOST') or '127.0.0.1'
 
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
