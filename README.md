@@ -293,6 +293,22 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/roles` | All guild roles |
 | GET | `/api/internal/guilds/{id}/channels` | All guild channels |
 | GET | `/api/internal/guilds/{id}/members?limit=N&after=ID` | Paginated member list |
+| POST | `/api/internal/guilds/{id}/members/{user_id}/action` | Kick/ban/unban a member (JSON: action, reason) |
+| PATCH | `/api/internal/guilds/{id}/members/{user_id}/roles` | Add/remove member roles (JSON: add[], remove[]) |
+| GET | `/api/internal/guilds/{id}/gatekeeper` | Gatekeeper configuration |
+| PATCH | `/api/internal/guilds/{id}/gatekeeper` | Update gatekeeper settings |
+| GET | `/api/internal/guilds/{id}/leveling/config` | Leveling system configuration |
+| GET | `/api/internal/guilds/{id}/leveling/leaderboard?limit=N` | XP leaderboard |
+| PATCH | `/api/internal/guilds/{id}/leveling/users/{user_id}` | Update user level/XP |
+| GET | `/api/internal/guilds/{id}/polls` | All guild polls with status and votes |
+| PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll (question, description, options, color, image) |
+| GET | `/api/internal/guilds/{id}/giveaways` | All guild giveaways with entries |
+| GET | `/api/internal/guilds/{id}/tags` | Tags with usage stats and top creators |
+| GET | `/api/internal/guilds/{id}/commands` | All commands + per-guild disable state + plonk list |
+| POST | `/api/internal/guilds/{id}/commands/toggle` | Enable/disable a command (JSON: name, enabled, channel_id) |
+| POST | `/api/internal/guilds/{id}/plonks` | Add/remove plonked entity (JSON: action, entity_id) |
+| GET | `/api/internal/guilds/{id}/stats` | Guild statistics (members, commands, boosts, etc.) |
+| GET | `/api/internal/bot/stats` | Bot-wide statistics (guilds, users, latency, uptime) |
 | GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
@@ -331,7 +347,7 @@ All of this is stored in PostgreSQL and cached in memory, with the cache invalid
 
 ## Database management
 
-Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V15__….sql`). All commands run against the database configured in `.env`/`config.py`.
+Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V21__….sql`). All commands run against the database configured in `.env`/`config.py`.
 
 | Command                                 | Description                                           |
 |-----------------------------------------|-------------------------------------------------------|
@@ -494,7 +510,7 @@ Percy-v2/
 ├── docker-compose.yml     # Snekbox sandbox service
 ├── app/                   # Application package (see Architecture)
 │   ├── core/ · database/ · services/ · clients/ · rendering/ · cogs/ · utils/
-├── migrations/            # Versioned SQL migrations (V1–V15)
+├── migrations/            # Versioned SQL migrations (V1–V21)
 ├── tests/                 # pytest suite
 └── assets/                # Fonts, word lists, image templates
 ```
