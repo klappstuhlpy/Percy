@@ -301,8 +301,11 @@ class TagsRepository(BaseRepository):
         """Fetches the ``(name, uses)`` of the most-used tags in a guild."""
         query = """
             SELECT
+                id,
                 name,
-                uses
+                uses,
+                created_at,
+                owner_id
             FROM tags
             WHERE location_id=$1
             ORDER BY uses DESC

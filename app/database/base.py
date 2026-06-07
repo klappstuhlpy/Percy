@@ -673,6 +673,11 @@ class GuildConfig(BaseRecord):
     alert_webhook_url: str | None
     alert_channel_id: int | None
 
+    # Added by V21 migration — accessed via getattr() until migration is applied.
+    mod_log_channel_id: int | None
+    message_log_channel_id: int | None
+    voice_log_channel_id: int | None
+
     music_panel_channel_id: int | None
     music_panel_message_id: int | None
     use_music_panel: bool
@@ -694,6 +699,8 @@ class GuildConfig(BaseRecord):
         "id",
         "linked_automod_rules",
         "mention_count",
+        "message_log_channel_id",
+        "mod_log_channel_id",
         "music_panel_channel_id",
         "music_panel_message_id",
         "mute_role_id",
@@ -704,6 +711,7 @@ class GuildConfig(BaseRecord):
         "prefixes",
         "safe_automod_entity_ids",
         "use_music_panel",
+        "voice_log_channel_id",
     )
 
     def __init__(self, **kwargs: Any) -> None:
