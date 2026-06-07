@@ -18,6 +18,7 @@ from aiohttp import web
 
 import config
 from app.core import Bot, Cog
+from app.database import Gatekeeper
 
 if TYPE_CHECKING:
     pass
@@ -390,11 +391,13 @@ class InternalAPI(Cog):
         payload = {
             'channel': self._resolve_channel(guild, gatekeeper.channel_id),
             'role': self._resolve_role(guild, gatekeeper.role_id),
+            'message': gatekeeper.message_id,
             'starter_role': self._resolve_role(guild, gatekeeper.starter_role_id),
             'bypass_action': gatekeeper.bypass_action,
             'rate': gatekeeper.rate if isinstance(gatekeeper.rate, str) else (f"{gatekeeper.rate[0]}/{gatekeeper.rate[1]}" if gatekeeper.rate else None),
             'started_at': gatekeeper.started_at.isoformat() if gatekeeper.started_at else None,
             'member_count': len(gatekeeper.members),
+            'needs_setup': gatekeeper.status
         }
         return web.json_response(payload)
 
@@ -663,7 +666,7 @@ class InternalAPI(Cog):
                 'description': _kwargs.get('description', 'N/A'),
                 'winners_count': _kwargs.get('winner_count', 1),
                 'entries': len(record.get('entries', [])),
-                'ended': _kwargs.get('expires').astimezone(datetime.UTC) < datetime.datetime.now(datetime.UTC),
+                'ended': datetime.datetime.fromisoformat(_kwargs.get('expires')).astimezone(datetime.UTC) < datetime.datetime.now(datetime.UTC),
                 'ends_at': _kwargs.get('expires'),
             })
 
