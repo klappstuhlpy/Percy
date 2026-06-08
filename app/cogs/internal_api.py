@@ -397,7 +397,7 @@ class InternalAPI(Cog):
             'rate': gatekeeper.rate if isinstance(gatekeeper.rate, str) else (f"{gatekeeper.rate[0]}/{gatekeeper.rate[1]}" if gatekeeper.rate else None),
             'started_at': gatekeeper.started_at.isoformat() if gatekeeper.started_at else None,
             'member_count': len(gatekeeper.members),
-            'needs_setup': gatekeeper.status
+            'needs_setup': gatekeeper.requires_setup
         }
         return web.json_response(payload)
 
