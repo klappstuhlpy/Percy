@@ -297,21 +297,58 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | PATCH | `/api/internal/guilds/{id}/members/{user_id}/roles` | Add/remove member roles (JSON: add[], remove[]) |
 | GET | `/api/internal/guilds/{id}/gatekeeper` | Gatekeeper configuration |
 | PATCH | `/api/internal/guilds/{id}/gatekeeper` | Update gatekeeper settings |
+| POST | `/api/internal/guilds/{id}/gatekeeper/message` | Send verification embed to channel |
+| POST | `/api/internal/guilds/{id}/gatekeeper/toggle` | Enable/disable gatekeeper (JSON: enabled) |
 | GET | `/api/internal/guilds/{id}/leveling/config` | Leveling system configuration |
+| PATCH | `/api/internal/guilds/{id}/leveling/config` | Update leveling config fields |
 | GET | `/api/internal/guilds/{id}/leveling/leaderboard?limit=N` | XP leaderboard |
 | PATCH | `/api/internal/guilds/{id}/leveling/users/{user_id}` | Update user level/XP |
+| POST | `/api/internal/guilds/{id}/leveling/roles` | Add/remove level role mapping |
+| POST | `/api/internal/guilds/{id}/leveling/roles/preset` | Create the milestone reward-role preset (levels 5–100) |
+| POST | `/api/internal/guilds/{id}/leveling/multipliers` | Set role/channel XP multiplier |
+| POST | `/api/internal/guilds/{id}/leveling/blacklist` | Add/remove blacklist entry |
+| GET | `/api/internal/guilds/{id}/economy` | Shop items + lottery state |
+| POST | `/api/internal/guilds/{id}/economy/items` | Create shop item |
+| DELETE | `/api/internal/guilds/{id}/economy/items/{name}` | Delete shop item |
+| GET | `/api/internal/guilds/{id}/economy/balances?limit=N` | Top member balances |
+| PATCH | `/api/internal/guilds/{id}/economy/balances/{user_id}` | Set cash/bank |
+| POST | `/api/internal/guilds/{id}/economy/lottery` | Start lottery |
+| DELETE | `/api/internal/guilds/{id}/economy/lottery` | Cancel lottery |
+| GET | `/api/internal/guilds/{id}/autoresponders` | All autoresponders |
+| POST | `/api/internal/guilds/{id}/autoresponders` | Create autoresponder |
+| PATCH | `/api/internal/guilds/{id}/autoresponders/{trigger}` | Toggle enabled |
+| DELETE | `/api/internal/guilds/{id}/autoresponders/{trigger}` | Delete autoresponder |
+| GET | `/api/internal/guilds/{id}/comics` | All comic feed subscriptions |
+| POST | `/api/internal/guilds/{id}/comics` | Subscribe to a comic brand |
+| PATCH | `/api/internal/guilds/{id}/comics/{brand}` | Update feed config |
+| DELETE | `/api/internal/guilds/{id}/comics/{brand}` | Unsubscribe |
+| POST | `/api/internal/guilds/{id}/comics/{brand}/push` | Manually trigger feed push |
+| GET | `/api/internal/guilds/{id}/temp-channels` | Temp voice channel hubs |
+| POST | `/api/internal/guilds/{id}/temp-channels` | Create hub |
+| PATCH | `/api/internal/guilds/{id}/temp-channels/{channel_id}` | Update format |
+| DELETE | `/api/internal/guilds/{id}/temp-channels/{channel_id}` | Remove hub |
+| GET | `/api/internal/guilds/{id}/status-feed` | Discord status feed subscription |
+| POST | `/api/internal/guilds/{id}/status-feed` | Subscribe/update channel |
+| DELETE | `/api/internal/guilds/{id}/status-feed` | Unsubscribe |
+| GET | `/api/internal/guilds/{id}/lockdowns` | Currently locked channels |
+| POST | `/api/internal/guilds/{id}/lockdowns/unlock` | Unlock channels |
+| GET | `/api/internal/guilds/{id}/highlights` | All user highlight configs |
+| DELETE | `/api/internal/guilds/{id}/highlights/{user_id}` | Remove user's highlights |
+| GET | `/api/internal/guilds/{id}/emoji-stats?limit=N` | Top emoji usage stats |
 | GET | `/api/internal/guilds/{id}/polls` | All guild polls with status and votes |
-| PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll (question, description, options, color, image) |
+| PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll |
 | GET | `/api/internal/guilds/{id}/giveaways` | All guild giveaways with entries |
 | GET | `/api/internal/guilds/{id}/tags` | Tags with usage stats and top creators |
 | GET | `/api/internal/guilds/{id}/commands` | All commands + per-guild disable state + plonk list |
-| POST | `/api/internal/guilds/{id}/commands/toggle` | Enable/disable a command (JSON: name, enabled, channel_id) |
-| POST | `/api/internal/guilds/{id}/plonks` | Add/remove plonked entity (JSON: action, entity_id) |
-| GET | `/api/internal/guilds/{id}/stats` | Guild statistics (members, commands, boosts, etc.) |
-| GET | `/api/internal/bot/stats` | Bot-wide statistics (guilds, users, latency, uptime) |
+| POST | `/api/internal/guilds/{id}/commands/toggle` | Enable/disable a command |
+| POST | `/api/internal/guilds/{id}/plonks` | Add/remove plonked entity |
+| GET | `/api/internal/guilds/{id}/stats` | Guild statistics |
+| GET | `/api/internal/bot/stats` | Bot-wide statistics |
 | GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
+
+The `InternalAPI` cog lives in the `app/cogs/internal_api/` package: `cog.py` owns the aiohttp server lifecycle and route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
 

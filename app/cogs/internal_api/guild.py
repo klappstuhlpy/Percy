@@ -1,0 +1,342 @@
+"""InternalAPI guild endpoints."""
+from __future__ import annotations
+
+import re
+
+from aiohttp import web
+
+import config
+
+from .base import InternalAPIHandlers
+
+
+class GuildHandlers(InternalAPIHandlers):
+    """Guild-related internal API handlers."""
+
+    async def _get_guild_config(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        guild_config = await self.bot.db.get_guild_config(guild_id)
+
+        payload = {
+            'id': guild_config.id,
+            'name': guild.name,
+            'icon_url': guild.icon.url if guild.icon else None,
+            'member_count': guild.member_count,
+            'flags': {
+                'audit_log': guild_config.flags.audit_log,
+                'raid': guild_config.flags.raid,
+                'alerts': guild_config.flags.alerts,
+                'gatekeeper': guild_config.flags.gatekeeper,
+            },
+            'audit_log_channel': self._resolve_channel(guild, guild_config.audit_log_channel_id),
+            'poll_channel': self._resolve_channel(guild, guild_config.poll_channel_id),
+            'poll_ping_role': self._resolve_role(guild, guild_config.poll_ping_role_id),
+            'poll_reason_channel': self._resolve_channel(guild, guild_config.poll_reason_channel_id),
+            'mention_count': guild_config.mention_count,
+            'mute_role': self._resolve_role(guild, guild_config.mute_role_id),
+            'alert_channel': self._resolve_channel(guild, guild_config.alert_channel_id),
+            'mod_log_channel': self._resolve_channel(guild, getattr(guild_config, 'mod_log_channel_id', None)),
+            'message_log_channel': self._resolve_channel(guild, getattr(guild_config, 'message_log_channel_id', None)),
+            'voice_log_channel': self._resolve_channel(guild, getattr(guild_config, 'voice_log_channel_id', None)),
+            'music_panel_channel': self._resolve_channel(guild, guild_config.music_panel_channel_id),
+            'use_music_panel': guild_config.use_music_panel,
+            'prefixes': list(guild_config.prefixes),
+            'is_new_config': guild_config.flags.value == 0 and guild_config.audit_log_channel_id is None,
+        }
+        return web.json_response(payload)
+
+    async def _patch_guild_config(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        if not isinstance(body, dict) or not body:
+            raise web.HTTPBadRequest(text='body must be a non-empty object')
+
+        guild_config = await self.bot.db.get_guild_config(guild_id)
+
+        # Build SET clauses from allowed fields.
+        allowed_fields = {
+            'audit_log_channel_id', 'poll_channel_id', 'poll_ping_role_id',
+            'poll_reason_channel_id', 'mention_count', 'mute_role_id',
+            'alert_channel_id', 'music_panel_channel_id', 'use_music_panel',
+            'mod_log_channel_id', 'message_log_channel_id', 'voice_log_channel_id',
+        }
+        updates: dict[str, object] = {}
+        for key, value in body.items():
+            if key in allowed_fields:
+                updates[key] = value
+            elif key == 'flags' and isinstance(value, dict):
+                # Flags are a bitmask — compute the new value.
+                new_flags = guild_config.flags.value
+                flag_map = {'audit_log': 1, 'raid': 2, 'alerts': 4, 'gatekeeper': 8}
+                for flag_name, bit in flag_map.items():
+                    if flag_name in value:
+                        if value[flag_name]:
+                            new_flags |= bit
+                        else:
+                            new_flags &= ~bit
+                updates['flags'] = new_flags
+            elif key == 'prefixes' and isinstance(value, list):
+                updates['prefixes'] = value
+
+        if not updates:
+            raise web.HTTPBadRequest(text='no valid fields to update')
+
+        # Apply each update through the record's _update mechanism.
+        # We use raw SQL here because the BaseRecord._update pattern is
+        # designed for single-field changes from within the bot.
+        set_clauses = []
+        params: list[object] = []
+        for i, (col, val) in enumerate(updates.items(), start=1):
+            if col == 'prefixes':
+                set_clauses.append(f'{col} = ${i}')
+                params.append(val)
+            else:
+                set_clauses.append(f'{col} = ${i}')
+                params.append(val)
+
+        params.append(guild_id)
+        query = f"UPDATE guild_config SET {', '.join(set_clauses)} WHERE id = ${len(params)}"
+
+        await self.bot.db.execute(query, *params)
+        self.bot.db.get_guild_config.invalidate(guild_id)
+
+        return web.json_response({'ok': True})
+
+    async def _get_guild_roles(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        roles = [
+            {
+                'id': str(role.id),
+                'name': role.name,
+                'color': role.color.value,
+                'position': role.position,
+                'permissions': role.permissions.value,
+                'mentionable': role.mentionable,
+                'managed': role.managed,
+                'hoist': role.hoist,
+                'icon_url': role.icon.url if role.icon else None,
+            }
+            for role in sorted(guild.roles, key=lambda r: r.position, reverse=True)
+        ]
+        return web.json_response(roles)
+
+    async def _get_guild_channels(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        channels = [
+            {
+                'id': str(ch.id),
+                'name': ch.name,
+                'type': str(ch.type),
+                'position': ch.position,
+                'category_id': str(ch.category_id) if ch.category_id else None,
+            }
+            for ch in sorted(guild.channels, key=lambda c: (c.position, c.name))
+        ]
+        return web.json_response(channels)
+
+    async def _get_gatekeeper(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+
+        if gatekeeper is None:
+            return web.json_response(None)
+
+        payload = {
+            'channel': self._resolve_channel(guild, gatekeeper.channel_id),
+            'role': self._resolve_role(guild, gatekeeper.role_id),
+            'message': gatekeeper.message_id,
+            'starter_role': self._resolve_role(guild, gatekeeper.starter_role_id),
+            'bypass_action': gatekeeper.bypass_action,
+            'rate': gatekeeper.rate if isinstance(gatekeeper.rate, str) else (f"{gatekeeper.rate[0]}/{gatekeeper.rate[1]}" if gatekeeper.rate else None),
+            'started_at': gatekeeper.started_at.isoformat() if gatekeeper.started_at else None,
+            'member_count': len(gatekeeper.members),
+            'needs_setup': gatekeeper.requires_setup
+        }
+        return web.json_response(payload)
+
+    async def _patch_gatekeeper(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        if not isinstance(body, dict) or not body:
+            raise web.HTTPBadRequest(text='body must be a non-empty object')
+
+        allowed = {'channel_id', 'role_id', 'starter_role_id', 'bypass_action', 'rate'}
+        updates: dict[str, object] = {}
+        for key, value in body.items():
+            if key not in allowed:
+                continue
+            if key == 'bypass_action' and value not in ('ban', 'kick'):
+                raise web.HTTPBadRequest(text='bypass_action must be ban or kick')
+            if key == 'rate' and not re.match(r'^\d+\/\d+$', value):
+                raise web.HTTPBadRequest(text='rate must be in the format X/Y')
+            updates[key] = value
+
+        if not updates:
+            raise web.HTTPBadRequest(text='no valid fields to update')
+
+        set_clauses = []
+        params: list[object] = [guild_id]
+        for i, (col, val) in enumerate(updates.items(), start=2):
+            set_clauses.append(f'{col} = ${i}')
+            params.append(val)
+
+        await self.bot.db.execute(
+            "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
+            guild_id,
+        )
+
+        query = f"UPDATE guild_gatekeeper SET {', '.join(set_clauses)} WHERE id = $1"
+        await self.bot.db.execute(query, *params)
+        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+
+        return web.json_response({'ok': True})
+
+    async def _send_gatekeeper_message(self, request: web.Request) -> web.Response:
+        """Send a gatekeeper verification embed to a channel and store the message_id."""
+        import discord
+
+        from app.cogs.moderation.gatekeeper import GatekeeperVerifyButton
+        from app.core.views import View
+        from app.utils import helpers
+
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        channel_id = body.get('channel_id')
+        title = body.get('title', 'Verification Required')
+        content = body.get('content', '')
+
+        if not channel_id:
+            raise web.HTTPBadRequest(text='channel_id is required')
+
+        channel = guild.get_channel(int(channel_id))
+        if channel is None:
+            raise web.HTTPBadRequest(text='channel not found')
+
+        if not isinstance(channel, discord.TextChannel):
+            raise web.HTTPBadRequest(text='channel must be a text channel')
+
+        config = await self.bot.db.get_guild_config(guild_id)
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+
+        embed = discord.Embed(title=title, description=content, colour=helpers.Colour.lime_green())
+        embed.set_footer(
+            text="⚠️ This message was set up by the moderators of this server. "
+            "This bot will never ask for your personal information, nor is it related to Discord"
+        )
+
+        view = View(timeout=None).add_item(GatekeeperVerifyButton(config, gatekeeper))
+        try:
+            message = await channel.send(view=view, embed=embed)
+        except discord.HTTPException as e:
+            raise web.HTTPServiceUnavailable(text=f'failed to send message: {e}')
+
+        await self.bot.db.execute(
+            "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
+            guild_id,
+        )
+        await self.bot.db.execute(
+            "UPDATE guild_gatekeeper SET message_id = $2, channel_id = $3 WHERE id = $1",
+            guild_id, message.id, channel_id,
+        )
+        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+
+        return web.json_response({'ok': True, 'message_id': message.id})
+
+    async def _toggle_gatekeeper(self, request: web.Request) -> web.Response:
+        """Enable or disable the gatekeeper."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        enabled = body.get('enabled')
+        if enabled is None:
+            raise web.HTTPBadRequest(text='enabled field is required')
+
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+
+        if enabled:
+            if gatekeeper is None:
+                raise web.HTTPBadRequest(text='gatekeeper has not been configured')
+            if gatekeeper.requires_setup:
+                raise web.HTTPBadRequest(text='gatekeeper requires setup (channel, role, and message must be set)')
+            if gatekeeper.started_at is not None:
+                return web.json_response({'ok': True, 'status': 'already_enabled'})
+            await gatekeeper.enable()
+        else:
+            if gatekeeper is None:
+                return web.json_response({'ok': True, 'status': 'not_configured'})
+            if gatekeeper.started_at is None:
+                return web.json_response({'ok': True, 'status': 'already_disabled'})
+            await gatekeeper.disable()
+
+        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+        return web.json_response({'ok': True, 'status': 'enabled' if enabled else 'disabled'})
+
+    async def _get_user_guilds(self, request: web.Request) -> web.Response:
+        discord_id = int(request.match_info['discord_id'])
+
+        manageable = []
+        for guild in self.bot.guilds:
+            member = guild.get_member(discord_id)
+            if member is None:
+                continue
+            perms = member.guild_permissions
+            if perms.administrator or perms.manage_guild:
+                manageable.append({
+                    'id': str(guild.id),
+                    'name': guild.name,
+                    'icon_url': guild.icon.url if guild.icon else None,
+                    'member_count': guild.member_count,
+                    'owner': guild.owner_id == discord_id,
+                })
+
+        return web.json_response(manageable)
+
