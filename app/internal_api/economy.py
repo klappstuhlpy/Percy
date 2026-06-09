@@ -1,9 +1,13 @@
 """InternalAPI economy endpoints."""
 from __future__ import annotations
 
+import discord
 from aiohttp import web
 
+from config import Emojis
 from .base import InternalAPIHandlers
+from ..core import make_notice, Accent
+from ..utils import get_asset_url, fnumb
 
 
 class EconomyHandlers(InternalAPIHandlers):
@@ -121,9 +125,34 @@ class EconomyHandlers(InternalAPIHandlers):
         ends_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
             minutes=int(duration_minutes)
         )
-        result = await self.bot.db.economy.create_lottery(guild_id, int(channel_id), int(ticket_price), ends_at)
+        result = await self.bot.db.economy.create_lottery(guild_id, int(channel_id), int(ticket_price), int(ticket_price), ends_at)
         if result is None:
             raise web.HTTPConflict(text='a lottery is already active')
+
+        view = make_notice(
+            "Server Lottery",
+            "## There has been a lottery started for this server!\n"
+            "-# Enter to participate and grab the chance to earn a fortune!\n\n"
+            "The pot grows with every ticket sold.\n"
+            "You'll need to have the Ticket Price in cash in order to buy a ticket.\n"
+            "Buy yourself in with `lottery buy <amount>`.",
+            accent=Accent.info,
+            thumbnail=get_asset_url(self.bot.get_guild(guild_id)),
+            fields=[
+                ("Jackpot", f"{Emojis.Economy.cash} **{fnumb(int(ticket_price))}**"),
+                ("Ticket Price", f"{Emojis.Economy.cash} **{fnumb(int(ticket_price))}**"),
+                ("Drawing", discord.utils.format_dt(ends_at, "R")),
+            ],
+        )
+        channel = self.bot.get_channel(int(channel_id))
+        if channel is None:
+            raise web.HTTPNotFound(text='channel not found')
+
+        try:
+            await channel.send(view=view)
+        except discord.HTTPException as e:
+            raise web.HTTPInternalServerError(text=str(e)) from e
+
         return web.json_response({'ok': True})
 
     async def _delete_lottery(self, request: web.Request) -> web.Response:

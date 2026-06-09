@@ -456,7 +456,9 @@ class Economy(Cog):
 
         view = make_notice(
             "Server Lottery",
-            "The pot grows with every ticket sold. Buy in with `lottery buy <amount>`.",
+            "The pot grows with every ticket sold.\n"
+            "You'll need to have the Ticket Price in cash in order to buy a ticket.\n"
+            "Buy yourself in with `lottery buy <amount>`.",
             accent=Accent.info,
             thumbnail=get_asset_url(ctx.guild),
             fields=[
@@ -467,7 +469,7 @@ class Economy(Cog):
                 ("Drawing", discord.utils.format_dt(ends_at, "R")),
             ],
         )
-        await ctx.send(view=view)
+        await ctx.send(view=view, ephemeral=True)
 
     @lottery.command(
         "start",
@@ -494,7 +496,7 @@ class Economy(Cog):
             return
 
         record = await self.bot.db.economy.create_lottery(
-            ctx.guild.id, ctx.channel.id, int(ticket_price), when.replace(tzinfo=None)
+            ctx.guild.id, ctx.channel.id, int(ticket_price), int(ticket_price), when.replace(tzinfo=None)
         )
         if record is None:
             await ctx.send_error("A lottery is already running. End it before starting another.")
@@ -505,6 +507,23 @@ class Economy(Cog):
             f"Lottery started! Tickets are {Emojis.Economy.cash} **{fnumb(int(ticket_price))}** each. "
             f"Drawing {discord.utils.format_dt(when, 'R')}."
         )
+
+        view = make_notice(
+            "Server Lottery",
+            "## There has been a lottery started for this server!\n"
+            "-# Enter to participate and grab the chance to earn a fortune!\n\n"
+            "The pot grows with every ticket sold.\n"
+            "You'll need to have the Ticket Price in cash in order to buy a ticket.\n"
+            "Buy yourself in with `lottery buy <amount>`.",
+            accent=Accent.info,
+            thumbnail=get_asset_url(ctx.guild),
+            fields=[
+                ("Jackpot", f"{Emojis.Economy.cash} **{fnumb(record['jackpot'])}**"),
+                ("Ticket Price", f"{Emojis.Economy.cash} **{fnumb(record['ticket_price'])}**"),
+                ("Drawing", discord.utils.format_dt(when, "R")),
+            ],
+        )
+        await ctx.send(view=view)
 
     @lottery.command("buy", description="Buy lottery tickets.", guild_only=True, hybrid=True)
     @describe(amount="How many tickets to buy.")

@@ -124,16 +124,16 @@ class EconomyRepository(BaseRepository):
         return await self.fetchrow('SELECT * FROM economy_lottery WHERE guild_id = $1;', guild_id)
 
     async def create_lottery(
-        self, guild_id: int, channel_id: int, ticket_price: int, ends_at: datetime.datetime
+        self, guild_id: int, channel_id: int, ticket_price: int, jackpot: int, ends_at: datetime.datetime
     ) -> asyncpg.Record | None:
         """Starts a lottery, returning the row (or ``None`` if one already runs)."""
         query = """
-            INSERT INTO economy_lottery (guild_id, channel_id, ticket_price, ends_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO economy_lottery (guild_id, channel_id, ticket_price, jackpot, ends_at)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (guild_id) DO NOTHING
             RETURNING *;
         """
-        return await self.fetchrow(query, guild_id, channel_id, ticket_price, ends_at)
+        return await self.fetchrow(query, guild_id, channel_id, ticket_price, jackpot, ends_at)
 
     async def add_lottery_tickets(self, guild_id: int, user_id: int, tickets: int, cost: int) -> int:
         """Adds tickets for a member and grows the jackpot; returns the member's new ticket total."""
