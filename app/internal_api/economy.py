@@ -5,9 +5,8 @@ import discord
 from aiohttp import web
 
 from config import Emojis
-from .base import InternalAPIHandlers
-from ..core import make_notice, Accent
-from ..utils import get_asset_url, fnumb
+from .models import InternalAPIHandlers
+from app.utils import get_asset_url, fnumb
 
 
 class EconomyHandlers(InternalAPIHandlers):
@@ -128,6 +127,10 @@ class EconomyHandlers(InternalAPIHandlers):
         result = await self.bot.db.economy.create_lottery(guild_id, int(channel_id), int(ticket_price), int(ticket_price), ends_at)
         if result is None:
             raise web.HTTPConflict(text='a lottery is already active')
+
+        # Deferred import: app.core pulls in Bot -> InternalAPI, so importing it at
+        # module load time would create a circular import during startup.
+        from app.core.components_v2 import make_notice, Accent
 
         view = make_notice(
             "Server Lottery",

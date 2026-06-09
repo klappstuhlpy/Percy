@@ -16,7 +16,7 @@ import wavelink
 from aiohttp import ClientSession
 from discord.ext import commands
 from discord.http import Route
-from discord.utils import MISSING, get
+from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
 from app.cogs import EXTENSIONS
@@ -31,6 +31,7 @@ from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.database.base import Database
+from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
 from app.utils.lock import LockedResourceError
@@ -87,6 +88,7 @@ class Bot(commands.Bot):
     socket_stats: Counter[str]
     command_types_used: Counter[bool]
     log_handler: logging.Handler
+    internal_api: InternalAPI
 
     if TYPE_CHECKING:
         blacklist: Config[int, bool]
@@ -226,6 +228,12 @@ class Bot(commands.Bot):
             )
         except Exception as exc:
             self.log.error('Failed to connect to Lavalink:', exc_info=exc)
+
+        try:
+            self.internal_api = InternalAPI(self)
+            await self.internal_api.start()
+        except Exception as exc:
+            self.log.error('Failed to start internal API:', exc_info=exc)
 
         await self._load_extensions()
 

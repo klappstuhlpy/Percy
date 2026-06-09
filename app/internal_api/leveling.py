@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 
-from .base import InternalAPIHandlers
+from .models import InternalAPIHandlers
 
 # Milestone reward roles created by the dashboard "preset" button.
 # (level threshold, role name, RGB colour) — a cool-to-warm gradient up to 100.

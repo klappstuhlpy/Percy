@@ -5,9 +5,7 @@ import re
 
 from aiohttp import web
 
-import config
-
-from .base import InternalAPIHandlers
+from .models import InternalAPIHandlers
 
 
 class GuildHandlers(InternalAPIHandlers):

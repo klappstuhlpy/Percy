@@ -6,6 +6,6 @@ route through Percy's repository layer and cache invalidation happens atomically
 """
 from __future__ import annotations
 
-from .cog import InternalAPI, setup
+from .base import InternalAPI
 
-__all__ = ('InternalAPI', 'setup')
+__all__ = ('InternalAPI',)

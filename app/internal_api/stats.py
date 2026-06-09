@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 
-from .base import InternalAPIHandlers
+from .models import InternalAPIHandlers
 
 
 class StatsHandlers(InternalAPIHandlers):

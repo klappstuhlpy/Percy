@@ -5,7 +5,7 @@ import datetime
 
 from aiohttp import web
 
-from .base import InternalAPIHandlers
+from .models import InternalAPIHandlers
 
 
 class ContentHandlers(InternalAPIHandlers):

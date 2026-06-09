@@ -1,33 +1,143 @@
-"""Shared base for the InternalAPI handler mixins."""
+"""The InternalAPI cog: aiohttp server lifecycle + route registration."""
 from __future__ import annotations
 
-from app.core import Bot
+import logging
+from typing import TYPE_CHECKING
+
+from aiohttp import web
+
+import config
+
+from .auth import auth_middleware
+from .content import ContentHandlers
+from .economy import EconomyHandlers
+from .guild import GuildHandlers
+from .leveling import LevelingHandlers
+from .members import MemberHandlers
+from .stats import StatsHandlers
+
+if TYPE_CHECKING:
+    from app.core import Bot
+
+log = logging.getLogger(__name__)
+
+__all__ = ('InternalAPI',)
 
 
-class InternalAPIHandlers:
-    """Typing anchor + shared helpers mixed into :class:`InternalAPI`."""
+class InternalAPI(
+    GuildHandlers,
+    MemberHandlers,
+    LevelingHandlers,
+    EconomyHandlers,
+    ContentHandlers,
+    StatsHandlers,
+):
+    """Manages the internal HTTP API server lifecycle."""
 
-    bot: Bot
+    __hidden__ = True
 
-    @staticmethod
-    def _resolve_channel(guild, channel_id: int | None) -> dict | None:
-        if channel_id is None:
-            return None
-        ch = guild.get_channel(channel_id)
-        return {
-            'id': str(channel_id),
-            'name': ch.name if ch else 'deleted-channel',
-            'type': str(ch.type) if ch else 'unknown',
-        }
+    def __init__(self, bot: Bot) -> None:
+        self.bot: Bot = bot
 
-    @staticmethod
-    def _resolve_role(guild, role_id: int | None) -> dict | None:
-        if role_id is None:
-            return None
-        role = guild.get_role(role_id)
-        return {
-            'id': str(role_id),
-            'name': role.name if role else 'deleted-role',
-            'color': role.color.value if role else 0,
-        }
+        self._app: web.Application | None = None
+        self._runner: web.AppRunner | None = None
+        self._site: web.TCPSite | None = None
+
+    async def start(self) -> None:
+        if not config.internal_api_token:
+            log.warning('Internal API disabled (INTERNAL_API_TOKEN not set)')
+            return
+
+        self._app = web.Application(middlewares=[auth_middleware])
+        assert self._app is not None
+
+        self._app['bot'] = self.bot
+        # Guild config
+        self._app.router.add_get('/api/internal/guilds/{guild_id}', self._get_guild_config)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/config', self._patch_guild_config)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/roles', self._get_guild_roles)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/channels', self._get_guild_channels)
+        # Members
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/members', self._get_guild_members)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/members/{user_id}/action', self._member_action)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/members/{user_id}/roles', self._member_roles)
+        # Gatekeeper
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/gatekeeper', self._get_gatekeeper)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/gatekeeper', self._patch_gatekeeper)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/gatekeeper/message', self._send_gatekeeper_message)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/gatekeeper/toggle', self._toggle_gatekeeper)
+        # User
+        self._app.router.add_get('/api/internal/users/{discord_id}/guilds', self._get_user_guilds)
+        # Leveling
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/config', self._get_leveling_config)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/leaderboard', self._get_leveling_leaderboard)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/users/{user_id}', self._patch_leveling_user)
+        # Polls
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/polls', self._get_polls)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/polls/{poll_id}', self._patch_poll)
+        # Giveaways
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/giveaways', self._get_giveaways)
+        # Tags
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/tags', self._get_tags)
+        # Commands
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/commands', self._get_commands)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/commands/toggle', self._toggle_command)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/plonks', self._manage_plonk)
+        # Stats
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/stats', self._get_guild_stats)
+        self._app.router.add_get('/api/internal/bot/stats', self._get_bot_stats)
+        # Autoresponders
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/autoresponders', self._get_autoresponders)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/autoresponders', self._create_autoresponder)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/autoresponders/{trigger}', self._delete_autoresponder)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/autoresponders/{trigger}', self._patch_autoresponder)
+        # Economy
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/economy', self._get_economy)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/economy/items', self._create_economy_item)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/economy/items/{name}', self._delete_economy_item)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/economy/balances', self._get_economy_balances)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/economy/balances/{user_id}', self._patch_economy_balance)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/economy/lottery', self._create_lottery)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/economy/lottery', self._delete_lottery)
+        # Comics
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/comics', self._get_comics)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/comics', self._create_comic)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/comics/{brand}', self._patch_comic)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/comics/{brand}', self._delete_comic)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/comics/{brand}/push', self._push_comic)
+        # Temp Channels
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/temp-channels', self._get_temp_channels)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/temp-channels', self._create_temp_channel)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/temp-channels/{channel_id}', self._patch_temp_channel)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/temp-channels/{channel_id}', self._delete_temp_channel)
+        # Status Feed
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/status-feed', self._get_status_feed)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/status-feed', self._post_status_feed)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/status-feed', self._delete_status_feed)
+        # Lockdowns
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/lockdowns', self._get_lockdowns)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/lockdowns/unlock', self._unlock_channels)
+        # Highlights
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/highlights', self._get_highlights)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/highlights/{user_id}', self._delete_highlight)
+        # Emoji Stats
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/emoji-stats', self._get_emoji_stats)
+        # Leveling (extended)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/config', self._patch_leveling_config)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles', self._post_leveling_roles)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles/preset', self._create_leveling_role_preset)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/multipliers', self._post_leveling_multipliers)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/blacklist', self._post_leveling_blacklist)
+
+        self._runner = web.AppRunner(self._app)
+        await self._runner.setup()
+        self._site = web.TCPSite(self._runner, config.internal_api_host, config.internal_api_port)
+        await self._site.start()
+        log.info('Internal API listening on %s:%d', config.internal_api_host, config.internal_api_port)
+
+    async def stop(self) -> None:
+        if self._site is not None:
+            await self._site.stop()
+        if self._runner is not None:
+            await self._runner.cleanup()
 
