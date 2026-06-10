@@ -1,13 +1,20 @@
 """Shared base for the InternalAPI handler mixins."""
 from __future__ import annotations
 
+from typing import Any
+
 from discord.ext import commands
+
+
+class _dummy_bot(commands.Bot):
+    """A dummy bot for the InternalAPI handlers."""
+    db: Any
 
 
 class InternalAPIHandlers:
     """Typing anchor + shared helpers mixed into :class:`InternalAPI`."""
 
-    bot: commands.Bot
+    bot: _dummy_bot
 
     @staticmethod
     def _resolve_channel(guild, channel_id: int | None) -> dict | None:
