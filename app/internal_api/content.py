@@ -447,7 +447,7 @@ class ContentHandlers(InternalAPIHandlers):
         if 'pin' in body:
             updates['pin'] = bool(body['pin'])
 
-        for update, value in updates:
+        for update, value in updates.items():
             if value == getattr(config, update):
                 updates.pop(update)
                 continue
