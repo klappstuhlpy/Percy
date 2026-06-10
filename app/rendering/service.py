@@ -4,10 +4,11 @@
 reachable as ``self.bot.render`` (mirroring ``self.bot.db``). It owns the shared,
 caching :class:`~app.rendering.primitives.FontManager`, performs all *data
 preparation* (turning Discord/domain objects into the plain dataclasses in
-:mod:`app.rendering.models`), runs the blocking Pillow work off the event loop via
-:func:`asyncio.to_thread`, and returns ready-to-send :class:`discord.File` objects.
+:mod:`app.rendering.models`), runs the blocking render work (Pillow or matplotlib)
+off the event loop via :func:`asyncio.to_thread`, and returns ready-to-send
+:class:`discord.File` objects.
 
-Cogs should never import the ``templates`` package or touch Pillow directly.
+Cogs should never import the ``templates`` package or touch Pillow/matplotlib directly.
 """
 
 from __future__ import annotations
@@ -100,7 +101,7 @@ class RenderingService:
 
         def _render() -> list[discord.File]:
             files = []
-            for i, image in enumerate(templates.render_bar_chart_images(spec, self._fonts)):
+            for i, image in enumerate(templates.render_bar_chart_images(spec)):
                 buffer = io.BytesIO()
                 image.save(buffer, "png")
                 buffer.seek(0)
@@ -115,7 +116,7 @@ class RenderingService:
         def _render() -> discord.File:
             images = []
             for spec in specs:
-                images.extend(templates.render_bar_chart_images(spec, self._fonts))
+                images.extend(templates.render_bar_chart_images(spec))
 
             merged = templates.merge_images_vertical(images)
             buffer = io.BytesIO()
@@ -131,11 +132,17 @@ class RenderingService:
         return discord.File(buffer, filename=filename)
 
     async def presence_chart(
-        self, *, labels: list[str], values: list[int], colors: list[str], filename: str = "presence.png"
+        self,
+        *,
+        labels: list[str],
+        values: list[int],
+        colors: list[str],
+        title: str = "Presence",
+        filename: str = "presence.png",
     ) -> discord.File:
         """Render a presence/activity donut chart."""
-        data = PresenceData(labels=labels, values=values, colors=colors)
-        buffer = await asyncio.to_thread(templates.draw_presence_chart, data, self._fonts)
+        data = PresenceData(labels=labels, values=values, colors=colors, title=title)
+        buffer = await asyncio.to_thread(templates.draw_presence_chart, data)
         return discord.File(buffer, filename=filename)
 
     async def captcha(self, *, length: int = 6, filename: str = "captcha.png") -> Captcha:

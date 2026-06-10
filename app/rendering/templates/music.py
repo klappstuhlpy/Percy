@@ -1,72 +1,112 @@
-"""Pure drawing logic for the equalizer graph."""
+"""Pure drawing logic for the equalizer graph (matplotlib, Agg).
+
+Rendered in the klappstuhl.me admin panel style shared with
+:mod:`app.rendering.templates.charts`: a smooth Catmull-Rom curve through the
+band gains with a translucent coral area fill, round band markers and a subtle
+gain grid. Replaces the old Pillow renderer that drew over a template asset.
+"""
 
 from __future__ import annotations
 
 from io import BytesIO
+from typing import TYPE_CHECKING
 
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
-from app.rendering.primitives import ASSETS
+from app.rendering.templates.theme import (
+    BRAND,
+    BRAND_BRIGHT,
+    GRID,
+    MUTED,
+    PANEL_BG,
+    RUBIK,
+    add_panel_title,
+    figure_to_image,
+    panel_figure,
+)
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
 
 __all__ = ('draw_equalizer',)
 
+WIDTH_PX = 1600
+HEIGHT_PX = 600
+CHART_DPI = 100
 
-def _get_gain_y(
-        gain: float, *, max_gain: float = +1.0, min_gain: float = -0.25, top_margin: int = 0, band_height: int = 0
-) -> int:
-    """Get the y position of the gain."""
-    gain_range = max_gain - min_gain
+# Lavalink's fixed 15-band equalizer; gains are clamped to its valid range.
+BAND_LABELS = ('25', '40', '63', '100', '160', '250', '400', '630', '1K', '1.6K', '2.5K', '4K', '6.3K', '10K', '16K')
+MIN_GAIN = -0.25
+MAX_GAIN = 1.0
 
-    if gain > 0:
-        y = top_margin + int((max_gain - gain) / gain_range * band_height)
-    elif gain < 0:
-        y = top_margin + band_height + int(gain / min_gain * band_height)
-    else:
-        y = top_margin + band_height
-    return y
+
+def _smooth_curve(xs: np.ndarray, ys: np.ndarray, samples: int = 24) -> tuple[np.ndarray, np.ndarray]:
+    """Interpolate a Catmull-Rom spline through the points for a smooth curve."""
+    if len(xs) < 3:
+        return xs, ys
+
+    px = np.concatenate(([xs[0]], xs, [xs[-1]]))
+    py = np.concatenate(([ys[0]], ys, [ys[-1]]))
+    t = np.linspace(0.0, 1.0, samples, endpoint=False)
+    t2, t3 = t * t, t * t * t
+
+    out_x: list[np.ndarray] = []
+    out_y: list[np.ndarray] = []
+    for i in range(1, len(px) - 2):
+        for p, out in ((px, out_x), (py, out_y)):
+            p0, p1, p2, p3 = p[i - 1], p[i], p[i + 1], p[i + 2]
+            out.append(
+                0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+            )
+
+    return np.concatenate([*out_x, xs[-1:]]), np.concatenate([*out_y, ys[-1:]])
 
 
 def draw_equalizer(gains: list[float]) -> BytesIO:
     """Draws the equalizer band graph for the given gains and returns a PNG buffer."""
-    font = ImageFont.truetype(str(ASSETS / 'fonts/rubik.ttf'), size=28)
-    reference_image = Image.open(ASSETS / 'eq_template.png')
+    bands = len(gains)
+    xs = np.arange(bands, dtype=float)
+    ys = np.clip(np.asarray(gains, dtype=float), MIN_GAIN, MAX_GAIN)
 
-    image = Image.new('RGB', reference_image.size, 'white')
-    draw = ImageDraw.Draw(image)
+    figure = panel_figure(WIDTH_PX, HEIGHT_PX, CHART_DPI)
+    add_panel_title(figure, 'Equalizer', width_px=WIDTH_PX, height_px=HEIGHT_PX)
 
-    image.paste(reference_image, (0, 0))
+    ax: Axes = figure.add_axes((90 / WIDTH_PX, 70 / HEIGHT_PX, 1 - 130 / WIDTH_PX, 1 - 170 / HEIGHT_PX))
+    ax.set_facecolor(PANEL_BG)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
 
-    num_bands = len(gains)
-    width = image.width
-    height = image.height + 35
-    band_width = (width - 130) // num_bands
-    band_height = (height - 280) // 2
-    top_margin = (height - (2 * band_height)) // 2
+    ax.set_xlim(-0.5, max(bands - 0.5, 0.5))
+    ax.set_ylim(MIN_GAIN - 0.07, MAX_GAIN + 0.06)
 
-    # Draw the Dots for the Gains
-    for i, gain in enumerate(gains):
-        x = 90 + i * band_width
-        y = _get_gain_y(gain, top_margin=top_margin, band_height=band_height)
+    # Subtle gain grid with an emphasized zero line.
+    ax.set_yticks([-0.25, 0.0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_yticklabels(
+        ['-0.25', '0', '+0.25', '+0.50', '+0.75', '+1.00'], fontproperties=RUBIK, fontsize=12, color=MUTED
+    )
+    ax.grid(axis='y', color=GRID, linewidth=1, zorder=1)
+    ax.axhline(0.0, color=MUTED, linewidth=1, alpha=0.55, zorder=2)
 
-        draw.ellipse([(x + band_width // 2 - 2, y - 2), (x + band_width // 2 + 2, y + 2)], fill='white')
+    labels = BAND_LABELS if bands == len(BAND_LABELS) else tuple(str(i + 1) for i in range(bands))
+    ax.set_xticks(list(range(bands)))
+    ax.set_xticklabels(labels, fontproperties=RUBIK, fontsize=12, color=MUTED)
+    ax.tick_params(length=0, pad=12)
 
-    # Draw the Lines for the Gains
-    for i in range(num_bands - 1):
-        x1 = 90 + (i + 0.5) * band_width
-        gain = gains[i]
-        y1 = _get_gain_y(gain, top_margin=top_margin, band_height=band_height)
+    if bands:
+        curve_x, curve_y = _smooth_curve(xs, ys)
+        curve_y = np.clip(curve_y, MIN_GAIN - 0.05, MAX_GAIN + 0.04)  # spline overshoot stays inside the panel
 
-        x2 = 90 + (i + 1.5) * band_width
-        future_gain = gains[i + 1]
-        y2 = _get_gain_y(future_gain, top_margin=top_margin, band_height=band_height)
+        ax.fill_between(curve_x, curve_y, 0.0, color=BRAND, alpha=0.18, linewidth=0, zorder=3)
+        ax.plot(
+            curve_x, curve_y, color=BRAND, linewidth=3,
+            solid_capstyle='round', solid_joinstyle='round', zorder=4,
+        )
+        ax.scatter(xs, ys, s=90, color=BRAND_BRIGHT, edgecolor=PANEL_BG, linewidth=2.5, zorder=5)
 
-        draw.line([(x1, y1), (x2, y2)], fill='white', width=1, joint='curve')
-
-    eq_text = 'EQ'
-    x = 356 - len(eq_text) * (len(eq_text) // 2)
-    draw.text((x, 29), eq_text, font=font, fill='white')
+    image = figure_to_image(figure).convert('RGB')
+    figure.clear()
 
     buffer = BytesIO()
-    image.save(buffer, 'png')
+    image.save(buffer, format='png')
     buffer.seek(0)
     return buffer

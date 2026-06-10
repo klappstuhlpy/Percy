@@ -71,3 +71,4 @@ class PresenceData:
     labels: list[str] = field(default_factory=list)
     values: list[int] = field(default_factory=list)
     colors: list[str] = field(default_factory=list)
+    title: str = 'Presence'

@@ -1,22 +1,47 @@
-"""Pure drawing logic for the data charts: horizontal bar charts, the presence
-donut chart and the avatar collage."""
+"""Pure drawing logic for the data charts: horizontal bar charts and the presence
+donut chart (matplotlib, Agg) plus the avatar collage (Pillow composition).
+
+The charts follow the klappstuhl.me admin design system (``static/css/base.css``
+tokens in the Rust project): dark panel surfaces with a subtle border, muted
+uppercase titles, the coral brand accent and a monospaced font. Bars are drawn on
+full-width "track" rails like the admin container table's inline meters.
+
+Chart figures use the object-oriented matplotlib API (:class:`~matplotlib.figure.Figure`
+with an explicit Agg canvas) instead of ``pyplot``, which holds global state and is not
+thread-safe under ``asyncio.to_thread``. Fonts are loaded from the bundled assets via
+``FontProperties(fname=...)`` so rendering never depends on system font lookup.
+"""
 
 from __future__ import annotations
 
 import math
-from functools import partial
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageDraw
+import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.textpath import TextPath
+from PIL import Image
 
-from app.rendering.primitives import ASSETS, FontManager, get_text_dimensions, resize_to_limit
-from app.utils import helpers
+from app.rendering.primitives import resize_to_limit
+from app.rendering.templates.theme import (
+    BRAND,
+    BRAND_BRIGHT,
+    FOREGROUND,
+    MENLO,
+    MUTED,
+    PANEL_BG,
+    RUBIK,
+    TRACK_BG,
+    add_panel_title,
+    figure_to_image,
+    panel_figure,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from PIL.ImageFont import FreeTypeFont
+    from matplotlib.axes import Axes
+    from matplotlib.font_manager import FontProperties
 
     from app.rendering.models import BarChartData, PresenceData
 
@@ -27,114 +52,139 @@ __all__ = (
     'render_bar_chart_images',
 )
 
+CHART_DPI = 100
+CHART_WIDTH_PX = 1920
+ROW_HEIGHT_PX = 52
+BAR_HEIGHT_PX = 26  # pill bars: corner radius = half of this
+MAX_BARS_PER_CHART = 18
 
-def render_bar_chart_images(data: BarChartData, fonts: FontManager) -> list[Image.Image]:
-    """Generate one or more bar chart images from a dictionary of data."""
-    get_font: Callable[[int], FreeTypeFont] = partial(fonts.get, str(ASSETS / 'fonts/menlo.ttf'))
+# Subtle left-to-right gradient for the value bars (coral -> bright coral).
+BRAND_GRADIENT = LinearSegmentedColormap.from_list('brand', [BRAND, BRAND_BRIGHT])
+_GRADIENT_ROW = np.linspace(0.0, 1.0, 256).reshape(1, -1)
 
-    BAR_HEIGHT = 25
-    BAR_COLOR = (227, 38, 54)
-    LABEL_FONT_SIZE = 18
-    LABEL_PADDING = 20
-    CHART_MARGIN = 20
-    MAX_WIDTH = 1920
-    MAX_HEIGHT = 1080
 
+def _format_value(value: int | float) -> str:
+    """Format a bar value with thousands grouping, trimming trailing zeros."""
+    if float(value).is_integer():
+        return f'{int(value):,}'
+    return f'{value:,.2f}'.rstrip('0').rstrip('.')
+
+
+def _text_width_px(text: str, prop: FontProperties, size_pt: float, dpi: int) -> float:
+    """Measure rendered text width in pixels without a canvas."""
+    if not text:
+        return 0.0
+    return TextPath((0, 0), text, prop=prop, size=size_pt).get_extents().width * dpi / 72
+
+
+def _pill(x: float, y: float, width: float, height: float, radius_x: float, aspect: float) -> FancyBboxPatch:
+    """A rounded-end bar in data coordinates with pixel-circular corners.
+
+    ``radius_x`` is the corner radius expressed in x-data units; ``aspect`` is the
+    x/y pixels-per-data-unit ratio that makes the corners round on screen.
+    """
+    return FancyBboxPatch(
+        (x, y), width, height,
+        boxstyle=f'round,pad=0,rounding_size={min(radius_x, width / 2)}',
+        mutation_aspect=aspect,
+        linewidth=0,
+    )
+
+
+def _draw_bar_chart_page(values: dict[str, int | float], title: str, max_value: float) -> Image.Image:
+    """Draw a single page of the horizontal bar chart."""
+    pad = 32
+    title_px = 104 if title else 40
+    rows = len(values)
+    height_px = max(rows, 1) * ROW_HEIGHT_PX + title_px + pad
+
+    figure = panel_figure(CHART_WIDTH_PX, height_px, CHART_DPI)
+
+    labels = list(values)
+    bar_values = list(values.values())
+    xmax = max(max_value, 1)
+
+    # Manual axes geometry: rounded corners need exact pixel scales, so the label
+    # and value columns are measured up front instead of letting a layout engine
+    # reserve them. The value column sits right of the track so bars never run
+    # underneath the numbers.
+    label_w = max((_text_width_px(label, RUBIK, 14, CHART_DPI) for label in labels), default=0.0)
+    value_w = max((_text_width_px(_format_value(v), RUBIK, 13.5, CHART_DPI) for v in bar_values), default=0.0)
+    value_col = value_w + 26
+    ax_left = pad + label_w + 28
+    ax_width = CHART_WIDTH_PX - ax_left - pad - value_col
+    ax_height = max(rows, 1) * ROW_HEIGHT_PX
+
+    ax: Axes = figure.add_axes(
+        (ax_left / CHART_WIDTH_PX, pad / height_px, ax_width / CHART_WIDTH_PX, ax_height / height_px)
+    )
+    ax.set_facecolor(PANEL_BG)
+    ax.set_xlim(0, xmax)
+    ax.set_ylim(max(rows, 1) - 0.5, -0.5)  # inverted: first dict entry on top
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks(list(range(rows)))
+    ax.set_yticklabels(labels, fontproperties=RUBIK, fontsize=14, color=FOREGROUND)
+    ax.tick_params(axis='y', length=0, pad=16)
+
+    # Pixel-exact pill geometry.
+    px_per_x = ax_width / xmax
+    px_per_y = float(ROW_HEIGHT_PX)
+    aspect = px_per_x / px_per_y
+    bar_h = BAR_HEIGHT_PX / px_per_y  # in y-data units
+    radius_x = (BAR_HEIGHT_PX / 2) / px_per_x  # in x-data units
+
+    for i, value in enumerate(bar_values):
+        track = _pill(0, i - bar_h / 2, xmax, bar_h, radius_x, aspect)
+        track.set_facecolor(TRACK_BG)
+        track.set_zorder(2)
+        ax.add_patch(track)
+
+        if value > 0:
+            # Trace amounts still render as a full pill "dot" instead of a hairline.
+            bar_w = max(float(value), BAR_HEIGHT_PX / px_per_x)
+            bar = _pill(0, i - bar_h / 2, bar_w, bar_h, radius_x, aspect)
+            bar.set_facecolor('none')
+            bar.set_zorder(3)
+            ax.add_patch(bar)
+            gradient = ax.imshow(
+                _GRADIENT_ROW,
+                extent=(0, bar_w, i - bar_h / 2, i + bar_h / 2),
+                aspect='auto',
+                cmap=BRAND_GRADIENT,
+                interpolation='bicubic',
+                zorder=3,
+            )
+            gradient.set_clip_path(bar)
+
+        # Value in its own right-aligned column past the end of the track.
+        ax.text(
+            xmax + value_col / px_per_x, i, _format_value(value),
+            fontproperties=RUBIK, fontsize=13.5, color=FOREGROUND, ha='right', va='center', zorder=5,
+        )
+
+    if title:
+        add_panel_title(figure, title, width_px=CHART_WIDTH_PX, height_px=height_px)
+
+    image = figure_to_image(figure).convert('RGB')
+    figure.clear()
+    return image
+
+
+def render_bar_chart_images(data: BarChartData) -> list[Image.Image]:
+    """Generate one or more bar chart images from a dictionary of data.
+
+    Data that spans more than :data:`MAX_BARS_PER_CHART` bars is paginated into
+    multiple images of identical width so they can be stacked afterwards.
+    """
     values = data.data
-    title = data.title
+    max_value = max(values.values(), default=0)
 
-    num_bars = len(values)
-    max_keys_per_chart = int(MAX_HEIGHT / (BAR_HEIGHT + LABEL_PADDING)) - 2
+    items = list(values.items())
+    pages = [dict(items[i:i + MAX_BARS_PER_CHART]) for i in range(0, len(items), MAX_BARS_PER_CHART)] or [{}]
 
-    chart_width = max(min(max(values.values()), MAX_WIDTH) + LABEL_PADDING * 2, MAX_WIDTH)
-    chart_height = (num_bars + 1) * (BAR_HEIGHT + LABEL_PADDING) + CHART_MARGIN * 2
-
-    scale_factor = min(MAX_WIDTH / chart_width, MAX_HEIGHT / chart_height)
-    chart_width *= scale_factor
-    chart_height *= scale_factor
-
-    image_count = len(values) // max_keys_per_chart + 1 if len(values) % max_keys_per_chart != 0 else len(
-        values) // max_keys_per_chart
-
-    images = []
-    for i in range(image_count):
-        start_index = i * max_keys_per_chart
-        end_index = start_index + max_keys_per_chart
-        subset_data = dict(list(values.items())[start_index:end_index])
-
-        image = Image.new('RGB', (int(chart_width), int(chart_height)),
-                          color=helpers.Colour.lighter_black().to_rgb())
-        draw = ImageDraw.Draw(image)
-
-        font = get_font(int(LABEL_FONT_SIZE * scale_factor))
-        max_label_width = max([get_text_dimensions(label, font=font)[0] for label in subset_data])
-        max_value_width = max([get_text_dimensions(str(value), font=font)[0] for value in subset_data.values()])
-
-        if title:
-            title_font = get_font(int(LABEL_FONT_SIZE * scale_factor * 1.5))
-            title_bbox = draw.textbbox((0, 0), title, font=title_font)
-            title_width = title_bbox[2] - title_bbox[0]
-            title_height = title_bbox[3] - title_bbox[1]
-            title_position = ((chart_width - title_width) // 2, CHART_MARGIN)
-            draw.text(
-                title_position,
-                title,
-                font=title_font,
-                fill=(255, 255, 255)
-            )
-
-            y = CHART_MARGIN + (title_height + 5) + LABEL_PADDING * 2
-        else:
-            y = CHART_MARGIN
-
-        for label, value in subset_data.items():
-            _, label_height = get_text_dimensions(label, font=font)
-            _value_width, value_height = get_text_dimensions(str(value), font=font)
-
-            # the label is aligned to the left of the image
-            label_position = (LABEL_PADDING, y + (BAR_HEIGHT - label_height) // 2)
-            draw.text(
-                label_position,
-                label,
-                font=font,
-                color=(255, 255, 255),
-                LANCZOS=True
-            )
-
-            bar_width = chart_width - max_label_width - max_value_width - LABEL_PADDING * 4
-            # Calculate the length of the bar by dividing the value
-            # by the max value and multiplying it by the max ar width
-            bar_width = int(value / max(values.values()) * bar_width)
-
-            # value is the count how often the command was invoked; it's displayed right on the bar
-            value_position = (LABEL_PADDING * 3 + bar_width + max_label_width, y + (BAR_HEIGHT - value_height) // 2)
-            draw.text(
-                value_position,
-                str(value),
-                font=font,
-                color=(255, 255, 255),
-                LANCZOS=True
-            )
-
-            # bar starts after the label and has a width of max_bar_width
-            draw.rounded_rectangle(
-                (
-                    LABEL_PADDING * 2 + max_label_width,
-                    y,
-                    LABEL_PADDING * 2 + max_label_width + bar_width,
-                    y + BAR_HEIGHT
-                ),
-                10,
-                outline=BAR_COLOR,
-                width=40,
-                fill=BAR_COLOR
-            )
-
-            y += BAR_HEIGHT + LABEL_PADDING
-
-        images.append(image)
-
-    return images
+    return [_draw_bar_chart_page(page, data.title, max_value) for page in pages]
 
 
 def merge_images_vertical(images: list[Image.Image]) -> Image.Image:
@@ -148,119 +198,54 @@ def merge_images_vertical(images: list[Image.Image]) -> Image.Image:
     return final_image
 
 
-class _PresenceChart:
-    """Internal drawing state for the presence donut chart."""
-
-    def __init__(self, data: PresenceData, fonts: FontManager) -> None:
-        self.data = data.values
-        self.labels = data.labels
-        self.colors = data.colors
-
-        self.scale_ratio: int = 3
-        self.inner_radius: int = 130 * self.scale_ratio
-
-        self.width: int = 600 * self.scale_ratio
-        self.height: int = 400 * self.scale_ratio
-        self.radius: float = min(self.width, self.height) / 2.2
-        self.center: tuple[float, float] = (self.radius + 20, self.height / 2)
-
-        self.image: Image.Image = Image.new('RGBA', (self.width, self.height), (255, 255, 255, 0))
-        self.draw: ImageDraw.ImageDraw = ImageDraw.Draw(self.image)
-
-        self.font = fonts.get(str(ASSETS / 'fonts/arial.ttf'), size=20 * self.scale_ratio)
-
-    def draw_pie_chart(self) -> None:
-        data = self.data
-        total = sum(data) or 1
-        start_angle = 0
-
-        for i, d in enumerate(data):
-            angle = 360 * d / total
-            self.draw.pieslice(
-                (  # type: ignore
-                    self.center[0] - self.radius,
-                    self.center[1] - self.radius,
-                    self.center[0] + self.radius,
-                    self.center[1] + self.radius,
-                ),
-                start_angle,
-                start_angle + angle,
-                fill=self.colors[i],
-            )
-            start_angle += angle
-
-    def clean_inner_circle(self) -> None:
-        self.draw.ellipse(
-            (
-                self.center[0] - self.inner_radius,
-                self.center[1] - self.inner_radius,
-                self.center[0] + self.inner_radius,
-                self.center[1] + self.inner_radius,
-            ),
-            fill=(255, 255, 255, 0),
-        )
-
-    def draw_cubes(self) -> None:
-        total = sum(self.data) or 1
-        TEXT_PADDING = 150 * self.scale_ratio
-        CUBE_1st_PADDING = 180 * self.scale_ratio
-        CUBE_2nd_PADDING = 162.5 * self.scale_ratio
-        MULTIPLIER = 70 * self.scale_ratio
-
-        for i, (color, label) in enumerate(zip(self.colors, self.labels)):
-            i_multi = i * MULTIPLIER
-
-            self.draw.rectangle(
-                (
-                    self.width - CUBE_1st_PADDING,
-                    (65 * self.scale_ratio) + i_multi,
-                    self.width - CUBE_2nd_PADDING,
-                    (82.5 * self.scale_ratio) + i_multi
-                ),
-                fill=color,
-            )
-
-            self.draw.text(
-                (self.width - TEXT_PADDING, (45 * self.scale_ratio) + i_multi),
-                label,
-                font=self.font,
-                align='right',
-            )
-            self.draw.text(
-                (self.width - TEXT_PADDING, (65 * self.scale_ratio) + i_multi),
-                f'{round(self.data[i] / 3600, 2)} Hours',
-                font=self.font,
-                align='right',
-            )
-            self.draw.text(
-                (self.width - TEXT_PADDING, (85 * self.scale_ratio) + i_multi),
-                f'{round(self.data[i] / total * 100, 2)}%',
-                font=self.font,
-                align='right',
-            )
-
-        # Align the "Total: ..." label to the right
-        total_text = f'Total: {round(total / 3600, 2)} Hours'
-        self.draw.text(
-            (self.width - TEXT_PADDING - (50 * self.scale_ratio), (55 * self.scale_ratio) + len(self.colors) * MULTIPLIER),
-            total_text,
-            font=self.font,
-            align='right',
-        )
-
-    def render(self) -> BytesIO:
-        for func in (self.draw_pie_chart, self.clean_inner_circle, self.draw_cubes):
-            func()
-
-        buffer = BytesIO()
-        self.image.save(buffer, format='png')
-        buffer.seek(0)
-        return buffer
-
-
-def draw_presence_chart(data: PresenceData, fonts: FontManager) -> BytesIO:
+def draw_presence_chart(data: PresenceData) -> BytesIO:
     """Draws a presence donut chart for the given prepared data and returns a PNG buffer."""
-    return _PresenceChart(data, fonts).render()
+    total = sum(data.values) or 1
+    has_data = sum(data.values) > 0
+
+    figure = panel_figure(1800, 1200, dpi=200)
+
+    figure.text(0.05, 0.915, data.title.upper(), fontproperties=MENLO, fontsize=13, color=MUTED)
+
+    ax: Axes = figure.add_axes((0.045, 0.05, 0.46, 0.74))
+    ax.set_facecolor('none')
+    ax.pie(
+        data.values if has_data else [1],
+        colors=data.colors if has_data else [TRACK_BG],
+        startangle=90,
+        counterclock=False,
+        wedgeprops={'width': 0.26, 'edgecolor': PANEL_BG, 'linewidth': 3},
+        radius=1.0,
+    )
+    ax.set(aspect='equal')
+
+    # Big total in the donut hole, metric-tile style.
+    ax.text(0, 0.06, f'{total / 3600:.1f}', fontproperties=MENLO, fontsize=30, color=FOREGROUND, ha='center', va='center')
+    ax.text(0, -0.22, 'HOURS TOTAL', fontproperties=MENLO, fontsize=10, color=MUTED, ha='center', va='center')
+
+    # Legend rows on the right: marker + label, with hours · percent underneath.
+    legend_x = 0.58
+    legend_y = 0.72
+    for value, color, label in zip(data.values, data.colors, data.labels):
+        figure.add_artist(
+            Rectangle((legend_x, legend_y - 0.014), 0.016, 0.036, transform=figure.transFigure, facecolor=color)
+        )
+        figure.text(
+            legend_x + 0.032, legend_y, label, fontproperties=MENLO, fontsize=13, color=FOREGROUND, va='center'
+        )
+        figure.text(
+            legend_x + 0.032, legend_y - 0.055, f'{value / 3600:.1f} h · {value / total * 100:.1f}%',
+            fontproperties=MENLO, fontsize=11, color=MUTED, va='center',
+        )
+        legend_y -= 0.16
+
+    image = figure_to_image(figure)
+    figure.clear()
+
+    buffer = BytesIO()
+    image.save(buffer, format='png')
+    buffer.seek(0)
+    return buffer
 
 
 def draw_avatar_collage(avatars: list[bytes]) -> BytesIO:
