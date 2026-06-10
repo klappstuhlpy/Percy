@@ -59,6 +59,11 @@ class LevelingRepository(BaseRepository):
                 "INSERT INTO levels (user_id, guild_id) VALUES ($1, $2) RETURNING *;", user_id, guild_id)
         return record
 
+    async def get_user_level(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a member's level row without creating one, or ``None`` if absent."""
+        return await self.fetchrow(
+            "SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
+
     async def get_user_levels(self, guild_id: int) -> list[asyncpg.Record]:
         """Fetches every member level row for a guild."""
         return await self.fetch("SELECT * FROM levels WHERE guild_id = $1;", guild_id)
@@ -111,3 +116,31 @@ class LevelingRepository(BaseRepository):
     async def delete_member(self, user_id: int, guild_id: int) -> None:
         """Deletes a member's level row for a guild."""
         await self.execute("DELETE FROM levels WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
+
+    # -- xp_history (daily per-guild XP snapshots) ------------------------
+
+    async def record_xp_snapshot(self, guild_id: int, total_xp: int, gainers: int) -> None:
+        """Upserts today's cumulative-XP snapshot for a guild.
+
+        ``total_xp`` is the summed *total* XP across members (resolved with the
+        guild's level spec by the caller); ``gainers`` is how many members carry
+        any XP. Re-running on the same day overwrites that day's row.
+        """
+        query = """
+            INSERT INTO xp_history (guild_id, day, total_xp, gainers)
+            VALUES ($1, (now() at time zone 'utc')::date, $2, $3)
+            ON CONFLICT (guild_id, day)
+                DO UPDATE SET total_xp = EXCLUDED.total_xp, gainers = EXCLUDED.gainers;
+        """
+        await self.execute(query, guild_id, total_xp, gainers)
+
+    async def get_xp_history(self, guild_id: int, *, days: int = 30) -> list[asyncpg.Record]:
+        """Fetches a guild's daily XP snapshots over the last ``days`` days, oldest first."""
+        query = """
+            SELECT day, total_xp, gainers
+            FROM xp_history
+            WHERE guild_id = $1
+              AND day >= (now() at time zone 'utc')::date - $2::int
+            ORDER BY day;
+        """
+        return await self.fetch(query, guild_id, days)

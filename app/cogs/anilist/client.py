@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 import aiohttp
@@ -60,11 +62,63 @@ class AniListClient(BaseHTTPClient):
             return data['data']['Viewer']
         return {}
 
+    async def user_favourites(self, **variables: Any) -> dict[str, Any]:
+        data = await self._request(query=self._user_favourites_query, **variables)
+        if data:
+            return data['data']['Viewer']
+        return {}
+
+    async def media_list(self, **variables: Any) -> list[dict[str, Any]]:
+        data = await self._request(query=self._media_list_query, **variables)
+        if data:
+            lists = data['data']['MediaListCollection']['lists'] or []
+            entries: list[dict[str, Any]] = []
+            for group in lists:
+                entries.extend(group.get('entries') or [])
+            return entries
+        return []
+
     async def schedule(self, **variables: Any) -> list[dict[str, Any]]:
         data = await self._request(query=self._schedule_query, **variables)
         if data:
             return data['data']['Page']['airingSchedules']
         return []
+
+    # --- Mutations (require auth headers) ---
+
+    async def save_media_list_entry(
+        self, *, media_id: int, status: str | None = None,
+        progress: int | None = None, score: float | None = None,
+        headers: dict[str, str],
+    ) -> dict[str, Any] | None:
+        variables: dict[str, Any] = {'mediaId': media_id}
+        if status is not None:
+            variables['status'] = status
+        if progress is not None:
+            variables['progress'] = progress
+        if score is not None:
+            variables['score'] = score
+        data = await self._request(query=self._save_entry_mutation, headers=headers, **variables)
+        if data:
+            return data['data']['SaveMediaListEntry']
+        return None
+
+    async def delete_media_list_entry(self, *, entry_id: int, headers: dict[str, str]) -> bool:
+        data = await self._request(query=self._delete_entry_mutation, headers=headers, id=entry_id)
+        if data:
+            return data['data']['DeleteMediaListEntry']['deleted']
+        return False
+
+    async def toggle_favourite(
+        self, *, media_id: int, media_type: str, headers: dict[str, str],
+    ) -> bool:
+        """Toggle a media entry as favourite. Returns True if the mutation succeeded."""
+        if media_type == 'ANIME':
+            variables = {'animeId': media_id}
+        else:
+            variables = {'mangaId': media_id}
+        data = await self._request(query=self._toggle_favourite_mutation, headers=headers, **variables)
+        return data is not None
 
     @property
     def _media_query(self) -> str:
@@ -251,27 +305,140 @@ class AniListClient(BaseHTTPClient):
         return '''
         query {
             Viewer {
-                name,
-                id,
+                name
+                id
                 avatar {
-                    large,
+                    large
                     medium
-                },
-                bannerImage,
-                siteUrl,
-                about(asHtml: false),
+                }
+                bannerImage
+                siteUrl
+                about(asHtml: false)
                 statistics {
-                    manga {
-                        volumesRead,
-                        chaptersRead,
-                        count
-                    }
                     anime {
-                        minutesWatched,
-                        episodesWatched,
                         count
+                        minutesWatched
+                        episodesWatched
+                        meanScore
+                    }
+                    manga {
+                        count
+                        volumesRead
+                        chaptersRead
+                        meanScore
                     }
                 }
+            }
+        }
+    '''
+
+    @property
+    def _user_favourites_query(self) -> str:
+        return '''
+        query {
+            Viewer {
+                name
+                id
+                favourites {
+                    anime(page: 1, perPage: 10) {
+                        nodes {
+                            id
+                            title { romaji english }
+                            format
+                            meanScore
+                            coverImage { large color }
+                            siteUrl
+                        }
+                    }
+                    manga(page: 1, perPage: 10) {
+                        nodes {
+                            id
+                            title { romaji english }
+                            format
+                            meanScore
+                            coverImage { large color }
+                            siteUrl
+                        }
+                    }
+                    characters(page: 1, perPage: 10) {
+                        nodes {
+                            name { full native }
+                            image { large }
+                            siteUrl
+                        }
+                    }
+                }
+            }
+        }
+    '''
+
+    @property
+    def _media_list_query(self) -> str:
+        return '''
+        query ($userId: Int, $type: MediaType, $status: MediaListStatus) {
+            MediaListCollection(userId: $userId, type: $type, status: $status) {
+                lists {
+                    name
+                    entries {
+                        id
+                        mediaId
+                        status
+                        progress
+                        score(format: POINT_10)
+                        media {
+                            id
+                            title { romaji english }
+                            type
+                            format
+                            status(version: 2)
+                            episodes
+                            chapters
+                            volumes
+                            coverImage { large color }
+                            siteUrl
+                        }
+                    }
+                }
+            }
+        }
+    '''
+
+    @property
+    def _save_entry_mutation(self) -> str:
+        return '''
+        mutation ($mediaId: Int, $status: MediaListStatus, $progress: Int, $score: Float) {
+            SaveMediaListEntry(mediaId: $mediaId, status: $status, progress: $progress, score: $score) {
+                id
+                mediaId
+                status
+                progress
+                score(format: POINT_10)
+                media {
+                    title { romaji }
+                    episodes
+                    chapters
+                }
+            }
+        }
+    '''
+
+    @property
+    def _delete_entry_mutation(self) -> str:
+        return '''
+        mutation ($id: Int) {
+            DeleteMediaListEntry(id: $id) {
+                deleted
+            }
+        }
+    '''
+
+    @property
+    def _toggle_favourite_mutation(self) -> str:
+        return '''
+        mutation ($animeId: Int, $mangaId: Int) {
+            ToggleFavourite(animeId: $animeId, mangaId: $mangaId) {
+                anime { nodes { id } }
+                manga { nodes { id } }
             }
         }
     '''
@@ -369,7 +536,7 @@ TAGS = [
     'Body Horror',
     'Body Swapping',
     'Boxing',
-    'Boys\' Love',
+    "Boys' Love",
     'Bullying',
     'Butler',
     'Calligraphy',
@@ -566,7 +733,7 @@ TAGS = [
     'Tanks',
     'Tanned Skin',
     'Teacher',
-    'Teens\' Love',
+    "Teens' Love",
     'Tennis',
     'Terrorism',
     'Time Manipulation',

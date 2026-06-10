@@ -1,4 +1,5 @@
 from app.database.repositories.admin import AdminRepository
+from app.database.repositories.anilist import AniListRepository
 from app.database.repositories.autoresponders import AutoRespondersRepository
 from app.database.repositories.base import BaseRepository
 from app.database.repositories.cases import CasesRepository
@@ -25,6 +26,7 @@ from app.database.repositories.users import UsersRepository
 
 __all__ = (
     'AdminRepository',
+    'AniListRepository',
     'AutoRespondersRepository',
     'BaseRepository',
     'CasesRepository',

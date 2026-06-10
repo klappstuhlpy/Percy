@@ -15,6 +15,7 @@ from discord.utils import MISSING
 
 from app.database.repositories import (
     AdminRepository,
+    AniListRepository,
     AutoRespondersRepository,
     CasesRepository,
     ComicsRepository,
@@ -211,6 +212,7 @@ class Database(_Database):
         self.rolemenu = RoleMenusRepository(self)
         self.autoresponders = AutoRespondersRepository(self)
         self.stat_counters = StatCountersRepository(self)
+        self.anilist = AniListRepository(self)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

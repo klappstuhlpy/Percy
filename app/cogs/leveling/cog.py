@@ -40,9 +40,40 @@ class Leveling(Cog):
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
         self.award_voice_xp.start()
+        self.snapshot_xp.start()
 
     async def cog_unload(self) -> None:
         self.award_voice_xp.cancel()
+        self.snapshot_xp.cancel()
+
+    @tasks.loop(hours=24)
+    async def snapshot_xp(self) -> None:
+        """Record a daily per-guild cumulative-XP snapshot for the dashboard chart.
+
+        Runs once on startup and then every 24h. For each guild with leveling
+        enabled, sums every member's *total* XP (resolved through the guild's
+        :class:`LevelingSpec`, since the stored ``xp`` column only holds
+        within-level progress) and upserts today's ``xp_history`` row.
+        """
+        for guild in self.bot.guilds:
+            config: GuildLevelConfig | None = await self.get_guild_level_config(guild.id)  # type: ignore[misc]
+            if config is None or not config.enabled:
+                continue
+
+            records = await self.bot.db.leveling.get_user_levels(guild.id)
+            total_xp = 0
+            gainers = 0
+            for record in records:
+                member_total = config.spec.get_total_xp(record['level'], record['xp'])
+                total_xp += member_total
+                if member_total > 0:
+                    gainers += 1
+
+            await self.bot.db.leveling.record_xp_snapshot(guild.id, total_xp, gainers)
+
+    @snapshot_xp.before_loop
+    async def _before_snapshot_xp(self) -> None:
+        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=1)
     async def award_voice_xp(self) -> None:
