@@ -5,7 +5,6 @@ import datetime
 
 from aiohttp import web
 
-from app.cogs.comic.models import ComicFeed
 from .models import InternalAPIHandlers
 
 
@@ -431,9 +430,8 @@ class ContentHandlers(InternalAPIHandlers):
         except Exception:
             raise web.HTTPBadRequest(text='invalid JSON body')
 
-        record = await self.bot.db.comics.get_config(guild_id, brand)
-        config = ComicFeed(self.bot.get_cog('Comics'), record=record)  # type: ignore
-        if record is None:
+        config = await self.bot.get_cog('Comics').get_comic_config(guild_id, brand)  # type: ignore
+        if config is None:
             raise web.HTTPNotFound(text='comic feed not found')
 
         updates: dict[str, object] = {}
@@ -450,13 +448,13 @@ class ContentHandlers(InternalAPIHandlers):
             updates['pin'] = bool(body['pin'])
 
         for update, value in updates:
-            if value == record[update]:
+            if value == getattr(config, update):
                 updates.pop(update)
                 continue
 
         if updates:
             await self.bot.db.comics.update_config(
-                record['id'],
+                config.id,
                 key=lambda t: f"{t[1]} = ${t[0]}",
                 values=updates,
             )
