@@ -108,6 +108,29 @@ class ContentHandlers(InternalAPIHandlers):
 
         return web.json_response({'ok': True})
 
+    async def _end_poll(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        poll_id = int(request.match_info['poll_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Polls')
+        if cog is None:
+            raise web.HTTPServiceUnavailable(text='polls cog not loaded')
+
+        polls = await cog.get_guild_polls(guild_id)
+        poll = next((p for p in polls if p.id == poll_id), None)
+        if poll is None:
+            raise web.HTTPNotFound(text='poll not found')
+
+        result = await cog.end_poll(poll)
+        if result is None:
+            raise web.HTTPBadRequest(text='poll is already ended')
+
+        return web.json_response({'ok': True})
+
     async def _get_giveaways(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)

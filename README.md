@@ -296,6 +296,10 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/members?limit=N&after=ID` | Paginated member list |
 | POST | `/api/internal/guilds/{id}/members/{user_id}/action` | Kick/ban/unban a member (JSON: action, reason) |
 | PATCH | `/api/internal/guilds/{id}/members/{user_id}/roles` | Add/remove member roles (JSON: add[], remove[]) |
+| POST | `/api/internal/guilds/{id}/members/bulk-action` | Batch kick/ban/unban/role-add/role-remove (JSON: user_ids[], action, role_ids?, reason?) |
+| GET | `/api/internal/guilds/{id}/members/{user_id}/activity` | Daily command counts for the past year (activity heatmap) |
+| GET | `/api/internal/guilds/{id}/cases?limit&offset&action&moderator_id&target_id&after&before` | Filtered, paginated moderation cases |
+| GET | `/api/internal/guilds/{id}/cases/recent?since=ISO` | Cases created after a timestamp (for live polling) |
 | GET | `/api/internal/guilds/{id}/gatekeeper` | Gatekeeper configuration |
 | PATCH | `/api/internal/guilds/{id}/gatekeeper` | Update gatekeeper settings |
 | POST | `/api/internal/guilds/{id}/gatekeeper/message` | Send verification embed to channel |
@@ -338,6 +342,7 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/emoji-stats?limit=N` | Top emoji usage stats |
 | GET | `/api/internal/guilds/{id}/polls` | All guild polls with status and votes |
 | PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll |
+| POST | `/api/internal/guilds/{id}/polls/{poll_id}/end` | End a running poll (archives thread, updates message, deletes timer) |
 | GET | `/api/internal/guilds/{id}/giveaways` | All guild giveaways with entries |
 | GET | `/api/internal/guilds/{id}/tags` | Tags with usage stats and top creators |
 | GET | `/api/internal/guilds/{id}/commands` | All commands + per-guild disable state + plonk list |
@@ -351,7 +356,7 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
 
-The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
+The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`, `moderation.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
 

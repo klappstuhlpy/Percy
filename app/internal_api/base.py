@@ -80,6 +80,7 @@ class InternalAPI(
         # Polls
         self._app.router.add_get('/api/internal/guilds/{guild_id}/polls', self._get_polls)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/polls/{poll_id}', self._patch_poll)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/polls/{poll_id}/end', self._end_poll)
         # Giveaways
         self._app.router.add_get('/api/internal/guilds/{guild_id}/giveaways', self._get_giveaways)
         # Tags
