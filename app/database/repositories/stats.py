@@ -288,3 +288,19 @@ class StatsRepository(BaseRepository):
             """,
             user_id, limit,
         )
+
+    # -- activity heatmap -------------------------------------------------
+
+    async def get_member_daily_activity(
+        self, guild_id: int, user_id: int, *, days: int = 365
+    ) -> list[asyncpg.Record]:
+        """Returns per-day command counts for a member, used for activity heatmaps."""
+        query = """
+            SELECT used::date AS day, COUNT(*) AS count
+            FROM commands
+            WHERE guild_id = $1 AND author_id = $2
+              AND used > (CURRENT_TIMESTAMP - $3::interval)
+            GROUP BY day
+            ORDER BY day;
+        """
+        return await self.fetch(query, guild_id, user_id, datetime.timedelta(days=days))

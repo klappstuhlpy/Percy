@@ -14,6 +14,7 @@ from .economy import EconomyHandlers
 from .guild import GuildHandlers
 from .leveling import LevelingHandlers
 from .members import MemberHandlers
+from .moderation import ModerationHandlers
 from .stats import StatsHandlers
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ __all__ = ('InternalAPI',)
 class InternalAPI(
     GuildHandlers,
     MemberHandlers,
+    ModerationHandlers,
     LevelingHandlers,
     EconomyHandlers,
     ContentHandlers,
@@ -134,6 +136,11 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles/preset', self._create_leveling_role_preset)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/multipliers', self._post_leveling_multipliers)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/blacklist', self._post_leveling_blacklist)
+        # Moderation (cases browser, bulk actions, activity)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/cases', self._get_cases)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/cases/recent', self._get_recent_cases)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/members/bulk-action', self._bulk_member_action)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/activity', self._get_member_activity)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()

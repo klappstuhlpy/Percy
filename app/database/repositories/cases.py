@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import datetime
+from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
 
@@ -86,6 +87,91 @@ class CasesRepository(BaseRepository):
             RETURNING *;
         """
         return await self.fetchrow(query, guild_id, case_index)
+
+    async def get_cases(
+        self,
+        guild_id: int,
+        *,
+        action: str | None = None,
+        moderator_id: int | None = None,
+        target_id: int | None = None,
+        after: datetime.datetime | None = None,
+        before: datetime.datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[asyncpg.Record]:
+        """Fetches cases for a guild with optional filters, newest first."""
+        args: list[Any] = [guild_id]
+        clauses = ['guild_id = $1']
+
+        if action is not None:
+            args.append(action)
+            clauses.append(f'action = ${len(args)}')
+        if moderator_id is not None:
+            args.append(moderator_id)
+            clauses.append(f'moderator_id = ${len(args)}')
+        if target_id is not None:
+            args.append(target_id)
+            clauses.append(f'target_id = ${len(args)}')
+        if after is not None:
+            args.append(after)
+            clauses.append(f'created_at >= ${len(args)}')
+        if before is not None:
+            args.append(before)
+            clauses.append(f'created_at <= ${len(args)}')
+
+        where = ' AND '.join(clauses)
+        args.extend([limit, offset])
+        query = f"""
+            SELECT * FROM mod_cases
+            WHERE {where}
+            ORDER BY case_index DESC
+            LIMIT ${len(args) - 1} OFFSET ${len(args)};
+        """
+        return await self.fetch(query, *args)
+
+    async def count_cases(
+        self,
+        guild_id: int,
+        *,
+        action: str | None = None,
+        moderator_id: int | None = None,
+        target_id: int | None = None,
+        after: datetime.datetime | None = None,
+        before: datetime.datetime | None = None,
+    ) -> int:
+        """Counts cases for a guild matching the given filters."""
+        args: list[Any] = [guild_id]
+        clauses = ['guild_id = $1']
+
+        if action is not None:
+            args.append(action)
+            clauses.append(f'action = ${len(args)}')
+        if moderator_id is not None:
+            args.append(moderator_id)
+            clauses.append(f'moderator_id = ${len(args)}')
+        if target_id is not None:
+            args.append(target_id)
+            clauses.append(f'target_id = ${len(args)}')
+        if after is not None:
+            args.append(after)
+            clauses.append(f'created_at >= ${len(args)}')
+        if before is not None:
+            args.append(before)
+            clauses.append(f'created_at <= ${len(args)}')
+
+        where = ' AND '.join(clauses)
+        query = f"SELECT COUNT(*) FROM mod_cases WHERE {where};"
+        return await self.fetchval(query, *args)
+
+    async def get_recent_cases(self, guild_id: int, *, since: datetime.datetime) -> list[asyncpg.Record]:
+        """Fetches cases created since a timestamp, oldest first (for event streaming)."""
+        query = """
+            SELECT * FROM mod_cases
+            WHERE guild_id = $1 AND created_at >= $2
+            ORDER BY created_at ASC;
+        """
+        return await self.fetch(query, guild_id, since)
 
     # -- modlog config ----------------------------------------------------
 
