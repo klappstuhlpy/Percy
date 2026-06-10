@@ -5,6 +5,7 @@ import datetime
 
 from aiohttp import web
 
+from app.cogs.comic.models import ComicFeed
 from .models import InternalAPIHandlers
 
 
@@ -431,6 +432,7 @@ class ContentHandlers(InternalAPIHandlers):
             raise web.HTTPBadRequest(text='invalid JSON body')
 
         record = await self.bot.db.comics.get_config(guild_id, brand)
+        config = ComicFeed(self.bot.get_cog('Comics'), record=record)  # type: ignore
         if record is None:
             raise web.HTTPNotFound(text='comic feed not found')
 
@@ -441,7 +443,7 @@ class ContentHandlers(InternalAPIHandlers):
             updates['format'] = body['format']
         if 'day' in body:
             updates['day'] = int(body['day'])
-            updates['next_pull'] = record.next_scheduled(int(body['day']))
+            updates['next_pull'] = config.next_scheduled(int(body['day']))
         if 'ping' in body:
             updates['ping'] = int(body['ping']) if body['ping'] else None
         if 'pin' in body:
