@@ -449,6 +449,11 @@ class ContentHandlers(InternalAPIHandlers):
         if 'pin' in body:
             updates['pin'] = bool(body['pin'])
 
+        for update, value in updates:
+            if value == record[update]:
+                updates.pop(update)
+                continue
+
         if updates:
             await self.bot.db.comics.update_config(
                 record['id'],
