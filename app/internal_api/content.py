@@ -189,29 +189,31 @@ class ContentHandlers(InternalAPIHandlers):
         command_config = await self.bot.db.guilds.get_command_config(guild_id)
         plonks = await self.bot.db.guilds.get_plonks(guild_id)
 
+        # A NULL channel_id deny row disables the command for the whole guild;
+        # rows with a channel_id only disable it in that specific channel.
         disabled_commands: dict[str, list[str]] = {}
+        globally_disabled: set[str] = set()
         for record in command_config:
             name = record['name']
             channel_id = record.get('channel_id')
             whitelist = record.get('whitelist', False)
-            if not whitelist and channel_id:
-                if name not in disabled_commands:
-                    disabled_commands[name] = []
-                disabled_commands[name].append(str(channel_id))
-
-        text_channel_count = len(guild.text_channels)
+            if whitelist:
+                continue
+            if channel_id is None:
+                globally_disabled.add(name)
+            else:
+                disabled_commands.setdefault(name, []).append(str(channel_id))
 
         all_commands = []
         for cmd in self.bot.walk_commands():
             qualified = cmd.qualified_name
             cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
-            disabled_in = disabled_commands.get(qualified, [])
             all_commands.append({
                 'name': qualified,
                 'category': cog_name,
                 'description': cmd.short_doc or '',
-                'disabled_in': disabled_in,
-                'globally_disabled': len(disabled_in) >= text_channel_count and text_channel_count > 0,
+                'disabled_in': disabled_commands.get(qualified, []),
+                'globally_disabled': qualified in globally_disabled,
             })
 
         plonk_list = []
@@ -249,28 +251,28 @@ class ContentHandlers(InternalAPIHandlers):
             raise web.HTTPBadRequest(text='must specify name and enabled')
 
         if enabled:
-            # Re-enable: remove all disable entries for this command in this guild
+            # Re-enable: remove the relevant disable entries for this command.
             if channel_id:
                 await self.bot.db.execute(
                     "DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND channel_id=$3;",
                     guild_id, name, int(channel_id),
                 )
             else:
+                # Clears both the guild-wide row and every per-channel row.
                 await self.bot.db.execute(
                     "DELETE FROM command_config WHERE guild_id=$1 AND name=$2;",
                     guild_id, name,
                 )
         else:
-            # Disable: need a channel_id for per-channel, or disable in all text channels
-            if channel_id:
-                await self.bot.db.guilds.set_command_config(guild_id, int(channel_id), name, whitelist=False)
-            else:
-                # Global disable: insert a row for every text channel
-                for ch in guild.text_channels:
-                    try:
-                        await self.bot.db.guilds.set_command_config(guild_id, ch.id, name, whitelist=False)
-                    except Exception:
-                        pass
+            # Disable: a channel_id targets a single channel; a NULL channel_id
+            # disables the command server-wide via one row (not one row per channel).
+            await self.bot.db.guilds.set_command_config(
+                guild_id, int(channel_id) if channel_id else None, name, whitelist=False)
+
+        # Keep the Config cog's resolved-permissions cache in sync with the write.
+        config_cog = self.bot.get_cog('Config')
+        if config_cog is not None:
+            config_cog.get_commands_configuration.invalidate(guild_id)
 
         return web.json_response({'ok': True})
 
@@ -300,6 +302,11 @@ class ContentHandlers(InternalAPIHandlers):
             await self.bot.db.guilds.add_plonk(guild_id, entity_id)
         else:
             await self.bot.db.guilds.remove_plonks(guild_id, [entity_id])
+
+        # Drop the Config cog's plonk-status cache for this guild.
+        config_cog = self.bot.get_cog('Config')
+        if config_cog is not None:
+            config_cog.is_plonked.invalidate_containing(f"{guild_id!r}:")
 
         return web.json_response({'ok': True})
 
@@ -373,7 +380,7 @@ class ContentHandlers(InternalAPIHandlers):
     async def _get_comics(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         feeds = []
-        for brand_name in ('Marvel', 'DC', 'Manga'):
+        for brand_name in ('MARVEL', 'DC', 'MANGA'):
             record = await self.bot.db.comics.get_config(guild_id, brand_name)
             if record:
                 feeds.append({
