@@ -441,7 +441,7 @@ class ContentHandlers(InternalAPIHandlers):
             updates['format'] = body['format']
         if 'day' in body:
             updates['day'] = int(body['day'])
-            updates['next_pull'] = None
+            updates['next_pull'] = record.next_scheduled(int(body['day']))
         if 'ping' in body:
             updates['ping'] = int(body['ping']) if body['ping'] else None
         if 'pin' in body:
