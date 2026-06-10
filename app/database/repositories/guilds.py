@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
 
@@ -45,6 +45,21 @@ class GuildsRepository(BaseRepository):
     async def get_gatekeeper_members(self, guild_id: int) -> list[asyncpg.Record]:
         """Fetches all gatekeeper member rows for a guild."""
         return await self.fetch("SELECT * FROM guild_gatekeeper_members WHERE guild_id=$1;", guild_id)
+
+    async def upsert_gatekeeper(self, guild_id: int, fields: dict[str, Any]) -> None:
+        """Ensures a gatekeeper row exists for a guild and updates the given columns.
+
+        ``fields`` keys must be ``guild_gatekeeper`` column names (callers pass a
+        validated allow-list). Invalidates the cached gatekeeper record afterwards.
+        """
+        async with self.acquire() as con, con.transaction():
+            await con.execute(
+                "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING;", guild_id)
+            if fields:
+                set_clause = ", ".join(f'"{col}" = ${i}' for i, col in enumerate(fields, start=2))
+                await con.execute(
+                    f"UPDATE guild_gatekeeper SET {set_clause} WHERE id = $1;", guild_id, *fields.values())
+        self.db.get_guild_gatekeeper.invalidate(guild_id)
 
     # -- plonks (ignore list) --------------------------------------------
 
@@ -109,3 +124,14 @@ class GuildsRepository(BaseRepository):
             await con.execute(
                 "INSERT INTO command_config (guild_id, channel_id, name, whitelist) VALUES ($1, $2, $3, $4);",
                 guild_id, channel_id, name, whitelist)
+
+    async def clear_command_config(self, guild_id: int, name: str) -> None:
+        """Removes every toggle (guild-wide and per-channel) for a command in a guild."""
+        await self.execute(
+            "DELETE FROM command_config WHERE guild_id=$1 AND name=$2;", guild_id, name)
+
+    async def clear_command_config_channel(self, guild_id: int, name: str, channel_id: int) -> None:
+        """Removes the toggle for a command in one specific channel."""
+        await self.execute(
+            "DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND channel_id=$3;",
+            guild_id, name, channel_id)

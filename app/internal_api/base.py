@@ -116,7 +116,10 @@ class InternalAPI(
         self._app.router.add_delete('/api/internal/guilds/{guild_id}/status-feed', self._delete_status_feed)
         # Lockdowns
         self._app.router.add_get('/api/internal/guilds/{guild_id}/lockdowns', self._get_lockdowns)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/lockdowns/lock', self._lock_channels)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/lockdowns/unlock', self._unlock_channels)
+        # Moderation ignore list (safe automod entities)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/moderation/ignore', self._manage_moderation_ignore)
         # Highlights
         self._app.router.add_get('/api/internal/guilds/{guild_id}/highlights', self._get_highlights)
         self._app.router.add_delete('/api/internal/guilds/{guild_id}/highlights/{user_id}', self._delete_highlight)

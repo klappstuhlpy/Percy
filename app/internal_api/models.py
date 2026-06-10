@@ -37,3 +37,17 @@ class InternalAPIHandlers:
             'name': role.name if role else 'deleted-role',
             'color': role.color.value if role else 0,
         }
+
+    @staticmethod
+    def _resolve_entity(guild, entity_id: int) -> dict:
+        """Resolves an arbitrary snowflake to ``{id, type, name}`` (role/channel/member)."""
+        role = guild.get_role(entity_id)
+        if role is not None:
+            return {'id': str(entity_id), 'type': 'role', 'name': role.name}
+        channel = guild.get_channel(entity_id)
+        if channel is not None:
+            return {'id': str(entity_id), 'type': 'channel', 'name': channel.name}
+        member = guild.get_member(entity_id)
+        if member is not None:
+            return {'id': str(entity_id), 'type': 'member', 'name': member.display_name}
+        return {'id': str(entity_id), 'type': 'unknown', 'name': str(entity_id)}

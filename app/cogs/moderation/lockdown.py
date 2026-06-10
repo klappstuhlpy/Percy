@@ -39,46 +39,59 @@ async def get_lockdown_information(
     }
 
 
+async def lock_channels(
+    bot: Bot,
+    guild: discord.Guild,
+    channels: list[discord.TextChannel | discord.VoiceChannel],
+    *,
+    reason: str,
+) -> tuple[list[discord.TextChannel | discord.VoiceChannel], list[discord.TextChannel | discord.VoiceChannel]]:
+    """Applies lockdown overwrites to the given channels and records them.
+
+    Shared by the ``lockdown`` command and the dashboard internal API so the
+    permission mechanics and bookkeeping live in one place.
+    """
+    records = []
+    success, failures = [], []
+    for channel in channels:
+        overwrites = channel.overwrites_for(guild.default_role)
+        allow, deny = overwrites.pair()
+        overwrites.update(
+            send_messages=False,
+            add_reactions=False,
+            use_application_commands=False,
+            create_public_threads=False,
+            create_private_threads=False,
+            send_messages_in_threads=False,
+        )
+
+        try:
+            await channel.set_permissions(guild.default_role, overwrite=overwrites, reason=reason)
+        except discord.HTTPException:
+            failures.append(channel)
+        else:
+            success.append(channel)
+            records.append(
+                {
+                    "guild_id": guild.id,
+                    "channel_id": channel.id,
+                    "allow": allow.value,
+                    "deny": deny.value,
+                }
+            )
+
+    await bot.db.moderation.add_lockdowns(records)
+    return success, failures
+
+
 async def start_lockdown(
     ctx: Context, channels: list[discord.TextChannel | discord.VoiceChannel]
 ) -> tuple[list[discord.TextChannel | discord.VoiceChannel], list[discord.TextChannel | discord.VoiceChannel]]:
     """Starts a lockdown in the given channels."""
     assert ctx.guild is not None
-    guild_id = ctx.guild.id
-
-    records = []
-    success, failures = [], []
     reason = f"Lockdown request by {ctx.author} (ID: {ctx.author.id})"
     async with ctx.typing():
-        for channel in channels:
-            overwrites = channel.overwrites_for(channel.guild.default_role)
-            allow, deny = overwrites.pair()
-            overwrites.update(
-                send_messages=False,
-                add_reactions=False,
-                use_application_commands=False,
-                create_public_threads=False,
-                create_private_threads=False,
-                send_messages_in_threads=False,
-            )
-
-            try:
-                await channel.set_permissions(ctx.guild.default_role, overwrite=overwrites, reason=reason)
-            except discord.HTTPException:
-                failures.append(channel)
-            else:
-                success.append(channel)
-                records.append(
-                    {
-                        "guild_id": guild_id,
-                        "channel_id": channel.id,
-                        "allow": allow.value,
-                        "deny": deny.value,
-                    }
-                )
-
-    await ctx.bot.db.moderation.add_lockdowns(records)
-    return success, failures
+        return await lock_channels(ctx.bot, ctx.guild, channels, reason=reason)
 
 
 async def end_lockdown(

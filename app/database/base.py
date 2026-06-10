@@ -633,22 +633,22 @@ class GuildConfig(BaseRecord):
     class AutoModFlags(BaseFlags):
         """The flags for the guild config settings."""
 
-        @flag_value  # type: ignore[misc]
+        @flag_value
         def audit_log(self) -> int:
             """Whether the server is broadcasting audit logs."""
             return 1
 
-        @flag_value  # type: ignore[misc]
+        @flag_value
         def raid(self) -> int:
             """Whether the server is auto banning spammers."""
             return 2
 
-        @flag_value  # type: ignore[misc]
+        @flag_value
         def alerts(self) -> int:
             """Whether the server has alerts enabled."""
             return 4
 
-        @flag_value  # type: ignore[misc]
+        @flag_value
         def gatekeeper(self) -> int:
             """Whether the server has gatekeeper enabled."""
             return 8

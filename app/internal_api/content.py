@@ -253,16 +253,10 @@ class ContentHandlers(InternalAPIHandlers):
         if enabled:
             # Re-enable: remove the relevant disable entries for this command.
             if channel_id:
-                await self.bot.db.execute(
-                    "DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND channel_id=$3;",
-                    guild_id, name, int(channel_id),
-                )
+                await self.bot.db.guilds.clear_command_config_channel(guild_id, name, int(channel_id))
             else:
                 # Clears both the guild-wide row and every per-channel row.
-                await self.bot.db.execute(
-                    "DELETE FROM command_config WHERE guild_id=$1 AND name=$2;",
-                    guild_id, name,
-                )
+                await self.bot.db.guilds.clear_command_config(guild_id, name)
         else:
             # Disable: a channel_id targets a single channel; a NULL channel_id
             # disables the command server-wide via one row (not one row per channel).
@@ -604,6 +598,36 @@ class ContentHandlers(InternalAPIHandlers):
             })
         return web.json_response({'entries': entries})
 
+    async def _lock_channels(self, request: web.Request) -> web.Response:
+        import discord
+
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        channel_ids = body.get('channel_ids', [])
+        if not channel_ids:
+            raise web.HTTPBadRequest(text='channel_ids is required')
+
+        channels = []
+        for cid in channel_ids:
+            channel = guild.get_channel(int(cid))
+            if channel is not None and isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
+                channels.append(channel)
+
+        if not channels:
+            raise web.HTTPBadRequest(text='no valid text or voice channels to lock')
+
+        from app.cogs.moderation.lockdown import lock_channels
+        success, failures = await lock_channels(self.bot, guild, channels, reason='Locked via dashboard')
+        return web.json_response({'ok': True, 'locked': len(success), 'failures': len(failures)})
+
     async def _unlock_channels(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
@@ -619,8 +643,11 @@ class ContentHandlers(InternalAPIHandlers):
         if not channel_ids:
             raise web.HTTPBadRequest(text='channel_ids is required')
 
+        ids = [int(c) for c in channel_ids]
         from app.cogs.moderation.lockdown import end_lockdown
-        failures = await end_lockdown(self.bot, guild, channel_ids=[int(c) for c in channel_ids], reason='Unlocked via dashboard')
+        failures = await end_lockdown(self.bot, guild, channel_ids=ids, reason='Unlocked via dashboard')
+        # Clear the lockdown bookkeeping so the channels no longer show as locked.
+        await self.bot.db.moderation.remove_lockdowns(guild_id, ids)
         return web.json_response({'ok': True, 'failures': len(failures)})
 
     async def _get_highlights(self, request: web.Request) -> web.Response:

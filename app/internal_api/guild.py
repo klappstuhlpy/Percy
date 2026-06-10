@@ -36,6 +36,7 @@ class GuildHandlers(InternalAPIHandlers):
             'poll_ping_role': self._resolve_role(guild, guild_config.poll_ping_role_id),
             'poll_reason_channel': self._resolve_channel(guild, guild_config.poll_reason_channel_id),
             'mention_count': guild_config.mention_count,
+            'ignored_entities': [self._resolve_entity(guild, eid) for eid in guild_config.safe_automod_entity_ids],
             'mute_role': self._resolve_role(guild, guild_config.mute_role_id),
             'alert_channel': self._resolve_channel(guild, guild_config.alert_channel_id),
             'mod_log_channel': self._resolve_channel(guild, getattr(guild_config, 'mod_log_channel_id', None)),
@@ -93,24 +94,36 @@ class GuildHandlers(InternalAPIHandlers):
         if not updates:
             raise web.HTTPBadRequest(text='no valid fields to update')
 
-        # Apply each update through the record's _update mechanism.
-        # We use raw SQL here because the BaseRecord._update pattern is
-        # designed for single-field changes from within the bot.
-        set_clauses = []
-        params: list[object] = []
-        for i, (col, val) in enumerate(updates.items(), start=1):
-            if col == 'prefixes':
-                set_clauses.append(f'{col} = ${i}')
-                params.append(val)
-            else:
-                set_clauses.append(f'{col} = ${i}')
-                params.append(val)
+        # Persist via the record helper: it builds the UPDATE and invalidates the
+        # get_guild_config cache, keeping the bot's view consistent with the DB.
+        await guild_config.update(**updates)
 
-        params.append(guild_id)
-        query = f"UPDATE guild_config SET {', '.join(set_clauses)} WHERE id = ${len(params)}"
+        return web.json_response({'ok': True})
 
-        await self.bot.db.execute(query, *params)
-        self.bot.db.get_guild_config.invalidate(guild_id)
+    async def _manage_moderation_ignore(self, request: web.Request) -> web.Response:
+        """Adds or removes roles/members/channels from the moderation ignore list."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        action = body.get('action')
+        entity_id = body.get('entity_id')
+        if action not in ('add', 'remove'):
+            raise web.HTTPBadRequest(text='action must be add or remove')
+        if not entity_id:
+            raise web.HTTPBadRequest(text='entity_id is required')
+
+        entity_id = int(entity_id)
+        if action == 'add':
+            await self.bot.db.moderation.add_safe_entities(guild_id, [entity_id])
+        else:
+            await self.bot.db.moderation.remove_safe_entities(guild_id, [entity_id])
 
         return web.json_response({'ok': True})
 
@@ -206,20 +219,8 @@ class GuildHandlers(InternalAPIHandlers):
         if not updates:
             raise web.HTTPBadRequest(text='no valid fields to update')
 
-        set_clauses = []
-        params: list[object] = [guild_id]
-        for i, (col, val) in enumerate(updates.items(), start=2):
-            set_clauses.append(f'{col} = ${i}')
-            params.append(val)
-
-        await self.bot.db.execute(
-            "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
-            guild_id,
-        )
-
-        query = f"UPDATE guild_gatekeeper SET {', '.join(set_clauses)} WHERE id = $1"
-        await self.bot.db.execute(query, *params)
-        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+        # Repository upsert ensures the row exists, updates it, and invalidates the cache.
+        await self.bot.db.guilds.upsert_gatekeeper(guild_id, updates)
 
         return web.json_response({'ok': True})
 
@@ -270,15 +271,8 @@ class GuildHandlers(InternalAPIHandlers):
         except discord.HTTPException as e:
             raise web.HTTPServiceUnavailable(text=f'failed to send message: {e}')
 
-        await self.bot.db.execute(
-            "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
-            guild_id,
-        )
-        await self.bot.db.execute(
-            "UPDATE guild_gatekeeper SET message_id = $2, channel_id = $3 WHERE id = $1",
-            guild_id, message.id, channel_id,
-        )
-        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+        await self.bot.db.guilds.upsert_gatekeeper(
+            guild_id, {'message_id': message.id, 'channel_id': int(channel_id)})
 
         return web.json_response({'ok': True, 'message_id': message.id})
 
