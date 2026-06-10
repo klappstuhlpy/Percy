@@ -83,6 +83,25 @@ class LevelingHandlers(InternalAPIHandlers):
 
         return web.json_response({'entries': entries, 'total': len(entries)})
 
+    async def _get_leveling_xp_history(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        days = max(1, min(int(request.query.get('days', '30')), 365))
+        records = await self.bot.db.leveling.get_xp_history(guild_id, days=days)
+
+        points = [
+            {
+                'day': record['day'].isoformat(),
+                'total_xp': int(record['total_xp']),
+                'gainers': int(record['gainers']),
+            }
+            for record in records
+        ]
+        return web.json_response({'points': points, 'days': days})
+
     async def _patch_leveling_user(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         user_id = int(request.match_info['user_id'])

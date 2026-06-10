@@ -637,64 +637,6 @@ class Meta(Cog):
         else:
             await ctx.send_help()
 
-    @command("v2", description="Shows info about Percy-v2.")
-    async def v2(self, ctx: Context) -> None:
-        """Shows info about Percy-v2."""
-        embed = discord.Embed(title="Percy-v2", colour=helpers.Colour.white())
-
-        assert isinstance(config.owners, int)
-        owner = ctx.bot.get_user(config.owners)
-        assert owner is not None
-
-        embed.set_author(name=owner, icon_url=owner.display_avatar.url)
-        embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
-
-        embed.description = (
-            "Percy has been rewritten from the ground up to be more efficient and faster.\n"
-            "With improving the codebase, the bot has been made more stable and reliable for such as user interaction "
-            "and command execution. The bots inner structure has been completely reworked to be more modular and "
-            "flexible for future updates and features.\n\n"
-            "The **v2** also brings some new features and improvements to the bot such as:\n"
-            "- **Updated Casino/Game System**\n"
-            " * The Poker Games has been finished and should now be fully functional.\n"
-            " * The Economy system has been deployed to all minigames for more interaction and fun.\n"
-            " * New Minigames such as **Tower** or **Slot** have been added.\n"
-            " * The Hangman Games has been reworked and improved.\n"
-            "- **Moderation:**\n"
-            " * You have now the possibility to use the so-called **Gatekeeper** functionality that acts as your "
-            " personal front door security for your server. This stops raiders and spammers from floating your server "
-            " by letting the users verify themselves by entering a captcha to gain access to the server.\n"
-            " * The **Moderation** commands have been reworked and improved, for example better *check* handling for "
-            " utility commands (ban, kick, mute, ...).\n"
-            "- \N{SQUARED NEW} **Music**:\n"
-            " * The v2 version brings the Music System, previously known from my second bot (R. Hashira thats now "
-            " deprecated), to Percy.\n"
-            " * This brings also the *playlist* system to Percy, so you can now create and manage your own playlists.\n"
-            "- **Error Handling:**\n"
-            "But also the error handling has greatly improved. Command invokes that cause an error because of for example "
-            "command parsing failures are now handeled entirely different by relying on the new **ANSI** command tracer "
-            "that shows exactly what has been going wrong and where. This is especially useful for people with lesser "
-            "knowledge about programming to make it easier to understand what went wrong and how to fix it.\n"
-            "- **Updated Functionality**:\n"
-            " * Overall the entire internal command handling has been updated to support better check implementations "
-            " and also a proper permission handling that has been a little bit missing in the previous version.\n"
-            " * Updated Poll/Giveaway/Reminder and Tag System to be more reliable and efficient.\n"
-            "- **Rendering**:\n"
-            " * The internal rendering done, for example for the leveling cards has been completly rewritten "
-            " to be more efficient and updated to new versions of the used libraries.\n"
-            " * The new Users Stats/History System that added the `presence`, `names` and `avatarhistory` commands "
-            " also uses newly written rendering functions.\n"
-            "\n"
-            "**This and much more small improvements and bug fixes have been made to the bot to make the experience "
-            "with Percy even better. And also in the future there are going to be more updates and features to come.**\n\n"
-            "This said, I would be happy if you help me improving issues by using the `feedback` command to submit "
-            "bugs or even request new features. I am always open for new ideas and improvements.\n\n"
-            "Thank you for using Percy!"
-        )
-
-        embed.set_footer(text="Percy-v2 - Changelog")
-        await ctx.send(embed=embed, ephemeral=True)
-
     @command("featureinfo", alias="fi", description="Shows the features of a guild.", hydra=True, guild_only=True)
     @describe(guild_id="The ID of the server to show info about. (Default: Current server)")
     async def featureinfo(self, ctx: Context, guild_id: str | None = None) -> None:

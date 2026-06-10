@@ -59,6 +59,8 @@ class InternalAPI(
         self._app.router.add_get('/api/internal/guilds/{guild_id}/channels', self._get_guild_channels)
         # Members
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members', self._get_guild_members)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/detail', self._get_member_detail)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/avatars', self._get_member_avatars)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/members/{user_id}/action', self._member_action)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/members/{user_id}/roles', self._member_roles)
         # Gatekeeper
@@ -71,6 +73,7 @@ class InternalAPI(
         # Leveling
         self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/config', self._get_leveling_config)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/leaderboard', self._get_leveling_leaderboard)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/xp-history', self._get_leveling_xp_history)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/users/{user_id}', self._patch_leveling_user)
         # Polls
         self._app.router.add_get('/api/internal/guilds/{guild_id}/polls', self._get_polls)

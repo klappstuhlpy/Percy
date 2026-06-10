@@ -275,6 +275,7 @@ TOPGG_TOKEN=                         # top.gg stats posting
 IMAGES_API_TOKEN=                    # image API integrations
 MARVEL_API_PUBLIC_KEY=               # Marvel API (comic subscriptions)
 MARVEL_API_PRIVATE_KEY=
+GROQ_API_KEY=                        # Groq API Token for /ai command
 
 # ── Web Dashboard (klappstuhl.me BFF) ───────────────────
 INTERNAL_API_TOKEN=                  # pre-shared bearer token for the dashboard BFF
@@ -342,13 +343,15 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/commands` | All commands + per-guild disable state + plonk list |
 | POST | `/api/internal/guilds/{id}/commands/toggle` | Enable/disable a command |
 | POST | `/api/internal/guilds/{id}/plonks` | Add/remove plonked entity |
+| GET | `/api/internal/guilds/{id}/leveling/xp-history?days=N` | Daily cumulative XP snapshots (for trend chart) |
+| GET | `/api/internal/guilds/{id}/members/{user_id}/detail` | Aggregated member profile (identity, leveling, cases, notes) |
 | GET | `/api/internal/guilds/{id}/stats` | Guild statistics |
 | GET | `/api/internal/bot/stats` | Bot-wide statistics |
 | GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
 
-The `InternalAPI` cog lives in the `app/cogs/internal_api/` package: `cog.py` owns the aiohttp server lifecycle and route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name.
+The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
 
@@ -384,7 +387,7 @@ All of this is stored in PostgreSQL and cached in memory, with the cache invalid
 
 ## Database management
 
-Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V21__….sql`). All commands run against the database configured in `.env`/`config.py`.
+Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V22__….sql`). All commands run against the database configured in `.env`/`config.py`.
 
 | Command                                 | Description                                           |
 |-----------------------------------------|-------------------------------------------------------|
