@@ -61,6 +61,7 @@ class InternalAPI(
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/config', self._patch_guild_config)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/roles', self._get_guild_roles)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/channels', self._get_guild_channels)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/audit-log-flags', self._patch_audit_log_flags)
         # Members
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members', self._get_guild_members)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/detail', self._get_member_detail)

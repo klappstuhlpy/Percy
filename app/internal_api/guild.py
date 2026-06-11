@@ -42,6 +42,7 @@ class GuildHandlers(InternalAPIHandlers):
             'mod_log_channel': self._resolve_channel(guild, getattr(guild_config, 'mod_log_channel_id', None)),
             'message_log_channel': self._resolve_channel(guild, getattr(guild_config, 'message_log_channel_id', None)),
             'voice_log_channel': self._resolve_channel(guild, getattr(guild_config, 'voice_log_channel_id', None)),
+            'audit_log_flags': guild_config.audit_log_flags or {},
             'music_panel_channel': self._resolve_channel(guild, guild_config.music_panel_channel_id),
             'use_music_panel': guild_config.use_music_panel,
             'prefixes': list(guild_config.prefixes),
@@ -126,6 +127,31 @@ class GuildHandlers(InternalAPIHandlers):
             await self.bot.db.moderation.remove_safe_entities(guild_id, [entity_id])
 
         return web.json_response({'ok': True})
+
+    async def _patch_audit_log_flags(self, request: web.Request) -> web.Response:
+        """Updates the audit log event flags for a guild."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        if not isinstance(body, dict):
+            raise web.HTTPBadRequest(text='body must be an object mapping flag names to booleans')
+
+        config = await self.bot.db.get_guild_config(guild_id)
+        current_flags = config.audit_log_flags or {}
+
+        for key, value in body.items():
+            if key in current_flags:
+                current_flags[key] = bool(value)
+
+        await self.bot.db.moderation.set_audit_log_flags(guild_id, current_flags)
+        return web.json_response({'ok': True, 'flags': current_flags})
 
     async def _get_guild_roles(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
