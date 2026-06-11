@@ -1,6 +1,7 @@
 """InternalAPI music/equalizer endpoints."""
 from __future__ import annotations
 
+import discord
 import wavelink
 from aiohttp import web
 
@@ -12,6 +13,11 @@ PRESETS = {
     'treble': [-0.1, -0.1, -0.1, -0.05, 0.0, 0.05, 0.1, 0.12, 0.15, 0.18, 0.2, 0.22, 0.24, 0.25, 0.25],
     'vocal': [-0.1, -0.05, 0.0, 0.1, 0.2, 0.25, 0.25, 0.2, 0.15, 0.1, 0.0, -0.05, -0.1, -0.1, -0.1],
 }
+
+DEFAULT_CHANNEL_DESCRIPTION = """
+This is the Channel where you can see {bot}'s current playing songs.
+You can interact with the **control panel** and manage the current songs.
+"""
 
 
 class MusicHandlers(InternalAPIHandlers):
@@ -32,12 +38,22 @@ class MusicHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
+        config = await self.bot.db.get_guild_config(guild_id)
+        setup = None
+        if config.music_panel_channel_id:
+            setup = {
+                'channel_id': str(config.music_panel_channel_id),
+                'message_id': str(config.music_panel_message_id) if config.music_panel_message_id else None,
+                'use_panel': config.use_music_panel,
+            }
+
         if player is None:
             return web.json_response({
                 'active': False,
                 'equalizer': [0.0] * 15,
                 'filters': {'nightcore': False, '8d': False, 'lowpass': None},
                 'presets': list(PRESETS.keys()),
+                'setup': setup,
             })
 
         eq_payload = player.filters.equalizer.payload
@@ -65,7 +81,81 @@ class MusicHandlers(InternalAPIHandlers):
             'presets': list(PRESETS.keys()),
             'now_playing': now_playing,
             'channel': str(player.channel.id) if player.channel else None,
+            'setup': setup,
         })
+
+    async def _post_music_setup(self, request: web.Request) -> web.Response:
+        """Set up the music panel: create or use a channel, send the panel message."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        config = await self.bot.db.get_guild_config(guild_id)
+        if config.music_panel_channel_id:
+            raise web.HTTPBadRequest(text='music configuration already exists')
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        channel_id = body.get('channel_id') if body else None
+        channel: discord.TextChannel | None = None
+
+        if channel_id:
+            channel = guild.get_channel(int(channel_id))  # type: ignore[assignment]
+            if channel is None or not isinstance(channel, discord.TextChannel):
+                raise web.HTTPBadRequest(text='invalid channel')
+        else:
+            category = guild.text_channels[0].category if guild.text_channels else None
+            parent = category or guild
+            channel = await parent.create_text_channel(name="\U0001f3b6percy-music")
+
+        assert self.bot.user is not None
+        await channel.edit(
+            slowmode_delay=3,
+            topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention),
+        )
+
+        from app.cogs.music.player import Player
+        message = await channel.send(embed=Player.preview_embed(guild))
+        await message.pin()
+        await channel.purge(limit=5, check=lambda msg: not msg.pinned)
+
+        await config.update(
+            music_panel_channel_id=channel.id,
+            music_panel_message_id=message.id,
+            use_music_panel=True,
+        )
+
+        return web.json_response({
+            'ok': True,
+            'channel_id': str(channel.id),
+            'channel_name': channel.name,
+        })
+
+    async def _post_music_reset(self, request: web.Request) -> web.Response:
+        """Reset the music configuration: delete the channel and clear config."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        config = await self.bot.db.get_guild_config(guild_id)
+        if not config.music_panel_channel_id:
+            raise web.HTTPBadRequest(text='no music configuration to reset')
+
+        channel = config.music_panel_channel
+        await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
+
+        if channel:
+            try:
+                await channel.delete(reason="Music configuration reset via dashboard")
+            except discord.HTTPException:
+                pass
+
+        return web.json_response({'ok': True})
 
     async def _post_music_equalizer(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])

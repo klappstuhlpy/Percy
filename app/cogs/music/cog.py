@@ -89,7 +89,8 @@ class Music(Cog):
 
     async def cog_before_invoke(self, ctx: Context) -> None:
         playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
-        await playlist_tools.initizalize_user(ctx.author)
+        if playlist_tools:
+            await playlist_tools.initizalize_user(ctx.author)
 
     @Cog.listener(name="on_wavelink_track_exception")
     @Cog.listener(name="on_wavelink_track_stuck")
@@ -1161,16 +1162,25 @@ class Music(Cog):
         "reset",
         description="Reset the Music configuration setup.",
         user_permissions=["manage_channels"],
+        bot_permissions=["manage_channels"],
     )
     async def setup_reset(self, ctx: Context) -> None:
         """Reset the Music configuration setup."""
         assert ctx.guild is not None
         config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-        if not config.music_panel_channel_id or not config.music_panel_message_id:
+        if not config.music_panel_channel_id:
             await ctx.send_error("There is currently no music configuration.")
             return
 
-        await config.update(music_panel_channel_id=None, music_panel_message_id=None)
+        channel = config.music_panel_channel
+        await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
+
+        if channel:
+            try:
+                await channel.delete(reason="Music configuration reset")
+            except discord.HTTPException:
+                pass
+
         await ctx.send_success("The Music Configuration for this Guild has been deleted.", ephemeral=True)
 
     @_music.command(
@@ -1183,12 +1193,13 @@ class Music(Cog):
         If disabled, the bot won't send a player panel regardless of the setup."""
         assert ctx.guild is not None
         config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-        if not config.music_panel_channel_id or not config.music_panel_message_id:
+        if not config.music_panel_channel_id:
             await ctx.send_error("There is currently no music configuration.")
             return
 
-        await config.update(use_music_panel=not config.use_music_panel)
-        await ctx.send_success(f"The Music Panel has been {'enabled' if not config.use_music_panel else 'disabled'}.")
+        new_value = not config.use_music_panel
+        await config.update(use_music_panel=new_value)
+        await ctx.send_success(f"The Music Panel has been {'enabled' if new_value else 'disabled'}.")
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:

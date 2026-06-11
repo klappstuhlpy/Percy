@@ -149,6 +149,8 @@ class InternalAPI(
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/activity', self._get_member_activity)
         # Music
         self._app.router.add_get('/api/internal/guilds/{guild_id}/music', self._get_music)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/setup', self._post_music_setup)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/reset', self._post_music_reset)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/equalizer', self._post_music_equalizer)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/filters', self._post_music_filters)
 
