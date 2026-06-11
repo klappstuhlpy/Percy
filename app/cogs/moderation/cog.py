@@ -205,7 +205,7 @@ class Moderation(Cog):
                     await coro(reason=reason)
                 return
 
-        if not config.mention_count:
+        if not config.flags.mentions or not config.mention_count:
             return
 
         checker = self._spam_check[message.guild.id]
@@ -852,7 +852,7 @@ class Moderation(Cog):
             updates = f"flags = guild_config.flags & ~{AutoModFlags.alerts.flag}, alert_channel = NULL"
             message = "Alert messages have been disabled."
         elif protection == "mentions":
-            updates = "mention_count = NULL"
+            updates = f"flags = guild_config.flags & ~{AutoModFlags.mentions.flag}, mention_count = NULL"
             message = "Mention spam protection has been disabled"
         elif protection == "auditlog":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, audit_log_channel = NULL, audit_log_flags = NULL"
@@ -971,6 +971,7 @@ class Moderation(Cog):
         """
         assert ctx.guild is not None
         await ctx.db.moderation.set_mention_count(ctx.guild.id, count)
+        await ctx.db.moderation.toggle_raid_protection(ctx.guild.id, AutoModFlags.mentions.flag, True)
         await ctx.send_success(f"Mention spam protection threshold set to `{count}`.")
 
     @moderation_mentions.error  # type: ignore[attr-defined]

@@ -655,6 +655,11 @@ class GuildConfig(BaseRecord):
             """Whether the server has gatekeeper enabled."""
             return 8
 
+        @flag_value
+        def mentions(self) -> int:
+            """Whether the server has mention spam protection enabled."""
+            return 16
+
     bot: Bot
     id: int
     flags: AutoModFlags

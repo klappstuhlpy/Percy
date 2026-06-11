@@ -30,6 +30,7 @@ class GuildHandlers(InternalAPIHandlers):
                 'raid': guild_config.flags.raid,
                 'alerts': guild_config.flags.alerts,
                 'gatekeeper': guild_config.flags.gatekeeper,
+                'mentions': guild_config.flags.mentions,
             },
             'audit_log_channel': self._resolve_channel(guild, guild_config.audit_log_channel_id),
             'poll_channel': self._resolve_channel(guild, guild_config.poll_channel_id),
@@ -81,7 +82,7 @@ class GuildHandlers(InternalAPIHandlers):
             elif key == 'flags' and isinstance(value, dict):
                 # Flags are a bitmask — compute the new value.
                 new_flags = guild_config.flags.value
-                flag_map = {'audit_log': 1, 'raid': 2, 'alerts': 4, 'gatekeeper': 8}
+                flag_map = {'audit_log': 1, 'raid': 2, 'alerts': 4, 'gatekeeper': 8, 'mentions': 16}
                 for flag_name, bit in flag_map.items():
                     if flag_name in value:
                         if value[flag_name]:
