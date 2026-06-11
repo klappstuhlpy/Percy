@@ -123,8 +123,8 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     # Active boost badges below the avatar.
     if data.boosts:
         boost_font = fonts.get(poppins, 15)
-        badge_y = AVATAR_POS[1] + AVATAR_SIZE + 12
-        badge_x = AVATAR_POS[0]
+        badge_y = 146
+        badge_x = CONTENT_X
         for boost in data.boosts:
             label = f"+{boost.percent}% {'XP' if boost.kind == 'xp' else 'Loot'}"
             tw = int(draw.textlength(label, font=boost_font))

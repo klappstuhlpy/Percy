@@ -30,6 +30,7 @@ class ActiveBoost:
     kind: str
     percent: int
 
+
 @dataclass(slots=True)
 class LevelCardData:
     """Everything needed to draw a rank/level card, fully resolved."""
