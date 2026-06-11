@@ -88,6 +88,8 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Roulette, Slots & Tower** | Classic casino gambling games with rendered results.                                                                                                                                                     |
 | **Mini-games**              | Tic-Tac-Toe, Minesweeper and Hangman.                                                                                                                                                                    |
 | **Earning activities**      | `daily` (with streak bonus), plus `fish` and `hunt` — cooldown-gated, weighted risk/reward loot tables from junk to rare jackpots.                                                                       |
+| **Shop & items**            | Admins stock a per-guild shop (`shop add/remove`); members `buy`, `sell` and browse their `inventory`. Items can carry a **use-effect**: cash vouchers, lootboxes, role grants, or timed XP/loot boosts. |
+| **Item effects**            | `use` consumes an item and applies its effect — boosts run on a timer (extendable by re-using) and multiply leveling XP (message + voice) or `fish`/`hunt` payouts. Item commands autocomplete.          |
 | **Server lottery**          | Admins start a timed `lottery`; members buy weighted tickets, the pot grows, and a winner is drawn automatically via the persistent timer system (announced with a Components V2 card).                  |
 
 ### Leveling
@@ -169,7 +171,7 @@ A few representative command groups:
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                      |
 | Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                         |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                 |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop`, `lottery …`                               |
+| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `lottery …` |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                               |
 | Polls         | `polls create/end/edit/delete/search/history/config`                                                                                    |
 | Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                      |
@@ -315,8 +317,8 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | POST | `/api/internal/guilds/{id}/leveling/roles/preset` | Create the milestone reward-role preset (levels 5–100) |
 | POST | `/api/internal/guilds/{id}/leveling/multipliers` | Set role/channel XP multiplier |
 | POST | `/api/internal/guilds/{id}/leveling/blacklist` | Add/remove blacklist entry |
-| GET | `/api/internal/guilds/{id}/economy` | Shop items + lottery state |
-| POST | `/api/internal/guilds/{id}/economy/items` | Create shop item |
+| GET | `/api/internal/guilds/{id}/economy` | Shop items (incl. use-effects) + lottery state |
+| POST | `/api/internal/guilds/{id}/economy/items` | Create shop item (optional: effect, effect_value, duration_minutes) |
 | DELETE | `/api/internal/guilds/{id}/economy/items/{name}` | Delete shop item |
 | GET | `/api/internal/guilds/{id}/economy/balances?limit=N` | Top member balances |
 | PATCH | `/api/internal/guilds/{id}/economy/balances/{user_id}` | Set cash/bank |
@@ -395,7 +397,7 @@ All of this is stored in PostgreSQL and cached in memory, with the cache invalid
 
 ## Database management
 
-Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V22__….sql`). All commands run against the database configured in `.env`/`config.py`.
+Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V24__….sql`). All commands run against the database configured in `.env`/`config.py`.
 
 | Command                                 | Description                                           |
 |-----------------------------------------|-------------------------------------------------------|

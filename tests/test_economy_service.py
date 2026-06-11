@@ -3,20 +3,27 @@
 from __future__ import annotations
 
 import datetime
-
 import random
 
 from app.services.economy import (
+    BOOST_MAX_DURATION_MINUTES,
+    BOOST_MAX_PERCENT,
     DAILY_BASE,
     DAILY_STREAK_BONUS,
     DAILY_STREAK_CAP,
     FISHING_TABLE,
     HUNTING_TABLE,
+    ITEM_EFFECTS,
+    LOOTBOX_BANDS,
     LootEntry,
+    boost_multiplier,
     compute_daily,
+    describe_effect,
     pick_weighted_winner,
     roll_loot,
+    roll_lootbox,
     sell_price,
+    validate_item_effect,
 )
 
 UTC = datetime.UTC
@@ -114,6 +121,87 @@ def test_roll_loot_single_entry_is_forced() -> None:
     catch = roll_loot(only, rng=random.Random(0))
     assert catch.name == 'certain'
     assert catch.amount == 10
+
+
+# -- roll_lootbox ------------------------------------------------------------
+
+
+def test_roll_lootbox_payout_within_band_bounds() -> None:
+    lowest = min(band[0] for band in LOOTBOX_BANDS)
+    highest = max(band[1] for band in LOOTBOX_BANDS)
+    for seed in range(200):
+        payout = roll_lootbox(1000, rng=random.Random(seed))
+        assert int(1000 * lowest) <= payout <= int(1000 * highest)
+
+
+def test_roll_lootbox_is_deterministic_for_a_seed() -> None:
+    assert roll_lootbox(500, rng=random.Random(3)) == roll_lootbox(500, rng=random.Random(3))
+
+
+def test_roll_lootbox_zero_value_pays_nothing() -> None:
+    assert roll_lootbox(0, rng=random.Random(0)) == 0
+
+
+# -- boost_multiplier --------------------------------------------------------
+
+
+def test_boost_multiplier_converts_percent() -> None:
+    assert boost_multiplier(50) == 1.5
+    assert boost_multiplier(100) == 2.0
+    assert boost_multiplier(0) == 1.0
+
+
+# -- validate_item_effect ----------------------------------------------------
+
+
+def test_validate_accepts_plain_items() -> None:
+    assert validate_item_effect('none', None, None) is None
+
+
+def test_validate_rejects_unknown_effect() -> None:
+    assert validate_item_effect('teleport', 1, None) is not None
+
+
+def test_validate_cash_and_lootbox_need_positive_value() -> None:
+    assert validate_item_effect('cash', None, None) is not None
+    assert validate_item_effect('cash', 0, None) is not None
+    assert validate_item_effect('cash', 100, None) is None
+    assert validate_item_effect('lootbox', 250, None) is None
+
+
+def test_validate_boosts_need_percent_and_duration() -> None:
+    assert validate_item_effect('xp_boost', None, 60) is not None
+    assert validate_item_effect('xp_boost', 50, None) is not None
+    assert validate_item_effect('xp_boost', BOOST_MAX_PERCENT + 1, 60) is not None
+    assert validate_item_effect('xp_boost', 50, BOOST_MAX_DURATION_MINUTES + 1) is not None
+    assert validate_item_effect('xp_boost', 50, 60) is None
+    assert validate_item_effect('loot_boost', BOOST_MAX_PERCENT, BOOST_MAX_DURATION_MINUTES) is None
+
+
+def test_validate_role_needs_a_role_id() -> None:
+    assert validate_item_effect('role', None, None) is not None
+    assert validate_item_effect('role', 1234567890, None) is None
+
+
+# -- describe_effect ---------------------------------------------------------
+
+
+def test_describe_effect_none_is_blank() -> None:
+    assert describe_effect('none', None, None) is None
+
+
+def test_describe_effect_covers_every_other_effect() -> None:
+    for effect in ITEM_EFFECTS:
+        if effect == 'none':
+            continue
+        line = describe_effect(effect, 100, 60)
+        assert line
+
+
+def test_describe_effect_includes_payload() -> None:
+    assert '1,000' in describe_effect('cash', 1000, None)
+    assert '+25%' in describe_effect('xp_boost', 25, 60)
+    assert '60 minutes' in describe_effect('loot_boost', 25, 60)
 
 
 # -- pick_weighted_winner --------------------------------------------------

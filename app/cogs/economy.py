@@ -1,7 +1,9 @@
 import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import discord
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from discord.ext.commands import Range
 
@@ -14,19 +16,58 @@ from app.services.economy import (
     FISHING_TABLE,
     HUNTING_COOLDOWN,
     HUNTING_TABLE,
+    boost_multiplier,
     compute_daily,
+    describe_effect,
     pick_weighted_winner,
     roll_loot,
+    roll_lootbox,
     sell_price,
+    validate_item_effect,
 )
-from app.utils import fnumb, get_asset_url, helpers, pluralize, timetools
+from app.utils import fnumb, fuzzy, get_asset_url, helpers, pluralize, timetools
 from config import Emojis
+
+#: Display labels for active boost kinds.
+BOOST_LABELS = {'xp': 'leveling XP', 'loot': 'fishing & hunting payouts'}
 
 
 class Economy(Cog):
     """Economy commands"""
 
     emoji = Emojis.Economy.cash
+
+    def _effect_line(self, guild: discord.Guild, item: Any) -> str | None:
+        """A display line for an item's use-effect, resolving role mentions where possible."""
+        effect = item.get('effect') or 'none'
+        if effect == 'role':
+            role = guild.get_role(item.get('effect_value') or 0)
+            return f'Grants {role.mention} when used.' if role else 'Grants a role that no longer exists.'
+        return describe_effect(effect, item.get('effect_value'), item.get('duration_minutes'))
+
+    async def shop_item_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]]:
+        """Autocomplete over every item in the guild's shop."""
+        assert interaction.guild_id is not None
+        items = await self.bot.db.economy.get_items(interaction.guild_id)
+        results = fuzzy.finder(current, items, key=lambda r: r['name'])
+        return [
+            app_commands.Choice(name=f"{r['name'][:80]} • {fnumb(r['price'])}", value=r['name'][:100])
+            for r in results[:25]
+        ]
+
+    async def owned_item_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str | int | float]]:
+        """Autocomplete over the items the invoking member actually owns."""
+        assert interaction.guild_id is not None
+        rows = await self.bot.db.economy.get_inventory(interaction.user.id, interaction.guild_id)
+        results = fuzzy.finder(current, rows, key=lambda r: r['name'])
+        return [
+            app_commands.Choice(name=f"{r['name'][:80]} ×{r['quantity']}", value=r['name'][:100])
+            for r in results[:25]
+        ]
 
     @command(
         "set-money",
@@ -254,11 +295,16 @@ class Economy(Cog):
             await ctx.send_info("The shop is empty. Admins can add items with `shop add`.")
             return
 
-        entries = [
-            f"**{item['name']}** • {Emojis.Economy.cash} {fnumb(item['price'])}\n"
-            f"{item['description'] or '*No description.*'}"
-            for item in items
-        ]
+        entries = []
+        for item in items:
+            line = (
+                f"**{item['name']}** • {Emojis.Economy.cash} {fnumb(item['price'])}\n"
+                f"{item['description'] or '*No description.*'}"
+            )
+            effect_line = self._effect_line(ctx.guild, item)
+            if effect_line:
+                line += f"\n\N{SMALL BLUE DIAMOND} {effect_line}"
+            entries.append(line)
         embed = discord.Embed(title="Server Shop", description="", colour=helpers.Colour.white())
         embed.set_author(name=ctx.guild.name, icon_url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
         await LinePaginator.start(ctx, entries=entries, embed=embed, location='description')
@@ -269,17 +315,67 @@ class Economy(Cog):
         guild_only=True,
         user_permissions=PermissionTemplate.admin,
     )
-    @describe(name="The item name (quote it if it has spaces).", price="The purchase price.", description="A description.")
+    @describe(
+        name="The item name (quote it if it has spaces).",
+        price="The purchase price.",
+        effect="What using the item does (default: nothing, a plain collectible).",
+        value="Effect payload: the cash amount (cash/lootbox) or the bonus percent (boosts).",
+        duration="How long boost effects last, in minutes.",
+        role="The role a role item grants.",
+        description="A description.",
+    )
     async def shop_add(
-        self, ctx: Context, name: str, price: commands.Range[int, 1], *, description: str | None = None
+        self,
+        ctx: Context,
+        name: str,
+        price: commands.Range[int, 1],
+        effect: Literal["none", "cash", "lootbox", "role", "xp_boost", "loot_boost"] = "none",
+        value: commands.Range[int, 1] | None = None,
+        duration: commands.Range[int, 1] | None = None,
+        role: discord.Role | None = None,
+        *,
+        description: str | None = None,
     ) -> None:
-        """Add an item to the server shop."""
+        """Add an item to the server shop, optionally with an effect for `use`.
+
+        **Effects:**
+        - **cash**: redeems for `value` cash.
+        - **lootbox**: pays out a random amount around `value` cash.
+        - **role**: grants `role` to the user.
+        - **xp_boost**: +`value`% leveling XP for `duration` minutes.
+        - **loot_boost**: +`value`% fish/hunt payouts for `duration` minutes.
+        """
         assert ctx.guild is not None
-        record = await self.bot.db.economy.create_item(ctx.guild.id, name, description, price)
+        effect_value = value
+        if effect == "role":
+            if role is None:
+                await ctx.send_error("Role items need a **role** to grant.")
+                return
+            if role.is_default() or role.managed:
+                await ctx.send_error("That role cannot be granted by a bot.")
+                return
+            if role >= ctx.guild.me.top_role:
+                await ctx.send_error("That role is above my top role — I wouldn't be able to grant it.")
+                return
+            effect_value = role.id
+
+        error = validate_item_effect(effect, effect_value, duration)
+        if error:
+            await ctx.send_error(error)
+            return
+
+        record = await self.bot.db.economy.create_item(
+            ctx.guild.id, name, description, price, effect, effect_value, duration
+        )
         if record is None:
             await ctx.send_error(f"An item named **{name}** already exists.")
             return
-        await ctx.send_success(f"Added **{name}** to the shop for {Emojis.Economy.cash} **{fnumb(price)}**.")
+
+        effect_line = self._effect_line(ctx.guild, record)
+        await ctx.send_success(
+            f"Added **{name}** to the shop for {Emojis.Economy.cash} **{fnumb(price)}**."
+            + (f"\n\N{SMALL BLUE DIAMOND} {effect_line}" if effect_line else "")
+        )
 
     @shop.command(
         "remove",
@@ -289,6 +385,7 @@ class Economy(Cog):
         user_permissions=PermissionTemplate.admin,
     )
     @describe(name="The item to remove.")
+    @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
     async def shop_remove(self, ctx: Context, *, name: str) -> None:
         """Remove an item from the server shop (also clears it from inventories)."""
         assert ctx.guild is not None
@@ -300,6 +397,7 @@ class Economy(Cog):
 
     @command("buy", description="Buy an item from the shop.", guild_only=True, hybrid=True)
     @describe(name="The item to buy.", quantity="How many to buy.")
+    @app_commands.autocomplete(name=shop_item_autocomplete)  # type: ignore
     async def buy(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
         """Buy an item from the shop with your cash."""
         assert ctx.guild is not None
@@ -324,6 +422,7 @@ class Economy(Cog):
 
     @command("sell", description="Sell an item back to the shop.", guild_only=True, hybrid=True)
     @describe(name="The item to sell.", quantity="How many to sell.")
+    @app_commands.autocomplete(name=owned_item_autocomplete)  # type: ignore
     async def sell(self, ctx: Context, name: str, quantity: commands.Range[int, 1] = 1) -> None:
         """Sell an item from your inventory back for half its price."""
         assert ctx.guild is not None
@@ -365,17 +464,29 @@ class Economy(Cog):
         for row in rows:
             unit = sell_price(row["price"])
             line_value = unit * row["quantity"]
-            entries.append(
+            line = (
                 f"**{row['name']}**  ×{row['quantity']}\n"
                 f"\N{SMALL ORANGE DIAMOND} {Emojis.Economy.cash} **{fnumb(line_value)}** "
                 f"*(sell {fnumb(unit)} each)*"
             )
+            effect_line = self._effect_line(ctx.guild, row)
+            if effect_line:
+                line += f"\n\N{SMALL BLUE DIAMOND} {effect_line}"
+            entries.append(line)
+
+        boosts = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
+        boost_lines = "".join(
+            f"\N{HIGH VOLTAGE SIGN} **+{row['multiplier'] - 1.0:.0%} {BOOST_LABELS.get(row['kind'], row['kind'])}** "
+            f"— ends {discord.utils.format_dt(row['expires_at'].replace(tzinfo=datetime.UTC), 'R')}\n"
+            for row in boosts
+        )
 
         embed = discord.Embed(
             description=(
                 f"{Emojis.Economy.cash} Total sell value: **{fnumb(total_value)}**\n"
                 f"\N{PACKAGE} **{pluralize(total_items):item}** across "
-                f"**{pluralize(len(rows)):unique type}**\n\n"
+                f"**{pluralize(len(rows)):unique type}**\n"
+                f"{boost_lines}\n"
             ),
             colour=helpers.Colour.white(),
         )
@@ -385,8 +496,13 @@ class Economy(Cog):
 
     @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True)
     @describe(name="The item to use.")
+    @app_commands.autocomplete(name=owned_item_autocomplete)  # type: ignore
     async def use(self, ctx: Context, *, name: str) -> None:
-        """Use (consume one of) an item you own."""
+        """Use (consume one of) an item you own — what happens depends on the item's effect.
+
+        Vouchers redeem for cash, lootboxes roll a random payout, role items grant
+        their role, and boost items activate a timed XP or loot multiplier.
+        """
         assert ctx.guild is not None
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
@@ -398,8 +514,60 @@ class Economy(Cog):
             await ctx.send_error(f"You don't own any **{item['name']}**.")
             return
 
+        effect: str = item.get("effect") or "none"
+        value: int = item.get("effect_value") or 0
+        duration: int = item.get("duration_minutes") or 0
+        if validate_item_effect(effect, value or None, duration or None) is not None:
+            # Misconfigured (e.g. pre-dates validation) - fall back to a plain collectible.
+            effect = "none"
+
+        left = f"You have **{owned - 1}** left."
+
+        if effect == "cash":
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=value)
+            message = f"You redeemed **{item['name']}** for {Emojis.Economy.cash} **{fnumb(value)}**. {left}"
+        elif effect == "lootbox":
+            payout = roll_lootbox(value)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            await balance.add(cash=payout)
+            flavour = (
+                "\N{PARTY POPPER} Jackpot!" if payout >= value * 2
+                else "Unlucky..." if payout < value // 2
+                else "Not bad!"
+            )
+            message = (
+                f"You opened **{item['name']}** and found {Emojis.Economy.cash} **{fnumb(payout)}**. {flavour} {left}"
+            )
+        elif effect == "role":
+            assert isinstance(ctx.author, discord.Member)
+            role = ctx.guild.get_role(value)
+            if role is None:
+                await ctx.send_error("The role this item grants no longer exists — ask an admin to fix the item.")
+                return
+            if role in ctx.author.roles:
+                await ctx.send_error(f"You already have the **{role.name}** role; the item was not consumed.")
+                return
+            try:
+                await ctx.author.add_roles(role, reason=f"Used shop item {item['name']}")
+            except discord.HTTPException:
+                await ctx.send_error(f"I couldn't grant **{role.name}** — check my role hierarchy and permissions.")
+                return
+            message = f"You used **{item['name']}** and received the **{role.name}** role. {left}"
+        elif effect in ("xp_boost", "loot_boost"):
+            kind = "xp" if effect == "xp_boost" else "loot"
+            expires = await self.bot.db.economy.add_boost(
+                ctx.author.id, ctx.guild.id, kind, boost_multiplier(value), duration
+            )
+            when = discord.utils.format_dt(expires.replace(tzinfo=datetime.UTC), "R")
+            message = (
+                f"You activated **{item['name']}**: **+{value}%** {BOOST_LABELS[kind]}, ending {when}. {left}"
+            )
+        else:
+            message = f"You used **{item['name']}**. Nothing obvious happened — must be a collectible. {left}"
+
         await self.bot.db.economy.remove_from_inventory(ctx.author.id, ctx.guild.id, item["id"], 1)
-        await ctx.send_success(f"You used **{item['name']}**. You have **{owned - 1}** left.")
+        await ctx.send_success(message)
 
     # -- earning activities ----------------------------------------------
 
@@ -409,15 +577,18 @@ class Economy(Cog):
         """Go fishing for a chance at cash — outcomes range from junk to a rare pearl."""
         assert ctx.guild is not None
         catch = roll_loot(FISHING_TABLE)
+        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
+        amount = round(catch.amount * boost)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=catch.amount)
+        await balance.add(cash=amount)
 
         if catch.amount <= 5:
             await ctx.send_info(f"{catch.emoji} You reeled in **{catch.name}** — barely worth it.")
             return
+        suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
         await ctx.send_success(
             f"{catch.emoji} You caught **{catch.name}** and sold it for "
-            f"{Emojis.Economy.cash} **{fnumb(catch.amount)}**!"
+            f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}"
         )
 
     @command("hunt", description="Head out hunting for a bigger, riskier payout.", guild_only=True, hybrid=True)
@@ -426,15 +597,18 @@ class Economy(Cog):
         """Go hunting — higher payouts and variance than fishing, on a longer cooldown."""
         assert ctx.guild is not None
         catch = roll_loot(HUNTING_TABLE)
+        boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
+        amount = round(catch.amount * boost)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        await balance.add(cash=catch.amount)
+        await balance.add(cash=amount)
 
         if catch.amount <= 10:
             await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.")
             return
+        suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
         await ctx.send_success(
             f"{catch.emoji} You bagged **{catch.name}** worth "
-            f"{Emojis.Economy.cash} **{fnumb(catch.amount)}**!"
+            f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}"
         )
 
     # -- lottery ----------------------------------------------------------

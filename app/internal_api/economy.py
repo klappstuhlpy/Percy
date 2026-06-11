@@ -4,9 +4,11 @@ from __future__ import annotations
 import discord
 from aiohttp import web
 
+from app.services.economy import validate_item_effect
+from app.utils import fnumb, get_asset_url
 from config import Emojis
+
 from .models import InternalAPIHandlers
-from app.utils import get_asset_url, fnumb
 
 
 class EconomyHandlers(InternalAPIHandlers):
@@ -18,7 +20,15 @@ class EconomyHandlers(InternalAPIHandlers):
         lottery = await self.bot.db.economy.get_lottery(guild_id)
 
         shop = [
-            {'id': r['id'], 'name': r['name'], 'description': r.get('description'), 'price': r['price']}
+            {
+                'id': r['id'],
+                'name': r['name'],
+                'description': r.get('description'),
+                'price': r['price'],
+                'effect': r.get('effect') or 'none',
+                'effect_value': r.get('effect_value'),
+                'duration_minutes': r.get('duration_minutes'),
+            }
             for r in items
         ]
         lottery_data = None
@@ -42,11 +52,22 @@ class EconomyHandlers(InternalAPIHandlers):
         name = body.get('name', '').strip()
         price = body.get('price')
         description = body.get('description', '').strip() or None
+        effect = (body.get('effect') or 'none').strip()
+        effect_value = body.get('effect_value')
+        duration_minutes = body.get('duration_minutes')
 
         if not name or price is None:
             raise web.HTTPBadRequest(text='name and price are required')
 
-        result = await self.bot.db.economy.create_item(guild_id, name, description, int(price))
+        effect_value = int(effect_value) if effect_value is not None else None
+        duration_minutes = int(duration_minutes) if duration_minutes is not None else None
+        error = validate_item_effect(effect, effect_value, duration_minutes)
+        if error:
+            raise web.HTTPBadRequest(text=error)
+
+        result = await self.bot.db.economy.create_item(
+            guild_id, name, description, int(price), effect, effect_value, duration_minutes
+        )
         if result is None:
             raise web.HTTPConflict(text='an item with that name already exists')
         return web.json_response({'ok': True})
@@ -130,7 +151,7 @@ class EconomyHandlers(InternalAPIHandlers):
 
         # Deferred import: app.core pulls in Bot -> InternalAPI, so importing it at
         # module load time would create a circular import during startup.
-        from app.core.components_v2 import make_notice, Accent
+        from app.core.components_v2 import Accent, make_notice
 
         view = make_notice(
             "Server Lottery",

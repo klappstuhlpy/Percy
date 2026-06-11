@@ -34,16 +34,29 @@ class EconomyRepository(BaseRepository):
             'SELECT * FROM economy_items WHERE guild_id = $1 AND lower(name) = lower($2);', guild_id, name)
 
     async def create_item(
-        self, guild_id: int, name: str, description: str | None, price: int
+        self,
+        guild_id: int,
+        name: str,
+        description: str | None,
+        price: int,
+        effect: str = 'none',
+        effect_value: int | None = None,
+        duration_minutes: int | None = None,
     ) -> asyncpg.Record | None:
-        """Inserts a shop item, returning the row (or ``None`` if the name already exists)."""
+        """Inserts a shop item, returning the row (or ``None`` if the name already exists).
+
+        ``effect`` describes what using the item does (see
+        :data:`app.services.economy.ITEM_EFFECTS`); ``effect_value`` carries its
+        payload (cash amount, bonus percent or role id) and ``duration_minutes``
+        how long boost effects last.
+        """
         query = """
-            INSERT INTO economy_items (guild_id, name, description, price)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO economy_items (guild_id, name, description, price, effect, effect_value, duration_minutes)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT DO NOTHING
             RETURNING *;
         """
-        return await self.fetchrow(query, guild_id, name, description, price)
+        return await self.fetchrow(query, guild_id, name, description, price, effect, effect_value, duration_minutes)
 
     async def delete_item(self, guild_id: int, name: str) -> asyncpg.Record | None:
         """Deletes a shop item by name, returning the deleted row (or ``None``)."""
@@ -59,7 +72,8 @@ class EconomyRepository(BaseRepository):
     async def get_inventory(self, user_id: int, guild_id: int) -> list[asyncpg.Record]:
         """Fetches a member's owned items joined with their shop metadata."""
         query = """
-            SELECT i.item_id, i.quantity, e.name, e.description, e.price
+            SELECT i.item_id, i.quantity, e.name, e.description, e.price,
+                   e.effect, e.effect_value, e.duration_minutes
             FROM economy_inventory i
             JOIN economy_items e ON e.id = i.item_id
             WHERE i.user_id = $1 AND i.guild_id = $2 AND i.quantity > 0
@@ -95,6 +109,49 @@ class EconomyRepository(BaseRepository):
             RETURNING quantity;
         """
         return await self.fetchval(query, user_id, guild_id, item_id, quantity) or 0
+
+    # -- timed boosts -------------------------------------------------------
+
+    async def add_boost(
+        self, user_id: int, guild_id: int, kind: str, multiplier: float, duration_minutes: int
+    ) -> datetime.datetime:
+        """Activates (or extends) a timed boost, returning the new expiry (naive UTC).
+
+        Using another item of the same ``kind`` while one is active extends the
+        remaining time and overwrites the multiplier with the new item's value.
+        """
+        query = """
+            INSERT INTO economy_boosts (user_id, guild_id, kind, multiplier, expires_at)
+            VALUES ($1, $2, $3, $4, (now() at time zone 'utc') + make_interval(mins => $5))
+            ON CONFLICT (user_id, guild_id, kind) DO UPDATE
+                SET multiplier = EXCLUDED.multiplier,
+                    expires_at = GREATEST(economy_boosts.expires_at, now() at time zone 'utc')
+                                 + make_interval(mins => $5)
+            RETURNING expires_at;
+        """
+        return await self.fetchval(query, user_id, guild_id, kind, multiplier, duration_minutes)
+
+    async def get_boost_multiplier(self, user_id: int, guild_id: int, kind: str) -> float:
+        """The member's active multiplier for ``kind`` (``1.0`` when no boost is running)."""
+        value = await self.fetchval(
+            """
+            SELECT multiplier FROM economy_boosts
+            WHERE user_id = $1 AND guild_id = $2 AND kind = $3 AND expires_at > (now() at time zone 'utc');
+            """,
+            user_id, guild_id, kind,
+        )
+        return value or 1.0
+
+    async def get_active_boosts(self, user_id: int, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches a member's running boosts as ``(kind, multiplier, expires_at)`` rows."""
+        return await self.fetch(
+            """
+            SELECT kind, multiplier, expires_at FROM economy_boosts
+            WHERE user_id = $1 AND guild_id = $2 AND expires_at > (now() at time zone 'utc')
+            ORDER BY kind;
+            """,
+            user_id, guild_id,
+        )
 
     # -- daily rewards ----------------------------------------------------
 

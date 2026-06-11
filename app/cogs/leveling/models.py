@@ -299,6 +299,8 @@ class LevelConfig(BaseRecord):
             return
 
         multiplier = self.get_multiplier(message)
+        # Item-shop XP boosts multiply on top of role/channel multipliers.
+        multiplier *= await self.cog.bot.db.economy.get_boost_multiplier(self.user_id, self.guild_id, 'xp')
         gain = self.config.spec.get_xp_gain(multiplier)
         await self.add_xp(gain, message=message)
 

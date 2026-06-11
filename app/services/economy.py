@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 __all__ = (
+    'BOOST_MAX_DURATION_MINUTES',
+    'BOOST_MAX_PERCENT',
     'DAILY_BASE',
     'DAILY_COOLDOWN',
     'DAILY_RESET',
@@ -25,14 +27,20 @@ __all__ = (
     'FISHING_TABLE',
     'HUNTING_COOLDOWN',
     'HUNTING_TABLE',
+    'ITEM_EFFECTS',
+    'LOOTBOX_BANDS',
     'SELL_RATE',
     'Catch',
     'DailyResult',
     'LootEntry',
+    'boost_multiplier',
     'compute_daily',
+    'describe_effect',
     'pick_weighted_winner',
     'roll_loot',
+    'roll_lootbox',
     'sell_price',
+    'validate_item_effect',
 )
 
 #: Base daily payout before streak bonuses.
@@ -164,6 +172,78 @@ def roll_loot(table: Sequence[LootEntry], *, rng: random.Random | None = None) -
     entry = chooser.choices(table, weights=[e.weight for e in table], k=1)[0]
     amount = chooser.randint(entry.min_value, entry.max_value)
     return Catch(entry.name, entry.emoji, amount)
+
+
+# -- item effects ----------------------------------------------------------
+
+#: Every effect a shop item can carry; ``none`` items are plain collectibles.
+ITEM_EFFECTS: tuple[str, ...] = ('none', 'cash', 'lootbox', 'role', 'xp_boost', 'loot_boost')
+
+#: Highest bonus percent a boost item may grant (+500% = x6).
+BOOST_MAX_PERCENT = 500
+#: Longest a boost item may last (one week).
+BOOST_MAX_DURATION_MINUTES = 7 * 24 * 60
+
+#: Lootbox payout bands as ``(low, high, weight)`` fractions of the item's base value:
+#: mostly around par, sometimes a bust, rarely a jackpot.
+LOOTBOX_BANDS: tuple[tuple[float, float, int], ...] = (
+    (0.2, 0.6, 30),
+    (0.8, 1.4, 50),
+    (1.8, 2.5, 15),
+    (4.0, 6.0, 5),
+)
+
+
+def roll_lootbox(value: int, *, rng: random.Random | None = None) -> int:
+    """Roll a lootbox payout around ``value`` using the weighted :data:`LOOTBOX_BANDS`."""
+    chooser = rng or random
+    low, high, _ = chooser.choices(LOOTBOX_BANDS, weights=[band[2] for band in LOOTBOX_BANDS], k=1)[0]
+    return max(int(value * chooser.uniform(low, high)), 0)
+
+
+def boost_multiplier(percent: int) -> float:
+    """Convert a stored bonus percent (e.g. ``50``) into a multiplier (``1.5``)."""
+    return 1.0 + percent / 100
+
+
+def validate_item_effect(effect: str, value: int | None, duration_minutes: int | None) -> str | None:
+    """Validate an item-effect configuration, returning an error message or ``None`` if valid.
+
+    ``value`` carries the cash amount (``cash``/``lootbox``), the bonus percent
+    (``xp_boost``/``loot_boost``) or the role id (``role``); ``duration_minutes``
+    only applies to boosts.
+    """
+    if effect not in ITEM_EFFECTS:
+        return f'Unknown effect `{effect}`. Valid effects: {", ".join(ITEM_EFFECTS)}.'
+    if effect in ('cash', 'lootbox') and (value is None or value < 1):
+        return 'This effect needs a positive **value** (the cash amount).'
+    if effect in ('xp_boost', 'loot_boost'):
+        if value is None or not 1 <= value <= BOOST_MAX_PERCENT:
+            return f'Boost items need a **value** between 1 and {BOOST_MAX_PERCENT} (the bonus in percent).'
+        if duration_minutes is None or not 1 <= duration_minutes <= BOOST_MAX_DURATION_MINUTES:
+            return f'Boost items need a **duration** between 1 and {BOOST_MAX_DURATION_MINUTES} minutes.'
+    if effect == 'role' and value is None:
+        return 'Role items need a **role** to grant.'
+    return None
+
+
+def describe_effect(effect: str, value: int | None, duration_minutes: int | None) -> str | None:
+    """A short human-readable line for what using an item does (``None`` for plain items).
+
+    The ``role`` description is generic; callers that can resolve the role should
+    replace it with a proper mention.
+    """
+    if effect == 'cash':
+        return f'Voucher: redeems for {value:,} cash.'
+    if effect == 'lootbox':
+        return f'Lootbox: pays out around {value:,} cash — luck decides.'
+    if effect == 'role':
+        return 'Grants a server role when used.'
+    if effect == 'xp_boost':
+        return f'Boost: +{value}% leveling XP for {duration_minutes} minutes.'
+    if effect == 'loot_boost':
+        return f'Boost: +{value}% fishing & hunting payouts for {duration_minutes} minutes.'
+    return None
 
 
 def pick_weighted_winner(

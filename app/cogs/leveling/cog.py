@@ -101,7 +101,8 @@ class Leveling(Cog):
                     if level_config is None or not level_config.can_gain_voice(channel):
                         continue
 
-                    await level_config.add_voice_xp(config.voice_xp, channel=channel)
+                    boost = await self.bot.db.economy.get_boost_multiplier(member.id, guild.id, 'xp')
+                    await level_config.add_voice_xp(round(config.voice_xp * boost), channel=channel)
 
     @award_voice_xp.before_loop
     async def _before_award_voice_xp(self) -> None:
