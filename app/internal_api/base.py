@@ -137,9 +137,12 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles/preset', self._create_leveling_role_preset)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/multipliers', self._post_leveling_multipliers)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/blacklist', self._post_leveling_blacklist)
-        # Moderation (cases browser, bulk actions, activity)
+        # Moderation (cases browser + management, bulk actions, activity)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/cases', self._get_cases)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/cases', self._create_case)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/cases/recent', self._get_recent_cases)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/cases/{case_index}', self._patch_case)
+        self._app.router.add_delete('/api/internal/guilds/{guild_id}/cases/{case_index}', self._delete_case)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/members/bulk-action', self._bulk_member_action)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/activity', self._get_member_activity)
 

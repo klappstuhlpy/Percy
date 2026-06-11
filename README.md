@@ -294,12 +294,15 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/roles` | All guild roles |
 | GET | `/api/internal/guilds/{id}/channels` | All guild channels |
 | GET | `/api/internal/guilds/{id}/members?limit=N&after=ID` | Paginated member list |
-| POST | `/api/internal/guilds/{id}/members/{user_id}/action` | Kick/ban/unban a member (JSON: action, reason) |
+| POST | `/api/internal/guilds/{id}/members/{user_id}/action` | Kick/ban/unban a member (JSON: action, reason, moderator_id?) — records a modlog case |
 | PATCH | `/api/internal/guilds/{id}/members/{user_id}/roles` | Add/remove member roles (JSON: add[], remove[]) |
-| POST | `/api/internal/guilds/{id}/members/bulk-action` | Batch kick/ban/unban/role-add/role-remove (JSON: user_ids[], action, role_ids?, reason?) |
+| POST | `/api/internal/guilds/{id}/members/bulk-action` | Batch kick/ban/unban/role-add/role-remove (JSON: user_ids[], action, role_ids?, reason?, moderator_id?) — records modlog cases |
 | GET | `/api/internal/guilds/{id}/members/{user_id}/activity` | Daily command counts for the past year (activity heatmap) |
 | GET | `/api/internal/guilds/{id}/cases?limit&offset&action&moderator_id&target_id&after&before` | Filtered, paginated moderation cases |
+| POST | `/api/internal/guilds/{id}/cases` | Open a case manually (JSON: action, target_id, reason?, moderator_id?) — announces it in the modlog channel |
 | GET | `/api/internal/guilds/{id}/cases/recent?since=ISO` | Cases created after a timestamp (for live polling) |
+| PATCH | `/api/internal/guilds/{id}/cases/{case_index}` | Update a case's reason (JSON: reason) — syncs the modlog post |
+| DELETE | `/api/internal/guilds/{id}/cases/{case_index}` | Close (delete) a case — removes the modlog post |
 | GET | `/api/internal/guilds/{id}/gatekeeper` | Gatekeeper configuration |
 | PATCH | `/api/internal/guilds/{id}/gatekeeper` | Update gatekeeper settings |
 | POST | `/api/internal/guilds/{id}/gatekeeper/message` | Send verification embed to channel |

@@ -76,6 +76,24 @@ class ModLog(Cog):
         except discord.HTTPException:
             pass
 
+    async def update_case_reason(self, guild_id: int, case_index: int, reason: str) -> ModerationCase | None:
+        """Updates a case's reason and syncs its modlog post. Returns ``None`` if the case is missing."""
+        record = await self.bot.db.cases.update_reason(guild_id, case_index, reason)
+        if record is None:
+            return None
+        case = ModerationCase.from_record(record)
+        await self._edit_modlog_message(case)
+        return case
+
+    async def delete_case(self, guild_id: int, case_index: int) -> ModerationCase | None:
+        """Deletes a case and removes its modlog post. Returns the deleted case, or ``None`` if missing."""
+        record = await self.bot.db.cases.delete_case(guild_id, case_index)
+        if record is None:
+            return None
+        case = ModerationCase.from_record(record)
+        await self._delete_modlog_message(case)
+        return case
+
     # -- event hook -------------------------------------------------------
 
     @Cog.listener()
@@ -183,11 +201,10 @@ class ModLog(Cog):
     async def reason(self, ctx: Context, index: int, *, reason: str) -> None:
         """Edit a case's reason (and its modlog post)."""
         assert ctx.guild is not None
-        record = await self.bot.db.cases.update_reason(ctx.guild.id, index, reason)
-        if record is None:
+        case = await self.update_case_reason(ctx.guild.id, index, reason)
+        if case is None:
             await ctx.send_error(f'Case #{index} does not exist.')
             return
-        await self._edit_modlog_message(ModerationCase.from_record(record))
         await ctx.send_success(f'Updated the reason for **Case #{index}**.')
 
     @command(
@@ -202,11 +219,10 @@ class ModLog(Cog):
     async def delcase(self, ctx: Context, index: int) -> None:
         """Delete a moderation case (and its modlog post)."""
         assert ctx.guild is not None
-        record = await self.bot.db.cases.delete_case(ctx.guild.id, index)
-        if record is None:
+        case = await self.delete_case(ctx.guild.id, index)
+        if case is None:
             await ctx.send_error(f'Case #{index} does not exist.')
             return
-        await self._delete_modlog_message(ModerationCase.from_record(record))
         await ctx.send_success(f'Deleted **Case #{index}**.')
 
     @group(

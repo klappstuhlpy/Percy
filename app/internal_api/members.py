@@ -205,6 +205,8 @@ class MemberHandlers(InternalAPIHandlers):
 
         action = body.get('action')
         reason = body.get('reason') or None
+        moderator_id = body.get('moderator_id')
+        moderator_id = int(moderator_id) if moderator_id else None
 
         if action not in ('kick', 'ban', 'unban'):
             raise web.HTTPBadRequest(text='action must be kick, ban, or unban')
@@ -229,6 +231,7 @@ class MemberHandlers(InternalAPIHandlers):
             elif action == 'ban':
                 await member.ban(reason=reason)
 
+        self.bot.dispatch('mod_action', guild_id, action, user_id, moderator_id, reason)
         return web.json_response({'ok': True})
 
     async def _member_roles(self, request: web.Request) -> web.Response:
