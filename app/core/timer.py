@@ -214,6 +214,33 @@ class TimerManager:
         if timer_id is not None and self._loaded_timer and self._loaded_timer.id == timer_id:
             self.reset_task()
 
+    async def fetch_member_timer(self, event: str, guild_id: int, member_id: int) -> Timer | None:
+        """|coro|
+
+        Fetches an active member-scoped moderation timer (e.g. ``tempmute``/``tempban``).
+
+        These timers store ``[guild_id, mod_id, member_id, ...]`` positionally in ``args``,
+        so they cannot be located through :meth:`fetch` (which matches ``kwargs``).
+        """
+        record = await self.bot.db.timers.fetch_member_timer(event, guild_id, member_id)
+        return Timer(bot=self.bot, record=record) if record else None
+
+    async def delete_member_timer(self, event: str, guild_id: int, member_id: int) -> bool:
+        """|coro|
+
+        Deletes an active member-scoped moderation timer, resetting the dispatch loop if
+        the cancelled timer was the next one due. Returns whether a timer was removed.
+
+        Note: only persisted timers are matched; sub-minute in-memory timers are ignored.
+        """
+        timer_id = await self.bot.db.timers.delete_member_timer(event, guild_id, member_id)
+        if timer_id is None:
+            return False
+
+        if self._loaded_timer and self._loaded_timer.id == timer_id:
+            self.reset_task()
+        return True
+
     async def call(self, timer: Timer) -> None:
         """|coro|
 

@@ -1505,6 +1505,20 @@ class Moderation(Cog):
             await ctx.send_error(error)
             return
 
+        try:
+            already_banned = await ctx.guild.fetch_ban(discord.Object(id=member.id)) is not None
+        except (discord.NotFound, discord.HTTPException):
+            already_banned = False
+
+        if already_banned:
+            existing = await self.bot.timers.fetch_member_timer("tempban", ctx.guild.id, member.id)
+            if existing is not None:
+                expires = discord.utils.format_dt(existing.expires.replace(tzinfo=datetime.UTC), "R")
+                await ctx.send_error(f"`{member}` is already temporarily banned (expires {expires}).")
+            else:
+                await ctx.send_error(f"`{member}` is already banned. Unban them first to apply a temporary ban.")
+            return
+
         until = f"until {discord.utils.format_dt(duration.dt, 'F')}"
 
         with suppress(discord.HTTPException, AttributeError):
@@ -1550,16 +1564,16 @@ class Moderation(Cog):
 
     # MUTE
 
-    @group(
+    @command(
         "mute",
-        description="Mutes members using the configured mute role.",
+        description="Mutes members indefinitely using the configured mute role.",
         hybrid=True,
         guild_only=True,
         bot_permissions=["manage_roles"],
         user_permissions=["manage_roles"],
     )
     @checks.can_mute()
-    @describe(members="The members to mute.")
+    @describe(members="The members to mute.", reason="The reason for muting the members.")
     async def _mute(
         self,
         ctx: ModGuildContext,
@@ -1567,11 +1581,13 @@ class Moderation(Cog):
         *,
         reason: Annotated[str | None, ActionReason] = None,
     ) -> None:
-        """Mutes members using the configured mute role.
+        """Mutes members indefinitely using the configured mute role.
         The bot must have Manage Roles permission and be
         above the muted role in the hierarchy.
         To use this command, you need to be higher than the
         mute role in the hierarchy.
+
+        Members who are already muted are skipped; use `tempmute` for a timed mute.
         """
         assert ctx.guild is not None
         if (total := len(members)) == 0:
@@ -1581,14 +1597,19 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         assert ctx.guild_config.mute_role_id is not None
-        role = discord.Object(id=ctx.guild_config.mute_role_id)
+        role_id = ctx.guild_config.mute_role_id
+        role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role < role:
+        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
             await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
             return
 
         failed = 0
+        skipped: list[str] = []
         for member in members:
+            if member._roles.has(role_id):
+                skipped.append(str(member))
+                continue
             try:
                 await member.add_roles(role, reason=reason)
             except discord.HTTPException:
@@ -1596,12 +1617,16 @@ class Moderation(Cog):
             else:
                 self.bot.dispatch("mod_action", ctx.guild.id, "mute", member.id, ctx.author.id, reason)
 
-        await ctx.send_success(f"Muted [`{abs(total - failed)}`/`{total}`] members.")
+        message = f"Muted [`{total - failed - len(skipped)}`/`{total}`] members."
+        if skipped:
+            message += f"\nAlready muted (skipped): {human_join([f'`{m}`' for m in skipped], final='and')}."
+        await ctx.send_success(message)
 
     @command(
         "unmute",
         description="Unmutes members using the configured mute role.",
         guild_only=True,
+        hybrid=True,
         bot_permissions=["manage_roles"],
         user_permissions=["manage_roles"],
     )
@@ -1615,10 +1640,13 @@ class Moderation(Cog):
         reason: Annotated[str | None, ActionReason] = None,
     ) -> None:
         """Unmutes members using the configured mute role.
-        The bot must have Manage Roles permission and be
-        above the muted role in the hierarchy.
-        To use this command, you need to be higher than the
-        mute role in the hierarchy.
+        Works for normal mutes, tempmutes and self-mutes, cancelling any pending
+        expiry timer so the member is not unmuted twice.
+
+        You cannot remove your own self-mute -- a moderator has to do it for you.
+
+        The bot must have Manage Roles permission and be above the muted role in the
+        hierarchy, and you need to be higher than the mute role in the hierarchy.
         """
         assert ctx.guild is not None
         if (total := len(members)) == 0:
@@ -1628,22 +1656,38 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         assert ctx.guild_config.mute_role_id is not None
-        role = discord.Object(id=ctx.guild_config.mute_role_id)
+        role_id = ctx.guild_config.mute_role_id
+        role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role < role:
+        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
             await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
             return
 
         failed = 0
+        blocked: list[str] = []
         for member in members:
+            timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
+            # A self-mute stores the same id for both the moderator and the target (args[1] == args[2]).
+            is_selfmute = timer is not None and timer.args[1] == member.id
+            if is_selfmute and member.id == ctx.author.id:
+                blocked.append(str(member))
+                continue
+
             try:
                 await member.remove_roles(role, reason=reason)
             except discord.HTTPException:
                 failed += 1
             else:
+                if timer is not None:
+                    await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
                 self.bot.dispatch("mod_action", ctx.guild.id, "unmute", member.id, ctx.author.id, reason)
 
-        await ctx.send_success(f"Unmuted [`{total - failed}`/`{total}`] members.")
+        message = f"Unmuted [`{total - failed - len(blocked)}`/`{total}`] members."
+        if blocked:
+            message += (
+                f"\nYou cannot remove your own self-mute: {human_join([f'`{m}`' for m in blocked], final='and')}."
+            )
+        await ctx.send_success(message)
 
     @command(
         "tempmute",
@@ -1691,6 +1735,16 @@ class Moderation(Cog):
 
         role_id = ctx.guild_config.mute_role_id
         assert role_id is not None
+
+        if member._roles.has(role_id):
+            existing = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
+            if existing is not None:
+                until = discord.utils.format_dt(existing.expires.replace(tzinfo=datetime.UTC), "R")
+                kind = "self-muted" if existing.args[1] == member.id else "temporarily muted"
+                await ctx.send_error(f"{member} is already {kind} (expires {until}). Unmute them first to change it.")
+            else:
+                await ctx.send_error(f"{member} is already muted. Unmute them first to apply a temporary mute.")
+            return
 
         if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
             await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
@@ -1747,11 +1801,12 @@ class Moderation(Cog):
         except discord.HTTPException:
             self._mute_data_batch[guild_id].append((member_id, False))
 
-    @_mute.group(
-        "role",
-        description="Shows configuration of the mute role.",
+    @group(
+        "muterole",
+        description="Shows and manages the configuration of the mute role.",
         guild_only=True,
         hybrid=True,
+        fallback="show",
         bot_permissions=["manage_roles"],
         user_permissions=["manage_roles", "manage_channels"],
     )

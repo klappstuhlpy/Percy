@@ -63,6 +63,34 @@ class TimersRepository(BaseRepository):
         """Deletes a single timer by its id."""
         await self.execute("DELETE FROM timers WHERE id = $1;", timer_id)
 
+    async def fetch_member_timer(self, event: str, guild_id: int, member_id: int) -> asyncpg.Record | None:
+        """Fetches an active ``event`` timer targeting ``member_id`` in ``guild_id``.
+
+        Used by member-scoped moderation timers (``tempmute``/``tempban``) whose
+        positional ``args`` are ``[guild_id, mod_id, member_id, ...]``; this matches the
+        guild at ``args[0]`` and the target at ``args[2]``. Only persisted timers are
+        searched (sub-minute timers live in memory and are not stored).
+        """
+        query = """
+            SELECT * FROM timers
+            WHERE event = $1
+              AND metadata #>> '{args,0}' = $2
+              AND metadata #>> '{args,2}' = $3
+            LIMIT 1;
+        """
+        return await self.fetchrow(query, event, str(guild_id), str(member_id))
+
+    async def delete_member_timer(self, event: str, guild_id: int, member_id: int) -> int | None:
+        """Deletes the active ``event`` timer targeting ``member_id`` in ``guild_id``, returning its id."""
+        query = """
+            DELETE FROM timers
+            WHERE event = $1
+              AND metadata #>> '{args,0}' = $2
+              AND metadata #>> '{args,2}' = $3
+            RETURNING id;
+        """
+        return await self.fetchval(query, event, str(guild_id), str(member_id))
+
     async def get_next_due(
             self, days: int = 7, *, connection: asyncpg.Connection | None = None
     ) -> asyncpg.Record | None:

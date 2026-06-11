@@ -104,36 +104,7 @@ class CodeblockConverter(commands.Converter[list[str]]):
 class ColorTransformer(commands.Converter[Colour | str], app_commands.Transformer):
     """A color converter that will try to match a color HEX or name to a :class:``discord.Color``."""
 
-    async def transform(self, interaction: discord.Interaction, value: str) -> Colour | None:
-        """Transform a color HEX to the matching :class:``discord.Color` if possible else return None."""
-        try:
-            value = value.strip()
-
-            if value.startswith("#"):
-                value = value[1:]
-            elif value.startswith("0x"):
-                value = value[2:]
-            else:
-                value = value
-
-            result = discord.Colour.from_rgb(*bytes.fromhex(value))
-        except ValueError:
-            results: list[tuple[str, str]] = fuzzy.finder(value, get_colour_dict().items(), key=lambda x: x[0], limit=1)
-            if results:
-                try:
-                    result = discord.Colour.from_rgb(*bytes.fromhex(results[0][1]))
-                except (ValueError, IndexError):
-                    return discord.Colour.blurple()
-                else:
-                    return result
-        else:
-            return result
-
-    async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
-        results = fuzzy.extract(current, get_colour_dict(), limit=20)
-        return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
-
-    async def convert(self, ctx: Context, argument: str) -> Colour | None:
+    def _convert(self, _, argument: str) -> Colour | None:
         """Converts a color HEX to the matching :class:``Colour` if possible else return None."""
         try:
             if isinstance(argument, Colour):
@@ -160,6 +131,16 @@ class ColorTransformer(commands.Converter[Colour | str], app_commands.Transforme
                     return result
         else:
             return result
+
+    async def transform(self, interaction: discord.Interaction, value: str) -> Colour | None:
+        return self._convert(interaction, value)
+
+    async def convert(self, ctx: Context, argument: str) -> Colour | None:
+        return self._convert(ctx, argument)
+
+    async def autocomplete(self, interaction: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
+        results = fuzzy.extract(current, get_colour_dict(), limit=20)
+        return [app_commands.Choice(name=f"{result[0]} ({result[2]})", value=result[2]) for result in results]
 
 
 IgnoreableEntity = discord.TextChannel | discord.VoiceChannel | discord.Thread | discord.User | discord.Role

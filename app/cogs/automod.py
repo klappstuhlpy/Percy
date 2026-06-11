@@ -549,7 +549,6 @@ class AutoMod(Cog):
         "automod",
         description="Modify/Create and view Percys' AutoMod preset rules.",
         guild_only=True,
-        hybrid=True,
         user_permissions=["manage_guild"],
         bot_permissions=["manage_guild"],
     )
