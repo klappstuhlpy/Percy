@@ -625,7 +625,7 @@ class PlaylistSelect(discord.ui.Select):
         if self.values[0] == "__index":
             self.paginator.pages = self.paginator.start_pages
         else:
-            playlist = self.paginator.playlists[int(self.values[0]) - 1]
+            playlist = self.paginator.playlists[int(self.values[0])]
             self.paginator.pages = playlist.to_embeds()
 
         self.paginator._current_page = 0
