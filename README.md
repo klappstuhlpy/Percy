@@ -346,6 +346,7 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | DELETE | `/api/internal/guilds/{id}/highlights/{user_id}` | Remove user's highlights |
 | GET | `/api/internal/guilds/{id}/emoji-stats?limit=N` | Top emoji usage stats |
 | GET | `/api/internal/guilds/{id}/polls` | All guild polls with status and votes |
+| POST | `/api/internal/guilds/{id}/polls` | Create and publish a new poll (question, options, duration, optional channel/color/image/thread question) |
 | PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll |
 | POST | `/api/internal/guilds/{id}/polls/{poll_id}/end` | End a running poll (archives thread, updates message, deletes timer) |
 | GET | `/api/internal/guilds/{id}/giveaways` | All guild giveaways with entries |

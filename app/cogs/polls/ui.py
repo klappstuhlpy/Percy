@@ -144,7 +144,7 @@ class PollClearVoteButton(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None or not interaction.message.embeds:
+        if interaction.message is None:
             return
 
         entry = self.poll.get_entry(interaction.user.id)
@@ -266,7 +266,7 @@ class PollEnterButton(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None or not interaction.message.embeds:
+        if interaction.message is None:
             return
 
         option = self.poll.get_option(self.index)
@@ -275,12 +275,19 @@ class PollEnterButton(
         if self.poll.kwargs.get("with_reason"):
             modal = PollReasonModal(self.poll, option, interaction.client)  # type: ignore
             await interaction.response.send_modal(modal)
-            state = await modal.wait()
-            if state:
+            if await modal.wait():
                 await interaction.followup.send(
                     content=f"{Emojis.error} This poll requires you to submit a reason for your vote.", ephemeral=True
                 )
                 return
+            # The modal already consumed the interaction response, so refresh the
+            # poll card with a direct message edit rather than via the interaction.
+            self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
+            reason_options: list[VoteOption] = self.poll.options.copy()
+            reason_options[option["index"]]["votes"] += 1
+            self.poll = await self.poll.edit(options=reason_options, votes=len(self.poll.entries))
+            await interaction.message.edit(view=create_view(self.poll))
+            return
 
         await interaction.response.defer(ephemeral=True)
 
@@ -354,7 +361,7 @@ class PollEnterSelect(
         return True
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if interaction.message is None or not interaction.message.embeds:
+        if interaction.message is None:
             return
 
         option = self.poll.get_option(int(self.item.values[0]))
@@ -363,12 +370,19 @@ class PollEnterSelect(
         if self.poll.kwargs.get("with_reason"):
             modal = PollReasonModal(self.poll, option, interaction.client)  # type: ignore
             await interaction.response.send_modal(modal)
-            state = await modal.wait()
-            if state:
+            if await modal.wait():
                 await interaction.followup.send(
                     content=f"{Emojis.error} This poll requires you to submit a reason for your vote.", ephemeral=True
                 )
                 return
+            # The modal already consumed the interaction response, so refresh the
+            # poll card with a direct message edit rather than via the interaction.
+            self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
+            reason_options: list[VoteOption] = self.poll.options.copy()
+            reason_options[option["index"]]["votes"] += 1
+            self.poll = await self.poll.edit(options=reason_options, votes=len(self.poll.entries))
+            await interaction.message.edit(view=create_view(self.poll))
+            return
 
         await interaction.response.defer(ephemeral=True)
 

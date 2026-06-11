@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 
+import discord
 from aiohttp import web
 
 from .models import InternalAPIHandlers
@@ -39,6 +40,73 @@ class ContentHandlers(InternalAPIHandlers):
             })
 
         return web.json_response({'polls': polls})
+
+    async def _create_poll(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Polls')
+        if cog is None:
+            raise web.HTTPServiceUnavailable(text='polls cog not loaded')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        question = (body.get('question') or '').strip()
+        if not question:
+            raise web.HTTPBadRequest(text='question is required')
+
+        raw_options = body.get('options') or []
+        options = [str(opt).strip() for opt in raw_options if str(opt).strip()]
+        if len(options) < 2:
+            raise web.HTTPBadRequest(text='at least 2 options are required')
+        if len(options) > 8:
+            raise web.HTTPBadRequest(text='a poll can have at most 8 options')
+
+        try:
+            duration = int(body.get('duration_seconds') or 0)
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='invalid duration')
+        if duration <= 0:
+            raise web.HTTPBadRequest(text='duration must be a positive number of seconds')
+
+        config = await self.bot.db.get_guild_config(guild_id=guild_id)
+
+        channel_id = body.get('channel_id')
+        if channel_id:
+            try:
+                channel = guild.get_channel(int(channel_id))
+            except (TypeError, ValueError):
+                raise web.HTTPBadRequest(text='invalid channel')
+        else:
+            channel = config.poll_channel if config else None
+
+        if not isinstance(channel, discord.TextChannel):
+            raise web.HTTPBadRequest(text='a valid text channel is required (set a poll channel or pass channel_id)')
+
+        if self.bot.timers is None:
+            raise web.HTTPServiceUnavailable(text='the timers system is not available')
+
+        expires = discord.utils.utcnow() + datetime.timedelta(seconds=duration)
+
+        poll = await cog.create_poll_from_dashboard(
+            guild,
+            channel,
+            author_id=self.bot.user.id,
+            question=question,
+            options=options,
+            expires=expires,
+            description=(body.get('description') or '').strip() or None,
+            color=(body.get('color') or '').strip() or None,
+            image_url=(body.get('image_url') or '').strip() or None,
+            thread_question=(body.get('thread_question') or '').strip() or None,
+        )
+
+        return web.json_response({'ok': True, 'id': poll.id})
 
     async def _patch_poll(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])

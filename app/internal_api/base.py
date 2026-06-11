@@ -82,6 +82,7 @@ class InternalAPI(
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/users/{user_id}', self._patch_leveling_user)
         # Polls
         self._app.router.add_get('/api/internal/guilds/{guild_id}/polls', self._get_polls)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/polls', self._create_poll)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/polls/{poll_id}', self._patch_poll)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/polls/{poll_id}/end', self._end_poll)
         # Giveaways

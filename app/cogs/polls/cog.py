@@ -205,6 +205,76 @@ class Polls(Cog):
         self.get_guild_polls.invalidate(guild_id)
         return poll
 
+    async def create_poll_from_dashboard(
+        self,
+        guild: discord.Guild,
+        channel: discord.TextChannel,
+        *,
+        author_id: int,
+        question: str,
+        options: list[str],
+        expires: datetime.datetime,
+        description: str | None = None,
+        color: str | None = None,
+        image_url: str | None = None,
+        thread_question: str | None = None,
+    ) -> Poll:
+        """Creates a poll initiated from the web dashboard.
+
+        Mirrors the core of the ``/polls create`` command, omitting the
+        Discord-command-only extras (ping role, vote reasons). When
+        ``thread_question`` is given, a discussion thread is opened on the poll
+        message and the question is posted and pinned, exactly like the command.
+        Callers are responsible for validating ``options`` (2-8 entries) and that
+        the timers system is available.
+        """
+        to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
+
+        message = await channel.send(content="*Preparing Poll...*")
+
+        if thread_question:
+            # Discord caps thread names at 100 characters.
+            thread = await message.create_thread(name=question[:100], auto_archive_duration=4320)
+            thread_message = await thread.send(thread_question)
+            await thread_message.pin(reason="Poll Discussion")
+
+        new_index = len(await self.get_guild_polls(guild.id)) + 1  # type: ignore[misc]
+        unique_id = uuid([rec[0] for rec in await self.bot.db.polls.get_all_ids()])
+
+        poll = await self.create_poll(
+            unique_id,
+            channel.id,
+            message.id,
+            guild.id,
+            expires,
+            author_id,
+            ping_message_id=None,
+            question=question,
+            description=description,
+            options=to_options,
+            # ``thread`` is the canonical kwarg read by the poll card + edit modal.
+            thread=thread_question or None,
+            with_reason=False,
+            image=image_url,
+            color=color or str(helpers.Colour.white()),
+            votes=0,
+            index=new_index,
+            running=True,
+        )
+
+        zone = await self.bot.db.get_user_timezone(author_id)
+        await self.bot.timers.create(
+            expires,
+            "poll",
+            poll_id=poll.id,
+            created=discord.utils.utcnow(),
+            timezone=zone or "UTC",
+        )
+
+        # Switch the placeholder message over to its Components V2 layout.
+        await message.edit(content=None, embed=None, view=create_view(poll))
+        return poll
+
     async def get_guild_poll(self, guild_id: int, poll_id: int, /) -> Poll | None:
         """|coro|
 
