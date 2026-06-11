@@ -238,13 +238,19 @@ class BannedMember(commands.Converter[discord.BanEntry], app_commands.Transforme
 class ActionReason(commands.Converter[str], app_commands.Transformer):
     """A Hybrid Command Converter that supports App and Text Commands to resolve action reasons."""
 
-    async def convert(self, ctx: Context, argument: str) -> str:
+    def _convert(self, ctx: Context | discord.Interaction, argument: str) -> str:
         ret = f"{ctx.user} (ID: {ctx.user.id}): {argument}"
 
         if len(ret) > 512:
             reason_max = 512 - len(ret) + len(argument)
             raise commands.BadArgument(f"Reason is too long ({len(argument)}/{reason_max})")
         return ret
+
+    async def transform(self, interaction: discord.Interaction, value: str) -> str:
+        return self._convert(interaction, value)
+
+    async def convert(self, ctx: Context, argument: str) -> str:
+        return self._convert(ctx, argument)
 
     @property
     def max_value(self) -> int:
