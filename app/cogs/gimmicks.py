@@ -180,11 +180,7 @@ class Gimmicks(Cog):
         embed.set_footer(text=f"Author ID: {user.id}")
         return embed
 
-    @command(
-        description="Sends feedback about the bot to the owner.",
-        hybrid=True,
-        with_app_command=False,
-    )
+    @command(description="Sends feedback about the bot to the owner.")
     @describe(content="The feedback you want to send.")
     @cooldown(1, 60, commands.BucketType.user)
     async def feedback(self, ctx: Context, *, content: str) -> None:
@@ -197,7 +193,7 @@ class Gimmicks(Cog):
         """
         channel = self.feedback_channel
         if channel is None:
-            return None
+            return
 
         embed = self.get_feedback_embed(ctx, summary=content)
         await channel.send(embed=embed)
