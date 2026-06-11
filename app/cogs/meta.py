@@ -998,7 +998,7 @@ class Meta(Cog):
     @cooldown(1, 3)
     async def vote(self, ctx: Context) -> None:
         """Shows the vote link for the bot."""
-        await ctx.send("You can vote for me on Top.gg [here](https://top.gg/bot/1070054930125176923/)!")
+        await ctx.send("You can vote for me on Top.gg [here](https://top.gg/bot/1070054930125176923/vote)!")
 
     @staticmethod
     def _ping_metric(latency: float, bad: float, good: float) -> AnsiColor:
