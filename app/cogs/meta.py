@@ -1008,7 +1008,7 @@ class Meta(Cog):
             return AnsiColor.green
         return AnsiColor.yellow
 
-    @command(aliases=("pong", "latency"), hybrid=True)
+    @command(aliases=("pong", "latency"))
     @cooldown(rate=2, per=3)
     async def ping(self, ctx: Context) -> None:
         """Pong! Sends detailed information about the bot's latency."""
