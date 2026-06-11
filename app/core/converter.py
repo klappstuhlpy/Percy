@@ -239,7 +239,7 @@ class ActionReason(commands.Converter[str], app_commands.Transformer):
     """A Hybrid Command Converter that supports App and Text Commands to resolve action reasons."""
 
     async def convert(self, ctx: Context, argument: str) -> str:
-        ret = f"{ctx.author} (ID: {ctx.author.id}): {argument}"
+        ret = f"{ctx.user} (ID: {ctx.user.id}): {argument}"
 
         if len(ret) > 512:
             reason_max = 512 - len(ret) + len(argument)
