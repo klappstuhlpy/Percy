@@ -67,12 +67,12 @@ AutoModFlags = GuildConfig.AutoModFlags
 
 
 class PurgeFlags(Flags):
-    user: discord.User | None = flag(description="Remove messages from this user", default=None)
-    contains: str | None = flag(description="Remove messages that contains this string (case sensitive)", default=None)
-    prefix: str | None = flag(description="Remove messages that start with this string (case sensitive)", default=None)
-    suffix: str | None = flag(description="Remove messages that end with this string (case sensitive)", default=None)
-    after: int | None = flag(description="Search for messages that come after this message ID", default=None)
-    before: int | None = flag(description="Search for messages that come before this message ID", default=None)
+    user: discord.User | None = flag(description="Remove messages from this user")
+    contains: str | None = flag(description="Remove messages that contains this string (case sensitive)")
+    prefix: str | None = flag(description="Remove messages that start with this string (case sensitive)")
+    suffix: str | None = flag(description="Remove messages that end with this string (case sensitive)")
+    after: int | None = flag(description="Search for messages that come after this message ID")
+    before: int | None = flag(description="Search for messages that come before this message ID")
     delete_pinned: bool = store_true(description="Whether to delete messages that are pinned. Defaults to True.")
     bot: bool = store_true(description="Remove messages from bots (not webhooks!)")
     webhooks: bool = store_true(description="Remove messages from webhooks")
@@ -391,21 +391,21 @@ class Moderation(Cog):
         channel: :class:`discord.abc.GuildChannel`
             The channel that has been created.
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[arg-type]
+        config: GuildConfig = await self.bot.db.get_guild_config(guild_id=channel.guild.id)
         if config is None:
             return
 
         me = channel.guild.me
 
         if config.mute_role is not None:
-            _, failed, _ = await update_role_permissions(config.mute_role, channel.guild, me, channels=[channel])
+            _, failed, _ = await update_role_permissions(config.mute_role, channel.guild, me, channels=[channel])  # type: ignore
             if failed:
                 await config.send_alert(
                     f"Failed to update permissions for the **mute role** on channel creation. [{channel.mention}]"
                 )
 
         if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[arg-type]
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=channel.guild.id)
             if gatekeeper is not None and gatekeeper.role_id:
                 role = channel.guild.get_role(gatekeeper.role_id)
                 if role is not None:
@@ -430,7 +430,7 @@ class Moderation(Cog):
         channel: :class:`discord.abc.GuildChannel`
             The channel that has been deleted.
         """
-        config: GuildConfig = await self.bot.db.get_guild_config(channel.guild.id)  # type: ignore[arg-type]
+        config: GuildConfig = await self.bot.db.get_guild_config(guild_id=channel.guild.id)
         if config is None:
             return
 
@@ -582,7 +582,7 @@ class Moderation(Cog):
         user_permissions=["manage_channels"],
     )
     @describe(duration="The slowmode duration or 0s to disable")
-    async def slowmode(self, ctx: ModGuildContext, *, duration: timetools.ShortTime) -> Any:
+    async def slowmode(self, ctx: ModGuildContext, *, duration: timetools.ShortTime) -> None:
         """Applies slowmode to this channel"""
         delta = duration.dt - ctx.message.created_at
         slowmode_delay = int(delta.total_seconds())
@@ -607,11 +607,12 @@ class Moderation(Cog):
         hybrid=True,
         user_permissions=PermissionTemplate.mod,
     )
-    async def moderation(self, ctx: ModGuildContext) -> Any:
+    async def moderation(self, ctx: ModGuildContext) -> None:
         """Show current Bot-Automatic-Moderation behavior on the server."""
         assert ctx.guild is not None
         if ctx.guild_config is None:
-            return await ctx.send_error("This server does not have moderation enabled.")
+            await ctx.send_error("This server does not have moderation enabled.")
+            return
 
         container = discord.ui.Container(accent_colour=helpers.Colour.white())
         container.add_item(
@@ -650,12 +651,14 @@ class Moderation(Cog):
         else:
             mention_spam = "*Disabled*"
 
-        container.add_item(discord.ui.TextDisplay(
-            f"**\N{IDENTIFICATION CARD} Audit Log**\n{audit_log_broadcast}\n"
-            f"**⚠️ Mod Alerts**\n{alerts}\n"
-            f"**\N{SHIELD} Raid Protection**\n{raid}\n"
-            f"**\N{PUBLIC ADDRESS LOUDSPEAKER} Mention Spam Protection**\n{mention_spam}"
-        ))
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"**\N{IDENTIFICATION CARD} Audit Log**\n{audit_log_broadcast}\n"
+                f"**⚠️ Mod Alerts**\n{alerts}\n"
+                f"**\N{SHIELD} Raid Protection**\n{raid}\n"
+                f"**\N{PUBLIC ADDRESS LOUDSPEAKER} Mention Spam Protection**\n{mention_spam}"
+            )
+        )
 
         if ctx.guild_config.flags.gatekeeper:
             enabled += 1
@@ -695,7 +698,7 @@ class Moderation(Cog):
         user_permissions=PermissionTemplate.mod,
     )
     @describe(channel="The channel to send alert messages to. The bot must be able to create webhooks in it.")
-    async def moderation_alerts(self, ctx: ModGuildContext, *, channel: discord.TextChannel) -> Any:
+    async def moderation_alerts(self, ctx: ModGuildContext, *, channel: discord.TextChannel) -> None:
         """Toggles alert message logging on the server.
 
         The bot must have the ability to create webhooks in the given channel.
@@ -703,9 +706,10 @@ class Moderation(Cog):
         assert ctx.guild is not None
         await ctx.defer()
         if ctx.guild_config and ctx.guild_config.flags.alerts:
-            return await ctx.send_info(
+            await ctx.send_info(
                 f'You already have alert message logging enabled. To disable, use "{ctx.prefix}moderation disable alerts"'
             )
+            return
 
         channel_id = channel.id
 
@@ -714,14 +718,17 @@ class Moderation(Cog):
         assert self.bot.user is not None
         avatar_asset = self.bot.user.avatar
         avatar_data = await avatar_asset.read() if avatar_asset is not None else None
+
         try:
             webhook = await channel.create_webhook(name="Moderation Alerts", avatar=avatar_data, reason=reason)
         except discord.Forbidden:
-            return await ctx.send_error(f"The bot does not have permissions to create webhooks in {channel.mention}.")
+            await ctx.send_error(f"The bot does not have permissions to create webhooks in {channel.mention}.")
+            return
         except discord.HTTPException:
-            return await ctx.send_error(
+            await ctx.send_error(
                 "An error occurred while creating the webhook. Note you can only have 10 webhooks per channel."
             )
+            return
 
         flags = AutoModFlags()
         flags.alerts = True
@@ -736,7 +743,7 @@ class Moderation(Cog):
         user_permissions=PermissionTemplate.mod,
     )
     @describe(channel="The channel to broadcast audit log messages to.")
-    async def moderation_auditlog(self, ctx: ModGuildContext, *, channel: discord.TextChannel) -> Any:
+    async def moderation_auditlog(self, ctx: ModGuildContext, *, channel: discord.TextChannel) -> None:
         """Toggles audit text log on the server.
         Audit Log sends a message to the log channel whenever a certain event is triggered.
         """
@@ -754,14 +761,18 @@ class Moderation(Cog):
         assert self.bot.user is not None
         try:
             webhook = await channel.create_webhook(
-                name="Moderation Audit Log", avatar=await self.bot.user.display_avatar.read(), reason=reason
+                name="Moderation Audit Log",
+                avatar=await self.bot.user.display_avatar.read(),
+                reason=reason,  # type: ignore[arg-type]
             )
         except discord.Forbidden:
-            return await ctx.send_error("I do not have permissions to create a webhook in that channel.")
+            await ctx.send_error("I do not have permissions to create a webhook in that channel.")
+            return
         except discord.HTTPException:
-            return await ctx.send_error(
+            await ctx.send_error(
                 "Failed to create a webhook in that channel. Note that the limit for webhooks in each channel is **10**."
             )
+            return
 
         await ctx.db.moderation.enable_audit_log(ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
         await ctx.send_success(f"Audit log enabled. Broadcasting log events to <#{channel.id}>.")
@@ -772,15 +783,17 @@ class Moderation(Cog):
         user_permissions=PermissionTemplate.mod,
     )
     @describe(flag="The flag you want to set.", value="The value you want to set the flag to.")
-    async def moderation_auditlog_alter(self, ctx: ModGuildContext, flag: str, value: bool) -> Any:
+    async def moderation_auditlog_alter(self, ctx: ModGuildContext, flag: str, value: bool) -> None:
         """Configures the audit log events.
         You can set the Events you want to get notified about via the Audit Log Channel.
         """
         if ctx.guild_config is None:
-            return await ctx.send_error("This server does not have moderation enabled.")
+            await ctx.send_error("This server does not have moderation enabled.")
+            return
 
         if not ctx.guild_config.flags.audit_log:
-            return await ctx.send_error("Audit log is not enabled on this server.")
+            await ctx.send_error("Audit log is not enabled on this server.")
+            return
 
         if flag == "all":
             for key in ctx.guild_config.audit_log_flags:
@@ -885,7 +898,7 @@ class Moderation(Cog):
                     warnings.append(f"The webhook `{record[1]}` could not be deleted for some reason.")
 
         if protection in ("all", "gatekeeper"):
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)  # type: ignore[misc]
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=guild_id)
             if gatekeeper is not None and gatekeeper.started_at is not None:
                 await gatekeeper.disable()
                 warnings.append("Gatekeeper was previously running and has been forcibly disabled.")
@@ -922,7 +935,7 @@ class Moderation(Cog):
             await previous.on_timeout()
             previous.stop()
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[misc]
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=ctx.guild.id)
         gatekeeper_record, config_record = await self.bot.db.moderation.setup_gatekeeper(
             ctx.guild.id, AutoModFlags.gatekeeper.flag, create_gatekeeper=gatekeeper is None
         )
@@ -974,7 +987,7 @@ class Moderation(Cog):
         await ctx.db.moderation.toggle_raid_protection(ctx.guild.id, AutoModFlags.mentions.flag, True)
         await ctx.send_success(f"Mention spam protection threshold set to `{count}`.")
 
-    @moderation_mentions.error  # type: ignore[attr-defined]
+    @moderation_mentions.error
     async def moderation_mentions_error(self, ctx: ModGuildContext, error: commands.BadArgument) -> None:
         if isinstance(error, commands.RangeError):
             await ctx.send_error("Mention spam protection threshold must be greater than **3**.")
@@ -1023,16 +1036,17 @@ class Moderation(Cog):
     @moderation.command(
         "ignored", description="Lists what channels, roles, and members are in the moderation ignore list.", guild_only=True
     )
-    async def moderation_ignored(self, ctx: ModGuildContext) -> Any:
+    async def moderation_ignored(self, ctx: ModGuildContext) -> None:
         """List all the channels, roles, and members that are in the Moderation ignore list."""
 
         if ctx.guild_config is None or not ctx.guild_config.safe_automod_entity_ids:
-            return await ctx.send_error("This server does not have any ignored entities.")
+            await ctx.send_error("This server does not have any ignored entities.")
+            return
 
         assert ctx.guild is not None
         entities = [resolve_entity_id(x, guild=ctx.guild) for x in ctx.guild_config.safe_automod_entity_ids]
         entities = [f"- {e}" for e in entities]
-        await LinePaginator.start(ctx, entries=entities, per_page=15, location="description")
+        await LinePaginator.start(ctx, entries=entities, location="description")
 
     @command(
         "purge",
@@ -1046,7 +1060,7 @@ class Moderation(Cog):
     @describe(search="How many messages to search for")
     async def purge(
         self, ctx: ModGuildContext, search: commands.Range[int, 1, 2000] | None = None, *, flags: PurgeFlags
-    ) -> Any:
+    ) -> None:
         """Removes messages that meet a criteria.
         This command uses a syntax similar to Discord's search bar.
         The messages are only deleted if all options are met unless
@@ -1095,13 +1109,15 @@ class Moderation(Cog):
 
             try:
                 deleted = await asyncio.wait_for(
-                    ctx.channel.purge(limit=search, before=before, after=after, check=predicate),
+                    ctx.channel.purge(limit=search, before=before, after=after, check=predicate),  # type: ignore[arg-type]
                     timeout=100,  # type: ignore[union-attr]
                 )
             except discord.Forbidden:
-                return await ctx.send_error("I do not have permissions to delete messages.")
+                await ctx.send_error("I do not have permissions to delete messages.")
+                return
             except discord.HTTPException as e:
-                return await ctx.send_error(f"Failed to delete messages: {e}")
+                await ctx.send_error(f"Failed to delete messages: {e}")
+                return
 
             spammers = Counter(m.author.display_name for m in deleted)
             deleted = len(deleted)
@@ -1132,12 +1148,13 @@ class Moderation(Cog):
     @describe(channels="A space-separated list of text or voice channels to lock down")
     async def lockdown(
         self, ctx: ModGuildContext, channels: commands.Greedy[discord.TextChannel | discord.VoiceChannel]
-    ) -> Any:
+    ) -> None:
         """Locks down channels by denying the default role to send messages or connect to voice channels."""
         if ctx.channel in channels and is_potential_lockout(ctx.me, ctx.channel):  # type: ignore[arg-type]
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
-                return await ctx.send(embed=build_lockdown_error_embed())
+                await ctx.send(embed=build_lockdown_error_embed())
+                return
 
             confirm = await ctx.confirm(
                 f"{Emojis.warning} This will potentially lock the bot from sending messages.\n"
@@ -1176,12 +1193,13 @@ class Moderation(Cog):
         ctx: ModGuildContext,
         duration: timetools.ShortTime,
         channels: commands.Greedy[discord.TextChannel | discord.VoiceChannel],
-    ) -> Any:
+    ) -> None:
         """Locks down specific channels for a specified amount of time."""
         if ctx.channel in channels and is_potential_lockout(ctx.me, ctx.channel):  # type: ignore[arg-type]
             parent = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
             if parent is None:
-                return await ctx.send(embed=build_lockdown_error_embed())
+                await ctx.send(embed=build_lockdown_error_embed())
+                return
 
             confirm = await ctx.confirm(
                 f"{Emojis.warning} This will potentially lock the bot from sending messages.\n"
@@ -1224,14 +1242,15 @@ class Moderation(Cog):
         bot_permissions=["manage_roles"],
         user_permissions=PermissionTemplate.mod,
     )
-    async def lockdown_end(self, ctx: ModGuildContext) -> Any:
+    async def lockdown_end(self, ctx: ModGuildContext) -> None:
         """Ends all set lockdowns.
         To use this command, you must have Manage Roles and Ban Members permissions.
         The bot must also have Manage Members permissions.
         """
         assert ctx.guild is not None
         if not await is_cooldown_active(self.bot, ctx.guild, ctx.channel):  # type: ignore[arg-type]
-            return await ctx.send_error("There is no active lockdown.")
+            await ctx.send_error("There is no active lockdown.")
+            return
 
         reason = f"Lockdown ended by {ctx.author} (ID: {ctx.author.id})"
         async with ctx.typing():
@@ -1244,7 +1263,7 @@ class Moderation(Cog):
             await ctx.send_success("Lockdown successfully ended.")
 
     @Cog.listener()
-    async def on_lockdown_timer_complete(self, timer: Timer) -> Any:
+    async def on_lockdown_timer_complete(self, timer: Timer) -> None:
         await self.bot.wait_until_ready()
         guild_id, mod_id, channel_id, channel_ids = timer.args
 
@@ -1292,7 +1311,8 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         if error := check_member_hierarchy(ctx, member, action="kick"):
-            return await ctx.send_error(error)
+            await ctx.send_error(error)
+            return
 
         await ctx.guild.kick(member, reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "kick", member.id, ctx.author.id, reason)
@@ -1315,7 +1335,7 @@ class Moderation(Cog):
         member: Annotated[MaybeMember, MemberID],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Bans a member from the server.
         You can also ban from ID to ban regardless of whether they're
         in the server or not.
@@ -1325,7 +1345,8 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         if error := check_member_hierarchy(ctx, member, action="ban"):
-            return await ctx.send_error(error)
+            await ctx.send_error(error)
+            return
 
         await ctx.guild.ban(member, reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
@@ -1348,7 +1369,7 @@ class Moderation(Cog):
         members: Annotated[list[MaybeMember], commands.Greedy[MemberID]],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Bans multiple members from the server.
         This only works through banning via ID.
         """
@@ -1388,7 +1409,7 @@ class Moderation(Cog):
         member: Annotated[MaybeMember, MemberID],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Soft bans a member from the server.
 
         A softban is basically banning the member from the server but
@@ -1400,7 +1421,8 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         if error := check_member_hierarchy(ctx, member, action="soft-ban"):
-            return await ctx.send_error(error)
+            await ctx.send_error(error)
+            return
 
         await ctx.guild.ban(member, reason=reason)
         await ctx.guild.unban(member, reason=reason)
@@ -1461,7 +1483,7 @@ class Moderation(Cog):
         member: Annotated[MaybeMember, MemberID],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Temporarily bans a member for the specified duration.
         The duration can be a short time form e.g., 30d or a more human
         duration such as "until thursday at 3PM" or a more concrete time
@@ -1480,14 +1502,13 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         if error := check_member_hierarchy(ctx, member, action="ban"):
-            return await ctx.send_error(error)
+            await ctx.send_error(error)
+            return
 
         until = f"until {discord.utils.format_dt(duration.dt, 'F')}"
 
-        try:
+        with suppress(discord.HTTPException, AttributeError):
             await member.send(f"{Emojis.info} You have been banned from {ctx.guild.name} {until}. Reason: {reason}")  # type: ignore[union-attr]
-        except (AttributeError, discord.HTTPException):
-            pass
 
         reason = safe_reason_append(reason, until)
         zone = await self.bot.db.get_user_timezone(ctx.author.id)
@@ -1533,7 +1554,6 @@ class Moderation(Cog):
         "mute",
         description="Mutes members using the configured mute role.",
         hybrid=True,
-        iwc=True,
         guild_only=True,
         bot_permissions=["manage_roles"],
         user_permissions=["manage_roles"],
@@ -1546,7 +1566,7 @@ class Moderation(Cog):
         members: commands.Greedy[discord.Member],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Mutes members using the configured mute role.
         The bot must have Manage Roles permission and be
         above the muted role in the hierarchy.
@@ -1564,7 +1584,8 @@ class Moderation(Cog):
         role = discord.Object(id=ctx.guild_config.mute_role_id)
 
         if ctx.guild.me.top_role < role:
-            return await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            return
 
         failed = 0
         for member in members:
@@ -1592,7 +1613,7 @@ class Moderation(Cog):
         members: commands.Greedy[discord.Member],
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Unmutes members using the configured mute role.
         The bot must have Manage Roles permission and be
         above the muted role in the hierarchy.
@@ -1610,7 +1631,8 @@ class Moderation(Cog):
         role = discord.Object(id=ctx.guild_config.mute_role_id)
 
         if ctx.guild.me.top_role < role:
-            return await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            return
 
         failed = 0
         for member in members:
@@ -1645,7 +1667,7 @@ class Moderation(Cog):
         member: discord.Member,
         *,
         reason: Annotated[str | None, ActionReason] = None,
-    ) -> Any:
+    ) -> None:
         """Temporarily mutes a member for the specified duration.
         The duration can be a short time form e.g., 30d or a more human
         duration such as "until thursday at 3PM" or a more concrete time
@@ -1664,13 +1686,15 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         if error := check_member_hierarchy(ctx, member, action="mute", check_owner=False):
-            return await ctx.send_error(error)
+            await ctx.send_error(error)
+            return
 
         role_id = ctx.guild_config.mute_role_id
         assert role_id is not None
 
         if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
-            return await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+            return
 
         await member.add_roles(discord.Object(id=role_id), reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason)
@@ -1822,8 +1846,9 @@ class Moderation(Cog):
         assert ctx.guild is not None
         assert ctx.guild_config is not None
         assert ctx.guild_config.mute_role is not None
+
         async with ctx.typing():
-            success, failure, skipped = await update_role_permissions(ctx.guild_config.mute_role, ctx.guild, ctx.author)
+            success, failure, skipped = await update_role_permissions(ctx.guild_config.mute_role, ctx.guild, ctx.author)  # type: ignore[arg-type]
             total = success + failure + skipped
             await ctx.send_info(
                 f"Attempted to update {total} channel permissions. "
@@ -1838,25 +1863,28 @@ class Moderation(Cog):
         user_permissions=["manage_roles"],
     )
     @describe(name="The name of the mute role to create.")
-    async def mute_role_create(self, ctx: ModGuildContext, *, name: str) -> Any:
+    async def mute_role_create(self, ctx: ModGuildContext, *, name: str) -> None:
         """Creates a mute role with the given name.
         This also updates the channels' permission overwrites accordingly if needed.
         """
         assert ctx.guild is not None
         guild_id = ctx.guild.id
         if ctx.guild_config is not None and ctx.guild_config.mute_role is not None:
-            return await ctx.send_error("A mute role has already been set up.")
+            await ctx.send_error("A mute role has already been set up.")
+            return
 
         try:
             role = await ctx.guild.create_role(name=name, reason=f"Mute Role Created By {ctx.author} (ID: {ctx.author.id})")
         except discord.HTTPException as e:
-            return await ctx.send_error(f"Failed to create role: {e}")
+            await ctx.send_error(f"Failed to create role: {e}")
+            return
 
         await ctx.db.moderation.create_mute_role(guild_id, role.id)
 
         confirm = await ctx.confirm(f"{Emojis.warning} Would you like to update the channel overwrites as well?")
         if not confirm:
-            return await ctx.send_success("Mute role successfully created.")
+            await ctx.send_success("Mute role successfully created.")
+            return
 
         async with ctx.typing():
             success, failure, skipped = await update_role_permissions(role, ctx.guild, ctx.author)
@@ -1897,7 +1925,7 @@ class Moderation(Cog):
     )
     @checks.requires_timer()
     @describe(duration="The duration to mute yourself for. Must be in a short time form e.g., 4h.")
-    async def selfmute(self, ctx: ModGuildContext, *, duration: timetools.ShortTime) -> Any:
+    async def selfmute(self, ctx: ModGuildContext, *, duration: timetools.ShortTime) -> None:
         """Temporarily mutes yourself for the specified duration.
         The duration must be in a short time form e.g., 4h. Can
         only mute yourself for a maximum of 24 hours and a minimum
@@ -1912,10 +1940,12 @@ class Moderation(Cog):
             raise commands.BadArgument('This server does not have a mute role set up.')
 
         if ctx.author._roles.has(role_id):
-            return await ctx.send_error('You are already muted.')
+            await ctx.send_error('You are already muted.')
+            return
 
         if ctx.guild.me.top_role < discord.Object(id=role_id):
-            return await ctx.send_error('I cannot mute you with a role equal to or higher than the mute role.')
+            await ctx.send_error('I cannot mute you with a role equal to or higher than the mute role.')
+            return
 
         created_at = ctx.message.created_at
         if duration.dt > (created_at + datetime.timedelta(days=1)):
