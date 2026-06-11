@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import discord
 
 from app.rendering import templates
-from app.rendering.models import BarChartData, ColorSwatchData, LevelCardData, PresenceData, QuoteData
+from app.rendering.models import ActiveBoost, BarChartData, ColorSwatchData, LevelCardData, PresenceData, QuoteData
 from app.rendering.primitives import Font, FontManager, get_dominant_color
 
 if TYPE_CHECKING:
@@ -45,7 +45,12 @@ class RenderingService:
     # -- Artifact rendering -------------------------------------------------
 
     async def level_card(
-        self, member: discord.Member, level_config: LevelConfig, *, font: Font = Font.RUBIK
+        self,
+        member: discord.Member,
+        level_config: LevelConfig,
+        *,
+        font: Font = Font.RUBIK,
+        boosts: list[ActiveBoost] | None = None,
     ) -> discord.File:
         """Render a member's rank card."""
         data = LevelCardData(
@@ -59,6 +64,7 @@ class RenderingService:
             max_xp=level_config.max_xp,
             messages=level_config.messages,
             font=font,
+            boosts=boosts or [],
         )
         buffer = await asyncio.to_thread(templates.draw_level_card, data, self._fonts)
         return discord.File(buffer, filename=f"{member.id}.png")

@@ -15,6 +15,7 @@ from .guild import GuildHandlers
 from .leveling import LevelingHandlers
 from .members import MemberHandlers
 from .moderation import ModerationHandlers
+from .music import MusicHandlers
 from .stats import StatsHandlers
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ class InternalAPI(
     LevelingHandlers,
     EconomyHandlers,
     ContentHandlers,
+    MusicHandlers,
     StatsHandlers,
 ):
     """Manages the internal HTTP API server lifecycle."""
@@ -145,6 +147,10 @@ class InternalAPI(
         self._app.router.add_delete('/api/internal/guilds/{guild_id}/cases/{case_index}', self._delete_case)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/members/bulk-action', self._bulk_member_action)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/activity', self._get_member_activity)
+        # Music
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/music', self._get_music)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/equalizer', self._post_music_equalizer)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/filters', self._post_music_filters)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()

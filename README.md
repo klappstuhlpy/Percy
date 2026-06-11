@@ -96,7 +96,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 | Feature                  | What it does                                                                                                                                            |
 |--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **XP & ranks**           | Earn XP per message (with cooldowns and configurable gain), level up, and view a **rendered rank card** (`/level`).                                     |
+| **XP & ranks**           | Earn XP per message (with cooldowns and configurable gain), level up, and view a **rendered rank card** (`/level`, member optional). Active boost badges (XP/Loot) are shown on the card. |
 | **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                          |
 | **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                         |
 | **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                   |
@@ -171,7 +171,7 @@ A few representative command groups:
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                      |
 | Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                         |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                 |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `lottery …` |
+| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …` |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                               |
 | Polls         | `polls create/end/edit/delete/search/history/config`                                                                                    |
 | Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                      |
@@ -357,11 +357,14 @@ When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (defau
 | GET | `/api/internal/guilds/{id}/members/{user_id}/detail` | Aggregated member profile (identity, leveling, cases, notes) |
 | GET | `/api/internal/guilds/{id}/stats` | Guild statistics |
 | GET | `/api/internal/bot/stats` | Bot-wide statistics |
+| GET | `/api/internal/guilds/{id}/music` | Music player state (active, channel, now playing, equalizer, filters) |
+| POST | `/api/internal/guilds/{id}/music/equalizer` | Apply EQ bands or preset (JSON: bands[] or preset) |
+| POST | `/api/internal/guilds/{id}/music/filters` | Toggle audio filters (JSON: action, smoothing?) |
 | GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
 
-The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`, `moderation.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
+The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`, `moderation.py`, `music.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
 

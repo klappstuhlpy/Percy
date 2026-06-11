@@ -760,5 +760,32 @@ class Economy(Cog):
         await channel.send(view=view, allowed_mentions=discord.AllowedMentions(users=True))
 
 
+    @command("perks", description="View your active item perks and boosts.", guild_only=True, hybrid=True)
+    @describe(member="The member whose perks to view.")
+    async def perks(self, ctx: Context, member: Annotated[discord.Member | None, converter.MemberConverter] = None) -> None:
+        """View active boosts and perks for yourself or another member."""
+        assert ctx.guild is not None
+        user = member or ctx.author
+        boosts = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
+        if not boosts:
+            await ctx.send_info(f"**{user.display_name}** has no active perks.")
+            return
+
+        lines = []
+        for row in boosts:
+            label = BOOST_LABELS.get(row['kind'], row['kind'])
+            bonus = row['multiplier'] - 1.0
+            expires = discord.utils.format_dt(row['expires_at'].replace(tzinfo=datetime.UTC), 'R')
+            lines.append(f"\N{HIGH VOLTAGE SIGN} **+{bonus:.0%} {label}** — expires {expires}")
+
+        embed = discord.Embed(
+            title=f"{user.display_name}'s Active Perks",
+            description="\n".join(lines),
+            colour=helpers.Colour.white(),
+        )
+        embed.set_thumbnail(url=get_asset_url(user))
+        await ctx.send(embed=embed)
+
+
 async def setup(bot: Bot) -> None:
     await bot.add_cog(Economy(bot))

@@ -12,6 +12,7 @@ from app.cogs.leveling.ui import InteractiveLevelRolesView, InteractiveMultiplie
 from app.core import Bot, Cog, Flags, converter, flag
 from app.core.converter import IgnoreableEntity, IgnoreEntity
 from app.core.models import Context, PermissionTemplate, describe, group
+from app.rendering.models import ActiveBoost
 from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, truncate
 from config import Emojis
 
@@ -188,7 +189,7 @@ class Leveling(Cog):
 
     @group("level", fallback="rank", description="Leveling purpose Commands.", guild_only=True, hybrid=True)
     @describe(member="The member to view the rank card of.")
-    async def level(self, ctx: Context, *, member: Annotated[discord.Member, converter.MemberConverter]) -> None:
+    async def level(self, ctx: Context, *, member: Annotated[discord.Member | None, converter.MemberConverter] = None) -> None:
         """View yours or someone else's rank card."""
         user: discord.Member = member or ctx.author  # type: ignore
 
@@ -207,7 +208,13 @@ class Leveling(Cog):
             await ctx.send_error(f"**{user}** has not gained any XP yet.")
             return
 
-        image = await self.bot.render.level_card(user, config)
+        boost_rows = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
+        boosts = [
+            ActiveBoost(kind=row['kind'], percent=round((row['multiplier'] - 1.0) * 100))
+            for row in boost_rows
+        ]
+
+        image = await self.bot.render.level_card(user, config, boosts=boosts)
         await ctx.send(file=image)
 
     @level.command(aliases=["top"], description="View the server leaderboard.", guild_only=True)

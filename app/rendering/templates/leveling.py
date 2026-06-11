@@ -21,7 +21,7 @@ from app.rendering.templates.theme import BRAND, BRAND_BRIGHT, FOREGROUND, MUTED
 from app.utils import shorten_number
 
 if TYPE_CHECKING:
-    from app.rendering.models import LevelCardData
+    from app.rendering.models import ActiveBoost, LevelCardData
 
 __all__ = ('draw_level_card',)
 
@@ -120,6 +120,22 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     draw.text((right, label_y), 'MESSAGES', font=label_font, fill=MUTED, anchor='ra')
     draw.text((right, value_y), shorten_number(data.messages), font=value_font, fill=FOREGROUND, anchor='ra')
 
+    # Active boost badges below the avatar.
+    if data.boosts:
+        boost_font = fonts.get(poppins, 15)
+        badge_y = AVATAR_POS[1] + AVATAR_SIZE + 12
+        badge_x = AVATAR_POS[0]
+        for boost in data.boosts:
+            label = f"+{boost.percent}% {'XP' if boost.kind == 'xp' else 'Loot'}"
+            tw = int(draw.textlength(label, font=boost_font))
+            bw, bh = tw + 16, 22
+            badge = Image.new('RGBA', (bw, bh), (0, 0, 0, 0))
+            badge_draw = ImageDraw.Draw(badge)
+            badge_draw.rounded_rectangle((0, 0, bw - 1, bh - 1), radius=bh // 2, fill=BRAND, outline=BRAND_BRIGHT)
+            badge_draw.text((bw // 2, bh // 2), label, font=boost_font, fill=FOREGROUND, anchor='mm')
+            base.paste(badge, (badge_x, badge_y), badge)
+            badge_x += bw + 6
+
     # Progress bar: full-width track rail with a gradient pill, like the bar charts.
     bar_width = WIDTH - 2 * PAD
     track = Image.new('RGB', (bar_width, BAR_HEIGHT), TRACK_BG)
@@ -127,7 +143,6 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
 
     ratio = min(max(data.xp / data.max_xp, 0.0), 1.0) if data.max_xp else 0.0
     if ratio > 0:
-        # Trace progress still renders as a full pill "dot" instead of a sliver.
         fill_width = max(int(bar_width * ratio), BAR_HEIGHT)
         gradient, mask = _gradient_pill(fill_width, BAR_HEIGHT)
         base.paste(gradient, (PAD, BAR_Y), mask)

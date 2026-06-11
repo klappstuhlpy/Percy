@@ -218,9 +218,9 @@ class BlackjackGame:
 
         self.dealer.cards[1].hidden = False
 
-        if len(self.player_hands) == 1 and self.player_hands[0].value >= 21:
-            # Don't draw anymore cards if there is
-            # only one hand, and it's already busted or has a blackjack
+        if len(self.player_hands) == 1 and self.player_hands[0].value > 21:
+            return
+        if len(self.player_hands) == 1 and self.player_hands[0].value == 21 and len(self.player_hands[0]) == 2:
             return
 
         while self.dealer.value <= 16:

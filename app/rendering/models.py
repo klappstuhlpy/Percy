@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from app.rendering.primitives import Font
 
 __all__ = (
+    "ActiveBoost",
     "BarChartData",
     "ColorSwatchData",
     "LevelCardData",
@@ -21,6 +22,13 @@ __all__ = (
     "QuoteData",
 )
 
+
+@dataclass(slots=True)
+class ActiveBoost:
+    """A single active perk/boost shown on the level card."""
+
+    kind: str
+    percent: int
 
 @dataclass(slots=True)
 class LevelCardData:
@@ -36,6 +44,7 @@ class LevelCardData:
     max_xp: int
     messages: int
     font: Font = Font.RUBIK
+    boosts: list[ActiveBoost] = field(default_factory=list)
 
 
 @dataclass(slots=True)
