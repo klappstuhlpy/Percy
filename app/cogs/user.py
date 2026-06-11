@@ -159,7 +159,7 @@ class UserSettings(Cog, name="User Settings"):
     )
     async def settings(self, ctx: Context) -> None:
         """Shows your settings."""
-        config = await self.bot.db.get_user_config(user_id=ctx.author.id)
+        config = await self.bot.db.get_user_config(ctx.author.id)
 
         embed = discord.Embed(title="User Settings", colour=helpers.Colour.white())
 
@@ -186,7 +186,7 @@ class UserSettings(Cog, name="User Settings"):
     @describe(user="The user to manage the timezone of.")
     async def timezone(self, ctx: Context, *, user: discord.User = commands.Author) -> None:
         """Shows/Manages the timezone of a user."""
-        config = await self.bot.db.get_user_config(user_id=user.id)
+        config = await self.bot.db.get_user_config(user.id)
         if config is None or (config and config.timezone is None):
             await ctx.send_error(f"{user} has not set their timezone.")
             return
@@ -246,7 +246,7 @@ class UserSettings(Cog, name="User Settings"):
     )
     async def timezone_purge(self, ctx: Context) -> None:
         """Clears your timezone."""
-        config = await self.bot.db.get_user_config(user_id=ctx.author.id)
+        config = await self.bot.db.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
             raise commands.BadArgument("You have not set your timezone.")
 
@@ -267,7 +267,7 @@ class UserSettings(Cog, name="User Settings"):
     @describe(enabled="Whether to enable or disable presence tracking.")
     async def settings_presence(self, ctx: Context, enabled: bool) -> None:
         """Toggles tracking of your presence status."""
-        config = await self.bot.db.get_user_config(user_id=ctx.author.id)
+        config = await self.bot.db.get_user_config(ctx.author.id)
         await config.update(track_presence=enabled)
         await ctx.send_success(f"Presence tracking has been {'enabled' if enabled else 'disabled'}.")
 

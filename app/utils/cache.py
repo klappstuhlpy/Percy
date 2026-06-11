@@ -194,7 +194,7 @@ def cache(
                 for k in kwargs:
                     if k in ("connection", "pool"):
                         continue
-                    key_parts.append(f"{_true_repr(k)}={_true_repr(k)}")
+                    key_parts.append(f"{_true_repr(k)}={_true_repr(kwargs[k])}")
 
             return ":".join(key_parts)
 

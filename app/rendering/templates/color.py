@@ -28,7 +28,7 @@ def draw_color_swatch(data: ColorSwatchData) -> BytesIO:
     draw = ImageDraw.Draw(image)
 
     if data.text:
-        font = ImageFont.truetype(str(ASSETS / 'fonts/rubrik.ttf'), size=28)
+        font = ImageFont.truetype(str(ASSETS / 'fonts/rubik.ttf'), size=28)
         text_color = 'white' if _is_color_dark(data.rgb) else 'black'
 
         _, _, w, h = draw.textbbox((0, 0), data.text, font=font)
