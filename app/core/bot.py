@@ -526,10 +526,16 @@ class Bot(commands.Bot):
         builder.append(content, color=AnsiColor.gray, bold=True).newline(2)
 
         # check if the missing argument is the flags builder
-        if isinstance(error, commands.MissingRequiredArgument) and isinstance(param.annotation, FlagMeta):
-            # we want to give a hint, that displays the flags that are required and display them
-            flags = [flag for flag in param.annotation.walk_flags() if flag.required is True]
-            builder.append('Missing required flags: ' + ', '.join(flag.name for flag in flags), color=AnsiColor.red, bold=True)
+        if isinstance(error, commands.MissingRequiredArgument):
+            if isinstance(param.annotation, FlagMeta):
+                # we want to give a hint, that displays the flags that are required and display them
+                flags = [flag for flag in param.annotation.walk_flags() if flag.required is True]
+                builder.append('Missing required flags: ' + ', '.join(flag.name for flag in flags), color=AnsiColor.red, bold=True)
+            else:
+                # check if there is documentation (description) for the missing parameter, if yes, then add it!
+                builder.append(f'Missing required argument: {param.name}', color=AnsiColor.red, bold=True)
+                if param.description:
+                    builder.newline(2).append(f'{" " * 4}Hint: {param.description}', color=AnsiColor.yellow, bold=True)
         else:
             builder.append(str(error), color=AnsiColor.red, bold=True)
 

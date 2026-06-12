@@ -111,6 +111,27 @@ class Command(commands.Command):
 
         super().__init__(func, **kwargs)
         self.add_check(self._permissions.check)
+        self._resolve_param_descriptions()
+
+    def _resolve_param_descriptions(self) -> None:
+        """Backfill ``commands.Parameter.description`` from ``app_commands.describe`` metadata.
+
+        The :func:`describe` decorator is applied to the *raw callback* (it sits below the command
+        decorator), so it can only stash descriptions in the callback's
+        ``__discord_app_commands_param_description__`` mapping -- it has no parameters to annotate yet.
+        This runs once the command (or group) is built and copies those descriptions onto the text
+        parameters, so the help signature and the missing-argument error renderer can surface them.
+        This applies uniformly to commands and groups since both subclass :class:`Command`.
+        """
+        descriptions: dict[str, str] | None = getattr(
+            self.callback, "__discord_app_commands_param_description__", None
+        )
+        if not descriptions:
+            return
+
+        for name, param in self.params.items():
+            if param.description is None and name in descriptions:
+                param._description = descriptions[name]
 
     @property
     def permissions(self) -> PermissionSpec:
@@ -681,10 +702,17 @@ def describe(**parameters: str) -> Any:
 
     def decorator(func: T) -> T:
         if isinstance(func, CommandInstance):
-            for param in func.params.values():
-                if param.name in parameters and param.description is None:
-                    param._description = parameters[param.name]
+            # ``describe`` placed *above* the command decorator: the command/group is already built,
+            # so annotate its text parameters directly and mirror the descriptions onto the callback
+            # so the app command picks them up too.
+            for name, param in func.params.items():
+                if name in parameters and param.description is None:
+                    param._description = parameters[name]
+            app_commands.describe(**parameters)(func.callback)
         else:
+            # ``describe`` placed *below* the command decorator (the normal usage): ``func`` is the
+            # raw callback. Stash the descriptions on it; ``Command._resolve_param_descriptions``
+            # backfills them onto the text parameters once the command (or group) is constructed.
             func = app_commands.describe(**parameters)(func)
         return func
 
