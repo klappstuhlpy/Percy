@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.games.engine.minesweeper import Board, MSField
+from app.cogs.games.models import Game, GameResult
 from app.core.views import LayoutView
 from app.utils import fnumb, helpers, humanize_duration
 from config import Emojis
@@ -70,6 +71,17 @@ class Minesweeper(LayoutView):
             user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)  # type: ignore
             amount: int = random.randint(25, 100)
             await user_balance.add(cash=amount)
+
+        # Only outcomes driven by a click carry an interaction; a timeout leaves the
+        # board unresolved and is intentionally not counted as a played round.
+        if interaction is not None and interaction.guild is not None:
+            await interaction.client.db.game_stats.record_result(
+                interaction.guild.id,
+                interaction.user.id,
+                Game.MINESWEEPER,
+                GameResult.WIN if won else GameResult.LOSS,
+                profit=amount,
+            )
 
         self.refresh_container(won, fnumb(amount) if won else None)
 

@@ -20,7 +20,6 @@ from dateutil.relativedelta import relativedelta
 from discord import File, app_commands
 from discord.ext import commands, tasks
 
-import config
 from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
@@ -526,8 +525,7 @@ class Meta(Cog):
     @command(
         'dashboard',
         description="Shows the dashboard of the bot.",
-        guild_only=True,
-        hybrid=True
+        guild_only=True
     )
     async def dashboard(self, ctx: Context) -> None:
         """Shows the dashboard of the bot."""
@@ -637,7 +635,7 @@ class Meta(Cog):
         else:
             await ctx.send_help()
 
-    @command("featureinfo", alias="fi", description="Shows the features of a guild.", hydra=True, guild_only=True)
+    @command("featureinfo", alias="fi", description="Shows the features of a guild.", guild_only=True)
     @describe(guild_id="The ID of the server to show info about. (Default: Current server)")
     async def featureinfo(self, ctx: Context, guild_id: str | None = None) -> None:
         """Shows the features of a guild."""
@@ -780,7 +778,7 @@ class Meta(Cog):
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
 
-    @command(name="quote", alias="q", description="Quotes a message by a user.", hybrid=True)
+    @command(name="quote", alias="q", description="Quotes a message by a user.")
     @describe(user="The user to quote.", message="The message to quote.")
     async def quote(
         self, ctx: Context, user: discord.Member | discord.User | None = None, *, message: str | None = None
@@ -994,7 +992,7 @@ class Meta(Cog):
         await config.update(prefixes=[])
         await ctx.send_success("Cleared all prefixes.")
 
-    @command(name="vote", alias="v", description="Shows the vote link for the bot.", hybrid=True)
+    @command(name="vote", alias="v", description="Shows the vote link for the bot.")
     @cooldown(1, 3)
     async def vote(self, ctx: Context) -> None:
         """Shows the vote link for the bot."""
@@ -1048,12 +1046,16 @@ class Meta(Cog):
         fmt = PermissionSpec.permission_as_str
         permissions = channel.permissions_for(member)
         embed = discord.Embed(title=f"Permissions for {member} in {channel.name}", colour=member.colour)
+
         allowed, denied = AnsiStringBuilder(), AnsiStringBuilder()
+        allowed.color(AnsiColor.green)
+        denied.color(AnsiColor.red)
+
         for name, value in permissions:
             if value:
-                allowed.append(fmt(name), color=AnsiColor.green).newline()
+                allowed.append(fmt(name)).newline()
             else:
-                denied.append(fmt(name), color=AnsiColor.red).newline()
+                denied.append(fmt(name)).newline()
 
         allowed = allowed.ensure_codeblock().dynamic(ctx)
         denied = denied.ensure_codeblock().dynamic(ctx)

@@ -5,6 +5,7 @@ from typing import ClassVar
 
 import discord
 
+from app.cogs.games.models import Game, GameResult
 from app.core.views import LayoutView
 from app.utils import fnumb, helpers
 from config import Emojis
@@ -148,17 +149,25 @@ class Tower(LayoutView):
             # probability of 30% to crash
             self._compose(failed=True)
             await interaction.response.edit_message(view=self)
+            await self._record(interaction, GameResult.LOSS, -self.bet)
             return
 
         self.add()
         self._compose()
         await interaction.response.edit_message(view=self)
 
+    async def _record(self, interaction: discord.Interaction, result: GameResult, profit: int) -> None:
+        assert interaction.guild is not None
+        await interaction.client.db.game_stats.record_result(
+            interaction.guild.id, self.player.id, Game.TOWER, result, wagered=self.bet, profit=profit
+        )
+
     async def _on_cash_out(self, interaction: discord.Interaction) -> None:
         self.finished = True
         balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild.id)
         amount = round(self.bet * self.multiplier)
         await balance.add(cash=amount)
+        await self._record(interaction, GameResult.WIN, amount - self.bet)
 
         self._compose()
         await interaction.response.edit_message(view=self)

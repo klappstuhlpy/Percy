@@ -15,11 +15,14 @@ import asyncpg
 import discord
 import psutil
 import pygit2
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
 import config
+from app.cogs.games.models import Game
 from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
@@ -33,7 +36,17 @@ from app.services import (
     summarize_gateway_traffic,
     summarize_presence,
 )
-from app.utils import AnsiColor, AnsiStringBuilder, TabularData, Timer, censor_object, get_asset_url, helpers, medal_emoji
+from app.utils import (
+    AnsiColor,
+    AnsiStringBuilder,
+    TabularData,
+    Timer,
+    censor_object,
+    fnumb,
+    get_asset_url,
+    helpers,
+    medal_emoji,
+)
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
 from config import Emojis, beta, path, repo_url, version
@@ -821,6 +834,135 @@ class Stats(Cog):
             value.append(f"{medal_emoji(i)}: {user} (`{record['uses']}` uses)")
         embed.add_field(name="Top Users", value="\n".join(value), inline=False)
 
+        await ctx.send(embed=embed)
+
+    async def game_autocomplete(self, _: discord.Interaction, current: str) -> list[Choice[str]]:
+        """Autocomplete over the tracked games."""
+        return [
+            Choice(name=f"{game.icon} {game.label}", value=game.value)
+            for game in Game
+            if current.lower() in game.label.lower()
+        ][:25]
+
+    @staticmethod
+    def _format_streak(current_streak: int) -> str:
+        """Pretty-prints an active win/loss streak."""
+        if current_streak > 0:
+            return f"\N{FIRE} {current_streak}W"
+        if current_streak < 0:
+            return f"\N{SNOWFLAKE} {abs(current_streak)}L"
+        return "—"
+
+    @staticmethod
+    def _winrate(won: int, played: int) -> float:
+        return (won / played * 100) if played else 0.0
+
+    @stats.command(
+        name="games",
+        alias="game",
+        description="Shows a member's game record (wins, losses, win-rate and profit).",
+    )
+    @describe(member="The member to show game stats for.")
+    async def stats_games(self, ctx: Context, *, member: discord.Member | None = None) -> None:
+        """Shows a member's per-game record across all casino & party games."""
+        assert ctx.guild is not None
+        target = member or ctx.author
+
+        rows = await ctx.db.game_stats.get_member_games(ctx.guild.id, target.id)
+        if not rows:
+            who = "You have" if target == ctx.author else f"**{target.display_name}** has"
+            await ctx.send_info(f"{who} not played any tracked games yet.")
+            return
+
+        totals = await ctx.db.game_stats.get_member_totals(ctx.guild.id, target.id)
+        assert totals is not None
+
+        embed = discord.Embed(title="Game Stats", colour=target.colour)
+        embed.set_author(name=str(target), icon_url=get_asset_url(target))
+
+        win_rate = self._winrate(totals["won"], totals["played"])
+        embed.description = (
+            f"**{totals['played']}** rounds played • **{totals['won']}**W / **{totals['lost']}**L "
+            f"({win_rate:.0f}% win-rate)\n"
+            f"Net profit: {Emojis.Economy.cash} **{fnumb(totals['profit'])}** • "
+            f"Biggest win: {Emojis.Economy.cash} **{fnumb(totals['biggest_win'])}**"
+        )
+
+        for record in rows:
+            game = Game(record["game"])
+            rate = self._winrate(record["won"], record["played"])
+            value = (
+                f"`{record['played']}` played • `{record['won']}`W / `{record['lost']}`L"
+                f"{f' / `{record['tied']}`T' if record['tied'] else ''} • **{rate:.0f}%**\n"
+                f"Net: {Emojis.Economy.cash} **{fnumb(record['profit'])}** • "
+                f"Streak: {self._format_streak(record['current_streak'])} "
+                f"(best {record['best_streak']}W)"
+            )
+            embed.add_field(name=f"{game.icon} {game.label}", value=value, inline=False)
+
+        await ctx.send(embed=embed)
+
+    @stats.command(
+        name="gameboard",
+        alias="gametop",
+        description="Server leaderboard for games, ranked by wins.",
+    )
+    @describe(game="Limit the leaderboard to a single game (defaults to all games combined).")
+    @app_commands.autocomplete(game=game_autocomplete)  # type: ignore
+    async def stats_gameboard(self, ctx: Context, *, game: str | None = None) -> None:
+        """Server-wide game leaderboard, ranked by total wins (ties broken by win-rate)."""
+        assert ctx.guild is not None
+
+        selected: Game | None = None
+        if game is not None:
+            try:
+                selected = Game(game.lower())
+            except ValueError:
+                match = next((g for g in Game if g.label.lower() == game.lower()), None)
+                if match is None:
+                    await ctx.send_error(
+                        f"Unknown game **{game}**. Choose one of: "
+                        + ", ".join(g.label for g in Game)
+                        + "."
+                    )
+                    return
+                selected = match
+
+        rows = await ctx.db.game_stats.get_leaderboard(
+            ctx.guild.id, game=selected.value if selected else None, metric="won", limit=10
+        )
+        if not rows:
+            scope = f" for **{selected.label}**" if selected else ""
+            await ctx.send_info(f"No game results have been recorded{scope} yet.")
+            return
+
+        title = f"{selected.icon} {selected.label} Leaderboard" if selected else "🏆 Game Leaderboard"
+        embed = discord.Embed(title=title, colour=helpers.Colour.white())
+        embed.description = (
+            f"Top players in **{ctx.guild.name}**"
+            + ("" if selected else " across all games")
+            + ", ranked by wins."
+        )
+
+        lines = []
+        for i, record in enumerate(rows):
+            rate = self._winrate(record["won"], record["played"])
+            lines.append(
+                f"{medal_emoji(i)} <@!{record['user_id']}> — **{record['won']}**W / **{record['lost']}**L "
+                f"({rate:.0f}%) • {Emojis.Economy.cash} **{fnumb(record['profit'])}**"
+            )
+        embed.add_field(name="Rankings", value="\n".join(lines), inline=False)
+
+        if not selected:
+            overview = await ctx.db.game_stats.get_guild_overview(ctx.guild.id)
+            if overview:
+                popular = "\n".join(
+                    f"{Game(r['game']).icon} **{Game(r['game']).label}** — `{r['played']}` rounds"
+                    for r in overview[:5]
+                )
+                embed.add_field(name="Most Played", value=popular, inline=False)
+
+        embed.set_footer(text="Use /stats games to see your own record.")
         await ctx.send(embed=embed)
 
     async def send_guild_stats(self, embed: discord.Embed, guild: discord.Guild) -> None:

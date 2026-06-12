@@ -199,12 +199,7 @@ class Gimmicks(Cog):
         await channel.send(embed=embed)
         await ctx.send_success("Thank you for your feedback!", ephemeral=True)
 
-    @feedback.define_app_command()
-    async def feedback_slash(self, ctx: HybridContext) -> None:
-        """Sends feedback about the bot to the owner."""
-        await ctx.interaction.response.send_modal(FeedbackModal(self))
-
-    @command(description="Searches the urban dictionary.", hybrid=True)
+    @command(description="Searches the urban dictionary.")
     @describe(word="The word to search for.")
     async def urban(self, ctx: Context, *, word: str) -> None:
         """Searches urban dictionary."""
@@ -220,7 +215,7 @@ class Gimmicks(Cog):
 
         await UrbanDictionaryPaginator.start(ctx, entries=data, per_page=1)
 
-    @command(description="Shows information about a color.", hybrid=True)
+    @command(description="Shows information about a color.")
     @describe(color="The color to show information about. Must be in hex format or autocompleted.")
     async def color(self, ctx: Context, *, color: Annotated[discord.Colour, ColourConverter]) -> None:
         """Shows information about a color."""
@@ -278,8 +273,9 @@ class Gimmicks(Cog):
         async with self.bot.session.get("https://www.reddit.com/r/dankmemes/new.json?sort=hot") as r:
             if r.status != 200:
                 await ctx.send_error("Could not fetch memes :(")
-                return None
+                return
             res = await r.json()
+
         random_meme = res["data"]["children"][random.randint(0, len(res["data"]["children"]) - 1)]["data"]
         embed = discord.Embed(
             title=random_meme["title"], url=random_meme["url"], timestamp=ctx.utcnow(), colour=helpers.Colour.white()
@@ -292,14 +288,15 @@ class Gimmicks(Cog):
         )
         await ctx.send(embed=embed)
 
-    @command(name="fact", description="Shows you a random fact.", hybrid=True)
+    @command(name="fact", description="Shows you a random fact.")
     async def fact(self, ctx: Context) -> None:
         """Shows you a random fact."""
         async with self.bot.session.get("https://uselessfacts.jsph.pl/random.json?language=en") as r:
             if r.status != 200:
                 await ctx.send_error("Could not fetch fact :(")
-                return None
+                return
             res = await r.json()
+
         embed = discord.Embed(title='Random Fact', description=res['text'], colour=helpers.Colour.white())
         await ctx.send(embed=embed)
 

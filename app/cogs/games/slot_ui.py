@@ -11,6 +11,7 @@ import discord
 import numpy as np
 
 from app.cogs.emoji import EMOJI_REGEX
+from app.cogs.games.models import Game, GameResult
 from app.core.views import LayoutView
 from app.utils import find_word, fnumb, helpers
 from config import Emojis
@@ -244,6 +245,15 @@ class SlotMachine(LayoutView):
             status = f"`\N{WHITE HEAVY CHECK MARK} You won {multiplier}x your bet!`"
         else:
             status = "`\N{CROSS MARK} Better luck next time!`"
+
+        await interaction.client.db.game_stats.record_result(
+            interaction.guild_id,
+            self.player.id,
+            Game.SLOTS,
+            GameResult.WIN if win else GameResult.LOSS,
+            wagered=self.bet,
+            profit=win - self.bet,
+        )
 
         self._compose(status=status)
         await interaction.edit_original_response(view=self)

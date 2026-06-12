@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import random
 from contextlib import suppress
 from pathlib import Path
@@ -16,15 +17,26 @@ from expiringdict import ExpiringDict
 from app.cogs.games import (
     blackjack_bridge,
     hangman_ui,
+    higherlower_ui,
+    horserace_ui,
+    mines_ui,
     minesweeper_ui,
     poker_bridge,
     roulette_ui,
+    russianroulette_ui,
     slot_ui,
     tictactoe_ui,
     tower_ui,
+    trivia_ui,
+    wordle_ui,
 )
-from app.cogs.games.cards import MinimumBet, Payouts
+from app.cogs.games.engine.cards import MinimumBet, Payouts
+from app.cogs.games.engine import dice as dice_engine
+from app.cogs.games.engine import horserace as horserace_engine
 from app.cogs.games.engine import roulette as roulette_engine
+from app.cogs.games.engine.trivia import RawQuestion, build_round
+from app.cogs.games.engine.wordle import WORD_LENGTH, daily_index
+from app.cogs.games.models import Game, GameResult
 from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, command, cooldown, describe
@@ -72,6 +84,51 @@ class Games(Cog):
         self.blackjack_tables: dict[int, blackjack_bridge.Blackjack] = ExpiringDict(max_len=1000, max_age_seconds=21600)
         self.roulette_tables: dict[int, roulette_ui.Table] = {}
         self.poker_tables: dict[int, poker_bridge.PokerSession] = {}
+        self.russian_tables: dict[int, russianroulette_ui.RussianRoulette] = {}
+        self.horse_tables: dict[int, horserace_ui.Table] = {}
+
+        # (guild_id, user_id, date.toordinal()) of members who already played today's Wordle.
+        self.wordle_played: set[tuple[int, int, int]] = set()
+        self._trivia_questions: list[RawQuestion] | None = None
+        self._wordle_words: list[str] | None = None
+
+    def _load_trivia(self) -> list[RawQuestion]:
+        """Lazily loads and caches the bundled trivia question bank."""
+        if self._trivia_questions is None:
+            self._trivia_questions = json.loads(txt(Path(path, "assets/trivia_questions.json")))
+        return self._trivia_questions
+
+    def _load_wordle_words(self) -> list[str]:
+        """Lazily loads and caches the bundled Wordle word list (5-letter words)."""
+        if self._wordle_words is None:
+            self._wordle_words = [
+                word.strip().lower()
+                for word in txt(Path(path, "assets/wordle_words.txt")).splitlines()
+                if len(word.strip()) == WORD_LENGTH and word.strip().isalpha()
+            ]
+        return self._wordle_words
+
+    async def _take_bet(self, ctx: Context, bet: int, *, minimum: int = 1) -> bool:
+        """Validates a positive, affordable bet and debits it. Returns success.
+
+        On failure it sends the appropriate error and returns ``False`` so the caller
+        can simply ``return``. The stake is removed from cash up front, mirroring the
+        other betting games (winnings are credited back by the game's own flow).
+        """
+        assert ctx.guild is not None
+        if bet < minimum:
+            await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(minimum)}**.")
+            return False
+        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        assert balance is not None
+        if bet > balance.cash:
+            await ctx.send_error(
+                f"You do not have enough money to bet that amount.\n"
+                f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+            )
+            return False
+        await balance.remove(cash=bet)
+        return True
 
     @command(
         "tictactoe", description="Play a TicTacToe party with another user.", aliases=["ttt"], guild_only=True, hybrid=True
@@ -129,6 +186,10 @@ class Games(Cog):
         word = random.choice(filtered_words)
         hangman = hangman_ui.Hangman(cast("discord.Member", ctx.author), word)
 
+        async def record(result: GameResult) -> None:
+            if ctx.guild is not None:
+                await self.bot.db.game_stats.record_result(ctx.guild.id, ctx.author.id, Game.HANGMAN, result)
+
         origin = await ctx.send(view=hangman.render())
 
         def check(msg: discord.Message) -> bool:
@@ -158,6 +219,7 @@ class Games(Cog):
             if content == word:
                 hangman.finished = True
                 await origin.edit(view=hangman.render(True))
+                await record(GameResult.WIN)
                 return
 
             if content in hangman.used:
@@ -172,6 +234,7 @@ class Games(Cog):
                 if hangman.letters.issubset(hangman.used):
                     hangman.finished = True
                     await origin.edit(view=hangman.render(True))
+                    await record(GameResult.WIN)
                     return
                 else:
                     hangman._last_input = f'`✅ "{content}" is correct.`'
@@ -184,6 +247,7 @@ class Games(Cog):
                 if hangman.tries == 0:
                     hangman.finished = True
                     await origin.edit(view=hangman.render(False))
+                    await record(GameResult.LOSS)
                     return
                 else:
                     hangman._last_input = f'`❌ "{content}" is wrong.`'
@@ -537,6 +601,193 @@ class Games(Cog):
             poker.message = message
             self.poker_tables[ctx.channel.id] = poker
 
+    @command(
+        "higherlower", aliases=["hl"], description="Play Higher or Lower for a rising multiplier.",
+        guild_only=True, hybrid=True,
+    )
+    @describe(bet="The amount of coins to bet.")
+    async def higherlower(self, ctx: Context, bet: int) -> None:
+        """Guess whether the next card is higher or lower; cash out before you bust."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        game = higherlower_ui.HigherLowerGame(cast("discord.Member", ctx.author), bet)
+        await ctx.send(view=game)
+
+    @command("dice", description="Bet on the total of two dice (2-12).", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.", target="The total to bet on (2-12).")
+    async def dice(self, ctx: Context, bet: int, target: commands.Range[int, 2, 12]) -> None:
+        """Roll two dice and bet on their total — rarer totals pay much more."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+
+        message = await ctx.send(f"{Emojis.loading} Rolling the dice...")
+        await asyncio.sleep(1.5)
+
+        d1, d2 = dice_engine.roll()
+        total = d1 + d2
+        faces = f"{dice_engine.DIE_FACES[d1 - 1]} {dice_engine.DIE_FACES[d2 - 1]}"
+
+        if total == target:
+            multiplier = dice_engine.payout_multiplier(target)
+            payout = round(bet * multiplier)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            assert balance is not None
+            await balance.add(cash=payout)
+            embed = discord.Embed(
+                title="\N{DIRECT HIT} Dice",
+                colour=helpers.Colour.lime_green(),
+                description=f"# {faces}\nTotal: **{total}** — you called **{target}**!\n"
+                f"Won {Emojis.Economy.cash} **{fnumb(payout)}** (**x{multiplier}**).",
+            )
+            result, profit = GameResult.WIN, payout - bet
+        else:
+            embed = discord.Embed(
+                title="\N{DIRECT HIT} Dice",
+                colour=helpers.Colour.light_red(),
+                description=f"# {faces}\nTotal: **{total}** — you called **{target}**.\n"
+                f"Lost {Emojis.Economy.cash} **{fnumb(bet)}**.",
+            )
+            result, profit = GameResult.LOSS, -bet
+
+        await message.edit(content=None, embed=embed)
+        await self.bot.db.game_stats.record_result(
+            ctx.guild.id, ctx.author.id, Game.DICE, result, wagered=bet, profit=profit
+        )
+
+    @command("mines", description="Reveal gems while dodging mines; cash out anytime.", guild_only=True, hybrid=True)
+    @describe(bet="The amount of coins to bet.", mines="Number of mines hidden in the grid (1-19).")
+    async def mines(self, ctx: Context, bet: int, mines: commands.Range[int, 1, 19] = 3) -> None:
+        """Flip gems for a rising multiplier and cash out before you hit a mine."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        game = mines_ui.MinesGame(cast("discord.Member", ctx.author), bet, mines)
+        await ctx.send(view=game)
+
+    @command("trivia", description="Answer a trivia question — first correct answer wins.", guild_only=True, hybrid=True)
+    @cooldown(1, 8.0, commands.BucketType.channel)
+    async def trivia(self, ctx: Context) -> None:
+        """Post a multiple-choice trivia question; the first member to answer correctly wins coins."""
+        raw = random.choice(self._load_trivia())
+        view = trivia_ui.TriviaView(build_round(raw))
+        message = await ctx.send(view=view)
+        view.message = message
+
+    @command("wordle", description="Guess the guild's daily 5-letter word.", guild_only=True, hybrid=True)
+    async def wordle(self, ctx: Context) -> None:
+        """Play the guild's daily Wordle — guess the 5-letter word in 6 tries (type guesses in chat)."""
+        assert ctx.guild is not None
+        words = self._load_wordle_words()
+        today = datetime.datetime.now(datetime.UTC).date()
+        key = (ctx.guild.id, ctx.author.id, today.toordinal())
+        if key in self.wordle_played:
+            await ctx.send_info("You've already played today's Wordle here. Come back tomorrow!")
+            return
+
+        answer = words[daily_index(len(words), ctx.guild.id, today)]
+        game = wordle_ui.Wordle(cast("discord.Member", ctx.author), answer)
+        origin = await ctx.send(view=game.render())
+
+        def check(msg: discord.Message) -> bool:
+            return msg.author == ctx.author and msg.channel == ctx.channel
+
+        while not game.finished:
+            try:
+                guess_message = await self.bot.wait_for("message", timeout=180.0, check=check)
+            except TimeoutError:
+                await origin.edit(view=game.render(reveal=True))
+                await ctx.send(f"{Emojis.error} Time's up! The word was **{answer.upper()}**.", reference=origin)
+                return
+
+            content = guess_message.content.strip().lower()
+            await ctx.maybe_delete(guess_message)
+
+            if content == "abort":
+                await origin.edit(view=game.render(reveal=True))
+                return
+            if len(content) != WORD_LENGTH or not content.isalpha():
+                await origin.edit(view=game.render(note=f"`\N{CROSS MARK} Guesses must be {WORD_LENGTH} letters.`"))
+                continue
+            if content not in words:
+                await origin.edit(view=game.render(note="`\N{CROSS MARK} Not in the word list.`"))
+                continue
+
+            game.add_guess(content)
+            await origin.edit(view=game.render())
+
+        self.wordle_played.add(key)
+        if game.won:
+            reward = max(50, 350 - (game.tries_used - 1) * 50)
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            assert balance is not None
+            await balance.add(cash=reward)
+            await ctx.send(
+                f"{Emojis.success} Solved in **{game.tries_used}**! You won {Emojis.Economy.cash} **{fnumb(reward)}**.",
+                reference=origin,
+            )
+            await self.bot.db.game_stats.record_result(
+                ctx.guild.id, ctx.author.id, Game.WORDLE, GameResult.WIN, profit=reward
+            )
+        else:
+            await self.bot.db.game_stats.record_result(ctx.guild.id, ctx.author.id, Game.WORDLE, GameResult.LOSS)
+
+    @command(
+        "russianroulette", aliases=["rr"], description="Last player standing wins the pot.",
+        guild_only=True, hybrid=True,
+    )
+    @describe(ante="Coins each player antes into the pot.")
+    async def russianroulette(self, ctx: Context, ante: int = 100) -> None:
+        """Open a Russian Roulette table; players ante in, take turns, and the last survivor takes the pot."""
+        assert ctx.guild is not None
+        if ctx.channel.id in self.russian_tables:
+            await ctx.send_error("A Russian Roulette game is already running in this channel.")
+            return
+        if not await self._take_bet(ctx, ante, minimum=10):
+            return
+
+        game = russianroulette_ui.RussianRoulette(self, ctx, ante)
+        self.russian_tables[ctx.channel.id] = game
+        message = await ctx.send(view=game)
+        game.message = message
+
+    @command(
+        "horserace", aliases=["hr"], description="Bet on a horse; parimutuel payouts after the race.",
+        guild_only=True, hybrid=True,
+    )
+    @describe(bet="The amount of coins to bet.", horse="The horse to back (1-6).")
+    async def horserace(self, ctx: Context, bet: int, horse: commands.Range[int, 1, 6]) -> None:
+        """Bet on a horse. When the gates close the race runs and the pool is split among winning bets."""
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+        assert ctx.guild is not None
+
+        member = cast("discord.Member", ctx.author)
+        if ctx.channel.id in self.horse_tables:
+            table = self.horse_tables[ctx.channel.id]
+            if not table.open:
+                balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+                assert balance is not None
+                await balance.add(cash=bet)
+                await ctx.send_error("The gates are closed for this race. Wait for the next one.")
+                return
+            table.place(horserace_ui.Bet(member, horse, bet))
+            await ctx.maybe_edit(table.message, view=table.view.render())
+        else:
+            table = horserace_ui.Table(ctx)
+            table.place(horserace_ui.Bet(member, horse, bet))
+            message = await ctx.send(view=table.view.render())
+            table.message = message
+            self.horse_tables[ctx.channel.id] = table
+            await self.bot.timers.create(
+                datetime.timedelta(seconds=horserace_ui.BETTING_SECONDS),
+                "horserace",
+                channel_id=ctx.channel.id,
+                message_id=message.id,
+            )
+
+        with suppress(discord.HTTPException):
+            await ctx.message.add_reaction(Emojis.success)
+
     @Cog.listener()
     async def on_roulette_timer_complete(self, timer: Timer) -> None:
         """Handle the completion of a roulette timer."""
@@ -577,14 +828,21 @@ class Games(Cog):
         winning_spaces = list(roulette.get_winning_spaces(result))
         winning_bets = [bet for bet in roulette.bets if bet.space in winning_spaces]
 
-        if winning_bets:
-            assert roulette.ctx.guild is not None
-            # Calculate the payout for each bet.
-            for bet in winning_bets:
-                balance = await self.bot.db.get_user_balance(bet.placed_by.id, roulette.ctx.guild.id)
+        assert roulette.ctx.guild is not None
+        guild_id = roulette.ctx.guild.id
+        for bet in roulette.bets:
+            if bet in winning_bets:
+                balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
                 payout = round(bet.amount * Payout.by_value(bet.space.value))
                 if balance is not None:
                     await balance.add(cash=payout)
+                await self.bot.db.game_stats.record_result(
+                    guild_id, bet.placed_by.id, Game.ROULETTE, GameResult.WIN, wagered=bet.amount, profit=payout - bet.amount
+                )
+            else:
+                await self.bot.db.game_stats.record_result(
+                    guild_id, bet.placed_by.id, Game.ROULETTE, GameResult.LOSS, wagered=bet.amount, profit=-bet.amount
+                )
 
         try:
             await roulette.message.edit(
@@ -594,3 +852,59 @@ class Games(Cog):
             return
         finally:
             self.roulette_tables.pop(channel_id)
+
+    @Cog.listener()
+    async def on_horserace_timer_complete(self, timer: Timer) -> None:
+        """Run the race and pay out parimutuel winnings when betting closes."""
+        channel_id = timer["channel_id"]
+        message_id = timer["message_id"]
+
+        table = self.horse_tables.get(channel_id)
+        if table is None:
+            return
+        table.open = False
+        assert table.ctx.guild is not None
+        guild_id = table.ctx.guild.id
+
+        if table.message is None:
+            channel = self.bot.get_channel(channel_id)
+            assert isinstance(channel, discord.abc.Messageable)
+            try:
+                table.message = await channel.fetch_message(message_id)
+            except discord.HTTPException:
+                for bet in table.bets:
+                    balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
+                    if balance is not None:
+                        await balance.add(cash=bet.amount)
+                await channel.send(f"{Emojis.warning} The horse race message was lost. *Refunding bets.*")
+                self.horse_tables.pop(channel_id, None)
+                return
+
+        winner, frames = horserace_engine.simulate_race()
+
+        # Animate a handful of evenly spaced frames to avoid edit rate limits.
+        step = max(1, len(frames) // 5)
+        for frame in frames[::step]:
+            with suppress(discord.HTTPException):
+                await table.message.edit(view=table.view.render(frame, racing=True))
+            await asyncio.sleep(1.1)
+
+        pool = table.pool
+        multiplier = horserace_engine.parimutuel_multiplier(pool, table.total_on(winner + 1))
+        for bet in table.bets:
+            if bet.horse == winner + 1:
+                payout = round(bet.amount * multiplier)
+                balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
+                if balance is not None:
+                    await balance.add(cash=payout)
+                await self.bot.db.game_stats.record_result(
+                    guild_id, bet.placed_by.id, Game.HORSERACE, GameResult.WIN, wagered=bet.amount, profit=payout - bet.amount
+                )
+            else:
+                await self.bot.db.game_stats.record_result(
+                    guild_id, bet.placed_by.id, Game.HORSERACE, GameResult.LOSS, wagered=bet.amount, profit=-bet.amount
+                )
+
+        with suppress(discord.HTTPException):
+            await table.message.edit(view=table.view.render(frames[-1], winner=winner))
+        self.horse_tables.pop(channel_id, None)

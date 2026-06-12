@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import enum
 import re
 from collections import namedtuple
@@ -54,21 +56,21 @@ class MinimumBet(enum.IntEnum):
 class Payouts(enum.IntEnum):
     WORK_PAYOUT_MIN = 20
     WORK_PAYOUT_MAX = 250
-    WORK_COODLWON = 7200.0  # 2 hours
+    WORK_COODLWON = 7200  # 2 hours
 
     CRIME_PAYOUT_MIN = 250
     CRIME_PAYOUT_MAX = 700
     CRIME_FINE_MIN = 0.2  # 20%
     CRIME_FINE_MAX = 0.4  # 40%
     CRIME_FAIL_RATE = 0.6  # 60%
-    CRIME_COOLDOWN = 86400.0  # 1 Day
+    CRIME_COOLDOWN = 86400  # 1 Day
 
     SLUT_PAYOUT_MIN = 100
     SLUT_PAYOUT_MAX = 400
     SLUT_FINE_MIN = 0.1  # 10%
     SLUT_FINE_MAX = 0.2  # 20%
     SLUT_FAIL_RATE = 0.35  # 35%
-    SLUT_COODLWON = 14400.0  # 4 hours
+    SLUT_COODLWON = 14400  # 4 hours
 
 
 def number_to_text(text: str) -> str:
@@ -107,6 +109,11 @@ class BaseCard:
 
     def __repr__(self) -> str:
         return f"Card(name={self.name}, value={self.value}, suit={self.suit})"
+
+    def __gt__(self, other: CardT):
+        if not isinstance(other, BaseCard):
+            return NotImplemented
+        return self.value > other.value
 
     def display(self, size: Literal["small", "large"], formatted: bool = False) -> DisplayCard | str:
         if size == "small":
@@ -169,19 +176,29 @@ class Deck[CardT: BaseCard]:
 
     Parameters
     ----------
-    game: Literal['blackjack', 'poker']
+    game: Literal['blackjack', 'poker', 'basic']
         The game that the deck is being used for, important for the value of the Ace card.
+        Basic is a generic deck type that is used by multiple other games and treats the Ace as 14.
     decks: int
         The number of decks to use, defaults to 1.
     card_cls: Type[C]
         The class to use for the cards, defaults to BaseCard.
+    infinite: bool
+        Whether the deck should be infinite, meaning that it will not run out of cards and will not be shuffled. Defaults to False.
 
     *: The number of cards in the deck can be more than 52 if the number of decks is greater than 1.
     """
 
-    def __init__(self, game: Literal["blackjack", "poker"], decks: int = 1, card_cls: type[CardT] = BaseCard) -> None:
+    def __init__(
+            self,
+            game: Literal["blackjack", "poker", "basic"],
+            decks: int = 1,
+            card_cls: type[CardT] = BaseCard,
+            infinite: bool = False
+    ) -> None:
         self._card_cls: type[CardT] = card_cls
-        self.game: Literal["blackjack", "poker"] = game
+        self.game: Literal["blackjack", "poker", "basic"] = game
+        self.infinite: bool = infinite
 
         self.decks: int = decks
 
@@ -210,7 +227,10 @@ class Deck[CardT: BaseCard]:
             raise Exception("No cards left in the deck")
 
         card = self.cards[0]
-        self.cards = np.delete(self.cards, 0, 0)
+        if not self.infinite:
+            self.cards = np.delete(self.cards, 0, 0)
+        else:
+            self.cards = np.roll(self.cards, -1, 0)
         return np.array([[card[0], card[1]]])
 
     def __len__(self) -> int:

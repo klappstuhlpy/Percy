@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.games.engine.blackjack import WinningType
+from app.cogs.games.models import Game, GameResult
 from app.core import Context, LayoutView
 from app.utils import fnumb, helpers
 from config import Emojis
@@ -117,6 +118,22 @@ class TableView(LayoutView):
         if amount:
             user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
             await user_balance.add(cash=amount)
+
+        bet = self.table.active_hand.bet
+        if winner in {WinningType.PLAYER_BLACKJACK, WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
+            game_result = GameResult.WIN
+        elif winner == WinningType.PUSH:
+            game_result = GameResult.PUSH
+        else:
+            game_result = GameResult.LOSS
+        await interaction.client.db.game_stats.record_result(
+            interaction.guild_id,
+            interaction.user.id,
+            Game.BLACKJACK,
+            game_result,
+            wagered=bet,
+            profit=(amount or 0) - bet,
+        )
 
         return result, color
 

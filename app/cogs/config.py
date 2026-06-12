@@ -539,7 +539,7 @@ class Config(Cog):
     @describe(channel="The channel to show the disabled commands for.")
     async def config_disabled(
         self, ctx: Context, *, channel: discord.TextChannel | discord.VoiceChannel | None = None
-    ) -> discord.Message | None:
+    ) -> None:
         """Shows the disabled commands for the channel given."""
         channel_id: int
         if channel is None:
@@ -551,7 +551,8 @@ class Config(Cog):
         disabled = list(resolved.get_blocked_commands(channel_id))
 
         if not disabled:
-            return await ctx.send_error("There are no disabled commands for this channel.")
+            await ctx.send_error("There are no disabled commands for this channel.")
+            return
 
         embed = discord.Embed(title="Disabled Commands", timestamp=discord.utils.utcnow(), color=helpers.Colour.white())
         guild = ctx.guild

@@ -21,6 +21,7 @@ from app.database.repositories import (
     ComicsRepository,
     EconomyRepository,
     EmojiStatsRepository,
+    GameStatsRepository,
     GiveawaysRepository,
     GuildsRepository,
     HighlightsRepository,
@@ -174,6 +175,7 @@ class Database(_Database):
     notes: NotesRepository
     giveaways: GiveawaysRepository
     emoji_stats: EmojiStatsRepository
+    game_stats: GameStatsRepository
     highlights: HighlightsRepository
     temp_channels: TempChannelsRepository
     playlists: PlaylistsRepository
@@ -200,6 +202,7 @@ class Database(_Database):
         self.notes = NotesRepository(self)
         self.giveaways = GiveawaysRepository(self)
         self.emoji_stats = EmojiStatsRepository(self)
+        self.game_stats = GameStatsRepository(self)
         self.highlights = HighlightsRepository(self)
         self.temp_channels = TempChannelsRepository(self)
         self.playlists = PlaylistsRepository(self)

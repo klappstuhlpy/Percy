@@ -6,6 +6,7 @@ from app.database.repositories.cases import CasesRepository
 from app.database.repositories.comics import ComicsRepository
 from app.database.repositories.economy import EconomyRepository
 from app.database.repositories.emoji_stats import EmojiStatsRepository
+from app.database.repositories.game_stats import GameStatsRepository
 from app.database.repositories.giveaways import GiveawaysRepository
 from app.database.repositories.guilds import GuildsRepository
 from app.database.repositories.highlights import HighlightsRepository
@@ -33,6 +34,7 @@ __all__ = (
     'ComicsRepository',
     'EconomyRepository',
     'EmojiStatsRepository',
+    'GameStatsRepository',
     'GiveawaysRepository',
     'GuildsRepository',
     'HighlightsRepository',

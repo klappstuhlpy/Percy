@@ -18,7 +18,7 @@ from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from app.cogs.games.cards import Deck
+    from app.cogs.games.engine.cards import Deck
     from app.cogs.games.engine.blackjack import Hand
     from app.core import Context
 

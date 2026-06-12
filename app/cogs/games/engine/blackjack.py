@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from app.cogs.games.cards import BaseCard, BaseHand, Deck, DisplayCard
+from app.cogs.games.engine.cards import BaseCard, BaseHand, Deck, DisplayCard
 from config import Emojis
 
 __all__ = (

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from operator import ne
 import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -9,6 +8,7 @@ import discord
 from discord import PartialEmoji
 
 from app.cogs.games.engine.tictactoe import Board, BoardKind
+from app.cogs.games.models import Game, GameResult
 from app.core import LayoutView, View
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
@@ -98,16 +98,27 @@ class TicTacToeButton(discord.ui.Button["TicTacToe"]):
 
         winner = self.view.engine.winner()
         if winner is not None:
+            assert interaction.guild is not None
+            game_stats = interaction.client.db.game_stats
+            guild_id = interaction.guild.id
+
             if winner is not BoardKind.Empty:
                 user_balance: Balance = await interaction.client.db.get_user_balance(player.member.id, interaction.guild.id)
                 amount: int = random.randint(25, 100)
                 await user_balance.add(cash=amount)
 
                 winning_player = next_player if next_player.kind is winner else player
+                losing_player = player if winning_player is next_player else next_player
 
                 self.view.build_container(winner=winning_player, amount=amount)
+
+                await game_stats.record_result(guild_id, winning_player.member.id, Game.TICTACTOE, GameResult.WIN, profit=amount)
+                await game_stats.record_result(guild_id, losing_player.member.id, Game.TICTACTOE, GameResult.LOSS)
             else:
                 self.view.build_container(winner=[player, next_player])
+
+                for tied_player in (player, next_player):
+                    await game_stats.record_result(guild_id, tied_player.member.id, Game.TICTACTOE, GameResult.PUSH)
 
             self.view.disable_all()
             self.view.stop()

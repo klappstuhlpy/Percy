@@ -51,7 +51,6 @@ class Assistant(Cog):
         'ask',
         aliases=['ai', 'chat'],
         description='Ask the AI assistant a question.',
-        hybrid=True,
     )
     @cooldown(1, 12)
     @describe(prompt='What you want to ask.')

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, cast
 import discord
 
 from app.cogs.games.engine.poker import Card, TableState, TexasHoldem
+from app.cogs.games.models import Game, GameResult
 from app.cogs.games.poker_ui import TableView
 from app.utils import helpers, number_suffix
 from config import Emojis
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from app.cogs.games import Games
-    from app.cogs.games.cards import DisplayCard
+    from app.cogs.games.engine.cards import DisplayCard
     from app.cogs.games.engine.poker import HandResult, Player, Pot
     from app.core import Context
 
@@ -65,6 +66,9 @@ class PokerSession:
         # Event Loop
         self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         self.running_autoplay_loop: asyncio.Task | None = None
+
+        # Guards :meth:`settle_round_stats` so each finished round is recorded once.
+        self._round_settled: bool = True
 
     def __repr__(self) -> str:
         return f"<PokerSession engine={self.engine!r}>"
@@ -147,10 +151,34 @@ class PokerSession:
             self.running_autoplay_loop.cancel()
 
     def restart_timer(self) -> None:
-        """(Re)starts the autoplay timer for the current player while the game runs."""
+        """(Re)starts the autoplay timer for the current player while the game runs.
+
+        Doubles as the single chokepoint for round-end detection: every player
+        action and autoplay turn funnels through here, so a transition to
+        ``FINISHED`` settles the round's win/loss stats exactly once.
+        """
         self.cancel_timer()
         if self.engine.state == TableState.RUNNING:
+            self._round_settled = False
             self.running_autoplay_loop = self.loop.create_task(self.start_timer(self.engine.current_player))
+        elif self.engine.state == TableState.FINISHED and not self._round_settled:
+            self._round_settled = True
+            self.loop.create_task(self.settle_round_stats())
+
+    async def settle_round_stats(self) -> None:
+        """|coro|
+
+        Records the per-player outcome of the just-finished round. Everyone dealt
+        into the round counts as a played round; members who took a share of any
+        pot are credited a win, everyone else (including folders) a loss.
+        """
+        if self.ctx.guild is None:
+            return
+
+        winner_ids = {player.member.id for group, _ in self.winners for player in group}
+        for player in self.players:
+            result = GameResult.WIN if player.member.id in winner_ids else GameResult.LOSS
+            await self.ctx.bot.db.game_stats.record_result(self.ctx.guild.id, player.member.id, Game.POKER, result)
 
     async def start_timer(self, player: Player) -> None:
         """A timer that runs out if the current player takes too long. (120 seconds)"""

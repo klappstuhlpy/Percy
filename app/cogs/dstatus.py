@@ -328,7 +328,6 @@ class DiscordStatus(Cog):
         fallback="show",
         description="Shows the current Discord Status.",
         guild_only=True,
-        hybrid=True,
     )
     async def dstatus(self, ctx: Context) -> None:
         """Shows the current Discord Status."""
@@ -348,7 +347,6 @@ class DiscordStatus(Cog):
     @dstatus.command(
         "release",
         description="Releases the last incident if not posted.",
-        with_app_command=False,
         guild_only=True,
         user_permissions=PermissionTemplate.mod,
     )
