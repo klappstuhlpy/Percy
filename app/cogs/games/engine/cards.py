@@ -116,29 +116,35 @@ class BaseCard:
         return self.value > other.value
 
     def display(self, size: Literal["small", "large"], formatted: bool = False) -> DisplayCard | str:
-        if size == "small":
-            emojis = [
-                getattr(Emojis.Card, number_to_text(f"{self.name}_{self.color}_nobottom")),
-                getattr(Emojis.Card, f"{RevDict(SUITS)[self.suit]}_notop"),
-            ]
-            return (
-                "\n".join(map(str, emojis))
-                if formatted
-                else DisplayCard(top=str(emojis[0]), middle=None, bottom=str(emojis[1]))
-            )
-        else:
-            top = [
-                getattr(Emojis.Card, number_to_text(f"{self.name}_{self.color}_nobottomright")),
-                Emojis.Card.blank_nobottomleft,
-            ]
-            middle = [getattr(Emojis.Card, RevDict(SUITS)[self.suit])] * 2
-            bottom = [
-                Emojis.Card.blank_notopright,
-                getattr(Emojis.Card, number_to_text(f"{self.name}_{self.color}_notopleft")),
-            ]
+        """Render the card as stacked emoji rows.
 
-            emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
-            return "\n".join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1], bottom=emojis[2])
+        Returns the rows joined by newlines when ``formatted`` is set, otherwise a
+        :class:`DisplayCard`. The ``small`` layout has two rows (its ``middle`` is
+        ``None``); ``large`` has three.
+        """
+        cards = Emojis.Card
+
+        if self.hidden:
+            top = f"{cards.cardback_top1}{cards.cardback_top2}"
+            bottom = f"{cards.cardback_bottom1}{cards.cardback_bottom2}"
+            middle = f"{cards.cardback_middle}{cards.cardback_middle}" if size == "large" else None
+        elif size == "small":
+            suit_name = RevDict(SUITS)[self.suit]
+            top = str(getattr(cards, number_to_text(f"{self.name}_{self.color}_nobottom")))
+            bottom = str(getattr(cards, f"{suit_name}_notop"))
+            middle = None
+        else:
+            suit = getattr(cards, RevDict(SUITS)[self.suit])
+            top_emoji = getattr(cards, number_to_text(f"{self.name}_{self.color}_nobottomright"))
+            bottom_emoji = getattr(cards, number_to_text(f"{self.name}_{self.color}_notopleft"))
+            top = f"{top_emoji}{cards.blank_nobottomleft}"
+            middle = f"{suit}{suit}"
+            bottom = f"{cards.blank_notopright}{bottom_emoji}"
+
+        if formatted:
+            rows = (top, bottom) if middle is None else (top, middle, bottom)
+            return "\n".join(rows)
+        return DisplayCard(top=top, middle=middle, bottom=bottom)
 
     @property
     def display_text(self) -> str:

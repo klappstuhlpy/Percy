@@ -16,16 +16,14 @@ from __future__ import annotations
 
 import enum
 from itertools import zip_longest
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
-from app.cogs.games.engine.cards import BaseCard, BaseHand, Deck, DisplayCard
-from config import Emojis
+from app.cogs.games.engine.cards import BaseHand, Deck
 
 __all__ = (
     "BlackjackGame",
-    "Card",
     "Hand",
     "WinningType",
 )
@@ -45,22 +43,7 @@ class WinningType(enum.Enum):
     PUSH = "Push"
 
 
-class Card(BaseCard):
-    """Represents a card in a deck"""
-
-    def display(self, size: Literal["small", "large"], formatted: bool = False) -> DisplayCard | str:
-        if self.hidden:
-            # Only need a big hidden card for blackjack
-            top = [Emojis.Card.cardback_top1, Emojis.Card.cardback_top2]
-            middle = [Emojis.Card.cardback_middle] * 2
-            bottom = [Emojis.Card.cardback_bottom1, Emojis.Card.cardback_bottom2]
-
-            emojis = ["".join(map(str, top)), "".join(map(str, middle)), "".join(map(str, bottom))]
-            return "\n".join(emojis) if formatted else DisplayCard(top=emojis[0], middle=emojis[1], bottom=emojis[2])
-        return super().display(size, formatted)
-
-
-class Hand(BaseHand[Card]):
+class Hand(BaseHand):
     """Represents a hand of cards for a blackjack game"""
 
     def __init__(self, bet: int) -> None:
@@ -163,7 +146,7 @@ class BlackjackGame:
     determination. No Discord, no IO."""
 
     def __init__(self, bet: int, decks: int = 1) -> None:
-        self.deck: Deck = Deck(game="blackjack", decks=decks, card_cls=Card)
+        self.deck: Deck = Deck(game="blackjack", decks=decks)
 
         self.dealer: Hand = Hand(bet=bet)
         self.player_hands: list[Hand] = [Hand(bet=bet)]
