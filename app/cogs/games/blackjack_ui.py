@@ -75,6 +75,10 @@ class TableView(LayoutView):
         self.double_down.callback = self._on_double_down  # type: ignore[assignment]
         self.split = discord.ui.Button(label="Split", style=discord.ButtonStyle.grey, disabled=True)
         self.split.callback = self._on_split  # type: ignore[assignment]
+        self.insurance = discord.ui.Button(label="Insurance", style=discord.ButtonStyle.green, disabled=True)
+        self.insurance.callback = self._on_insurance  # type: ignore[assignment]
+        self.surrender_btn = discord.ui.Button(label="Surrender", style=discord.ButtonStyle.grey, disabled=True)
+        self.surrender_btn.callback = self._on_surrender  # type: ignore[assignment]
         self.help = discord.ui.Button(
             label="Help", style=discord.ButtonStyle.grey, emoji="\N{WHITE QUESTION MARK ORNAMENT}"
         )
@@ -95,34 +99,53 @@ class TableView(LayoutView):
         return self
 
     async def finish_winner(self, interaction: discord.Interaction, winner: WinningType) -> tuple[str, discord.Colour]:
+        hand = self.table.active_hand
         amount: int | None = None
+        insurance_result = ""
+
+        # Handle insurance payout first (separate from main bet)
+        if hand.insurance_bet > 0:
+            if self.table.dealer_has_blackjack():
+                insurance_payout = hand.insurance_bet * 3  # 2:1 payout + original bet back
+                user_balance: Balance = await interaction.client.db.get_user_balance(
+                    interaction.user.id, interaction.guild_id
+                )
+                await user_balance.add(cash=insurance_payout)
+                insurance_result = f" Insurance paid {Emojis.Economy.cash} **{fnumb(insurance_payout)}**!"
+            else:
+                insurance_result = f" Insurance lost {Emojis.Economy.cash} **{fnumb(hand.insurance_bet)}**."
+
         if winner == WinningType.PLAYER_BLACKJACK:
-            amount = int(self.table.active_hand.bet * 1.5)
-            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(amount)}**."  # type: ignore
+            amount = int(hand.bet * 1.5)
+            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(amount)}**.{insurance_result}"
             color = helpers.Colour.lime_green()
+        elif winner == WinningType.SURRENDER:
+            amount = hand.bet // 2  # Return half the bet
+            result = f"{winner.value}. Half your bet returned: {Emojis.Economy.cash} **{fnumb(amount)}**."
+            color = helpers.Colour.light_grey()
         elif winner in {WinningType.DEALER_BLACKJACK, WinningType.DEALER_WIN, WinningType.PLAYER_BUST}:
-            result = f"{winner.value}. You lost {Emojis.Economy.cash} **{fnumb(self.table.active_hand.bet)}**."
+            result = f"{winner.value}. You lost {Emojis.Economy.cash} **{fnumb(hand.bet)}**.{insurance_result}"
             color = helpers.Colour.light_red()
         elif winner in {WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
-            amount = self.table.active_hand.bet * 2
-            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(self.table.active_hand.bet)}**."
+            amount = hand.bet * 2
+            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(hand.bet)}**.{insurance_result}"
             color = helpers.Colour.lime_green()
         elif winner == WinningType.PUSH:
-            amount = self.table.active_hand.bet
-            result = f"{winner.value}. {Emojis.Economy.cash} **{fnumb(self.table.active_hand.bet)}** returned."
+            amount = hand.bet
+            result = f"{winner.value}. {Emojis.Economy.cash} **{fnumb(hand.bet)}** returned.{insurance_result}"
             color = helpers.Colour.light_grey()
         else:
             result = "Something went wrong."
             color = helpers.Colour.white()
 
         if amount:
-            user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
+            user_balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
             await user_balance.add(cash=amount)
 
-        bet = self.table.active_hand.bet
+        bet = hand.bet + hand.insurance_bet
         if winner in {WinningType.PLAYER_BLACKJACK, WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
             game_result = GameResult.WIN
-        elif winner == WinningType.PUSH:
+        elif winner in {WinningType.PUSH, WinningType.SURRENDER}:
             game_result = GameResult.PUSH
         else:
             game_result = GameResult.LOSS
@@ -166,7 +189,7 @@ class TableView(LayoutView):
             next_hand.message = message
         else:
             # Ensure to show the dealer's second card regardless of the outcome
-            self.table.dealer.cards[1].hidden = False
+            self.table.dealer.set_card_hidden(1, False)
 
             await self.update_buttons(active=False)
             self._game_over = True
@@ -188,9 +211,19 @@ class TableView(LayoutView):
 
         if not hand.finished:
             can_split = len(hand) == 2 and hand.cards[0].value == hand.cards[1].value and hand.bet <= balance.cash
+            insurance_cost = hand.bet // 2
 
             self.split.disabled = not can_split
             self.double_down.disabled = not (hand.bet <= balance.cash)
+            # Insurance: only when dealer shows Ace, first action, and player can afford it
+            self.insurance.disabled = not (self.table.can_offer_insurance and insurance_cost <= balance.cash)
+            # Late Surrender: only on first action, not after split, and dealer must not have blackjack
+            can_surrender = (
+                len(hand) == 2
+                and not hand.splitted
+                and not self.table.dealer_has_blackjack()
+            )
+            self.surrender_btn.disabled = not can_surrender
 
     async def _on_hit(self, interaction: discord.Interaction) -> None:
         """Hits the player"""
@@ -229,6 +262,25 @@ class TableView(LayoutView):
         if not await self.check_for_winner(interaction):
             await interaction.response.edit_message(view=self.render(self.table.active_hand))
 
+    async def _on_insurance(self, interaction: discord.Interaction) -> None:
+        """Takes insurance (half the original bet) against dealer blackjack."""
+        insurance_cost = self.table.active_hand.bet // 2
+
+        user_balance: Balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
+        await user_balance.remove(cash=insurance_cost)
+
+        self.table.take_insurance(insurance_cost)
+        self.insurance.disabled = True
+
+        await interaction.response.edit_message(view=self.render(self.table.active_hand))
+
+    async def _on_surrender(self, interaction: discord.Interaction) -> None:
+        """Surrenders the hand, forfeiting half the bet."""
+        self.table.surrender()
+
+        if not await self.check_for_winner(interaction):
+            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+
     async def _on_help(self, interaction: discord.Interaction) -> None:
         """Shows the help menu"""
         embed = discord.Embed(title="Blackjack Help", colour=helpers.Colour.blurple())
@@ -241,7 +293,7 @@ class TableView(LayoutView):
             "If you are dealt 21 from the start (Ace & 10), you got a *blackjack*.\n"
             "Blackjack usually means you win **1.5** the amount of your bet.\n"
             "Dealer will hit until his/her cards total **17 or higher**.\n"
-            "You can only double/split on the first move, or first move of a hand created by a split.\n"
+            "You can only double/split/surrender on the first move, or first move of a hand created by a split.\n"
             "You cannot play on two aces after they are split.\n\n"
             "For more information, see [this](https://en.wikipedia.org/wiki/Blackjack) article."
         )
@@ -249,5 +301,7 @@ class TableView(LayoutView):
         embed.add_field(name="Stand", value="Stands the current hand.")
         embed.add_field(name="Double Down", value="Doubles the bet and hits the current hand.")
         embed.add_field(name="Split", value="Splits the current hand into two hands. Doubles the bet.")
+        embed.add_field(name="Insurance", value="Side bet (half your bet) that pays 2:1 if dealer has blackjack. Only available when dealer shows an Ace.")
+        embed.add_field(name="Surrender", value="Forfeit the hand and get half your bet back. Only available on your first action.")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)

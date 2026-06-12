@@ -41,6 +41,7 @@ class WinningType(enum.Enum):
     DEALER_BLACKJACK = "Dealer Blackjack"
 
     PUSH = "Push"
+    SURRENDER = "Surrender"
 
 
 class Hand(BaseHand):
@@ -54,21 +55,44 @@ class Hand(BaseHand):
 
         self.finished: bool = False
         self.splitted: bool = False
+        self.surrendered: bool = False
+        self.insurance_bet: int = 0
+        self._hidden_indices: set[int] = set()
+
+    @property
+    def cards(self) -> list:
+        """Returns a list of cards with hidden state preserved."""
+        from app.cogs.games.engine.cards import BaseCard
+
+        result = []
+        for i, (value, suit) in enumerate(self.card_arr):
+            card = BaseCard(suit=suit, value=value)
+            if i in self._hidden_indices:
+                card.hidden = True
+            result.append(card)
+        return result
+
+    def set_card_hidden(self, index: int, hidden: bool) -> None:
+        """Set the hidden state of a card at the given index."""
+        if hidden:
+            self._hidden_indices.add(index)
+        else:
+            self._hidden_indices.discard(index)
 
     def get_real_card_values(self, include_hidden: bool = False) -> list[int]:
         """Because the card values for Jack, King Queen and Ace are 11, 12, 13 and 14, we now need to
         translate them for the blackjack game into the actual values they represent."""
         values = []
-        for card in self.cards:
-            if card.hidden and not include_hidden:
+        for i, (value, _suit) in enumerate(self.card_arr):
+            if i in self._hidden_indices and not include_hidden:
                 continue
-            if card.value >= 10:
-                if card.value == 14:
+            if value >= 10:
+                if value == 14:
                     values.append(11)  # Ace
                 else:
                     values.append(10)  # Face cards
             else:
-                values.append(card.value)
+                values.append(value)
         return values
 
     @property
@@ -170,14 +194,12 @@ class BlackjackGame:
 
     def deal(self) -> None:
         """Deals the cards to the players and the dealer"""
-        # Find next two cards with same value:
-
         for _ in range(2):
             self.active_hand.add(self.deck.draw())
             self.dealer.add(self.deck.draw())
 
-        # Sets the dealers second card to hidden
-        self.dealer.cards[1].hidden = True
+        # Sets the dealer's second card (hole card) to hidden
+        self.dealer.set_card_hidden(1, True)
 
     def hit(self, hand: Hand) -> None:
         """Hits a hand."""
@@ -199,7 +221,7 @@ class BlackjackGame:
         if self.playing_players:
             return
 
-        self.dealer.cards[1].hidden = False
+        self.dealer.set_card_hidden(1, False)
 
         if len(self.player_hands) == 1 and self.player_hands[0].value > 21:
             return
@@ -227,6 +249,37 @@ class BlackjackGame:
         self.player_hands.append(new_hand)
         return new_hand
 
+    def surrender(self) -> None:
+        """Surrenders the active hand, forfeiting half the bet."""
+        self.active_hand.surrendered = True
+        self.active_hand.finished = True
+
+    def take_insurance(self, amount: int) -> None:
+        """Places an insurance side-bet (up to half the original bet)."""
+        self.active_hand.insurance_bet = amount
+
+    @property
+    def dealer_shows_ace(self) -> bool:
+        """Returns True if the dealer's face-up card (first card) is an Ace."""
+        if not self.dealer.cards:
+            return False
+        return self.dealer.cards[0].value == 14
+
+    @property
+    def can_offer_insurance(self) -> bool:
+        """Insurance can be offered only at the start when dealer shows an Ace."""
+        return (
+            self.dealer_shows_ace
+            and len(self.active_hand) == 2
+            and not self.active_hand.splitted
+            and self.active_hand.insurance_bet == 0
+        )
+
+    @property
+    def hole_card_hidden(self) -> bool:
+        """Returns True if the dealer's hole card is still hidden."""
+        return 1 in self.dealer._hidden_indices
+
     def get_winner(self, hand: Hand) -> WinningType | None:
         """Gets a potential winner for the game.
 
@@ -234,6 +287,9 @@ class BlackjackGame:
         Also for events like both having a blackjack, both having the same value etc.
         Also checks that requirements for a blackjack are met.
         """
+        if hand.surrendered:
+            return WinningType.SURRENDER
+
         player_value = hand.value
         dealer_value = self.dealer.value
 
@@ -251,7 +307,7 @@ class BlackjackGame:
         elif dealer_value > 21:
             return WinningType.DEALER_BUST
 
-        if self.dealer.cards[1].hidden:
+        if self.hole_card_hidden:
             if player_value == 21:
                 return WinningType.PLAYER_WIN
         else:
@@ -262,3 +318,9 @@ class BlackjackGame:
             elif player_value < dealer_value:
                 return WinningType.DEALER_WIN
         return None
+
+    def dealer_has_blackjack(self) -> bool:
+        """Returns True if the dealer has blackjack (used for insurance payout).
+        Must check with include_hidden=True to see the full hand."""
+        dealer_full_value = sum(self.dealer.get_real_card_values(include_hidden=True))
+        return dealer_full_value == 21 and len(self.dealer) == 2

@@ -18,8 +18,8 @@ from app.utils import fnumb, helpers
 from config import Emojis
 
 if TYPE_CHECKING:
-    from app.cogs.games.engine.cards import Deck
     from app.cogs.games.engine.blackjack import Hand
+    from app.cogs.games.engine.cards import Deck
     from app.core import Context
 
 __all__ = (
@@ -81,6 +81,27 @@ class Blackjack:
     def get_winner(self, hand: Hand) -> WinningType | None:
         return self.engine.get_winner(hand)
 
+    def surrender(self) -> None:
+        self.engine.surrender()
+
+    def take_insurance(self, amount: int) -> None:
+        self.engine.take_insurance(amount)
+
+    @property
+    def can_offer_insurance(self) -> bool:
+        return self.engine.can_offer_insurance
+
+    @property
+    def dealer_shows_ace(self) -> bool:
+        return self.engine.dealer_shows_ace
+
+    @property
+    def hole_card_hidden(self) -> bool:
+        return self.engine.hole_card_hidden
+
+    def dealer_has_blackjack(self) -> bool:
+        return self.engine.dealer_has_blackjack()
+
     # -- Lifecycle -----------------------------------------------------------------
 
     def wake_up(self, ctx: Context, bet: int) -> Blackjack:
@@ -100,7 +121,12 @@ class Blackjack:
     ) -> discord.ui.Container:
         """Build the Components V2 card for the blackjack table."""
         container = discord.ui.Container(accent_colour=colour)
-        description = text or f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**"
+        if text:
+            description = text
+        else:
+            description = f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**"
+            if hand.insurance_bet > 0:
+                description += f" | Insurance: {Emojis.Economy.cash} **{fnumb(hand.insurance_bet)}**"
         container.add_item(discord.ui.TextDisplay(f"## Blackjack\n{description}"))
 
         if image_url:
@@ -118,19 +144,38 @@ class Blackjack:
 
         if with_buttons:
             container.add_item(discord.ui.ActionRow(view.hit, view.stand, view.double_down, view.split))
+            # Second row: conditionally show Insurance/Surrender only when applicable
+            second_row = discord.ui.ActionRow()
+            # Insurance: only show when dealer shows an Ace, first action, not already taken
+            show_insurance = (
+                self.dealer_shows_ace
+                and len(hand) == 2
+                and not hand.splitted
+                and hand.insurance_bet == 0
+                and not hand.finished
+            )
+            if show_insurance:
+                second_row.add_item(view.insurance)
+            # Late Surrender: only on first action (2 cards), not split, dealer doesn't have blackjack
+            show_surrender = (
+                len(hand) == 2
+                and not hand.splitted
+                and not hand.finished
+                and not self.dealer_has_blackjack()
+            )
+            if show_surrender:
+                second_row.add_item(view.surrender_btn)
+            second_row.add_item(view.help)
+            container.add_item(second_row)
 
         if colour == discord.Colour.blurple():
             container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.TextDisplay(f"-# Cards remaining: {len(self.deck)}"))
 
-        if with_buttons:
+        if with_buttons and view._game_over:
             container.add_item(discord.ui.Separator())
             row = discord.ui.ActionRow()
-            row.add_item(view.help)
-
-            if view._game_over:
-                row.add_item(view.NewGameButton(view.table))
-
+            row.add_item(view.NewGameButton(view.table))
             container.add_item(row)
 
         return container
