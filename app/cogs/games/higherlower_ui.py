@@ -56,10 +56,9 @@ class HigherLowerGame(LayoutView):
         higher_odds = self.engine.odds(True).favorable
         lower_odds = self.engine.odds(False).favorable
 
-        container.add_item(discord.ui.TextDisplay(f"-# Current card\n{self.engine.current.display(size="large", formatted=True)}"))
-        if self.engine.next is not None:
-            container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay(f"-# Next\n{self.engine.next.display(size="large", formatted=True)}"))
+        container.add_item(discord.ui.TextDisplay(f"-# Current\n{self.engine.current.display(size="large", formatted=True)}"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"-# Next\n{self.engine.next.display(size="large", formatted=True)}"))
 
         container.add_item(discord.ui.TextDisplay(
             f"Bet: {Emojis.Economy.cash} **{fnumb(self.bet)}** • Multiplier: **x{self.engine.multiplier:.2f}**\n"

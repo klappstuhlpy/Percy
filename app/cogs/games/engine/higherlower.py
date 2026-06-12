@@ -40,18 +40,22 @@ class HigherLower:
         self.cards: Deck = Deck(game="basic", infinite=True)
         self.hand: BaseHand = BaseHand()
 
+        # Draw the first two cards, the first is shown and the second is hidden until the first guess.
         self.hand.add(self.cards.draw())
         self.current: BaseCard = self.hand.cards[-1]
-        self.next: BaseCard | None = None
+
+        self.hand.add(self.cards.draw())
+        self.next: BaseCard = self.add_next_card(hidden=True)
 
         self.multiplier: float = 1.0
         self.rounds: int = 0
         self.busted: bool = False
 
-    def add_next_card(self) -> BaseCard:
+    def add_next_card(self, hidden: bool = False) -> BaseCard:
         """Adds the next card to the hand and returns it."""
         nxt = self.cards.draw()
         self.hand.add(nxt)
+        self.hand.cards[-1].hidden = hidden
         return self.hand.cards[-1]
 
     def odds(self, higher: bool) -> GuessOdds:
@@ -78,14 +82,15 @@ class HigherLower:
         if self.busted:
             raise RuntimeError("cannot guess after busting")
 
-        nxt: BaseCard = self.add_next_card()
-        correct = nxt > self.current if higher else nxt < self.current
-        self.next = nxt
+        self.next.hidden = False
+        correct = self.next > self.current if higher else self.next < self.current
         self.rounds += 1
 
         if correct:
+            self.current = self.next
+            self.next = self.add_next_card(hidden=True)
+
             self.multiplier *= self.step_multiplier(higher)
-            self.current = nxt
         else:
             self.busted = True
-        return nxt, correct
+        return self.next, correct
