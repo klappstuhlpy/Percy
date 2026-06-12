@@ -87,6 +87,6 @@ class Wordle(LayoutView):
             container.add_item(discord.ui.TextDisplay(f"-# {Emojis.warning} The word was **{self.answer.upper()}**."))
 
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player}"))
+        container.add_item(discord.ui.TextDisplay(f"-# Player: {self.player} • type \"abort\" to cancel"))
         self.add_item(container)
         return self
