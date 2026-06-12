@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
-from app.cogs.games.engine.poker import Card, TableState, TexasHoldem
+from app.cogs.games.engine.poker import Card, OddsMode, TableState, TexasHoldem
 from app.cogs.games.models import Game, GameResult
 from app.cogs.games.poker_ui import TableView
 from app.utils import helpers, number_suffix
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.core import Context
 
 __all__ = (
+    "OddsMode",
     "PokerSession",
     "TableState",
     "TexasHoldem",
@@ -138,6 +139,10 @@ class PokerSession:
     @property
     def first_buy_in(self) -> int:
         return self.engine.first_buy_in
+
+    @property
+    def analysis(self) -> list:
+        return self.engine.analysis
 
     def add_player(self, member: discord.Member, stack: int) -> None:
         """Adds a player to the underlying engine."""

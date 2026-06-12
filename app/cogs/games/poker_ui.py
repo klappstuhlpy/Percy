@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
-from app.cogs.games.engine.poker import TableState
+from app.cogs.games.engine.poker import OddsMode, TableState
 from app.core.views import LayoutView
 from app.rendering.models import BarChartData
 from app.utils import fnumb, helpers
@@ -95,6 +95,8 @@ class TableView(LayoutView):
         self.leave_button.callback = self._on_leave
         self.set_blinds_button = discord.ui.Button(label="Set Blinds", style=discord.ButtonStyle.blurple)
         self.set_blinds_button.callback = self._on_set_blinds
+        self.odds_mode_button = discord.ui.Button(label="Odds: Live", style=discord.ButtonStyle.grey, emoji="\N{BAR CHART}")
+        self.odds_mode_button.callback = self._on_toggle_odds_mode
 
         self.container: discord.ui.Container = discord.ui.Container(id=1)
 
@@ -133,12 +135,19 @@ class TableView(LayoutView):
             self.start_next_round.disabled = len(engine.players) < 2
             self.join.disabled = len(engine.players) == 4
 
+            # Update odds mode button label
+            mode_labels = {OddsMode.NONE: "Odds: Off", OddsMode.LIVE: "Odds: Live", OddsMode.FULL: "Odds: Full"}
+            self.odds_mode_button.label = mode_labels[engine.odds_mode]
+
             rows = [discord.ui.ActionRow(self.join, self.start_next_round, self.leave_button)]
             second: list[discord.ui.Button] = []
             if stopped_or_prepared:
                 second.append(self.set_blinds_button)
+                second.append(self.odds_mode_button)
             if engine.state == TableState.FINISHED:
-                second.append(self.analysis_button)
+                if engine.odds_mode != OddsMode.NONE and engine.analysis:
+                    second.append(self.analysis_button)
+                second.append(self.odds_mode_button)  # Also allow toggling after game ends
             if second:
                 rows.append(discord.ui.ActionRow(*second))
             return rows
@@ -414,8 +423,19 @@ class TableView(LayoutView):
             )
             return
 
+        if not self.engine.analysis:
+            await interaction.followup.send(
+                f"{Emojis.error} No analysis data available. Odds calculation may have been disabled.", ephemeral=True
+            )
+            return
+
         embed = discord.Embed(title="Game Odds Analysis", color=helpers.Colour.white())
-        data: list[tuple[dict[str, float], dict[int, dict[str, float]]]] = self.engine.analysis
+        # Data format: (live_odds, full_odds, hand_strength) per street
+        data: list[tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]] = self.engine.analysis
+
+        # Determine which odds to display based on current mode
+        use_live = self.engine.odds_mode == OddsMode.LIVE
+        mode_label = "Live" if use_live else "Full"
 
         embeds, files = [], []
         for index, player in enumerate(self.engine.players):
@@ -425,28 +445,38 @@ class TableView(LayoutView):
             embed.set_author(
                 name=f"{player.member.display_name} | Seat #{d_index}", icon_url=player.member.display_avatar.url
             )
+
+            # Check when this player folded
+            folded_street = player.folded_on_street
+
             embed.description = (
-                "This Analyis shows the odds of winning for each player at each stage of the game."
-                "The River is not included as the game is already over and nothing more to predict.\n\n"
+                f"**Mode:** {mode_label} Odds"
+                + (" *(shows real equity among active players)*" if use_live else " *(hypothetical: what if everyone stayed in)*")
+                + "\nThe River is not included as the game is already over.\n\n"
             )
 
-            match len(data):
-                case 1:
-                    embed.description += f"Pre-Flop: Win: **{data[0][0][f'Player {d_index} Win']}**% | Tie: **{data[0][0][f'Player {d_index} Tie']}**%\n"
-                case 2:
-                    embed.description += f"Pre-Flop: Win: **{data[0][0][f'Player {d_index} Win']}**% | Tie: **{data[0][0][f'Player {d_index} Tie']}**%\n"
-                    embed.description += f"Flop: Win: **{data[1][0][f'Player {d_index} Win']}**% | Tie: **{data[1][0][f'Player {d_index} Tie']}**%\n"
-                case 3:
-                    embed.description += f"Pre-Flop: Win: **{data[0][0][f'Player {d_index} Win']}**% | Tie: **{data[0][0][f'Player {d_index} Tie']}**%\n"
-                    embed.description += f"Flop: Win: **{data[1][0][f'Player {d_index} Win']}**% | Tie: **{data[1][0][f'Player {d_index} Tie']}**%\n"
-                    embed.description += f"Turn: Win: **{data[2][0][f'Player {d_index} Win']}**% | Tie: **{data[2][0][f'Player {d_index} Tie']}**%"
-                case _:
-                    embed.description += "***NO DATA***"
+            street_names = ["Pre-Flop", "Flop", "Turn"]
+            for street_idx, street_name in enumerate(street_names[:len(data)]):
+                # Index 0 for live, 1 for full
+                odds_idx = 0 if use_live else 1
+                odds = data[street_idx][odds_idx]
+                win_pct = odds.get(f'Player {d_index} Win', 0.0)
+                tie_pct = odds.get(f'Player {d_index} Tie', 0.0)
+
+                # Show fold indicator
+                fold_indicator = ""
+                if folded_street is not None and street_idx >= folded_street:
+                    fold_indicator = " *(folded)*" if use_live else ""
+
+                embed.description += f"{street_name}: Win: **{win_pct}**% | Tie: **{tie_pct}**%{fold_indicator}\n"
+
+            if not data:
+                embed.description += "***NO DATA***"
 
             TITLE_MAP = {0: f"Seat #{d_index} - Hand Strength Analysis | Pre-Flop", 1: "Flop", 2: "Turn"}
             specs = [
                 BarChartData(
-                    data=dict(dict((data[i][1][d_index]).items()).items()),
+                    data=dict(data[i][2][d_index].items()),  # Index 2 is hand_strength
                     title=TITLE_MAP.get(i, "---"),
                 )
                 for i in range(len(data))
@@ -458,6 +488,29 @@ class TableView(LayoutView):
             files.append(image)
 
         await interaction.followup.send(embeds=embeds, files=files, ephemeral=True)
+
+    async def _on_toggle_odds_mode(self, interaction: discord.Interaction) -> None:
+        """Callback for the odds mode toggle button (host only)."""
+        if interaction.user != self.engine.host:
+            await interaction.response.send_message(
+                f"{Emojis.error} Only the table host can change the odds mode.", ephemeral=True
+            )
+            return
+
+        # Cycle through modes: LIVE -> FULL -> NONE -> LIVE
+        mode_cycle = {OddsMode.LIVE: OddsMode.FULL, OddsMode.FULL: OddsMode.NONE, OddsMode.NONE: OddsMode.LIVE}
+        self.engine.odds_mode = mode_cycle[self.engine.odds_mode]
+
+        mode_descriptions = {
+            OddsMode.NONE: "Odds calculation **disabled** - no analysis will be generated.",
+            OddsMode.LIVE: "**Live Odds** - shows real equity among active players only.",
+            OddsMode.FULL: "**Full Odds** - shows hypothetical odds if everyone stayed in.",
+        }
+
+        await interaction.response.edit_message(view=self.render())
+        await interaction.followup.send(
+            f"\N{BAR CHART} {mode_descriptions[self.engine.odds_mode]}", ephemeral=True
+        )
 
     async def _on_leave(self, interaction: discord.Interaction) -> None:
         """Callback for the leave button"""

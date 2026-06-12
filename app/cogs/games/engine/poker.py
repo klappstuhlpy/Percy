@@ -32,6 +32,7 @@ __all__ = (
     "CombResult",
     "Hand",
     "HandResult",
+    "OddsMode",
     "Player",
     "Pot",
     "Ranker",
@@ -50,6 +51,14 @@ class TableState(enum.Enum):
     RUNNING = 1
     FINISHED = 2
     PREPARED = 3
+
+
+class OddsMode(enum.Enum):
+    """Represents the odds calculation mode for analysis."""
+
+    NONE = "none"  # No odds calculation
+    LIVE = "live"  # Only active players (realistic game state)
+    FULL = "full"  # All players including folded (hypothetical)
 
 
 class Card(BaseCard):
@@ -471,6 +480,8 @@ class Player:
         self.folded: bool = False
         self.all_in: bool = False
         self.checked: bool = False
+        # Tracks which street the player folded on (0=pre-flop, 1=flop, 2=turn, 3=river, None=still in)
+        self.folded_on_street: int | None = None
 
     def __repr__(self) -> str:
         return (
@@ -485,6 +496,7 @@ class Player:
         self.folded = False
         self.all_in = False
         self.checked = False
+        self.folded_on_street = None
         self.hand = Hand()
 
 
@@ -578,7 +590,12 @@ class TexasHoldem:
         self.winners: list[tuple[list[Player], Pot]] = []
         self.eliminated_players: list[Player] = []
 
-        self.analysis: list[tuple[dict[str, float], dict[int, dict[str, float]]]] = []
+        # Analysis data: list of (live_analysis, full_analysis, hand_strength) per street
+        # live_analysis: odds among active players only
+        # full_analysis: odds including folded players (hypothetical)
+        # hand_strength: hand type distribution per player
+        self.analysis: list[tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]] = []
+        self.odds_mode: OddsMode = OddsMode.LIVE  # Default to live odds
 
     def __repr__(self) -> str:
         return f"TexasHoldem(state={self.state} host={self.host} players={len(self.players)} max_players={self.max_players})"
@@ -597,6 +614,19 @@ class TexasHoldem:
     def playing_players(self) -> list[Player]:
         """list[:class:`Player`]: Returns a list of players that are still playing"""
         return [player for player in self.players if not player.folded and player not in self.eliminated_players]
+
+    @property
+    def current_street(self) -> int:
+        """Returns the current street (0=pre-flop, 1=flop, 2=turn, 3=river)."""
+        community_len = len(self.community_arr)
+        if community_len == 0:
+            return 0  # Pre-flop
+        elif community_len == 3:
+            return 1  # Flop
+        elif community_len == 4:
+            return 2  # Turn
+        else:
+            return 3  # River
 
     @property
     def current_player(self) -> Player:
@@ -658,6 +688,8 @@ class TexasHoldem:
         """Folds the current player."""
         player = self.players[self.player_index]
         player.folded = True
+        # Track which street the player folded on
+        player.folded_on_street = self.current_street
 
     def reset(self) -> None:
         """Resets the table to its initial state"""
@@ -668,6 +700,8 @@ class TexasHoldem:
         self.eliminated_players = []
         self.pot = Pot(amount=0)
         self.tie = False
+        self.analysis = []
+        # Note: odds_mode persists across rounds (host setting)
 
     def start(self) -> None:
         """Starts the game by dealing the cards and setting the sb and bb.
@@ -694,7 +728,8 @@ class TexasHoldem:
 
         self.pot.amount = self.small_blind + self.big_blind
 
-        self.analysis.append(cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
+        if self.odds_mode != OddsMode.NONE:
+            self.analysis.append(cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
 
     def end(self) -> None:
         """Ends the game by calculating the winner(s).
@@ -815,10 +850,10 @@ class TexasHoldem:
     def __fill_left_community_cards(self) -> None:
         """Fills the left community cards"""
         while len(self.community_arr) < 5:
-            if len(self.community_arr) in (3, 4):
+            if len(self.community_arr) in (3, 4) and self.odds_mode != OddsMode.NONE:
                 # add analysis data for the flop and turn
                 self.analysis.append(
-                    cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
+                    cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
                 )
 
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
@@ -890,10 +925,10 @@ class TexasHoldem:
         for _ in range(self.to_draw):
             self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
 
-        # Calculate odds if game is not over
-        if len(self.community_arr) != 5:
+        # Calculate odds if game is not over and odds mode is enabled
+        if len(self.community_arr) != 5 and self.odds_mode != OddsMode.NONE:
             self.analysis.append(
-                cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
+                cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
             )
 
     def autoplay_turn(self, player: Player) -> bool:
@@ -992,32 +1027,67 @@ class TexasHoldem:
         return final_hand_dict
 
     def _simulation_analysis(
-        self, odds_type: Literal["win_any", "tie_win", "precise"], res_arr: np.ndarray[Any, np.dtype[Any]]
+        self,
+        odds_type: Literal["win_any", "tie_win", "precise"],
+        res_arr: np.ndarray[Any, np.dtype[Any]],
+        active_indices: list[int] | None = None,
     ) -> dict:
-        outcome_arr = res_arr == np.expand_dims(np.max(res_arr, axis=1), axis=1)
+        """Analyze simulation results to compute odds.
+
+        Parameters
+        ----------
+        odds_type : Literal["win_any", "tie_win", "precise"]
+            The type of odds calculation.
+        res_arr : np.ndarray
+            The simulation result array (scenarios x players).
+        active_indices : list[int] | None
+            If provided, only consider these player indices for odds calculation.
+            Players not in this list will have 0% odds (as if they folded).
+        """
+        if active_indices is None:
+            active_indices = list(range(len(self.players)))
+
+        # For live odds, we only consider active players when determining the "best hand"
+        # Create a masked result array where folded players have minimum values
+        if len(active_indices) < len(self.players):
+            masked_res = res_arr.copy()
+            for i in range(len(self.players)):
+                if i not in active_indices:
+                    masked_res[:, i] = -1  # Set to -1 so they can never "win"
+            outcome_arr = masked_res == np.expand_dims(np.max(masked_res, axis=1), axis=1)
+        else:
+            outcome_arr = res_arr == np.expand_dims(np.max(res_arr, axis=1), axis=1)
+
         num_outcomes = len(outcome_arr)  # type: ignore # lying
-        outcome_dict = {}
+        outcome_dict: dict[str, float] = {}
 
         # Any Tied Win counts as a Win
         if odds_type == "win_any":
             tie_indices = np.all(outcome_arr, axis=1)  # multi-way tie
-            outcome_dict["Tie"] = np.round(np.mean(tie_indices) * 100, 2)
+            outcome_dict["Tie"] = float(np.round(np.mean(tie_indices) * 100, 2))
 
             for player in range(len(self.players)):
-                outcome_dict["Player " + str(player + 1)] = np.round(
-                    np.sum(outcome_arr[~tie_indices, player]) / num_outcomes * 100, 2
-                )  # type: ignore # lying
+                if player in active_indices:
+                    outcome_dict["Player " + str(player + 1)] = float(np.round(
+                        np.sum(outcome_arr[~tie_indices, player]) / num_outcomes * 100, 2
+                    ))  # type: ignore # lying
+                else:
+                    outcome_dict["Player " + str(player + 1)] = 0.0
 
         # Any Multi-way Tie/Tied Win counts as a Tie, Win must be exclusive
         elif odds_type == "tie_win":
             for player in range(len(self.players)):
-                tie_win_scenarios = outcome_arr[outcome_arr[:, player] == 1].sum(axis=1)  # type: ignore # lying
-                outcome_dict["Player " + str(player + 1) + " Win"] = np.round(
-                    np.sum(tie_win_scenarios == 1) / num_outcomes * 100, 2
-                )
-                outcome_dict["Player " + str(player + 1) + " Tie"] = np.round(
-                    np.sum(tie_win_scenarios > 1) / num_outcomes * 100, 2
-                )
+                if player in active_indices:
+                    tie_win_scenarios = outcome_arr[outcome_arr[:, player] == 1].sum(axis=1)  # type: ignore # lying
+                    outcome_dict["Player " + str(player + 1) + " Win"] = float(np.round(
+                        np.sum(tie_win_scenarios == 1) / num_outcomes * 100, 2
+                    ))
+                    outcome_dict["Player " + str(player + 1) + " Tie"] = float(np.round(
+                        np.sum(tie_win_scenarios > 1) / num_outcomes * 100, 2
+                    ))
+                else:
+                    outcome_dict["Player " + str(player + 1) + " Win"] = 0.0
+                    outcome_dict["Player " + str(player + 1) + " Tie"] = 0.0
 
         # Every possible outcome
         elif odds_type == "precise":
@@ -1034,7 +1104,7 @@ class TexasHoldem:
                     else:
                         outcome_key = f"Player {','.join([str(player + 1) for player in player_arr])} Tie"
 
-                    outcome_dict[outcome_key] = np.round(temp_arr.sum() / num_outcomes * 100, 2)
+                    outcome_dict[outcome_key] = float(np.round(temp_arr.sum() / num_outcomes * 100, 2))
         return outcome_dict
 
     def _simulate_calculation(
@@ -1110,8 +1180,8 @@ class TexasHoldem:
         num_scenarios: int | Literal["all"] = 150000,
         odds_type: Literal["win_any", "tie_win", "precise"] = "tie_win",
         final_hand: bool = False,
-    ) -> tuple[dict, dict] | dict:
-        """Simulates the game
+    ) -> tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]] | dict[str, float]:
+        """Simulates the game and returns both live and full odds.
 
         Parameters
         ----------
@@ -1121,18 +1191,25 @@ class TexasHoldem:
             The type of odds to calculate.
         final_hand: bool
             Whether to return the final hand strength of each player.
+            If True, returns (live_odds, full_odds, hand_strength).
 
         Returns
         -------
-        tuple[dict, dict] | dict
-            The outcome dictionary.
+        tuple[dict, dict, dict] | dict
+            If final_hand=True: (live_odds, full_odds, hand_strength)
+            Otherwise: full_odds only (for backward compat)
         """
         community_cards, undrawn_combos = self._simulation_preparation(num_scenarios)
         res_arr = self._simulate_calculation(community_cards, undrawn_combos)
-        outcome_dict = self._simulation_analysis(odds_type, res_arr)
+
+        # Full odds: all players (hypothetical "what if everyone stayed in")
+        full_odds = self._simulation_analysis(odds_type, res_arr)
 
         if final_hand:
+            # Live odds: only players who haven't folded yet
+            active_indices = [i for i, p in enumerate(self.players) if not p.folded]
+            live_odds = self._simulation_analysis(odds_type, res_arr, active_indices)
             final_hand_dict = self._hand_strength_analysis(res_arr)
-            return outcome_dict, final_hand_dict
+            return live_odds, full_odds, final_hand_dict
 
-        return outcome_dict
+        return full_odds

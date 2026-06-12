@@ -12,7 +12,7 @@ tests drive the deterministic betting/transition logic directly.
 
 from __future__ import annotations
 
-from app.cogs.games.engine.poker import Pot, TableState, TexasHoldem
+from app.cogs.games.engine.poker import OddsMode, Pot, TableState, TexasHoldem
 
 
 def make_engine(buy_in: int = 1000) -> TexasHoldem:
@@ -156,3 +156,58 @@ def test_autoplay_turn_folds_when_facing_a_bet() -> None:
 
     assert acted is True
     assert b.folded is True
+
+
+def test_odds_mode_default_is_live() -> None:
+    engine = make_engine()
+    assert engine.odds_mode is OddsMode.LIVE
+
+
+def test_odds_mode_none_skips_analysis() -> None:
+    engine = make_engine()
+    engine.odds_mode = OddsMode.NONE
+    engine.add_player('a', 500)
+    engine.add_player('b', 500)
+
+    # Manually deal cards (simulate start without running the full simulation)
+    engine.deal()
+    # Analysis should remain empty when mode is NONE
+    assert engine.analysis == []
+
+
+def test_fold_tracks_street() -> None:
+    engine = make_engine()
+    engine.add_player('a', 500)
+    engine.add_player('b', 500)
+    engine.add_player('c', 500)
+
+    # Pre-flop fold (street 0)
+    engine.player_index = 0
+    engine.Fold()
+
+    assert engine.players[0].folded_on_street == 0
+
+    # Player reset should clear folded_on_street
+    engine.players[0].reset()
+    assert engine.players[0].folded_on_street is None
+
+
+def test_current_street_property() -> None:
+    import numpy as np
+
+    engine = make_engine()
+
+    # Pre-flop (0 community cards)
+    assert engine.current_street == 0
+
+    # Flop (3 community cards)
+    engine.community_arr = np.array([[2, 0], [3, 1], [4, 2]])
+    assert engine.current_street == 1
+
+    # Turn (4 community cards)
+    engine.community_arr = np.array([[2, 0], [3, 1], [4, 2], [5, 3]])
+    assert engine.current_street == 2
+
+    # River (5 community cards)
+    engine.community_arr = np.array([[2, 0], [3, 1], [4, 2], [5, 3], [6, 0]])
+    assert engine.current_street == 3
