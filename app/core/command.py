@@ -44,7 +44,12 @@ __all__ = (
 
 
 async def _dummy_context(ctx: Context) -> None:
-    pass
+    """No-op stand-in for :meth:`Command._parse_arguments`.
+
+    Hybrid commands invoked from an interaction already have their ``args``/``kwargs``
+    populated, so argument parsing must be skipped. :func:`define_app_command_impl`
+    temporarily swaps in this coroutine to bypass the text parser.
+    """
 
 
 class ParamInfo(NamedTuple):
@@ -80,6 +85,7 @@ class ParamInfo(NamedTuple):
     store_true: bool
 
     def is_flag(self) -> bool:
+        """:class:`bool` : Whether this parameter represents a flag (alias of :attr:`flag`)."""
         return self.flag
 
 
@@ -173,16 +179,17 @@ class Command(commands.Command):
         return sorted(entries, key=lambda x: len(x.qualified_name), reverse=True)
 
     def transform_flag_parameters(self) -> None:
-        """Transforms a with a subclass of `Flags` annotated parameter
-        in the command signature into a valid flag parameter.
+        """Transform a keyword-only parameter annotated with a :class:`.Flags` subclass into a real flag parameter.
 
-        This is used to support the :class:`.Flags` class and its special parameters.
-        This supports transformation for consume-until-flag keyword-only parameters and store-true flags.
+        This backs the :class:`.Flags` class and its special parameters, handling both consume-until-flag
+        keyword-only parameters and store-true flags. When a positional consume-rest parameter precedes the
+        flags parameter, it is rewritten to a :class:`.ConsumeUntilFlag` so text parsing stops at the first flag,
+        and the callback is wrapped to restore the original keyword-only calling convention.
 
         Notes
         -----
-        This method needs to be called before the command is finnaly added to the bot to ensure the correct
-        parameter transformation.
+        This method must be called before the command is finally added to the bot to ensure the
+        parameters are transformed correctly.
         """
         first_consume_rest: str | None = None
 
@@ -221,17 +228,20 @@ class Command(commands.Command):
             elif not first_consume_rest:
                 first_consume_rest = name
 
-        if first_consume_rest and self.custom_flags:  # A kw-only has been transformed into a pos-or-kw, reverse this here
+        # A keyword-only parameter was rewritten into positional-or-keyword above; wrap the callback so the
+        # consume-rest argument is passed back as a keyword, matching the original signature the author wrote.
+        if first_consume_rest and self.custom_flags:
 
             @wraps(original := self.callback)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                """A wrapper to reverse the transformation of the first consume rest parameter."""
+                """Re-map the positional consume-rest argument back to its keyword-only parameter."""
+                # Skip the leading ``self``/``ctx`` (or just ``ctx`` for cog-less commands) positionals.
                 idx = 2 if self.cog else 1
 
-                for i, (arg, (k, v)) in enumerate(zip(args[idx:], self.params.items())):
-                    if k == first_consume_rest:
+                for i, (arg, (name, _param)) in enumerate(zip(args[idx:], self.params.items())):
+                    if name == first_consume_rest:
                         args = args[: i + idx]
-                        kwargs[k] = arg
+                        kwargs[name] = arg
                         break
 
                 return await original(*args, **kwargs)
@@ -253,11 +263,18 @@ class Command(commands.Command):
             return cls.ansi_signature.fget(command)
 
     @staticmethod
-    def _disect_param(param: commands.Parameter) -> tuple:
-        """Disects a parameter into it's annotation, greedy, optional, and origin.
+    def _dissect_param(param: commands.Parameter) -> tuple[Any, bool, bool, Any]:
+        """Dissect a parameter into its ``(annotation, greedy, optional, origin)`` components.
 
-        This is basically a separate implementation of the original method in the `commands.Command` class
-        to support the `app.core.flags.Flags` class and it's special parameters.
+        This reimplements the unpacking logic of :class:`commands.Command` so it can also handle the
+        :class:`app.core.flags.Flags` class and its special parameters. ``Optional[Literal[...]]`` and
+        ``Greedy[...]`` wrappers are unwrapped so callers see the underlying annotation.
+
+        Returns
+        -------
+        tuple[Any, bool, bool, Any]
+            The resolved annotation, whether it is :class:`commands.Greedy`, whether it is optional
+            (``Optional[...]``), and the annotation's ``__origin__`` (e.g. :data:`typing.Literal`).
         """
         greedy = isinstance(param.annotation, commands.Greedy)
         optional = False
@@ -293,7 +310,7 @@ class Command(commands.Command):
             return result
 
         for name, param in params.items():
-            annotation, greedy, optional, origin = Command._disect_param(param)
+            annotation, greedy, optional, origin = Command._dissect_param(param)
             default = param.default
 
             if isinstance(annotation, FlagMeta) and self.custom_flags:
@@ -359,7 +376,7 @@ class Command(commands.Command):
             return result
 
         for name, param in params.items():
-            annotation, greedy, optional, origin = Command._disect_param(param)
+            annotation, greedy, optional, origin = Command._dissect_param(param)
 
             if isinstance(annotation, FlagMeta) and self.custom_flags:
                 if annotation.__commands_flag_compress_usage__:
@@ -459,6 +476,22 @@ def define_app_command_impl(
     cls: type[app_commands.Command | app_commands.Group],
     **kwargs: Any,
 ) -> Callable[[AsyncCallable], None]:
+    """Build and attach an :mod:`app_commands` implementation to a hybrid (group) command.
+
+    The decorated ``func`` receives a fully-built :class:`~app.core.context.Context` (rather than a raw
+    :class:`discord.Interaction`), letting hybrid commands reuse text-command logic from a slash invocation.
+    The interaction is routed through :meth:`Bot.invoke`, with argument parsing bypassed via
+    :func:`_dummy_context` since the interaction already supplies parsed arguments. Errors are re-dispatched
+    onto the regular ``command_error`` event so both invocation paths share one handler.
+
+    Parameters
+    ----------
+    source: HybridCommand | HybridGroupCommand
+        The hybrid command the generated application command is bound to.
+    cls: type[app_commands.Command | app_commands.Group]
+        The application-command class to instantiate (a plain command or a group).
+    """
+
     def decorator(func: AsyncCallable) -> None:
         @functools.wraps(func)
         async def wrapper(self: Cog, inter: discord.Interaction, *args: Any, **kwds: Any) -> Any:
@@ -530,6 +563,7 @@ class HybridGroupCommand(GroupCommand, commands.HybridGroup):
         return define_app_command_impl(self, app_commands.Group, **kwargs)
 
     def copy(self) -> Self:
+        """Copy the group, carrying over any app-command subcommands the base copy would drop."""
         _copy = super().copy()
         # Ensure app commands are properly copied over
         if self.app_command is not None:
@@ -555,6 +589,12 @@ def _resolve_command_kwargs(
     brief: str = MISSING,
     help: str = MISSING,
 ) -> dict[str, Any]:
+    """Assemble the keyword arguments for :func:`commands.command` / :func:`commands.group`.
+
+    Only explicitly-provided (non-:data:`~discord.utils.MISSING`) values are forwarded so discord.py's own
+    defaults stay in effect. ``alias`` and ``aliases`` are mutually exclusive and normalised into an
+    ``aliases`` tuple.
+    """
     kwargs: dict[str, Any] = {"cls": cls}
 
     if name is not MISSING:
@@ -582,6 +622,11 @@ def _resolve_command_kwargs(
 
 
 def _resolve_kwargs_inheritance(new: dict[str, Any], parent: GroupCommand) -> dict[str, Any]:
+    """Let a subcommand inherit ``guild_only``, ``hybrid`` and ``hidden`` from its parent group.
+
+    Values already present in ``new`` win; only unset keys fall back to the parent so a subcommand can still
+    override them explicitly. The subcommand's ``parent`` is also defaulted to ``parent``.
+    """
     new.setdefault("guild_only", parent.__original_kwargs__.get("guild_only", False))
     new.setdefault("parent", parent)
     new.setdefault("hybrid", isinstance(parent, (HybridGroupCommand, HybridCommand)))
@@ -603,9 +648,27 @@ def command(
     nsfw: bool = False,
     **other_kwargs: Any,
 ) -> Callable[..., Command | HybridCommand]:
-    """A decorator that turns a function into a command.
+    """Turn a coroutine into a :class:`Command` (or :class:`HybridCommand` when ``hybrid=True``).
 
-    This supports core and hybrid command behavior.
+    This is the project's replacement for :func:`commands.command`; define commands with this rather than the
+    vanilla decorator so they pick up the custom permission, flag and ANSI-signature behaviour.
+
+    Parameters
+    ----------
+    name: str
+        The command name. Defaults to the function name.
+    alias / aliases: str | Iterable[str]
+        A single alias or a collection of aliases. The two are mutually exclusive.
+    usage / brief / help: str
+        Standard discord.py help-text overrides.
+    examples: list[str]
+        Usage examples, stored under ``extras["examples"]`` for the help command.
+    hybrid: bool
+        When ``True``, build a :class:`HybridCommand` exposed as both a text and a slash command.
+    guild_only: bool
+        Restrict the command to guilds (applies :func:`commands.guild_only`).
+    nsfw: bool
+        Mark the command NSFW (applies :func:`commands.is_nsfw`).
     """
     kwargs = _resolve_command_kwargs(
         HybridCommand if hybrid else Command,
@@ -649,9 +712,18 @@ def group(
     iwc: bool = True,
     **other_kwargs: Any,
 ) -> Callable[..., GroupCommand | HybridGroupCommand]:
-    """A decorator that turns a function into a group command.
+    """Turn a coroutine into a :class:`GroupCommand` (or :class:`HybridGroupCommand` when ``hybrid=True``).
 
-    This supports core and hybrid command behavior.
+    The callback runs when the group is invoked without a recognised subcommand. Accepts the same
+    naming/help kwargs as :func:`command`, plus:
+
+    Parameters
+    ----------
+    hybrid: bool
+        When ``True``, build a :class:`HybridGroupCommand` exposed as a slash-command group too.
+    iwc: bool
+        Shorthand for ``invoke_without_command``; defaults to ``True`` so the group body runs when no
+        subcommand matches.
     """
     kwargs = _resolve_command_kwargs(
         HybridGroupCommand if hybrid else GroupCommand,
@@ -684,7 +756,12 @@ def guild_max_concurrency(count: int, *, wait: bool = False) -> Any:
 
 
 def guilds(*guild_ids: int) -> Any:
-    """A decorator that adds guild specification for an (app)command."""
+    """Restrict a command to the given guild IDs.
+
+    Stores the IDs on the callback's ``__guild_ids__`` (read by :meth:`Command.can_run` to abort text
+    invocations elsewhere) and applies :func:`app_commands.guilds` so the slash command is only registered
+    in those guilds.
+    """
 
     def decorator(func: T) -> T:
         func.__guild_ids__ = guild_ids
@@ -695,9 +772,12 @@ def guilds(*guild_ids: int) -> Any:
 
 
 def describe(**parameters: str) -> Any:
-    """A decorator that adds description to the parameters of a command.
+    """Attach descriptions to a command's parameters.
 
-    This also descripting app commands if the command is an instance of `CommandInstance`.
+    Works whether the decorator sits above or below the ``@command``/``@group`` decorator. When applied to an
+    already-built :class:`CommandInstance`, the text parameters are annotated directly and mirrored onto the
+    app command; when applied to a raw callback, the descriptions are stashed for
+    :meth:`Command._resolve_param_descriptions` to backfill once the command is constructed.
     """
 
     def decorator(func: T) -> T:
