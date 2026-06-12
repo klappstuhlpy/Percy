@@ -121,6 +121,10 @@ class PokerSession:
         return self.engine.blind_index
 
     @property
+    def dealer_index(self) -> int | None:
+        return self.engine.dealer_index
+
+    @property
     def community_arr(self) -> np.ndarray:
         return self.engine.community_arr
 
@@ -288,9 +292,12 @@ class PokerSession:
 
         description = (
             f"**Small Blind:** `{self.small_blind}`\n"
-            f"**Big Blind:** `{self.big_blind}`\n\n"
-            f"**Pot:** {Emojis.Economy.coin} `{self.pot}`\n"
+            f"**Big Blind:** `{self.big_blind}`\n"
         )
+        if self.engine.escalation_enabled:
+            hands_left = self.engine.escalation_hands - self.engine.hands_at_level
+            description += f"**Blind Level:** `{self.engine.blind_level}` ({hands_left} hands until increase)\n"
+        description += f"\n**Pot:** {Emojis.Economy.coin} `{self.pot}`\n"
 
         for i, side_pot in enumerate(self.side_pots, start=1):
             description += f"**Side Pot *#{i}*:** {Emojis.Economy.coin} `{side_pot}`\n"
@@ -308,9 +315,19 @@ class PokerSession:
 
                 name_parts[0] = f"### {name_parts[0]}"
                 assert self.blind_index is not None
-                blind = "BB" if index == self.blind_index[1] + 1 else "SB" if index == self.blind_index[0] + 1 else None
-                if blind is not None:
-                    name_parts.append(blind)
+
+                # Show dealer button (D), small blind (SB), big blind (BB), straddle (STR)
+                position_tags = []
+                if self.dealer_index is not None and index - 1 == self.dealer_index:
+                    position_tags.append("D")
+                if index - 1 == self.blind_index[0]:
+                    position_tags.append("SB")
+                if index - 1 == self.blind_index[1]:
+                    position_tags.append("BB")
+                if self.engine.straddle_index is not None and index - 1 == self.engine.straddle_index:
+                    position_tags.append("STR")
+                if position_tags:
+                    name_parts.append("/".join(position_tags))
 
                 text += f"**Current Bet:** {Emojis.Economy.coin} `{player.bet}`\n"
 
@@ -318,6 +335,9 @@ class PokerSession:
                     text += f"*\N{ALARM CLOCK} Autoplay {
                         discord.utils.format_dt(discord.utils.utcnow() + datetime.timedelta(seconds=20), 'R')
                     }*\n"
+
+            if player.sitting_out:
+                name_parts.append("Away")
 
             if player.all_in:
                 name_parts.append("All In")
@@ -358,21 +378,25 @@ class PokerSession:
 
     def _append_finished_container_text(self, player: Player, text: str) -> str:
         if self.state == TableState.FINISHED:
-            raw_cards = [card.display("small") for card in player.hand.cards]
-            cards = [cast("DisplayCard", c) for c in raw_cards]
-            found = discord.utils.find(lambda x: x[0] == player, self.ranks)
-            assert found is not None
-            _, hand = found
-            position = self.ranks.index((player, hand)) + 1
+            # Check if player mucked their hand
+            if player.mucked:
+                text += "*Hand mucked*"
+            else:
+                raw_cards = [card.display("small") for card in player.hand.cards]
+                cards = [cast("DisplayCard", c) for c in raw_cards]
+                found = discord.utils.find(lambda x: x[0] == player, self.ranks)
+                assert found is not None
+                _, hand = found
+                position = self.ranks.index((player, hand)) + 1
 
-            hand_suffix = (
-                f"**{number_suffix(position)} Best Hand** 👑"
-                if position == 1
-                else f"{number_suffix(position)} Best Hand"
-                if not self.tie
-                else "**Tie**"
-            )
-            text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
+                hand_suffix = (
+                    f"**{number_suffix(position)} Best Hand** 👑"
+                    if position == 1
+                    else f"{number_suffix(position)} Best Hand"
+                    if not self.tie
+                    else "**Tie**"
+                )
+                text += f"{cards[0].top} {cards[1].top} {hand.name}\n{cards[0].bottom} {cards[1].bottom} {hand_suffix}"
         return text
 
     def _add_community_cards_to_container(self, container: discord.ui.Container) -> None:

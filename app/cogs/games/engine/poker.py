@@ -15,7 +15,8 @@ from __future__ import annotations
 import enum
 import multiprocessing
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from itertools import chain, combinations
 from typing import Any, Literal, NamedTuple, cast
 
@@ -172,6 +173,22 @@ class HandResult(NamedTuple):
     name: str
     cards: list[Card]
     value: int
+
+
+@dataclass
+class HandHistoryEntry:
+    """Records a single hand's history for review."""
+
+    hand_number: int
+    timestamp: str  # ISO format string (not datetime to avoid Date issues)
+    players: list[str]  # Player display names at start
+    hole_cards: dict[str, list[tuple[int, int]]]  # player_name -> [(value, suit), ...]
+    community_cards: list[tuple[int, int]]
+    actions: list[str]  # ["Player 1 raises 100", "Player 2 calls", ...]
+    pot_total: int
+    winners: list[str]
+    winning_hand: str | None = None
+    blinds: tuple[int, int] = (0, 0)  # (small, big)
 
 
 @dataclass
@@ -482,6 +499,12 @@ class Player:
         self.checked: bool = False
         # Tracks which street the player folded on (0=pre-flop, 1=flop, 2=turn, 3=river, None=still in)
         self.folded_on_street: int | None = None
+        # Sit out: player is away and will auto-fold until they return
+        self.sitting_out: bool = False
+        # Straddle: voluntary pre-flop blind (2x BB) from UTG position
+        self.has_straddled: bool = False
+        # Muck: whether this player chose to muck (not show) their losing hand
+        self.mucked: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -498,6 +521,9 @@ class Player:
         self.checked = False
         self.folded_on_street = None
         self.hand = Hand()
+        self.has_straddled = False
+        self.mucked = False
+        # Note: sitting_out persists across hands until player returns
 
 
 class Pot:
@@ -573,12 +599,43 @@ class TexasHoldem:
         self.max_players: int = max_players
         self.player_index: int = 0
 
-        # Small Blind and Big Blind
-        # Those indexes are used to determine the player that is the small blind and the big blind
-        # They are set when the game starts behind the "dealer"
+        # Dealer button and blinds
+        # dealer_index: position of the dealer button (rotates each hand)
+        # blind_index: (small_blind_pos, big_blind_pos) - derived from dealer
+        self.dealer_index: int | None = None
         self.blind_index: tuple[int, int] | None = None
         self.big_blind: int = max(int(self.first_buy_in * 0.01), 2)
         self.small_blind: int = self.big_blind // 2
+
+        # Blind escalation (tournament mode)
+        # escalation_enabled: whether blinds increase over time
+        # escalation_hands: number of hands between blind increases
+        # escalation_multiplier: how much blinds increase each level (e.g., 1.5 = 50% increase)
+        # hands_at_level: hands played at current blind level
+        self.escalation_enabled: bool = False
+        self.escalation_hands: int = 10  # Increase blinds every 10 hands
+        self.escalation_multiplier: float = 1.5  # 50% increase
+        self.hands_at_level: int = 0
+        self.blind_level: int = 1  # Current blind level (for display)
+
+        # Straddle tracking
+        self.straddle_enabled: bool = True  # Allow straddles by default
+        self.straddle_index: int | None = None  # Index of player who straddled (UTG)
+        self.straddle_amount: int = 0  # Current straddle amount
+
+        # Run it twice tracking
+        self.run_it_twice_enabled: bool = True  # Allow run it twice by default
+        self.run_it_twice_offered: bool = False  # Whether offer is pending
+        self.run_it_twice_accepted: bool = False  # Whether both players agreed
+        self.run_it_twice_boards: list[list[tuple[int, int]]] = []  # Multiple board runouts
+
+        # Hand history
+        self.hand_history: list[HandHistoryEntry] = []
+        self.hand_number: int = 0
+        self._current_hand_actions: list[str] = []
+
+        # Showdown order tracking (last aggressor shows first)
+        self.last_aggressor_index: int | None = None
 
         # Pots
         self.pot: Pot = Pot(amount=0)
@@ -629,6 +686,31 @@ class TexasHoldem:
             return 3  # River
 
     @property
+    def showdown_order(self) -> list[Player]:
+        """Returns players in showdown order (last aggressor first, then clockwise)."""
+        active = [p for p in self.playing_players if not p.folded]
+        if not active:
+            return []
+
+        # If there was an aggressor, they show first
+        if self.last_aggressor_index is not None:
+            aggressor = self.players[self.last_aggressor_index]
+            if aggressor in active:
+                # Start from aggressor, then clockwise
+                start_idx = active.index(aggressor)
+                return active[start_idx:] + active[:start_idx]
+
+        # Otherwise, start from first active player after dealer
+        if self.dealer_index is not None:
+            for i in range(len(self.players)):
+                idx = (self.dealer_index + 1 + i) % len(self.players)
+                if self.players[idx] in active:
+                    start_idx = active.index(self.players[idx])
+                    return active[start_idx:] + active[:start_idx]
+
+        return active
+
+    @property
     def current_player(self) -> Player:
         """:class:`Player`: The player whose turn it currently is."""
         return self.players[self.player_index]
@@ -643,6 +725,7 @@ class TexasHoldem:
         player.wait_for_allin_call = True
 
         amount: int = player.stack
+        self._log_action(f"{self._get_player_name(player)} goes ALL-IN ({amount} chips)")
         self.Raise(amount)
 
     def Call(self) -> None:
@@ -658,6 +741,7 @@ class TexasHoldem:
             # if discord is going to be bugcord or not
             self.AllIn()
         else:
+            self._log_action(f"{self._get_player_name(player)} calls {contribution}")
             self.Raise(contribution)
 
     def Raise(self, amount: int) -> None:
@@ -677,12 +761,16 @@ class TexasHoldem:
         player.stack -= contribution
         player.bet += contribution
 
+        # Track last aggressor for showdown order
+        self.last_aggressor_index = self.player_index
+
         self.Check()
 
     def Check(self) -> None:
         """Checks the street for the current player."""
         player = self.players[self.player_index]
         player.checked = True
+        self._log_action(f"{self._get_player_name(player)} checks")
 
     def Fold(self) -> None:
         """Folds the current player."""
@@ -690,6 +778,7 @@ class TexasHoldem:
         player.folded = True
         # Track which street the player folded on
         player.folded_on_street = self.current_street
+        self._log_action(f"{self._get_player_name(player)} folds")
 
     def reset(self) -> None:
         """Resets the table to its initial state"""
@@ -701,7 +790,14 @@ class TexasHoldem:
         self.pot = Pot(amount=0)
         self.tie = False
         self.analysis = []
-        # Note: odds_mode persists across rounds (host setting)
+        self.straddle_index = None
+        self.straddle_amount = 0
+        self.run_it_twice_offered = False
+        self.run_it_twice_accepted = False
+        self.run_it_twice_boards = []
+        self._current_hand_actions = []
+        self.last_aggressor_index = None
+        # Note: odds_mode, straddle_enabled, run_it_twice_enabled, hand_history persist across rounds
 
     def start(self) -> None:
         """Starts the game by dealing the cards and setting the sb and bb.
@@ -710,15 +806,40 @@ class TexasHoldem:
         The caller (bridge) is responsible for (re)starting the autoplay timer afterwards.
         """
         self.state = TableState.RUNNING
+        self.hand_number += 1
+        self._current_hand_actions = []
+
+        # Check for blind escalation before dealing
+        self._check_blind_escalation()
+
         self.deal()
 
         self.pot.players = self.players
 
-        if self.blind_index is None:
-            self.blind_index = (0, 1)
+        # Initialize dealer button on first hand
+        if self.dealer_index is None:
+            self.dealer_index = 0
 
-        # Set the player index to the player behind the bb
-        self.player_index = (self.blind_index[1] + 1) % len(self.players)
+        # Derive blind positions from dealer
+        # Heads-up (2 players): dealer is SB and acts first pre-flop
+        # 3+ players: SB is left of dealer, BB is left of SB
+        num_players = len(self.players)
+        if num_players == 2:
+            # Heads-up special rules: dealer posts SB
+            sb_index = self.dealer_index
+            bb_index = (self.dealer_index + 1) % num_players
+        else:
+            sb_index = (self.dealer_index + 1) % num_players
+            bb_index = (self.dealer_index + 2) % num_players
+
+        self.blind_index = (sb_index, bb_index)
+
+        # Set the player index to the player after BB (UTG)
+        # In heads-up, dealer/SB acts first pre-flop
+        if num_players == 2:
+            self.player_index = self.dealer_index  # Dealer/SB acts first pre-flop
+        else:
+            self.player_index = (bb_index + 1) % num_players
 
         # Set sb and bb and take their bets
         for index in self.blind_index:
@@ -727,6 +848,12 @@ class TexasHoldem:
             player.stack -= player.bet
 
         self.pot.amount = self.small_blind + self.big_blind
+
+        # Auto-fold players who are sitting out
+        for player in self.players:
+            if player.sitting_out:
+                player.folded = True
+                player.folded_on_street = 0  # Folded pre-flop
 
         if self.odds_mode != OddsMode.NONE:
             self.analysis.append(cast("tuple[dict[str, float], dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True)))
@@ -747,11 +874,18 @@ class TexasHoldem:
                 winner.stack += pot.amount
                 total_won += pot.amount
                 self.winners.append(([winner], pot))
-            # Don't evaluate/reveal hand - winner takes pot without showdown
+            self._log_action(f"{self._get_player_name(winner)} wins {total_won} (others folded)")
+            self._save_hand_history()
             return
 
-        # Normal showdown: evaluate all remaining players' hands
-        for player in self.playing_players:
+        # Handle run it twice if accepted
+        if self.run_it_twice_accepted and self.run_it_twice_boards:
+            self._evaluate_run_it_twice()
+            self._save_hand_history()
+            return
+
+        # Normal showdown: evaluate all remaining players' hands in showdown order
+        for player in self.showdown_order:
             result = player.hand.evaluate(self.community_arr)
             self.ranks.append((player, result))
 
@@ -781,7 +915,8 @@ class TexasHoldem:
 
             self.winners.append((pot_winners, pot))
 
-            self.winners.append((pot_winners, pot))
+        # Save hand to history after normal showdown
+        self._save_hand_history()
 
     def add_player(self, member: discord.Member, stack: int) -> None:
         """Adds a player to the table.
@@ -794,6 +929,397 @@ class TexasHoldem:
             The stack of the player
         """
         self.players.append(Player(member=member, stack=stack))
+
+    def rebuy(self, member: discord.Member, amount: int) -> bool:
+        """Adds chips to a player's stack (rebuy/add-on).
+
+        Can only be done between hands (not during active play).
+
+        Parameters
+        ----------
+        member : discord.Member
+            The member to rebuy for.
+        amount : int
+            The amount of chips to add.
+
+        Returns
+        -------
+        bool
+            True if successful, False if player not found or game is running.
+        """
+        if self.state == TableState.RUNNING:
+            return False
+
+        player = next((p for p in self.players if p.member == member), None)
+        if player is None:
+            return False
+
+        # Enforce max buy-in limit
+        if player.stack + amount > self.max_buy_in:
+            return False
+
+        player.stack += amount
+        return True
+
+    def sit_out(self, member: discord.Member) -> bool:
+        """Marks a player as sitting out (will auto-fold each hand).
+
+        Parameters
+        ----------
+        member : discord.Member
+            The member to sit out.
+
+        Returns
+        -------
+        bool
+            True if successful.
+        """
+        player = next((p for p in self.players if p.member == member), None)
+        if player is None:
+            return False
+
+        player.sitting_out = True
+        return True
+
+    def sit_in(self, member: discord.Member) -> bool:
+        """Marks a player as back in (will participate in next hand).
+
+        Parameters
+        ----------
+        member : discord.Member
+            The member returning to play.
+
+        Returns
+        -------
+        bool
+            True if successful.
+        """
+        player = next((p for p in self.players if p.member == member), None)
+        if player is None:
+            return False
+
+        player.sitting_out = False
+        return True
+
+    def set_escalation(self, enabled: bool, hands: int = 10, multiplier: float = 1.5) -> None:
+        """Configures blind escalation (tournament mode).
+
+        Parameters
+        ----------
+        enabled : bool
+            Whether to enable blind escalation.
+        hands : int
+            Number of hands between blind increases.
+        multiplier : float
+            How much blinds increase each level (e.g., 1.5 = 50% increase).
+        """
+        self.escalation_enabled = enabled
+        self.escalation_hands = max(1, hands)
+        self.escalation_multiplier = max(1.1, min(3.0, multiplier))  # Clamp between 1.1x and 3x
+
+    def _check_blind_escalation(self) -> bool:
+        """Checks and applies blind escalation if needed.
+
+        Called at the start of each hand. Returns True if blinds increased.
+        """
+        if not self.escalation_enabled:
+            return False
+
+        self.hands_at_level += 1
+
+        if self.hands_at_level >= self.escalation_hands:
+            self.hands_at_level = 0
+            self.blind_level += 1
+            self.big_blind = int(self.big_blind * self.escalation_multiplier)
+            self.small_blind = self.big_blind // 2
+            return True
+
+        return False
+
+    def can_straddle(self, member: discord.Member) -> bool:
+        """Checks if a player can post a straddle.
+
+        Straddle is only allowed for the UTG player (left of BB) before they act,
+        only in 3+ player games, and only if straddles are enabled.
+        """
+        if not self.straddle_enabled:
+            return False
+        if self.state != TableState.RUNNING:
+            return False
+        if len(self.players) < 3:  # No straddle in heads-up
+            return False
+        if self.straddle_index is not None:  # Already straddled this hand
+            return False
+
+        player = next((p for p in self.players if p.member == member), None)
+        if player is None:
+            return False
+
+        # UTG is the player after BB
+        assert self.blind_index is not None
+        utg_index = (self.blind_index[1] + 1) % len(self.players)
+
+        # Must be UTG and not have acted yet
+        player_index = self.players.index(player)
+        return player_index == utg_index and not player.checked and player.bet == 0
+
+    def post_straddle(self, member: discord.Member) -> bool:
+        """Posts a straddle (voluntary blind of 2x BB from UTG position).
+
+        Parameters
+        ----------
+        member : discord.Member
+            The member posting the straddle.
+
+        Returns
+        -------
+        bool
+            True if successful.
+        """
+        if not self.can_straddle(member):
+            return False
+
+        player = next((p for p in self.players if p.member == member), None)
+        assert player is not None
+
+        straddle_amount = self.big_blind * 2
+        if player.stack < straddle_amount:
+            return False
+
+        player_index = self.players.index(player)
+        self.straddle_index = player_index
+        self.straddle_amount = straddle_amount
+
+        player.bet = straddle_amount
+        player.stack -= straddle_amount
+        player.has_straddled = True
+        self.pot += straddle_amount
+
+        # Action moves to player after straddler
+        self.player_index = (player_index + 1) % len(self.players)
+
+        return True
+
+    def can_run_it_twice(self) -> bool:
+        """Checks if run it twice is available.
+
+        Run it twice requires:
+        - Feature enabled
+        - Exactly 2 players remaining (all-in situation)
+        - At least one all-in player
+        - Community cards not yet fully dealt
+        """
+        if not self.run_it_twice_enabled:
+            return False
+        if self.run_it_twice_offered:
+            return False  # Already offered/accepted
+        if len(self.playing_players) != 2:
+            return False
+        if not any(p.all_in for p in self.playing_players):
+            return False
+        if len(self.community_arr) >= 5:
+            return False  # Board is complete
+        return True
+
+    def offer_run_it_twice(self) -> bool:
+        """Offers run it twice to players.
+
+        Returns True if offer is now pending.
+        """
+        if not self.can_run_it_twice():
+            return False
+
+        self.run_it_twice_offered = True
+        return True
+
+    def accept_run_it_twice(self, times: int = 2) -> bool:
+        """Accepts running it multiple times.
+
+        Parameters
+        ----------
+        times : int
+            Number of times to run out the board (2 or 3).
+
+        Returns
+        -------
+        bool
+            True if accepted and boards generated.
+        """
+        if not self.run_it_twice_offered:
+            return False
+
+        times = min(3, max(2, times))  # Clamp to 2-3
+
+        # Save current community cards as base
+        base_community = list(map(tuple, self.community_arr))
+        cards_needed = 5 - len(base_community)
+
+        if cards_needed <= 0:
+            return False
+
+        self.run_it_twice_boards = []
+
+        for _ in range(times):
+            # Draw remaining cards for this runout
+            board = list(base_community)
+            for _ in range(cards_needed):
+                card = self.deck.draw()
+                board.append((int(card[0, 0]), int(card[0, 1])))
+            self.run_it_twice_boards.append(board)
+
+        self.run_it_twice_accepted = True
+        return True
+
+    def decline_run_it_twice(self) -> None:
+        """Declines the run it twice offer."""
+        self.run_it_twice_offered = False
+
+    def can_muck(self, member: discord.Member) -> bool:
+        """Checks if a player can muck their hand.
+
+        Players can muck only if:
+        - The game is finished
+        - They didn't win (no need to show)
+        - They haven't already mucked
+        """
+        if self.state != TableState.FINISHED:
+            return False
+
+        player = next((p for p in self.players if p.member == member), None)
+        if player is None or player.mucked:
+            return False
+
+        # Check if player is a winner - winners must show
+        for winners, _ in self.winners:
+            if player in winners:
+                return False
+
+        return True
+
+    def muck_hand(self, member: discord.Member) -> bool:
+        """Mucks a player's hand (hides it from view).
+
+        Parameters
+        ----------
+        member : discord.Member
+            The member wanting to muck.
+
+        Returns
+        -------
+        bool
+            True if successfully mucked.
+        """
+        if not self.can_muck(member):
+            return False
+
+        player = next((p for p in self.players if p.member == member), None)
+        if player:
+            player.mucked = True
+            return True
+        return False
+
+    def _log_action(self, action: str) -> None:
+        """Logs an action for hand history."""
+        self._current_hand_actions.append(action)
+
+    def _get_player_name(self, player: Player) -> str:
+        """Gets a player's display name safely (works with both real Members and test strings)."""
+        if hasattr(player.member, 'display_name'):
+            return player.member.display_name
+        return str(player.member)
+
+    def _save_hand_history(self) -> None:
+        """Saves the completed hand to history."""
+        if not self.ranks and not self.winners:
+            return  # No showdown data
+
+        hole_cards: dict[str, list[tuple[int, int]]] = {}
+        for player in self.players:
+            hole_cards[self._get_player_name(player)] = [
+                (int(c[0]), int(c[1])) for c in player.hand.card_arr
+            ]
+
+        community = [(int(c[0]), int(c[1])) for c in self.community_arr]
+
+        winner_names = []
+        winning_hand = None
+        for winners, _ in self.winners:
+            for w in winners:
+                name = self._get_player_name(w)
+                if name not in winner_names:
+                    winner_names.append(name)
+        if self.ranks:
+            winning_hand = self.ranks[0][1].name
+
+        entry = HandHistoryEntry(
+            hand_number=self.hand_number,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            players=[self._get_player_name(p) for p in self.players],
+            hole_cards=hole_cards,
+            community_cards=community,
+            actions=list(self._current_hand_actions),
+            pot_total=self.pot.amount + sum(sp.amount for sp in self.side_pots),
+            winners=winner_names,
+            winning_hand=winning_hand,
+            blinds=(self.small_blind, self.big_blind),
+        )
+
+        self.hand_history.append(entry)
+        # Keep only last 20 hands
+        if len(self.hand_history) > 20:
+            self.hand_history = self.hand_history[-20:]
+
+    def _evaluate_run_it_twice(self) -> None:
+        """Evaluates multiple boards and splits the pot accordingly."""
+        num_boards = len(self.run_it_twice_boards)
+        if num_boards == 0:
+            return
+
+        # Track wins per player across all boards
+        board_winners: list[list[Player]] = []
+
+        for board in self.run_it_twice_boards:
+            # Convert board to numpy array for evaluation
+            board_arr = np.array(board)
+
+            # Evaluate each player's hand against this board
+            board_ranks: list[tuple[Player, HandResult]] = []
+            for player in self.playing_players:
+                result = player.hand.evaluate(board_arr)
+                board_ranks.append((player, result))
+
+            board_ranks.sort(key=lambda x: x[1].value, reverse=True)
+
+            # Find winner(s) for this board
+            best_value = board_ranks[0][1].value
+            winners = [p for p, r in board_ranks if r.value == best_value]
+            board_winners.append(winners)
+
+            # Store ranks for the first board (for display)
+            if not self.ranks:
+                self.ranks = board_ranks
+
+        # Distribute pots based on board wins
+        for pot in [self.pot, *self.side_pots]:
+            pot_amount_per_board = pot.amount // num_boards
+
+            for winners in board_winners:
+                # Filter to players in this pot
+                pot_winners = [w for w in winners if w in pot.players]
+                if not pot_winners:
+                    continue
+
+                # Split this board's share among winners
+                share = pot_amount_per_board // len(pot_winners)
+                for winner in pot_winners:
+                    winner.stack += share
+
+                if len(pot_winners) > 1:
+                    self.tie = True
+
+            # Record overall winners (unique winners across all boards)
+            all_winners = list({w for winners in board_winners for w in winners if w in pot.players})
+            self.winners.append((all_winners, pot))
 
     def remove_player(self, member: discord.Member) -> int:
         """Removes a player from the table and returns their leftover stack.
@@ -842,9 +1368,11 @@ class TexasHoldem:
 
         self.reset()
 
-        assert self.blind_index is not None
-        self.blind_index = ((self.blind_index[0] + 1) % len(self.players), (self.blind_index[1] + 1) % len(self.players))
-        self.player_index = (self.blind_index[1] + 1) % len(self.players)
+        # Rotate dealer button (blinds will be derived in start())
+        if self.dealer_index is not None and len(self.players) > 0:
+            self.dealer_index = (self.dealer_index + 1) % len(self.players)
+        # Clear blind_index so start() recalculates from new dealer position
+        self.blind_index = None
         return removed
 
     def __fill_left_community_cards(self) -> None:
@@ -900,18 +1428,28 @@ class TexasHoldem:
     def _start_new_street(self) -> None:
         """Starts a new betting street: resets flags, handles all-in side pots, deals community cards."""
         assert self.blind_index is not None
+        assert self.dealer_index is not None
 
         # Reset check flags for the new street
         for player in self.playing_players:
             player.checked = False
             player.bet = 0  # Reset bets for the new street
 
-        # Set player index to first active player after dealer
-        self.player_index = (self.blind_index[1] + 1) % len(self.players)
+        # Post-flop action starts left of dealer (SB in 3+ players, BB in heads-up)
+        # In heads-up, BB acts first post-flop (dealer/SB acts last)
+        num_players = len(self.players)
+        if num_players == 2:
+            # Heads-up: BB (non-dealer) acts first post-flop
+            start_index = (self.dealer_index + 1) % num_players
+        else:
+            # 3+ players: SB acts first (left of dealer)
+            start_index = (self.dealer_index + 1) % num_players
+
+        self.player_index = start_index
         # Skip to first non-folded, non-all-in player
         while self.players[self.player_index].folded or self.players[self.player_index].all_in:
             self.player_index = (self.player_index + 1) % len(self.players)
-            if self.player_index == (self.blind_index[1] + 1) % len(self.players):
+            if self.player_index == start_index:
                 break  # Avoid infinite loop
 
         # Handle all-in player side pot creation

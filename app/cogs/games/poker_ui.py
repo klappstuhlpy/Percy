@@ -60,6 +60,40 @@ class SetBlindsModal(discord.ui.Modal, title="Set Custom Big Blind"):
         self.stop()
 
 
+class RebuyModal(discord.ui.Modal, title="Rebuy / Add Chips"):
+    amount = discord.ui.TextInput(label="Amount", min_length=1, max_length=10)
+
+    def __init__(self, current_stack: int, max_buy_in: int) -> None:
+        super().__init__(timeout=100.0)
+        max_rebuy = max_buy_in - current_stack
+        self.amount.placeholder = f"Enter rebuy amount. (Max: {max_rebuy})"
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+        self.stop()
+
+
+class EscalationModal(discord.ui.Modal, title="Blind Escalation Settings"):
+    hands = discord.ui.TextInput(
+        label="Hands per level",
+        placeholder="Number of hands before blinds increase (e.g., 10)",
+        default="10",
+        min_length=1,
+        max_length=3,
+    )
+    multiplier = discord.ui.TextInput(
+        label="Increase multiplier",
+        placeholder="Multiplier for blind increase (e.g., 1.5 = 50%)",
+        default="1.5",
+        min_length=1,
+        max_length=4,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+        self.stop()
+
+
 class TableView(LayoutView):
     """The Components V2 view for a poker table.
 
@@ -97,6 +131,18 @@ class TableView(LayoutView):
         self.set_blinds_button.callback = self._on_set_blinds
         self.odds_mode_button = discord.ui.Button(label="Odds: Live", style=discord.ButtonStyle.grey, emoji="\N{BAR CHART}")
         self.odds_mode_button.callback = self._on_toggle_odds_mode
+        self.rebuy_button = discord.ui.Button(label="Rebuy", style=discord.ButtonStyle.green, emoji=Emojis.Economy.coin)
+        self.rebuy_button.callback = self._on_rebuy
+        self.sit_out_button = discord.ui.Button(label="Sit Out", style=discord.ButtonStyle.grey, emoji="\N{PERSON IN LOTUS POSITION}")
+        self.sit_out_button.callback = self._on_sit_out
+        self.escalation_button = discord.ui.Button(label="Escalation: Off", style=discord.ButtonStyle.grey, emoji="\N{CHART WITH UPWARDS TREND}")
+        self.escalation_button.callback = self._on_toggle_escalation
+        self.straddle_button = discord.ui.Button(label="Straddle", style=discord.ButtonStyle.blurple, emoji="\N{MONEY BAG}")
+        self.straddle_button.callback = self._on_straddle
+        self.history_button = discord.ui.Button(label="History", style=discord.ButtonStyle.grey, emoji="\N{SCROLL}")
+        self.history_button.callback = self._on_view_history
+        self.muck_button = discord.ui.Button(label="Muck", style=discord.ButtonStyle.grey, emoji="\N{NO ENTRY SIGN}")
+        self.muck_button.callback = self._on_muck
 
         self.container: discord.ui.Container = discord.ui.Container(id=1)
 
@@ -139,17 +185,38 @@ class TableView(LayoutView):
             mode_labels = {OddsMode.NONE: "Odds: Off", OddsMode.LIVE: "Odds: Live", OddsMode.FULL: "Odds: Full"}
             self.odds_mode_button.label = mode_labels[engine.odds_mode]
 
-            rows = [discord.ui.ActionRow(self.join, self.start_next_round, self.leave_button)]
+            # Update escalation button label
+            if engine.escalation_enabled:
+                self.escalation_button.label = f"Esc: Lv{engine.blind_level}"
+                self.escalation_button.style = discord.ButtonStyle.green
+            else:
+                self.escalation_button.label = "Escalation: Off"
+                self.escalation_button.style = discord.ButtonStyle.grey
+
+            rows = [discord.ui.ActionRow(self.join, self.start_next_round, self.leave_button, self.sit_out_button)]
             second: list[discord.ui.Button] = []
+            third: list[discord.ui.Button] = []
             if stopped_or_prepared:
                 second.append(self.set_blinds_button)
                 second.append(self.odds_mode_button)
+                second.append(self.rebuy_button)
+                third.append(self.escalation_button)
+                if engine.hand_history:
+                    third.append(self.history_button)
             if engine.state == TableState.FINISHED:
                 if engine.odds_mode != OddsMode.NONE and engine.analysis:
                     second.append(self.analysis_button)
-                second.append(self.odds_mode_button)  # Also allow toggling after game ends
+                second.append(self.odds_mode_button)
+                second.append(self.rebuy_button)
+                third.append(self.escalation_button)
+                if engine.hand_history:
+                    third.append(self.history_button)
+                # Add muck button (shown but availability checked per-player in callback)
+                third.append(self.muck_button)
             if second:
                 rows.append(discord.ui.ActionRow(*second))
+            if third:
+                rows.append(discord.ui.ActionRow(*third))
             return rows
 
         # running
@@ -173,10 +240,21 @@ class TableView(LayoutView):
             self.check_call.disabled = False
             self.check_call.style = discord.ButtonStyle.grey if is_check else discord.ButtonStyle.green
 
-        return [
+        # Build action rows
+        rows = [
             discord.ui.ActionRow(self.join, self.my_hand, self.start_next_round),
             discord.ui.ActionRow(self.fold, self.check_call, self.raise_bet, self.all_in),
         ]
+
+        # Add straddle button if available (only pre-flop, UTG, no community cards yet)
+        if (engine.straddle_enabled and
+            len(engine.community_arr) == 0 and
+            engine.straddle_index is None and
+            len(engine.players) >= 3):
+            self.straddle_button.label = f"Straddle ({engine.big_blind * 2})"
+            rows.append(discord.ui.ActionRow(self.straddle_button))
+
+        return rows
 
     # Buttons
 
@@ -511,6 +589,257 @@ class TableView(LayoutView):
         await interaction.followup.send(
             f"\N{BAR CHART} {mode_descriptions[self.engine.odds_mode]}", ephemeral=True
         )
+
+    async def _on_muck(self, interaction: discord.Interaction) -> None:
+        """Callback for mucking hand (hiding losing cards)."""
+        if not self.engine.can_muck(cast("discord.Member", interaction.user)):
+            player = discord.utils.get(self.engine.players, member=interaction.user)
+            if player is None:
+                await interaction.response.send_message(
+                    f"{Emojis.error} You are not in the game.", ephemeral=True
+                )
+            elif player.mucked:
+                await interaction.response.send_message(
+                    f"{Emojis.error} You already mucked your hand.", ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    f"{Emojis.error} You cannot muck - either the game isn't finished or you won.",
+                    ephemeral=True,
+                )
+            return
+
+        self.engine.muck_hand(cast("discord.Member", interaction.user))
+        await interaction.response.edit_message(view=self.render())
+        if self.session.message is not None:
+            await self.session.message.reply(
+                f"\N{NO ENTRY SIGN} {interaction.user.mention} mucks their hand.",
+                delete_after=10,
+            )
+
+    async def _on_view_history(self, interaction: discord.Interaction) -> None:
+        """Callback for viewing hand history."""
+        if not self.engine.hand_history:
+            await interaction.response.send_message(
+                f"{Emojis.error} No hand history available yet.", ephemeral=True
+            )
+            return
+
+        embeds = []
+        # Show last 5 hands (most recent first)
+        for entry in reversed(self.engine.hand_history[-5:]):
+            embed = discord.Embed(
+                title=f"Hand #{entry.hand_number}",
+                color=helpers.Colour.white(),
+            )
+            embed.description = (
+                f"**Blinds:** {entry.blinds[0]}/{entry.blinds[1]}\n"
+                f"**Pot:** {Emojis.Economy.coin} {fnumb(entry.pot_total)}\n"
+                f"**Winner(s):** {', '.join(entry.winners)}\n"
+            )
+            if entry.winning_hand:
+                embed.description += f"**Winning Hand:** {entry.winning_hand}\n"
+
+            # Show community cards
+            if entry.community_cards:
+                from app.cogs.games.engine.poker import Card
+                cards = [Card(value=v, suit=s) for v, s in entry.community_cards]
+                card_str = " ".join(f"`{c.display_text_short}`" for c in cards)
+                embed.add_field(name="Board", value=card_str, inline=False)
+
+            # Show actions (truncated if too long)
+            if entry.actions:
+                actions_text = "\n".join(entry.actions[-8:])  # Last 8 actions
+                if len(entry.actions) > 8:
+                    actions_text = f"*...{len(entry.actions) - 8} earlier actions...*\n" + actions_text
+                embed.add_field(name="Actions", value=actions_text, inline=False)
+
+            embed.set_footer(text=entry.timestamp[:19].replace("T", " "))
+            embeds.append(embed)
+
+        await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+    async def _on_straddle(self, interaction: discord.Interaction) -> None:
+        """Callback for posting a straddle."""
+        if not self.engine.can_straddle(cast("discord.Member", interaction.user)):
+            await interaction.response.send_message(
+                f"{Emojis.error} You cannot straddle right now. Only UTG can straddle before acting.",
+                ephemeral=True,
+            )
+            return
+
+        success = self.engine.post_straddle(cast("discord.Member", interaction.user))
+        if success:
+            self.session.cancel_timer()
+            self.session.restart_timer()
+            await interaction.response.edit_message(view=self.render())
+            if self.session.message is not None:
+                await self.session.message.reply(
+                    f"\N{MONEY BAG} {interaction.user.mention} posts a **straddle** of {Emojis.Economy.coin} **{self.engine.straddle_amount}**!",
+                    delete_after=10,
+                )
+        else:
+            await interaction.response.send_message(
+                f"{Emojis.error} Failed to post straddle. You may not have enough chips.",
+                ephemeral=True,
+            )
+
+    async def _on_toggle_escalation(self, interaction: discord.Interaction) -> None:
+        """Callback for the blind escalation toggle button (host only)."""
+        if interaction.user != self.engine.host:
+            await interaction.response.send_message(
+                f"{Emojis.error} Only the table host can change escalation settings.", ephemeral=True
+            )
+            return
+
+        if self.engine.state == TableState.RUNNING:
+            await interaction.response.send_message(
+                f"{Emojis.error} Cannot change escalation during a hand.", ephemeral=True
+            )
+            return
+
+        if self.engine.escalation_enabled:
+            # Disable escalation
+            self.engine.set_escalation(enabled=False)
+            await interaction.response.edit_message(view=self.render())
+            await interaction.followup.send(
+                "\N{CHART WITH UPWARDS TREND} Blind escalation **disabled**.", ephemeral=True
+            )
+        else:
+            # Show modal to configure escalation
+            modal = EscalationModal()
+            await interaction.response.send_modal(modal)
+            await modal.wait()
+            with suppress(AttributeError):
+                interaction = modal.interaction
+
+            try:
+                hands = int(modal.hands.value)
+                multiplier = float(modal.multiplier.value)
+            except ValueError:
+                await interaction.response.send_message(f"{Emojis.error} Invalid values.", ephemeral=True)
+                return
+
+            if hands < 1 or hands > 100:
+                await interaction.response.send_message(
+                    f"{Emojis.error} Hands per level must be between 1 and 100.", ephemeral=True
+                )
+                return
+
+            if multiplier < 1.1 or multiplier > 3.0:
+                await interaction.response.send_message(
+                    f"{Emojis.error} Multiplier must be between 1.1 and 3.0.", ephemeral=True
+                )
+                return
+
+            self.engine.set_escalation(enabled=True, hands=hands, multiplier=multiplier)
+            await interaction.response.edit_message(view=self.render())
+            await interaction.followup.send(
+                f"\N{CHART WITH UPWARDS TREND} Blind escalation **enabled**!\n"
+                f"Blinds will increase by **{int((multiplier - 1) * 100)}%** every **{hands}** hands.",
+                ephemeral=True,
+            )
+
+    async def _on_sit_out(self, interaction: discord.Interaction) -> None:
+        """Callback for the sit out / sit in toggle button."""
+        player = discord.utils.get(self.engine.players, member=interaction.user)
+        if not player:
+            await interaction.response.send_message(
+                f"{Emojis.error} You are not in the game.", ephemeral=True
+            )
+            return
+
+        if player.sitting_out:
+            # Return to play
+            self.engine.sit_in(cast("discord.Member", interaction.user))
+            await interaction.response.edit_message(view=self.render())
+            if self.session.message is not None:
+                await self.session.message.reply(
+                    f"\N{PERSON IN LOTUS POSITION} {interaction.user.mention} is back in the game!",
+                    delete_after=10,
+                )
+        else:
+            # Sit out
+            self.engine.sit_out(cast("discord.Member", interaction.user))
+            await interaction.response.edit_message(view=self.render())
+            if self.session.message is not None:
+                await self.session.message.reply(
+                    f"\N{PERSON IN LOTUS POSITION} {interaction.user.mention} is sitting out (will auto-fold until they return).",
+                    delete_after=10,
+                )
+
+    async def _on_rebuy(self, interaction: discord.Interaction) -> None:
+        """Callback for the rebuy button."""
+        if self.engine.state == TableState.RUNNING:
+            await interaction.response.send_message(
+                f"{Emojis.error} Cannot rebuy during a hand. Wait for the hand to finish.", ephemeral=True
+            )
+            return
+
+        # Check if user is a player
+        player = discord.utils.get(self.engine.players, member=interaction.user)
+        if not player:
+            await interaction.response.send_message(
+                f"{Emojis.error} You are not in the game. Use **Join** to enter.", ephemeral=True
+            )
+            return
+
+        # Check if already at max
+        if player.stack >= self.engine.max_buy_in:
+            await interaction.response.send_message(
+                f"{Emojis.error} You are already at the maximum stack ({fnumb(self.engine.max_buy_in)} chips).", ephemeral=True
+            )
+            return
+
+        modal = RebuyModal(current_stack=player.stack, max_buy_in=self.engine.max_buy_in)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        with suppress(AttributeError):
+            interaction = modal.interaction
+
+        try:
+            amount = int(modal.amount.value)
+        except ValueError:
+            await interaction.response.send_message(f"{Emojis.error} Invalid amount.", ephemeral=True)
+            return
+
+        if amount <= 0:
+            await interaction.response.send_message(f"{Emojis.error} Amount must be positive.", ephemeral=True)
+            return
+
+        max_rebuy = self.engine.max_buy_in - player.stack
+        if amount > max_rebuy:
+            await interaction.response.send_message(
+                f"{Emojis.error} Maximum rebuy is {fnumb(max_rebuy)} chips.", ephemeral=True
+            )
+            return
+
+        # Check balance
+        balance: Balance = await cast("Bot", interaction.client).db.get_user_balance(
+            interaction.user.id, interaction.guild_id
+        )
+        if balance.cash < amount:
+            await interaction.response.send_message(
+                f"{Emojis.error} You don't have enough cash. You have {Emojis.Economy.coin} **{fnumb(balance.cash)}**.",
+                ephemeral=True,
+            )
+            return
+
+        # Deduct and add chips
+        await balance.remove(cash=amount)
+        success = self.engine.rebuy(cast("discord.Member", interaction.user), amount)
+
+        if success:
+            await interaction.response.edit_message(view=self.render())
+            if self.session.message is not None:
+                await self.session.message.reply(
+                    f"{Emojis.Economy.coin} {interaction.user.mention} added **{fnumb(amount)}** chips (now at **{fnumb(player.stack)}**).",
+                    delete_after=10,
+                )
+        else:
+            # Refund if engine rejected
+            await balance.add(cash=amount)
+            await interaction.response.send_message(f"{Emojis.error} Rebuy failed.", ephemeral=True)
 
     async def _on_leave(self, interaction: discord.Interaction) -> None:
         """Callback for the leave button"""
