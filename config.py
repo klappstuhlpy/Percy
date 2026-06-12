@@ -93,9 +93,17 @@ groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or '
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
 images_key: str | None = env('IMAGES_API_TOKEN')
-anilist = SimpleNamespace(client_id=int(env('ANILIST_CLIENT_ID') or 0), client_secret=str(env('ANILIST_CLIENT_SECRET')),
+def _optional_int(value: str | None) -> int | None:
+    """Parse an optional integer env var, tolerating blank or malformed values so boot never fails."""
+    try:
+        return int(value) if value else None
+    except ValueError:
+        return None
+
+
+anilist = SimpleNamespace(client_id=_optional_int(env('ANILIST_CLIENT_ID')), client_secret=env('ANILIST_CLIENT_SECRET'),
                           redirect_uri='https://anilist.co/api/v2/oauth/pin')
-marvel = SimpleNamespace(public_key=str(env('MARVEL_API_PUBLIC_KEY')), private_key=str(env('MARVEL_API_PRIVATE_KEY')))
+marvel = SimpleNamespace(public_key=env('MARVEL_API_PUBLIC_KEY'), private_key=env('MARVEL_API_PRIVATE_KEY'))
 
 
 class Emojis:

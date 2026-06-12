@@ -260,13 +260,9 @@ DATABASE_HOST=localhost              # required
 # ── Lavalink (music) ─────────────────────────────────────
 LAVALINK_NODE_1_PASSWORD=            # required for music playback
 
-# ── AniList (required at startup) ────────────────────────
-# config.py parses ANILIST_CLIENT_ID as an int at import time, so it MUST be set
-# to a valid integer or the bot will fail to start.
-ANILIST_CLIENT_ID=
-ANILIST_CLIENT_SECRET=
-
 # ── Optional integrations ────────────────────────────────
+ANILIST_CLIENT_ID=                   # AniList OAuth client (anime/manga linking); disabled if blank
+ANILIST_CLIENT_SECRET=
 STATS_WEBHOOK_TOKEN=                 # webhook token for posting bot stats/errors
 GENIUS_TOKEN=                        # Genius API (music lyrics)
 GROQ_API_KEY=                        # Groq API key (AI assistant — /ask); disabled if blank
@@ -367,7 +363,7 @@ All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is di
 
 The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`, `moderation.py`, `music.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response.
 
-> **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, `DATABASE_HOST`, and a valid integer `ANILIST_CLIENT_ID`. Everything else gracefully disables the corresponding integration if left blank.
+> **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, and `DATABASE_HOST`. Everything else — including `ANILIST_CLIENT_ID` — gracefully disables the corresponding integration if left blank.
 
 ### Static configuration (`config.py`)
 
