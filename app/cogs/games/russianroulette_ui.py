@@ -49,11 +49,17 @@ class RussianRoulette(LayoutView):
         self.ctx = ctx
         self.ante = ante
         self.host = ctx.author
+
         self.players: list[RRPlayer] = [RRPlayer(ctx.author)]  # type: ignore[arg-type]
         self.phase = Phase.LOBBY
         self._rng = random.Random()
         self.order: list[RRPlayer] = []
         self.turn: int = 0
+        # a list that holds 6 values, one "1", 5 "0"
+        # the first value is the bullet, the rest are empty chambers; shuffle it at the start of the game and pop values on trigger pulls
+        self.chambers: list[int] = [1, 0, 0, 0, 0, 0]
+        self._rng.shuffle(self.chambers)
+
         self._status: str | None = None
 
         self.join = discord.ui.Button(label="Join", style=discord.ButtonStyle.green, emoji=Emojis.join)
@@ -215,7 +221,7 @@ class RussianRoulette(LayoutView):
             await interaction.response.send_message(f"{Emojis.error} It's not your turn.", ephemeral=True)
             return
 
-        bang = self._rng.randrange(CHAMBERS) == 0
+        bang = self.chambers.pop(0) == 1
         if bang:
             current.alive = False
             self.order.pop(self.turn)
