@@ -345,20 +345,19 @@ class Games(Cog):
         # Shuffle cards, just for aesthetics
         message = await ctx.send(
             view=blackjack.view.render(
-                blackjack.active_hand,
                 colour=discord.Colour.light_grey(),
                 text="*Shuffling Cards...*",
                 image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
                 with_buttons=False,
             )
         )
-        blackjack.active_hand.message = message
+        blackjack.message = message
 
         await asyncio.sleep(3)
 
         await blackjack.view.update_buttons(active=True)
         if not await blackjack.view.check_for_winner(ctx):
-            await message.edit(view=blackjack.view.render(blackjack.active_hand))
+            await message.edit(view=blackjack.view.render())
 
     @command("work", description="Work for money.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.WORK_COODLWON.value, commands.BucketType.member)

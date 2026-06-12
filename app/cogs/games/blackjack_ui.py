@@ -14,7 +14,6 @@ from config import Emojis
 if TYPE_CHECKING:
     from app.cogs.economy import Economy
     from app.cogs.games.blackjack_bridge import Blackjack
-    from app.cogs.games.engine.blackjack import Hand
     from app.database.base import Balance
 
 __all__ = ("TableView",)
@@ -43,20 +42,19 @@ class TableView(LayoutView):
             # Shuffle cards, just for aesthetics
             await interaction.response.edit_message(
                 view=table.view.render(
-                    table.active_hand,
                     colour=discord.Colour.light_grey(),
                     text="*Shuffling Cards...*",
                     image_url="https://klappstuhl.me/gallery/raw/TpjOl.gif",
                     with_buttons=False,
                 )
             )
-            table.active_hand.message = interaction.message
+            table.message = interaction.message
 
             await asyncio.sleep(3)
 
             await table.view.update_buttons(active=True)
             if not await table.view.check_for_winner(interaction):
-                await interaction.message.edit(view=table.view.render(table.active_hand))
+                await interaction.message.edit(view=table.view.render())
 
             table.ctx.bot.get_cog("Games").blackjack_tables[table.ctx.user.id] = table
 
@@ -86,118 +84,142 @@ class TableView(LayoutView):
 
     def render(
         self,
-        hand: Hand,
         colour: discord.Colour = helpers.Colour.white(),
         text: str | None = None,
         image_url: str | None = None,
         *,
         with_buttons: bool = True,
     ) -> TableView:
-        """Recompose the layout for ``hand``: the card plus (optionally) the controls."""
+        """Recompose the layout showing all hands with active indicator."""
         self.clear_items()
-        self.add_item(self.table.build_container(self, hand, colour, text, image_url, with_buttons))
+        self.add_item(self.table.build_container(self, colour, text, image_url, with_buttons))
         return self
 
-    async def finish_winner(self, interaction: discord.Interaction, winner: WinningType) -> tuple[str, discord.Colour]:
-        hand = self.table.active_hand
-        amount: int | None = None
-        insurance_result = ""
+    async def finish_game(self, interaction: discord.Interaction) -> tuple[str, discord.Colour]:
+        """Process all hands and return combined result text and overall colour."""
+        results: list[str] = []
+        total_profit = 0
+        total_wagered = 0
+        has_win = False
+        has_loss = False
 
-        # Handle insurance payout first (separate from main bet)
-        if hand.insurance_bet > 0:
-            if self.table.dealer_has_blackjack():
-                insurance_payout = hand.insurance_bet * 3  # 2:1 payout + original bet back
-                user_balance: Balance = await interaction.client.db.get_user_balance(
-                    interaction.user.id, interaction.guild_id
-                )
-                await user_balance.add(cash=insurance_payout)
-                insurance_result = f" Insurance paid {Emojis.Economy.cash} **{fnumb(insurance_payout)}**!"
+        for i, hand in enumerate(self.table.player_hands):
+            winner = self.table.get_winner(hand)
+            amount: int | None = None
+            insurance_result = ""
+            hand_num = f" #{i + 1}" if len(self.table.player_hands) > 1 else ""
+
+            # Handle insurance payout
+            if hand.insurance_bet > 0:
+                if self.table.dealer_has_blackjack():
+                    insurance_payout = hand.insurance_bet * 3
+                    user_balance: Balance = await interaction.client.db.get_user_balance(
+                        interaction.user.id, interaction.guild_id
+                    )
+                    await user_balance.add(cash=insurance_payout)
+                    total_profit += insurance_payout - hand.insurance_bet
+                    insurance_result = f" (Insurance +{fnumb(insurance_payout)})"
+                else:
+                    total_profit -= hand.insurance_bet
+                    insurance_result = f" (Insurance -{fnumb(hand.insurance_bet)})"
+
+            if winner == WinningType.PLAYER_BLACKJACK:
+                amount = int(hand.bet * 1.5)
+                results.append(f"**Blackjack{hand_num}!** +{Emojis.Economy.cash} {fnumb(amount)}{insurance_result}")
+                has_win = True
+            elif winner == WinningType.SURRENDER:
+                amount = hand.bet // 2
+                results.append(f"**Surrender{hand_num}** {Emojis.Economy.cash} {fnumb(amount)} returned")
+            elif winner == WinningType.PLAYER_BUST:
+                results.append(f"**Bust{hand_num}** -{Emojis.Economy.cash} {fnumb(hand.bet)}{insurance_result}")
+                has_loss = True
+            elif winner == WinningType.DEALER_BLACKJACK:
+                results.append(f"**Dealer Blackjack{hand_num}** -{Emojis.Economy.cash} {fnumb(hand.bet)}{insurance_result}")
+                has_loss = True
+            elif winner == WinningType.DEALER_WIN:
+                results.append(f"**Dealer Wins{hand_num}** -{Emojis.Economy.cash} {fnumb(hand.bet)}{insurance_result}")
+                has_loss = True
+            elif winner == WinningType.PLAYER_WIN:
+                amount = hand.bet * 2
+                results.append(f"**You Win{hand_num}!** +{Emojis.Economy.cash} {fnumb(hand.bet)}{insurance_result}")
+                has_win = True
+            elif winner == WinningType.DEALER_BUST:
+                amount = hand.bet * 2
+                results.append(f"**Dealer Bust{hand_num}!** +{Emojis.Economy.cash} {fnumb(hand.bet)}{insurance_result}")
+                has_win = True
+            elif winner == WinningType.PUSH:
+                amount = hand.bet
+                results.append(f"**Push{hand_num}** {Emojis.Economy.cash} {fnumb(hand.bet)} returned{insurance_result}")
+
+            if amount:
+                user_balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
+                await user_balance.add(cash=amount)
+
+            bet = hand.bet + hand.insurance_bet
+            total_wagered += bet
+            total_profit += (amount or 0) - hand.bet
+
+            if winner in {WinningType.PLAYER_BLACKJACK, WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
+                game_result = GameResult.WIN
+            elif winner in {WinningType.PUSH, WinningType.SURRENDER}:
+                game_result = GameResult.PUSH
             else:
-                insurance_result = f" Insurance lost {Emojis.Economy.cash} **{fnumb(hand.insurance_bet)}**."
+                game_result = GameResult.LOSS
+            await interaction.client.db.game_stats.record_result(
+                interaction.guild_id,
+                interaction.user.id,
+                Game.BLACKJACK,
+                game_result,
+                wagered=bet,
+                profit=(amount or 0) - bet,
+            )
 
-        if winner == WinningType.PLAYER_BLACKJACK:
-            amount = int(hand.bet * 1.5)
-            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(amount)}**.{insurance_result}"
+        # Determine overall colour
+        if has_win and not has_loss:
             color = helpers.Colour.lime_green()
-        elif winner == WinningType.SURRENDER:
-            amount = hand.bet // 2  # Return half the bet
-            result = f"{winner.value}. Half your bet returned: {Emojis.Economy.cash} **{fnumb(amount)}**."
-            color = helpers.Colour.light_grey()
-        elif winner in {WinningType.DEALER_BLACKJACK, WinningType.DEALER_WIN, WinningType.PLAYER_BUST}:
-            result = f"{winner.value}. You lost {Emojis.Economy.cash} **{fnumb(hand.bet)}**.{insurance_result}"
+        elif has_loss and not has_win:
             color = helpers.Colour.light_red()
-        elif winner in {WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
-            amount = hand.bet * 2
-            result = f"{winner.value}. You won {Emojis.Economy.cash} **{fnumb(hand.bet)}**.{insurance_result}"
-            color = helpers.Colour.lime_green()
-        elif winner == WinningType.PUSH:
-            amount = hand.bet
-            result = f"{winner.value}. {Emojis.Economy.cash} **{fnumb(hand.bet)}** returned.{insurance_result}"
+        else:
             color = helpers.Colour.light_grey()
-        else:
-            result = "Something went wrong."
-            color = helpers.Colour.white()
 
-        if amount:
-            user_balance = await interaction.client.db.get_user_balance(interaction.user.id, interaction.guild_id)
-            await user_balance.add(cash=amount)
-
-        bet = hand.bet + hand.insurance_bet
-        if winner in {WinningType.PLAYER_BLACKJACK, WinningType.PLAYER_WIN, WinningType.DEALER_BUST}:
-            game_result = GameResult.WIN
-        elif winner in {WinningType.PUSH, WinningType.SURRENDER}:
-            game_result = GameResult.PUSH
-        else:
-            game_result = GameResult.LOSS
-        await interaction.client.db.game_stats.record_result(
-            interaction.guild_id,
-            interaction.user.id,
-            Game.BLACKJACK,
-            game_result,
-            wagered=bet,
-            profit=(amount or 0) - bet,
-        )
-
-        return result, color
+        return " | ".join(results), color
 
     async def check_for_winner(self, interaction: discord.Interaction | Context) -> bool:
-        """Checks if there is a winner and updates the card accordingly."""
+        """Checks if there is a winner and updates the view accordingly."""
         if not self.table.active_hand.finished:
             if (self.table.playing_players and self.table.active_hand.value >= 21) or (
                 self.table.dealer.value == 21 and len(self.table.dealer) == 2
             ):
-                # If the player has over 21 or a blackjack, or the dealer has a blackjack, stand automatically
+                # Auto-stand on 21+, blackjack, or dealer blackjack
                 self.table.stand()
                 await self.check_for_winner(interaction)
                 return True
             return False
 
-        # Respond to the interaction and disable the finished hand's message.
-        finished = self.table.active_hand
-        if isinstance(interaction, Context):
-            await finished.message.edit(view=self.render(finished, with_buttons=False))
-        elif interaction.response.is_done():
-            await interaction.message.edit(view=self.render(finished, with_buttons=False))
-        else:
-            await interaction.response.edit_message(view=self.render(finished, with_buttons=False))
-
         if self.table.playing_players:
-            # Start the next hand on its own message.
-            next_hand = self.table.advance_hand()
+            # Move to next hand, update the same message
+            self.table.advance_hand()
             await self.update_buttons(active=True)
-            message = await interaction.followup.send(view=self.render(next_hand))
-            next_hand.message = message
+            if isinstance(interaction, Context):
+                await self.table.message.edit(view=self.render())
+            elif interaction.response.is_done():
+                await interaction.message.edit(view=self.render())
+            else:
+                await interaction.response.edit_message(view=self.render())
         else:
-            # Ensure to show the dealer's second card regardless of the outcome
+            # Game over - reveal dealer's hole card
             self.table.dealer.set_card_hidden(1, False)
 
             await self.update_buttons(active=False)
             self._game_over = True
 
-            for hand in self.table.player_hands:
-                winner = self.table.get_winner(hand)
-                text, color = await self.finish_winner(interaction, winner)  # type: ignore
-                await hand.message.edit(view=self.render(hand, color, text))
+            text, color = await self.finish_game(interaction)
+            if isinstance(interaction, Context):
+                await self.table.message.edit(view=self.render(color, text))
+            elif interaction.response.is_done():
+                await interaction.message.edit(view=self.render(color, text))
+            else:
+                await interaction.response.edit_message(view=self.render(color, text))
 
         return True
 
@@ -210,7 +232,18 @@ class TableView(LayoutView):
         balance: Balance = await self.table.ctx.db.get_user_balance(self.table.ctx.user.id, self.table.ctx.guild.id)
 
         if not hand.finished:
-            can_split = len(hand) == 2 and hand.cards[0].value == hand.cards[1].value and hand.bet <= balance.cash
+            # Compare blackjack values for split (face cards all worth 10)
+            def bj_value(card_value: int) -> int:
+                if card_value >= 10:
+                    return 11 if card_value == 14 else 10  # Ace=11, face cards=10
+                return card_value
+
+            cards = hand.cards
+            can_split = (
+                len(hand) == 2
+                and bj_value(cards[0].value) == bj_value(cards[1].value)
+                and hand.bet <= balance.cash
+            )
             insurance_cost = hand.bet // 2
 
             self.split.disabled = not can_split
@@ -230,14 +263,14 @@ class TableView(LayoutView):
         self.table.hit(self.table.active_hand)
 
         if not await self.check_for_winner(interaction):
-            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+            await interaction.response.edit_message(view=self.render())
 
     async def _on_stand(self, interaction: discord.Interaction) -> None:
         """Stands the player"""
         self.table.stand()
 
         if not await self.check_for_winner(interaction):
-            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+            await interaction.response.edit_message(view=self.render())
 
     async def _on_double_down(self, interaction: discord.Interaction) -> None:
         """Doubles the bet and hits the player"""
@@ -250,7 +283,7 @@ class TableView(LayoutView):
         self.table.stand()
 
         if not await self.check_for_winner(interaction):
-            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+            await interaction.response.edit_message(view=self.render())
 
     async def _on_split(self, interaction: discord.Interaction) -> None:
         """Splits the hand"""
@@ -260,7 +293,7 @@ class TableView(LayoutView):
         await user_balance.remove(cash=self.table.active_hand.bet)
 
         if not await self.check_for_winner(interaction):
-            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+            await interaction.response.edit_message(view=self.render())
 
     async def _on_insurance(self, interaction: discord.Interaction) -> None:
         """Takes insurance (half the original bet) against dealer blackjack."""
@@ -272,14 +305,14 @@ class TableView(LayoutView):
         self.table.take_insurance(insurance_cost)
         self.insurance.disabled = True
 
-        await interaction.response.edit_message(view=self.render(self.table.active_hand))
+        await interaction.response.edit_message(view=self.render())
 
     async def _on_surrender(self, interaction: discord.Interaction) -> None:
         """Surrenders the hand, forfeiting half the bet."""
         self.table.surrender()
 
         if not await self.check_for_winner(interaction):
-            await interaction.response.edit_message(view=self.render(self.table.active_hand))
+            await interaction.response.edit_message(view=self.render())
 
     async def _on_help(self, interaction: discord.Interaction) -> None:
         """Shows the help menu"""

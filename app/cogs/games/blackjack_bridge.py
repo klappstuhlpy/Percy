@@ -8,7 +8,7 @@ engine as ``self.engine`` and proxies the state the renderer / view needs).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
@@ -36,6 +36,7 @@ class Blackjack:
         self.ctx: Context = ctx
         self.engine: BlackjackGame = BlackjackGame(bet, decks=decks)
         self.view: TableView = TableView(table=self)
+        self.message: Any = None  # The Discord message showing the game
 
     def __repr__(self) -> str:
         return f"Blackjack(ctx={self.ctx}, decks={self.deck.decks} dealer={self.dealer})"
@@ -113,54 +114,66 @@ class Blackjack:
     def build_container(
         self,
         view: TableView,
-        hand: Hand,
         colour: discord.Colour = helpers.Colour.white(),
         text: str | None = None,
         image_url: str | None = None,
         with_buttons: bool = True,
     ) -> discord.ui.Container:
-        """Build the Components V2 card for the blackjack table."""
+        """Build the Components V2 card for the blackjack table showing all hands."""
         container = discord.ui.Container(accent_colour=colour)
+        active = self.active_hand
+
+        # Header with bet info
         if text:
             description = text
         else:
-            description = f"Your Bet: {Emojis.Economy.cash} **{fnumb(hand.bet)}**"
-            if hand.insurance_bet > 0:
-                description += f" | Insurance: {Emojis.Economy.cash} **{fnumb(hand.insurance_bet)}**"
+            total_bet = sum(h.bet for h in self.player_hands)
+            total_insurance = sum(h.insurance_bet for h in self.player_hands)
+            description = f"Your Bet: {Emojis.Economy.cash} **{fnumb(total_bet)}**"
+            if total_insurance > 0:
+                description += f" | Insurance: {Emojis.Economy.cash} **{fnumb(total_insurance)}**"
         container.add_item(discord.ui.TextDisplay(f"## Blackjack\n{description}"))
 
         if image_url:
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image_url)))
             return container
 
+        # Dealer hand
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay("**Dealer Hand**\n" + "\n".join(self.dealer.display_blocks)))
         container.add_item(discord.ui.Separator())
 
-        name = "Your Hand"
-        if len(self.player_hands) > 1:
-            name += f" #{self.player_hands.index(hand) + 1}"
-        container.add_item(discord.ui.TextDisplay(f"**{name}**\n" + "\n".join(hand.display_blocks)))
+        # Player hands - show all with active indicator
+        for i, hand in enumerate(self.player_hands):
+            is_active = hand is active and not hand.finished
+            hand_num = f" #{i + 1}" if len(self.player_hands) > 1 else ""
+            indicator = "### " if is_active else "-# "
+            status = ""
+            if hand.finished and not view._game_over:
+                status = " *(waiting)*"
+            name = f"{indicator} Your Hand{hand_num}{status}"
+            container.add_item(discord.ui.TextDisplay(f"{name}\n" + "\n".join(hand.display_blocks)))
 
-        if with_buttons:
+        # Action buttons (only for active hand)
+        if with_buttons and not view._game_over:
             container.add_item(discord.ui.ActionRow(view.hit, view.stand, view.double_down, view.split))
             # Second row: conditionally show Insurance/Surrender only when applicable
             second_row = discord.ui.ActionRow()
-            # Insurance: only show when dealer shows an Ace, first action, not already taken
+            # Insurance: only when dealer shows Ace, first action, not already taken
             show_insurance = (
                 self.dealer_shows_ace
-                and len(hand) == 2
-                and not hand.splitted
-                and hand.insurance_bet == 0
-                and not hand.finished
+                and len(active) == 2
+                and not active.splitted
+                and active.insurance_bet == 0
+                and not active.finished
             )
             if show_insurance:
                 second_row.add_item(view.insurance)
             # Late Surrender: only on first action (2 cards), not split, dealer doesn't have blackjack
             show_surrender = (
-                len(hand) == 2
-                and not hand.splitted
-                and not hand.finished
+                len(active) == 2
+                and not active.splitted
+                and not active.finished
                 and not self.dealer_has_blackjack()
             )
             if show_surrender:
@@ -175,6 +188,7 @@ class Blackjack:
         if with_buttons and view._game_over:
             container.add_item(discord.ui.Separator())
             row = discord.ui.ActionRow()
+            row.add_item(view.help)
             row.add_item(view.NewGameButton(view.table))
             container.add_item(row)
 
