@@ -148,11 +148,8 @@ class TableView(LayoutView):
         self.start_next_round.label = "Start" if engine.state == TableState.PREPARED else "Next Round"
         self.start_next_round.disabled = True
 
-        # Big/Small Blind can't raise/bet in the first round
-        is_first_round_and_blind = (
-            len(engine.community_arr) == 0 and engine.blind_index is not None and engine.player_index in engine.blind_index
-        )
-        self.raise_bet.disabled = is_first_round_and_blind
+        # Raise/Bet is always available (blinds can raise when action comes back to them)
+        self.raise_bet.disabled = False
         self.raise_bet.label = "Bet" if all(player.bet <= engine.big_blind for player in engine.playing_players) else "Raise"
 
         is_check = engine.players[engine.player_index].bet == max(player.bet for player in engine.players)
@@ -341,29 +338,34 @@ class TableView(LayoutView):
             await interaction.response.send_message(f"{Emojis.error} Invalid amount.", ephemeral=True)
             return
 
-        if amount > player.stack:
-            await interaction.response.send_message(f"{Emojis.error} You don't have enough chips.", ephemeral=True)
-            return
+        # Calculate minimum raise
+        current_max_bet = max(p.bet for p in self.engine.players)
 
-        is_bet = all(player.bet <= self.engine.big_blind for player in self.engine.playing_players)
+        is_bet = current_max_bet <= self.engine.big_blind
         if is_bet:
-            if amount < self.engine.big_blind:
+            # First bet of the round: minimum is the big blind
+            min_raise = self.engine.big_blind
+            if amount < min_raise:
                 await interaction.response.send_message(
-                    f"You have to raise by at least the big blind (**{self.engine.big_blind}** Chips).", ephemeral=True
+                    f"You have to bet at least the big blind (**{min_raise}** Chips).", ephemeral=True
                 )
                 return
         else:
-            # Raise must be at least twice the current bet
-            previous_bet = max(player.bet for player in self.engine.players)
-            if amount < previous_bet * 2:
+            # Raise: minimum raise increment is the big blind (standard poker rule)
+            # The total bet must be at least current_max_bet + big_blind
+            min_total_bet = current_max_bet + self.engine.big_blind
+            min_raise_amount = min_total_bet - player.bet  # Amount player needs to add
+
+            if amount < min_raise_amount:
                 await interaction.response.send_message(
-                    f"You have to raise by at least twice the current bet (**{previous_bet * 2}** Chips).", ephemeral=True
+                    f"You have to raise to at least **{min_total_bet}** Chips "
+                    f"(add at least **{min_raise_amount}** Chips).", ephemeral=True
                 )
                 return
 
-            if (previous_bet + amount) > player.stack:
-                await interaction.response.send_message(f"{Emojis.error} You don't have enough chips.", ephemeral=True)
-                return
+        if amount > player.stack:
+            await interaction.response.send_message(f"{Emojis.error} You don't have enough chips.", ephemeral=True)
+            return
 
         # check if its all-in
         if amount == player.stack:

@@ -631,21 +631,21 @@ class TexasHoldem:
             self.Raise(contribution)
 
     def Raise(self, amount: int) -> None:
-        """Raises the bet for the current player."""
-        if self.side_pots:
-            # if we have at least one side pot, we will update this one and not the initial pot
-            self.side_pots[-1] += amount
-        else:
-            self.pot += amount
-
+        """Raises the bet for the current player by adding `amount` chips to their current bet."""
         player = self.players[self.player_index]
 
-        # Calculate the amount the player can contribute to the current pot
+        # Calculate the amount the player can contribute (capped by their stack)
         contribution = min(player.stack, amount)
+
+        if self.side_pots:
+            # if we have at least one side pot, we will update this one and not the initial pot
+            self.side_pots[-1] += contribution
+        else:
+            self.pot += contribution
 
         # Deduct the contribution from the player's stack
         player.stack -= contribution
-        player.bet += amount
+        player.bet += contribution
 
         self.Check()
 
@@ -703,25 +703,48 @@ class TexasHoldem:
         """
         self.state = TableState.FINISHED
 
+        # Special case: only one player remains (everyone else folded)
+        # Award all pots to the remaining player without revealing cards
+        if len(self.playing_players) == 1:
+            winner = self.playing_players[0]
+            total_won = 0
+            for pot in [self.pot, *self.side_pots]:
+                winner.stack += pot.amount
+                total_won += pot.amount
+                self.winners.append(([winner], pot))
+            # Don't evaluate/reveal hand - winner takes pot without showdown
+            return
+
+        # Normal showdown: evaluate all remaining players' hands
         for player in self.playing_players:
             result = player.hand.evaluate(self.community_arr)
             self.ranks.append((player, result))
 
         self.ranks.sort(key=lambda x: x[1].value, reverse=True)
 
-        # Calculate the winner(s)
+        # Calculate the winner(s) for each pot
         for pot in [self.pot, *self.side_pots]:
-            pot_winners = []
-            for player in pot.players:
-                ranked = next((rank for rank in self.ranks if rank[0] == player), [None, None])[1]
-                if ranked and ranked.value == max([rank[1].value for rank in self.ranks]):
-                    pot_winners.append(player)
+            # Only consider players who contributed to this pot
+            pot_player_ranks = [(p, r) for p, r in self.ranks if p in pot.players]
 
+            if not pot_player_ranks:
+                continue
+
+            # Find the best hand value among players in this pot
+            best_value = max(r.value for _, r in pot_player_ranks)
+
+            # Find all players with the best hand in this pot
+            pot_winners = [p for p, r in pot_player_ranks if r.value == best_value]
+
+            # Distribute the pot among winners
             for winner in pot_winners:
                 winner.stack += pot.amount // len(pot_winners)
 
-            if all(value == max(self.ranks, key=lambda x: x[1].value) for value in self.ranks):
+            # Check if this pot resulted in a tie
+            if len(pot_winners) > 1:
                 self.tie = True
+
+            self.winners.append((pot_winners, pot))
 
             self.winners.append((pot_winners, pot))
 
@@ -828,35 +851,50 @@ class TexasHoldem:
             return
 
         if by_raise:
+            # A raise reopens betting - all players except the raiser and all-in players must act again
             for player in self.playing_players:
-                if not player.all_in:
+                if not player.all_in and player != self.players[self.player_index]:
                     player.checked = False
         else:
-            if all(player.checked for player in self.playing_players):
-                # Next street
-                assert self.blind_index is not None
-                self.player_index = (self.blind_index[1] + 1) % len(self.players)
+            # Check if the betting round is complete (all active players have acted)
+            active_players = [p for p in self.playing_players if not p.all_in]
+            if all(player.checked for player in active_players) if active_players else True:
+                # Next street - reset all check flags and bets for the new round
+                self._start_new_street()
 
-                for player in self.playing_players:
-                    if not player.all_in:
-                        player.checked = False
+    def _start_new_street(self) -> None:
+        """Starts a new betting street: resets flags, handles all-in side pots, deals community cards."""
+        assert self.blind_index is not None
 
-                if (
-                    all_in_player := next((player for player in self.playing_players if player.wait_for_allin_call), None)
-                ) and len(self.playing_players) > 2:
-                    # the call round for the all-in player is over,
-                    # all further bets will be added to the side pot
-                    all_in_player.wait_for_allin_call = False
-                    self.side_pots.append(Pot(amount=0, players=[p for p in self.playing_players if not p.all_in]))
+        # Reset check flags for the new street
+        for player in self.playing_players:
+            player.checked = False
+            player.bet = 0  # Reset bets for the new street
 
-                for _ in range(self.to_draw):
-                    self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
+        # Set player index to first active player after dealer
+        self.player_index = (self.blind_index[1] + 1) % len(self.players)
+        # Skip to first non-folded, non-all-in player
+        while self.players[self.player_index].folded or self.players[self.player_index].all_in:
+            self.player_index = (self.player_index + 1) % len(self.players)
+            if self.player_index == (self.blind_index[1] + 1) % len(self.players):
+                break  # Avoid infinite loop
 
-                if len(self.community_arr) != 5:
-                    # Only calculate the odds if the game is not over
-                    self.analysis.append(
-                        cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
-                    )
+        # Handle all-in player side pot creation
+        if all_in_player := next((player for player in self.playing_players if player.wait_for_allin_call), None):
+            all_in_player.wait_for_allin_call = False
+            remaining_players = [p for p in self.playing_players if not p.all_in]
+            if remaining_players:
+                self.side_pots.append(Pot(amount=0, players=remaining_players))
+
+        # Deal community cards
+        for _ in range(self.to_draw):
+            self.community_arr = np.concatenate([self.community_arr, self.deck.draw()], axis=0)
+
+        # Calculate odds if game is not over
+        if len(self.community_arr) != 5:
+            self.analysis.append(
+                cast("tuple[dict[str, float], dict[int, dict[str, float]]]", self.simulate(final_hand=True))
+            )
 
     def autoplay_turn(self, player: Player) -> bool:
         """Applies the automatic action for a player who took too long.
