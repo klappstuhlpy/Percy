@@ -359,3 +359,24 @@ class GuildHandlers(InternalAPIHandlers):
 
         return web.json_response(manageable)
 
+    async def _get_user_avatar(self, request: web.Request) -> web.Response:
+        """Resolve a user's *current* avatar URL straight from Discord.
+
+        The dashboard calls this live instead of persisting the avatar hash, so a
+        profile-picture change is reflected immediately (no stale stored avatars).
+        """
+        import discord
+
+        discord_id = int(request.match_info['discord_id'])
+        user = self.bot.get_user(discord_id)
+        if user is None:
+            try:
+                user = await self.bot.fetch_user(discord_id)
+            except discord.HTTPException:
+                raise web.HTTPNotFound(text='user not found')
+
+        return web.json_response({
+            'avatar_url': user.display_avatar.url,
+            'username': user.name,
+        })
+

@@ -75,6 +75,7 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/gatekeeper/toggle', self._toggle_gatekeeper)
         # User
         self._app.router.add_get('/api/internal/users/{discord_id}/guilds', self._get_user_guilds)
+        self._app.router.add_get('/api/internal/users/{discord_id}/avatar', self._get_user_avatar)
         # Leveling
         self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/config', self._get_leveling_config)
         self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/leaderboard', self._get_leveling_leaderboard)

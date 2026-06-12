@@ -74,6 +74,17 @@ class UsersRepository(BaseRepository):
         """Fetches every balance row for a guild."""
         return await self.fetch("SELECT * FROM economy WHERE guild_id = $1;", guild_id)
 
+    async def get_top_balance_records(self, guild_id: int, limit: int) -> list[asyncpg.Record]:
+        """Fetches the richest members of a guild (by cash + bank), excluding empty wallets.
+
+        A single ordered query — the leaderboard must not loop per-member balance
+        lookups (that was both slow and only sampled an arbitrary subset).
+        """
+        return await self.fetch(
+            "SELECT user_id, cash, bank, (cash + bank) AS total FROM economy "
+            "WHERE guild_id = $1 AND (cash + bank) > 0 ORDER BY total DESC LIMIT $2;",
+            guild_id, limit)
+
     async def add_cash(self, user_id: int, guild_id: int, amount: int) -> None:
         """Adds (or, with a negative ``amount``, removes) cash from a user's balance."""
         await self.execute(
