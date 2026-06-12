@@ -41,10 +41,7 @@ class HigherLower:
         self.hand: BaseHand = BaseHand()
 
         # Draw the first two cards, the first is shown and the second is hidden until the first guess.
-        self.hand.add(self.cards.draw())
-        self.current: BaseCard = self.hand.cards[-1]
-
-        self.hand.add(self.cards.draw())
+        self.current: BaseCard = self.add_next_card()
         self.next: BaseCard = self.add_next_card(hidden=True)
 
         self.multiplier: float = 1.0
@@ -55,8 +52,9 @@ class HigherLower:
         """Adds the next card to the hand and returns it."""
         nxt = self.cards.draw()
         self.hand.add(nxt)
-        self.hand.cards[-1].hidden = hidden
-        return self.hand.cards[-1]
+        cards = self.hand.cards
+        cards[-1].hidden = hidden
+        return cards[-1]
 
     def odds(self, higher: bool) -> GuessOdds:
         """Strictly-favourable ranks for a higher/lower call from the current card."""
