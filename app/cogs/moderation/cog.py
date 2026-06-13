@@ -919,7 +919,9 @@ class Moderation(Cog):
         "gatekeeper",
         description="Enables and shows the gatekeeper settings menu for the server.",
         guild_only=True,
-        bot_permissions=["ban_members"],
+        # Creates/assigns the unverified role and edits channel overwrites (manage_roles),
+        # and removes bypassers via the configurable ban/kick action.
+        bot_permissions=["manage_roles", "ban_members", "kick_members"],
         user_permissions=PermissionTemplate.mod,
     )
     async def moderation_gatekeeper(self, ctx: ModGuildContext) -> None:
@@ -969,6 +971,7 @@ class Moderation(Cog):
         "mentions",
         description="Enables auto-banning accounts that spam more than 'count' mentions.",
         guild_only=True,
+        bot_permissions=["ban_members"],  # the protection auto-bans mention spammers
         user_permissions=PermissionTemplate.mod,
     )
     @describe(count="The maximum amount of mentions before banning.")
