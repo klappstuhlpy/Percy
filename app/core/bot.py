@@ -428,12 +428,14 @@ class Bot(commands.Bot):
             elif isinstance(ctx, discord.Message):
                 author = ctx.author
                 send = ctx.channel.send
-            else:  # discord.Member
+            elif isinstance(ctx, discord.Member):
                 author = ctx
                 member = ctx
                 await member.create_dm()
                 assert member.dm_channel is not None
                 send = member.dm_channel.send
+            else:
+                raise ValueError
 
             if await self.is_owner(author):
                 await send(embed=embed)

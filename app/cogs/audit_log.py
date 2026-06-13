@@ -160,6 +160,10 @@ class AuditLog(Cog):
         embed.set_thumbnail(url=get_asset_url(entry.guild))
         assert entry.user is not None
         embed.set_footer(text=f"Log: [{entry.id}]", icon_url=get_asset_url(entry.user))
+
+        if config.audit_log_webhook is None:
+            return
+
         await config.audit_log_webhook.send(embed=embed)
 
 
