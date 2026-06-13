@@ -529,7 +529,7 @@ class Meta(Cog):
     )
     async def dashboard(self, ctx: Context) -> None:
         """Shows the dashboard of the bot."""
-        url = f"https://klappstuhl.me/percy/dashboard/guild/{ctx.guild.id}"
+        url = "https://r.klappstuhl.me/db"
         await ctx.send(f"You can find the dashboard here: <{url}>\n"
                        f"*Note: If you have no account, you can create one by linking your Discord account.*")
 
