@@ -801,7 +801,7 @@ class GuildConfig(BaseRecord):
             RETURNING *;
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.get_guild_config.invalidate(self.id)
+        self.bot.db.signals.fire("guild_config_changed", self.id)
         return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
 
     @property
@@ -975,7 +975,7 @@ class UserConfig(BaseRecord):
             RETURNING *;
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.get_user_config.invalidate(self.id)
+        self.bot.db.signals.fire("user_config_changed", self.id)
         return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
 
     @property
@@ -1171,7 +1171,7 @@ class Gatekeeper(BaseRecord):
             RETURNING *;
         """
         record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.get_guild_gatekeeper.invalidate(self.id)
+        self.bot.db.signals.fire("gatekeeper_changed", self.id)
         return self.__class__(self.__members, bot=self.bot, record=record)  # type: ignore[return-value]
 
     async def edit(

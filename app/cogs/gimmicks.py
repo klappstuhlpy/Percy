@@ -219,50 +219,50 @@ class Gimmicks(Cog):
     @describe(color="The color to show information about. Must be in hex format or autocompleted.")
     async def color(self, ctx: Context, *, color: Annotated[discord.Colour, ColourConverter]) -> None:
         """Shows information about a color."""
-        await ctx.defer()
+        async with ctx.progress("Looking up color data...") as progress:
+            embed = discord.Embed(color=color)
+            embed.set_footer(text="provided by thecolorapi.com")
 
-        embed = discord.Embed(color=color)
-        embed.set_footer(text="provided by thecolorapi.com")
+            url = "https://www.thecolorapi.com/id"
+            async with self.bot.session.get(url, params={"hex": f"{color.value:0>6x}"}) as resp:
+                if resp.status != 200:
+                    raise commands.BadArgument(f"An error occurred: {resp.status} {resp.reason}")
 
-        url = "https://www.thecolorapi.com/id"
-        async with self.bot.session.get(url, params={"hex": f"{color.value:0>6x}"}) as resp:
-            if resp.status != 200:
-                raise commands.BadArgument(f"An error occurred: {resp.status} {resp.reason}")
+                js = await resp.json()
+                embed.url = f"{url}?hex={color.value:0>6x}"
 
-            js = await resp.json()
-            embed.url = f"{url}?hex={color.value:0>6x}"
+                message = js["name"]["value"]
+                await progress.update("Rendering color swatch...")
+                image = await self.bot.render.color_swatch((js["rgb"]["r"], js["rgb"]["g"], js["rgb"]["b"]), message)
 
-            message = js["name"]["value"]
-            image = await self.bot.render.color_swatch((js["rgb"]["r"], js["rgb"]["g"], js["rgb"]["b"]), message)
+                hsl = js["hsl"]["value"]
+                hsv = js["hsv"]["value"]
+                cmyk = js["cmyk"]["value"]
+                xyz = js["XYZ"]["value"]
 
-            hsl = js["hsl"]["value"]
-            hsv = js["hsv"]["value"]
-            cmyk = js["cmyk"]["value"]
-            xyz = js["XYZ"]["value"]
+                embed.title = message
 
-            embed.title = message
+                embed.add_field(
+                    name="Information",
+                    value=f"**Closest Named Hex:** {js['name']['closest_named_hex']}\n"
+                    f"**Exact Match Name:** `{js['name']['exact_match_name']}`\n"
+                    f"**Distance:** `{js['name']['distance']}`",
+                    inline=False,
+                )
+                embed.add_field(
+                    name="Color Data",
+                    value=f"**Hex:** {js['hex']['value']}\n"
+                    f"**RGB:** `{js['rgb']['value']}`\n"
+                    f"**HSL:** `{hsl}`\n"
+                    f"**HSV:** `{hsv}`\n"
+                    f"**CMYK:** `{cmyk}`\n"
+                    f"**XYZ:** `{xyz}`",
+                    inline=False,
+                )
 
-            embed.add_field(
-                name="Information",
-                value=f"**Closest Named Hex:** {js['name']['closest_named_hex']}\n"
-                f"**Exact Match Name:** `{js['name']['exact_match_name']}`\n"
-                f"**Distance:** `{js['name']['distance']}`",
-                inline=False,
-            )
-            embed.add_field(
-                name="Color Data",
-                value=f"**Hex:** {js['hex']['value']}\n"
-                f"**RGB:** `{js['rgb']['value']}`\n"
-                f"**HSL:** `{hsl}`\n"
-                f"**HSV:** `{hsv}`\n"
-                f"**CMYK:** `{cmyk}`\n"
-                f"**XYZ:** `{xyz}`",
-                inline=False,
-            )
+                embed.set_image(url="attachment://color.png")
 
-            embed.set_image(url="attachment://color.png")
-
-            await ctx.send(embed=embed, file=image)
+        await ctx.send(embed=embed, file=image)
 
     @command(
         name="meme",

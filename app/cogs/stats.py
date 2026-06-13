@@ -413,6 +413,9 @@ class Stats(Cog):
         if before.bot:
             return None
 
+        if self.bot.feature_flags.is_cog_disabled("Stats"):
+            return None
+
         if not (await self.bot.db.get_user_config(after.id)).track_presence:  # type: ignore[misc]
             return None
 
@@ -651,7 +654,7 @@ class Stats(Cog):
     async def stats(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Tells you command usage stats for the server or a member."""
         assert ctx.guild is not None
-        async with ctx.typing():
+        async with ctx.progress("Fetching command statistics..."):
             embed = discord.Embed()
 
             if member is None:

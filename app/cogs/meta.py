@@ -677,7 +677,7 @@ class Meta(Cog):
         roles = [role.name.replace("@", "@\u200b") for role in guild.roles]
 
         if not guild.chunked:
-            async with ctx.channel.typing():
+            async with ctx.progress("Loading member data..."):
                 await guild.chunk(cache=True)
 
         everyone = guild.default_role

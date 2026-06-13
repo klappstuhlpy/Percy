@@ -154,7 +154,7 @@ class Moderation(Cog):
                 func(member_id)  # type: ignore[arg-type]
 
             final_data.append({"guild_id": guild_id, "result_array": list(as_set)})
-            self.bot.db.get_guild_config.invalidate(guild_id)
+            self.bot.db.signals.fire("guild_config_changed", guild_id)
 
         await self.bot.db.moderation.bulk_update_muted_members(final_data)
         self._mute_data_batch.clear()
@@ -704,7 +704,7 @@ class Moderation(Cog):
         The bot must have the ability to create webhooks in the given channel.
         """
         assert ctx.guild is not None
-        await ctx.defer()
+
         if ctx.guild_config and ctx.guild_config.flags.alerts:
             await ctx.send_info(
                 f'You already have alert message logging enabled. To disable, use "{ctx.prefix}moderation disable alerts"'
@@ -713,26 +713,29 @@ class Moderation(Cog):
 
         channel_id = channel.id
 
-        reason = f"{ctx.author} enabled alert message logging (ID: {ctx.author.id})"
+        async with ctx.progress("Setting up alert logging...") as progress:
+            reason = f"{ctx.author} enabled alert message logging (ID: {ctx.author.id})"
 
-        assert self.bot.user is not None
-        avatar_asset = self.bot.user.avatar
-        avatar_data = await avatar_asset.read() if avatar_asset is not None else None
+            assert self.bot.user is not None
+            avatar_asset = self.bot.user.avatar
+            avatar_data = await avatar_asset.read() if avatar_asset is not None else None
 
-        try:
-            webhook = await channel.create_webhook(name="Moderation Alerts", avatar=avatar_data, reason=reason)
-        except discord.Forbidden:
-            await ctx.send_error(f"The bot does not have permissions to create webhooks in {channel.mention}.")
-            return
-        except discord.HTTPException:
-            await ctx.send_error(
-                "An error occurred while creating the webhook. Note you can only have 10 webhooks per channel."
-            )
-            return
+            await progress.update("Creating webhook...")
+            try:
+                webhook = await channel.create_webhook(name="Moderation Alerts", avatar=avatar_data, reason=reason)
+            except discord.Forbidden:
+                await ctx.send_error(f"The bot does not have permissions to create webhooks in {channel.mention}.")
+                return
+            except discord.HTTPException:
+                await ctx.send_error(
+                    "An error occurred while creating the webhook. Note you can only have 10 webhooks per channel."
+                )
+                return
 
-        flags = AutoModFlags()
-        flags.alerts = True
-        await ctx.db.moderation.enable_alerts(ctx.guild.id, flags.value, channel_id, webhook.url)
+            flags = AutoModFlags()
+            flags.alerts = True
+            await ctx.db.moderation.enable_alerts(ctx.guild.id, flags.value, channel_id, webhook.url)
+
         await ctx.send_success(f"Alert messages enabled. Sending alerts to <#{channel_id}>.")
 
     @moderation.group(
@@ -748,33 +751,35 @@ class Moderation(Cog):
         Audit Log sends a message to the log channel whenever a certain event is triggered.
         """
         assert ctx.guild is not None
-        await ctx.defer()
-        reason = f"{ctx.author} enabled mod audit log (ID: {ctx.author.id})"
 
-        wh_url = await self.bot.db.moderation.get_audit_log_webhook_url(ctx.guild.id)
-        if wh_url is not None:
-            # Delete the old webhook if it exists
-            with suppress(discord.HTTPException):
-                webhook = discord.Webhook.from_url(wh_url, session=self.bot.session)
-                await webhook.delete(reason=reason)
+        async with ctx.progress("Setting up audit log...") as progress:
+            reason = f"{ctx.author} enabled mod audit log (ID: {ctx.author.id})"
 
-        assert self.bot.user is not None
-        try:
-            webhook = await channel.create_webhook(
-                name="Moderation Audit Log",
-                avatar=await self.bot.user.display_avatar.read(),
-                reason=reason,  # type: ignore[arg-type]
-            )
-        except discord.Forbidden:
-            await ctx.send_error("I do not have permissions to create a webhook in that channel.")
-            return
-        except discord.HTTPException:
-            await ctx.send_error(
-                "Failed to create a webhook in that channel. Note that the limit for webhooks in each channel is **10**."
-            )
-            return
+            wh_url = await self.bot.db.moderation.get_audit_log_webhook_url(ctx.guild.id)
+            if wh_url is not None:
+                with suppress(discord.HTTPException):
+                    webhook = discord.Webhook.from_url(wh_url, session=self.bot.session)
+                    await webhook.delete(reason=reason)
 
-        await ctx.db.moderation.enable_audit_log(ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
+            await progress.update("Creating webhook...")
+            assert self.bot.user is not None
+            try:
+                webhook = await channel.create_webhook(
+                    name="Moderation Audit Log",
+                    avatar=await self.bot.user.display_avatar.read(),
+                    reason=reason,  # type: ignore[arg-type]
+                )
+            except discord.Forbidden:
+                await ctx.send_error("I do not have permissions to create a webhook in that channel.")
+                return
+            except discord.HTTPException:
+                await ctx.send_error(
+                    "Failed to create a webhook in that channel. Note that the limit for webhooks in each channel is **10**."
+                )
+                return
+
+            await ctx.db.moderation.enable_audit_log(ctx.guild.id, AutoModFlags.audit_log.flag, channel.id, webhook.url)
+
         await ctx.send_success(f"Audit log enabled. Broadcasting log events to <#{channel.id}>.")
 
     @moderation_auditlog.command(
@@ -1258,7 +1263,7 @@ class Moderation(Cog):
             return
 
         reason = f"Lockdown ended by {ctx.author} (ID: {ctx.author.id})"
-        async with ctx.typing():
+        async with ctx.progress("Ending lockdown..."):
             failures = await end_lockdown(self.bot, ctx.guild, reason=reason)
 
         await ctx.db.moderation.clear_lockdowns(ctx.guild.id)
@@ -1390,12 +1395,15 @@ class Moderation(Cog):
         if not confirm:
             return
 
-        failed = 0
-        for member in members:
-            try:
-                await ctx.guild.ban(member, reason=reason)
-            except discord.HTTPException:
-                failed += 1
+        async with ctx.progress(f"Banning {total_members} members...") as progress:
+            failed = 0
+            for i, member in enumerate(members, 1):
+                try:
+                    await ctx.guild.ban(member, reason=reason)
+                except discord.HTTPException:
+                    failed += 1
+                if i % 5 == 0:
+                    await progress.update(f"Banning members... ({i}/{total_members})")
 
         await ctx.send_success(f"Successfully banned [`{total_members - failed}`/`{total_members}`] members.")
 
@@ -1872,7 +1880,7 @@ class Moderation(Cog):
                 if not confirm:
                     return
 
-        async with ctx.typing():
+        async with ctx.progress("Configuring mute role..."):
             members = set()
 
             if ctx.guild_config and merge:
@@ -1886,11 +1894,11 @@ class Moderation(Cog):
             members.update(m.id for m in role.members)
             await self.bot.db.moderation.set_mute_role(ctx.guild.id, role.id, list(members))
 
-            escaped = discord.utils.escape_mentions(role.name)
-            await ctx.send_success(
-                f"Successfully set the {escaped} role as the mute role.\n\n"
-                "**Note: Permission overwrites have not been changed.**"
-            )
+        escaped = discord.utils.escape_mentions(role.name)
+        await ctx.send_success(
+            f"Successfully set the {escaped} role as the mute role.\n\n"
+            "**Note: Permission overwrites have not been changed.**"
+        )
 
     @_mute_role.command(
         "update",
@@ -1907,13 +1915,14 @@ class Moderation(Cog):
         assert ctx.guild_config is not None
         assert ctx.guild_config.mute_role is not None
 
-        async with ctx.typing():
+        async with ctx.progress("Updating channel permissions..."):
             success, failure, skipped = await update_role_permissions(ctx.guild_config.mute_role, ctx.guild, ctx.author)  # type: ignore[arg-type]
             total = success + failure + skipped
-            await ctx.send_info(
-                f"Attempted to update {total} channel permissions. "
-                f"[Updated: `{success}`, Failed: `{failure}`, Skipped (*no permissions*): `{skipped}`]"
-            )
+
+        await ctx.send_info(
+            f"Attempted to update {total} channel permissions. "
+            f"[Updated: `{success}`, Failed: `{failure}`, Skipped (*no permissions*): `{skipped}`]"
+        )
 
     @_mute_role.command(
         "create",
@@ -1946,11 +1955,12 @@ class Moderation(Cog):
             await ctx.send_success("Mute role successfully created.")
             return
 
-        async with ctx.typing():
+        async with ctx.progress("Updating channel permissions..."):
             success, failure, skipped = await update_role_permissions(role, ctx.guild, ctx.author)
-            await ctx.send_success(
-                f"Mute role successfully created. Overwrites: [Updated: {success}, Failed: {failure}, Skipped: {skipped}]"
-            )
+
+        await ctx.send_success(
+            f"Mute role successfully created. Overwrites: [Updated: {success}, Failed: {failure}, Skipped: {skipped}]"
+        )
 
     @_mute_role.command(
         "unbind",

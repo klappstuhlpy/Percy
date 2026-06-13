@@ -336,7 +336,7 @@ class GuildHandlers(InternalAPIHandlers):
                 return web.json_response({'ok': True, 'status': 'already_disabled'})
             await gatekeeper.disable()
 
-        self.bot.db.get_guild_gatekeeper.invalidate(guild_id)
+        self.bot.db.signals.fire("gatekeeper_changed", guild_id)
         return web.json_response({'ok': True, 'status': 'enabled' if enabled else 'disabled'})
 
     async def _get_user_guilds(self, request: web.Request) -> web.Response:

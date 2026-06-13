@@ -158,6 +158,9 @@ class Leveling(Cog):
         if message.author.bot:
             return
 
+        if self.bot.feature_flags.is_cog_disabled("Leveling"):
+            return
+
         guild_config: GuildLevelConfig = await self.get_guild_level_config(message.guild.id)  # type: ignore[misc]
 
         if guild_config is None:

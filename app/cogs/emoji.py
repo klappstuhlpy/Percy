@@ -250,7 +250,7 @@ class Emoji(Cog):
             image_color = get_dominant_color(io.BytesIO(data))
 
             coro = ctx.guild.create_custom_emoji(name=name, image=data, reason=reason)
-            async with ctx.typing():
+            async with ctx.progress("Creating emoji..."):
                 try:
                     created: discord.Emoji = await asyncio.wait_for(coro, timeout=10.0)
                 except Exception as exc:

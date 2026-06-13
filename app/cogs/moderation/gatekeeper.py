@@ -471,7 +471,7 @@ class GatekeeperSetUpView(LayoutView):
 
     def update_state(self, *, invalidate: bool = True) -> None:
         if invalidate:
-            self.cog.bot.db.get_guild_gatekeeper.invalidate(self.gatekeeper.id)
+            self.cog.bot.db.signals.fire("gatekeeper_changed", self.gatekeeper.id)
 
         role = self.gatekeeper.role
         if role is not None:

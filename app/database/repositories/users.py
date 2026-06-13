@@ -39,12 +39,12 @@ class UsersRepository(BaseRepository):
                 ON CONFLICT (id) DO UPDATE SET timezone = $2;
         """
         await self.execute(query, user_id, timezone)
-        self.db.get_user_config.invalidate(user_id)
+        self.invalidate_cache("user_config_changed", user_id)
 
     async def clear_timezone(self, user_id: int) -> None:
         """Clears a user's stored timezone."""
         await self.execute("UPDATE user_settings SET timezone = NULL WHERE id=$1;", user_id)
-        self.db.get_user_config.invalidate(user_id)
+        self.invalidate_cache("user_config_changed", user_id)
 
     async def delete_personal_data(self, user_id: int) -> None:
         """Removes a user's tracked history (presence, avatar and item) in one transaction."""

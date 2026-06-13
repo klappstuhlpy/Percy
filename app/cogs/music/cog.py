@@ -993,7 +993,7 @@ class Music(Cog):
             await ctx.send_error("Please provide a song to search for.")
             return
 
-        async with ctx.channel.typing():
+        async with ctx.progress("Searching for lyrics...") as progress:
             headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
 
             async with self.bot.session.get(
@@ -1008,6 +1008,7 @@ class Music(Cog):
                 data = (await resp.json())["response"]["hits"][0]["result"]
                 song_url = urljoin("https://genius.com", data["path"])
 
+            await progress.update("Fetching lyrics page...")
             async with self.bot.session.get(song_url) as res:
                 if res.status != 200:
                     await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
@@ -1015,6 +1016,7 @@ class Music(Cog):
 
                 html = await res.text()
 
+            await progress.update("Extracting lyrics...")
             lyrics_data = self._extract_lyrics(html)
 
             if lyrics_data is None:

@@ -90,7 +90,7 @@ async def start_lockdown(
     """Starts a lockdown in the given channels."""
     assert ctx.guild is not None
     reason = f"Lockdown request by {ctx.author} (ID: {ctx.author.id})"
-    async with ctx.typing():
+    async with ctx.progress(f"Locking down {len(channels)} channels..."):
         return await lock_channels(ctx.bot, ctx.guild, channels, reason=reason)
 
 
