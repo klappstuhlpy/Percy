@@ -54,7 +54,10 @@ from app.utils import (
 from config import Emojis, path
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from app.core.timer import Timer
+    from app.database.base import Balance
 
 
 async def roulette_space_autocomplete(_, current: str) -> list[Choice[str | int | float]]:
@@ -787,6 +790,16 @@ class Games(Cog):
         with suppress(discord.HTTPException):
             await ctx.message.add_reaction(Emojis.success)
 
+    async def _balances_for(self, guild_id: int, user_ids: Iterable[int]) -> dict[int, Balance]:
+        """Fetch balances for the given users in a single query, keyed by user id.
+
+        Bettors always have a row (placing a bet debits them), but any missing
+        user falls back to a single fetch which inserts an empty record. This
+        replaces per-bet ``get_user_balance`` calls in the payout/refund loops.
+        """
+        balances = {b.user_id: b for b in await self.bot.db.get_guild_balances(guild_id)}
+        return {uid: balances.get(uid) or await self.bot.db.get_user_balance(uid, guild_id) for uid in set(user_ids)}
+
     @Cog.listener()
     async def on_roulette_timer_complete(self, timer: Timer) -> None:
         """Handle the completion of a roulette timer."""
@@ -806,10 +819,9 @@ class Games(Cog):
                 roulette.message = await channel.fetch_message(message_id)
             except discord.HTTPException:
                 assert roulette.ctx.guild is not None
+                balances = await self._balances_for(roulette.ctx.guild.id, [bet.placed_by.id for bet in roulette.bets])
                 for bet in roulette.bets:
-                    balance = await self.bot.db.get_user_balance(bet.placed_by.id, roulette.ctx.guild.id)
-                    if balance is not None:
-                        await balance.add(cash=bet.amount)
+                    await balances[bet.placed_by.id].add(cash=bet.amount)
                 # give people their money back
                 await channel.send(f"{Emojis.warning} The roulette game message has not been found. *Returning bets.*")
                 self.roulette_tables.pop(channel_id)
@@ -829,12 +841,11 @@ class Games(Cog):
 
         assert roulette.ctx.guild is not None
         guild_id = roulette.ctx.guild.id
+        balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in roulette.bets])
         for bet in roulette.bets:
             if bet in winning_bets:
-                balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
                 payout = round(bet.amount * Payout.by_value(bet.space.value))
-                if balance is not None:
-                    await balance.add(cash=payout)
+                await balances[bet.placed_by.id].add(cash=payout)
                 await self.bot.db.game_stats.record_result(
                     guild_id, bet.placed_by.id, Game.ROULETTE, GameResult.WIN, wagered=bet.amount, profit=payout - bet.amount
                 )
@@ -871,10 +882,9 @@ class Games(Cog):
             try:
                 table.message = await channel.fetch_message(message_id)
             except discord.HTTPException:
+                balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in table.bets])
                 for bet in table.bets:
-                    balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
-                    if balance is not None:
-                        await balance.add(cash=bet.amount)
+                    await balances[bet.placed_by.id].add(cash=bet.amount)
                 await channel.send(f"{Emojis.warning} The horse race message was lost. *Refunding bets.*")
                 self.horse_tables.pop(channel_id, None)
                 return
@@ -890,12 +900,11 @@ class Games(Cog):
 
         pool = table.pool
         multiplier = horserace_engine.parimutuel_multiplier(pool, table.total_on(winner + 1))
+        balances = await self._balances_for(guild_id, [bet.placed_by.id for bet in table.bets])
         for bet in table.bets:
             if bet.horse == winner + 1:
                 payout = round(bet.amount * multiplier)
-                balance = await self.bot.db.get_user_balance(bet.placed_by.id, guild_id)
-                if balance is not None:
-                    await balance.add(cash=payout)
+                await balances[bet.placed_by.id].add(cash=payout)
                 await self.bot.db.game_stats.record_result(
                     guild_id, bet.placed_by.id, Game.HORSERACE, GameResult.WIN, wagered=bet.amount, profit=payout - bet.amount
                 )

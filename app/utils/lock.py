@@ -241,7 +241,7 @@ def lock_from(
                 log.info("%s: aborted because resource %r:%r is locked", name, namespace, resource_id)
                 if wait:
                     log.debug("%s: waiting for locked resource %r:%r to release...", name, namespace, resource_id)
-                    while __lock_dicts[namespace].get(resource_id).locked():
+                    while waiter_lock.locked():
                         await asyncio.sleep(0.1)
                     return await func(*args, **kwargs)
                 if raise_error:

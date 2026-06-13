@@ -399,7 +399,7 @@ class LevelConfig(BaseRecord):
         if new == {r.id for r in user.roles}:
             return
 
-        reason = f'Overwrting roles for level {level}.'
+        reason = f'Overwriting roles for level {level}.'
         with suppress(discord.HTTPException):
             await user.edit(roles=list(map(discord.Object, new)), reason=reason)
 

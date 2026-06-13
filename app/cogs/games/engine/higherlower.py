@@ -9,7 +9,6 @@ unit-testable.
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass
 
 __all__ = ('RANKS', 'GuessOdds', 'HigherLower')
@@ -34,9 +33,7 @@ class GuessOdds:
 class HigherLower:
     """Stateful single-run Higher/Lower game."""
 
-    def __init__(self, rng: random.Random | None = None) -> None:
-        self._rng = rng or random.Random()
-
+    def __init__(self) -> None:
         self.cards: Deck = Deck(game="basic", infinite=True)
         self.hand: BaseHand = BaseHand()
 

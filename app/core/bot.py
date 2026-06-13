@@ -264,7 +264,7 @@ class Bot(commands.Bot):
 
             try:
                 payload = app_cmd.to_dict(tree=self.tree)
-            except:
+            except Exception:
                 app_cmd = getattr(app_cmd, "app_command", None)
                 if app_cmd is None:
                     continue
