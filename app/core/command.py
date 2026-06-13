@@ -431,15 +431,17 @@ class Command(commands.Command):
                 name = "|".join(f'"{v}"' if isinstance(v, str) else str(v) for v in annotation.__args__)
 
             if param.default is not param.empty:
-                # We don't want None or '' to trigger the [name=value] case, and instead it should
-                # do [name] since [name=None] or [name=] are not exactly useful for the user.
-                should_print = param.default if isinstance(param.default, str) else param.default is not None
+                # Use the parameter's ``displayed_default`` rather than the raw default: it
+                # renders special defaults like ``commands.Author`` as their friendly text
+                # (``<you>``) and returns None for bare callables/None, so we fall back to
+                # ``[name]`` instead of an ugly repr like ``operator.attrgetter('author')``.
+                displayed = param.displayed_default
                 result.append("[", color=AnsiColor.gray, bold=True)
                 result.append(name, color=AnsiColor.blue)
 
-                if should_print:
+                if displayed:
                     result.append("=", color=AnsiColor.gray, bold=True)
-                    result.append(str(param.default), color=AnsiColor.cyan)
+                    result.append(str(displayed), color=AnsiColor.cyan)
                     extra = "..." if greedy else ""
                 else:
                     extra = ""
