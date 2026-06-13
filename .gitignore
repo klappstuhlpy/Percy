@@ -11,4 +11,4 @@ pyright_output.txt
 pyrightconfig.json
 temp_channels.json
 .claude/
-tests/
+/tests/artifacts

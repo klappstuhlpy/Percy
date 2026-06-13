@@ -1,13 +1,36 @@
 name: CI
 
+# Run on every push (any branch) and every pull request, plus a manual trigger.
+# This is what makes the suite actually execute whenever new work is pushed —
+# not just on master/main.
 on:
   push:
-    branches: [master, main]
   pull_request:
+  workflow_dispatch:
+
+# Least-privilege: the job only needs to read the checked-out code.
+permissions:
+  contents: read
+
+# Cancel an in-progress run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
+    name: Tests, lint & types
     runs-on: ubuntu-latest
+
+    # CI runs the non-beta (Linux) code path, which reads tokens/IDs from the
+    # environment. The suite is fully mocked and never connects to Discord or a
+    # database, so these dummy values just keep config/cog imports from failing.
+    env:
+      DISCORD_TOKEN: ci-dummy-token
+      DISCORD_BETA_TOKEN: ci-dummy-token
+      ANILIST_CLIENT_ID: "0"
+      INTERNAL_API_PORT: "8090"
+
     steps:
       - uses: actions/checkout@v4
 

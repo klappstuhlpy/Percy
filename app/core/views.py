@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Iterable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -16,6 +17,7 @@ else:
     Context = commands.Context
 
 __all__ = (
+    "CommandSuggestionView",
     "ConfirmationView",
     "DisambiguatorView",
     "LayoutView",
@@ -222,6 +224,39 @@ class TrashView(View):
     async def on_timeout(self) -> None:
         for child in self.children:
             child.disabled = True
+
+
+class CommandSuggestionView(View):
+    """Offers a one-click "run the command you probably meant" after a typo.
+
+    Shown by the ``CommandNotFound`` handler when a mistyped command is a very
+    close fuzzy match for a real one. The button re-dispatches the original
+    message with the command name corrected, so all checks/cooldowns run fresh.
+    """
+
+    def __init__(self, ctx: Context, suggestion: str, new_content: str) -> None:
+        super().__init__(timeout=30.0, members=ctx.author, delete_on_timeout=True)
+        self.ctx = ctx
+        self._new_content = new_content
+
+        button: discord.ui.Button[CommandSuggestionView] = discord.ui.Button(  # type: ignore[type-arg]
+            style=discord.ButtonStyle.grey, label=f"Run {ctx.clean_prefix}{suggestion}"
+        )
+        button.callback = self._run  # type: ignore[assignment]
+        self.add_item(button)
+
+    async def _run(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        with suppress(discord.HTTPException):
+            await interaction.response.defer()
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.delete()
+
+        message = copy.copy(self.ctx.message)
+        message.content = self._new_content
+        new_ctx = await self.ctx.bot.get_context(message)
+        await self.ctx.bot.invoke(new_ctx)
 
 
 class ConfirmationView(View):

@@ -30,10 +30,21 @@ from app.core.permissions import PermissionSpec
 from app.core.spam import SpamControl
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
+from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
-from app.utils import GUILD_FEATURES, AnsiColor, AnsiStringBuilder, Config, cache, deep_to_with, helpers, humanize_duration
+from app.utils import (
+    GUILD_FEATURES,
+    AnsiColor,
+    AnsiStringBuilder,
+    Config,
+    cache,
+    deep_to_with,
+    fuzzy,
+    helpers,
+    humanize_duration,
+)
 from app.utils.lock import LockedResourceError
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
@@ -282,13 +293,18 @@ class Bot(commands.Bot):
     async def process_commands(self, message: discord.Message) -> None:
         ctx = await self.get_context(message)
 
-        if ctx.command is None:
-            return
-
         if ctx.author.id in self.blacklist:
             return
 
         if ctx.guild is not None and ctx.guild.id in self.blacklist:
+            return
+
+        if ctx.command is None:
+            # No command matched. discord.py only raises CommandNotFound from invoke(),
+            # which we skip here — so handle the "did you mean?" suggestion directly. Only
+            # act when the user actually used the prefix (ctx.invoked_with is set).
+            if ctx.invoked_with:
+                await self._maybe_suggest_command(ctx)
             return
 
         if await self.spam_control.is_spam(ctx, message):
@@ -370,6 +386,49 @@ class Bot(commands.Bot):
 
             await self.stats_webhook.send(embed=embed)
 
+    #: Minimum fuzzy ``ratio`` (0-100) for a mistyped command to earn a "did you mean?"
+    #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
+    #: matches while an unrelated word (``baldheu``) stays silent, as before.
+    SUGGESTION_CUTOFF: Final[int] = 75
+
+    async def _maybe_suggest_command(self, ctx: Context) -> None:
+        """Reply with a single close command suggestion for a mistyped command.
+
+        Stays silent unless the attempted name is a *very* close fuzzy match for a
+        visible command, so unknown text behaves exactly as before (no reply).
+        """
+        attempted = (ctx.invoked_with or '').lower()
+        # Only handle clean top-level misses; ignore 1-2 char noise to avoid false hits.
+        if ctx.command is not None or len(attempted) < 3:
+            return
+
+        # Map every visible command name/alias to its command, then take the best match.
+        choices: dict[str, Command] = {}
+        for cmd in self.commands:
+            if cmd.hidden:
+                continue
+            for name in (cmd.name, *cmd.aliases):
+                choices.setdefault(name.lower(), cmd)  # type: ignore[arg-type]
+
+        match = fuzzy.extract_one(attempted, choices, scorer=fuzzy.ratio, score_cutoff=self.SUGGESTION_CUTOFF)
+        if match is None:
+            return
+
+        _, _, command = match
+        suggestion = command.qualified_name
+        prefix = ctx.prefix or ''
+        rest = ctx.message.content[len(prefix) + len(ctx.invoked_with or ''):]
+        new_content = f'{prefix}{suggestion}{rest}'
+
+        view = CommandSuggestionView(ctx, suggestion, new_content)
+        with suppress(discord.HTTPException):
+            view.message = await ctx.send(
+                f"{Emojis.error} *I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?*",
+                view=view,
+                reference=ctx.message,
+                delete_after=15,
+            )
+
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         """|coro|
 
@@ -393,10 +452,9 @@ class Bot(commands.Bot):
 
         self.command_error_cache[self.make_command_cache_key(ctx)] = f'{error.__class__.__name__}: {error}'
 
-        blacklist = (
-            commands.CommandNotFound, commands.CheckFailure, discord.Forbidden
-        )
-        if isinstance(error, blacklist):
+        # CommandNotFound is handled earlier in process_commands (an unmatched command never
+        # reaches invoke(), so it is never raised here); CheckFailure/Forbidden stay silent.
+        if isinstance(error, (commands.CommandNotFound, commands.CheckFailure, discord.Forbidden)):
             return
 
         if isinstance(error, commands.CommandOnCooldown):
