@@ -56,8 +56,12 @@ class PermissionSpec(NamedTuple):
 
         Users default to requiring no permissions.
         Bots default to requiring Read Message History, View Channel, Send Messages, Embed Links, and External Emojis permissions.
+
+        Both sets are fresh copies: ``PermissionTemplate.bot`` is class-level and mutable,
+        so aliasing it here would let one command's ``bot_permissions`` leak into every
+        other command (and into the template itself) via the in-place ``update``.
         """
-        return cls(user=set(), bot=PermissionTemplate.bot)
+        return cls(user=set(), bot=set(PermissionTemplate.bot))
 
     def update(
         self,
