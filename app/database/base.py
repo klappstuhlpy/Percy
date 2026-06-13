@@ -41,6 +41,8 @@ from app.database.repositories import (
     UsersRepository,
 )
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
+from app.utils.query_tracker import QueryTracker
+from app.utils.signals import CacheSignalHub
 from config import DatabaseConfig, Emojis
 
 from .migrations import Migrations
@@ -191,6 +193,8 @@ class Database(_Database):
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
+        self.signals = CacheSignalHub()
+        self.query_tracker = QueryTracker(threshold_ms=100.0)
         self.guilds = GuildsRepository(self)
         self.users = UsersRepository(self)
         self.polls = PollsRepository(self)
@@ -216,6 +220,43 @@ class Database(_Database):
         self.autoresponders = AutoRespondersRepository(self)
         self.stat_counters = StatCountersRepository(self)
         self.anilist = AniListRepository(self)
+
+        self._register_cache_signals()
+
+    async def execute(self, query: str, *args: Any, timeout: float | None = None) -> str:
+        import time
+        start = time.perf_counter()
+        result = await self._internal_pool.execute(query, *args, timeout=timeout)
+        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
+        return result
+
+    async def fetch(self, query: str, *args: Any, timeout: float | None = None) -> list[Any]:
+        import time
+        start = time.perf_counter()
+        result = await self._internal_pool.fetch(query, *args, timeout=timeout)
+        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
+        return result
+
+    async def fetchrow(self, query: str, *args: Any, timeout: float | None = None) -> Any:
+        import time
+        start = time.perf_counter()
+        result = await self._internal_pool.fetchrow(query, *args, timeout=timeout)
+        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
+        return result
+
+    async def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Any:
+        import time
+        start = time.perf_counter()
+        result = await self._internal_pool.fetchval(query, *args, column=column, timeout=timeout)
+        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
+        return result
+
+    def _register_cache_signals(self) -> None:
+        """Wire up cache invalidation signals so repositories can fire them on mutation."""
+        s = self.signals
+        s.register("guild_config_changed").connect(self.get_guild_config, None)
+        s.register("user_config_changed").connect(self.get_user_config, None)
+        s.register("gatekeeper_changed").connect(self.get_guild_gatekeeper, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:

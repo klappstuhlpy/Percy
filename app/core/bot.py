@@ -27,13 +27,16 @@ from app.core.help import PaginatedHelpCommand
 from app.core.models import AppBadArgument
 from app.core.pagination import TextSource
 from app.core.permissions import PermissionSpec
+from app.core.feature_flags import FeatureFlags
 from app.core.spam import SpamControl
+from app.i18n import I18n
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
+from app.utils.metrics import MetricsCollector
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,
@@ -100,6 +103,9 @@ class Bot(commands.Bot):
     command_types_used: Counter[bool]
     log_handler: logging.Handler
     internal_api: InternalAPI
+    metrics: MetricsCollector
+    feature_flags: FeatureFlags
+    i18n: I18n
 
     #: Whether application-command IDs have been resolved onto command objects (for
     #: ``Command.mention``). Set by :meth:`resolve_app_command_ids`, cleared on re-sync.
@@ -152,6 +158,9 @@ class Bot(commands.Bot):
 
         self.context: type[Context] = Context
         self.spam_control: SpamControl = SpamControl(self)
+        self.metrics: MetricsCollector = MetricsCollector()
+        self.feature_flags: FeatureFlags = FeatureFlags()
+        self.i18n: I18n = I18n()
 
         self.initial_extensions: list[str] = EXTENSIONS
 
@@ -340,7 +349,23 @@ class Bot(commands.Bot):
         if await self.spam_control.is_spam(ctx, message):
             return
 
+        cog_name = ctx.command.cog.qualified_name if ctx.command.cog else None
+        if self.feature_flags.is_disabled(ctx.command.qualified_name, cog_name):
+            await ctx.send_info('This command is temporarily disabled.', delete_after=10)
+            return
+
+        import time as _time
+        start = _time.perf_counter()
         await self.invoke(ctx)
+        duration_ms = (_time.perf_counter() - start) * 1000
+
+        self.metrics.record_command(
+            ctx.command.qualified_name if ctx.command else "unknown",
+            duration_ms,
+            guild_id=ctx.guild.id if ctx.guild else None,
+            user_id=ctx.author.id,
+            success=not ctx.command_failed,
+        )
 
     async def on_shard_resumed(self, shard_id: int) -> None:
         self.log.info('Shard ID %s has resumed...', shard_id)
@@ -492,7 +517,12 @@ class Bot(commands.Bot):
                 await ctx.message.add_reaction('\U000023f3')
                 return
 
-            await ctx.send_warning(f'Slow down, you\'re on cooldown. Retry again in **{humanize_duration(error.retry_after)}**.')
+            retry_str = humanize_duration(error.retry_after)
+            cooldown = error.cooldown
+            msg = f'Slow down, you\'re on cooldown. Retry again in **{retry_str}**.'
+            if cooldown.rate > 1:
+                msg += f'\n-# This command allows {cooldown.rate} uses per {humanize_duration(cooldown.per)}.'
+            await ctx.send_warning(msg)
             return
         if isinstance(error, commands.NSFWChannelRequired):
             await ctx.send(
@@ -522,6 +552,29 @@ class Bot(commands.Bot):
 
             with suppress(discord.HTTPException):
                 await ctx.author.send(message)
+            return
+
+        # Service outage errors get a distinct, gentler tone.
+        from app.clients.base import CircuitBreakerOpen, HTTPClientError
+        from app.core.errors import ServiceUnavailableError
+
+        unwrapped = getattr(error, 'original', error)
+        if isinstance(unwrapped, (CircuitBreakerOpen, ServiceUnavailableError)):
+            service = getattr(unwrapped, 'service_name', 'external service')
+            retry = getattr(unwrapped, 'retry_after', None)
+            msg = f'The **{service}** service is temporarily unavailable.'
+            if retry:
+                msg += f' Try again in **{humanize_duration(retry)}**.'
+            else:
+                msg += ' Please try again shortly.'
+            await ctx.send_info(msg, delete_after=20)
+            return
+
+        if isinstance(unwrapped, HTTPClientError) and unwrapped.status >= 500:
+            await ctx.send_info(
+                'An external service returned an error. This is likely temporary — please try again shortly.',
+                delete_after=20,
+            )
             return
 
         # Look for errors we send directly into the channel.

@@ -58,3 +58,38 @@ class StatsHandlers(InternalAPIHandlers):
             'uptime_seconds': (self.bot.uptime.total_seconds() if hasattr(self.bot, 'uptime') else 0),
         })
 
+    async def _get_bot_metrics(self, request: web.Request) -> web.Response:
+        return web.json_response({
+            'commands': self.bot.metrics.summary(),
+            'queries': self.bot.db.query_tracker.summary(),
+        })
+
+    async def _get_feature_flags(self, request: web.Request) -> web.Response:
+        return web.json_response(self.bot.feature_flags.status())
+
+    async def _post_feature_flags(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        action = body.get('action')
+        target = body.get('target')
+        target_type = body.get('type', 'command')
+
+        if not action or not target:
+            raise web.HTTPBadRequest(text='Missing "action" or "target" field')
+
+        if target_type == 'cog':
+            if action == 'disable':
+                self.bot.feature_flags.disable_cog(target)
+            elif action == 'enable':
+                self.bot.feature_flags.enable_cog(target)
+            else:
+                raise web.HTTPBadRequest(text=f'Unknown action: {action}')
+        else:
+            if action == 'disable':
+                self.bot.feature_flags.disable_command(target)
+            elif action == 'enable':
+                self.bot.feature_flags.enable_command(target)
+            else:
+                raise web.HTTPBadRequest(text=f'Unknown action: {action}')
+
+        return web.json_response(self.bot.feature_flags.status())
+

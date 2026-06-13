@@ -102,6 +102,17 @@ def setup_logging() -> Generator[None, Any, None]:
         handler.setFormatter(fmt)
         root_log.addHandler(handler)
 
+        from app.utils.logging import JSONFormatter
+        json_handler = RotatingFileHandler(
+            filename=Path(logs_path, 'percy.json.log'),
+            encoding='utf-8',
+            mode='w',
+            maxBytes=max_bytes,
+            backupCount=3,
+        )
+        json_handler.setFormatter(JSONFormatter())
+        root_log.addHandler(json_handler)
+
         yield
     finally:
         for hdlr in root_log.handlers[:]:

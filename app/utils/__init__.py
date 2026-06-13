@@ -3,5 +3,6 @@ from .config import Config
 from .constants import *
 from .formats import *
 from .helpers import *
+from .progress import *
 from .tasks import *
 from .timetools import *

@@ -157,6 +157,12 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/equalizer', self._post_music_equalizer)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/filters', self._post_music_filters)
 
+        # Feature flags (runtime enable/disable)
+        self._app.router.add_get('/api/internal/feature-flags', self._get_feature_flags)
+        self._app.router.add_post('/api/internal/feature-flags', self._post_feature_flags)
+        # Metrics (command latency, query timing)
+        self._app.router.add_get('/api/internal/bot/metrics', self._get_bot_metrics)
+
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, config.internal_api_host, config.internal_api_port)

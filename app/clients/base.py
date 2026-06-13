@@ -17,6 +17,7 @@ __all__ = (
     'BaseHTTPClient',
     'CircuitBreakerOpen',
     'HTTPClientError',
+    'StaleResult',
 )
 
 
@@ -42,6 +43,23 @@ class CircuitBreakerOpen(HTTPClientError):
         super(discord.HTTPException, self).__init__(
             f'{client_name}: circuit breaker is open, retry in {retry_after:.1f}s'
         )
+
+
+class StaleResult:
+    """Wraps a cached response served when the upstream is unreachable.
+
+    Consumers can check ``isinstance(result, StaleResult)`` to show a staleness
+    disclaimer to the user. The actual payload is in ``.data``.
+    """
+
+    __slots__ = ("data", "age_seconds")
+
+    def __init__(self, data: Any, age_seconds: float) -> None:
+        self.data = data
+        self.age_seconds = age_seconds
+
+    def __repr__(self) -> str:
+        return f"<StaleResult age={self.age_seconds:.0f}s>"
 
 
 class BaseHTTPClient:
@@ -76,12 +94,16 @@ class BaseHTTPClient:
     #: Ceiling (seconds) for a single exponential-backoff sleep.
     MAX_BACKOFF: ClassVar[float] = 30.0
 
+    #: Whether to serve stale cached responses when the circuit breaker is open.
+    SERVE_STALE: ClassVar[bool] = True
+
     def __init__(self, session: aiohttp.ClientSession, *, name: str | None = None) -> None:
         self.session: aiohttp.ClientSession = session
         self.name: str = name or type(self).__name__
         self.log: logging.Logger = logging.getLogger(f'{__name__}.{self.name}')
         self._consecutive_failures: int = 0
         self._breaker_until: float = 0.0
+        self._response_cache: dict[str, tuple[Any, float]] = {}
 
     # -- circuit breaker -------------------------------------------------
 
@@ -163,7 +185,14 @@ class BaseHTTPClient:
         Raises :class:`CircuitBreakerOpen` if the breaker is open, or
         :class:`HTTPClientError` (or a subclass) for a non-2xx response.
         """
+        cache_key = f'{method}:{url}'
+
         if self.breaker_open:
+            if self.SERVE_STALE and cache_key in self._response_cache:
+                data_cached, cached_at = self._response_cache[cache_key]
+                age = self._now() - cached_at
+                self.log.info('Serving stale response for %s %s (age=%.0fs)', method, url, age)
+                return StaleResult(data_cached, age)
             raise CircuitBreakerOpen(self.name, self._breaker_until - self._now())
 
         full_url = self._build_url(url)
@@ -189,6 +218,8 @@ class BaseHTTPClient:
 
                     if 200 <= response.status < 300:
                         self._record_success()
+                        if method.upper() == 'GET':
+                            self._response_cache[cache_key] = (payload, self._now())
                         return payload
 
                     self._record_failure()

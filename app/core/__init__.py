@@ -1,4 +1,5 @@
 from .bot import Bot
+from .errors import ErrorCategory, ServiceUnavailableError, categorize_error
 from .command import (
     Command,
     CommandInstance,

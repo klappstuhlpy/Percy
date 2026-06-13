@@ -761,8 +761,47 @@ def group(
     return commands.group(**kwargs, **other_kwargs)
 
 
+class _ModBypassCooldownMapping(commands.CooldownMapping):
+    """A cooldown mapping that bypasses cooldowns for users with manage_guild permission."""
+
+    def _bucket_key(self, message: discord.Message) -> Any:
+        if message.guild and isinstance(message.author, discord.Member):
+            if message.author.guild_permissions.manage_guild:
+                return None
+        return super()._bucket_key(message)
+
+    def get_bucket(self, message: discord.Message, current: float | None = None) -> commands.Cooldown | None:
+        if self._bucket_key(message) is None:
+            return None
+        return super().get_bucket(message, current)
+
+
 @discord.utils.copy_doc(commands.cooldown)
-def cooldown(rate: int, per: float, bucket: commands.BucketType = commands.BucketType.user) -> Any:
+def cooldown(
+    rate: int,
+    per: float,
+    bucket: commands.BucketType = commands.BucketType.user,
+    *,
+    bypass_moderators: bool = False,
+) -> Any:
+    """Apply a cooldown to a command.
+
+    Parameters
+    ----------
+    bypass_moderators: bool
+        If True, users with ``manage_guild`` permission skip this cooldown.
+    """
+    if bypass_moderators:
+        mapping = _ModBypassCooldownMapping.from_cooldown(rate, per, bucket)
+
+        def decorator(func: T) -> T:
+            if isinstance(func, commands.Command):
+                func._buckets = mapping
+            else:
+                func.__commands_cooldown__ = mapping
+            return func
+
+        return decorator
     return commands.cooldown(rate, per, bucket)
 
 

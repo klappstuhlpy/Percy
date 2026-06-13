@@ -51,3 +51,11 @@ class BaseRepository:
 
     def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Awaitable[Any]:
         return self.db.fetchval(query, *args, column=column, timeout=timeout)
+
+    def invalidate_cache(self, signal_name: str, *args: Any) -> int:
+        """Fire a cache invalidation signal by name.
+
+        Repositories call this after mutating data to auto-bust related caches.
+        Returns the number of caches that were actually invalidated.
+        """
+        return self.db.signals.fire(signal_name, *args)

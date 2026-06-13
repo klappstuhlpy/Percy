@@ -693,7 +693,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 label = f"{mention} **`{args}`**" if args else mention
             else:
                 label = f"**`{self.get_command_signature(cmd)}`**"
-            container.add_item(discord.ui.TextDisplay(f"{prefix}{label}\n{cmd.description or '…'}"))
+            description = cmd.description or "…"
+            examples = cmd.extras.get("examples")
+            if examples:
+                cmd_sig = self.get_command_signature(cmd, no_signature=True)
+                description += f"\n-# e.g. `{cmd_sig} {examples[0]}`"
+            container.add_item(discord.ui.TextDisplay(f"{prefix}{label}\n{description}"))
 
         notes = list(iter_help_notes(is_any_locked, any_has_more_help, self.context.clean_prefix))
         if notes:
@@ -824,6 +829,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 + "\n".join(f"* `{command_signature} {example}`" for example in examples)
             )
 
+        related = self._find_related_commands(command)
+        if related:
+            related_lines = [
+                (self._render_mentions and getattr(cmd, "mention", None)) or f"`{self.get_command_signature(cmd, no_signature=True)}`"
+                for cmd in related[:5]
+            ]
+            extra.append(f"**{Emojis.info} | Related Commands**\n" + " • ".join(related_lines))
+
         if extra:
             container.add_item(discord.ui.Separator())
             for block in extra:
@@ -838,6 +851,19 @@ class PaginatedHelpCommand(commands.HelpCommand):
         container.add_item(discord.ui.TextDisplay(footer))
 
         return container
+
+    def _find_related_commands(self, command: AnyCommand) -> list[AnyCommand]:
+        """Find sibling commands in the same cog, excluding the command itself."""
+        cog = command.cog
+        if cog is None:
+            return []
+        siblings = [
+            cmd for cmd in cog.walk_commands()
+            if cmd.qualified_name != command.qualified_name
+            and not cmd.hidden
+            and self.is_available(cmd)
+        ]
+        return siblings[:5]
 
     @classmethod
     def temporary(cls, context: Context | discord.Interaction) -> PaginatedHelpCommand:

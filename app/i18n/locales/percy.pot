@@ -1,0 +1,26 @@
+# Percy Bot Translation Template
+# Copyright (C) 2024 klappstuhl.me
+#
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: common messages
+msgid "This command is temporarily disabled."
+msgstr ""
+
+msgid "Slow down, you're on cooldown. Retry again in **{duration}**."
+msgstr ""
+
+msgid "An external service is temporarily unavailable. Please try again shortly."
+msgstr ""
+
+msgid "You or the bot lack the required permissions for this action."
+msgstr ""
+
+msgid "Check your command input and try again."
+msgstr ""
+
+msgid "Something unexpected went wrong. This has been logged."
+msgstr ""

@@ -11,6 +11,7 @@ from discord.utils import cached_property
 
 from app.core.flags import FlagNamespace, Flags
 from app.core.views import ConfirmationView, DisambiguatorView
+from app.utils.progress import ProgressTracker
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -282,6 +283,16 @@ class Context[CogT: "Cog"](commands.Context):
         else:
             if typing:
                 await self.typing()
+
+    def progress(self, initial_status: str, *, ephemeral: bool = False) -> ProgressTracker:
+        """Return a :class:`ProgressTracker` context manager for long-running operations.
+
+        Usage::
+
+            async with ctx.progress("Fetching data...") as progress:
+                await progress.update("Page 1/3...")
+        """
+        return ProgressTracker(self, initial_status, ephemeral=ephemeral)
 
     async def safe_send(self, content: str, *, escape_mentions: bool = True, **kwargs: Any) -> discord.Message:
         if escape_mentions:
