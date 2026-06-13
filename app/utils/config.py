@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, TypeVar, overload
 
 from app.utils.tasks import executor
-from config import path
+from config import data_path
 
 V = TypeVar("V")
 
@@ -71,8 +71,8 @@ class Config[K, V]:
 
     @staticmethod
     def real_path(dest: str) -> Path:
-        """Returns the real path of the config file."""
-        return Path(path, dest)
+        """Returns the real path of the config file (under the ``data/`` directory)."""
+        return Path(data_path, dest)
 
     def load_from_file(self) -> None:
         """Loads the config from the file."""

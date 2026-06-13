@@ -94,14 +94,14 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 ### Leveling
 
-| Feature                  | What it does                                                                                                                                            |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Feature                  | What it does                                                                                                                                                                              |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **XP & ranks**           | Earn XP per message (with cooldowns and configurable gain), level up, and view a **rendered rank card** (`/level`, member optional). Active boost badges (XP/Loot) are shown on the card. |
-| **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                          |
-| **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                         |
-| **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                   |
-| **Voice XP**             | Opt-in XP for time spent active in voice (`/level config voice`); skips members who are alone, AFK or deafened, and honours the same blacklists.        |
-| **Fine-grained control** | Toggle leveling, set the level-up message and channel (or DM), blacklist roles/channels/users, and optionally delete a member's data when they leave.   |
+| **Leaderboard**          | Per-guild Top-10 board (`/level leaderboard`).                                                                                                                                            |
+| **Level roles**          | Award roles at configured levels, with optional **role stacking**, managed through an interactive view (`/level config roles`).                                                           |
+| **Multipliers**          | Per-role and per-channel XP multipliers (`/level config multiplier`).                                                                                                                     |
+| **Voice XP**             | Opt-in XP for time spent active in voice (`/level config voice`); skips members who are alone, AFK or deafened, and honours the same blacklists.                                          |
+| **Fine-grained control** | Toggle leveling, set the level-up message and channel (or DM), blacklist roles/channels/users, and optionally delete a member's data when they leave.                                     |
 
 ### Music
 
@@ -166,18 +166,18 @@ Use the built-in help to explore everything interactively:
 
 A few representative command groups:
 
-| Group         | Examples                                                                                                                                |
-|---------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                      |
-| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                         |
-| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                 |
+| Group         | Examples                                                                                                                                                |
+|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                                      |
+| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                                         |
+| Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                                 |
 | Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …` |
-| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                               |
-| Polls         | `polls create/end/edit/delete/search/history/config`                                                                                    |
-| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                      |
-| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`, `translate`, `statcounter …`, `autoresponder …` |
-| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                                     |
-| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`, `ask` (AI assistant)                                                               |
+| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                                               |
+| Polls         | `polls create/end/edit/delete/search/history/config`                                                                                                    |
+| Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                                      |
+| Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`, `translate`, `statcounter …`, `autoresponder …`                 |
+| Info          | `userinfo`, `serverinfo`, `avatar`, `names`, `lastseen`, `presence`                                                                                     |
+| Developer     | `docs`/`rtfm`, snekbox eval, `anilist …`, `comic …`, `ask` (AI assistant)                                                                               |
 
 ---
 
@@ -284,80 +284,7 @@ INTERNAL_API_PORT=8090               # port for internal API (default 8090)
 
 When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (default `127.0.0.1:8090`) exposing guild data to the klappstuhl.me web dashboard. The dashboard proxies user actions through this API so all mutations go through Percy's repository layer and cache invalidation.
 
-**Endpoints:**
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/internal/guilds/{id}` | Guild config with resolved channel/role names |
-| PATCH | `/api/internal/guilds/{id}/config` | Update config fields + cache invalidation |
-| GET | `/api/internal/guilds/{id}/roles` | All guild roles |
-| GET | `/api/internal/guilds/{id}/channels` | All guild channels |
-| GET | `/api/internal/guilds/{id}/members?limit=N&after=ID` | Paginated member list |
-| POST | `/api/internal/guilds/{id}/members/{user_id}/action` | Kick/ban/unban a member (JSON: action, reason, moderator_id?) — records a modlog case |
-| PATCH | `/api/internal/guilds/{id}/members/{user_id}/roles` | Add/remove member roles (JSON: add[], remove[]) |
-| POST | `/api/internal/guilds/{id}/members/bulk-action` | Batch kick/ban/unban/role-add/role-remove (JSON: user_ids[], action, role_ids?, reason?, moderator_id?) — records modlog cases |
-| GET | `/api/internal/guilds/{id}/members/{user_id}/activity` | Daily command counts for the past year (activity heatmap) |
-| GET | `/api/internal/guilds/{id}/cases?limit&offset&action&moderator_id&target_id&after&before` | Filtered, paginated moderation cases |
-| POST | `/api/internal/guilds/{id}/cases` | Open a case manually (JSON: action, target_id, reason?, moderator_id?) — announces it in the modlog channel |
-| GET | `/api/internal/guilds/{id}/cases/recent?since=ISO` | Cases created after a timestamp (for live polling) |
-| PATCH | `/api/internal/guilds/{id}/cases/{case_index}` | Update a case's reason (JSON: reason) — syncs the modlog post |
-| DELETE | `/api/internal/guilds/{id}/cases/{case_index}` | Close (delete) a case — removes the modlog post |
-| GET | `/api/internal/guilds/{id}/gatekeeper` | Gatekeeper configuration |
-| PATCH | `/api/internal/guilds/{id}/gatekeeper` | Update gatekeeper settings |
-| POST | `/api/internal/guilds/{id}/gatekeeper/message` | Send verification embed to channel |
-| POST | `/api/internal/guilds/{id}/gatekeeper/toggle` | Enable/disable gatekeeper (JSON: enabled) |
-| GET | `/api/internal/guilds/{id}/leveling/config` | Leveling system configuration |
-| PATCH | `/api/internal/guilds/{id}/leveling/config` | Update leveling config fields |
-| GET | `/api/internal/guilds/{id}/leveling/leaderboard?limit=N` | XP leaderboard |
-| PATCH | `/api/internal/guilds/{id}/leveling/users/{user_id}` | Update user level/XP |
-| POST | `/api/internal/guilds/{id}/leveling/roles` | Add/remove level role mapping |
-| POST | `/api/internal/guilds/{id}/leveling/roles/preset` | Create the milestone reward-role preset (levels 5–100) |
-| POST | `/api/internal/guilds/{id}/leveling/multipliers` | Set role/channel XP multiplier |
-| POST | `/api/internal/guilds/{id}/leveling/blacklist` | Add/remove blacklist entry |
-| GET | `/api/internal/guilds/{id}/economy` | Shop items (incl. use-effects) + lottery state |
-| POST | `/api/internal/guilds/{id}/economy/items` | Create shop item (optional: effect, effect_value, duration_minutes) |
-| DELETE | `/api/internal/guilds/{id}/economy/items/{name}` | Delete shop item |
-| GET | `/api/internal/guilds/{id}/economy/balances?limit=N` | Top member balances |
-| PATCH | `/api/internal/guilds/{id}/economy/balances/{user_id}` | Set cash/bank |
-| POST | `/api/internal/guilds/{id}/economy/lottery` | Start lottery |
-| DELETE | `/api/internal/guilds/{id}/economy/lottery` | Cancel lottery |
-| GET | `/api/internal/guilds/{id}/autoresponders` | All autoresponders |
-| POST | `/api/internal/guilds/{id}/autoresponders` | Create autoresponder |
-| PATCH | `/api/internal/guilds/{id}/autoresponders/{trigger}` | Toggle enabled |
-| DELETE | `/api/internal/guilds/{id}/autoresponders/{trigger}` | Delete autoresponder |
-| GET | `/api/internal/guilds/{id}/comics` | All comic feed subscriptions |
-| POST | `/api/internal/guilds/{id}/comics` | Subscribe to a comic brand |
-| PATCH | `/api/internal/guilds/{id}/comics/{brand}` | Update feed config |
-| DELETE | `/api/internal/guilds/{id}/comics/{brand}` | Unsubscribe |
-| POST | `/api/internal/guilds/{id}/comics/{brand}/push` | Manually trigger feed push |
-| GET | `/api/internal/guilds/{id}/temp-channels` | Temp voice channel hubs |
-| POST | `/api/internal/guilds/{id}/temp-channels` | Create hub |
-| PATCH | `/api/internal/guilds/{id}/temp-channels/{channel_id}` | Update format |
-| DELETE | `/api/internal/guilds/{id}/temp-channels/{channel_id}` | Remove hub |
-| GET | `/api/internal/guilds/{id}/status-feed` | Discord status feed subscription |
-| POST | `/api/internal/guilds/{id}/status-feed` | Subscribe/update channel |
-| DELETE | `/api/internal/guilds/{id}/status-feed` | Unsubscribe |
-| GET | `/api/internal/guilds/{id}/lockdowns` | Currently locked channels |
-| POST | `/api/internal/guilds/{id}/lockdowns/unlock` | Unlock channels |
-| GET | `/api/internal/guilds/{id}/highlights` | All user highlight configs |
-| DELETE | `/api/internal/guilds/{id}/highlights/{user_id}` | Remove user's highlights |
-| GET | `/api/internal/guilds/{id}/emoji-stats?limit=N` | Top emoji usage stats |
-| GET | `/api/internal/guilds/{id}/polls` | All guild polls with status and votes |
-| POST | `/api/internal/guilds/{id}/polls` | Create and publish a new poll (question, options, duration, optional channel/color/image/thread question) |
-| PATCH | `/api/internal/guilds/{id}/polls/{poll_id}` | Edit a running poll |
-| POST | `/api/internal/guilds/{id}/polls/{poll_id}/end` | End a running poll (archives thread, updates message, deletes timer) |
-| GET | `/api/internal/guilds/{id}/giveaways` | All guild giveaways with entries |
-| GET | `/api/internal/guilds/{id}/tags` | Tags with usage stats and top creators |
-| GET | `/api/internal/guilds/{id}/commands` | All commands + per-guild disable state + plonk list |
-| POST | `/api/internal/guilds/{id}/commands/toggle` | Enable/disable a command |
-| POST | `/api/internal/guilds/{id}/plonks` | Add/remove plonked entity |
-| GET | `/api/internal/guilds/{id}/leveling/xp-history?days=N` | Daily cumulative XP snapshots (for trend chart) |
-| GET | `/api/internal/guilds/{id}/members/{user_id}/detail` | Aggregated member profile (identity, leveling, cases, notes) |
-| GET | `/api/internal/guilds/{id}/stats` | Guild statistics |
-| GET | `/api/internal/bot/stats` | Bot-wide statistics |
-| GET | `/api/internal/guilds/{id}/music` | Music player state (active, channel, now playing, equalizer, filters) |
-| POST | `/api/internal/guilds/{id}/music/equalizer` | Apply EQ bands or preset (JSON: bands[] or preset) |
-| POST | `/api/internal/guilds/{id}/music/filters` | Toggle audio filters (JSON: action, smoothing?) |
-| GET | `/api/internal/users/{discord_id}/guilds` | Guilds user can manage |
+> **Endpoints:** For reference, look at /app/internal_api/base.py.
 
 All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
 
@@ -448,79 +375,6 @@ The bot itself is not containerised by default — run it directly with Poetry a
 
 ---
 
-## Architecture
-
-Percy is layered to keep data access, business logic and presentation (Discord UI) separate. Dependencies flow one way — **cog → ui → engine/service**, and the data layer is reached only through repositories — which keeps the inner layers free of `discord` and unit-testable. The big picture:
-
-```text
-main.py                     CLI entry point (bot runner + DB migration commands)
-config.py                   Tokens, IDs, emoji definitions, version, Lavalink nodes
-app/
-├── core/                   Custom command framework (subclasses discord.py)
-│   ├── bot.py              The Bot class: cog auto-discovery, error handling, prefix resolution
-│   ├── command.py          Command / GroupCommand / Hybrid* + @command / @group / @describe decorators
-│   ├── context.py          Context with send_success / send_error / send_info helpers
-│   ├── flags.py            Flag-based command argument system
-│   ├── permissions.py      PermissionSpec / PermissionTemplate
-│   ├── embeds.py           EmbedBuilder
-│   ├── converter.py        Custom argument converters
-│   ├── views.py            Shared persistent View base classes
-│   ├── help.py             Paginated help command
-│   ├── pagination.py       Paginators (line / file / text)
-│   ├── timer.py            Persistent TimerManager (reminders, temp-bans, lockdowns, …)
-│   ├── spam.py             Global spam control
-│   ├── tree.py             Custom app-command tree
-│   └── models.py           Cog base class + errors (re-exports the above for back-compat)
-│
-├── database/               Persistence layer
-│   ├── base.py             asyncpg pool wrapper + BaseRecord "mini-ORM" + domain records
-│   ├── migrations.py       Versioned SQL migration runner
-│   └── repositories/       Data-access layer (Repository pattern); all cog-reachable SQL lives here
-│       ├── base.py         BaseRepository (execute/fetch/fetchrow/fetchval/acquire)
-│       └── guilds · users · polls · leveling · moderation · tags · stats · incidents · notes
-│           · giveaways · emoji_stats · highlights · temp_channels · playlists · admin · timers · comics
-│
-├── services/               Discord-free business logic extracted from cogs (unit-tested)
-│       bot_health · char_info · code_stats · gateway_stats · presence_stats · purge
-│
-├── clients/                Shared HTTP layer
-│   └── base.py             BaseHTTPClient: 429 retries, backoff, circuit breaker, typed errors
-│
-├── rendering/              Pillow image generation behind a single service (self.bot.render)
-│   ├── primitives.py       Low-level toolkit (fonts, masks, colour helpers)
-│   ├── models.py           Prepared view-models
-│   ├── templates/          Pure drawing functions (data in → BytesIO out; no discord/DB)
-│   └── service.py          RenderingService: prepares data, draws off-thread, returns discord.File
-│
-├── cogs/                   Feature modules (~27 cogs)
-│   ├── moderation/          cog · antispam · gatekeeper · infractions · lockdown · models · ui
-│   ├── games/               cog · engine/ (poker, blackjack, roulette, tictactoe, minesweeper)
-│   │                        + *_bridge.py (state machines) + *_ui.py (Discord views)
-│   ├── polls/ · leveling/   models · ui · cog  (MVVM-style split)
-│   ├── music/               cog · player · models · ui
-│   ├── doc/                 cog · client · engine · html · cache · models · ui
-│   ├── anilist/ · comic/    cog · client · models · ui   (clients subclass BaseHTTPClient)
-│   ├── snekbox/             cog · eval · formatter
-│   └── admin · automod · config · economy · stats · meta · tags · reminder · … (single-file cogs)
-│
-└── utils/                  Helpers: formats, fuzzy, timetools, cache, ANSI builder, config store, …
-```
-
-Key design decisions:
-
-- **Custom command framework.** Commands subclass a custom `Command`/`Context`/`Cog` (in `app/core`) rather than vanilla discord.py. This is what powers hybrid commands, the flag system, and the ANSI argument-error renderer in `Bot.on_command_error`. Define commands with the `@command`/`@group` decorators from `app.core` and reply with `ctx.send_success`/`send_error`/`send_info`.
-- **Repository data-access layer.** Cogs never write raw SQL; they call e.g. `self.bot.db.moderation.clear_lockdowns(...)` or `self.bot.db.leveling.get_leaderboard(...)`. The cached config getters (`db.get_guild_config`, `db.get_user_config`, …) remain on the `Database` object and delegate to the repositories, so caching and `.invalidate()` are handled in one place.
-- **Service layer.** Non-trivial, Discord-free logic (counting, ranking, multi-step analysis) lives in `app/services/` and is called from the cog, which stays a thin controller. Services never import `discord`, so they are unit-tested directly (e.g. `summarize_presence`, `build_purge_predicate`, `assess_bot_health`).
-- **MVVM-style cogs.** Larger features are packages split into `models.py` (records + pure helpers), `ui.py` (Views/Modals) and `cog.py` (command routing/orchestration). Games add an `engine/` (rules) and `*_bridge.py` (state machine) layer on top.
-- **Pure game engines.** Game rules live under `app/cogs/games/engine/` with **no `discord` imports**, returning plain data. The cogs feed them user input and map their output back to embeds/views — which also makes the engines unit-testable without Discord (see `tests/test_poker_engine.py`).
-- **Uniform, resilient API clients.** External clients subclass `app/clients/base.py`'s `BaseHTTPClient`, which centralizes 429/`Retry-After` handling, exponential backoff, a per-client circuit breaker, and a standardized `HTTPClientError`. AniList and Marvel both route through it.
-- **Rendering service.** Cogs never touch Pillow directly — they call `self.bot.render.<artifact>(...)` (rank cards, charts, presence charts, captchas, music panels, …). The service prepares the data, runs the blocking draw off the event loop, and returns a ready `discord.File`.
-- **Persistent timers.** The `TimerManager` schedules future work in the database and dispatches `on_<event>_timer_complete` when due — the mechanism behind reminders, giveaways, temp-bans/mutes, lockdowns and blacklist expiry.
-
-For a contributor-oriented summary, see [`CLAUDE.md`](CLAUDE.md).
-
----
-
 ## Development
 
 ### Code quality
@@ -547,23 +401,6 @@ poetry run pytest tests/test_poker_engine.py::test_all_in_empties_stack_and_sets
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs the test suite on every push and pull request. Ruff and Pyright also run there in informational (non-blocking) mode while their pre-existing backlog is worked down; each will be promoted to a required check once clean.
-
----
-
-## Project structure
-
-```text
-Percy-v2/
-├── main.py                # CLI entry point (bot runner + DB management)
-├── config.py              # Tokens, IDs, emoji definitions, version info
-├── pyproject.toml         # Poetry project, Ruff/Pyright/pytest config
-├── docker-compose.yml     # Snekbox sandbox service
-├── app/                   # Application package (see Architecture)
-│   ├── core/ · database/ · services/ · clients/ · rendering/ · cogs/ · utils/
-├── migrations/            # Versioned SQL migrations (V1–V21)
-├── tests/                 # pytest suite
-└── assets/                # Fonts, word lists, image templates
-```
 
 ---
 

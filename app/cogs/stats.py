@@ -342,6 +342,9 @@ class Stats(Cog):
         if before.bot:
             return None
 
+        if not (await self.bot.db.get_user_config(after.id)).track_history:  # type: ignore[misc]
+            return None
+
         if before.display_avatar != after.display_avatar:
             avatar: bytes | None = await self._read_avatar(after)
             if avatar:
@@ -371,6 +374,12 @@ class Stats(Cog):
         - Discriminator
         - Avatar
         """
+        if after.bot:
+            return None
+
+        if not (await self.bot.db.get_user_config(after.id)).track_history:  # type: ignore[misc]
+            return None
+
         if before.name != after.name:
             await self.bot.db.stats.insert_item_history(after.id, "name", after.name)
 

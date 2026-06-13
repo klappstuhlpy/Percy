@@ -609,8 +609,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             discord.ui.Section(
                 f"## {bot_user.name if bot_user else 'Percy'} Help\n"
                 f"Check out Percy's dashboard by clicking [here](https://klappstuhl.me/percy/dashboard)!\n\n"
-                f"**Privacy Policy**: [Click here](https://t.ly/vAhUk)\n"
-                f"**Terms of Service**: [Click here](https://t.ly/8V2D4)",
+                f"**Privacy Policy**: [Click here](https://github.com/klappstuhlpy/Percy/PRIVACY_POLICY.md)\n"
+                f"**Terms of Service**: [Click here](https://github.com/klappstuhlpy/Percy/TERMS_OF_SERVICE.md)",
                 accessory=discord.ui.Thumbnail(thumb),
             )
         )
@@ -622,6 +622,17 @@ class PaginatedHelpCommand(commands.HelpCommand):
             f"- `{prefix}help <category>`\n\n"
             f"You can also use `{prefix}help flags` to get an overview of how to use flags."
         ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            "### Your Data & Privacy\n"
+            "Percy stores some data about you to power features like presence graphs and "
+            "name/avatar history. This tracking is **on by default**, and you're always in control:\n"
+            f"- `{prefix}settings tracking false` — turn off **all** tracking at once\n"
+            f"- `{prefix}settings presence false` / `{prefix}settings history false` — turn off one kind\n"
+            f"- `{prefix}settings request-data` — export a copy of your stored data\n"
+            f"- `{prefix}settings remove-personal-data` — permanently delete it"
+        ))
+        container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
             f"### Stats\n"
             f"**Total Commands:** `{len(ctx.bot.commands)}`\n"

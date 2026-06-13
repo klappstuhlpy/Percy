@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import json
 import zoneinfo
 from typing import TYPE_CHECKING, ClassVar, Final, NamedTuple
 
@@ -12,6 +14,7 @@ from lxml import etree
 
 from app.core.models import Cog, describe, group
 from app.utils import fuzzy, helpers, timetools
+from config import Emojis
 
 if TYPE_CHECKING:
     from app.core import Bot, Context
@@ -173,6 +176,16 @@ class UserSettings(Cog, name="User Settings"):
 
         embed.add_field(name="Time", value=tz_text, inline=False)
         embed.add_field(name="Track Presence", value="Yes" if config.track_presence else "No")
+        embed.add_field(name="Track Name/Avatar History", value="Yes" if config.track_history else "No")
+        embed.add_field(
+            name="Your data",
+            value=(
+                f"Tracking is on by default. Turn it **all** off with `{ctx.clean_prefix}settings tracking false`, "
+                f"export a copy with `{ctx.clean_prefix}settings request-data`, "
+                f"or delete it with `{ctx.clean_prefix}settings remove-personal-data`."
+            ),
+            inline=False,
+        )
 
         await ctx.send(embed=embed)
 
@@ -261,6 +274,27 @@ class UserSettings(Cog, name="User Settings"):
         return [TimeZone(label=k, key=self.timezone_aliases[k]) for k in keys]
 
     @settings.command(
+        name="tracking",
+        description="Turn ALL of Percy's data tracking about you on or off in one go.",
+    )
+    @describe(enabled="True keeps tracking on (the default); False disables presence and name/avatar history.")
+    async def settings_tracking(self, ctx: Context, enabled: bool) -> None:
+        """Master switch for every kind of data tracking Percy keeps about you.
+
+        Turning this off disables both presence tracking and name/avatar history. It
+        does not delete data already stored — use `settings remove-personal-data` for that.
+        """
+        config = await self.bot.db.get_user_config(ctx.author.id)
+        await config.update(track_presence=enabled, track_history=enabled)
+        if enabled:
+            await ctx.send_success("All data tracking has been **enabled**.")
+        else:
+            await ctx.send_success(
+                "All data tracking has been **disabled**. Nothing new will be stored. "
+                f"To erase what's already saved, use `{ctx.clean_prefix}settings remove-personal-data`."
+            )
+
+    @settings.command(
         name="presence",
         description="Toggles tracking of your presence status.",
     )
@@ -272,21 +306,58 @@ class UserSettings(Cog, name="User Settings"):
         await ctx.send_success(f"Presence tracking has been {'enabled' if enabled else 'disabled'}.")
 
     @settings.command(
+        name="history",
+        description="Toggles tracking of your username, nickname and avatar history.",
+    )
+    @describe(enabled="Whether to enable or disable name/nickname/avatar history tracking.")
+    async def settings_history(self, ctx: Context, enabled: bool) -> None:
+        """Toggles tracking of your username, nickname and avatar history."""
+        config = await self.bot.db.get_user_config(ctx.author.id)
+        await config.update(track_history=enabled)
+        await ctx.send_success(f"Name/avatar history tracking has been {'enabled' if enabled else 'disabled'}.")
+
+    @settings.command(
+        name="request-data",
+        description="Export a copy of the personal data Percy has stored about you.",
+    )
+    async def settings_request_data(self, ctx: Context) -> None:
+        """Request a copy of your stored personal data (a GDPR-style data export).
+
+        Sends you a JSON file containing your settings and your stored presence,
+        name/nickname and avatar history.
+        """
+        await ctx.defer(ephemeral=True)
+        data = await self.bot.db.users.export_personal_data(ctx.author.id)
+        payload = json.dumps(data, indent=2, default=str, ensure_ascii=False)
+        file = discord.File(io.BytesIO(payload.encode("utf-8")), filename=f"percy-data-{ctx.author.id}.json")
+        await ctx.send_success(
+            "Here is a copy of the personal data Percy has stored about you.",
+            file=file,
+            ephemeral=True,
+        )
+
+    @settings.command(
         name="remove-personal-data",
-        with_app_command=False,
-        description="Remove all your personal data thats stored from the bots database.",
+        description="Permanently delete all personal data Percy has stored about you.",
     )
     async def settings_request_data_removal(self, ctx: Context) -> None:
-        """Request the removal of your data from the bot.
+        """Permanently delete your stored personal data.
 
-        This includes removal from the following tables:
-        - presence history
-        - avatar history
-        - name history
+        This removes your stored presence history, avatar history and name/nickname
+        history. This action cannot be undone.
         """
+        confirm = await ctx.confirm(
+            f"{Emojis.warning} This permanently deletes your stored **presence, name/nickname and avatar history**. "
+            "This cannot be undone. Continue?",
+            ephemeral=True,
+            timeout=60.0,
+        )
+        if not confirm:
+            await ctx.send_info("Cancelled — nothing was deleted.", ephemeral=True)
+            return
 
         await self.bot.db.users.delete_personal_data(ctx.author.id)
-        await ctx.send_success('Your data has been removed from the bot.', ephemeral=True)
+        await ctx.send_success("Your personal data has been removed from the bot.", ephemeral=True)
 
 
 async def setup(bot: Bot) -> None:

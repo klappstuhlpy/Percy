@@ -31,6 +31,14 @@ class VersionInfo(NamedTuple):
 beta: bool = system() != 'Linux'
 path: Path = Path(__file__).parent
 
+#: Runtime directories, created on import so they always exist before first use.
+#: ``data_path`` holds generated JSON state stores (blacklist, temp_channels,
+#: doc_links, …); ``logs_path`` holds the rotating ``percy.log`` files.
+data_path: Path = path / 'data'
+logs_path: Path = path / 'logs'
+for _directory in (data_path, logs_path):
+    _directory.mkdir(exist_ok=True)
+
 name: str = 'Percy'
 version: VersionInfo = VersionInfo(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
 description: str = 'A multipurpose bot for Discord'

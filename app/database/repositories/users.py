@@ -58,6 +58,33 @@ class UsersRepository(BaseRepository):
                 user_id,
             )
 
+    async def export_personal_data(self, user_id: int) -> dict[str, object]:
+        """Collects a user's stored personal data for a data-access (export) request.
+
+        Mirrors :meth:`delete_personal_data`: returns the settings row plus the
+        presence, name/nickname and avatar history. Avatar image bytes are omitted
+        (only the format and timestamp are exported) to keep the payload portable.
+        """
+        settings = await self.fetchrow("SELECT * FROM user_settings WHERE id = $1;", user_id)
+        presence = await self.fetch(
+            "SELECT status, status_before, changed_at FROM presence_history WHERE uuid = $1 ORDER BY changed_at;",
+            user_id,
+        )
+        items = await self.fetch(
+            "SELECT item_type, item_value, changed_at FROM item_history WHERE uuid = $1 ORDER BY changed_at;",
+            user_id,
+        )
+        avatars = await self.fetch(
+            "SELECT format, changed_at FROM avatar_history WHERE uuid = $1 ORDER BY changed_at;",
+            user_id,
+        )
+        return {
+            'settings': dict(settings) if settings is not None else None,
+            'presence_history': [dict(row) for row in presence],
+            'name_history': [dict(row) for row in items],
+            'avatar_history': [dict(row) for row in avatars],
+        }
+
     # -- economy ----------------------------------------------------------
 
     async def get_balance_record(self, user_id: int, guild_id: int) -> asyncpg.Record:

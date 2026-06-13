@@ -903,8 +903,9 @@ class UserConfig(BaseRecord):
     timezone: str
 
     track_presence: bool
+    track_history: bool
 
-    __slots__ = ("bot", "id", "timezone", "track_presence")
+    __slots__ = ("bot", "id", "timezone", "track_history", "track_presence")
 
     async def _update(
         self,

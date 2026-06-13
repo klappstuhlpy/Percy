@@ -13,7 +13,7 @@ import discord
 
 from app.core import Bot
 from app.database import Migrations
-from config import DatabaseConfig, path
+from config import DatabaseConfig, logs_path
 
 try:
     import uvloop  # type: ignore[import-not-found]
@@ -93,7 +93,7 @@ def setup_logging() -> Generator[None, Any, None]:
 
         root_log.setLevel(logging.INFO)
         handler = RotatingFileHandler(
-            filename=Path(path, 'percy.log'),
+            filename=Path(logs_path, 'percy.log'),
             encoding='utf-8',
             mode='w',
             maxBytes=max_bytes,
