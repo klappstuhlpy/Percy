@@ -491,7 +491,7 @@ class Games(Cog):
                 f"You failed to rob **{user.display_name}** and lost {Emojis.Economy.cash} **{fnumb(amount)}**."
             )
 
-    @command("roulette", description="Play a game of roulette.", guild_only=True, hybrid=True)
+    @command("roulette", description="Play a game of roulette.", guild_only=True, hybrid=True, bot_permissions=["add_reactions"])
     @app_commands.choices(space=[])  # Do this because of the "Space" Class Enum
     @app_commands.autocomplete(space=roulette_space_autocomplete)
     @describe(bet="The amount of coins to bet.", space="The space to bet on.")
@@ -754,7 +754,7 @@ class Games(Cog):
 
     @command(
         "horserace", aliases=["hr"], description="Bet on a horse; parimutuel payouts after the race.",
-        guild_only=True, hybrid=True,
+        guild_only=True, hybrid=True, bot_permissions=["add_reactions"],
     )
     @describe(bet="The amount of coins to bet.", horse="The horse to back (1-6).")
     async def horserace(self, ctx: Context, bet: int, horse: commands.Range[int, 1, 6]) -> None:

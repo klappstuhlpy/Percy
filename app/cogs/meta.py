@@ -538,6 +538,7 @@ class Meta(Cog):
         description="Marks a thread as solved.",
         guild_only=True,
         hybrid=True,
+        bot_permissions=["manage_threads"],
     )
     @guilds(main_guild_id, test_guild_id)
     @cooldown(1, 5, commands.BucketType.member)
@@ -778,7 +779,7 @@ class Meta(Cog):
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
 
-    @command(name="quote", alias="q", description="Quotes a message by a user.")
+    @command(name="quote", alias="q", description="Quotes a message by a user.", bot_permissions=["attach_files"])
     @describe(user="The user to quote.", message="The message to quote.")
     async def quote(
         self, ctx: Context, user: discord.Member | discord.User | None = None, *, message: str | None = None

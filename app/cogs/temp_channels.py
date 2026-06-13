@@ -149,7 +149,7 @@ class TempChannels(Cog):
     @temp.command(
         "set",
         description="Transforms a voice channel into a temporary channel.",
-        bot_permissions=["manage_channels"],
+        bot_permissions=["manage_channels", "manage_roles", "move_members"],
         user_permissions=["manage_channels"],
     )
     @app_commands.rename(_format="format")
@@ -175,7 +175,7 @@ class TempChannels(Cog):
     @temp.command(
         "remove",
         description="Remove an existing temp channel.",
-        bot_permissions=["manage_channels"],
+        bot_permissions=["manage_channels", "manage_roles", "move_members"],
         user_permissions=["manage_channels"],
     )
     @describe(channel_id="The voice channel to remove")

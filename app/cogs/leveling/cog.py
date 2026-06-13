@@ -187,7 +187,7 @@ class Leveling(Cog):
 
         await guild_config.delete_member(member)
 
-    @group("level", fallback="rank", description="Leveling purpose Commands.", guild_only=True, hybrid=True)
+    @group("level", fallback="rank", description="Leveling purpose Commands.", guild_only=True, hybrid=True, bot_permissions=["attach_files", "manage_roles"])
     @describe(member="The member to view the rank card of.")
     async def level(self, ctx: Context, *, member: Annotated[discord.Member | None, converter.MemberConverter] = None) -> None:
         """View yours or someone else's rank card."""

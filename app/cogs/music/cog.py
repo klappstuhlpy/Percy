@@ -296,7 +296,7 @@ class Music(Cog):
             await player.panel.channel.send("The host has stopped listening to Spotify.")
             await player.disconnect()
 
-    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True)
+    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, bot_permissions=["connect", "speak"])
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
@@ -356,7 +356,8 @@ class Music(Cog):
         await player.send_track_add(result, ctx, short=short)
 
     @command(
-        description="Adds a track/playlist to the queue by choosing from a set of examples.", guild_only=True, hybrid=True
+        description="Adds a track/playlist to the queue by choosing from a set of examples.",
+        guild_only=True, hybrid=True, bot_permissions=["connect", "speak"],
     )
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
@@ -379,6 +380,7 @@ class Music(Cog):
         description="Start a listen-together activity with a user.",
         guild_only=True,
         hybrid=True,
+        bot_permissions=["connect", "speak"],
     )
     @describe(member="The user you want to start a listen-together activity with.")
     @checks.is_author_connected()
@@ -458,7 +460,7 @@ class Music(Cog):
         await player.disconnect()
         await ctx.send_success(f"{Emojis.success} Stopped the current listen-together activity.", delete_after=10)
 
-    @command("connect", description="Connect me to a voice-channel.", hybrid=True, guild_only=True)
+    @command("connect", description="Connect me to a voice-channel.", hybrid=True, guild_only=True, bot_permissions=["connect", "speak"])
     @describe(channel="The Voice/Stage-Channel you want to connect to.")
     async def connect(self, ctx: Context, channel: discord.VoiceChannel | discord.StageChannel | None = None) -> None:
         """Connect me to a voice-channel."""
@@ -1124,7 +1126,7 @@ class Music(Cog):
     @_music.command(
         "setup",
         description="Start the Music configuration setup.",
-        bot_permissions=["manage_channels"],
+        bot_permissions=["manage_channels", "manage_messages"],
         user_permissions=["manage_channels"],
     )
     @describe(channel="The channel you want to set as the music player channel.")

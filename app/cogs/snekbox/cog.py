@@ -469,7 +469,7 @@ class Snekbox(Cog):
                 break
             log.info("Re-evaluating code from message %r:\n%s", ctx.message.id, job)
 
-    @command(name="eval", description="Run Python code and get the results.", aliases=["e"], guild_only=True)
+    @command(name="eval", description="Run Python code and get the results.", aliases=["e"], guild_only=True, bot_permissions=["add_reactions", "manage_messages"])
     @app_commands.describe(code="The Python code to run.")
     async def eval_command(
         self, ctx: EvalContext, *, code: Annotated[list[str], CodeblockConverter], flags: EvalFlags
@@ -494,7 +494,7 @@ class Snekbox(Cog):
         job = EvalJob.from_code("\n".join(code)).as_version(flags.version)
         await self.run_job(ctx, job)
 
-    @command(name="timeit", description="Profile Python Code to find execution time.", aliases=["ti"], guild_only=True)
+    @command(name="timeit", description="Profile Python Code to find execution time.", aliases=["ti"], guild_only=True, bot_permissions=["add_reactions", "manage_messages"])
     @app_commands.describe(code="The Python code to run.")
     async def timeit_command(
         self, ctx: EvalContext, *, code: Annotated[list[str], CodeblockConverter], flags: EvalFlags

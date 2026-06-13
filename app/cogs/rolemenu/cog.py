@@ -52,6 +52,7 @@ class RoleMenus(Cog):
         description='Create and manage self-assignable role menus.',
         guild_only=True,
         hybrid=True,
+        bot_permissions=["manage_roles"],
     )
     async def rolemenu(self, ctx: Context) -> None:
         """List the server's role menus."""
