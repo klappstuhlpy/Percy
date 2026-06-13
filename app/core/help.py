@@ -628,9 +628,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         container.add_item(
             discord.ui.Section(
                 f"## {bot_user.name if bot_user else 'Percy'} Help\n"
-                f"Check out Percy's dashboard by clicking [here](https://klappstuhl.me/percy/dashboard)!\n\n"
-                f"**Privacy Policy**: [Click here](https://github.com/klappstuhlpy/Percy/PRIVACY_POLICY.md)\n"
-                f"**Terms of Service**: [Click here](https://github.com/klappstuhlpy/Percy/TERMS_OF_SERVICE.md)",
+                f"Check out Percy's dashboard by clicking [here](https://r.klappstuhl.me/db)!\n\n"
+                f"**Privacy Policy**: [Click here](https://r.klappstuhl.me/pp)\n"
+                f"**Terms of Service**: [Click here](https://r.klappstuhl.me/tos)",
                 accessory=discord.ui.Thumbnail(thumb),
             )
         )
