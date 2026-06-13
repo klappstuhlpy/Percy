@@ -115,6 +115,11 @@ class Command(commands.Command):
 
         self.custom_flags: FlagMeta[Any] | None = None
 
+        #: The synced application-command ID, resolved lazily by
+        #: :meth:`Bot.resolve_app_command_ids` so :attr:`mention` can render a
+        #: clickable ``</name:id>``. ``None`` until resolved or for prefix-only commands.
+        self._app_command_id: int | None = None
+
         super().__init__(func, **kwargs)
         self.add_check(self._permissions.check)
         self._resolve_param_descriptions()
@@ -144,11 +149,25 @@ class Command(commands.Command):
         """:class:`PermissionSpec` : Return the permission specification for this command."""
         return self._permissions
 
+    @property
+    def mention(self) -> str | None:
+        """The clickable ``</qualified name:id>`` slash-command mention, if known.
+
+        Returns ``None`` for prefix-only commands and before the application-command
+        ID has been resolved (see :meth:`Bot.resolve_app_command_ids`). The ID is the
+        top-level command's ID; the qualified name resolves subcommands correctly,
+        e.g. ``</settings tracking:123>``.
+        """
+        if self._app_command_id is None:
+            return None
+        return f"</{self.qualified_name}:{self._app_command_id}>"
+
     def _ensure_assignment_on_copy(self, other: Command) -> Command:
         super()._ensure_assignment_on_copy(other)
 
         other._permissions = self._permissions
         other.custom_flags = self.custom_flags
+        other._app_command_id = self._app_command_id
         return other
 
     async def can_run(self, ctx: Context, /) -> bool:

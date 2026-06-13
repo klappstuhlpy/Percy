@@ -61,6 +61,7 @@ class Admin(Cog):
             self.bot.tree.copy_global_to(guild=guild)
 
         commands = await self.bot.tree.sync(guild=guild)
+        self.bot._app_command_ids_resolved = False  # IDs may have changed; let help re-resolve them.
         await ctx.send(f"Successfully synced {len(commands)} commands")
 
     @sync.command(name="global", guild_only=False)
@@ -68,6 +69,7 @@ class Admin(Cog):
         """Syncs the commands globally"""
 
         commands = await self.bot.tree.sync(guild=None)
+        self.bot._app_command_ids_resolved = False  # IDs may have changed; let help re-resolve them.
         await ctx.send(f"Successfully synced {len(commands)} commands")
 
     @group(invoke_without_command=True, alias="rl")

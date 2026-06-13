@@ -101,6 +101,10 @@ class Bot(commands.Bot):
     log_handler: logging.Handler
     internal_api: InternalAPI
 
+    #: Whether application-command IDs have been resolved onto command objects (for
+    #: ``Command.mention``). Set by :meth:`resolve_app_command_ids`, cleared on re-sync.
+    _app_command_ids_resolved: bool = False
+
     if TYPE_CHECKING:
         blacklist: Config[int, bool]
         temp_channels: Config[int, bool]
@@ -289,6 +293,32 @@ class Bot(commands.Bot):
 
             payloads.append(payload)
         return payloads
+
+    async def resolve_app_command_ids(self, *, guild: discord.abc.Snowflake | None = None) -> None:
+        """Tag command objects with their synced app-command ID so ``Command.mention`` works.
+
+        Fetches the registered slash commands from Discord — global *and* the given guild,
+        to cover both global- and guild-synced setups — and assigns each command (and its
+        subcommands) the ID of its top-level application command. Idempotent: guarded by
+        ``_app_command_ids_resolved`` and re-run after a sync clears that flag.
+        """
+        if self._app_command_ids_resolved:
+            return
+
+        fetched: list[discord.app_commands.AppCommand] = []
+        with suppress(discord.HTTPException):
+            fetched.extend(await self.tree.fetch_commands())
+        if guild is not None:
+            with suppress(discord.HTTPException):
+                fetched.extend(await self.tree.fetch_commands(guild=guild))
+
+        id_by_name = {cmd.name: cmd.id for cmd in fetched if cmd.type is discord.AppCommandType.chat_input}
+        for command in self.walk_commands():
+            if isinstance(command, Command):
+                top_level = command.qualified_name.split(' ', 1)[0]
+                command._app_command_id = id_by_name.get(top_level)
+
+        self._app_command_ids_resolved = True
 
     async def process_commands(self, message: discord.Message) -> None:
         ctx = await self.get_context(message)

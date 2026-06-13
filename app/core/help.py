@@ -313,6 +313,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             },
             **kwargs,  # type: ignore[arg-type]
         )
+        #: Whether to render commands as clickable ``</name:id>`` mentions. Enabled only
+        #: when help is invoked as a slash command (kept off for prefix invocations).
+        self._render_mentions: bool = False
 
     def get_bot_mapping(self) -> dict[Cog | None, list[Command]]:
         mapping = super().get_bot_mapping()
@@ -403,6 +406,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
             ret.sort(key=key)  # type: ignore[arg-type]
         return ret
 
+    async def prepare_help_command(self, ctx: Context, command: str | None = None) -> None:
+        """Runs before every help dispatch — both the text ``command_callback`` and
+        ``Context.send_help`` (used by the ``/help`` slash command) call this, so it's the
+        right place to resolve clickable command mentions for the slash path.
+        """
+        await super().prepare_help_command(ctx, command)
+        if getattr(ctx, "interaction", None) is not None:
+            self._render_mentions = True
+            await ctx.bot.resolve_app_command_ids(guild=ctx.guild)
+
     async def command_callback(self, ctx: Context, /, *, command: str | None = None) -> None:
         if command is not None and command.lower() == "flags":
             await ctx.send(view=NoticeView(self.build_flag_help_container()), silent=True)
@@ -465,6 +478,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         *,
         descripted: bool = False,
         no_signature: bool = False,
+        args_only: bool = False,
     ) -> list[dict[str, str | bool]] | str:
         """Takes an :class:`Command` and returns a POSIX-like signature useful for help command output.
 
@@ -478,6 +492,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             Whether to return the commands as formatted embed fields with description.
         no_signature: :class:`bool`
             Whether to return only the command name without signature.
+        args_only: :class:`bool`
+            Whether to return only the argument signature (without prefix or command name),
+            e.g. ``<user> [reason]``. Used alongside a clickable command mention.
 
         Returns
         -------
@@ -515,6 +532,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         signature = getattr(command, "ansi_signature", None)
         signature = signature.raw if signature is not None else command.signature
         hidden_tag = "[!]" if command.hidden else ""
+
+        if args_only:
+            return f"{truncate(signature, 150)} {hidden_tag}".strip()
 
         return f"{prefix}{command.qualified_name} {truncate(signature, 150)} {hidden_tag}".strip()
 
@@ -664,8 +684,16 @@ class PaginatedHelpCommand(commands.HelpCommand):
         for cmd in entries:
             prefixes = create_prefixes(cmd)
             prefix = (" ".join(prefixes) + " | ") if prefixes else ""
-            signature = self.get_command_signature(cmd)
-            container.add_item(discord.ui.TextDisplay(f"{prefix}**`{signature}`**\n{cmd.description or '…'}"))
+            # When help was run as a slash command, show the clickable mention followed by
+            # just the argument signature; otherwise (and for commands without an app-command
+            # counterpart) fall back to the full prefixed signature.
+            mention = getattr(cmd, "mention", None) if self._render_mentions else None
+            if mention:
+                args = self.get_command_signature(cmd, args_only=True)
+                label = f"{mention} **`{args}`**" if args else mention
+            else:
+                label = f"**`{self.get_command_signature(cmd)}`**"
+            container.add_item(discord.ui.TextDisplay(f"{prefix}{label}\n{cmd.description or '…'}"))
 
         notes = list(iter_help_notes(is_any_locked, any_has_more_help, self.context.clean_prefix))
         if notes:
@@ -772,7 +800,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         if getattr(command, "commands", None):
             resolved_sub_commands = [
-                f"- `{self.get_command_signature(cmd)}`"
+                f"- {(self._render_mentions and getattr(cmd, 'mention', None)) or f'`{self.get_command_signature(cmd)}`'}"
                 for cmd in command.walk_commands()  # type: ignore[attr-defined]
                 if not cmd.hidden
             ]
