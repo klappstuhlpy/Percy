@@ -97,8 +97,8 @@ async def test_set_mute_role_writes_and_invalidates(mock_db: MagicMock) -> None:
     assert 'INSERT INTO guild_config' in query
     assert 'muted_members' in query
     assert params == [1, 99, [3, 4]]
-    # mutating the mute role must bust the cached guild config
-    mock_db.get_guild_config.invalidate.assert_called_once_with(1)
+    # mutating the mute role must fire the guild_config_changed signal
+    mock_db.signals.fire.assert_called_once_with("guild_config_changed", 1)
 
 
 async def test_unbind_mute_role_clears_and_invalidates(mock_db: MagicMock) -> None:
@@ -109,4 +109,4 @@ async def test_unbind_mute_role_clears_and_invalidates(mock_db: MagicMock) -> No
     query, *params = mock_db.execute.await_args.args
     assert 'UPDATE guild_config' in query
     assert params == [42]
-    mock_db.get_guild_config.invalidate.assert_called_once_with(42)
+    mock_db.signals.fire.assert_called_once_with("guild_config_changed", 42)

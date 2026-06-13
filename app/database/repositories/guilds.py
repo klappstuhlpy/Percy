@@ -59,7 +59,7 @@ class GuildsRepository(BaseRepository):
                 set_clause = ", ".join(f'"{col}" = ${i}' for i, col in enumerate(fields, start=2))
                 await con.execute(
                     f"UPDATE guild_gatekeeper SET {set_clause} WHERE id = $1;", guild_id, *fields.values())
-        self.db.get_guild_gatekeeper.invalidate(guild_id)
+        self.invalidate_cache("gatekeeper_changed", guild_id)
 
     # -- plonks (ignore list) --------------------------------------------
 

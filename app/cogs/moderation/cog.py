@@ -1106,7 +1106,7 @@ class Moderation(Cog):
             if not confirm:
                 return
 
-        async with ctx.channel.typing():
+        async with ctx.progress(f"Purging up to {search} messages...") as progress:
             before = discord.Object(id=flags.before) if flags.before else None
             after = discord.Object(id=flags.after) if flags.after else None
 
@@ -1122,6 +1122,8 @@ class Moderation(Cog):
                 await ctx.send_error(f"Failed to delete messages: {e}")
                 return
 
+            await progress.update(f"Deleted {len(deleted)} messages, compiling results...")
+
             spammers = Counter(m.author.display_name for m in deleted)
             deleted = len(deleted)
             messages = [f"`{deleted}` message{' was' if deleted == 1 else 's were'} removed."]
@@ -1135,8 +1137,8 @@ class Moderation(Cog):
             if len(to_send) > 4000:
                 to_send = f"Successfully removed `{deleted}` messages."
 
-            embed = discord.Embed(title="Channel Purge", description=to_send, colour=helpers.Colour.lime_green())
-            await ctx.send(embed=embed, delete_after=15)
+        embed = discord.Embed(title="Channel Purge", description=to_send, colour=helpers.Colour.lime_green())
+        await ctx.send(embed=embed, delete_after=15)
 
     @group(
         "lockdown",

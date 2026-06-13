@@ -1070,9 +1070,8 @@ class Stats(Cog):
     async def avatar_history(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Shows the avatar history of a user."""
         user: discord.Member | discord.User = member or ctx.author
-        await ctx.defer(typing=True)
 
-        async with ctx.channel.typing():
+        async with ctx.progress("Fetching avatar history...") as progress:
             with Timer() as timer:
                 history = await self.get_avatar_history(user)
 
@@ -1086,6 +1085,7 @@ class Stats(Cog):
                 if not avatars:
                     return
 
+                await progress.update(f"Generating collage from {len(avatars)} avatars...")
                 file = await self.bot.render.avatar_collage(avatars)
 
         embed = discord.Embed(
@@ -1108,7 +1108,7 @@ class Stats(Cog):
         user: discord.Member | discord.User = member or ctx.author
         query_days = 30
 
-        async with ctx.channel.typing():
+        async with ctx.progress("Fetching presence history...") as progress:
             with Timer() as timer:
                 history: list[asyncpg.Record] = await self.get_presence_history(user.id, days=query_days)
 
@@ -1118,6 +1118,7 @@ class Stats(Cog):
 
                 fetching_time = timer.reset()
 
+                await progress.update("Analyzing presence data...")
                 breakdown = summarize_presence((record["changed_at"], record["status_before"]) for record in history)
 
                 if not breakdown.has_data:
@@ -1126,6 +1127,7 @@ class Stats(Cog):
 
                 analyzing_time = timer.reset()
 
+                await progress.update("Generating presence chart...")
                 canvas: discord.File = await self.bot.render.presence_chart(
                     labels=["Online", "Offline", "DND", "Idle"],
                     colors=["#43b581", "#747f8d", "#f04747", "#fba31c"],

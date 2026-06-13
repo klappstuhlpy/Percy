@@ -90,7 +90,7 @@ class ModerationRepository(BaseRepository):
                               muted_members = EXCLUDED.muted_members;
         """
         await self.execute(query, guild_id, role_id, list(members))
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def create_mute_role(self, guild_id: int, role_id: int) -> None:
         """Binds a freshly created mute role for a guild, leaving muted members untouched."""
@@ -101,13 +101,13 @@ class ModerationRepository(BaseRepository):
                 DO UPDATE SET mute_role_id = EXCLUDED.mute_role_id;
         """
         await self.execute(query, guild_id, role_id)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def unbind_mute_role(self, guild_id: int) -> None:
         """Unbinds the mute role and clears the tracked muted members for a guild."""
         query = "UPDATE guild_config SET (mute_role_id, muted_members) = (NULL, '{}'::bigint[]) WHERE id=$1;"
         await self.execute(query, guild_id)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def bulk_update_muted_members(self, records: list[dict[str, Any]]) -> None:
         """Replaces the tracked muted-member arrays for a batch of guilds.
@@ -136,7 +136,7 @@ class ModerationRepository(BaseRepository):
                               alert_webhook_url = EXCLUDED.alert_webhook_url;
         """
         await self.execute(query, guild_id, flags_value, channel_id, webhook_url)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def get_audit_log_webhook_url(self, guild_id: int) -> str | None:
         """Fetches the stored audit-log webhook url for a guild, if any."""
@@ -153,7 +153,7 @@ class ModerationRepository(BaseRepository):
                               audit_log_webhook_url = $4;
         """
         await self.execute(query, guild_id, flags_value, channel_id, webhook_url)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def get_audit_log_flags(self, guild_id: int) -> dict[str, Any] | None:
         """Fetches the audit-log event flag mapping for a guild."""
@@ -162,7 +162,7 @@ class ModerationRepository(BaseRepository):
     async def set_audit_log_flags(self, guild_id: int, flags: dict[str, Any]) -> None:
         """Replaces the audit-log event flag mapping for a guild."""
         await self.execute("UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;", guild_id, flags)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def disable_protection(self, guild_id: int, updates: str) -> asyncpg.Record:
         """Applies a moderation-disable ``SET`` fragment and returns the freed webhook urls.
@@ -173,7 +173,7 @@ class ModerationRepository(BaseRepository):
         """
         query = f"UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url, alert_webhook_url;"
         record = await self.fetchrow(query, guild_id)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
         return cast('asyncpg.Record', record)
 
     # -- Gatekeeper & raid/mention protection (guild_config) --------------
@@ -202,7 +202,7 @@ class ModerationRepository(BaseRepository):
                 """,
                 guild_id, flags_value)
 
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
         return gatekeeper_record, config_record
 
     async def toggle_raid_protection(self, guild_id: int, flag: int, enabled: bool | None) -> bool:
@@ -218,7 +218,7 @@ class ModerationRepository(BaseRepository):
             RETURNING COALESCE($3, (flags & $2 = $2));
         """
         result = await self.fetchval(query, guild_id, flag, enabled)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
         return result
 
     async def set_mention_count(self, guild_id: int, count: int) -> None:
@@ -230,7 +230,7 @@ class ModerationRepository(BaseRepository):
                 DO UPDATE SET mention_count = $2;
         """
         await self.execute(query, guild_id, count)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     # -- Moderation ignore list (guild_config.safe_automod_entity_ids) ----
 
@@ -243,7 +243,7 @@ class ModerationRepository(BaseRepository):
             WHERE id = $1;
         """
         await self.execute(query, guild_id, entity_ids)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)
 
     async def remove_safe_entities(self, guild_id: int, entity_ids: list[int]) -> None:
         """Removes entities from the moderation ignore list for a guild."""
@@ -256,4 +256,4 @@ class ModerationRepository(BaseRepository):
             WHERE id = $1;
         """
         await self.execute(query, guild_id, entity_ids)
-        self.db.get_guild_config.invalidate(guild_id)
+        self.invalidate_cache("guild_config_changed", guild_id)

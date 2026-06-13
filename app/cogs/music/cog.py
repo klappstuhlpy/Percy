@@ -1134,31 +1134,34 @@ class Music(Cog):
         """Sets up a new music player channel.
         If you don't provide a channel, the bot will create a new channel in the category where the command was executed.
         """
-        await ctx.defer()
-
         assert ctx.guild is not None
-        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-        if config.music_panel_channel_id and config.music_panel_message_id:
-            await ctx.send_error("There is already a music configuration setup.")
-            return
 
-        if not channel:
-            assert isinstance(ctx.channel, discord.TextChannel)
-            parent = ctx.channel.category or ctx.guild
-            channel = await parent.create_text_channel(name="🎶percy-music")
+        async with ctx.progress("Setting up music player channel...") as progress:
+            config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
+            if config.music_panel_channel_id and config.music_panel_message_id:
+                await ctx.send_error("There is already a music configuration setup.")
+                return
 
-        assert self.bot.user is not None
-        await channel.edit(slowmode_delay=3, topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
+            if not channel:
+                assert isinstance(ctx.channel, discord.TextChannel)
+                parent = ctx.channel.category or ctx.guild
+                await progress.update("Creating music channel...")
+                channel = await parent.create_text_channel(name="🎶percy-music")
+
+            assert self.bot.user is not None
+            await progress.update("Configuring channel settings...")
+            await channel.edit(slowmode_delay=3, topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
+
+            guild = ctx.guild
+            assert guild is not None
+            await progress.update("Sending player panel...")
+            message = await channel.send(embed=Player.preview_embed(guild))
+            await message.pin()
+            await channel.purge(limit=5, check=lambda msg: not msg.pinned)
+
+            await config.update(music_panel_channel_id=channel.id, music_panel_message_id=message.id)
 
         await ctx.send_success(f"Successfully set the new player channel to {channel.mention}.")
-
-        guild = ctx.guild
-        assert guild is not None
-        message = await channel.send(embed=Player.preview_embed(guild))
-        await message.pin()
-        await channel.purge(limit=5, check=lambda msg: not msg.pinned)
-
-        await config.update(music_panel_channel_id=channel.id, music_panel_message_id=message.id)
 
     @_music.command(
         "reset",

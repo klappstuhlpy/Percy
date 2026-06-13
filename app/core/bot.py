@@ -5,6 +5,7 @@ import datetime
 import logging
 import re
 import sys
+import time as _time
 import traceback
 from collections import Counter, defaultdict
 from contextlib import suppress
@@ -354,7 +355,6 @@ class Bot(commands.Bot):
             await ctx.send_info('This command is temporarily disabled.', delete_after=10)
             return
 
-        import time as _time
         start = _time.perf_counter()
         await self.invoke(ctx)
         duration_ms = (_time.perf_counter() - start) * 1000
@@ -506,6 +506,7 @@ class Bot(commands.Bot):
             return
 
         self.command_error_cache[self.make_command_cache_key(ctx)] = f'{error.__class__.__name__}: {error}'
+        self.metrics.record_error(type(error).__name__)
 
         # CommandNotFound is handled earlier in process_commands (an unmatched command never
         # reaches invoke(), so it is never raised here); CheckFailure/Forbidden stay silent.

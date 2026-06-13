@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.clients import TranslateClient, TranslationError
 from app.clients.base import HTTPClientError
 from app.core import Accent, Bot, Cog, Context, command, describe, make_notice
+from app.core.errors import ServiceUnavailableError
 from app.utils import truncate
 
 #: A small alias table so users can type common language names, not just ISO codes.
@@ -52,9 +53,8 @@ class Translator(Cog):
 
         try:
             result = await self.client.translate(text, target=target)
-        except (TranslationError, HTTPClientError):
-            await ctx.send_error('Could not translate that right now — please try again later.')
-            return
+        except (TranslationError, HTTPClientError) as exc:
+            raise ServiceUnavailableError("Translation") from exc
 
         view = make_notice(
             'Translation',

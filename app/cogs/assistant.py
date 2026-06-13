@@ -7,6 +7,7 @@ import discord
 from app.clients import GroqClient, GroqResponseError
 from app.clients.base import HTTPClientError
 from app.core import Accent, Bot, Cog, Context, command, cooldown, describe, make_notice
+from app.core.errors import ServiceUnavailableError
 from app.utils import truncate
 from config import groq
 
@@ -73,9 +74,8 @@ class Assistant(Cog):
 
         try:
             answer = await self.client.chat(messages)
-        except (HTTPClientError, GroqResponseError):
-            await ctx.send_error('The assistant is unavailable right now — please try again shortly.')
-            return
+        except (HTTPClientError, GroqResponseError) as exc:
+            raise ServiceUnavailableError("Groq AI") from exc
 
         view = make_notice(
             'Assistant',

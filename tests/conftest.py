@@ -50,4 +50,8 @@ def mock_db(mock_bot: MagicMock) -> MagicMock:
     db.get_guild_config = MagicMock(name='get_guild_config')
     db.get_guild_config.invalidate = MagicMock(name='get_guild_config.invalidate')
 
+    # Signal hub for signal-based cache invalidation.
+    db.signals = MagicMock(name='CacheSignalHub')
+    db.signals.fire = MagicMock(return_value=1)
+
     return db
