@@ -42,9 +42,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 - [Database management](#database-management)
 - [Running the bot](#running-the-bot)
 - [Docker](#docker)
-- [Architecture](#architecture)
 - [Development](#development)
-- [Project structure](#project-structure)
 - [License](#license)
 
 ---
