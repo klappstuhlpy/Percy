@@ -48,7 +48,7 @@ from .lockdown import (
     is_potential_lockout,
     start_lockdown,
 )
-from .ui import PreExistingMuteRoleView
+from .ui import MuteRoleSetUpView
 
 if TYPE_CHECKING:
     from app.core.timer import Timer
@@ -1814,179 +1814,24 @@ class Moderation(Cog):
         except discord.HTTPException:
             self._mute_data_batch[guild_id].append((member_id, False))
 
-    @group(
+    @command(
         "muterole",
-        description="Shows and manages the configuration of the mute role.",
+        description="Opens the mute role configuration menu.",
         guild_only=True,
         hybrid=True,
-        fallback="show",
-        bot_permissions=["manage_roles"],
+        bot_permissions=["manage_roles", "manage_channels"],
         user_permissions=["manage_roles", "manage_channels"],
     )
-    async def _mute_role(self, ctx: ModGuildContext) -> None:
-        """Shows configuration of the mute role."""
-        role = ctx.guild_config.mute_role if ctx.guild_config else None
-        total = 0
-        if role is not None:
-            members = ctx.guild_config.muted_members.copy()
-            members.update(r.id for r in role.members)
-            total = len(members)
-            role = f"{role} (ID: {role.id})"
+    async def mute_role(self, ctx: ModGuildContext) -> None:
+        """Opens the mute role configuration menu.
 
-        await ctx.send_success(f"Role: {role}\nMembers Muted: {total}")
-
-    @_mute_role.command(
-        "set",
-        description="Sets the mute role to a pre-existing role.",
-        guild_only=True,
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles", "manage_channels"],
-    )
-    @cooldown(1, 30.0, commands.BucketType.guild)
-    @describe(role="The role to set as the mute role.")
-    async def mute_role_set(self, ctx: ModGuildContext, *, role: discord.Role) -> None:
-        """Sets the mute role to a pre-existing role."""
-        assert ctx.guild is not None
-        if role.is_default():
-            raise commands.BadArgument("You cannot set the default role as the mute role.")
-
-        if role > ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:  # type: ignore[union-attr]
-            raise commands.BadArgument("You cannot set a role higher than your top role as the mute role.")
-
-        if role > ctx.guild.me.top_role:
-            raise commands.BadArgument("I cannot set a role higher than my top role as the mute role.")
-
-        has_pre_existing = ctx.guild_config is not None and ctx.guild_config.mute_role is not None
-        merge: bool = False
-
-        if has_pre_existing:
-            view = PreExistingMuteRoleView(
-                ctx.author,  # type: ignore[arg-type]
-                content=(
-                    "**There seems to be a pre-existing mute role set up.**\n\n"
-                    "If you want to merge the pre-existing member data with the new member data press the Merge button.\n"
-                    "If you want to replace pre-existing member data with the new member data press the Replace button.\n\n"
-                    "**Note: Merging is __slow__. It will also add the role to every possible member that needs it.**"
-                ),
-            )
-            view.message = await ctx.send(view=view)
-            await view.wait()
-            if view.merge is None:
-                return
-            merge = view.merge
-        else:
-            muted_members = len(role.members)
-            if muted_members > 0:
-                msg = f"{Emojis.warning} Are you sure you want to make this the mute role? It has {pluralize(muted_members):member}."
-                confirm = await ctx.confirm(msg)
-                if not confirm:
-                    return
-
-        async with ctx.progress("Configuring mute role..."):
-            members = set()
-
-            if ctx.guild_config and merge:
-                members |= ctx.guild_config.muted_members
-                reason = f"Action done by {ctx.author} (ID: {ctx.author.id}): Merging mute roles"
-                async for member in self.bot.resolve_member_ids(ctx.guild, members):  # type: ignore[arg-type]
-                    if not member._roles.has(role.id):
-                        with suppress(discord.HTTPException):
-                            await member.add_roles(role, reason=reason)
-
-            members.update(m.id for m in role.members)
-            await self.bot.db.moderation.set_mute_role(ctx.guild.id, role.id, list(members))
-
-        escaped = discord.utils.escape_mentions(role.name)
-        await ctx.send_success(
-            f"Successfully set the {escaped} role as the mute role.\n\n"
-            "**Note: Permission overwrites have not been changed.**"
-        )
-
-    @_mute_role.command(
-        "update",
-        description="Updates the permission overwrites of the mute role.",
-        aliases=["sync"],
-        guild_only=True,
-        bot_permissions=["manage_roles", "manage_channels"],
-        user_permissions=["manage_roles"],
-    )
-    @checks.can_mute()
-    async def mute_role_update(self, ctx: ModGuildContext) -> None:
-        """Automatically updates the permission overwrites of the mute role on the server."""
-        assert ctx.guild is not None
-        assert ctx.guild_config is not None
-        assert ctx.guild_config.mute_role is not None
-
-        async with ctx.progress("Updating channel permissions..."):
-            success, failure, skipped = await update_role_permissions(ctx.guild_config.mute_role, ctx.guild, ctx.author)  # type: ignore[arg-type]
-            total = success + failure + skipped
-
-        await ctx.send_info(
-            f"Attempted to update {total} channel permissions. "
-            f"[Updated: `{success}`, Failed: `{failure}`, Skipped (*no permissions*): `{skipped}`]"
-        )
-
-    @_mute_role.command(
-        "create",
-        description="Creates a mute role with the given name.",
-        guild_only=True,
-        bot_permissions=["manage_roles", "manage_channels"],
-        user_permissions=["manage_roles"],
-    )
-    @describe(name="The name of the mute role to create.")
-    async def mute_role_create(self, ctx: ModGuildContext, *, name: str) -> None:
-        """Creates a mute role with the given name.
-        This also updates the channels' permission overwrites accordingly if needed.
+        A single dashboard to bind an existing role, create a fresh one, sync its
+        channel permission overwrites, or unbind it — all from one place.
         """
         assert ctx.guild is not None
-        guild_id = ctx.guild.id
-        if ctx.guild_config is not None and ctx.guild_config.mute_role is not None:
-            await ctx.send_error("A mute role has already been set up.")
-            return
-
-        try:
-            role = await ctx.guild.create_role(name=name, reason=f"Mute Role Created By {ctx.author} (ID: {ctx.author.id})")
-        except discord.HTTPException as e:
-            await ctx.send_error(f"Failed to create role: {e}")
-            return
-
-        await ctx.db.moderation.create_mute_role(guild_id, role.id)
-
-        confirm = await ctx.confirm(f"{Emojis.warning} Would you like to update the channel overwrites as well?")
-        if not confirm:
-            await ctx.send_success("Mute role successfully created.")
-            return
-
-        async with ctx.progress("Updating channel permissions..."):
-            success, failure, skipped = await update_role_permissions(role, ctx.guild, ctx.author)
-
-        await ctx.send_success(
-            f"Mute role successfully created. Overwrites: [Updated: {success}, Failed: {failure}, Skipped: {skipped}]"
-        )
-
-    @_mute_role.command(
-        "unbind",
-        aliases=["delete"],
-        description="Unbinds a mute role without deleting it.",
-        guild_only=True,
-        user_permissions=["manage_roles"],
-    )
-    async def mute_role_unbind(self, ctx: ModGuildContext) -> None:
-        """Unbinds a mute role without deleting it."""
-        assert ctx.guild is not None
-        guild_id = ctx.guild.id
-        if ctx.guild_config is None or ctx.guild_config.mute_role is None:
-            raise commands.BadArgument("This server does not have a mute role set up.")
-
-        muted_members = len(ctx.guild_config.muted_members)
-        if muted_members > 0:
-            msg = f"Are you sure you want to unbind and unmute {pluralize(muted_members):member}?"
-            confirm = await ctx.confirm(msg)
-            if not confirm:
-                return
-
-        await self.bot.db.moderation.unbind_mute_role(guild_id)
-        await ctx.send_success("Successfully unbound mute role.")
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+        view = MuteRoleSetUpView(self, ctx.author, config)  # type: ignore[arg-type]
+        view.message = await ctx.send(view=view)
 
     @command(
         "selfmute",

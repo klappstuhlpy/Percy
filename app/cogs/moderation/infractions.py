@@ -15,9 +15,11 @@ import discord
 from app.utils import merge_perms
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Awaitable, Callable, Sequence
 
     from app.core import Context
+
+    ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 def check_member_hierarchy(
@@ -69,6 +71,7 @@ async def update_role_permissions(
     invoker: discord.abc.User,
     update_read_permissions: bool = False,
     channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None = None,
+    progress: ProgressCallback | None = None,
     **permissions: bool | None,
 ) -> tuple[int, int, int]:
     r"""|coro|
@@ -91,6 +94,9 @@ async def update_role_permissions(
         Whether to update the read permissions as well.
     channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None
         The channels to update the permission overwrites in.
+    progress: ProgressCallback | None
+        An optional ``async (done, total)`` callback invoked after each channel is
+        processed, used to surface live progress to the caller.
     \*\*permissions: bool | None
         The permissions to update the permission overwrites with.
         Those are extras.
@@ -109,7 +115,8 @@ async def update_role_permissions(
         effective_channels = list(channels)  # type: ignore
 
     guild_perms = guild.me.guild_permissions
-    for channel in effective_channels:
+    total = len(effective_channels)
+    for index, channel in enumerate(effective_channels, start=1):
         perms = channel.permissions_for(guild.me)
         if perms.manage_roles:
             overwrite = channel.overwrites_for(role)
@@ -138,4 +145,7 @@ async def update_role_permissions(
                 success += 1
         else:
             skipped += 1
+
+        if progress is not None:
+            await progress(index, total)
     return success, failure, skipped
