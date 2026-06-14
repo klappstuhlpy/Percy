@@ -1,15 +1,163 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    import datetime
+    from collections.abc import Callable, Iterable
 
     import asyncpg
 
-__all__ = ('TagsRepository',)
+__all__ = (
+    'GiveawaysRepository',
+    'HighlightsRepository',
+    'PollsRepository',
+    'StarboardRepository',
+    'TagsRepository',
+)
+
+
+# -- Polls ----------------------------------------------------------------
+
+
+class PollsRepository(BaseRepository):
+    """Data access for the ``polls`` table.
+
+    ``poll_entry`` is a Postgres composite type stored in the ``entries`` array
+    column of ``polls`` rather than a standalone table, so it is handled here too.
+    The methods return raw records/scalars; building :class:`Poll` objects is left
+    to the ``Polls`` cog, which owns the ``cog`` reference each record needs.
+    """
+
+    _SORT_CLAUSES: ClassVar[dict[str, str]] = {
+        'id': 'id',
+        'new': "metadata #>> ARRAY['kwargs', 'published'] DESC",
+        'old': "metadata #>> ARRAY['kwargs', 'published'] ASC",
+        'most votes': "metadata #>> ARRAY['kwargs', 'votes'] DESC",
+        'least votes': "metadata #>> ARRAY['kwargs', 'votes'] ASC",
+    }
+
+    async def create(
+            self,
+            poll_id: int,
+            channel_id: int,
+            message_id: int,
+            guild_id: int,
+            published: datetime.datetime,
+            expires: datetime.datetime,
+            metadata: dict[str, Any],
+    ) -> int:
+        """Inserts a new poll and returns its generated ``id``."""
+        query = """
+            INSERT INTO polls (id, channel_id, message_id, guild_id, published, expires, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            RETURNING id;
+        """
+        return await self.fetchval(
+            query, poll_id, channel_id, message_id, guild_id, published, expires, metadata)
+
+    async def get(self, poll_id: int, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a single poll scoped to a guild."""
+        query = "SELECT * FROM polls WHERE id = $1 AND guild_id = $2 LIMIT 1;"
+        return await self.fetchrow(query, poll_id, guild_id)
+
+    async def get_by_id(self, poll_id: int) -> asyncpg.Record | None:
+        """Fetches a single poll by its ID, regardless of guild."""
+        query = "SELECT * FROM polls WHERE id = $1 LIMIT 1;"
+        return await self.fetchrow(query, poll_id)
+
+    async def get_for_guild(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches every poll belonging to a guild."""
+        query = "SELECT * FROM polls WHERE guild_id = $1;"
+        return await self.fetch(query, guild_id)
+
+    async def get_all_ids(self) -> list[asyncpg.Record]:
+        """Fetches the IDs of every poll (used to generate a unique new ID)."""
+        return await self.fetch("SELECT id FROM polls;")
+
+    async def search_for_guild(
+            self, guild_id: int, *, sort: str | None = None, active: bool = False
+    ) -> list[asyncpg.Record]:
+        """Fetches a guild's polls, optionally filtered to running polls and sorted.
+
+        ``sort`` is matched against a whitelist of allowed ``ORDER BY`` fragments,
+        falling back to sorting by ``id`` for unknown values.
+        """
+        sort_clause = self._SORT_CLAUSES.get(sort or 'id', 'id')
+        running = "AND metadata #>> ARRAY['kwargs', 'running'] = true" if active else ''
+        query = f"SELECT * FROM polls WHERE guild_id = $1 {running} ORDER BY {sort_clause};"
+        return await self.fetch(query, guild_id)
+
+    async def update(
+            self,
+            poll_id: int,
+            key: Callable[[tuple[int, str]], str],
+            values: dict[str, Any],
+            *,
+            connection: asyncpg.Connection | None = None,
+    ) -> asyncpg.Record:
+        """Applies a :class:`~app.database.base.BaseRecord`-style update to a poll row."""
+        query = f"""
+            UPDATE polls
+            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
+            WHERE id = $1
+            RETURNING *;
+        """
+        return await (connection or self.db).fetchrow(query, poll_id, *values.values())
+
+    async def delete(self, poll_id: int) -> None:
+        """Deletes a poll row."""
+        await self.execute("DELETE FROM polls WHERE id = $1;", poll_id)
+
+
+# -- Giveaways ------------------------------------------------------------
+
+
+class GiveawaysRepository(BaseRepository):
+    """Data access for the ``giveaways`` table.
+
+    Each row stores a giveaway's location (guild/channel/message), its author,
+    the set of entrant IDs, and a JSONB ``metadata`` blob holding the prize,
+    schedule and winner count. Methods return raw records/scalars; the
+    ``Giveaways`` cog wraps them in ``Giveaway`` records.
+    """
+
+    async def get_giveaway(self, giveaway_id: int) -> asyncpg.Record | None:
+        """Fetches a giveaway by ID."""
+        return await self.fetchrow("SELECT * FROM giveaways WHERE id = $1 LIMIT 1;", giveaway_id)
+
+    async def get_guild_giveaway(self, guild_id: int, giveaway_id: int) -> asyncpg.Record | None:
+        """Fetches a giveaway by ID, scoped to a guild."""
+        return await self.fetchrow(
+            "SELECT * FROM giveaways WHERE guild_id = $1 AND id = $2 LIMIT 1;", guild_id, giveaway_id)
+
+    async def get_guild_giveaways(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches every giveaway in a guild."""
+        return await self.fetch("SELECT * FROM giveaways WHERE guild_id = $1;", guild_id)
+
+    async def create_giveaway(
+            self, channel_id: int, message_id: int, guild_id: int, author_id: int, metadata: dict[str, Any]
+    ) -> int:
+        """Inserts a new giveaway and returns its ID."""
+        query = """
+            INSERT INTO giveaways (channel_id, message_id, guild_id, author_id, metadata)
+            VALUES ($1, $2, $3, $4, $5::jsonb)
+            RETURNING id;
+        """
+        return await self.fetchval(query, channel_id, message_id, guild_id, author_id, metadata)
+
+    async def set_entries(self, giveaway_id: int, entries: Iterable[int]) -> None:
+        """Replaces the entrant set of a giveaway."""
+        await self.execute("UPDATE giveaways SET entries = $1 WHERE id = $2;", entries, giveaway_id)
+
+    async def delete_giveaway(self, giveaway_id: int) -> None:
+        """Deletes a giveaway."""
+        await self.execute("DELETE FROM giveaways WHERE id = $1;", giveaway_id)
+
+
+# -- Tags ------------------------------------------------------------------
 
 
 def _is_id(name_or_id: str | int) -> bool:
@@ -366,3 +514,144 @@ class TagsRepository(BaseRepository):
             LIMIT $3;
         """
         return await self.fetch(query, location_id, owner_id, limit)
+
+
+# -- Highlights ------------------------------------------------------------
+
+
+class HighlightsRepository(BaseRepository):
+    """Data access for the ``highlights`` table.
+
+    Each row is a user's highlight configuration within a guild: the trigger
+    ``lookup`` set and the ``blocked`` entity set. Methods return raw records;
+    the ``Highlights`` cog wraps them in ``HighlightConfig`` records.
+    """
+
+    async def update_config(
+            self,
+            config_id: int,
+            key: Callable[[tuple[int, str]], str],
+            values: dict[str, Any],
+            *,
+            connection: asyncpg.Connection | None = None,
+    ) -> asyncpg.Record:
+        """Applies a :class:`~app.database.base.BaseRecord`-style update to a highlight row."""
+        query = f"""
+            UPDATE highlights
+            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
+            WHERE id = $1
+            RETURNING *;
+        """
+        return cast('asyncpg.Record', await (connection or self.db).fetchrow(query, config_id, *values.values()))
+
+    async def get_guild_configs(self, location_id: int) -> list[asyncpg.Record]:
+        """Fetches every highlight configuration in a guild."""
+        return await self.fetch("SELECT * FROM highlights WHERE location_id = $1;", location_id)
+
+    async def get_config(self, location_id: int, user_id: int) -> asyncpg.Record | None:
+        """Fetches a user's highlight configuration in a guild, if it exists."""
+        return await self.fetchrow(
+            "SELECT * FROM highlights WHERE location_id = $1 AND user_id = $2;", location_id, user_id)
+
+    async def create_config(self, user_id: int, location_id: int) -> asyncpg.Record:
+        """Inserts a blank highlight configuration for a user in a guild and returns it."""
+        return await self.fetchrow(
+            "INSERT INTO highlights (user_id, location_id) VALUES ($1, $2) RETURNING *;", user_id, location_id)
+
+    async def delete_config(self, config_id: int) -> None:
+        """Deletes a highlight configuration."""
+        await self.execute("DELETE FROM highlights WHERE id = $1;", config_id)
+
+    async def get_import_locations(self, user_id: int, exclude_location_id: int) -> list[asyncpg.Record]:
+        """Fetches the guild IDs where a user has highlights, excluding the current guild."""
+        query = """
+            SELECT location_id
+            FROM highlights
+            WHERE user_id = $1
+            AND location_id != $2
+            AND lookup IS NOT NULL;
+        """
+        return await self.fetch(query, user_id, exclude_location_id)
+
+
+# -- Starboard -------------------------------------------------------------
+
+
+class StarboardRepository(BaseRepository):
+    """Data access for the ``starboard_config`` and ``starboard_entries`` tables.
+
+    ``starboard_config`` holds one row of per-guild settings (channel, threshold, star
+    emoji, self-star toggle, ignore list); ``starboard_entries`` tracks each original
+    message that has been mirrored to the starboard, keyed by the *original* message id.
+    Methods return raw records/scalars; the ``Starboard`` cog wraps the config row in a
+    :class:`~app.cogs.starboard.models.StarboardConfig`.
+    """
+
+    # -- config -----------------------------------------------------------
+
+    async def get_config(self, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a guild's starboard config row, or ``None`` if never configured."""
+        return await self.fetchrow("SELECT * FROM starboard_config WHERE guild_id = $1;", guild_id)
+
+    async def upsert_config(self, guild_id: int, **columns: object) -> asyncpg.Record:
+        """Inserts or updates the given config columns for a guild, returning the row.
+
+        Only the columns passed are written; everything else falls back to its default
+        (on insert) or keeps its current value (on update).
+        """
+        keys = list(columns)
+        insert_cols = ', '.join(['guild_id', *keys])
+        placeholders = ', '.join(f'${i}' for i in range(1, len(keys) + 2))
+        updates = ', '.join(f'{key} = EXCLUDED.{key}' for key in keys) or 'guild_id = EXCLUDED.guild_id'
+        query = f"""
+            INSERT INTO starboard_config ({insert_cols})
+            VALUES ({placeholders})
+            ON CONFLICT (guild_id) DO UPDATE SET {updates}
+            RETURNING *;
+        """
+        return await self.fetchrow(query, guild_id, *columns.values())
+
+    # -- entries ----------------------------------------------------------
+
+    async def get_entry(self, message_id: int) -> asyncpg.Record | None:
+        """Fetches the starboard entry for an original message id."""
+        return await self.fetchrow("SELECT * FROM starboard_entries WHERE message_id = $1;", message_id)
+
+    async def get_entry_by_starboard_message(self, starboard_message_id: int) -> asyncpg.Record | None:
+        """Fetches the entry whose mirrored post has the given starboard message id."""
+        return await self.fetchrow(
+            "SELECT * FROM starboard_entries WHERE starboard_message_id = $1;", starboard_message_id)
+
+    async def create_entry(
+        self,
+        message_id: int,
+        guild_id: int,
+        channel_id: int,
+        author_id: int,
+        starboard_message_id: int,
+        star_count: int,
+    ) -> None:
+        """Records a newly mirrored message."""
+        query = """
+            INSERT INTO starboard_entries
+                (message_id, guild_id, channel_id, author_id, starboard_message_id, star_count)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (message_id) DO UPDATE
+                SET starboard_message_id = EXCLUDED.starboard_message_id,
+                    star_count = EXCLUDED.star_count;
+        """
+        await self.execute(query, message_id, guild_id, channel_id, author_id, starboard_message_id, star_count)
+
+    async def update_star_count(self, message_id: int, star_count: int) -> None:
+        """Updates the cached star count for an entry."""
+        await self.execute(
+            "UPDATE starboard_entries SET star_count = $2 WHERE message_id = $1;", message_id, star_count)
+
+    async def delete_entry(self, message_id: int) -> None:
+        """Removes a starboard entry by original message id."""
+        await self.execute("DELETE FROM starboard_entries WHERE message_id = $1;", message_id)
+
+    async def delete_entries(self, message_ids: Iterable[int]) -> None:
+        """Removes several starboard entries by original message id."""
+        await self.execute(
+            "DELETE FROM starboard_entries WHERE message_id = ANY($1::bigint[]);", list(message_ids))

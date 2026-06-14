@@ -28,7 +28,6 @@ from app.database.repositories import (
     IncidentsRepository,
     LevelingRepository,
     ModerationRepository,
-    NotesRepository,
     PlaylistsRepository,
     PollsRepository,
     RoleMenusRepository,
@@ -174,7 +173,6 @@ class Database(_Database):
     tags: TagsRepository
     stats: StatsRepository
     incidents: IncidentsRepository
-    notes: NotesRepository
     giveaways: GiveawaysRepository
     emoji_stats: EmojiStatsRepository
     game_stats: GameStatsRepository
@@ -203,7 +201,6 @@ class Database(_Database):
         self.tags = TagsRepository(self)
         self.stats = StatsRepository(self)
         self.incidents = IncidentsRepository(self)
-        self.notes = NotesRepository(self)
         self.giveaways = GiveawaysRepository(self)
         self.emoji_stats = EmojiStatsRepository(self)
         self.game_stats = GameStatsRepository(self)

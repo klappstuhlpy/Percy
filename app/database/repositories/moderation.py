@@ -5,11 +5,19 @@ from typing import TYPE_CHECKING, Any, cast
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
+    import datetime
     from collections.abc import Sequence
 
     import asyncpg
 
-__all__ = ('ModerationRepository',)
+__all__ = (
+    'CasesRepository',
+    'IncidentsRepository',
+    'ModerationRepository',
+)
+
+
+# -- Moderation (lockdowns, mute role, alerts, gatekeeper) -----------------
 
 
 class ModerationRepository(BaseRepository):
@@ -257,3 +265,275 @@ class ModerationRepository(BaseRepository):
         """
         await self.execute(query, guild_id, entity_ids)
         self.invalidate_cache("guild_config_changed", guild_id)
+
+
+# -- Cases (mod_cases, modlog_config) --------------------------------------
+
+
+class CasesRepository(BaseRepository):
+    """Data access for the ``mod_cases`` and ``modlog_config`` tables.
+
+    ``mod_cases`` is an append-only moderation log; each row carries a per-guild
+    sequential ``case_index`` (the public "Case #N"). ``modlog_config`` holds the
+    destination channel for case announcements. Methods return raw records/scalars; the
+    ``ModLog`` cog wraps them in :class:`~app.cogs.modlog.models.ModerationCase`.
+    """
+
+    # -- cases ------------------------------------------------------------
+
+    async def create_case(
+        self,
+        guild_id: int,
+        action: str,
+        target_id: int,
+        moderator_id: int | None,
+        reason: str | None,
+    ) -> asyncpg.Record:
+        """Inserts a case with the next per-guild ``case_index`` and returns the row.
+
+        A transaction-scoped advisory lock serializes index allocation per guild so
+        concurrent moderation actions can't collide on the ``(guild_id, case_index)``
+        uniqueness constraint.
+        """
+        query = """
+            INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason)
+            SELECT $1, COALESCE(MAX(case_index), 0) + 1, $2, $3, $4, $5
+            FROM mod_cases WHERE guild_id = $1
+            RETURNING *;
+        """
+        async with self.acquire() as con, con.transaction():
+            await con.execute('SELECT pg_advisory_xact_lock($1);', guild_id)
+            return await con.fetchrow(query, guild_id, action, target_id, moderator_id, reason)
+
+    async def set_log_message(self, case_id: int, log_message_id: int) -> None:
+        """Records the id of the announcement message posted for a case."""
+        await self.execute('UPDATE mod_cases SET log_message_id = $2 WHERE id = $1;', case_id, log_message_id)
+
+    async def get_case(self, guild_id: int, case_index: int) -> asyncpg.Record | None:
+        """Fetches a single case by its public per-guild index."""
+        return await self.fetchrow(
+            'SELECT * FROM mod_cases WHERE guild_id = $1 AND case_index = $2;', guild_id, case_index)
+
+    async def get_user_cases(self, guild_id: int, target_id: int, *, limit: int = 25) -> list[asyncpg.Record]:
+        """Fetches a target's cases for a guild, newest first."""
+        query = """
+            SELECT * FROM mod_cases
+            WHERE guild_id = $1 AND target_id = $2
+            ORDER BY case_index DESC
+            LIMIT $3;
+        """
+        return await self.fetch(query, guild_id, target_id, limit)
+
+    async def count_user_cases(self, guild_id: int, target_id: int) -> int:
+        """Counts how many cases a target has in a guild."""
+        return await self.fetchval(
+            'SELECT COUNT(*) FROM mod_cases WHERE guild_id = $1 AND target_id = $2;', guild_id, target_id)
+
+    async def update_reason(self, guild_id: int, case_index: int, reason: str) -> asyncpg.Record | None:
+        """Updates a case's reason and returns the updated row (or ``None`` if missing)."""
+        query = """
+            UPDATE mod_cases SET reason = $3
+            WHERE guild_id = $1 AND case_index = $2
+            RETURNING *;
+        """
+        return await self.fetchrow(query, guild_id, case_index, reason)
+
+    async def delete_case(self, guild_id: int, case_index: int) -> asyncpg.Record | None:
+        """Deletes a case and returns the deleted row (or ``None`` if missing)."""
+        query = """
+            DELETE FROM mod_cases
+            WHERE guild_id = $1 AND case_index = $2
+            RETURNING *;
+        """
+        return await self.fetchrow(query, guild_id, case_index)
+
+    async def get_cases(
+        self,
+        guild_id: int,
+        *,
+        action: str | None = None,
+        moderator_id: int | None = None,
+        target_id: int | None = None,
+        after: datetime.datetime | None = None,
+        before: datetime.datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[asyncpg.Record]:
+        """Fetches cases for a guild with optional filters, newest first."""
+        args: list[Any] = [guild_id]
+        clauses = ['guild_id = $1']
+
+        if action is not None:
+            args.append(action)
+            clauses.append(f'action = ${len(args)}')
+        if moderator_id is not None:
+            args.append(moderator_id)
+            clauses.append(f'moderator_id = ${len(args)}')
+        if target_id is not None:
+            args.append(target_id)
+            clauses.append(f'target_id = ${len(args)}')
+        if after is not None:
+            args.append(after)
+            clauses.append(f'created_at >= ${len(args)}')
+        if before is not None:
+            args.append(before)
+            clauses.append(f'created_at <= ${len(args)}')
+
+        where = ' AND '.join(clauses)
+        args.extend([limit, offset])
+        query = f"""
+            SELECT * FROM mod_cases
+            WHERE {where}
+            ORDER BY case_index DESC
+            LIMIT ${len(args) - 1} OFFSET ${len(args)};
+        """
+        return await self.fetch(query, *args)
+
+    async def count_cases(
+        self,
+        guild_id: int,
+        *,
+        action: str | None = None,
+        moderator_id: int | None = None,
+        target_id: int | None = None,
+        after: datetime.datetime | None = None,
+        before: datetime.datetime | None = None,
+    ) -> int:
+        """Counts cases for a guild matching the given filters."""
+        args: list[Any] = [guild_id]
+        clauses = ['guild_id = $1']
+
+        if action is not None:
+            args.append(action)
+            clauses.append(f'action = ${len(args)}')
+        if moderator_id is not None:
+            args.append(moderator_id)
+            clauses.append(f'moderator_id = ${len(args)}')
+        if target_id is not None:
+            args.append(target_id)
+            clauses.append(f'target_id = ${len(args)}')
+        if after is not None:
+            args.append(after)
+            clauses.append(f'created_at >= ${len(args)}')
+        if before is not None:
+            args.append(before)
+            clauses.append(f'created_at <= ${len(args)}')
+
+        where = ' AND '.join(clauses)
+        query = f"SELECT COUNT(*) FROM mod_cases WHERE {where};"
+        return await self.fetchval(query, *args)
+
+    async def get_recent_cases(self, guild_id: int, *, since: datetime.datetime) -> list[asyncpg.Record]:
+        """Fetches cases created since a timestamp, oldest first (for event streaming)."""
+        query = """
+            SELECT * FROM mod_cases
+            WHERE guild_id = $1 AND created_at >= $2
+            ORDER BY created_at ASC;
+        """
+        return await self.fetch(query, guild_id, since)
+
+    # -- modlog config ----------------------------------------------------
+
+    async def get_modlog_channel(self, guild_id: int) -> int | None:
+        """Fetches the configured modlog channel id for a guild, if any."""
+        return await self.fetchval('SELECT channel_id FROM modlog_config WHERE guild_id = $1;', guild_id)
+
+    async def set_modlog_channel(self, guild_id: int, channel_id: int | None) -> None:
+        """Sets (or clears, with ``None``) the modlog channel for a guild."""
+        query = """
+            INSERT INTO modlog_config (guild_id, channel_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id;
+        """
+        await self.execute(query, guild_id, channel_id)
+
+
+# -- Incidents (discord_incidents) -----------------------------------------
+
+
+class IncidentsRepository(BaseRepository):
+    """Data access for the ``discord_incidents`` table.
+
+    Each row links a guild (and its chosen channel/message) to the Discord Status
+    incident it is currently tracking. Methods return raw records; the
+    ``DiscordStatus`` cog wraps them in ``IncidentItem`` and owns the feed logic.
+    """
+
+    # -- reads ------------------------------------------------------------
+
+    async def get_all_subscribers(self) -> list[asyncpg.Record]:
+        """Fetches every guild subscribed to the status feed."""
+        return await self.fetch("SELECT * FROM discord_incidents;")
+
+    async def get_subscriber(self, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a guild's subscription row, or ``None`` if it is not subscribed."""
+        return await self.fetchrow("SELECT * FROM discord_incidents WHERE guild_id = $1;", guild_id)
+
+    async def incident_exists(self, incident_id: str, guild_id: int) -> bool:
+        """Returns whether a row exists for the given incident and guild."""
+        record = await self.fetchrow(
+            "SELECT 1 FROM discord_incidents WHERE id = $1 AND guild_id = $2;", incident_id, guild_id)
+        return record is not None
+
+    # -- incident tracking ------------------------------------------------
+
+    async def set_incident_id(self, incident_id: str, guild_id: int) -> asyncpg.Record:
+        """Assigns an incident ID to a guild's subscription and returns the updated row."""
+        return await self.fetchrow(
+            "UPDATE discord_incidents SET id = $1 WHERE guild_id = $2 RETURNING *;", incident_id, guild_id)
+
+    async def set_status(self, incident_id: str, guild_id: int, status: str) -> None:
+        """Updates the tracked status of a guild's current incident."""
+        await self.execute(
+            "UPDATE discord_incidents SET status = $3 WHERE id = $1 AND guild_id = $2;",
+            incident_id, guild_id, status)
+
+    async def replace_incident(self, new_id: str, old_id: str, status: str, guild_id: int) -> None:
+        """Swaps a guild's tracked incident for a newer one with its status."""
+        await self.execute(
+            "UPDATE discord_incidents SET id = $1, status = $3 WHERE id = $2 AND guild_id = $4;",
+            new_id, status, old_id, guild_id)
+
+    async def set_message_id(self, message_id: int, incident_id: str, guild_id: int) -> None:
+        """Records the message used to display a guild's incident."""
+        await self.execute(
+            "UPDATE discord_incidents SET message_id = $1 WHERE id = $2 AND guild_id = $3;",
+            message_id, incident_id, guild_id)
+
+    async def create_incident(
+            self, incident_id: str, status: str, guild_id: int, channel_id: int
+    ) -> asyncpg.Record:
+        """Inserts a new tracked incident for a guild and returns the row."""
+        return await self.fetchrow(
+            "INSERT INTO discord_incidents (id, status, guild_id, channel_id) VALUES ($1, $2, $3, $4) RETURNING *;",
+            incident_id, status, guild_id, channel_id)
+
+    async def update_incident_status(
+            self, incident_id: str, status: str, guild_id: int
+    ) -> asyncpg.Record:
+        """Updates a tracked incident's status and returns the updated row."""
+        return await self.fetchrow(
+            "UPDATE discord_incidents SET status = $2 WHERE id = $1 AND guild_id = $3 RETURNING *;",
+            incident_id, status, guild_id)
+
+    # -- subscription management ------------------------------------------
+
+    async def create_subscription(
+            self, guild_id: int, channel_id: int, *, connection: asyncpg.Connection | None = None
+    ) -> None:
+        """Inserts a new subscription for a guild.
+
+        Raises :class:`asyncpg.UniqueViolationError` if the guild is already
+        subscribed; the caller is expected to handle that case.
+        """
+        query = "INSERT INTO discord_incidents (guild_id, channel_id) VALUES ($1, $2) RETURNING *;"
+        await (connection or self.db).execute(query, guild_id, channel_id)
+
+    async def update_channel(self, guild_id: int, channel_id: int) -> None:
+        """Changes the channel a guild's subscription posts to."""
+        await self.execute(
+            "UPDATE discord_incidents SET channel_id = $2 WHERE guild_id = $1;", guild_id, channel_id)
+
+    async def unsubscribe(self, guild_id: int) -> None:
+        """Removes a guild's subscription."""
+        await self.execute("DELETE FROM discord_incidents WHERE guild_id = $1;", guild_id)

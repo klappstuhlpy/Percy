@@ -39,7 +39,7 @@ class MemberHandlers(InternalAPIHandlers):
         return web.json_response(members)
 
     async def _get_member_detail(self, request: web.Request) -> web.Response:
-        """Aggregated profile for one user: identity, leveling, moderation history, notes, stats."""
+        """Aggregated profile for one user: identity, leveling, moderation history, stats."""
         guild_id = int(request.match_info['guild_id'])
         user_id = int(request.match_info['user_id'])
 
@@ -141,9 +141,6 @@ class MemberHandlers(InternalAPIHandlers):
 
         warning_count = sum(1 for c in cases if c['action'] == 'warn')
 
-        # Personal notes are keyed per-user (not per-guild); expose the count only.
-        notes = await self.bot.db.notes.get_owner_notes(user_id)
-
         # Command usage stats for this user in this guild.
         command_summary = await self.bot.db.stats.get_command_summary(guild_id, user_id)
         top_commands = await self.bot.db.stats.get_command_usage(
@@ -183,7 +180,6 @@ class MemberHandlers(InternalAPIHandlers):
             'cases': cases,
             'case_count': len(cases),
             'warning_count': warning_count,
-            'note_count': len(notes),
             'command_stats': command_stats,
             'last_seen': last_seen,
             'names': names,
