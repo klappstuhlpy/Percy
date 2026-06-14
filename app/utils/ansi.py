@@ -7,7 +7,7 @@ from discord import User
 
 from app.utils.formats import sentinel
 
-# Code obtained form: https://github.com/jay3332/Lambda-v3/blob/main/app/util/ansi.py
+# Code base obtained form: https://github.com/jay3332/Lambda-v3/blob/main/app/util/ansi.py
 
 if TYPE_CHECKING:
     from collections.abc import Generator
