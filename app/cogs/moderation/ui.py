@@ -101,9 +101,7 @@ class MuteRoleSetUpView(LayoutView):
         self.guild: discord.Guild = guild
 
         # -- interactive components (stable instances, mutated by update_state)
-        self.role_select: discord.ui.RoleSelect = discord.ui.RoleSelect(
-            min_values=1, max_values=1, placeholder="Bind an existing role..."
-        )
+        self.role_select: discord.ui.RoleSelect = discord.ui.RoleSelect(placeholder="Bind an existing role...")
         self.role_select.callback = self._on_role_select  # type: ignore[assignment]
 
         self.create_btn: discord.ui.Button = discord.ui.Button(
