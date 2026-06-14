@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from app.core import Bot, Context, LayoutView, View
+from app.core import Bot, Context, LayoutView
 from app.utils import helpers
 from config import Emojis, anilist
 
@@ -790,15 +790,23 @@ class EnterCodeModal(discord.ui.Modal, title='Enter AniList Code'):
             await interaction.message.delete()
 
 
-class AniListLinkView(View):
-    def __init__(self, ctx: Context | discord.Interaction, url: str) -> None:
+class AniListLinkView(LayoutView):
+    def __init__(self, ctx: Context | discord.Interaction, url: str, *, content: str | None = None) -> None:
         super().__init__(timeout=100.0)
         self.ctx: Context | discord.Interaction = ctx
 
-        self.add_item(discord.ui.Button(label="Link AniList", style=discord.ButtonStyle.link, url=url))
+        link_btn = discord.ui.Button(label="Link AniList", style=discord.ButtonStyle.link, url=url)
+        code_btn = discord.ui.Button(label="Enter Code", style=discord.ButtonStyle.green)
+        code_btn.callback = self._enter_code  # type: ignore[assignment]
 
-    @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.green)
-    async def enter_code(self, interaction: discord.Interaction, _) -> None:
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+        if content:
+            container.add_item(discord.ui.TextDisplay(content))
+            container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(link_btn, code_btn))
+        self.add_item(container)
+
+    async def _enter_code(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(EnterCodeModal(self.ctx.client))
 
 

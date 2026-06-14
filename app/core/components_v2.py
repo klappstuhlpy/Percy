@@ -10,6 +10,9 @@ This module keeps the raw component plumbing in one place so feature cogs can co
 an embed-like card (heading, body, fields, thumbnail, footer) without repeating the
 container/section/separator boilerplate. It lives in ``app/core`` like the rest of the
 framework and is re-exported from :mod:`app.core`.
+
+Colours are drawn from the klappstuhl.me dashboard CSS palette so bot messages
+feel visually consistent with the web UI.
 """
 
 from __future__ import annotations
@@ -34,15 +37,17 @@ __all__ = (
 class Accent(enum.Enum):
     """Semantic accent colours for a :class:`discord.ui.Container`'s rail.
 
-    Mirrors the tone of the classic :meth:`~app.core.Context.send_success` /
-    ``send_error`` helpers so CV2 cards read consistently with the rest of the bot.
+    Mirrors the klappstuhl.me dashboard palette and the tone of the classic
+    :meth:`~app.core.Context.send_success` / ``send_error`` helpers so CV2
+    cards read consistently with the rest of the bot.
     """
 
-    success = Colour.lime_green()
-    error = Colour.darker_red()
-    warning = Colour.light_orange()
-    info = Colour.royal_blue()
-    neutral = Colour.white()
+    brand = Colour.brand()
+    success = Colour.success_accent()
+    error = Colour.error_accent()
+    warning = Colour.warning_accent()
+    info = Colour.info_accent()
+    neutral = Colour.surface()
 
     @property
     def colour(self) -> discord.Colour:
@@ -52,11 +57,14 @@ class Accent(enum.Enum):
 class NoticeView(discord.ui.LayoutView):
     """A self-contained, non-interactive CV2 card.
 
-    Defaults to ``timeout=None`` because a display-only layout has no components to
-    expire; pass a timeout only when you later attach interactive children.
+    Defaults to ``timeout=None`` because a display-only layout has no
+    components to expire; pass a timeout only when you later attach
+    interactive children.
     """
 
-    def __init__(self, container: discord.ui.Container, *, timeout: float | None = None) -> None:
+    def __init__(
+        self, container: discord.ui.Container, *, timeout: float | None = None
+    ) -> None:
         super().__init__(timeout=timeout)
         self.add_item(container)
 
@@ -79,18 +87,22 @@ def make_notice(
     description:
         Optional body markdown shown beneath the heading.
     accent:
-        The container's left-rail colour; an :class:`Accent` or a raw colour/int.
+        The container's left-rail colour; an :class:`Accent` or a raw
+        colour/int.
     thumbnail:
-        Optional image URL placed beside the heading/body via a section accessory.
+        Optional image URL placed beside the heading/body via a section
+        accessory.
     fields:
-        Optional ``(name, value)`` pairs rendered after a separator, embed-style.
+        Optional ``(name, value)`` pairs rendered after a separator,
+        embed-style.
     footer:
         Optional muted line rendered last, after a separator.
 
     Returns
     -------
     NoticeView
-        A ready-to-send layout view (send it with ``view=`` and no content/embed).
+        A ready-to-send layout view (send it with ``view=`` and no
+        content/embed).
     """
     colour = accent.colour if isinstance(accent, Accent) else accent
     container = discord.ui.Container(accent_colour=colour)
@@ -109,7 +121,9 @@ def make_notice(
     if field_list:
         container.add_item(discord.ui.Separator())
         for name, value in field_list:
-            container.add_item(discord.ui.TextDisplay(f'**{name}**\n{value}'))
+            container.add_item(
+                discord.ui.TextDisplay(f'**{name}**\n{value}')
+            )
 
     if footer is not None:
         container.add_item(discord.ui.Separator())

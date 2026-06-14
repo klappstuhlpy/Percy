@@ -392,7 +392,48 @@ class HealthBarBuilder:
 
 
 class Colour(discord.Colour):
-    """A subclass of `discord.Colour` with some extra colours."""
+    """A subclass of `discord.Colour` with extra colours.
+
+    The ``brand_*`` and ``surface_*`` family mirrors the klappstuhl.me
+    dashboard CSS custom-property palette so bot embeds/cards feel visually
+    consistent with the web UI.
+    """
+
+    # --- klappstuhl.me dashboard palette ---
+
+    @classmethod
+    def brand(cls) -> Self:
+        return cls(0xD97757)
+
+    @classmethod
+    def brand_bright(cls) -> Self:
+        return cls(0xE8916F)
+
+    @classmethod
+    def surface(cls) -> Self:
+        return cls(0x18181B)
+
+    @classmethod
+    def surface_border(cls) -> Self:
+        return cls(0x27272A)
+
+    @classmethod
+    def success_accent(cls) -> Self:
+        return cls(0x166534)
+
+    @classmethod
+    def warning_accent(cls) -> Self:
+        return cls(0x92400E)
+
+    @classmethod
+    def error_accent(cls) -> Self:
+        return cls(0x991B1B)
+
+    @classmethod
+    def info_accent(cls) -> Self:
+        return cls(0x0C4A6E)
+
+    # --- legacy colours (retained for back-compat) ---
 
     @classmethod
     def darker_red(cls) -> Self:
@@ -428,17 +469,14 @@ class Colour(discord.Colour):
 
     @classmethod
     def mirage(cls) -> Self:
-        # A darker blue
         return cls(0x1D2439)
 
     @classmethod
     def di_sierra(cls) -> Self:
-        # A sandy
         return cls(0xDDA453)
 
     @classmethod
     def transparent(cls) -> Self:
-        # Discord background
         return cls(0x2B2D31)
 
     @classmethod
@@ -447,7 +485,6 @@ class Colour(discord.Colour):
 
     @classmethod
     def burgundy(cls) -> Self:
-        # A dark red
         return cls(0x99002B)
 
     @classmethod
@@ -456,7 +493,6 @@ class Colour(discord.Colour):
 
     @classmethod
     def energy_yellow(cls) -> Self:
-        # Lighter yellow
         return cls(0xF8DB5E)
 
     @classmethod

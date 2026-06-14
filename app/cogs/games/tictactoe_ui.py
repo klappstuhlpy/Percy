@@ -9,7 +9,7 @@ from discord import PartialEmoji
 
 from app.cogs.games.engine.tictactoe import Board, BoardKind
 from app.cogs.games.models import Game, GameResult
-from app.core import LayoutView, View
+from app.core import LayoutView
 from app.utils import fnumb, helpers, pluralize
 from config import Emojis
 
@@ -206,16 +206,30 @@ class TicTacToe(LayoutView):
         return container
 
 
-class Prompt(View):
+class Prompt(LayoutView):
     def __init__(self, first: discord.abc.User, second: discord.abc.User) -> None:
         super().__init__(members=second)
         self.first: discord.abc.User = first
         self.second: discord.abc.User = second
-
         self.confirmed: bool = False
 
-    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green)
-    async def accept(self: Prompt, interaction: discord.Interaction, _) -> None:
+        accept_btn = discord.ui.Button(label="Accept", style=discord.ButtonStyle.green)
+        accept_btn.callback = self._accept  # type: ignore[assignment]
+
+        decline_btn = discord.ui.Button(label="Decline", style=discord.ButtonStyle.red)
+        decline_btn.callback = self._decline  # type: ignore[assignment]
+
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+        container.add_item(discord.ui.TextDisplay(
+            f"## TicTacToe\n"
+            f"{second.mention} has been challenged to a TicTacToe party by {first.mention}.\n"
+            f"Do you accept this party, {second.mention}?"
+        ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(accept_btn, decline_btn))
+        self.add_item(container)
+
+    async def _accept(self, interaction: discord.Interaction) -> None:
         coin = random.randint(0, 1)
         order = (self.first, self.second) if coin == 0 else (self.second, self.first)
 
@@ -229,12 +243,8 @@ class Prompt(View):
         self.confirmed = True
         self.stop()
 
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red)
-    async def decline(self: Prompt, interaction: discord.Interaction, _) -> None:
-        embed = discord.Embed(
-            title="TicTacToe",
-            description="Your Challenge was declined.",
-            colour=helpers.Colour.light_red(),
-        )
-        await interaction.response.send_message(embed=embed)
+    async def _decline(self, interaction: discord.Interaction) -> None:
+        from app.core.components_v2 import Accent, make_notice
+        notice = make_notice("TicTacToe", "Your challenge was declined.", accent=Accent.error)
+        await interaction.response.send_message(view=notice)
         self.stop()

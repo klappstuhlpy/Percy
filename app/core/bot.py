@@ -480,7 +480,6 @@ class Bot(commands.Bot):
         view = CommandSuggestionView(ctx, suggestion, new_content)
         with suppress(discord.HTTPException):
             view.message = await ctx.send(
-                f"{Emojis.error} *I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?*",
                 view=view,
                 reference=ctx.message,
                 delete_after=15,

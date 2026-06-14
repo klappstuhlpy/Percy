@@ -234,24 +234,32 @@ class BasicTextInputModal(discord.ui.Modal, title="Text Input"):
         self.stop()
 
 
-class AlertChannelSelect(View):
-    """A view for selecting the alert channel."""
+class AlertChannelSelect(discord.ui.LayoutView):
+    """CV2 view for selecting the alert channel."""
 
     def __init__(self) -> None:
-        super().__init__(timeout=60.0, delete_on_timeout=True)
+        super().__init__(timeout=60.0)
         self.channel: discord.app_commands.AppCommandChannel | discord.app_commands.AppCommandThread | None = None
+        self.interaction: Interaction | None = None
 
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        placeholder="Select a channel...",
-        min_values=1,
-        max_values=1,
-        channel_types=[_t for _t in discord.ChannelType if "voice" not in _t.name],
-    )
-    async def select_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect) -> None:
-        """Select a channel."""
+        select = discord.ui.ChannelSelect(
+            placeholder="Select a channel...",
+            min_values=1,
+            max_values=1,
+            channel_types=[_t for _t in discord.ChannelType if "voice" not in _t.name],
+        )
+        select.callback = self._on_select  # type: ignore[assignment]
+        self._select = select
+
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+        container.add_item(discord.ui.TextDisplay("Select a channel to send the alert messages..."))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(select))
+        self.add_item(container)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
-        self.channel = select.values[0]
+        self.channel = self._select.values[0]
         self.stop()
 
 
@@ -346,7 +354,7 @@ class InteractiveAutoModRuleSetupView(View):
                     )
                 case AutoModRuleActionType.send_alert_message:
                     view = AlertChannelSelect()
-                    await interaction.response.send_message("Select a channel to send the alert messages...", view=view)
+                    await interaction.response.send_message(view=view)
                     await view.wait()
 
                     if not view.channel:

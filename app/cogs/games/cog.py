@@ -145,13 +145,7 @@ class Games(Cog):
             return
 
         prompt = tictactoe_ui.Prompt(ctx.author, other)
-        embed = discord.Embed(
-            title="TicTacToe",
-            description=f"{other.mention} has been challenged to a TicTacToe party by {ctx.author.mention}.\n"
-            f"Do you accept this party, {other.mention}?",
-            colour=helpers.Colour.white(),
-        )
-        msg = await ctx.send(embed=embed, view=prompt)
+        msg = await ctx.send(view=prompt)
 
         await prompt.wait()
         await ctx.maybe_delete(msg, delay=1)

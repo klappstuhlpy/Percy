@@ -26,7 +26,7 @@ __all__ = (
     "View",
 )
 
-from app.utils import AsyncCallable, Timer, get_asset_url, helpers
+from app.utils import Timer, get_asset_url, helpers
 from config import Emojis
 
 T = TypeVar("T")
@@ -213,10 +213,12 @@ class LayoutView(discord.ui.LayoutView):
 
 
 class TrashView(View):
+    """A simple delete button attached to content-bearing messages."""
+
     def __init__(self, author: discord.Member | discord.User) -> None:
         super().__init__(members=author)
 
-    @discord.ui.button(style=discord.ButtonStyle.red, emoji=Emojis.trash, label="Delete", custom_id="delete")
+    @discord.ui.button(style=discord.ButtonStyle.red, emoji=Emojis.trash, label="Delete")
     async def delete(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if interaction.message:
             await interaction.message.delete()
@@ -226,24 +228,26 @@ class TrashView(View):
             child.disabled = True
 
 
-class CommandSuggestionView(View):
-    """Offers a one-click "run the command you probably meant" after a typo.
-
-    Shown by the ``CommandNotFound`` handler when a mistyped command is a very
-    close fuzzy match for a real one. The button re-dispatches the original
-    message with the command name corrected, so all checks/cooldowns run fresh.
-    """
+class CommandSuggestionView(LayoutView):
+    """CV2 card offering a one-click "run the command you probably meant" after a typo."""
 
     def __init__(self, ctx: Context, suggestion: str, new_content: str) -> None:
         super().__init__(timeout=30.0, members=ctx.author, delete_on_timeout=True)
         self.ctx = ctx
         self._new_content = new_content
 
-        button: discord.ui.Button[CommandSuggestionView] = discord.ui.Button(  # type: ignore[type-arg]
+        button = discord.ui.Button(
             style=discord.ButtonStyle.grey, label=f"Run {ctx.clean_prefix}{suggestion}"
         )
         button.callback = self._run  # type: ignore[assignment]
-        self.add_item(button)
+
+        container = discord.ui.Container(accent_colour=helpers.Colour.warning_accent())
+        container.add_item(discord.ui.TextDisplay(
+            f"*I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?*"
+        ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(button))
+        self.add_item(container)
 
     async def _run(self, interaction: discord.Interaction) -> None:
         self.stop()
@@ -259,21 +263,25 @@ class CommandSuggestionView(View):
         await self.ctx.bot.invoke(new_ctx)
 
 
-class ConfirmationView(View):
-    """A view for the confirmation dialog.
+class ConfirmationView(LayoutView):
+    """A CV2 confirmation dialog with prompt text and two buttons in one card.
 
-    This view is used to create a confirmation dialog with two buttons, one for confirming and one for canceling.
+    The ``content`` parameter holds the question text rendered inside the
+    container. If not provided at init time, it can be set later via
+    :meth:`set_content` before sending — or callers can pass ``content``
+    to :meth:`Context.confirm` which sets it automatically.
 
     Attributes
     ----------
     value: bool | None
-        The value of the confirmation dialog.
+        The result of the confirmation (True/False/None if timed out).
     """
 
     def __init__(
         self,
         user: discord.Member | discord.User,
         *,
+        content: str | None = None,
         true: str = "Confirm",
         false: str = "Cancel",
         timeout: float | None = None,
@@ -287,28 +295,44 @@ class ConfirmationView(View):
         self._defer: bool = defer
         self._delete_after: bool = delete_after
         self._hook: AsyncHook | None = hook
-        super().__init__(timeout=timeout, members=user)
+        self._content: str = content or ""
+        super().__init__(timeout=timeout, members=user, delete_on_timeout=delete_after)
 
-        self._true_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(  # type: ignore
+        self._true_button: discord.ui.Button = discord.ui.Button(
             style=discord.ButtonStyle.green, label=true
         )
-        self._true_button.callback = self._make_callback(True)
+        self._true_button.callback = self._make_callback(True)  # type: ignore[assignment]
 
-        self._false_button: discord.ui.Button[ConfirmationView] = discord.ui.Button(  # type: ignore
+        self._false_button: discord.ui.Button = discord.ui.Button(
             style=discord.ButtonStyle.red, label=false
         )
-        self._false_button.callback = self._make_callback(False)
+        self._false_button.callback = self._make_callback(False)  # type: ignore[assignment]
 
         self.interaction: discord.Interaction | None = None
 
-        self.add_item(self._true_button)
-        self.add_item(self._false_button)
+        self._build_layout()
 
-    async def on_timeout(self) -> None:
-        if self.message:
-            await self.message.delete()
+    def set_content(self, content: str) -> None:
+        """Update the prompt text and rebuild the layout."""
+        self._content = content
+        self._build_layout()
 
-    def _make_callback(self, toggle: bool) -> Callable[[discord.Interaction], Awaitable[None]]:
+    def _build_layout(self) -> None:
+        self.clear_items()
+        container = discord.ui.Container(
+            accent_colour=helpers.Colour.brand()
+        )
+        if self._content:
+            container.add_item(discord.ui.TextDisplay(self._content))
+            container.add_item(discord.ui.Separator())
+        container.add_item(
+            discord.ui.ActionRow(self._true_button, self._false_button)
+        )
+        self.add_item(container)
+
+    def _make_callback(
+        self, toggle: bool
+    ) -> Callable[[discord.Interaction], Awaitable[None]]:
         async def callback(interaction: discord.Interaction) -> None:
             self.value = toggle
             self.interaction = interaction
@@ -337,10 +361,14 @@ class ConfirmationView(View):
         return callback
 
 
-class DisambiguatorView[T](View):
+class DisambiguatorView[T](LayoutView):
+    """CV2 disambiguation select — picks one item from a list."""
+
     selected: T
 
-    def __init__(self, ctx: Context, data: list[T], entry: Callable[[T], Any]) -> None:
+    def __init__(
+        self, ctx: Context, data: list[T], entry: Callable[[T], Any]
+    ) -> None:
         super().__init__(members=ctx.author)
         self.ctx: Context = ctx
         self.data: list[T] = data
@@ -353,13 +381,22 @@ class DisambiguatorView[T](View):
             opt.value = str(i)
             options.append(opt)
 
-        select = discord.ui.Select(options=options)
+        self.select = discord.ui.Select(options=options)
+        self.select.callback = self.on_select_submit  # type: ignore[assignment]
 
-        select.callback = self.on_select_submit
-        self.select = select
-        self.add_item(select)
+        container = discord.ui.Container(
+            accent_colour=helpers.Colour.brand()
+        )
+        container.add_item(discord.ui.TextDisplay(
+            "Multiple matches found — please select one:"
+        ))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(self.select))
+        self.add_item(container)
 
-    async def on_select_submit(self, interaction: discord.Interaction) -> None:
+    async def on_select_submit(
+        self, interaction: discord.Interaction
+    ) -> None:
         index = int(self.select.values[0])
         self.selected = self.data[index]
         await interaction.response.defer()
@@ -370,26 +407,22 @@ class DisambiguatorView[T](View):
 
 
 class UserInfoView(View):
-    """A view for the user info command."""
+    """A view for the user info command (V1 — accompanies an embed)."""
 
     def __init__(self, ctx: Context, member: discord.Member | discord.User) -> None:
         super().__init__(timeout=120.0, members=ctx.author, clear_on_timeout=False)
         self.bot = ctx.bot
         self.member = member
-
         self.cog: Any = ctx.bot.get_cog("Stats")
 
     async def create_member_collage(self, results: list[dict[str, Any]]) -> discord.File | None:
-        """Creates a member avatar collage."""
         avatars = [x["avatar"] for x in results]
         if not avatars:
-            return
-
+            return None
         return await self.bot.render.avatar_collage(avatars)
 
-    @discord.ui.button(label="Avatar Collage", style=discord.ButtonStyle.blurple, emoji="🖼️")
+    @discord.ui.button(label="Avatar Collage", style=discord.ButtonStyle.secondary, emoji="🖼️")
     async def avatar_collage(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """The callback for the avatar collage button."""
         self.disable_item(self.avatar_collage)
         await interaction.response.edit_message(view=self)
 
@@ -399,7 +432,7 @@ class UserInfoView(View):
             file = await self.create_member_collage(results)
 
         if not file:
-            await interaction.followup.send(f"{Emojis.error} No avatar history found. 🫠", ephemeral=True)
+            await interaction.followup.send(f"{Emojis.error} No avatar history found.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -416,9 +449,8 @@ class UserInfoView(View):
         embed.set_footer(text="Last updated")
         await interaction.followup.send(embed=embed, file=file, ephemeral=True)
 
-    @discord.ui.button(label="Name History", style=discord.ButtonStyle.blurple, emoji="📜")
+    @discord.ui.button(label="Name History", style=discord.ButtonStyle.secondary, emoji="📜")
     async def name_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """The callback for the name history button."""
         self.disable_item(self.name_history)
         await interaction.response.edit_message(view=self)
 
@@ -429,8 +461,12 @@ class UserInfoView(View):
             await interaction.followup.send(f"{Emojis.error} No name history found.", ephemeral=True)
             return
 
-        un_text = ", ".join(f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in un_history)
-        nn_text = ", ".join(f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in nn_history)
+        un_text = ", ".join(
+            f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in un_history
+        )
+        nn_text = ", ".join(
+            f"`{x['item_value']}` ({discord.utils.format_dt(x['changed_at'], 'R')})" for x in nn_history
+        )
         embed = discord.Embed(
             title=f"Name History for {self.member}",
             description=f"**Username History:**\n{un_text}\n\n**Nickname History:**\n{nn_text}",
@@ -441,9 +477,8 @@ class UserInfoView(View):
         embed.set_thumbnail(url=get_asset_url(self.member))
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="Status History", style=discord.ButtonStyle.blurple, emoji="📊")
+    @discord.ui.button(label="Status History", style=discord.ButtonStyle.secondary, emoji="📊")
     async def status_history(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """The callback for the status history button."""
         self.disable_item(self.status_history)
         await interaction.response.edit_message(view=self)
 

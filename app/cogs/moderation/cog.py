@@ -1860,14 +1860,16 @@ class Moderation(Cog):
         merge: bool = False
 
         if has_pre_existing:
-            view = PreExistingMuteRoleView(ctx.author)  # type: ignore[arg-type]
-            view.message = await ctx.send_warning(
-                "**There seems to be a pre-existing mute role set up.**\n\n"
-                "If you want to merge the pre-existing member data with the new member data press the Merge button.\n"
-                "If you want to replace pre-existing member data with the new member data press the Replace button.\n\n"
-                "**Note: Merging is __slow__. It will also add the role to every possible member that needs it.**",
-                view=view,
+            view = PreExistingMuteRoleView(
+                ctx.author,  # type: ignore[arg-type]
+                content=(
+                    "**There seems to be a pre-existing mute role set up.**\n\n"
+                    "If you want to merge the pre-existing member data with the new member data press the Merge button.\n"
+                    "If you want to replace pre-existing member data with the new member data press the Replace button.\n\n"
+                    "**Note: Merging is __slow__. It will also add the role to every possible member that needs it.**"
+                ),
             )
+            view.message = await ctx.send(view=view)
             await view.wait()
             if view.merge is None:
                 return

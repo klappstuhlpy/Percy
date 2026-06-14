@@ -9,7 +9,7 @@ from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import QueueMode
 
-from app.core import Context, LayoutView, View
+from app.core import Context, LayoutView
 from app.core.pagination import BasePaginator
 from app.utils import (
     PlayerStamp,
@@ -535,17 +535,16 @@ class AdjustVolumeModal(discord.ui.Modal, title="Volume Adjuster"):
             await interaction.message.edit(view=self._view)
 
 
-class TrackDisambiguatorView[T](View):
+class TrackDisambiguatorView[T](LayoutView):
     message: discord.Message
     selected: T
 
     def __init__(self, ctx: Context | discord.Interaction, tracks: list[T]) -> None:
-        super().__init__(timeout=100.0, members=ctx.user)
+        super().__init__(timeout=100.0, members=ctx.user, delete_on_timeout=True)
         self.ctx = ctx
         self.tracks = tracks
-        self.value = None
+        self.selected = None
 
-        # Use list comprehension for creating options
         options = [
             discord.SelectOption(
                 label=truncate(x.title, 100),
@@ -557,17 +556,32 @@ class TrackDisambiguatorView[T](View):
         ]
 
         select = discord.ui.Select(options=options)
-        select.callback = self.on_select_submit
+        select.callback = self._on_select  # type: ignore[assignment]
         self.select = select
-        self.add_item(select)
 
-    async def on_select_submit(self, _) -> None:
+        cancel_btn = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red)
+        cancel_btn.callback = self._on_cancel  # type: ignore[assignment]
+
+        description = "\n".join(
+            f"{letter_emoji(i)} [{track.title}]({track.uri}) by **{track.author}** | `{convert_duration(track.length)}`"
+            for i, track in enumerate(tracks)
+        )
+
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+        container.add_item(discord.ui.TextDisplay(f"## Choose a Track\n{description}"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(select))
+        container.add_item(discord.ui.ActionRow(cancel_btn))
+        self.add_item(container)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         index = int(self.select.values[0])
         self.selected = self.tracks[index]
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red, row=1)
-    async def cancel(self, _, __) -> None:
+    async def _on_cancel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         self.selected = None
         self.stop()
 
@@ -575,9 +589,6 @@ class TrackDisambiguatorView[T](View):
     async def start(
         cls: type[TrackDisambiguatorView], context: Context | discord.Interaction, *, tracks: list[T]
     ) -> T | None:
-        """|coro|
-
-        Used to start the disambiguator."""
         tracks = tracks[:5]
 
         if len(tracks) == 1:
@@ -586,21 +597,7 @@ class TrackDisambiguatorView[T](View):
             return None
 
         self = cls(context, tracks=tracks)
-
-        description = "\n".join(
-            f"{letter_emoji(i)} [{track.title}]({track.uri}) by **{track.author}** | `{convert_duration(track.length)}`"
-            for i, track in enumerate(tracks)
-        )
-
-        embed = discord.Embed(
-            title="Choose a Track",
-            description=description,
-            timestamp=datetime.datetime.now(datetime.UTC),
-            color=helpers.Colour.white(),
-        )
-        embed.set_footer(text=context.user, icon_url=context.user.display_avatar.url)
-
-        self.message = await context.send(embed=embed, view=self)
+        self.message = await context.send(view=self)
 
         await self.wait()
         with suppress(discord.HTTPException):

@@ -136,47 +136,61 @@ class Context[CogT: "Cog"](commands.Context):
     ) -> bool | None:
         """|coro|
 
-        Sends a ConfirmationView or a custom view that waits for a interaction and returns a parameter called `value`.
+        Sends a CV2 ConfirmationView (prompt text + buttons in a single card)
+        and waits for the user's choice.
 
         Parameters
         ----------
         content: str
-            The content to send with the view.
+            The prompt text rendered inside the confirmation card.
         view: ConfirmationView
-            The view to use for the confirmation.
+            An already-constructed view (content is set via
+            ``view.set_content`` if provided).
         user: discord.Member | discord.User
             The user to send the confirmation to.
         timeout: float
             The timeout for the confirmation.
         true: str
-            The string to use for the true value.
+            The label for the confirm button.
         false: str
-            The string to use for the false value.
+            The label for the cancel button.
         interaction: discord.Interaction
-            The interaction to use for the confirmation.
+            The interaction to use for the response.
         hook: Callable[[discord.Interaction], None]
-            A hook to call when the interaction is received.
-            This gets passed to the ConfirmationView and is handled there, it takes
-            exactly one argument which is the interaction.
+            A hook invoked on confirm — result stored in
+            ``view.hook_value``.
         **kwargs
             Additional keyword arguments to pass to the send method.
         """
         author = user or self.author
-        view = view or ConfirmationView(author, true=true, false=false, hook=hook, timeout=timeout)
+        view = view or ConfirmationView(
+            author, content=content, true=true, false=false,
+            hook=hook, timeout=timeout, delete_after=True,
+        )
+        if content and view._content != content:
+            view.set_content(content)
+
+        # LayoutView messages cannot carry content/embeds — only view=
+        kwargs.pop("content", None)
+        kwargs.pop("embed", None)
+        kwargs.pop("embeds", None)
 
         if interaction is not None:
-            await interaction.response.send_message(content, view=view, **kwargs)
+            await interaction.response.send_message(view=view, **kwargs)
             await view.wait()
             return view.value
 
-        view.message = await self.send(content, view=view, **kwargs)
+        view.message = await self.send(view=view, **kwargs)
 
         await view.wait()
         with suppress(discord.HTTPException):
-            await view.message.delete()
+            if view.message:
+                await view.message.delete()
         return view.value
 
-    async def disambiguate(self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False) -> T:
+    async def disambiguate(
+        self, matches: list[T], entry: Callable[[T], Any], *, ephemeral: bool = False
+    ) -> T:
         if len(matches) == 0:
             raise ValueError("No results found.")
 
@@ -187,9 +201,7 @@ class Context[CogT: "Cog"](commands.Context):
             raise ValueError("Too many results... sorry.")
 
         view = DisambiguatorView(self, matches, entry)
-        view.message = await self.send_info(
-            "There are too many matches... Please specify your choice by selecting a result.", view=view, ephemeral=ephemeral
-        )
+        view.message = await self.send(view=view, ephemeral=ephemeral)
         await view.wait()
         return view.selected
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import inspect
 import logging
 from typing import Any
 from urllib.parse import urljoin
@@ -15,12 +14,11 @@ from discord.ext.commands import Range
 
 from app.core import Bot, Cog, Context, Flags, LayoutView, describe, flag, group
 from app.core.pagination import EmbedPaginator
-from app.utils import fuzzy, helpers
+from app.utils import fuzzy
 from config import anilist
 
 from .client import AniListClient
 from .ui import (
-    ANILIST_ICON,
     ANILIST_LOGO,
     AniListCardBuilder,
     AniListEmbedBuilder,
@@ -235,23 +233,18 @@ class AniList(Cog):
             await ctx.send_error('You have already linked your AniList account to your Discord account.')
             return
 
-        embed = discord.Embed(
-            title='AniList Linking',
-            description=inspect.cleandoc("""
-                Click on the button below. It'll redirect you to the AniList website where you will then be prompted
-                to authorize us. Don't worry, this process is 100% secure.
-
-                You will then be redirected to our site. Copy the code our site gives you and use the second button below to pas
-                it to us. Once you've done that, you're all set!
-            """),
-            color=helpers.Colour.white(),
-            url='https://anilist.co/',
+        view = AniListLinkView(
+            ctx, self.format_oauth_url,
+            content=(
+                "## AniList Linking\n"
+                "Click on the button below. It'll redirect you to the AniList website where you will "
+                "then be prompted to authorize us. Don't worry, this process is 100% secure.\n\n"
+                "You will then be redirected to our site. Copy the code our site gives you and use the "
+                "second button below to pass it to us. Once you've done that, you're all set!\n\n"
+                "-# Provided by AniList"
+            ),
         )
-        embed.set_thumbnail(url=ANILIST_ICON)
-        embed.set_footer(text='Provided by AniList', icon_url=ANILIST_LOGO)
-
-        view = AniListLinkView(ctx, self.format_oauth_url)
-        await ctx.send(embed=embed, view=view, ephemeral=True)
+        await ctx.send(view=view, ephemeral=True)
 
     @_anilist.command(
         'unlink',
