@@ -82,11 +82,11 @@ class Brand(NotCaseSensitiveEnum):
     def copyright(self) -> str:
         year = datetime.datetime.now().year
         if self == self.DC:
-            return '© & ™ DC. ALL RIGHTS RESERVED'
+            return f'Data provided by [League of Comic Geeks](https://leagueofcomicgeeks.com/). © {year} DC'
         elif self == self.MARVEL:
-            return f'Data provided by Marvel. © {year} MARVEL'
+            return f'Data provided by [League of Comic Geeks](https://leagueofcomicgeeks.com/). © {year} MARVEL'
         elif self == self.MANGA:
-            return f'© {year} VIZ Media, LLC. All rights reserved.'
+            return f'© {year} [VIZ Media](https://www.viz.com/), LLC. All rights reserved.'
         else:
             return ""
 
