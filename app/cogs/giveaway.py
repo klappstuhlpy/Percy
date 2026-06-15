@@ -275,10 +275,11 @@ class Giveaway(BaseRecord):
     async def get_winners(self) -> list[discord.Member]:
         """Gets the winners of the giveaway."""
         guild = self.guild
-        winners = []
-        for _ in range(self.winner_count):
-            if not self.entries:
-                break
+        winners: list[discord.Member] = []
+        # Keep drawing until we have enough winners or the pool is exhausted. Entrants who
+        # have left the guild are removed but must not consume a winner slot, otherwise a
+        # giveaway can produce fewer winners than there are valid entrants.
+        while len(winners) < self.winner_count and self.entries:
             user_id = random.choice(list(self.entries))
             self.entries.remove(user_id)
             member = guild.get_member(user_id) if guild else None

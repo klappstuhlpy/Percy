@@ -578,7 +578,7 @@ class Documentation(Cog):
         """
         _, matches = await self.get_symbol_item(package, symbol_name, 8)  # type: ignore
 
-        if len(matches) == 0:
+        if not matches:
             await ctx.send_error(f'The symbol `{symbol_name}` was not found.')
             return
 

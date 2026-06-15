@@ -36,19 +36,9 @@ from config import Emojis, genius_key
 
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import Player
-from .ui import PlaylistPaginator
+from .ui import MusicSetupView, PlaylistPaginator
 
 log = logging.getLogger(__name__)
-
-DEFAULT_CHANNEL_DESCRIPTION = """
-This is the Channel where you can see {bot}\'s current playing songs.
-You can interact with the **control panel** and manage the current songs.
-
-__Be careful not to delete the **control panel** message.__
-If you accidentally deleted the message, you have to redo the setup with </music setup:1207828024666497090>.
-
-ℹ️** | Every Message if not pinned, gets deleted within 60 seconds.**
-"""
 
 
 class PlayFlags(Flags):
@@ -78,7 +68,7 @@ class VolumeConverter(commands.Converter[int]):
             )
 
         if match.group().startswith(("+", "-")):
-            return player.volume + int(match.group()[1:])
+            return player.volume + int(match.group())
         return int(match.group())
 
 
@@ -245,10 +235,8 @@ class Music(Cog):
             if before_activity.title == after_activity.title:
                 now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
                 start = after_activity.start.replace(tzinfo=None)
-                end = after_activity.end.replace(tzinfo=None)
 
-                deter = (end - now if now > end else now - start).total_seconds()
-                position = round(deter) * 1000
+                position = round((now - start).total_seconds()) * 1000
 
                 await player.seek(position)
                 await player.panel.update()
@@ -1063,7 +1051,7 @@ class Music(Cog):
         dj_role = discord.utils.get(ctx.guild.roles, name="DJ")
         if dj_role is None:
             dj_role = await ctx.guild.create_role(name="DJ")
-            await ctx.send_success(f"Created new DJ Role `{dj_role.mention}`.")
+            await ctx.send_success(f"Created new DJ Role {dj_role.mention}.")
 
         if dj_role in member.roles:
             await ctx.send_error(f"{member} already has the DJ role.")
@@ -1119,94 +1107,18 @@ class Music(Cog):
         description="Manage the Music Configuration.",
         guild_only=True,
         hybrid=True,
-    )
-    async def _music(self, ctx: Context) -> None:
-        """Manage the Music Configuration."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @_music.command(
-        "setup",
-        description="Start the Music configuration setup.",
+        fallback="setup",
         bot_permissions=["manage_channels", "manage_messages"],
         user_permissions=["manage_channels"],
     )
-    @describe(channel="The channel you want to set as the music player channel.")
-    async def music_setup(self, ctx: Context, channel: discord.TextChannel | None = None) -> None:
-        """Sets up a new music player channel.
-        If you don't provide a channel, the bot will create a new channel in the category where the command was executed.
-        """
+    async def _music(self, ctx: Context) -> None:
+        """Opens the music configuration dashboard."""
         assert ctx.guild is not None
+        assert isinstance(ctx.author, discord.Member)
 
-        async with ctx.progress("Setting up music player channel...") as progress:
-            config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-            if config.music_panel_channel_id and config.music_panel_message_id:
-                await ctx.send_error("There is already a music configuration setup.")
-                return
-
-            if not channel:
-                assert isinstance(ctx.channel, discord.TextChannel)
-                parent = ctx.channel.category or ctx.guild
-                await progress.update("Creating music channel...")
-                channel = await parent.create_text_channel(name="🎶percy-music")
-
-            assert self.bot.user is not None
-            await progress.update("Configuring channel settings...")
-            await channel.edit(slowmode_delay=3, topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention))
-
-            guild = ctx.guild
-            assert guild is not None
-            await progress.update("Sending player panel...")
-            message = await channel.send(embed=Player.preview_embed(guild))
-            await message.pin()
-            await channel.purge(limit=5, check=lambda msg: not msg.pinned)
-
-            await config.update(music_panel_channel_id=channel.id, music_panel_message_id=message.id)
-
-        await ctx.send_success(f"Successfully set the new player channel to {channel.mention}.")
-
-    @_music.command(
-        "reset",
-        description="Reset the Music configuration setup.",
-        user_permissions=["manage_channels"],
-        bot_permissions=["manage_channels"],
-    )
-    async def setup_reset(self, ctx: Context) -> None:
-        """Reset the Music configuration setup."""
-        assert ctx.guild is not None
         config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-        if not config.music_panel_channel_id:
-            await ctx.send_error("There is currently no music configuration.")
-            return
-
-        channel = config.music_panel_channel
-        await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
-
-        if channel:
-            try:
-                await channel.delete(reason="Music configuration reset")
-            except discord.HTTPException:
-                pass
-
-        await ctx.send_success("The Music Configuration for this Guild has been deleted.", ephemeral=True)
-
-    @_music.command(
-        "panel",
-        description="Toggle the use of the Music Panel.",
-        user_permissions=["manage_channels"],
-    )
-    async def setup_panel(self, ctx: Context) -> None:
-        """This toggles the use of the music panel.
-        If disabled, the bot won't send a player panel regardless of the setup."""
-        assert ctx.guild is not None
-        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
-        if not config.music_panel_channel_id:
-            await ctx.send_error("There is currently no music configuration.")
-            return
-
-        new_value = not config.use_music_panel
-        await config.update(use_music_panel=new_value)
-        await ctx.send_success(f"The Music Panel has been {'enabled' if new_value else 'disabled'}.")
+        view = MusicSetupView(self.bot, ctx.author, config)
+        view.message = await ctx.send(view=view)
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -1384,7 +1296,7 @@ class PlaylistTools(Cog):
         fields = [items[i : i + 12] for i in range(0, len(items), 12)]
 
         embeds = []
-        for index, field in enumerate(fields):
+        for field in fields:
             embed = discord.Embed(
                 title="Your Playlists",
                 description="Here are your playlists, use the buttons and view to navigate",
@@ -1392,7 +1304,7 @@ class PlaylistTools(Cog):
             )
             embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar.url)
             embed.set_footer(text=f"{pluralize(len(playlists)):playlist}")
-            for name, value in field[index : index + 12]:
+            for name, value in field:
                 embed.add_field(name=name, value=value, inline=False)
             embeds.append(embed)
 

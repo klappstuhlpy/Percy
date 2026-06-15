@@ -8,9 +8,11 @@ from __future__ import annotations
 import datetime
 import random
 
+import numpy as np
 import pytest
 
 from app.cogs.games.engine import dice, higherlower, horserace, mines
+from app.cogs.games.engine.blackjack import Hand
 from app.cogs.games.engine.cards import BaseCard
 from app.cogs.games.engine.trivia import build_round
 from app.cogs.games.engine.wordle import (
@@ -21,6 +23,32 @@ from app.cogs.games.engine.wordle import (
     is_solved,
     score_guess,
 )
+
+# -- Blackjack hand value (soft-ace adjustment) -----------------------------
+
+
+def _hand(*values: int) -> Hand:
+    """Build a hand from card values (14=Ace, 11-13=face, else pip); suit is irrelevant."""
+    hand = Hand(bet=0)
+    hand.card_arr = np.array([[v, 0] for v in values], dtype=int)
+    return hand
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ((14, 10), 21),       # natural blackjack: ace counts as 11
+        ((14, 5), 16),        # soft 16
+        ((14, 14, 10), 12),   # two aces + ten -> one ace demoted (not 32)
+        ((14, 5, 10), 16),    # ace demoted to avoid busting
+        ((14, 14, 14, 8), 21),  # three aces + 8 -> 11+1+1+8
+        ((10, 10, 5), 25),    # hard bust, no aces to soften
+        ((13, 12), 20),       # two face cards
+    ],
+)
+def test_blackjack_hand_value_softens_aces(values: tuple[int, ...], expected: int) -> None:
+    assert _hand(*values).value == expected
+
 
 # -- Higher/Lower -----------------------------------------------------------
 

@@ -516,11 +516,13 @@ class Parser:
         try:
             price = store_table.find('span').text[1:]  # type: ignore[union-attr]
         except (KeyError, AttributeError):
-            price = 'N/A'
-        if price.endswith('*'):
+            price = None
+        if isinstance(price, str) and price.endswith('*'):
             price = price[:-1]
 
-        if isinstance(price, str):
+        try:
+            price = float(price) if price else 0.0
+        except (ValueError, TypeError):
             price = 0.0
 
         base_obj = soup.find('div', class_='o_geo-block')
@@ -552,8 +554,11 @@ class Parser:
         if result.get('Category') in ['TV Series', 'Movie']:
             return None
 
-        page_info = result.get('Length', 'N/A Pages')[0]
-        page_count = int(page_info) if not isinstance(page_info, str) else None
+        page_info = result.get('Length', '')
+        page_count: int | None = None
+        if page_info:
+            digits = ''.join(c for c in page_info if c.isdigit())
+            page_count = int(digits) if digits else None
 
         return GenericComic(
             brand=Brand.MANGA,

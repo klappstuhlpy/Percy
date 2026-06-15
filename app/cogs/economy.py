@@ -116,7 +116,7 @@ class Economy(Cog):
         to="Whether to add the balance to the bank or cash.",
     )
     async def add_money_role(
-        self, ctx: Context, role: Annotated[discord.Role, commands.RoleConverter], amount: int, to: Literal["bank", "cash"]
+        self, ctx: Context, role: Annotated[discord.Role, commands.RoleConverter], amount: Range[int, 1], to: Literal["bank", "cash"]
     ) -> None:
         """Sets a user's balance"""
         humans = [member for member in role.members if not member.bot]
@@ -154,7 +154,7 @@ class Economy(Cog):
         self,
         ctx: Context,
         member: Annotated[discord.Member, converter.MemberConverter],
-        amount: int,
+        amount: Range[int, 1],
         to: Literal["bank", "cash"],
     ) -> None:
         """Removes from a user's balance"""
@@ -179,7 +179,7 @@ class Economy(Cog):
 
     @command("deposit", aliases=["dep"], description="Deposits money into your bank.", guild_only=True, hybrid=True)
     @describe(amount="The amount to deposit.")
-    async def deposit(self, ctx: Context, amount: int) -> None:
+    async def deposit(self, ctx: Context, amount: Range[int, 1]) -> None:
         """Deposits money into your bank."""
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
         if balance.cash < amount:
@@ -192,7 +192,7 @@ class Economy(Cog):
 
     @command("withdraw", description="Withdraws money from your bank.", guild_only=True, hybrid=True)
     @describe(amount="The amount to withdraw.")
-    async def withdraw(self, ctx: Context, amount: int) -> None:
+    async def withdraw(self, ctx: Context, amount: Range[int, 1]) -> None:
         """Withdraws money from your bank."""
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)  # type: ignore[union-attr]
         if balance.bank < amount:
@@ -206,7 +206,7 @@ class Economy(Cog):
     @command("transfer", description="Transfers money to another user.", guild_only=True, hybrid=True)
     @describe(member="The user to transfer the money to.", amount="The amount to transfer.")
     async def transfer(
-        self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter], amount: int
+        self, ctx: Context, member: Annotated[discord.Member, converter.MemberConverter], amount: Range[int, 1]
     ) -> None:
         """Transfers money to another user."""
         if member.bot:

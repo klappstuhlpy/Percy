@@ -207,7 +207,7 @@ class PollInfoButton(
         vote = next((option for (user, option) in self.poll.entries if user == interaction.user.id), None)
         if vote:
             option = next((i for i in self.poll.options if i["index"] == vote), None)
-            text = f"You've voted: {to_emoji(option['index'])} *{option['content']}*" if option else "You've voted."  # type: ignore[index]
+            text = f"You've voted: {self.poll.to_emoji(option['index'])} *{option['content']}*" if option else "You've voted."  # type: ignore[index]
         else:
             text = "You haven't voted yet." if self.poll.kwargs.get("running") is True else "You didn't vote."
 
@@ -258,7 +258,7 @@ class PollEnterButton(
             vote = self.poll.get_option(entry[1])
             await interaction.response.send_message(
                 f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
-                f"{to_emoji(vote['index'])} - `{vote['content']}`",  # type: ignore[index]
+                f"{self.poll.to_emoji(vote['index'])} - `{vote['content']}`",  # type: ignore[index]
                 ephemeral=True,
             )
             return False

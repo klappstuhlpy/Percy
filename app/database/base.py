@@ -866,7 +866,9 @@ class GuildConfig(BaseRecord):
             return []
 
         guild_rules = await self.guild.fetch_automod_rules()
-        return [rule for rule in guild_rules if rule.id in self.linked_automod_rules]
+        # ``linked_automod_rules`` stores the bot's preset *names* (see the AutoMod cog),
+        # so match on name rather than id.
+        return [rule for rule in guild_rules if rule.name in self.linked_automod_rules]
 
     def is_muted(self, member: discord.abc.Snowflake) -> bool:
         """Checks if a member is muted.

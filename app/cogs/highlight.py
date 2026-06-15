@@ -222,7 +222,7 @@ class Highlights(Cog):
     @describe(trigger="The word or phrase to highlight. Not case-sensitive.")
     async def highlight_add(self, ctx: Context, *, trigger: str) -> None:
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
-        if trigger in highlight.lookup:  # type: ignore[union-attr]
+        if trigger.casefold() in highlight.lookup:  # type: ignore[union-attr]
             await ctx.send_error("This highlight already exists.")
             return
 
@@ -237,7 +237,7 @@ class Highlights(Cog):
             await ctx.send_error("Such a highlight does not exist.")
             return
 
-        await highlight.prune(lookup=trigger)  # type: ignore[union-attr]
+        await highlight.prune(lookup=trigger.casefold())  # type: ignore[union-attr]
         await ctx.send_success("Removed highlight.", ephemeral=True)
 
     @highlight.command("block", description="Block an entity from triggering your highlights.", with_app_command=False)

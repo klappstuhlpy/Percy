@@ -434,8 +434,8 @@ class Moderation(Cog):
         if config is None:
             return
 
-        if config.music_panel_channel_id and config.music_panel_message_id and channel.id == config.music_panel_channel_id:
-            await config.update(music_panel_channel_id=None, music_panel_message_id=None)
+        if config.music_panel_channel_id and channel.id == config.music_panel_channel_id:
+            await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
             await config.send_alert("Music panel channel has been deleted, therefore it's been automatically disabled.")
             return
 
@@ -485,7 +485,7 @@ class Moderation(Cog):
             return
 
         if config.music_panel_message_id and payload.message_id == config.music_panel_message_id:
-            await config.update(music_panel_channel_id=None, music_panel_message_id=None)
+            await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
             await config.send_alert("Music panel message has been deleted, therefore it's been automatically disabled.")
             return
 

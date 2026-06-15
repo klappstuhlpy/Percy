@@ -1,15 +1,4 @@
 services:
-  snekbox:
-    container_name: snekbox
-    image: ghcr.io/python-discord/snekbox
-    restart: unless-stopped
-    ipc: none
-    privileged: true
-    ports:
-      - "8060:8060"
-    networks:
-      - bot
-
   bot:
     container_name: percy
     build: .

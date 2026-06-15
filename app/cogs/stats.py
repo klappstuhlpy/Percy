@@ -189,9 +189,9 @@ class Stats(Cog):
         This task is automatically started after the cog is loaded.
         """
         try:
-            record = await self._logging_queue.get()
-
-            await self.send_log_record(record)
+            while True:
+                record = await self._logging_queue.get()
+                await self.send_log_record(record)
         except asyncio.CancelledError:
             pass
         except Exception as exc:
@@ -347,7 +347,7 @@ class Stats(Cog):
 
         if before.display_avatar != after.display_avatar:
             avatar: bytes | None = await self._read_avatar(after)
-            if avatar:
+            if avatar is None:
                 return None
 
             scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
@@ -454,13 +454,13 @@ class Stats(Cog):
                 return None
             if exc.status >= 500:
                 await asyncio.sleep(15.0)
-                await self._read_avatar(member)
+                return await self._read_avatar(member)
             log.exception(
                 "Unhandled Discord HTTPException while getting avatar for %s (%s)",
                 member.name,
                 member.id,
             )
-            return
+            return None
         return avatar
 
     def get_bot_uptime(self, *, brief: bool = False) -> str:
@@ -839,6 +839,7 @@ class Stats(Cog):
         embed.add_field(name="Top Guilds", value="\n".join(value), inline=False)
 
         top_users = await self.get_commands_stats(group_by="author_id", days=1) or []
+        value = []
         for i, record in enumerate(top_users):
             user = censor_object(
                 self.bot.blacklist, self.bot.get_user(record["author_id"]) or f"<Unknown {record['author_id']}>"
@@ -1044,7 +1045,7 @@ class Stats(Cog):
             return
 
         un_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in usernames)
-        nn_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in usernames)
+        nn_text = ", ".join(f"`{name}` {discord.utils.format_dt(changed_at, 'R')}" for name, changed_at in nicknames)
         await ctx.send(
             f"""
             ### Username History for {user}

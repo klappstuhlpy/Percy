@@ -97,24 +97,19 @@ class Hand(BaseHand):
 
     @property
     def value(self) -> int:
-        """Gets the value of the hand"""
-        _sum = sum(self.get_real_card_values())
+        """Gets the best (soft) value of the hand.
 
-        # Check and adjust for aces
-        if _sum > 21:
-            for card in self.cards:
-                if card.value == 14:  # Ace
-                    card.value = 1
-                if _sum <= 21:
-                    break
-
-        # Check and adjust for aces after a split
-        if len(self) == 2 and _sum < 21:
-            for card in self.cards:
-                if card.value == 1:  # Ace
-                    card.value = 14
-
-        return sum(self.get_real_card_values())
+        Each ace starts as 11 (see :meth:`get_real_card_values`); while the hand busts
+        and still holds an ace counted as 11, demote one ace to 1 (``-10``). This yields
+        the highest non-busting total, e.g. ``A+A+10`` is ``12`` rather than ``32``.
+        """
+        values = self.get_real_card_values()
+        total = sum(values)
+        aces = values.count(11)
+        while total > 21 and aces:
+            total -= 10
+            aces -= 1
+        return total
 
     @property
     def display_text(self) -> str:

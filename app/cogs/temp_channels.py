@@ -243,7 +243,7 @@ class TempChannels(Cog):
                     config: GuildConfig = await self.bot.db.get_guild_config(guild_id=member.guild.id)
                     if config.alert_webhook:
                         await config.send_alert(message)
-                    else:
+                    elif member.guild.system_channel is not None:
                         with suppress(discord.HTTPException):
                             await member.guild.system_channel.send(message)
 

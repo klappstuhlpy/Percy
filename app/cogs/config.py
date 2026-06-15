@@ -41,6 +41,7 @@ async def plonk_iterator(ctx: commands.Context, records: list[asyncpg.Record]) -
         resolved = ctx.guild.get_channel(entity_id) or await ctx.bot.get_or_fetch_member(ctx.guild, entity_id)
         if resolved is None:
             yield f"<Not Found: {entity_id}>"
+            continue
         yield str(resolved)
 
 

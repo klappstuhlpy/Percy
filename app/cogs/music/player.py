@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Self, Literal
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import discord
 import wavelink
@@ -170,10 +170,11 @@ class Player(wavelink.Player):
     async def cleanupleft(self) -> None:
         """Removes all tracks from the queue that are not in the voice channel."""
         assert self.queue.history is not None
+        member_ids = {m.id for m in self.channel.members}
         for track in self.queue.all:
-            if not hasattr(track.extras, 'requester'):
+            if not hasattr(track.extras, 'requester_id'):
                 continue
-            if track.extras.requester_id not in self.channel.members:
+            if track.extras.requester_id not in member_ids:
                 if self.current == track:
                     await self.stop()
 

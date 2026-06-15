@@ -104,10 +104,7 @@ class SearchReturn(enum.Enum):
     NO_YOUTUBE_ALLOWED = 3
 
 
-def is_dj(member: discord.Member) -> bool:
-    """Checks if the Member has the DJ Role."""
-    role = discord.utils.get(member.guild.roles, name="DJ")
-    return role in member.roles
+from app.utils.checks import is_dj as is_dj
 
 
 class Playlist(BaseRecord):

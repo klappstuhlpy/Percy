@@ -9,8 +9,9 @@ from discord.ext import commands
 from discord.utils import MISSING
 from wavelink import QueueMode
 
-from app.core import Context, LayoutView
+from app.core import Bot, Context, LayoutView
 from app.core.pagination import BasePaginator
+from app.core.views import ConfirmationView
 from app.utils import (
     PlayerStamp,
     ProgressBar,
@@ -25,7 +26,7 @@ from config import Emojis
 from .models import PlayerState, Playlist, ShuffleMode, is_dj
 
 if TYPE_CHECKING:
-    from app.core import Bot
+    from app.database.base import GuildConfig
 
     from .player import Player
 
@@ -456,7 +457,8 @@ class PlayerPanel(LayoutView):
             await playlist_tools.initizalize_user(interaction.user)
 
         assert self.player.current is not None
-        if self.player.current.uri not in liked_songs:
+        track_urls = [t.url for t in liked_songs.tracks]
+        if self.player.current.uri not in track_urls:
             await liked_songs.add_track(self.player.current)
             await interaction.response.send_message(
                 f"{Emojis.success} Added `{self.player.current.title}` to your liked songs.", ephemeral=True
@@ -467,7 +469,7 @@ class PlayerPanel(LayoutView):
                 f"{Emojis.success} Removed `{self.player.current.title}` from your liked songs.", ephemeral=True
             )
 
-        playlist_tools.get_playlists.invalidate(playlist_tools, interaction.user.id)
+        playlist_tools.get_playlists.invalidate(interaction.user.id)
 
     @classmethod
     async def start(
@@ -669,3 +671,218 @@ class PlaylistPaginator(BasePaginator[discord.Embed | Any]):
 
         self.msg = await cls._send(context, ephemeral, view=self, embed=page)
         return self
+
+
+DEFAULT_CHANNEL_DESCRIPTION = """
+This is the Channel where you can see {bot}'s current playing songs.
+You can interact with the **control panel** and manage the current songs.
+
+__Be careful not to delete the **control panel** message.__
+If you accidentally deleted the message, you have to redo the setup with </music setup:1207828024666497090>.
+
+ℹ️** | Every Message if not pinned, gets deleted within 60 seconds.**
+"""
+
+
+class MusicSetupView(LayoutView):
+    """Dashboard for music player channel configuration.
+
+    Consolidates setup, panel toggle, and reset into one CV2 card.
+    """
+
+    def __init__(self, bot: Bot, member: discord.Member, config: GuildConfig) -> None:
+        super().__init__(timeout=300.0, members=member, delete_on_timeout=True)
+        self.bot = bot
+        self.config = config
+        self.guild: discord.Guild = member.guild
+
+        self._channel_select: discord.ui.ChannelSelect = discord.ui.ChannelSelect(
+            channel_types=[discord.ChannelType.text],
+            placeholder="Select an existing channel...",
+            min_values=1, max_values=1,
+        )
+        self._channel_select.callback = self._on_channel_select
+
+        self._create_btn: discord.ui.Button = discord.ui.Button(
+            label="Create Channel", style=discord.ButtonStyle.green,
+        )
+        self._create_btn.callback = self._on_create_channel
+
+        self._toggle_panel_btn: discord.ui.Button = discord.ui.Button(
+            label="Panel: Enabled", style=discord.ButtonStyle.grey,
+        )
+        self._toggle_panel_btn.callback = self._on_toggle_panel
+
+        self._reset_btn: discord.ui.Button = discord.ui.Button(
+            label="Reset Configuration", style=discord.ButtonStyle.red,
+        )
+        self._reset_btn.callback = self._on_reset
+
+        self._update_state()
+        self._rebuild_layout()
+
+    def _update_state(self) -> None:
+        has_config = bool(self.config.music_panel_channel_id)
+
+        if has_config:
+            self._channel_select.disabled = True
+            self._create_btn.disabled = True
+            self._toggle_panel_btn.disabled = False
+            self._reset_btn.disabled = False
+
+            if self.config.use_music_panel:
+                self._toggle_panel_btn.label = "Panel: Enabled"
+                self._toggle_panel_btn.style = discord.ButtonStyle.green
+            else:
+                self._toggle_panel_btn.label = "Panel: Disabled"
+                self._toggle_panel_btn.style = discord.ButtonStyle.grey
+        else:
+            self._channel_select.disabled = False
+            self._create_btn.disabled = False
+            self._toggle_panel_btn.disabled = True
+            self._reset_btn.disabled = True
+
+    def _rebuild_layout(self) -> None:
+        self.clear_items()
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+
+        container.add_item(discord.ui.Section(
+            "## Music Player Setup\n-# Configure the dedicated music player channel",
+            accessory=discord.ui.Thumbnail(
+                self.guild.icon.url if self.guild.icon else "https://cdn.discordapp.com/embed/avatars/0.png"
+            ),
+        ))
+        container.add_item(discord.ui.Separator())
+
+        has_config = bool(self.config.music_panel_channel_id)
+        if has_config:
+            channel_display = f"<#{self.config.music_panel_channel_id}>"
+            panel_status = "Enabled" if self.config.use_music_panel else "Disabled"
+            container.add_item(discord.ui.TextDisplay(
+                f"### Current Configuration\n"
+                f"**Channel:** {channel_display}\n"
+                f"**Panel:** `{panel_status}`\n\n"
+                f"-# The player panel lives in this channel. Messages are auto-deleted after 60s."
+            ))
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                "### Toggle Panel\n"
+                "-# Enable or disable the embedded player panel without removing the channel."
+            ))
+            container.add_item(discord.ui.ActionRow(self._toggle_panel_btn))
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                "### Reset\n"
+                "-# Deletes the music channel and removes all configuration."
+            ))
+            container.add_item(discord.ui.ActionRow(self._reset_btn))
+        else:
+            container.add_item(discord.ui.TextDisplay(
+                "### Setup\n"
+                "Select an existing text channel or create a new one to use as the music player channel.\n"
+                "-# The bot will configure the channel with slowmode and pin a player panel message."
+            ))
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(self._channel_select))
+            container.add_item(discord.ui.ActionRow(self._create_btn))
+
+        self.add_item(container)
+
+    async def _setup_channel(self, channel: discord.TextChannel, interaction: discord.Interaction) -> None:
+        """Shared logic: configure the channel as the music player channel."""
+        assert self.bot.user is not None
+        await channel.edit(
+            slowmode_delay=3,
+            topic=DEFAULT_CHANNEL_DESCRIPTION.format(bot=self.bot.user.mention),
+        )
+
+        from .player import Player
+        message = await channel.send(embed=Player.preview_embed(self.guild))
+        await message.pin()
+        await channel.purge(limit=5, check=lambda msg: not msg.pinned)
+
+        self.config = await self.config.update(
+            music_panel_channel_id=channel.id,
+            music_panel_message_id=message.id,
+            use_music_panel=True,
+        )
+        self._update_state()
+        self._rebuild_layout()
+
+        await interaction.followup.send(
+            f"{Emojis.success} Music player channel set to {channel.mention}.",
+            ephemeral=True,
+        )
+        if interaction.message is not None:
+            await interaction.message.edit(view=self)
+
+    async def _on_channel_select(self, interaction: discord.Interaction) -> None:
+        channel = self._channel_select.values[0].resolve()
+        if channel is None or not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                f"{Emojis.error} Could not resolve that channel.", ephemeral=True
+            )
+            return
+
+        perms = channel.permissions_for(self.guild.me)
+        if not perms.manage_messages or not perms.send_messages:
+            await interaction.response.send_message(
+                f"{Emojis.error} I need Send Messages and Manage Messages in that channel.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        await self._setup_channel(channel, interaction)
+
+    async def _on_create_channel(self, interaction: discord.Interaction) -> None:
+        if not interaction.app_permissions.manage_channels:
+            await interaction.response.send_message(
+                f"{Emojis.error} I need Manage Channels permission to create a channel.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        parent = (self.guild.text_channels[0].category if self.guild.text_channels else None) or self.guild
+        channel = await parent.create_text_channel(name="\U0001f3b6percy-music")
+        await self._setup_channel(channel, interaction)
+
+    async def _on_toggle_panel(self, interaction: discord.Interaction) -> None:
+        new_value = not self.config.use_music_panel
+        self.config = await self.config.update(use_music_panel=new_value)
+
+        self._update_state()
+        self._rebuild_layout()
+
+        await interaction.response.edit_message(view=self)
+
+    async def _on_reset(self, interaction: discord.Interaction) -> None:
+        confirm = ConfirmationView(
+            interaction.user, timeout=60.0, delete_after=True,
+            content="This will delete the music channel and remove all configuration. Continue?",
+        )
+        await interaction.response.send_message(view=confirm, ephemeral=True)
+        confirm.message = await interaction.original_response()
+        await confirm.wait()
+        if not confirm.value:
+            return
+
+        channel = self.config.music_panel_channel
+        self.config = await self.config.update(
+            music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False
+        )
+
+        if channel:
+            with suppress(discord.HTTPException):
+                await channel.delete(reason="Music configuration reset")
+
+        self._update_state()
+        self._rebuild_layout()
+
+        await interaction.followup.send(
+            f"{Emojis.success} Music configuration has been reset.", ephemeral=True
+        )
+        if interaction.message is not None:
+            await interaction.message.edit(view=self)

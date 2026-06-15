@@ -12,7 +12,7 @@ from config import Emojis
 
 from .formatter import FILE_COUNT_LIMIT, FILE_SIZE_LIMIT, FileAttachment, sizeof_fmt
 
-SupportedPythonVersions = Literal["3.11", "3.10"]
+SupportedPythonVersions = Literal["3.12", "3.13", "3.14"]
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class EvalJob:
     args: list[str]
     files: list[FileAttachment] = field(default_factory=list)
     name: str = "eval"
-    version: SupportedPythonVersions = "3.11"
+    version: SupportedPythonVersions = "3.12"
 
     @classmethod
     def from_code(cls, code: str, path: str = "main.py") -> EvalJob:
@@ -45,11 +45,17 @@ class EvalJob:
             version=version,
         )
 
-    def to_dict(self) -> dict[str, list[str | dict[str, str]]]:
+    @property
+    def executable_path(self) -> str:
+        """Return the snekbox executable path for this version."""
+        return f"/snekbin/python/{self.version}/bin/python3"
+
+    def to_dict(self) -> dict:
         """Convert the job to a dict."""
         return {
             "args": self.args,
             "files": [file.to_dict() for file in self.files],
+            "executable_path": self.executable_path,
         }
 
 
@@ -163,10 +169,12 @@ class EvalResult:
             returncode=data["returncode"],  # type: ignore
         )
 
-        files: dict = iter(data["files"])  # type: ignore
+        files = iter(data["files"])  # type: ignore
         for i, file in enumerate(files):
             if i >= FILE_COUNT_LIMIT:
-                res.failed_files.extend(file["path"] for file in files)
+                # Include the current boundary file as well as the rest of the iterator.
+                res.failed_files.append(file["path"])
+                res.failed_files.extend(remaining["path"] for remaining in files)
                 break
             try:
                 res.files.append(FileAttachment.from_dict(file))
