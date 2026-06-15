@@ -42,11 +42,22 @@ class LOCGClient:
         if date:
             params['date'] = date
 
-        async with self.session.get(url, params=params) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                raise RuntimeError(f'comic-api returned {resp.status}: {text}')
-            data = await resp.json()
+        log.debug('Connecting to comic-api at %s (publisher=%s, date=%s)', url, publisher, date or 'this week')
+        try:
+            async with self.session.get(url, params=params) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    log.error('comic-api returned status %s for %s: %s', resp.status, publisher, text[:500])
+                    raise RuntimeError(f'comic-api returned {resp.status}: {text}')
+                data = await resp.json()
+        except aiohttp.ClientConnectionError as exc:
+            log.error('Failed to connect to comic-api at %s for %s: %s', self.base_url, publisher, exc)
+            raise
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            log.error('comic-api request for %s failed: %s', publisher, exc)
+            raise
+
+        log.debug('Connected to comic-api; parsing %s response.', publisher)
 
         brand = Brand.MARVEL if publisher == 'marvel' else Brand.DC
         comics: list[GenericComic] = []
@@ -81,6 +92,7 @@ class LOCGClient:
                 date=release_date,
             ))
 
+        log.info('Fetched %d %s comic(s) from comic-api.', len(comics), publisher)
         return comics
 
 
