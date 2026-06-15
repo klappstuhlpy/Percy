@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeVar, Union
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ext.commands import Parameter, run_converters
 from discord.utils import MISSING
 
 from app.core.flags import ConsumeUntilFlag, FlagMeta, Flags
@@ -169,6 +170,27 @@ class Command(commands.Command):
         other.custom_flags = self.custom_flags
         other._app_command_id = self._app_command_id
         return other
+
+    async def transform(self, ctx: Context, param: Parameter, attachments: Any, /) -> Any:
+        """Override transform to use read_rest for ConsumeUntilFlag parameters.
+
+        discord.py's default transform calls ``view.get_quoted_word()`` for positional params,
+        which raises UnexpectedQuoteError on unescaped quotes. ConsumeUntilFlag params need
+        the full remaining text, so we bypass the quoted-word parser entirely.
+        """
+        if isinstance(param.converter, ConsumeUntilFlag):
+            view = ctx.view
+            view.skip_ws()
+            if view.eof:
+                if param.required:
+                    raise commands.MissingRequiredArgument(param)
+                return await param.get_default(ctx)
+            previous = view.index
+            ctx.current_argument = argument = view.read_rest().strip()
+            view.previous = previous
+            return await run_converters(ctx, param.converter, argument, param)
+
+        return await super().transform(ctx, param, attachments)
 
     async def can_run(self, ctx: Context, /) -> bool:
         """Checks if the command can be run in the given context.

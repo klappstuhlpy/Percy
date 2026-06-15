@@ -53,7 +53,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 - **Rich, helpful errors** — invalid input is answered with an ANSI-coloured "here's where your command broke" trace that points at the exact offending argument.
 - **Per-guild everything** — prefixes, automod, audit logging, leveling, polls and music panels are all configured per server and cached in memory for speed.
 - **Layered, testable architecture** — a repository data-access layer, a Discord-free **service layer** for business logic, MVVM-style UI separation in the cogs, and pure game **engines** that are unit-tested in isolation.
-- **Resilient external APIs** — every third-party client (AniList, Marvel, …) shares one HTTP base with 429 handling, exponential backoff and a circuit breaker.
+- **Resilient external APIs** — every third-party client (AniList, …) shares one HTTP base with 429 handling, exponential backoff and a circuit breaker.
 - **Server-side image rendering** — rank cards, casino cards, poker odds charts, presence charts, captchas and music panels are all drawn with Pillow behind a single `RenderingService`.
 - **Components V2 UI** — newer features (translation, AI assistant, autoresponder/stat-counter lists, lottery results) render with Discord's Components V2 layouts via a shared `app.core` helper.
 
@@ -142,7 +142,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                                             |
 | **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).                       |
 | **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                     |
-| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via the Marvel API).                                                                                                           |
+| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via a self-hosted League of Comic Geeks API wrapper).                                                                          |
 | **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set. |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                       |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                 |
@@ -269,8 +269,7 @@ GITHUB_TOKEN=                        # GitHub API (source links, gists)
 DBOTS_TOKEN=                         # discord.bots.gg stats posting
 TOPGG_TOKEN=                         # top.gg stats posting
 IMAGES_API_TOKEN=                    # image API integrations
-MARVEL_API_PUBLIC_KEY=               # Marvel API (comic subscriptions)
-MARVEL_API_PRIVATE_KEY=
+COMIC_API_URL=                       # self-hosted League of Comic Geeks API wrapper (comic subscriptions; default http://127.0.0.1:8070)
 GROQ_API_KEY=                        # Groq API Token for /ai command
 
 # ── Web Dashboard (klappstuhl.me BFF) ───────────────────

@@ -16,9 +16,9 @@ from app.core import Bot, Cog, Context, Flags, NoticeView, cooldown, describe, f
 from app.utils import cache, truncate
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
-from config import Emojis, default_prefix
+from config import Emojis, comic_api_url, default_prefix
 
-from .client import ComicCache, Marvel, Parser
+from .client import ComicCache, LOCGClient, Parser
 from .models import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
 from .ui import JumpToTopButton
 
@@ -56,14 +56,14 @@ class Comics(Cog):
         parser: Parser
         comic_cache: ComicCache
         inventory_scheduler: Scheduler
-        marvel_client: Marvel
+        locg_client: LOCGClient
         _current_feed: ComicFeed | None
         __event: asyncio.Event
         __dispatching_task: asyncio.Task | None
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
-        self.marvel_client: Marvel = Marvel(self.bot)
+        self.locg_client: LOCGClient = LOCGClient(self.bot.session, base_url=comic_api_url)
 
         self.parser: Parser = Parser()
         self.comic_cache: ComicCache = ComicCache()
@@ -103,8 +103,8 @@ class Comics(Cog):
         log.debug('Refreshing comic cache...')
 
         coroutines: list[tuple[Coroutine, Brand]] = [
-            (self.parser.fetch_marvel_lookup_table(self.marvel_client), Brand.MARVEL),
-            (self.parser.bs4_dc(), Brand.DC),
+            (self.locg_client.fetch_comics('marvel'), Brand.MARVEL),
+            (self.locg_client.fetch_comics('dc'), Brand.DC),
             (self.parser.bs4_viz(), Brand.MANGA)
         ]
 
@@ -119,7 +119,7 @@ class Comics(Cog):
                     data.sort(key=sort_key, reverse=True)
                     await self.comic_cache.set(brand, data)
             except Exception as e:
-                log.error('Error refreshing comic cache for %s: %s', brand.name, e)
+                log.warning('Error refreshing comic cache for %s: %s', brand.name, e)
             else:
                 log.debug('Fetched %s inventory.', brand.name)
 

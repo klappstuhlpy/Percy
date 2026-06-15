@@ -58,9 +58,9 @@ class CodeblockConverter(commands.Converter[list[str]]):
 
     FORMATTED_CODE_REGEX: ClassVar[re.Pattern[str]] = re.compile(
         r"""
-            (?P<delim>```|``)
-            (?:[a-z]+\n)?          # optional language
-            \s*
+            (?P<delim>(?P<block>```)|``)
+            (?:(?P<lang>[a-z0-9]+)\n)?
+            (?:[ \t]*\n)*
             (?P<code>.*?)
             \s*
             (?P=delim)
