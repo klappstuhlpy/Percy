@@ -276,8 +276,8 @@ class ComicFeed(BaseRecord):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        self.brand = Brand[str(self.brand)]  # type: ignore[assignment]
-        self.format = Format[str(self.format)]
+        self.brand = Brand.coerce(self.brand)  # type: ignore[assignment]
+        self.format = Format.coerce(self.format)  # type: ignore[assignment]
 
     async def _update(
             self,

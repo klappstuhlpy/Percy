@@ -135,6 +135,29 @@ class NotCaseSensitiveEnum(enum.Enum):
     """
 
     @classmethod
+    def coerce(cls, value: object) -> NotCaseSensitiveEnum:
+        """Resolve a stored/loaded value to a member, tolerating either the member
+        name or its value, case-insensitively.
+
+        This guards persisted records where the column may hold the member name
+        (e.g. ``'COMPACT'``) or its value (e.g. ``'Compact'``) interchangeably.
+        """
+        if isinstance(value, cls):
+            return value
+
+        text = str(value)
+        try:
+            return cls[text.upper()]
+        except KeyError:
+            pass
+
+        for member in cls:
+            if str(member.value).lower() == text.lower():
+                return member
+
+        raise KeyError(value)
+
+    @classmethod
     async def convert(cls, _: commands.Context, argument: str) -> NotCaseSensitiveEnum:
         by_value = "__by_value__" in cls.__members__
         for case in [str.title, str.upper, str.lower, int]:

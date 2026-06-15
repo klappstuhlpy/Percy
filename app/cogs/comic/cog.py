@@ -359,7 +359,7 @@ class Comics(Cog):
                 info.append(f'[Read More]({cs_cm.url})')
             lines.append(f'**{cs_cm.title}** — {" **×** ".join(info) if info else "…"}')
 
-        container.add_item(discord.ui.TextDisplay(truncate('\n'.join(lines), 3500) or '…'))
+        container.add_item(discord.ui.TextDisplay(truncate('\n'.join(lines), 3900) or '…'))
 
         if jump_button is not None:
             container.add_item(discord.ui.Separator())
