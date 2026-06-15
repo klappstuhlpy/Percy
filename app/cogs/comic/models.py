@@ -23,6 +23,10 @@ MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/raw/HTBFL.png'
 DC_ICON_URL = 'https://klappstuhl.me/gallery/raw/VmiCY.png'
 VIZ_ICON_URL = 'https://klappstuhl.me/gallery/raw/nsTxu.png'
 
+# Shown when a release has no cover art yet (LOCG serves a no-cover placeholder
+# for upcoming issues, which the scraper resolves to ``None``).
+COMING_SOON_COVER = 'https://klappstuhl.me/gallery/raw/vKMTn.jpeg'
+
 MANGA_POSITIONS = ['Story', 'Art', 'Story and Art', 'Original Conecept', 'Written', 'Drawn']
 
 
@@ -206,6 +210,16 @@ class GenericComic:
     def price_format(self) -> str:
         return f'${fnumb(self.price)} USD' if self.price is not None else 'Unknown'
 
+    @property
+    def is_coming_soon(self) -> bool:
+        """``True`` when no cover art exists yet (an upcoming, not-yet-drawn issue)."""
+        return not self.image_url
+
+    @property
+    def cover_url(self) -> str:
+        """The cover to display, falling back to the coming-soon placeholder."""
+        return self.image_url or COMING_SOON_COVER
+
     def format_creators(self, *, cover: bool = False, compact: bool = False) -> str:
         priority = ['Writer', 'Artist', 'Penciler', 'Inker', 'Colorist', 'Letterer', 'Editor', *MANGA_POSITIONS]
 
@@ -223,6 +237,36 @@ class GenericComic:
             if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
         )
 
+    def format_creators_compact(self) -> tuple[str, int]:
+        """Headline creator roles only (writer/penciller/artist/cover).
+
+        Returns the rendered text and a count of the omitted long-tail credits
+        (inkers, colorists, letterers, assistant editors, …) for a "+N more" hint.
+        """
+        creators = self.creators or {}
+        primary = ['Writer', 'Story', 'Story and Art', 'Penciller', 'Penciler', 'Artist', *MANGA_POSITIONS]
+
+        lines: list[str] = []
+        shown_roles: set[str] = set()
+
+        for role in primary:
+            names = creators.get(role)
+            if names and role not in shown_roles:
+                lines.append(f'**{role}**: {", ".join(alpha_surnames(names))}')
+                shown_roles.add(role)
+
+        cover_names: list[str] = []
+        for role, names in creators.items():
+            if 'Cover' in role:
+                cover_names.extend(names)
+                shown_roles.add(role)
+        if cover_names:
+            unique = list(dict.fromkeys(alpha_surnames(cover_names)))
+            lines.append(f'**Cover**: {", ".join(unique)}')
+
+        more = sum(len(v) for role, v in creators.items() if role not in shown_roles)
+        return '\n'.join(lines), more
+
     def _general_info(self) -> str:
         """Render the brand-appropriate info block, omitting fields we don't have."""
         if self.brand == Brand.MANGA:
@@ -235,37 +279,70 @@ class GenericComic:
                 f"Age Rating: {self.kwargs.get('age_rating')}"
             )
 
-        fields: list[tuple[str, str | None]] = [
-            ('Format', self.comic_format),
-            ('Price', self.price_format if self.price is not None else None),
-            ('Pages', str(self.page_count) if self.page_count else None),
-            ('Release Date', discord.utils.format_dt(self.date, 'D') if self.date else None),
-            ('Cover Date', self.cover_date),
-            ('UPC', self.upc),
-            ('ISBN', self.isbn),
-            ('Distributor SKU', self.sku),
-            ('Final Order Cutoff', self.foc),
-            ('Setting', self.setting),
-            ('Community Rating', f'{self.rating:.0f}%' if self.rating is not None else None),
-            ('Pulls', f'{self.pulls:,}' if self.pulls else None),
+        # Compact, dot-separated lines. Collector minutiae (UPC/ISBN/SKU/cover date)
+        # is intentionally omitted — it's noise in a feed; the title links out for it.
+        release = discord.utils.format_dt(self.date, 'D') if self.date else None
+        groups: list[list[str | None]] = [
+            [v for v in (
+                self.comic_format,
+                f'{self.page_count} pages' if self.page_count else None,
+                self.price_format if self.price is not None else None,
+            ) if v],
+            [v for v in (
+                f'Release: {release}' if release else None,
+                f'FOC: {self.foc}' if self.foc else None,
+            ) if v],
+            [v for v in (
+                f'Setting: {self.setting}' if self.setting else None,
+                f'Rating: {self.rating:.0f}%' if self.rating is not None else None,
+                f'Pulls: {self.pulls:,}' if self.pulls else None,
+            ) if v],
         ]
-        lines = '\n'.join(f'{label}: {value}' for label, value in fields if value)
+        lines = '\n'.join(' · '.join(g) for g in groups if g)
         return f'### General Info\n{lines}' if lines else ''
 
     def _format_characters(self) -> str:
-        """Group characters by their appearance type (Main/Supporting/…)."""
+        """Show Main/Supporting casts only, deduped and capped, with a "+N more" tail.
+
+        Cameos and bit players are rolled into the overflow count rather than listed.
+        """
         if not self.characters:
             return ''
 
-        by_type: dict[str, list[str]] = {}
+        order = ['Main', 'Supporting', 'Cameo', 'Other']
+        rank = {t: i for i, t in enumerate(order)}
+
+        # One entry per name, keeping its strongest billing.
+        best: dict[str, str] = {}
         for character in self.characters:
             name = character.get('name')
-            if name:
-                by_type.setdefault(character.get('type') or 'Other', []).append(name)
+            if not name:
+                continue
+            ctype = character.get('type') or 'Other'
+            if name not in best or rank.get(ctype, 99) < rank.get(best[name], 99):
+                best[name] = ctype
 
-        order = ['Main', 'Supporting', 'Cameo', 'Other']
-        ranked = sorted(by_type, key=lambda t: order.index(t) if t in order else len(order))
-        return '\n'.join(f'**{t}**: {truncate(", ".join(by_type[t]), 280)}' for t in ranked)
+        by_type: dict[str, list[str]] = {}
+        for name, ctype in best.items():
+            by_type.setdefault(ctype, []).append(name)
+
+        caps = {'Main': 12, 'Supporting': 10}
+        lines: list[str] = []
+        overflow = 0
+        for billing, cap in caps.items():
+            names = by_type.get(billing)
+            if not names:
+                continue
+            lines.append(f'**{billing}**: {", ".join(names[:cap])}')
+            overflow += max(len(names) - cap, 0)
+
+        # Everything that isn't Main/Supporting (cameos, misc) becomes overflow.
+        overflow += sum(len(v) for t, v in by_type.items() if t not in caps)
+
+        text = '\n'.join(lines)
+        if overflow:
+            text = f'{text}\n-# +{overflow} more' if text else f'-# {overflow} characters'
+        return text
 
     def to_container(self, full_img: bool = True) -> discord.ui.Container:
         """Build the Components V2 release card for this comic.
@@ -278,16 +355,21 @@ class GenericComic:
         container = discord.ui.Container(accent_colour=colour)
 
         heading = f'## [{self.title or "Untitled"}]({self.url})' if self.url else f'## {self.title or "Untitled"}'
+        tag = '-# 🔜 **Coming Soon** — cover art not yet available' if self.is_coming_soon else None
 
-        if not full_img and self.image_url:
+        if not full_img:
             body = heading
+            if tag:
+                body += f'\n{tag}'
             if self.description:
-                body += f'\n{truncate(self.description, 1200)}'
-            container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(self.image_url)))
+                body += f'\n{truncate(self.description, 600)}'
+            container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(self.cover_url)))
         else:
             container.add_item(discord.ui.TextDisplay(heading))
+            if tag:
+                container.add_item(discord.ui.TextDisplay(tag))
             if self.description:
-                container.add_item(discord.ui.TextDisplay(truncate(self.description, 1500)))
+                container.add_item(discord.ui.TextDisplay(truncate(self.description, 700)))
 
         container.add_item(discord.ui.Separator())
 
@@ -296,21 +378,26 @@ class GenericComic:
             container.add_item(discord.ui.TextDisplay(info))
 
         if self.creators:
-            container.add_item(discord.ui.TextDisplay(f'### Creators\n{self.format_creators()}'))
+            creators_text, more = self.format_creators_compact()
+            if more:
+                creators_text = f'{creators_text}\n-# +{more} more credits'
+            container.add_item(discord.ui.TextDisplay(f'### Creators\n{creators_text}'))
 
         characters = self._format_characters()
         if characters:
             container.add_item(discord.ui.TextDisplay(f'### Characters\n{characters}'))
 
+        # Collapse the per-story breakdown to a single line — the full list is a wall
+        # for collections and adds little in a feed.
         if len(self.stories) > 1:
-            story_lines = [
-                f"**{s.get('title') or 'Untitled'}**" + (f" — {s['pages']} pages" if s.get('pages') else '')
-                for s in self.stories
-            ]
-            container.add_item(discord.ui.TextDisplay(f'### Stories\n{truncate(chr(10).join(story_lines), 800)}'))
+            total_pages = sum(s.get('pages') or 0 for s in self.stories)
+            summary = f'{len(self.stories)} stories collected'
+            if total_pages:
+                summary += f' · {total_pages} pages'
+            container.add_item(discord.ui.TextDisplay(f'-# {summary}'))
 
-        if full_img and self.image_url:
-            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(self.image_url)))
+        if full_img:
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(self.cover_url)))
 
         variant_items = [
             discord.MediaGalleryItem(v['cover'], description=truncate(v.get('name') or '', 90))
