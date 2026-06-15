@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,13 @@ SANDBOX_INFO = (
     "\U0001f40d **Interpreters** — 3.12, 3.13, 3.14\n"
     "-# Output truncated at ~1 MB. `input()` is not supported."
 )
+
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -208,12 +216,12 @@ class EvalResultView(LayoutView):
         # --- Output ---
         if result.stdout.strip() or not result.has_files:
             container.add_item(discord.ui.Separator())
-            output = result.stdout.strip() or "[No output]"
+            output = _strip_ansi(result.stdout.strip()) or "[No output]"
 
             if self._show_trace:
                 trace = _build_error_trace(result.stdout)
                 if trace:
-                    output = trace
+                    output = _strip_ansi(trace)
 
             output = _truncate(output, MAX_OUTPUT_DISPLAY)
             container.add_item(discord.ui.TextDisplay(
@@ -224,7 +232,7 @@ class EvalResultView(LayoutView):
         if result.returncode and result.returncode != 0 and not self._show_trace:
             trace = _build_error_trace(result.stdout)
             if trace:
-                last_line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+                last_line = _strip_ansi(result.stdout.strip().splitlines()[-1]) if result.stdout.strip() else ""
                 if last_line:
                     container.add_item(discord.ui.TextDisplay(
                         f"-# \U0001f41b `{_truncate(last_line, 80)}`"
