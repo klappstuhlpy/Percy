@@ -48,10 +48,10 @@ def _strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE.sub("", text)
 
 
-def _truncate(text: str, limit: int) -> str:
+def _truncate(text: str, limit: int, newline: str = "\n") -> str:
     if len(text) <= limit:
         return text
-    return text[: limit - 20] + "\n... (truncated)"
+    return text[: limit - 20] + f"{newline}... (truncated)"
 
 
 def _format_returncode(code: int | None) -> str:
@@ -235,7 +235,7 @@ class EvalResultView(LayoutView):
                 last_line = _strip_ansi(result.stdout.strip().splitlines()[-1]) if result.stdout.strip() else ""
                 if last_line:
                     container.add_item(discord.ui.TextDisplay(
-                        f"-# \U0001f41b `{_truncate(last_line, 80)}`"
+                        f"-# \U0001f41b `{_truncate(last_line, 300, "")}`"
                     ))
 
         # --- EOF Warning ---
