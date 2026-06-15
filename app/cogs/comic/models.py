@@ -143,6 +143,19 @@ class GenericComic:
             price: float | None = None,
             _copyright: str | None = None,
             date: datetime.datetime | None = None,
+            characters: list[dict[str, Any]] | None = None,
+            variants: list[dict[str, Any]] | None = None,
+            stories: list[dict[str, Any]] | None = None,
+            cover_date: str | None = None,
+            upc: str | None = None,
+            isbn: str | None = None,
+            sku: str | None = None,
+            foc: str | None = None,
+            comic_format: str | None = None,
+            rating: float | None = None,
+            pulls: int | None = None,
+            setting: str | None = None,
+            variant_count: int | None = None,
             **kwargs: Any
     ) -> None:
         self.brand: Brand | None = brand
@@ -157,6 +170,21 @@ class GenericComic:
         self.date: datetime.datetime | None = date
         self.page_count: int | None = page_count
         self.price: float | None = price
+
+        # Enriched detail-page fields (see LOCGClient.fetch_comics).
+        self.characters: list[dict[str, Any]] = characters or []
+        self.variants: list[dict[str, Any]] = variants or []
+        self.stories: list[dict[str, Any]] = stories or []
+        self.cover_date: str | None = cover_date
+        self.upc: str | None = upc
+        self.isbn: str | None = isbn
+        self.sku: str | None = sku
+        self.foc: str | None = foc
+        self.comic_format: str | None = comic_format
+        self.rating: float | None = rating
+        self.pulls: int | None = pulls
+        self.setting: str | None = setting
+        self.variant_count: int | None = variant_count
 
         self.copyright: str | None = _copyright
         self.kwargs = kwargs
@@ -195,11 +223,56 @@ class GenericComic:
             if (not compact or k in compact_positions) and (cover or not k.endswith('(Cover)'))
         )
 
+    def _general_info(self) -> str:
+        """Render the brand-appropriate info block, omitting fields we don't have."""
+        if self.brand == Brand.MANGA:
+            return (
+                f'### General Info\n'
+                f'Price: {self.price_format}\n'
+                f'Pages: {self.page_count}\n'
+                f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
+                f"Category: {self.kwargs.get('category')}\n"
+                f"Age Rating: {self.kwargs.get('age_rating')}"
+            )
+
+        fields: list[tuple[str, str | None]] = [
+            ('Format', self.comic_format),
+            ('Price', self.price_format if self.price is not None else None),
+            ('Pages', str(self.page_count) if self.page_count else None),
+            ('Release Date', discord.utils.format_dt(self.date, 'D') if self.date else None),
+            ('Cover Date', self.cover_date),
+            ('UPC', self.upc),
+            ('ISBN', self.isbn),
+            ('Distributor SKU', self.sku),
+            ('Final Order Cutoff', self.foc),
+            ('Setting', self.setting),
+            ('Community Rating', f'{self.rating:.0f}%' if self.rating is not None else None),
+            ('Pulls', f'{self.pulls:,}' if self.pulls else None),
+        ]
+        lines = '\n'.join(f'{label}: {value}' for label, value in fields if value)
+        return f'### General Info\n{lines}' if lines else ''
+
+    def _format_characters(self) -> str:
+        """Group characters by their appearance type (Main/Supporting/…)."""
+        if not self.characters:
+            return ''
+
+        by_type: dict[str, list[str]] = {}
+        for character in self.characters:
+            name = character.get('name')
+            if name:
+                by_type.setdefault(character.get('type') or 'Other', []).append(name)
+
+        order = ['Main', 'Supporting', 'Cameo', 'Other']
+        ranked = sorted(by_type, key=lambda t: order.index(t) if t in order else len(order))
+        return '\n'.join(f'**{t}**: {truncate(", ".join(by_type[t]), 280)}' for t in ranked)
+
     def to_container(self, full_img: bool = True) -> discord.ui.Container:
         """Build the Components V2 release card for this comic.
 
         ``full_img`` shows the cover as a full-width :class:`~discord.ui.MediaGallery`;
         otherwise it is a compact :class:`~discord.ui.Thumbnail` beside the heading.
+        Variant covers are folded into this card rather than rendered separately.
         """
         colour = self.brand.colour if self.brand is not None else 0
         container = discord.ui.Container(accent_colour=colour)
@@ -218,27 +291,36 @@ class GenericComic:
 
         container.add_item(discord.ui.Separator())
 
-        if self.brand == Brand.MANGA:
-            container.add_item(discord.ui.TextDisplay(
-                f'### General Info\n'
-                f'Price: {self.price_format}\n'
-                f'Pages: {self.page_count}\n'
-                f"Release Date: {discord.utils.format_dt(self.date, 'D') if self.date else 'Unknown'}\n"
-                f"Category: {self.kwargs.get('category')}\n"
-                f"Age Rating: {self.kwargs.get('age_rating')}"
-            ))
-        else:
-            container.add_item(discord.ui.TextDisplay(
-                f'### General Info\n'
-                f'Price: {self.price_format}\n'
-                f'Pages: {self.page_count}'
-            ))
+        info = self._general_info()
+        if info:
+            container.add_item(discord.ui.TextDisplay(info))
 
         if self.creators:
             container.add_item(discord.ui.TextDisplay(f'### Creators\n{self.format_creators()}'))
 
+        characters = self._format_characters()
+        if characters:
+            container.add_item(discord.ui.TextDisplay(f'### Characters\n{characters}'))
+
+        if len(self.stories) > 1:
+            story_lines = [
+                f"**{s.get('title') or 'Untitled'}**" + (f" — {s['pages']} pages" if s.get('pages') else '')
+                for s in self.stories
+            ]
+            container.add_item(discord.ui.TextDisplay(f'### Stories\n{truncate(chr(10).join(story_lines), 800)}'))
+
         if full_img and self.image_url:
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(self.image_url)))
+
+        variant_items = [
+            discord.MediaGalleryItem(v['cover'], description=truncate(v.get('name') or '', 90))
+            for v in self.variants[:10] if v.get('cover')
+        ]
+        if variant_items:
+            count = self.variant_count or len(self.variants)
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(f'### Variant Covers • {count}'))
+            container.add_item(discord.ui.MediaGallery(*variant_items))
 
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(f'-# {self.title or ""} • {self.copyright or ""}'))
