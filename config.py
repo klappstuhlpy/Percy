@@ -111,7 +111,7 @@ def _optional_int(value: str | None) -> int | None:
 
 anilist = SimpleNamespace(client_id=_optional_int(env('ANILIST_CLIENT_ID')), client_secret=env('ANILIST_CLIENT_SECRET'),
                           redirect_uri='https://anilist.co/api/v2/oauth/pin')
-comic_api_url: str = env('COMIC_API_URL') or 'http://127.0.0.1:8070'
+locg_api_url: str = env('LOCG_API_URL') or 'http://127.0.0.1:8070'
 
 
 class Emojis:

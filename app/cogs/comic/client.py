@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 class LOCGClient:
     """Client for the self-hosted League of Comic Geeks API wrapper.
 
-    Calls the comic-api Express service to fetch weekly Marvel/DC releases.
+    Calls the locg-api Express service to fetch weekly Marvel/DC releases.
     """
 
     def __init__(self, session: aiohttp.ClientSession, *, base_url: str = "http://127.0.0.1:8070") -> None:
@@ -28,7 +28,7 @@ class LOCGClient:
         self.base_url = base_url.rstrip("/")
 
     async def fetch_comics(self, publisher: str, *, date: str | None = None) -> list[GenericComic]:
-        """Fetch comics for a publisher from the comic-api service.
+        """Fetch comics for a publisher from the locg-api service.
 
         Parameters
         ----------
@@ -42,22 +42,22 @@ class LOCGClient:
         if date:
             params["date"] = date
 
-        log.debug("Connecting to comic-api at %s (publisher=%s, date=%s)", url, publisher, date or "this week")
+        log.debug("Connecting to locg-api at %s (publisher=%s, date=%s)", url, publisher, date or "this week")
         try:
             async with self.session.get(url, params=params) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    log.error("comic-api returned status %s for %s: %s", resp.status, publisher, text[:500])
-                    raise RuntimeError(f"comic-api returned {resp.status}: {text}")
+                    log.error("locg-api returned status %s for %s: %s", resp.status, publisher, text[:500])
+                    raise RuntimeError(f"locg-api returned {resp.status}: {text}")
                 data = await resp.json()
         except aiohttp.ClientConnectionError as exc:
-            log.error("Failed to connect to comic-api at %s for %s: %s", self.base_url, publisher, exc)
+            log.error("Failed to connect to locg-api at %s for %s: %s", self.base_url, publisher, exc)
             raise
         except (aiohttp.ClientError, TimeoutError) as exc:
-            log.error("comic-api request for %s failed: %s", publisher, exc)
+            log.error("locg-api request for %s failed: %s", publisher, exc)
             raise
 
-        log.debug("Connected to comic-api; parsing %s response.", publisher)
+        log.debug("Connected to locg-api; parsing %s response.", publisher)
 
         brand = Brand.MARVEL if publisher == "marvel" else Brand.DC
         comics: list[GenericComic] = []
@@ -93,7 +93,7 @@ class LOCGClient:
                     price=price,
                     _copyright=brand.copyright,
                     date=release_date,
-                    # Enriched detail fields (present when comic-api ran with ?details=true).
+                    # Enriched detail fields (present when locg-api ran with ?details=true).
                     characters=entry.get("characters") or [],
                     variants=entry.get("variants") or [],
                     stories=entry.get("stories") or [],
@@ -110,12 +110,12 @@ class LOCGClient:
                 )
             )
 
-        log.info("Fetched %d %s comic(s) from comic-api.", len(comics), publisher)
+        log.info("Fetched %d %s comic(s) from locg-api.", len(comics), publisher)
         return comics
 
     @staticmethod
     def _group_creators(creators: list[dict] | None) -> dict[str, list[str]] | None:
-        """Collapse comic-api's flat ``[{name, role, url}]`` credits into the
+        """Collapse locg-api's flat ``[{name, role, url}]`` credits into the
         ``{role: [names]}`` shape Percy's :class:`GenericComic` renders from."""
         if not creators:
             return None

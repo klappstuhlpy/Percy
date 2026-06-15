@@ -16,7 +16,7 @@ from app.core import Bot, Cog, Context, Flags, NoticeView, cooldown, describe, f
 from app.utils import cache, truncate
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
-from config import Emojis, comic_api_url, default_prefix
+from config import Emojis, default_prefix, locg_api_url
 
 from .client import ComicCache, LOCGClient, Parser
 from .models import Brand, ComicFeed, Format, GenericComic, GenericComicMessage
@@ -63,7 +63,7 @@ class Comics(Cog):
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
-        self.locg_client: LOCGClient = LOCGClient(self.bot.session, base_url=comic_api_url)
+        self.locg_client: LOCGClient = LOCGClient(self.bot.session, base_url=locg_api_url)
 
         self.parser: Parser = Parser()
         self.comic_cache: ComicCache = ComicCache()

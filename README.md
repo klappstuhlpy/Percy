@@ -269,7 +269,7 @@ GITHUB_TOKEN=                        # GitHub API (source links, gists)
 DBOTS_TOKEN=                         # discord.bots.gg stats posting
 TOPGG_TOKEN=                         # top.gg stats posting
 IMAGES_API_TOKEN=                    # image API integrations
-COMIC_API_URL=                       # self-hosted League of Comic Geeks API wrapper (comic subscriptions). Docker: http://host.docker.internal:8070 (host-gateway); bare metal: http://127.0.0.1:8070
+LOCG_API_URL=                        # self-hosted League of Comic Geeks API wrapper (locg-api; comic subscriptions). Docker: http://host.docker.internal:8070 (host-gateway); bare metal: http://127.0.0.1:8070
 GROQ_API_KEY=                        # Groq API Token for /ai command
 
 # ── Web Dashboard (klappstuhl.me BFF) ───────────────────
