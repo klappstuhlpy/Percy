@@ -8,11 +8,14 @@ reaching back into the cog.
 
 from __future__ import annotations
 
+import time
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 import discord
 
 from app.utils import merge_perms
+from config import Emojis
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -149,3 +152,45 @@ async def update_role_permissions(
         if progress is not None:
             await progress(index, total)
     return success, failure, skipped
+
+
+async def sync_permissions_with_progress(
+    interaction: discord.Interaction,
+    role: discord.Role,
+    guild: discord.Guild,
+    *,
+    channels: Sequence[discord.abc.GuildChannel] | list[discord.abc.Messageable] | None = None,
+    update_read_permissions: bool = False,
+    label: str = "Syncing channel permissions",
+) -> tuple[int, int, int]:
+    """Run :func:`update_role_permissions` with a live ephemeral progress message.
+
+    Shared by the mute-role and gatekeeper setup views so heavy multi-channel syncs
+    surface a ``done/total`` counter instead of a frozen typing indicator. The
+    interaction must already be deferred or responded to. Status edits are throttled
+    to roughly one per 1.5s (plus a final tick) to stay within Discord's rate limits.
+    """
+    status = await interaction.followup.send(f"{Emojis.loading} {label}...", ephemeral=True, wait=True)
+
+    last_edit = 0.0
+
+    async def on_progress(done: int, total: int) -> None:
+        nonlocal last_edit
+        now = time.monotonic()
+        if done != total and now - last_edit < 1.5:
+            return
+        last_edit = now
+        with suppress(discord.HTTPException):
+            await status.edit(content=f"{Emojis.loading} {label}... `{done}/{total}`")
+
+    result = await update_role_permissions(
+        role,
+        guild,
+        interaction.user,
+        update_read_permissions=update_read_permissions,
+        channels=channels,
+        progress=on_progress,
+    )
+    with suppress(discord.HTTPException):
+        await status.delete()
+    return result

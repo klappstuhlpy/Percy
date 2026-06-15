@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.leveling.models import _MAX_LEVEL
-from app.core import View
-from app.utils import helpers
+from app.core import LayoutView
+from app.utils import get_asset_url
+from app.utils.helpers import Colour
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -20,8 +21,19 @@ __all__ = (
     "InteractiveLevelRolesView",
     "InteractiveMultiplierView",
     "RemoveLevelRolesSelect",
-    "RoleStackToggle",
 )
+
+
+def _roles_summary(roles: dict[int, int]) -> str:
+    """Render the configured level → role mapping as a markdown list."""
+    if not roles:
+        return "### Reward Roles\n-# No reward roles configured yet — add one with the select below."
+
+    body = "\n".join(
+        f"- **Level {level}** → <@&{role_id}>"
+        for role_id, level in sorted(roles.items(), key=lambda pair: pair[1])
+    )
+    return f"### Reward Roles `({len(roles)}/25)`\n{body}"
 
 
 class AddLevelRoleModal(discord.ui.Modal):
@@ -40,21 +52,28 @@ class AddLevelRoleModal(discord.ui.Modal):
         super().__init__(title="Configure Level Role", timeout=120)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        level = int(self.level.value)
+        try:
+            level = int(self.level.value)
+        except ValueError:
+            await interaction.response.send_message(f"{Emojis.error} Level must be a number.", ephemeral=True)
+            return
+
         if not 1 <= level <= _MAX_LEVEL:
-            await interaction.response.send_message(f"Level must be between 1 and {_MAX_LEVEL}.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{Emojis.error} Level must be between 1 and {_MAX_LEVEL}.", ephemeral=True
+            )
             return
 
         self.view._roles[self.role.id] = level
-        self.view.remove_select.update()
-        await interaction.response.edit_message(embed=self.view.make_embed(), view=self.view)
+        self.view._rebuild()
+        await interaction.response.edit_message(view=self.view)
 
 
-class RemoveLevelRolesSelect(discord.ui.RoleSelect["InteractiveLevelRolesView"]):
+class RemoveLevelRolesSelect(discord.ui.RoleSelect["InteractiveLevelRolesView | InteractiveMultiplierView"]):
     def __init__(self, roles_ref: dict[int, int], ctx: Context) -> None:
         self._roles_ref = roles_ref
         self._ctx = ctx
-        super().__init__(placeholder="Remove level roles...", row=1, max_values=25)
+        super().__init__(placeholder="Remove level roles...", max_values=25)
         self.update()
 
     def update(self) -> None:
@@ -81,77 +100,90 @@ class RemoveLevelRolesSelect(discord.ui.RoleSelect["InteractiveLevelRolesView"])
         except KeyError:
             pass
 
-        self.update()
-        await interaction.response.edit_message(embed=self.view.make_embed(), view=self.view)
+        self.view._rebuild()
+        await interaction.response.edit_message(view=self.view)
 
 
-class RoleStackToggle(discord.ui.Button["InteractiveLevelRolesView"]):
-    def __init__(self, current: bool) -> None:
-        super().__init__(
-            style=discord.ButtonStyle.primary,
-            label=f"{'Disable' if current else 'Enable'} Role Stack",
-            row=2,
-        )
+class InteractiveLevelRolesView(LayoutView):
+    """Components V2 dashboard for managing level-up reward roles.
 
-    async def callback(self, interaction: discord.Interaction) -> None:
-        assert self.view is not None
-        self.view._role_stack = new = not self.view._role_stack
-        self.label = f"{'Disable' if new else 'Enable'} Role Stack"
-        await interaction.response.edit_message(embed=self.view.make_embed(), view=self.view)
+    Mirrors the gatekeeper/mute-role setup cards: a single brand-accented container
+    holds the live role list, the role-stacking status and every control, rebuilt on
+    each interaction.
+    """
 
-
-class InteractiveLevelRolesView(View):
     def __init__(self, ctx: Context, *, config: GuildLevelConfig) -> None:
         super().__init__(timeout=300, members=ctx.author)
         self.ctx = ctx
         self.config = config
         self._roles = config.level_roles.copy()
         self._role_stack = config.role_stack
+        self._status: str | None = None
+
+        self.add_select: discord.ui.RoleSelect = discord.ui.RoleSelect(
+            placeholder="Add a new level role reward...", min_values=1, max_values=1
+        )
+        self.add_select.callback = self._on_add_role  # type: ignore[assignment]
 
         self.remove_select = RemoveLevelRolesSelect(self._roles, ctx)
-        self.add_item(self.remove_select)
-        self.add_item(RoleStackToggle(self._role_stack))
 
-    def make_embed(self) -> discord.Embed:
-        embed = discord.Embed(color=helpers.Colour.white(), timestamp=self.ctx.now)
-        embed.set_author(
-            name=f"{self.ctx.guild} Level Role Rewards", icon_url=self.ctx.guild.icon.url if self.ctx.guild.icon else None
+        self.stack_toggle: discord.ui.Button = discord.ui.Button(style=discord.ButtonStyle.blurple)
+        self.stack_toggle.callback = self._on_toggle_stack  # type: ignore[assignment]
+
+        self.save_btn: discord.ui.Button = discord.ui.Button(label="Save", style=discord.ButtonStyle.success)
+        self.save_btn.callback = self._on_save  # type: ignore[assignment]
+
+        self.cancel_btn: discord.ui.Button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
+        self.cancel_btn.callback = self._on_cancel  # type: ignore[assignment]
+
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        self.clear_items()
+        self.remove_select.update()
+        self.stack_toggle.label = "Disable Role Stack" if self._role_stack else "Enable Role Stack"
+
+        container = discord.ui.Container(accent_colour=Colour.brand())
+        container.add_item(
+            discord.ui.Section(
+                "## Level Role Rewards\n-# Roles handed out automatically as members level up",
+                accessory=discord.ui.Thumbnail(get_asset_url(self.ctx.guild)),
+            )
         )
-        embed.set_footer(text="Make sure to save your changes by pressing the Save button!")
 
-        indicator = (
-            "Users can accumulate multiple level roles."
+        container.add_item(discord.ui.Separator())
+        stack_state = (
+            f"{Emojis.success} **ON** — members keep every role they earn"
             if self._role_stack
-            else "Users can only have the highest level role."
+            else f"{Emojis.error} **OFF** — members keep only their highest role"
         )
-        embed.add_field(name="Role Stack", value=f"{Emojis.success if self._role_stack else Emojis.error} {indicator}")
+        container.add_item(discord.ui.TextDisplay(f"### Role Stacking\n{stack_state}"))
 
-        if not self._roles:
-            embed.description = "You have not configured any level role rewards yet."
-            return embed
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(_roles_summary(self._roles)))
 
-        embed.insert_field_at(
-            index=0,
-            name=f"Level Roles ({len(self._roles)}/25 slots)",
-            value="\n".join(
-                f"- Level {level}: <@&{role_id}>" for role_id, level in sorted(self._roles.items(), key=lambda pair: pair[1])
-            ),
-            inline=False,
-        )
-        return embed
+        container.add_item(discord.ui.ActionRow(self.add_select))
+        container.add_item(discord.ui.ActionRow(self.remove_select))
+        container.add_item(discord.ui.ActionRow(self.stack_toggle, self.save_btn, self.cancel_btn))
 
-    @discord.ui.select(
-        cls=discord.ui.RoleSelect,
-        placeholder="Add a new level role reward...",
-        min_values=1,
-        max_values=1,
-        row=0,
-    )
-    async def add_level_role(self: InteractiveLevelRolesView, interaction: discord.Interaction, select: discord.ui.RoleSelect) -> None:
-        role = select.values[0]
+        container.add_item(discord.ui.Separator())
+        footer = self._status or "Press **Save** to apply your changes."
+        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
+
+        self.add_item(container)
+
+    def _disable_controls(self) -> None:
+        self.add_select.disabled = True
+        self.remove_select.disabled = True
+        self.stack_toggle.disabled = True
+        self.save_btn.disabled = True
+        self.cancel_btn.disabled = True
+
+    async def _on_add_role(self, interaction: discord.Interaction) -> None:
+        role = self.add_select.values[0]
         if role.is_default() or role.managed:
             await interaction.response.send_message(
-                "That role is a default role or managed role, which means I am unable to assign it.\n"
+                "That role is a default or managed role, which means I am unable to assign it.\n"
                 "Try using a different role or creating a new one.",
                 ephemeral=True,
             )
@@ -160,45 +192,52 @@ class InteractiveLevelRolesView(View):
         assert self.ctx.guild is not None
         if not role.is_assignable():
             await interaction.response.send_message(
-                f"That role is lower than or equal to my top role ({self.ctx.guild.me.top_role.mention}) in the role hierarchy, "
-                f"which means I am unable to assign it.\nTry moving the role to be lower than {self.ctx.guild.me.top_role.mention}, "
-                "and then try again.",
+                f"That role is higher than or equal to my top role ({self.ctx.guild.me.top_role.mention}) in the "
+                f"hierarchy, which means I am unable to assign it.\nMove the role below {self.ctx.guild.me.top_role.mention} "
+                "and try again.",
                 ephemeral=True,
             )
             return
+
         await interaction.response.send_modal(AddLevelRoleModal(self, role=role))
 
-    @discord.ui.button(label="Save", style=discord.ButtonStyle.success, row=2)
-    async def save(self: InteractiveLevelRolesView, interaction: discord.Interaction, _) -> None:
-        await self.config.update(level_roles=self._roles, role_stack=self._role_stack)
-        for child in self.children:
-            child.disabled = True  # type: ignore[misc]
+    async def _on_toggle_stack(self, interaction: discord.Interaction) -> None:
+        self._role_stack = not self._role_stack
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-        embed = self.make_embed()
-        embed.colour = helpers.Colour.yellow()
-        await interaction.response.edit_message(content="Updating roles...", embed=embed, view=self)
+    async def _on_save(self, interaction: discord.Interaction) -> None:
+        await self.config.update(level_roles=self._roles, role_stack=self._role_stack)
+        self._disable_controls()
+        self._status = f"{Emojis.loading} Updating roles across the server..."
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
         await self.config.update_all_roles()
 
-        embed.colour = helpers.Colour.lime_green()
-        await interaction.edit_original_response(content="Saved and updated level roles.", embed=embed, view=self)
+        self._status = f"{Emojis.success} Saved and updated level roles."
+        self._rebuild()
+        await interaction.edit_original_response(view=self)
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, row=2)
-    async def cancel(self: InteractiveLevelRolesView, interaction: discord.Interaction, _) -> None:
-        for child in self.children:
-            child.disabled = True  # type: ignore[misc]
-
-        embed = self.make_embed()
-        embed.colour = helpers.Colour.light_red()
-        await interaction.response.edit_message(content="Cancelled. Changes were discarded.", embed=embed, view=self)
+    async def _on_cancel(self, interaction: discord.Interaction) -> None:
+        self._disable_controls()
+        self._status = f"{Emojis.error} Cancelled — changes were discarded."
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
+        self.stop()
 
     async def on_timeout(self) -> None:
         await self.config.update(level_roles=self._roles, role_stack=self._role_stack)
         await self.config.update_all_roles()
 
 
-class InteractiveMultiplierView(View):
+class InteractiveMultiplierView(LayoutView):
+    """Components V2 dashboard for the level role multiplier configuration.
+
+    Shares the brand-accented card style of :class:`InteractiveLevelRolesView`.
+    """
+
     def __init__(self, ctx: Context, *, config: GuildLevelConfig) -> None:
         super().__init__(timeout=300, members=ctx.author)
         self.ctx = ctx
@@ -207,36 +246,40 @@ class InteractiveMultiplierView(View):
         self._role_stack = config.role_stack
 
         self.remove_select = RemoveLevelRolesSelect(self._roles, ctx)
-        self.add_item(self.remove_select)
-        self.add_item(RoleStackToggle(self._role_stack))
+        self.stack_toggle: discord.ui.Button = discord.ui.Button(style=discord.ButtonStyle.blurple)
+        self.stack_toggle.callback = self._on_toggle_stack  # type: ignore[assignment]
 
-    def make_embed(self: InteractiveMultiplierView) -> discord.Embed:
-        embed = discord.Embed(color=helpers.Colour.white(), timestamp=self.ctx.now)
-        embed.set_author(
-            name=f"{self.ctx.guild} Level Role Rewards", icon_url=self.ctx.guild.icon.url if self.ctx.guild.icon else None
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        self.clear_items()
+        self.remove_select.update()
+        self.stack_toggle.label = "Disable Role Stack" if self._role_stack else "Enable Role Stack"
+
+        container = discord.ui.Container(accent_colour=Colour.brand())
+        container.add_item(
+            discord.ui.Section(
+                "## Level Role Multipliers\n-# Bonus XP roles and stacking behaviour",
+                accessory=discord.ui.Thumbnail(get_asset_url(self.ctx.guild)),
+            )
         )
-        embed.set_footer(text="Make sure to save your changes by pressing the Save button!")
-
-        indicator = (
-            "Users can accumulate multiple level roles."
+        container.add_item(discord.ui.Separator())
+        stack_state = (
+            f"{Emojis.success} **ON** — members keep every role they earn"
             if self._role_stack
-            else "Users can only have the highest level role."
+            else f"{Emojis.error} **OFF** — members keep only their highest role"
         )
-        embed.add_field(name="Role Stack", value=f"{Emojis.success if self._role_stack else Emojis.error} {indicator}")
+        container.add_item(discord.ui.TextDisplay(f"### Role Stacking\n{stack_state}"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(_roles_summary(self._roles)))
+        container.add_item(discord.ui.ActionRow(self.remove_select))
+        container.add_item(discord.ui.ActionRow(self.stack_toggle))
+        self.add_item(container)
 
-        if not self._roles:
-            embed.description = "You have not configured any level role rewards yet."
-            return embed
-
-        embed.insert_field_at(
-            index=0,
-            name=f"Level Roles ({len(self._roles)}/25 slots)",
-            value="\n".join(
-                f"- Level {level}: <@&{role_id}>" for role_id, level in sorted(self._roles.items(), key=lambda pair: pair[1])
-            ),
-            inline=False,
-        )
-        return embed
+    async def _on_toggle_stack(self, interaction: discord.Interaction) -> None:
+        self._role_stack = not self._role_stack
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
     async def on_timeout(self) -> None:
         await self.config.update()

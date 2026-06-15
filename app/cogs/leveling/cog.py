@@ -429,7 +429,7 @@ class Leveling(Cog):
             return
 
         view = InteractiveLevelRolesView(ctx, config=config)
-        await ctx.send(embed=view.make_embed(), view=view)
+        await ctx.send(view=view)
 
     @level_config.command(
         "message",
@@ -576,7 +576,7 @@ class Leveling(Cog):
             return
 
         view = InteractiveMultiplierView(ctx, config=config)
-        await ctx.send(embed=view.make_embed(), view=view)
+        await ctx.send(view=view)
 
     @level_config.command(
         "voice",

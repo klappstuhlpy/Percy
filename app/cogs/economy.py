@@ -1,4 +1,5 @@
 import datetime
+from contextlib import nullcontext
 from typing import Annotated, Any, Literal
 
 import discord
@@ -118,15 +119,20 @@ class Economy(Cog):
         self, ctx: Context, role: Annotated[discord.Role, commands.RoleConverter], amount: int, to: Literal["bank", "cash"]
     ) -> None:
         """Sets a user's balance"""
-        for member in role.members:
-            if member.bot:
-                continue
+        humans = [member for member in role.members if not member.bot]
+        total = len(humans)
+        # Each member is a balance fetch + write, so surface progress for large roles.
+        tracker = ctx.progress(f"Adding money to {total} members...") if total >= 10 else nullcontext()
+        async with tracker as progress:
+            for i, member in enumerate(humans, 1):
+                balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
+                if to == "bank":
+                    await balance.add(bank=amount)
+                else:
+                    await balance.add(cash=amount)
 
-            balance = await ctx.db.get_user_balance(member.id, ctx.guild.id)  # type: ignore[union-attr]
-            if to == "bank":
-                await balance.add(bank=amount)
-            else:
-                await balance.add(cash=amount)
+                if progress is not None and (i == total or i % 10 == 0):
+                    await progress.tick(i, total, "Adding money")
 
         await ctx.send_success(
             f"Successfully added {Emojis.Economy.cash} **{fnumb(amount)}** to all users with the role **{role.name}**."

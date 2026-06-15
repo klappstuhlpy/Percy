@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
@@ -11,7 +10,7 @@ from app.utils import get_asset_url, pluralize
 from app.utils.helpers import Colour
 from config import Emojis
 
-from .infractions import update_role_permissions
+from .infractions import sync_permissions_with_progress
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -206,35 +205,12 @@ class MuteRoleSetUpView(LayoutView):
         *,
         channels: Sequence[discord.abc.GuildChannel] | None = None,
     ) -> tuple[int, int, int]:
-        """Apply the mute overwrites, editing a live ephemeral progress message as it goes.
+        """Apply the mute overwrites with a live ephemeral progress counter.
 
-        The interaction must already be deferred or responded to. Edits to the status
-        message are throttled to roughly one per 1.5s (plus a final tick) so syncing a
-        large server doesn't trip Discord's edit rate limits.
+        Thin wrapper around the shared :func:`sync_permissions_with_progress` helper;
+        the interaction must already be deferred or responded to.
         """
-        status = await interaction.followup.send(
-            f"{Emojis.loading} Syncing channel permissions...", ephemeral=True, wait=True
-        )
-
-        last_edit = 0.0
-
-        async def on_progress(done: int, total: int) -> None:
-            nonlocal last_edit
-            now = time.monotonic()
-            if done != total and now - last_edit < 1.5:
-                return
-            last_edit = now
-            with suppress(discord.HTTPException):
-                await status.edit(
-                    content=f"{Emojis.loading} Syncing channel permissions... `{done}/{total}`"
-                )
-
-        result = await update_role_permissions(
-            role, self.guild, interaction.user, channels=channels, progress=on_progress
-        )
-        with suppress(discord.HTTPException):
-            await status.delete()
-        return result
+        return await sync_permissions_with_progress(interaction, role, self.guild, channels=channels)
 
     # -- callbacks --------------------------------------------------------
 

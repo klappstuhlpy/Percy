@@ -15,7 +15,7 @@ from app.database.base import Gatekeeper, GuildConfig
 from app.utils import checks, get_asset_url, merge_perms, pluralize
 from config import Emojis
 
-from .infractions import update_role_permissions
+from .infractions import sync_permissions_with_progress
 
 if TYPE_CHECKING:
     from .cog import Moderation
@@ -117,22 +117,21 @@ class GatekeeperSetupRoleView(LayoutView):
                     ephemeral=True,
                 )
             else:
-                assert isinstance(interaction.channel, discord.abc.Messageable)
-                async with interaction.channel.typing():  # type: ignore[union-attr]
-                    success, failure, skipped = await update_role_permissions(
-                        role,
-                        self.parent.guild,
-                        interaction.user,
-                        update_read_permissions=True,
-                        channels=channels,  # type: ignore[arg-type]
-                    )
-                    total = success + failure + skipped
-                    await interaction.followup.send(
-                        f"{Emojis.success} Role set to {role.mention}.\n"
-                        f"Synced {total} channels: {success} ok, "
-                        f"{failure} failed, {skipped} skipped.",
-                        ephemeral=True,
-                    )
+                success, failure, skipped = await sync_permissions_with_progress(
+                    interaction,
+                    role,
+                    self.parent.guild,
+                    update_read_permissions=True,
+                    channels=channels,  # type: ignore[arg-type]
+                    label="Syncing lockdown role across channels",
+                )
+                total = success + failure + skipped
+                await interaction.followup.send(
+                    f"{Emojis.success} Role set to {role.mention}.\n"
+                    f"Synced {total} channels: {success} ok, "
+                    f"{failure} failed, {skipped} skipped.",
+                    ephemeral=True,
+                )
         else:
             await interaction.followup.send(
                 f"{Emojis.success} Role set to {role.mention}", ephemeral=True
@@ -175,18 +174,21 @@ class GatekeeperSetupRoleView(LayoutView):
                 ephemeral=True,
             )
         else:
-            async with interaction.channel.typing():  # type: ignore[union-attr]
-                success, failure, skipped = await update_role_permissions(
-                    role, self.parent.guild, interaction.user,
-                    update_read_permissions=True, channels=channels,
-                )
-                total = success + failure + skipped
-                await interaction.followup.send(
-                    f"{Emojis.success} Created and set role to {role.mention}.\n"
-                    f"Synced {total} channels: {success} ok, "
-                    f"{failure} failed, {skipped} skipped.",
-                    ephemeral=True,
-                )
+            success, failure, skipped = await sync_permissions_with_progress(
+                interaction,
+                role,
+                self.parent.guild,
+                update_read_permissions=True,
+                channels=channels,
+                label="Syncing lockdown role across channels",
+            )
+            total = success + failure + skipped
+            await interaction.followup.send(
+                f"{Emojis.success} Created and set role to {role.mention}.\n"
+                f"Synced {total} channels: {success} ok, "
+                f"{failure} failed, {skipped} skipped.",
+                ephemeral=True,
+            )
         self.stop()
 
 

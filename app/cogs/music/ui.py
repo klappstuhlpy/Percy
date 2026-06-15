@@ -127,7 +127,7 @@ class PlayerPanel(LayoutView):
 
     def build_container(self) -> discord.ui.Container:
         """Builds the Components V2 now-playing card for the panel."""
-        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
 
         if self.state == PlayerState.PLAYING:
             assert self.player.current is not None

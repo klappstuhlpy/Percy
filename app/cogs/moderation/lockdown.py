@@ -14,7 +14,11 @@ import discord
 from app.utils import helpers
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from app.core import Bot, Context
+
+    ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 def build_lockdown_error_embed() -> discord.Embed:
@@ -45,15 +49,18 @@ async def lock_channels(
     channels: list[discord.TextChannel | discord.VoiceChannel],
     *,
     reason: str,
+    progress: ProgressCallback | None = None,
 ) -> tuple[list[discord.TextChannel | discord.VoiceChannel], list[discord.TextChannel | discord.VoiceChannel]]:
     """Applies lockdown overwrites to the given channels and records them.
 
     Shared by the ``lockdown`` command and the dashboard internal API so the
-    permission mechanics and bookkeeping live in one place.
+    permission mechanics and bookkeeping live in one place. ``progress`` is an
+    optional ``async (done, total)`` callback invoked after each channel.
     """
     records = []
     success, failures = [], []
-    for channel in channels:
+    total = len(channels)
+    for index, channel in enumerate(channels, start=1):
         overwrites = channel.overwrites_for(guild.default_role)
         allow, deny = overwrites.pair()
         overwrites.update(
@@ -80,6 +87,9 @@ async def lock_channels(
                 }
             )
 
+        if progress is not None:
+            await progress(index, total)
+
     await bot.db.moderation.add_lockdowns(records)
     return success, failures
 
@@ -90,8 +100,13 @@ async def start_lockdown(
     """Starts a lockdown in the given channels."""
     assert ctx.guild is not None
     reason = f"Lockdown request by {ctx.author} (ID: {ctx.author.id})"
-    async with ctx.progress(f"Locking down {len(channels)} channels..."):
-        return await lock_channels(ctx.bot, ctx.guild, channels, reason=reason)
+    async with ctx.progress(f"Locking down {len(channels)} channels...") as progress:
+
+        async def on_progress(done: int, total: int) -> None:
+            if done == total or done % 5 == 0:
+                await progress.tick(done, total, "Locking down")
+
+        return await lock_channels(ctx.bot, ctx.guild, channels, reason=reason, progress=on_progress)
 
 
 async def end_lockdown(
@@ -100,14 +115,20 @@ async def end_lockdown(
     *,
     channel_ids: list[int] | None = None,
     reason: str | None = None,
+    progress: ProgressCallback | None = None,
 ) -> list[discord.abc.GuildChannel]:
-    """Ends a lockdown in the given guild."""
+    """Ends a lockdown in the given guild.
+
+    ``progress`` is an optional ``async (done, total)`` callback invoked after each
+    channel's overwrites are restored, used to surface live progress to the caller.
+    """
     channel_fallback: dict[int, discord.abc.GuildChannel] | None = None
     default_role = guild.default_role
     failures = []
 
     lockdowns = await get_lockdown_information(bot, guild.id, channel_ids=channel_ids)
-    for channel_id, permissions in lockdowns.items():
+    total = len(lockdowns)
+    for index, (channel_id, permissions) in enumerate(lockdowns.items(), start=1):
         channel = guild.get_channel(channel_id)
         if channel is None:
             if channel_fallback is None:
@@ -121,6 +142,9 @@ async def end_lockdown(
             await channel.set_permissions(default_role, overwrite=permissions, reason=reason)
         except discord.HTTPException:
             failures.append(channel)
+
+        if progress is not None:
+            await progress(index, total)
 
     return failures
 

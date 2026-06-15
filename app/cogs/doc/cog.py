@@ -405,7 +405,7 @@ class Documentation(Cog):
             if item.markdown is None:
                 item.markdown = await self.get_symbol_markdown(item)
 
-            container = discord.ui.Container(accent_colour=helpers.Colour.white())
+            container = discord.ui.Container(accent_colour=helpers.Colour.brand())
 
             body = f"## {discord.utils.escape_markdown(item.symbol_id)}\n"
 

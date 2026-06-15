@@ -4,7 +4,7 @@ import asyncio
 import datetime
 import logging
 from collections import Counter, defaultdict
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 import asyncpg
@@ -1263,8 +1263,13 @@ class Moderation(Cog):
             return
 
         reason = f"Lockdown ended by {ctx.author} (ID: {ctx.author.id})"
-        async with ctx.progress("Ending lockdown..."):
-            failures = await end_lockdown(self.bot, ctx.guild, reason=reason)
+        async with ctx.progress("Ending lockdown...") as progress:
+
+            async def on_progress(done: int, total: int) -> None:
+                if done == total or done % 5 == 0:
+                    await progress.tick(done, total, "Ending lockdown")
+
+            failures = await end_lockdown(self.bot, ctx.guild, reason=reason, progress=on_progress)
 
         await ctx.db.moderation.clear_lockdowns(ctx.guild.id)
         if failures:
@@ -1619,16 +1624,22 @@ class Moderation(Cog):
 
         failed = 0
         skipped: list[str] = []
-        for member in members:
-            if member._roles.has(role_id):
-                skipped.append(str(member))
-                continue
-            try:
-                await member.add_roles(role, reason=reason)
-            except discord.HTTPException:
-                failed += 1
-            else:
-                self.bot.dispatch("mod_action", ctx.guild.id, "mute", member.id, ctx.author.id, reason)
+        # Only surface a progress card for sizeable batches; small mutes are instant.
+        tracker = ctx.progress(f"Muting {total} members...") if total >= 5 else nullcontext()
+        async with tracker as progress:
+            for i, member in enumerate(members, 1):
+                if member._roles.has(role_id):
+                    skipped.append(str(member))
+                    continue
+                try:
+                    await member.add_roles(role, reason=reason)
+                except discord.HTTPException:
+                    failed += 1
+                else:
+                    self.bot.dispatch("mod_action", ctx.guild.id, "mute", member.id, ctx.author.id, reason)
+
+                if progress is not None and (i == total or i % 5 == 0):
+                    await progress.tick(i, total, "Muting")
 
         message = f"Muted [`{total - failed - len(skipped)}`/`{total}`] members."
         if skipped:
@@ -1678,22 +1689,28 @@ class Moderation(Cog):
 
         failed = 0
         blocked: list[str] = []
-        for member in members:
-            timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
-            # A self-mute stores the same id for both the moderator and the target (args[1] == args[2]).
-            is_selfmute = timer is not None and timer.args[1] == member.id
-            if is_selfmute and member.id == ctx.author.id:
-                blocked.append(str(member))
-                continue
+        # Each member costs a timer lookup plus a role edit, so show progress for big batches.
+        tracker = ctx.progress(f"Unmuting {total} members...") if total >= 5 else nullcontext()
+        async with tracker as progress:
+            for i, member in enumerate(members, 1):
+                timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
+                # A self-mute stores the same id for both the moderator and the target (args[1] == args[2]).
+                is_selfmute = timer is not None and timer.args[1] == member.id
+                if is_selfmute and member.id == ctx.author.id:
+                    blocked.append(str(member))
+                    continue
 
-            try:
-                await member.remove_roles(role, reason=reason)
-            except discord.HTTPException:
-                failed += 1
-            else:
-                if timer is not None:
-                    await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
-                self.bot.dispatch("mod_action", ctx.guild.id, "unmute", member.id, ctx.author.id, reason)
+                try:
+                    await member.remove_roles(role, reason=reason)
+                except discord.HTTPException:
+                    failed += 1
+                else:
+                    if timer is not None:
+                        await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
+                    self.bot.dispatch("mod_action", ctx.guild.id, "unmute", member.id, ctx.author.id, reason)
+
+                if progress is not None and (i == total or i % 5 == 0):
+                    await progress.tick(i, total, "Unmuting")
 
         message = f"Unmuted [`{total - failed - len(blocked)}`/`{total}`] members."
         if blocked:
