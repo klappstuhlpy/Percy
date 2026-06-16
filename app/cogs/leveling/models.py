@@ -186,6 +186,7 @@ class GuildLevelConfig(BaseRecord, table="level_config", pk="id"):
 class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
     """Represents a level configuration for a guild."""
 
+    bot: Bot
     cog: Leveling
     config: GuildLevelConfig
     guild_id: int
@@ -194,7 +195,11 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
     xp: int
     messages: int
 
-    __slots__ = ('cog', 'config', 'guild_id', 'level', 'messages', 'user_id', 'xp')
+    __slots__ = ('bot', 'cog', 'config', 'guild_id', 'level', 'messages', 'user_id', 'xp')
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.bot: Bot = self.cog.bot
 
     def __len__(self) -> int:
         return self.messages

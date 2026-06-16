@@ -13,7 +13,7 @@ from app.utils import fnumb, truncate
 from app.utils.helpers import NotCaseSensitiveEnum
 
 if TYPE_CHECKING:
-    from app.core import Cog
+    from app.core import Bot, Cog
 
 MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/raw/HTBFL.png'
 DC_ICON_URL = 'https://klappstuhl.me/gallery/raw/VmiCY.png'
@@ -425,6 +425,7 @@ class GenericComicMessage(GenericComic):
 class ComicFeed(BaseRecord, table="comic_config", pk="id"):
 
     if TYPE_CHECKING:
+        bot: Bot
         cog: Cog
     id: int
     guild_id: int
@@ -436,7 +437,11 @@ class ComicFeed(BaseRecord, table="comic_config", pk="id"):
     pin: bool
     next_pull: datetime.datetime
 
-    __slots__ = ('brand', 'channel_id', 'cog', 'day', 'format', 'guild_id', 'id', 'next_pull', 'pin', 'ping')
+    __slots__ = ('bot', 'brand', 'channel_id', 'cog', 'day', 'format', 'guild_id', 'id', 'next_pull', 'pin', 'ping')
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.bot = self.cog.bot
 
     def _coerce(self) -> None:
         self.brand = Brand.coerce(self.brand)  # type: ignore[assignment]
