@@ -254,6 +254,10 @@ DISCORD_CLIENT_SECRET=
 # ── Database ─────────────────────────────────────────────
 DATABASE_PASSWORD=your_password      # required
 DATABASE_HOST=localhost              # required
+DATABASE_POOL_MIN_SIZE=10            # optional; warm connections kept open (default 10)
+DATABASE_POOL_MAX_SIZE=20            # optional; pool ceiling under load (default 20)
+DATABASE_COMMAND_TIMEOUT=300         # optional; per-query timeout in seconds (default 300)
+DATABASE_POOL_MAX_IDLE=300           # optional; recycle idle connections after N seconds (default 300)
 
 # ── Lavalink (music) ─────────────────────────────────────
 LAVALINK_NODE_1_PASSWORD=            # required for music playback
@@ -321,19 +325,20 @@ All of this is stored in PostgreSQL and cached in memory, with the cache invalid
 
 ## Database management
 
-Percy uses **versioned SQL migrations** in `migrations/` (`V1__….sql` … `V24__….sql`). All commands run against the database configured in `.env`/`config.py`.
+Percy uses **forward-only versioned SQL migrations** in `migrations/` (`V1__….sql`, `V2__….sql`, …). Applied state is tracked in the `schema_migrations` table in the database itself (version, description, checksum, applied_at) rather than a JSON file. All commands run against the database configured in `.env`/`config.py`.
 
-| Command                                 | Description                                           |
-|-----------------------------------------|-------------------------------------------------------|
-| `python main.py db init`                | Apply all pending migrations (first-time setup).      |
-| `python main.py db upgrade`             | Apply any newly added migrations.                     |
-| `python main.py db upgrade -r <N>`      | Upgrade to a specific revision number.                |
-| `python main.py db upgrade --sql`       | Print the SQL that would run instead of executing it. |
-| `python main.py db migrate -r "reason"` | Create a new, blank migration file to edit.           |
-| `python main.py db log`                 | Show migration history (newest first).                |
-| `python main.py db log --reverse`       | Show migration history (oldest first).                |
+| Command                                 | Description                                                          |
+|-----------------------------------------|---------------------------------------------------------------------|
+| `python main.py db init`                | Create the tracking table (backfilling legacy state) + apply all pending. |
+| `python main.py db upgrade`             | Apply any pending migrations.                                       |
+| `python main.py db upgrade -t <N>`      | Apply pending migrations up to and including version N.             |
+| `python main.py db upgrade --sql`       | Print the pending SQL instead of executing it (also `--dry-run`).   |
+| `python main.py db migrate -r "reason"` | Create a new, blank migration file (next version) to edit.          |
+| `python main.py db status`              | Show current version, pending migrations and any integrity problems.|
+| `python main.py db history`             | List applied migrations with apply times, then pending (`--reverse` for oldest-first). |
+| `python main.py db verify`              | Validate files and detect drift; exits non-zero on problems.        |
 
-> Always create schema changes via a **new** `migrations/V<N>__name.sql` file (`db migrate`); never edit a migration that has already been applied. The connection pool also applies any pending migrations automatically on startup.
+> Always create schema changes via a **new** `migrations/V<N>__name.sql` file (`db migrate`); never edit a migration that has already been applied — `db verify` flags such drift via checksums. The connection pool also applies any pending migrations automatically on startup. Each migration runs in its own transaction; add `-- migration: no-transaction` to a file's header to run it outside one (e.g. `CREATE INDEX CONCURRENTLY`).
 
 ---
 

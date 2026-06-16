@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from asyncpg import Record
+
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
     import datetime
-    from collections.abc import Callable, Iterable
+    from collections.abc import Iterable
 
     import asyncpg
 
@@ -93,23 +95,16 @@ class PollsRepository(BaseRepository):
     async def update(
             self,
             poll_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a poll row."""
-        query = f"""
-            UPDATE polls
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        return await (connection or self.db).fetchrow(query, poll_id, *values.values())
+    ) -> Record | None:
+        """Updates a poll row and returns the full updated record."""
+        return await self.update_returning("polls", ("id",), (poll_id,), values, connection=connection)
 
     async def delete(self, poll_id: int) -> None:
         """Deletes a poll row."""
-        await self.execute("DELETE FROM polls WHERE id = $1;", poll_id)
+        await self.delete_where("polls", ("id",), (poll_id,))
 
 
 # -- Giveaways ------------------------------------------------------------
@@ -154,7 +149,7 @@ class GiveawaysRepository(BaseRepository):
 
     async def delete_giveaway(self, giveaway_id: int) -> None:
         """Deletes a giveaway."""
-        await self.execute("DELETE FROM giveaways WHERE id = $1;", giveaway_id)
+        await self.delete_where("giveaways", ("id",), (giveaway_id,))
 
 
 # -- Tags ------------------------------------------------------------------
@@ -182,19 +177,15 @@ class TagsRepository(BaseRepository):
     async def update_tag(
             self,
             tag_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a tag row."""
-        query = f"""
-            UPDATE tags
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        return cast('asyncpg.Record', await (connection or self.db).fetchrow(query, tag_id, *values.values()))
+        """Updates a tag row and returns the full updated record."""
+        return cast(
+            'asyncpg.Record',
+            await self.update_returning("tags", ("id",), (tag_id,), values, connection=connection),
+        )
 
     async def create_tag(
             self,
@@ -239,7 +230,7 @@ class TagsRepository(BaseRepository):
 
     async def delete_alias(self, alias_id: int) -> None:
         """Deletes a single alias row."""
-        await self.execute("DELETE FROM tag_lookup WHERE id=$1;", alias_id)
+        await self.delete_where("tag_lookup", ("id",), (alias_id,))
 
     async def transfer_aliases(
             self, tag_id: int, owner_id: int, *, connection: asyncpg.Connection | None = None
@@ -530,19 +521,15 @@ class HighlightsRepository(BaseRepository):
     async def update_config(
             self,
             config_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a highlight row."""
-        query = f"""
-            UPDATE highlights
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        return cast('asyncpg.Record', await (connection or self.db).fetchrow(query, config_id, *values.values()))
+        """Updates a highlight row and returns the full updated record."""
+        return cast(
+            'asyncpg.Record',
+            await self.update_returning("highlights", ("id",), (config_id,), values, connection=connection),
+        )
 
     async def get_guild_configs(self, location_id: int) -> list[asyncpg.Record]:
         """Fetches every highlight configuration in a guild."""
@@ -560,7 +547,7 @@ class HighlightsRepository(BaseRepository):
 
     async def delete_config(self, config_id: int) -> None:
         """Deletes a highlight configuration."""
-        await self.execute("DELETE FROM highlights WHERE id = $1;", config_id)
+        await self.delete_where("highlights", ("id",), (config_id,))
 
     async def get_import_locations(self, user_id: int, exclude_location_id: int) -> list[asyncpg.Record]:
         """Fetches the guild IDs where a user has highlights, excluding the current guild."""
@@ -649,7 +636,7 @@ class StarboardRepository(BaseRepository):
 
     async def delete_entry(self, message_id: int) -> None:
         """Removes a starboard entry by original message id."""
-        await self.execute("DELETE FROM starboard_entries WHERE message_id = $1;", message_id)
+        await self.delete_where("starboard_entries", ("message_id",), (message_id,))
 
     async def delete_entries(self, message_ids: Iterable[int]) -> None:
         """Removes several starboard entries by original message id."""

@@ -179,7 +179,7 @@ class PlaylistsRepository(BaseRepository):
 
     async def remove_track(self, track_id: int) -> None:
         """Removes a single track by its id."""
-        await self.execute("DELETE FROM playlist_lookup WHERE id = $1;", track_id)
+        await self.delete_where("playlist_lookup", ("id",), (track_id,))
 
     async def clear_tracks(self, playlist_id: int) -> None:
         """Removes every track from a playlist."""
@@ -187,8 +187,8 @@ class PlaylistsRepository(BaseRepository):
 
     async def delete_playlist(self, playlist_id: int) -> None:
         """Deletes a playlist together with all of its tracks."""
-        await self.execute("DELETE FROM playlist WHERE id = $1;", playlist_id)
-        await self.execute("DELETE FROM playlist_lookup WHERE playlist_id = $1;", playlist_id)
+        await self.delete_where("playlist", ("id",), (playlist_id,))
+        await self.delete_where("playlist_lookup", ("playlist_id",), (playlist_id,))
 
 
 # -- AniList ---------------------------------------------------------------
@@ -217,7 +217,5 @@ class AniListRepository(BaseRepository):
         )
 
     async def delete_token(self, user_id: int) -> bool:
-        result = await self.execute(
-            'DELETE FROM anilist_users WHERE user_id = $1', user_id,
-        )
+        result = await self.delete_where("anilist_users", ("user_id",), (user_id,))
         return result == 'DELETE 1'

@@ -128,11 +128,7 @@ class LevelingHandlers(InternalAPIHandlers):
             updates['xp'] = int(xp)
 
         await self.bot.db.leveling.get_or_create_user_level(user_id, guild_id)
-        await self.bot.db.leveling.update_user_level(
-            user_id, guild_id,
-            key=lambda: None,
-            values=updates,
-        )
+        await self.bot.db.leveling.update_user_level(user_id, guild_id, updates)
         return web.json_response({'ok': True})
 
     async def _patch_leveling_config(self, request: web.Request) -> web.Response:
@@ -158,11 +154,7 @@ class LevelingHandlers(InternalAPIHandlers):
             await self.bot.db.leveling.create_guild_config(guild_id, updates.get('enabled', False))
             record = await self.bot.db.leveling.get_guild_config_record(guild_id)
 
-        await self.bot.db.leveling.update_guild_config(
-            guild_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values=updates,
-        )
+        await self.bot.db.leveling.update_guild_config(guild_id, updates)
         return web.json_response({'ok': True})
 
     async def _post_leveling_roles(self, request: web.Request) -> web.Response:
@@ -187,11 +179,7 @@ class LevelingHandlers(InternalAPIHandlers):
         else:
             level_roles = {k: v for k, v in level_roles.items() if v != int(level)}
 
-        await self.bot.db.leveling.update_guild_config(
-            guild_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values={'level_roles': level_roles},
-        )
+        await self.bot.db.leveling.update_guild_config(guild_id, {'level_roles': level_roles})
         return web.json_response({'ok': True})
 
     async def _create_leveling_role_preset(self, request: web.Request) -> web.Response:
@@ -232,11 +220,7 @@ class LevelingHandlers(InternalAPIHandlers):
         except discord.HTTPException as exc:
             raise web.HTTPBadRequest(text=f'failed to create roles: {exc}')
 
-        await self.bot.db.leveling.update_guild_config(
-            guild_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values={'level_roles': level_roles},
-        )
+        await self.bot.db.leveling.update_guild_config(guild_id, {'level_roles': level_roles})
         return web.json_response({'ok': True, 'created': created})
 
     async def _post_leveling_multipliers(self, request: web.Request) -> web.Response:
@@ -264,11 +248,7 @@ class LevelingHandlers(InternalAPIHandlers):
         else:
             current.pop(str(entity_id), None)
 
-        await self.bot.db.leveling.update_guild_config(
-            guild_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values={field: current},
-        )
+        await self.bot.db.leveling.update_guild_config(guild_id, {field: current})
         return web.json_response({'ok': True})
 
     async def _post_leveling_blacklist(self, request: web.Request) -> web.Response:
@@ -298,10 +278,6 @@ class LevelingHandlers(InternalAPIHandlers):
         else:
             current.discard(eid)
 
-        await self.bot.db.leveling.update_guild_config(
-            guild_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values={field: list(current)},
-        )
+        await self.bot.db.leveling.update_guild_config(guild_id, {field: list(current)})
         return web.json_response({'ok': True})
 

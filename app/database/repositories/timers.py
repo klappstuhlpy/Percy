@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING, Any, cast
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     import asyncpg
 
 __all__ = ('TimersRepository',)
@@ -61,7 +59,7 @@ class TimersRepository(BaseRepository):
 
     async def delete_timer(self, timer_id: int) -> None:
         """Deletes a single timer by its id."""
-        await self.execute("DELETE FROM timers WHERE id = $1;", timer_id)
+        await self.delete_where("timers", ("id",), (timer_id,))
 
     async def fetch_member_timer(self, event: str, guild_id: int, member_id: int) -> asyncpg.Record | None:
         """Fetches an active ``event`` timer targeting ``member_id`` in ``guild_id``.
@@ -107,21 +105,14 @@ class TimersRepository(BaseRepository):
     async def update_timer(
             self,
             timer_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a timer row."""
-        query = f"""
-            UPDATE timers
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
+        """Updates a timer row and returns the full updated record."""
         return cast(
             'asyncpg.Record',
-            await (connection or self.db).fetchrow(query, timer_id, *values.values()),
+            await self.update_returning("timers", ("id",), (timer_id,), values, connection=connection),
         )
 
     # -- Reminder-specific queries (Reminder cog) -------------------------

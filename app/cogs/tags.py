@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
 
-class TagPageEntry(BaseRecord):
+class TagPageEntry(BaseRecord, table="tags", pk="id"):
     id: int
     name: str
 
@@ -267,7 +267,7 @@ class TagMakeModal(discord.ui.Modal, title="Create a New Tag"):
                 await self.cog.create_tag(self.ctx, name, content)
 
 
-class Tag(BaseRecord):
+class Tag(BaseRecord, table="tags", pk="id"):
     """Represents a Tag."""
 
     bot: Bot
@@ -319,38 +319,14 @@ class Tag(BaseRecord):
         *,
         connection: asyncpg.Connection | None = None,
     ) -> Tag:
-        """|coro|
-
-        Updates the Tag in the database.
-
-        Parameters
-        ----------
-        key: Callable[[tuple[int, str]], str]
-            The key to update.
-        values: dict[str, Any]
-            The values to update.
-        connection: asyncpg.Connection | None
-            The connection to use. Defaults to the bot's db.
-
-        Returns
-        -------
-        Tag
-            The updated Tag.
-        """
         try:
-            record = await self.bot.db.tags.update_tag(self.id, key, values, connection=connection)
-        except Exception as e:
-            match e:
-                case asyncpg.UniqueViolationError():
-                    raise BadArgument("A Tag with this name already exists.", "name_or_id")
-                case asyncpg.StringDataRightTruncationError():
-                    raise BadArgument("Tag Name length out of range, max. 100 characters.", "name_or_id")
-                case asyncpg.CheckViolationError():
-                    raise BadArgument("Tag Content is missing.", "name_or_id")
-                case _:
-                    raise e
-        else:
-            return self.__class__(bot=self.bot, record=record)
+            return await super()._update(key, values, connection=connection)
+        except asyncpg.UniqueViolationError:
+            raise BadArgument("A Tag with this name already exists.", "name_or_id")
+        except asyncpg.StringDataRightTruncationError:
+            raise BadArgument("Tag Name length out of range, max. 100 characters.", "name_or_id")
+        except asyncpg.CheckViolationError:
+            raise BadArgument("Tag Content is missing.", "name_or_id")
 
     async def get_rank(self) -> int:
         """|coro|
@@ -389,7 +365,7 @@ class Tag(BaseRecord):
                 await self.bot.db.tags.transfer_aliases(self.id, to.id, connection=conn)  # type: ignore[arg-type]
 
 
-class AliasTag(BaseRecord):
+class AliasTag(BaseRecord, table="tag_lookup", pk="id"):
     """Represents an Alias for a Tag."""
 
     parent: Tag | None

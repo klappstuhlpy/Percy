@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 import traceback
-from collections.abc import Generator
+from collections.abc import Awaitable, Callable, Generator
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, ClassVar
@@ -12,7 +12,8 @@ import click
 import discord
 
 from app.core import Bot
-from app.database import Migrations
+from app.database import MigrationRunner
+from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
 from config import DatabaseConfig, logs_path
 
 try:
@@ -26,13 +27,15 @@ else:
 __all__ = (
     'RemoveNoise',
     'db',
+    'history',
     'init',
-    'log',
     'main',
     'migrate',
     'run_bot',
     'setup_logging',
+    'status',
     'upgrade',
+    'verify',
 )
 
 
@@ -139,88 +142,180 @@ def main(ctx: click.Context) -> None:
 
 @main.group(short_help='Database configuration', options_metavar='[options]')
 def db() -> None:
-    """Manages the database."""
+    """Manages forward-only SQL migrations.
+
+    Available migrations are the ``migrations/V<n>__<name>.sql`` files; applied state lives
+    in the ``schema_migrations`` table. A database created by the old ``revisions.json``
+    system is backfilled automatically on the first ``upgrade``/``init``/``status``.
+    """
+
+
+async def _with_connection[T](action: Callable[[asyncpg.Connection], Awaitable[T]]) -> T:
+    """Opens a short-lived connection from the configured DSN, runs ``action``, closes it."""
+    connection: asyncpg.Connection = await asyncpg.connect(**DatabaseConfig.to_kwargs())
+    try:
+        return await action(connection)
+    finally:
+        await connection.close()
+
+
+def _fail(message: str) -> None:
+    traceback.print_exc()
+    click.secho(message, fg='red')
 
 
 @db.command()
 def init() -> None:
-    """Initializes the database and applies all pending migrations."""
-    migrations = Migrations()
+    """Creates the tracking table (backfilling legacy state) and applies all pending migrations."""
+    runner = MigrationRunner()
+
+    async def _action(conn: asyncpg.Connection) -> tuple[int, list[Migration]]:
+        backfilled = await runner.bootstrap(conn)
+        applied = await runner.upgrade(conn)
+        return backfilled, applied
 
     try:
-        applied = asyncio.run(run_migration_upgrade(migrations))
-    except Exception:
-        traceback.print_exc()
-        click.secho(
-            'Failed to initialize and apply migrations. Check your database configuration and migration scripts.',
-            fg='red',
-        )
-    else:
-        click.secho(f'Successfully initialized the database and applied {applied} migration(s).', fg='green')
+        backfilled, applied = asyncio.run(_with_connection(_action))
+    except (MigrationError, asyncpg.PostgresError, OSError):
+        _fail('Failed to initialize the database. Check your configuration and migration scripts.')
+        return
+
+    if backfilled:
+        click.secho(f'Backfilled {backfilled} previously-applied migration(s) into {MIGRATIONS_TABLE}.', fg='cyan')
+    click.secho(f'Initialized the database and applied {len(applied)} migration(s).', fg='green')
 
 
 @db.command()
-@click.option('--reason', '-r', help='The reason for this revision.', required=True)
+@click.option('--reason', '-r', help='Short description of the migration.', required=True)
 def migrate(reason: str) -> None:
-    """Creates a new revision file for you to edit."""
-    migrations = Migrations()
-    if migrations.is_next_revision_taken:
-        click.secho(
-            'An unapplied migration for the next version already exists. Apply pending migrations before creating a new one.',
-            fg='yellow',
-        )
-        click.secho('Hint: Use the `upgrade` command to apply pending migrations.', fg='yellow', bold=True)
-        return
-
-    revision = migrations.create_revision(reason)
-    click.secho(f'Successfully created revision V{revision.version}.', fg='green')
-
-
-async def run_migration_upgrade(migrations: Migrations, revision: int | None = None) -> int:
-    connection: asyncpg.Connection = await asyncpg.connect(**DatabaseConfig.to_kwargs())
-    return await migrations.upgrade(connection, revision_number=revision)
+    """Creates a new, empty migration stub one version above the latest file."""
+    runner = MigrationRunner()
+    migration = runner.create(reason)
+    click.secho(f'Created {migration.label} at {migration.path.as_posix()}.', fg='green')
 
 
 @db.command()
-@click.option('--revision', '-r', help='The revision number to upgrade to. Defaults to latest.')
-@click.option('--sql', help='Print the SQL instead of executing it.', is_flag=True)
-def upgrade(revision: str | None, sql: bool) -> None:
-    """Upgrades the database to the given revision (or latest if not specified)."""
-    migrations = Migrations()
+@click.option('--target', '-t', type=int, default=None, help='Highest version to apply (default: latest).')
+@click.option('--sql', 'show_sql', is_flag=True, help='Print the pending SQL instead of executing it.')
+@click.option('--dry-run', is_flag=True, help='List what would be applied without executing.')
+def upgrade(target: int | None, show_sql: bool, dry_run: bool) -> None:
+    """Applies every pending migration, optionally only up to ``--target``."""
+    runner = MigrationRunner()
 
-    if sql:
-        migrations.display()
+    async def _pending(conn: asyncpg.Connection) -> list[Migration]:
+        await runner.bootstrap(conn)
+        return await runner.pending(conn, target=target)
+
+    if show_sql or dry_run:
+        try:
+            pending = asyncio.run(_with_connection(_pending))
+        except (MigrationError, asyncpg.PostgresError, OSError):
+            _fail('Could not determine pending migrations.')
+            return
+        if not pending:
+            click.secho('Database is up to date — nothing pending.', fg='green')
+            return
+        for migration in pending:
+            if show_sql:
+                click.secho(f'-- {migration.label} {migration.title}', fg='yellow')
+                click.echo(migration.sql.rstrip())
+                click.echo()
+            else:
+                click.echo(f'{click.style(migration.label, fg="yellow")} {migration.title}')
         return
 
-    revision_number: int | None = None
-    if revision:
-        try:
-            revision_number = int(revision)
-        except ValueError:
-            click.secho('The revision number must be a valid integer.', fg='red')
-            return
+    try:
+        applied = asyncio.run(_with_connection(lambda conn: runner.upgrade(conn, target=target)))
+    except (MigrationError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while applying migrations. Check your migration scripts.')
+        return
+
+    if not applied:
+        click.secho('Database is already up to date.', fg='green')
+    else:
+        for migration in applied:
+            click.echo(f'{click.style("✓ " + migration.label, fg="green")} {migration.title}')
+        click.secho(f'Applied {len(applied)} migration(s).', fg='green', bold=True)
+
+
+@db.command()
+def status() -> None:
+    """Shows the current version, pending migrations and any integrity problems."""
+    runner = MigrationRunner()
+
+    async def _action(conn: asyncpg.Connection) -> tuple[int, list[Migration], list[str]]:
+        await runner.bootstrap(conn)
+        return await runner.current_version(conn), await runner.pending(conn), await runner.check_integrity(conn)
 
     try:
-        applied = asyncio.run(run_migration_upgrade(migrations, revision_number))
-    except Exception:
-        traceback.print_exc()
-        click.secho(
-            'An error occurred while applying the database migrations. Check your migration scripts.',
-            fg='red',
-        )
+        current, pending, problems = asyncio.run(_with_connection(_action))
+    except (MigrationError, asyncpg.PostgresError, OSError):
+        _fail('Could not read migration status.')
+        return
+
+    click.echo(f'Current version : {click.style(f"V{current:03d}", fg="cyan")}')
+    click.echo(f'Latest available: {click.style(f"V{runner.latest_version:03d}", fg="cyan")}')
+    click.echo(f'Pending         : {click.style(str(len(pending)), fg="yellow" if pending else "green")}')
+    for migration in pending:
+        click.echo(f'  - {migration.label} {migration.title}')
+
+    file_problems = runner.validate() + problems
+    if file_problems:
+        click.secho(f'Problems ({len(file_problems)}):', fg='red', bold=True)
+        for problem in file_problems:
+            click.secho(f'  ! {problem}', fg='red')
     else:
-        click.secho(f'Successfully applied {applied} migration(s) to the database.', fg='green')
+        click.secho('Integrity       : OK', fg='green')
 
 
-@db.command(name='log')
-@click.option('--reverse', help='Print in reverse order (oldest first).', is_flag=True)
-def log(reverse: bool) -> None:
-    """Displays the migration revision history."""
-    migrations = Migrations()
-    revs = migrations.ordered_revisions if reverse else reversed(migrations.ordered_revisions)
-    for rev in revs:
-        as_yellow = click.style(f'V{rev.version:>03}', fg='yellow')
-        click.echo(f'{as_yellow} {rev.description.replace("_", " ")}')
+@db.command(name='history')
+@click.option('--reverse', is_flag=True, help='Oldest first.')
+def history(reverse: bool) -> None:
+    """Lists applied migrations (with apply time) followed by any pending ones."""
+    runner = MigrationRunner()
+
+    try:
+        applied = asyncio.run(_with_connection(runner.fetch_applied))
+    except (asyncpg.PostgresError, OSError):
+        _fail('Could not read migration history.')
+        return
+
+    records = sorted(applied.values(), key=lambda a: a.version, reverse=not reverse)
+    if not records:
+        click.secho('No migrations have been applied yet.', fg='yellow')
+    for record in records:
+        when = record.applied_at.strftime('%Y-%m-%d %H:%M')
+        label = click.style(f'V{record.version:03d}', fg='green')
+        click.echo(f'{label} {record.description.replace("_", " "):<45} {click.style(when, fg="bright_black")}')
+
+    pending = [m for m in runner.migrations if m.version not in applied]
+    for migration in pending:
+        click.echo(f'{click.style(migration.label, fg="yellow")} {migration.title:<45} {click.style("pending", fg="yellow")}')
+
+
+@db.command()
+def verify() -> None:
+    """Validates the migration files and checks applied rows for drift; exits non-zero on problems."""
+    runner = MigrationRunner()
+    problems = runner.validate()
+
+    try:
+        problems += asyncio.run(_with_connection(lambda conn: _verify_db(runner, conn)))
+    except (asyncpg.PostgresError, OSError):
+        _fail('Could not verify migrations against the database.')
+        raise SystemExit(1) from None
+
+    if problems:
+        click.secho(f'Found {len(problems)} problem(s):', fg='red', bold=True)
+        for problem in problems:
+            click.secho(f'  ! {problem}', fg='red')
+        raise SystemExit(1)
+    click.secho('All migrations are valid and consistent with the database.', fg='green')
+
+
+async def _verify_db(runner: MigrationRunner, conn: asyncpg.Connection) -> list[str]:
+    await runner.bootstrap(conn)
+    return await runner.check_integrity(conn)
 
 
 if __name__ == '__main__':

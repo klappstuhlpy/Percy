@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -15,14 +15,10 @@ from app.utils import fuzzy, helpers, pluralize
 from config import Emojis
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    import asyncpg
-
     from app.database.base import GuildConfig
 
 
-class TempChannel(BaseRecord):
+class TempChannel(BaseRecord, table="temp_channels", pk=("guild_id", "channel_id")):
     """A temporary voice channel dataclass."""
 
     bot: Bot
@@ -31,18 +27,6 @@ class TempChannel(BaseRecord):
     format: str
 
     __slots__ = ("bot", "channel_id", "format", "guild_id")
-
-    async def _update(
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ) -> TempChannel:
-        record = await self.bot.db.temp_channels.update_channel(
-            self.guild_id, self.channel_id, key, values, connection=connection
-        )
-        return self.__class__(bot=self.bot, record=record)
 
     @property
     def choice_text(self) -> str:
@@ -58,12 +42,8 @@ class TempChannel(BaseRecord):
             .replace("%channel", member.voice.channel.name)
         )
 
-    async def delete(self) -> None:
-        """Delete the temporary channel."""
-        await self.bot.db.temp_channels.delete_channel(self.guild_id, self.channel_id)
-
     async def delete_all(self) -> None:
-        """Delete all temporary channels."""
+        """Delete all temporary channels for this guild."""
         await self.bot.db.temp_channels.delete_guild_channels(self.guild_id)
 
 

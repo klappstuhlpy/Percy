@@ -52,6 +52,46 @@ class GuildsRepository(BaseRepository):
         """Fetches all sentinel member rows for a guild."""
         return await self.fetch("SELECT * FROM guild_sentinel_members WHERE guild_id=$1;", guild_id)
 
+    async def delete_sentinel_members(self, guild_id: int) -> None:
+        """Removes all sentinel member rows for a guild."""
+        await self.delete_where("guild_sentinel_members", ("guild_id",), (guild_id,))
+
+    async def delete_sentinel_member(self, guild_id: int, user_id: int) -> None:
+        """Removes a single sentinel member row."""
+        await self.delete_where("guild_sentinel_members", ("guild_id", "user_id"), (guild_id, user_id))
+
+    async def insert_sentinel_member(self, guild_id: int, user_id: int) -> None:
+        """Inserts a sentinel member row, ignoring if it already exists."""
+        await self.execute(
+            "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;",
+            guild_id, user_id,
+        )
+
+    async def insert_sentinel_members_bulk(self, guild_id: int, user_ids: list[int]) -> None:
+        """Bulk-inserts sentinel member rows in a transaction, ignoring conflicts."""
+        query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
+        async with self.acquire() as conn, conn.transaction():
+            await conn.executemany(query, [(guild_id, uid) for uid in user_ids])
+
+
+    async def update_sentinel_member_state(
+        self, guild_id: int, user_id: int, state: str, *, connection: asyncpg.Connection | None = None
+    ) -> None:
+        """Updates the state of a single sentinel member."""
+        await (connection or self.db).execute(
+            "UPDATE guild_sentinel_members SET state = $3 WHERE guild_id = $1 AND user_id = $2;",
+            guild_id, user_id, state,
+        )
+
+    async def bulk_update_sentinel_member_state(
+        self, guild_id: int, from_state: str, to_state: str, *, connection: asyncpg.Connection | None = None
+    ) -> None:
+        """Bulk-updates sentinel members from one state to another."""
+        await (connection or self.db).execute(
+            "UPDATE guild_sentinel_members SET state = $3 WHERE guild_id = $1 AND state = $2;",
+            guild_id, from_state, to_state,
+        )
+
     async def upsert_sentinel(self, guild_id: int, fields: dict[str, Any]) -> None:
         """Ensures a sentinel row exists for a guild and updates the given columns.
 

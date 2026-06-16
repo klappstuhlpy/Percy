@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import itertools
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import asyncpg
 import discord
@@ -16,10 +16,10 @@ from app.utils import fuzzy, helpers, validate_snowflakes
 from app.utils.lock import lock
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Generator
 
 
-class HighlightConfig(BaseRecord):
+class HighlightConfig(BaseRecord, table="highlights", pk="id"):
     bot: Bot
     id: int
     user_id: int
@@ -29,20 +29,9 @@ class HighlightConfig(BaseRecord):
 
     __slots__ = ("blocked", "bot", "id", "location_id", "lookup", "user_id")
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+    def _coerce(self) -> None:
         self.blocked = set(self.blocked or [])
         self.lookup = set(self.lookup or [])
-
-    async def _update(
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ) -> HighlightConfig:
-        record = await self.bot.db.highlights.update_config(self.id, key, values, connection=connection)
-        return self.__class__(bot=self.bot, record=record)
 
     def match(self, text: str, /) -> str | None:
         """Match a highlight in a text.
@@ -58,14 +47,6 @@ class HighlightConfig(BaseRecord):
             The highlight if found, else None.
         """
         return next((lookup for lookup in self.lookup if lookup in text), None)
-
-    async def delete(self, /) -> None:
-        """|coro|
-
-        Delete the highlight configuration.
-        """
-        await self.bot.db.highlights.delete_config(self.id)
-
 
 class MessagedHighlight(NamedTuple):
     highlight: HighlightConfig

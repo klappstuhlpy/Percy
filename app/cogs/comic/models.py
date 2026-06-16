@@ -13,10 +13,6 @@ from app.utils import fnumb, truncate
 from app.utils.helpers import NotCaseSensitiveEnum
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    import asyncpg
-
     from app.core import Cog
 
 MARVEL_ICON_URL = 'https://klappstuhl.me/gallery/raw/HTBFL.png'
@@ -426,7 +422,7 @@ class GenericComicMessage(GenericComic):
         return self.message.jump_url
 
 
-class ComicFeed(BaseRecord):
+class ComicFeed(BaseRecord, table="comic_config", pk="id"):
 
     if TYPE_CHECKING:
         cog: Cog
@@ -442,21 +438,9 @@ class ComicFeed(BaseRecord):
 
     __slots__ = ('brand', 'channel_id', 'cog', 'day', 'format', 'guild_id', 'id', 'next_pull', 'pin', 'ping')
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-
+    def _coerce(self) -> None:
         self.brand = Brand.coerce(self.brand)  # type: ignore[assignment]
         self.format = Format.coerce(self.format)  # type: ignore[assignment]
-
-    async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
-    ) -> ComicFeed:
-        record = await self.cog.bot.db.comics.update_config(self.id, key, values, connection=connection)
-        return self.__class__(cog=self.cog, record=record)
 
     def to_dict(self) -> dict[str, Any]:
         return {

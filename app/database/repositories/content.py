@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING, Any, cast
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     import asyncpg
 
 __all__ = (
@@ -133,21 +131,14 @@ class ComicsRepository(BaseRepository):
     async def update_config(
             self,
             config_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a feed row."""
-        query = f"""
-            UPDATE comic_config
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
+        """Updates a comic_config row and returns the full updated record."""
         return cast(
             'asyncpg.Record',
-            await (connection or self.db).fetchrow(query, config_id, *values.values()),
+            await self.update_returning("comic_config", ("id",), (config_id,), values, connection=connection),
         )
 
     async def set_next_pull(self, next_pull: datetime.datetime, guild_id: int, brand: str) -> None:
@@ -158,8 +149,7 @@ class ComicsRepository(BaseRepository):
 
     async def delete_config(self, guild_id: int, brand: str) -> None:
         """Removes a guild's feed configuration for a single brand."""
-        await self.execute(
-            "DELETE FROM comic_config WHERE guild_id = $1 AND brand = $2;", guild_id, brand)
+        await self.delete_where("comic_config", ("guild_id", "brand"), (guild_id, brand))
 
 
 # -- Temp Channels ---------------------------------------------------------
@@ -177,21 +167,17 @@ class TempChannelsRepository(BaseRepository):
             self,
             guild_id: int,
             channel_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a temp-channel row."""
-        query = f"""
-            UPDATE temp_channels
-            SET {', '.join(map(key, enumerate(values.keys(), start=3)))}
-            WHERE guild_id = $1 AND channel_id = $2
-            RETURNING *;
-        """
+        """Updates a temp_channels row and returns the full updated record."""
         return cast(
             'asyncpg.Record',
-            await (connection or self.db).fetchrow(query, guild_id, channel_id, *values.values()),
+            await self.update_returning(
+                "temp_channels", ("guild_id", "channel_id"), (guild_id, channel_id),
+                values, connection=connection,
+            ),
         )
 
     async def get_guild_channels(self, guild_id: int) -> list[asyncpg.Record]:
@@ -211,8 +197,7 @@ class TempChannelsRepository(BaseRepository):
 
     async def delete_channel(self, guild_id: int, channel_id: int) -> None:
         """Removes a single temp-channel hub."""
-        await self.execute(
-            "DELETE FROM temp_channels WHERE guild_id = $1 AND channel_id = $2;", guild_id, channel_id)
+        await self.delete_where("temp_channels", ("guild_id", "channel_id"), (guild_id, channel_id))
 
     async def delete_guild_channels(self, guild_id: int) -> None:
         """Removes every temp-channel hub in a guild."""

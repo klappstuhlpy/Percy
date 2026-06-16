@@ -168,11 +168,7 @@ class ContentHandlers(InternalAPIHandlers):
                     kwargs['options'] = updated
 
         metadata['kwargs'] = kwargs
-        await self.bot.db.polls.update(
-            poll_id,
-            key=lambda x: f'{x[1]} = ${x[0]}',
-            values={'metadata': metadata},
-        )
+        await self.bot.db.polls.update(poll_id, {'metadata': metadata})
 
         return web.json_response({'ok': True})
 
@@ -540,11 +536,7 @@ class ContentHandlers(InternalAPIHandlers):
             updates['pin'] = bool(body['pin'])
 
         if updates:
-            await self.bot.db.comics.update_config(
-                config.id,
-                key=lambda t: f"{t[1]} = ${t[0]}",
-                values=updates,
-            )
+            await self.bot.db.comics.update_config(config.id, updates)
         return web.json_response({'ok': True})
 
     async def _delete_comic(self, request: web.Request) -> web.Response:
@@ -609,11 +601,7 @@ class ContentHandlers(InternalAPIHandlers):
         if not fmt:
             raise web.HTTPBadRequest(text='format is required')
 
-        await self.bot.db.temp_channels.update_channel(
-            guild_id, channel_id,
-            key=lambda t: f"{t[1]} = ${t[0]}",
-            values={'format': fmt},
-        )
+        await self.bot.db.temp_channels.update_channel(guild_id, channel_id, {'format': fmt})
         return web.json_response({'ok': True})
 
     async def _delete_temp_channel(self, request: web.Request) -> web.Response:

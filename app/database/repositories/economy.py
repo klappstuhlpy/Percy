@@ -6,7 +6,6 @@ from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
     import datetime
-    from collections.abc import Callable
 
     import asyncpg
 
@@ -230,7 +229,7 @@ class EconomyRepository(BaseRepository):
 
     async def delete_lottery(self, guild_id: int) -> None:
         """Ends a lottery, removing it and its entries (entries cascade)."""
-        await self.execute('DELETE FROM economy_lottery WHERE guild_id = $1;', guild_id)
+        await self.delete_where("economy_lottery", ("guild_id",), (guild_id,))
 
 
 # -- Leveling (level_config, levels, xp_history) ---------------------------
@@ -259,19 +258,12 @@ class LevelingRepository(BaseRepository):
     async def update_guild_config(
             self,
             guild_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a guild's config row."""
-        query = f"""
-            UPDATE level_config
-            SET {', '.join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        return await (connection or self.db).fetchrow(query, guild_id, *values.values())
+        """Updates a guild's level_config row and returns the full updated record."""
+        return await self.update_returning("level_config", ("id",), (guild_id,), values, connection=connection)
 
     # -- levels (per-member XP rows) --------------------------------------
 
@@ -323,23 +315,18 @@ class LevelingRepository(BaseRepository):
             self,
             user_id: int,
             guild_id: int,
-            key: Callable[[tuple[int, str]], str],
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
     ) -> asyncpg.Record:
-        """Applies a :class:`~app.database.base.BaseRecord`-style update to a member's level row."""
-        query = f"""
-            UPDATE levels
-            SET {', '.join(map(key, enumerate(values.keys(), start=3)))}
-            WHERE user_id = $1 AND guild_id = $2
-            RETURNING *;
-        """
-        return await (connection or self.db).fetchrow(query, user_id, guild_id, *values.values())
+        """Updates a member's level row and returns the full updated record."""
+        return await self.update_returning(
+            "levels", ("user_id", "guild_id"), (user_id, guild_id), values, connection=connection,
+        )
 
     async def delete_member(self, user_id: int, guild_id: int) -> None:
         """Deletes a member's level row for a guild."""
-        await self.execute("DELETE FROM levels WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
+        await self.delete_where("levels", ("user_id", "guild_id"), (user_id, guild_id))
 
     # -- xp_history (daily per-guild XP snapshots) ------------------------
 

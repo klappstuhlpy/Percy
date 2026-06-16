@@ -81,7 +81,7 @@ class LevelingSpec(NamedTuple):
         return round(random.randint(*self.gain) * multiplier)
 
 
-class GuildLevelConfig(BaseRecord):
+class GuildLevelConfig(BaseRecord, table="level_config", pk="id"):
     """Represents a leveling configuration for a guild."""
 
     cog: Leveling
@@ -139,20 +139,18 @@ class GuildLevelConfig(BaseRecord):
         super().__init__(**kwargs)
         self.bot: Bot = self.cog.bot
 
-        gain = GainConfig(self.min_gain, self.max_gain)
-        self.spec: LevelingSpec = LevelingSpec(
+    def _coerce(self) -> None:
+        self.spec = LevelingSpec(
             guild_id=self.id,
             base=self.base,
             factor=self.factor,
-            gain=gain,
+            gain=GainConfig(self.min_gain, self.max_gain),
         )
-
-        self.cooldown_manager: CooldownManager = CooldownManager(
+        self.cooldown_manager = CooldownManager(
             self.id,
             rate=self.cooldown_rate,
-            per=self.cooldown_per
+            per=self.cooldown_per,
         )
-
         self.level_roles = sanitize_snowflakes(self.level_roles)
         self.multiplier_roles = sanitize_snowflakes(self.multiplier_roles)
         self.multiplier_channels = sanitize_snowflakes(self.multiplier_channels)
@@ -167,27 +165,9 @@ class GuildLevelConfig(BaseRecord):
             *,
             connection: asyncpg.Connection | None = None,
     ) -> GuildLevelConfig:
-        """|coro|
-
-        Update the guild level configuration with the given values.
-
-        Parameters
-        ----------
-        key: Callable[[tuple[int, str]], str]
-            A callable that returns the key for the update query.
-        values: dict[str, Any]
-            The values to update the guild level configuration with.
-        connection: :class:`asyncpg.Connection
-            The connection to use for the query.
-
-        Returns
-        -------
-        :class:`GuildLevelConfig`
-            The updated guild level configuration.
-        """
-        record = await self.bot.db.leveling.update_guild_config(self.id, key, values, connection=connection)
+        await super()._update(key, values, connection=connection)
         self.cog.get_guild_level_config.invalidate(self.id)
-        return self.__class__(cog=self.cog, record=record)
+        return self
 
     async def walk_users(self) -> AsyncGenerator[LevelConfig, None]:
         records = await self.bot.db.leveling.get_user_levels(self.id)
@@ -203,7 +183,7 @@ class GuildLevelConfig(BaseRecord):
         await self.bot.db.leveling.delete_member(member.id, self.id)
 
 
-class LevelConfig(BaseRecord):
+class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
     """Represents a level configuration for a guild."""
 
     cog: Leveling
@@ -445,31 +425,3 @@ class LevelConfig(BaseRecord):
         """
         return await self.cog.bot.db.leveling.get_rank(self.user_id, self.guild_id, connection=connection)
 
-    async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
-    ) -> LevelConfig:
-        """|coro|
-
-        Update the level configuration with the given values.
-
-        Parameters
-        ----------
-        key: Callable[[tuple[int, str]], str]
-            A callable that returns the key for the update query.
-        values: dict[str, Any]
-            The values to update the level configuration with.
-        connection: :class:`asyncpg.Connection
-            The connection to use for the query.
-
-        Returns
-        -------
-        :class:`LevelConfig`
-            The updated level configuration.
-        """
-        record = await self.cog.bot.db.leveling.update_user_level(
-            self.user_id, self.guild_id, key, values, connection=connection)
-        return self.__class__(cog=self.cog, config=self.config, record=record)

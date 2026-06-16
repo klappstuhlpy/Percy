@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import enum
 import json
 import logging
+import time
 from abc import ABC
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import asyncpg
@@ -44,10 +47,10 @@ from app.utils.query_tracker import QueryTracker
 from app.utils.signals import CacheSignalHub
 from config import DatabaseConfig, Emojis
 
-from .migrations import Migrations
+from .migrations import MigrationRunner
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterator, Sequence
+    from collections.abc import Awaitable, Callable, Generator, Iterator, Sequence
     from typing import Self, TypeVar
 
     from app.core import Bot
@@ -58,110 +61,201 @@ __all__ = (
     "Balance",
     "BaseRecord",
     "Database",
-    "Sentinel",
     "GuildConfig",
+    "Sentinel",
     "UserConfig",
 )
 
 
-class _Database:
-    """The base class for the database.
+log = logging.getLogger(__name__)
 
-    This class provides the basic functionality to interact with the PostgreSQL database using the asyncpg library.
+
+def _encode_jsonb(value: Any) -> str:
+    return json.dumps(value)
+
+
+def _decode_jsonb(value: str) -> Any:
+    return json.loads(value)
+
+
+def _one_line(query: str) -> str:
+    """Collapse a query to a single trimmed line for logging."""
+    return " ".join(query.split())[:200]
+
+
+@dataclass(frozen=True, slots=True)
+class PoolConnectionState:
+    """A snapshot of a single pooled connection (for diagnostics)."""
+
+    generation: int
+    in_use: bool
+    is_closed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PoolStats:
+    """A point-in-time view of the connection pool, for health/diagnostics."""
+
+    size: int
+    idle: int
+    in_use: int
+    min_size: int
+    max_size: int
+    waiting: int
+    generation: int
+    connections: tuple[PoolConnectionState, ...]
+
+
+class _Database:
+    """Owns the asyncpg connection pool, timed query helpers, and cache-invalidation signals.
+
+    The pool is created lazily on a background task started in ``__init__``; callers await
+    :meth:`wait` (which the bot does once at startup) before issuing queries. Every query
+    goes through :meth:`_observe`, which records timing into :attr:`query_tracker` and logs
+    failures with the offending statement — a single, consistent execution path for all SQL.
+
+    The :attr:`signals` hub coordinates cache invalidation: repositories and
+    :class:`BaseRecord` mutations fire named signals (e.g. ``"guild_config_changed"``),
+    which automatically bust the memoized ``get_guild_config`` / ``get_user_config`` /
+    ``get_guild_sentinel`` cached getters on :class:`Database`.
 
     Attributes
     ----------
-    bot : Bot
+    bot: Bot
         The bot instance.
-    loop : asyncio.AbstractEventLoop
-        The event loop to use for the database operations.
+    loop: asyncio.AbstractEventLoop
+        The event loop used for database operations.
+    query_tracker: QueryTracker
+        Records per-query timing and surfaces slow queries.
+    signals: CacheSignalHub
+        Cache-invalidation signal hub shared with repositories and BaseRecord instances.
     """
 
-    __slots__ = ("_connect_task", "_internal_pool", "bot", "loop")
+    __slots__ = ("_connect_task", "_internal_pool", "_ready", "bot", "loop", "query_tracker", "signals")
 
     if TYPE_CHECKING:
         loop: asyncio.AbstractEventLoop
-        _internal_pool: asyncpg.Pool
         _connect_task: asyncio.Task
+        query_tracker: QueryTracker
+        signals: CacheSignalHub
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self.bot = bot
         self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_running_loop()
+        self.signals = CacheSignalHub()
+        self.query_tracker = QueryTracker()
+        self._internal_pool: asyncpg.Pool | None = None
+        self._ready: asyncio.Event = asyncio.Event()
         self._connect_task: asyncio.Task = self.loop.create_task(self._connect())
 
     async def _connect(self) -> None:
+        """Builds the pool and applies pending migrations; shuts the bot down on failure."""
         try:
             self._internal_pool = await self.create_pool()
-
             async with self.acquire() as conn:
-                migrator = Migrations()
-                await migrator.upgrade(conn)  # type: ignore[arg-type]
-        except (asyncpg.PostgresError, OSError, TimeoutError) as e:
-            logging.error("Failed to connect to the PostgreSQL database: %s", e)
-            logging.critical("Shutting down the bot due to database connection failure.")
+                await MigrationRunner().upgrade(conn)  # type: ignore[arg-type]
+        except (asyncpg.PostgresError, OSError, TimeoutError):
+            log.critical("Failed to connect to PostgreSQL; shutting down the bot.", exc_info=True)
             await self.bot.close()
+        else:
+            pool = self._internal_pool
+            log.info("PostgreSQL pool ready (min=%d, max=%d).", pool.get_min_size(), pool.get_max_size())
+        finally:
+            # Always release waiters: on failure ``pool`` stays ``None`` and query helpers
+            # raise a clear error rather than hanging on ``_ready``.
+            self._ready.set()
 
     @classmethod
     async def create_pool(cls) -> asyncpg.Pool:
-        """Creates a connection pool to the PostgreSQL database.
-
-        This creates a connection pool to the PostgreSQL database using the asyncpg library.
-        This also ensures the support for JSONB data type by encoding and decoding it.
-        """
-
-        def _encode_jsonb(value: Any) -> str:
-            return json.dumps(value)
-
-        def _decode_jsonb(value: str) -> Any:
-            return json.loads(value)
+        """Creates the connection pool, registering a JSONB text codec on each connection."""
 
         async def init(con: asyncpg.Connection) -> None:
-            await con.set_type_codec(
-                "jsonb",
-                schema="pg_catalog",
-                encoder=_encode_jsonb,
-                decoder=_decode_jsonb,
-                format="text",
-            )
+            await con.set_type_codec("jsonb", schema="pg_catalog", encoder=_encode_jsonb, decoder=_decode_jsonb)
 
-        return await asyncpg.create_pool(  # type: ignore
-            **DatabaseConfig.to_kwargs(),
-            init=init,
-            command_timeout=300,
-            max_size=20,
-            min_size=20,
-        )
+        return await asyncpg.create_pool(init=init, **DatabaseConfig.pool_kwargs())  # type: ignore[arg-type]
 
     async def wait(self: DatabaseT) -> DatabaseT:
-        """|coro|
-
-        Waits for the database to connect and returns the database instance.
-
-        Returns
-        -------
-        DatabaseT
-            The database instance.
-        """
+        """|coro| Waits for the pool to finish connecting and returns the database instance."""
         await self._connect_task
         return self
 
+    @property
+    def pool(self) -> asyncpg.Pool:
+        """The live connection pool, or a clear error if accessed before it is ready."""
+        if self._internal_pool is None:
+            raise RuntimeError("Database pool is not initialised yet — await Database.wait() first.")
+        return self._internal_pool
+
+    async def _ensure_ready(self) -> None:
+        """Cheap fast-path gate so a query issued before :meth:`wait` blocks until the pool exists."""
+        if self._internal_pool is None:
+            await self._ready.wait()
+
+    @contextlib.contextmanager
+    def _observe(self, query: str) -> Generator[None, None, None]:
+        """Times a query into the tracker and logs the statement if it errors."""
+        start = time.perf_counter()
+        try:
+            yield
+        except asyncpg.PostgresError:
+            log.error("Query failed after %.1fms: %s", (time.perf_counter() - start) * 1000.0, _one_line(query))
+            raise
+        finally:
+            self.query_tracker.record(query, (time.perf_counter() - start) * 1000.0)
+
     def acquire(self, *, timeout: float | None = None) -> asyncpg.pool.PoolAcquireContext:
-        return self._internal_pool.acquire(timeout=timeout)  # type: ignore[arg-type]
+        """Acquires a pooled connection (use ``async with``), e.g. for multi-statement transactions."""
+        return self.pool.acquire(timeout=timeout)  # type: ignore[arg-type]
 
     def release(self, conn: asyncpg.Connection, *, timeout: float | None = None) -> Awaitable[None]:
-        return self._internal_pool.release(conn, timeout=timeout)  # type: ignore[arg-type]
+        return self.pool.release(conn, timeout=timeout)  # type: ignore[arg-type]
 
-    def execute(self, query: str, *args: Any, timeout: float | None = None) -> Awaitable[str]:
-        return self._internal_pool.execute(query, *args, timeout=timeout)
+    async def execute(self, query: str, *args: Any, timeout: float | None = None) -> str:
+        await self._ensure_ready()
+        with self._observe(query):
+            return await self.pool.execute(query, *args, timeout=timeout)
 
-    def fetch(self, query: str, *args: Any, timeout: float | None = None) -> Awaitable[list[Any]]:
-        return self._internal_pool.fetch(query, *args, timeout=timeout)
+    async def fetch(self, query: str, *args: Any, timeout: float | None = None) -> list[Any]:
+        await self._ensure_ready()
+        with self._observe(query):
+            return await self.pool.fetch(query, *args, timeout=timeout)
 
-    def fetchrow(self, query: str, *args: Any, timeout: float | None = None) -> Awaitable[asyncpg.Record]:
-        return self._internal_pool.fetchrow(query, *args, timeout=timeout)
+    async def fetchrow(self, query: str, *args: Any, timeout: float | None = None) -> asyncpg.Record | None:
+        await self._ensure_ready()
+        with self._observe(query):
+            return await self.pool.fetchrow(query, *args, timeout=timeout)
 
-    def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Awaitable[Any]:
-        return self._internal_pool.fetchval(query, *args, column=column, timeout=timeout)  # type: ignore[arg-type]
+    async def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Any:
+        await self._ensure_ready()
+        with self._observe(query):
+            return await self.pool.fetchval(query, *args, column=column, timeout=timeout)
+
+    def pool_stats(self) -> PoolStats:
+        """Returns a structured snapshot of the pool for the health report.
+
+        Encapsulates the only access to asyncpg's pool internals (there is no public API for
+        per-connection generation/in-use/closed state or the acquire-waiter count), so callers
+        get a stable, typed view instead of poking private attributes themselves.
+        """
+        pool = self.pool
+        connections = tuple(
+            PoolConnectionState(
+                generation=holder._generation,
+                in_use=holder._in_use is not None,
+                is_closed=holder._con is None or holder._con.is_closed(),
+            )
+            for holder in pool._holders
+        )
+        return PoolStats(
+            size=pool.get_size(),
+            idle=pool.get_idle_size(),
+            in_use=pool.get_size() - pool.get_idle_size(),
+            min_size=pool.get_min_size(),
+            max_size=pool.get_max_size(),
+            waiting=len(pool._queue._getters),
+            generation=pool._generation,
+            connections=connections,
+        )
 
 
 class Database(_Database):
@@ -191,8 +285,6 @@ class Database(_Database):
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
-        self.signals = CacheSignalHub()
-        self.query_tracker = QueryTracker(threshold_ms=100.0)
         self.guilds = GuildsRepository(self)
         self.users = UsersRepository(self)
         self.polls = PollsRepository(self)
@@ -219,34 +311,6 @@ class Database(_Database):
         self.anilist = AniListRepository(self)
 
         self._register_cache_signals()
-
-    async def execute(self, query: str, *args: Any, timeout: float | None = None) -> str:
-        import time
-        start = time.perf_counter()
-        result = await self._internal_pool.execute(query, *args, timeout=timeout)
-        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
-        return result
-
-    async def fetch(self, query: str, *args: Any, timeout: float | None = None) -> list[Any]:
-        import time
-        start = time.perf_counter()
-        result = await self._internal_pool.fetch(query, *args, timeout=timeout)
-        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
-        return result
-
-    async def fetchrow(self, query: str, *args: Any, timeout: float | None = None) -> Any:
-        import time
-        start = time.perf_counter()
-        result = await self._internal_pool.fetchrow(query, *args, timeout=timeout)
-        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
-        return result
-
-    async def fetchval(self, query: str, *args: Any, column: str | int = 0, timeout: float | None = None) -> Any:
-        import time
-        start = time.perf_counter()
-        result = await self._internal_pool.fetchval(query, *args, column=column, timeout=timeout)
-        self.query_tracker.record(query, (time.perf_counter() - start) * 1000)
-        return result
 
     def _register_cache_signals(self) -> None:
         """Wire up cache invalidation signals so repositories can fire them on mutation."""
@@ -376,48 +440,105 @@ class Database(_Database):
 
 
 class BaseRecord(ABC):
-    """The base class for representing a PostgreSQL fetched record.
+    """A lightweight ORM mapping an ``asyncpg.Record`` onto a typed Python object.
 
-    This class facilitates the creation of a class that maps to a PostgreSQL row. It automatically maps the record's
-    values to the class attributes, providing convenient access to the data.
+    Subclasses declare ``__slots__`` matching database columns; the base class maps a
+    fetched row onto attributes automatically. Declarative class kwargs control
+    persistence behaviour:
 
-    By overriding the `__slots__` attribute, you can specify which attributes should be mapped to the record.
+    Parameters (passed as ``class Foo(BaseRecord, table=..., pk=..., ...)``)
+    ----------
+    table : str | None
+        The PostgreSQL table this record maps to. Required for :meth:`update`,
+        :meth:`delete`, and :meth:`refresh` to work without overrides.
+    pk : str | tuple[str, ...]
+        Primary-key column(s) for WHERE clauses. Defaults to ``"id"``.
+        Composite keys are passed as a tuple, e.g. ``pk=("user_id", "guild_id")``.
+    changed_signal : str | None
+        Cache-invalidation signal fired (with pk values) after :meth:`update` or
+        :meth:`delete`. ``None`` means no signal is fired.
+    ignore_record : bool
+        Allow construction without a backing ``asyncpg.Record`` (for temporary/
+        projection instances created via :meth:`temporary`).
 
-    Additional attributes, which are not mapped to the record, can be added by specifying
-    them in the `__init__` method and calling `super().__init__()`.
+    Mutation helpers
+    ----------------
+    All mutation methods build parameterized SQL, re-hydrate the instance in place from
+    the ``RETURNING *`` row (so the object never goes stale), and fire the configured
+    cache signal. Column names are validated against the backing record before any SQL is
+    built, closing the identifier-injection surface.
+
+    - :meth:`update` — ``SET col = $n``
+    - :meth:`add` / :meth:`remove` — ``SET col = col +/- $n``
+    - :meth:`append` / :meth:`prune` — ``ARRAY_APPEND`` / ``ARRAY_REMOVE``
+    - :meth:`merge` — ``ARRAY_CAT``
+    - :meth:`delete` — ``DELETE FROM ... WHERE pk = ...``
+    - :meth:`refresh` — ``SELECT * FROM ... WHERE pk = ...`` (re-hydrate without mutating)
+
+    Lifecycle hooks
+    ---------------
+    - :meth:`_coerce` — post-load type conversions (runs after construction and after
+      every hydration). Override to convert raw DB types (ints → flag objects, arrays →
+      sets, JSON blobs → extracted fields).
+    - :meth:`_update` — the SQL execution path. Override only for records with bespoke
+      persistence semantics (e.g. Sentinel, which must skip hydration and signals).
 
     Examples
     --------
     .. code-block:: python3
 
-            class User(BaseRecord):
-                __slots__ = ('id', 'name', 'age')
+        class User(BaseRecord, table="users", pk="id", changed_signal="user_changed"):
+            __slots__ = ('id', 'name', 'age')
 
-                def __init__(year: int, **kwargs):
-                    self.year = year
-                    super().__init__(**kwargs)
+        class Balance(BaseRecord, table="economy", pk=("user_id", "guild_id")):
+            __slots__ = ('user_id', 'guild_id', 'cash', 'bank')
 
-                @property
-                def display_text() -> str:
-                    return f'{self.name} ({self.age} Years old) - {self.year}'
-
-            >> user = User(record=asyncpg.Record)
-            >> print(user.display_text)
-            John Doe (20 Years old) - 2021
+        # Mutate and stay in sync:
+        user = User(bot=bot, record=row)
+        await user.update(name="Jane")   # UPDATE users SET name=$2 WHERE id=$1 RETURNING *
+        await user.delete()              # DELETE FROM users WHERE id=$1
     """
 
     if TYPE_CHECKING:
         __record: asyncpg.Record
         __ignore_record__: bool
+        __tablename__: str | None
+        __pk__: tuple[str, ...]
+        __changed_signal__: str | None
 
     __slots__ = ("__record",)
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Initializes the subclass."""
+    def __init_subclass__(
+        cls,
+        *,
+        ignore_record: bool = False,
+        table: str | None = None,
+        pk: str | tuple[str, ...] = "id",
+        changed_signal: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Registers a record subclass and its update metadata.
+
+        Parameters
+        ----------
+        ignore_record:
+            Allow construction without a backing record (temporary/projection instances).
+        table:
+            The table this record maps to. When set, the inherited :meth:`_update` builds the
+            ``UPDATE`` automatically; otherwise a subclass must override ``_update``.
+        pk:
+            Primary-key column(s) for the ``WHERE`` clause — a single name or a tuple.
+        changed_signal:
+            Cache-invalidation signal fired (with the pk values) after a successful update;
+            ``None`` means the record is its own cache source and fires nothing.
+        """
         if cls is BaseRecord:
             raise TypeError("Class `BaseRecord` must be initialized by subclassing it.")
 
-        cls.__ignore_record__ = kwargs.pop("ignore_record", False)
+        cls.__ignore_record__ = ignore_record
+        cls.__tablename__ = table
+        cls.__pk__ = (pk,) if isinstance(pk, str) else tuple(pk)
+        cls.__changed_signal__ = changed_signal
         super().__init_subclass__(**kwargs)
 
     def __init__(self, **kwargs: dict[str, Any] | object | asyncpg.Record) -> None:
@@ -451,10 +572,27 @@ class BaseRecord(ABC):
             for k, v in kwargs.items():
                 self._set_item_safe(k, v)
 
+        self._coerce()
+
     def _set_item_safe(self, key: str, value: Any) -> None:
         """Sets an item as a class attribute if its present in the __slots__ attribute."""
         if key in self.__slots__:
             setattr(self, key, value)
+
+    def _coerce(self) -> None:
+        """Hook for post-load type conversions (arrays → sets, flag ints → flag objects, …).
+
+        Runs after the raw row is mapped onto the instance — both at construction and after an
+        in-place update — so a subclass's converted attributes never regress to raw DB types.
+        The default does nothing.
+        """
+
+    def _hydrate(self, record: asyncpg.Record) -> None:
+        """Re-maps a freshly-returned row onto this instance, then re-applies :meth:`_coerce`."""
+        self.__record = record
+        for key, value in record.items():
+            self._set_item_safe(key, value)
+        self._coerce()
 
     async def _update(
         self,
@@ -463,121 +601,157 @@ class BaseRecord(ABC):
         *,
         connection: asyncpg.Connection | None = None,
     ) -> Self:
-        """|coro|
+        """|coro| Builds and executes the ``UPDATE`` for this record.
 
-        Updates the record with the given values.
+        The default implementation uses the ``table``/``pk``/``changed_signal`` declared
+        via ``__init_subclass__``:
 
-        Notes
-        -----
-        This method `must` be overridden by subclasses to provide the functionality to
-        update the record with the given values.
+        1. Builds ``UPDATE "<table>" SET <key(col)> WHERE <pk> RETURNING *``
+        2. Re-hydrates this instance in place from the returned row (via :meth:`_hydrate`)
+        3. Fires the configured cache signal (if any)
+        4. Returns ``self``
 
-        Parameters
-        ----------
-        key : Callable[[tuple[int, str]], str]
-            A callable that takes a tuple of an index and a key, and returns a string.
-        values : dict[str, Any]
-            The values to update the record with.
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
+        The ``key`` callable receives ``(param_index, column_name)`` and returns the SET
+        fragment — this is what allows :meth:`update`, :meth:`add`, :meth:`append`, etc.
+        to share a single code path with different SQL expressions.
+
+        Override this method only for records with bespoke persistence semantics (e.g.
+        :class:`Sentinel`, which must skip hydration to preserve a singleton + background
+        task reference).
         """
-        raise NotImplementedError
+        table = type(self).__tablename__
+        if table is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} is not updatable: pass `table=...` when subclassing "
+                "BaseRecord, or override `_update`."
+            )
+
+        pk = type(self).__pk__
+        pk_values = [getattr(self, column) for column in pk]
+        set_clause = ", ".join(map(key, enumerate(values.keys(), start=len(pk) + 1)))
+        where_clause = " AND ".join(f'"{column}" = ${index}' for index, column in enumerate(pk, start=1))
+        query = f'UPDATE "{table}" SET {set_clause} WHERE {where_clause} RETURNING *;'
+
+        record = await (connection or self.bot.db).fetchrow(query, *pk_values, *values.values())
+        if record is not None:
+            self._hydrate(record)
+        signal = type(self).__changed_signal__
+        if signal is not None:
+            self.bot.db.signals.fire(signal, *pk_values)
+        return self
+
+    async def _apply(
+        self,
+        key: Callable[[tuple[int, str]], str],
+        values: dict[str, Any],
+        *,
+        connection: asyncpg.Connection | None = None,
+    ) -> Self:
+        """Guards a mutation, then delegates to :meth:`_update`.
+
+        Validates that:
+        1. At least one column is being set (rejects empty updates).
+        2. Every column name exists in the backing record (via :meth:`_assert_known_columns`).
+
+        This closes the identifier-injection surface: column names are interpolated into
+        the SQL statement (identifiers cannot be parameterised), so they must be validated
+        against the known schema before any query is built.
+        """
+        if not values:
+            raise ValueError(f"{type(self).__name__}.update() requires at least one column to set.")
+        self._assert_known_columns(values)
+        return await self._update(key, values, connection=connection)
+
+    def _assert_known_columns(self, values: dict[str, Any]) -> None:
+        """Rejects any key that is not a real column of the backing row."""
+        record = self.__record
+        if not record:
+            return  # no authoritative row to validate against (temporary/projection instance)
+        try:
+            known = set(record.keys())
+        except AttributeError:
+            return
+        unknown = sorted(column for column in values if column not in known)
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__}: refusing to update unknown column(s) {unknown}. "
+                f"Known columns: {sorted(known)}."
+            )
 
     async def update(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
-
-        Updates the record with the given values by setting the values to the record.
-
-        -> X = Y
-
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
-        """
-        return await self._update(lambda o: f'"{o[1]}" = ${o[0]}', values, connection=connection)
+        """|coro| Sets each column to the given value (``col = $n``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = ${o[0]}', values, connection=connection)
 
     async def add(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
-
-        Adds the given values to the record.
-
-        -> X = X + Y
-
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
-        """
-        return await self._update(lambda o: f'"{o[1]}" = "{o[1]}" + ${o[0]}', values, connection=connection)
+        """|coro| Increments each column by the given value (``col = col + $n``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = "{o[1]}" + ${o[0]}', values, connection=connection)
 
     async def remove(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
-
-        Removes the given values from the record.
-
-        -> X = X - Y
-
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
-        """
-        return await self._update(lambda o: f'"{o[1]}" = "{o[1]}" - ${o[0]}', values, connection=connection)
+        """|coro| Decrements each column by the given value (``col = col - $n``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = "{o[1]}" - ${o[0]}', values, connection=connection)
 
     async def append(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
-
-        Appends the given values to the array.
-
-        -> X = ARRAY_APPEND(X, Y)
-
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
-        """
-        return await self._update(lambda o: f'"{o[1]}" = ARRAY_APPEND("{o[1]}", ${o[0]})', values, connection=connection)
+        """|coro| Appends the value to each array column (``col = ARRAY_APPEND(col, $n)``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = ARRAY_APPEND("{o[1]}", ${o[0]})', values, connection=connection)
 
     async def prune(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
-
-        Removes the given values to the array.
-
-        -> X = ARRAY_REMOVE(X, Y)
-
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
-        """
-        return await self._update(lambda o: f'"{o[1]}" = ARRAY_REMOVE("{o[1]}", ${o[0]})', values, connection=connection)
+        """|coro| Removes the value from each array column (``col = ARRAY_REMOVE(col, $n)``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = ARRAY_REMOVE("{o[1]}", ${o[0]})', values, connection=connection)
 
     async def merge(self, *, connection: asyncpg.Connection | None = None, **values: Any) -> Self:
-        """|coro|
+        """|coro| Concatenates the value onto each array column (``col = ARRAY_CAT(col, $n)``)."""
+        return await self._apply(lambda o: f'"{o[1]}" = ARRAY_CAT("{o[1]}", ${o[0]})', values, connection=connection)
 
-        Merges two lists in the array with the given values.
+    async def delete(self, *, connection: asyncpg.Connection | None = None) -> None:
+        """|coro| Deletes this record's row from the database.
 
-        -> X = ARRAY_CAT(X, Y)
+        Builds ``DELETE FROM "<table>" WHERE <pk> = ...`` using the class-level
+        ``table`` and ``pk`` declarations. Fires the ``changed_signal`` (if configured)
+        so cached config getters are invalidated.
 
-        Parameters
-        ----------
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        values : dict[str, Any]
-            The values to update the record with.
+        Raises :exc:`NotImplementedError` if no ``table`` was declared.
+        Subclasses may override to add cascading deletes or Discord-side cleanup
+        before/after calling ``super().delete()``.
         """
-        return await self._update(lambda o: f'"{o[1]}" = ARRAY_CAT("{o[1]}", ${o[0]})', values, connection=connection)
+        table = type(self).__tablename__
+        if table is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} is not deletable: pass `table=...` when subclassing BaseRecord."
+            )
+        pk = type(self).__pk__
+        pk_values = [getattr(self, column) for column in pk]
+        where_clause = " AND ".join(f'"{column}" = ${index}' for index, column in enumerate(pk, start=1))
+        query = f'DELETE FROM "{table}" WHERE {where_clause};'
+        await (connection or self.bot.db).execute(query, *pk_values)
+        signal = type(self).__changed_signal__
+        if signal is not None:
+            self.bot.db.signals.fire(signal, *pk_values)
+
+    async def refresh(self, *, connection: asyncpg.Connection | None = None) -> Self:
+        """|coro| Re-fetches this record from the database and hydrates in place.
+
+        Issues ``SELECT * FROM "<table>" WHERE <pk> = ...`` and calls :meth:`_hydrate`
+        to update every attribute (plus :meth:`_coerce`). Useful when the row may have
+        been mutated externally (e.g. by a repository method or a concurrent process)
+        and you need the instance to reflect the current DB state without constructing
+        a new object.
+
+        Returns ``self`` for chaining. If the row no longer exists the instance is
+        left unchanged (no error raised).
+        """
+        table = type(self).__tablename__
+        if table is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} is not refreshable: pass `table=...` when subclassing BaseRecord."
+            )
+        pk = type(self).__pk__
+        pk_values = [getattr(self, column) for column in pk]
+        where_clause = " AND ".join(f'"{column}" = ${index}' for index, column in enumerate(pk, start=1))
+        query = f'SELECT * FROM "{table}" WHERE {where_clause};'
+        record = await (connection or self.bot.db).fetchrow(query, *pk_values)
+        if record is not None:
+            self._hydrate(record)
+        return self
 
     @classmethod
     def __subclasshook__(cls, subclass: type[Any]) -> bool:
@@ -646,9 +820,12 @@ class BaseRecord(ABC):
             return True
         return bool(self.__record)
 
-    def __hash__(self) -> int:
-        """Returns the hash of the item's record."""
-        return hash(self.__record)
+    def __hash__(self) -> int:  # type: ignore[override]
+        """Hashes on the primary key (consistent with ``__eq__``; falls back to identity)."""
+        try:
+            return hash((type(self).__name__, *(getattr(self, column) for column in type(self).__pk__)))
+        except (AttributeError, TypeError):
+            return object.__hash__(self)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Returns the value of the item's record."""
@@ -670,7 +847,7 @@ def ignore_record(cls: type[BaseRecord]) -> type[BaseRecord]:
     return cls
 
 
-class GuildConfig(BaseRecord):
+class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="guild_config_changed"):
     """The configuration for a guild."""
 
     class AutoModFlags(BaseFlags):
@@ -762,44 +939,12 @@ class GuildConfig(BaseRecord):
         "voice_log_channel_id",
     )
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-
+    def _coerce(self) -> None:
         self.flags = self.AutoModFlags(self.flags or 0)  # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])
         self.muted_members = set(self.muted_members or [])
         self.prefixes = set(self.prefixes or [])
         self.linked_automod_rules = set(self.linked_automod_rules or [])
-
-    async def _update(
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ) -> Self:
-        """|coro|
-
-        Updates the record with the given values.
-
-        Parameters
-        ----------
-        key : Callable[[tuple[int, str]], str]
-            A callable that takes a tuple of an index and a key, and returns a string.
-        values : dict[str, Any]
-            The values to update the record with.
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        """
-        query = f"""
-            UPDATE guild_config
-            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.signals.fire("guild_config_changed", self.id)
-        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
 
     @property
     def guild(self) -> discord.Guild | None:
@@ -937,7 +1082,7 @@ class GuildConfig(BaseRecord):
             return None
 
 
-class UserConfig(BaseRecord):
+class UserConfig(BaseRecord, table="user_settings", pk="id", changed_signal="user_config_changed"):
     bot: Bot
     id: int
     timezone: str
@@ -947,36 +1092,6 @@ class UserConfig(BaseRecord):
 
     __slots__ = ("bot", "id", "timezone", "track_history", "track_presence")
 
-    async def _update(
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ) -> Self:
-        """|coro|
-
-        Updates the record with the given values.
-
-        Parameters
-        ----------
-        key : Callable[[tuple[int, str]], str]
-            A callable that takes a tuple of an index and a key, and returns a string.
-        values : dict[str, Any]
-            The values to update the record with.
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        """
-        query = f"""
-            UPDATE user_settings
-            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.signals.fire("user_config_changed", self.id)
-        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]
-
     @property
     def tzinfo(self) -> datetime.tzinfo:
         if self.timezone is None:
@@ -984,7 +1099,7 @@ class UserConfig(BaseRecord):
         return dateutil.tz.gettz(self.timezone) or datetime.UTC
 
 
-class Sentinel(BaseRecord):
+class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
     """A sentinel (Captcha-Verify-System) that prevents users from participating
     in the server until certain conditions are met.
 
@@ -1076,11 +1191,6 @@ class Sentinel(BaseRecord):
         super().__init__(**kwargs)
         self.members: set[int] = {r["user_id"] for r in members if r["state"] == "added"}
 
-        if self.rate is not None:
-            assert isinstance(self.rate, str)
-            rate, per = self.rate.split("/")
-            self.rate = (int(rate), int(per))
-
         # This event is used to stop the task because we can't
         # cancel the task gracefully without stopping the internal loop
         self.__stop_event: asyncio.Event = asyncio.Event()
@@ -1088,8 +1198,6 @@ class Sentinel(BaseRecord):
         self.task._log_destroy_pending = False  # type: ignore[attr-defined]
 
         self.log.debug("Sentinel %r has started.", self.id)
-        if self.started_at is not None:
-            self.started_at = self.started_at.replace(tzinfo=datetime.UTC)
 
         self.queue: CancellableQueue[int, tuple[int, Sentinel.SentinelRoleState]] = CancellableQueue(
             hook_check=self.__stop_event.is_set
@@ -1100,6 +1208,13 @@ class Sentinel(BaseRecord):
             member_id = member["user_id"]
             if state is not self.SentinelRoleState.added:
                 self.queue.put(member_id, (member_id, state))
+
+    def _coerce(self) -> None:
+        if isinstance(self.rate, str):
+            rate, per = self.rate.split("/")
+            self.rate = (int(rate), int(per))
+        if self.started_at is not None and self.started_at.tzinfo is None:
+            self.started_at = self.started_at.replace(tzinfo=datetime.UTC)
 
     def __repr__(self) -> str:
         attrs = [
@@ -1148,35 +1263,21 @@ class Sentinel(BaseRecord):
         *,
         connection: asyncpg.Connection | None = None,
     ) -> Self:
-        """|coro|
+        """Persists the mutation but deliberately does NOT hydrate or fire a signal.
 
-        Updates the record with the given values.
-
-        Parameters
-        ----------
-        key : Callable[[tuple[int, str]], str]
-            A callable that takes a tuple of an index and a key, and returns a string.
-        values : dict[str, Any]
-            The values to update the record with.
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
+        ``self`` is the cached sentinel returned by ``get_guild_sentinel`` — editing in
+        place keeps the cache, the open setup menu, and the background role loop coherent.
+        Constructing a new instance would spawn a second ``role_loop`` task on every edit,
+        and firing ``sentinel_changed`` would cancel the task ``disable()`` relies on.
+        Raw-SQL mutations (the dashboard) still fire the signal to force a rebuild.
         """
-        query = f"""
-            UPDATE guild_sentinel
-            SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
-            WHERE id = $1
-            RETURNING *;
-        """
-        await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        # NOTE: we deliberately mutate ``self`` in place (see ``edit``) and return it
-        # rather than constructing a fresh instance. ``self`` is the cached sentinel
-        # returned by ``get_guild_sentinel`` (every caller fetches it through that
-        # getter), so editing in place keeps the cache, the open setup menu, and the
-        # background role loop coherent. Constructing a new instance here would spawn a
-        # second ``role_loop`` task on every edit, and firing ``sentinel_changed``
-        # would invalidate the cache and cancel the very task ``disable()`` relies on to
-        # drain its pending-removal queue. Raw-SQL mutations (the dashboard's
-        # ``upsert_sentinel``) still fire the signal to force a rebuild.
+        table = type(self).__tablename__
+        pk = type(self).__pk__
+        pk_values = [getattr(self, column) for column in pk]
+        set_clause = ", ".join(map(key, enumerate(values.keys(), start=len(pk) + 1)))
+        where_clause = " AND ".join(f'"{column}" = ${index}' for index, column in enumerate(pk, start=1))
+        query = f'UPDATE "{table}" SET {set_clause} WHERE {where_clause};'
+        await (connection or self.bot.db).execute(query, *pk_values, *values.values())
         return self
 
     async def edit(
@@ -1234,7 +1335,7 @@ class Sentinel(BaseRecord):
         await self.update(**form)
 
         if role_id is not MISSING:
-            await self.bot.db.execute("DELETE FROM guild_sentinel_members WHERE guild_id = $1;", self.id)
+            await self.bot.db.guilds.delete_sentinel_members(self.id)
 
             self.members.clear()
             self.queue.cancel_all()
@@ -1270,8 +1371,7 @@ class Sentinel(BaseRecord):
             try:
                 if action is self.SentinelRoleState.pending_remove:
                     await self.bot.http.remove_role(self.id, member_id, role_id, reason="Completed Sentinel verification")
-                    query = "DELETE FROM guild_sentinel_members WHERE guild_id = $1 AND user_id = $2;"
-                    await self.bot.db.execute(query, self.id, member_id)
+                    await self.bot.db.guilds.delete_sentinel_member(self.id, member_id)
 
                     if self.starter_role:
                         await self.bot.http.add_role(
@@ -1279,8 +1379,7 @@ class Sentinel(BaseRecord):
                         )  # type: ignore[arg-type]
                 elif action is self.SentinelRoleState.pending_add:
                     await self.bot.http.add_role(self.id, member_id, role_id, reason="Started Sentinel verification")
-                    query = "UPDATE guild_sentinel_members SET state = 'added' WHERE guild_id = $1 AND user_id = $2;"
-                    await self.bot.db.execute(query, self.id, member_id)
+                    await self.bot.db.guilds.update_sentinel_member_state(self.id, member_id, "added")
             except discord.DiscordServerError:
                 self.queue.put(member_id, (member_id, action))
             except discord.NotFound as e:
@@ -1355,8 +1454,7 @@ class Sentinel(BaseRecord):
         await self.edit(started_at=None)
 
         async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            query = "UPDATE guild_sentinel_members SET state = 'pending_remove' WHERE guild_id = $1 AND state = 'added';"
-            await conn.execute(query, self.id)
+            await self.bot.db.guilds.bulk_update_sentinel_member_state(self.id, "added", "pending_remove", connection=conn)
             for member_id in self.members:
                 self.queue.put(member_id, (member_id, self.SentinelRoleState.pending_remove))
             self.members.clear()
@@ -1428,8 +1526,7 @@ class Sentinel(BaseRecord):
             The member to block.
         """
         self.members.add(member.id)
-        query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
-        await self.bot.db.execute(query, self.id, member.id)
+        await self.bot.db.guilds.insert_sentinel_member(self.id, member.id)
         self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
 
     async def force_enable_with(self, members: Sequence[discord.Member]) -> None:
@@ -1445,10 +1542,7 @@ class Sentinel(BaseRecord):
         """
         self.members.update(m.id for m in members)
         await self.edit(started_at=discord.utils.utcnow())
-
-        async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
-            await conn.executemany(query, [(self.id, m.id) for m in members])
+        await self.bot.db.guilds.insert_sentinel_members_bulk(self.id, [m.id for m in members])
 
         for member in members:
             self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
@@ -1466,16 +1560,14 @@ class Sentinel(BaseRecord):
         """
         self.members.discard(member.id)
         if self.queue.is_pending(member.id):
-            query = "DELETE FROM guild_sentinel_members WHERE guild_id = $1 AND user_id = $2;"
-            await self.bot.db.execute(query, self.id, member.id)
+            await self.bot.db.guilds.delete_sentinel_member(self.id, member.id)
             self.queue.cancel(member.id)
         else:
-            query = "UPDATE guild_sentinel_members SET state = 'pending_remove' WHERE guild_id = $1 AND user_id = $2;"
-            await self.bot.db.execute(query, self.id, member.id)
+            await self.bot.db.guilds.update_sentinel_member_state(self.id, member.id, "pending_remove")
             self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_remove))
 
 
-class Balance(BaseRecord):
+class Balance(BaseRecord, table="economy", pk=("user_id", "guild_id")):
     """Represents a user's balance"""
 
     bot: Bot
@@ -1490,32 +1582,3 @@ class Balance(BaseRecord):
     def total(self) -> int:
         """Gets the total amount of money a user has"""
         return self.cash + self.bank
-
-    async def _update(
-            self,
-            key: Callable[[tuple[int, str]], str],
-            values: dict[str, Any],
-            *,
-            connection: asyncpg.Connection | None = None,
-    ) -> Self:
-        """|coro|
-
-        Updates the record with the given values.
-
-        Parameters
-        ----------
-        key : Callable[[tuple[int, str]], str]
-            A callable that takes a tuple of an index and a key, and returns a string.
-        values : dict[str, Any]
-            The values to update the record with.
-        connection : asyncpg.Connection | None
-            The connection to use for the update operation.
-        """
-        query = f"""
-            UPDATE economy
-            SET {', '.join(map(key, enumerate(values.keys(), start=3)))}
-            WHERE user_id = $1 AND guild_id = $2
-            RETURNING *;
-        """
-        record = await (connection or self.bot.db).fetchrow(query, self.user_id, self.guild_id, *values.values())
-        return self.__class__(bot=self.bot, record=record)  # type: ignore[return-value]

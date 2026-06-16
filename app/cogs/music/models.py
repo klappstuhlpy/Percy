@@ -107,7 +107,7 @@ class SearchReturn(enum.Enum):
 from app.utils.checks import is_dj as is_dj
 
 
-class Playlist(BaseRecord):
+class Playlist(BaseRecord, table="playlist", pk="id"):
     cog: PlaylistTools
     id: int
     name: str
@@ -215,12 +215,12 @@ class Playlist(BaseRecord):
         self.cog.get_playlists.invalidate(self.owner_id)
 
     async def clear(self) -> None:
-        """Clear all Items in a playlist."""
+        """Clear all tracks in this playlist."""
         await self.cog.bot.db.playlists.clear_tracks(self.id)
         self.tracks.clear()
 
 
-class PlaylistTrack(BaseRecord):
+class PlaylistTrack(BaseRecord, table="playlist_lookup", pk="id"):
     id: int
     name: str
     url: str

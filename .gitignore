@@ -2,7 +2,6 @@
 .idea/
 __pycache__/
 ruff_cache/
-migrations/revisions.json
 # Runtime directories (generated state stores and rotating logs)
 /data/
 /logs/

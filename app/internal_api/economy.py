@@ -120,10 +120,12 @@ class EconomyHandlers(InternalAPIHandlers):
         if balance is None:
             raise web.HTTPNotFound(text='user balance not found')
 
+        updates: dict[str, int] = {}
         if cash is not None:
-            await balance.update(cash=int(cash))
+            updates['cash'] = int(cash)
         if bank is not None:
-            await balance.update(bank=int(bank))
+            updates['bank'] = int(bank)
+        await balance.update(**updates)
         return web.json_response({'ok': True})
 
     async def _create_lottery(self, request: web.Request) -> web.Response:

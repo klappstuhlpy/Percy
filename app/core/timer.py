@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class Timer(BaseRecord):
+class Timer(BaseRecord, table="timers", pk="id"):
     """A timer that will fire at a given time and send a message to a given channel."""
 
     bot: Bot
@@ -35,34 +35,9 @@ class Timer(BaseRecord):
 
     __slots__ = ("args", "bot", "created", "event", "expires", "id", "kwargs", "metadata", "timezone")
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-
+    def _coerce(self) -> None:
         self.args: Sequence[Any] = self.metadata.get("args", [])
         self.kwargs: dict[str, Any] = self.metadata.get("kwargs", {})
-
-    async def _update(  # noqa: ANN202
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ):
-        """|coro|
-
-        Updates the timer in the database.
-
-        Parameters
-        -----------
-        key: Callable[[tuple[int, str]], str]
-            The key to use for the update query.
-        values: dict[str, Any]
-            The values to update.
-        connection: :class:`asyncpg.Connection` | None
-            The connection to use for the query.
-        """
-        record = await self.bot.db.timers.update_timer(self.id, key, values, connection=connection)
-        return self.__class__(bot=self.bot, record=record)
 
     async def rerun(  # noqa: ANN201
         self, when: datetime.datetime | datetime.timedelta, /, *args: Any, **kwargs: Any

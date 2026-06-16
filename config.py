@@ -3,7 +3,7 @@ from os import getenv as env
 from pathlib import Path
 from platform import system
 from types import SimpleNamespace
-from typing import ClassVar, Literal, NamedTuple
+from typing import Any, ClassVar, Literal, NamedTuple
 
 from discord import AllowedMentions
 from dotenv import load_dotenv
@@ -85,6 +85,23 @@ class DatabaseConfig:
             'password': cls.password,
             'host': cls.host,
             'port': cls.port,
+        }
+
+    @classmethod
+    def pool_kwargs(cls) -> dict[str, Any]:
+        """Connection + pool tuning for ``asyncpg.create_pool``.
+
+        Sizes and timeouts are env-overridable so deployments can tune them without code
+        changes; the defaults suit a single bot process. ``application_name`` tags the
+        connections so they're identifiable in ``pg_stat_activity``.
+        """
+        return {
+            **cls.to_kwargs(),
+            'min_size': _optional_int(env('DATABASE_POOL_MIN_SIZE')) or 10,
+            'max_size': _optional_int(env('DATABASE_POOL_MAX_SIZE')) or 20,
+            'command_timeout': float(env('DATABASE_COMMAND_TIMEOUT') or 300),
+            'max_inactive_connection_lifetime': float(env('DATABASE_POOL_MAX_IDLE') or 300),
+            'server_settings': {'application_name': 'percy'},
         }
 
 

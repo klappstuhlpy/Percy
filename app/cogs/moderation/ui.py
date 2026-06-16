@@ -196,7 +196,7 @@ class MuteRoleSetUpView(LayoutView):
 
     async def _refresh(self) -> None:
         """Re-pull the cached guild config after a mutation so the card stays in sync."""
-        self.config = await self.cog.bot.db.get_guild_config(self.guild.id)
+        await self.config.refresh()
 
     async def _sync_with_progress(
         self,

@@ -15,10 +15,8 @@ from config import Emojis
 
 if TYPE_CHECKING:
     import datetime
-    from collections.abc import Callable, Iterator
+    from collections.abc import Iterator
     from typing import Self
-
-    import asyncpg
 
     from app.cogs.polls.cog import Polls
     from app.core import Bot
@@ -60,7 +58,7 @@ class VoteOption(TypedDict):
     votes: int
 
 
-class PollEntry(BaseRecord):
+class PollEntry(BaseRecord, pk="user_id"):
     """Represents a poll entry."""
 
     user_id: int
@@ -72,7 +70,7 @@ class PollEntry(BaseRecord):
         return iter((self.user_id, self.vote))
 
 
-class Poll(BaseRecord):
+class Poll(BaseRecord, table="polls", pk="id"):
     """Represents a poll item."""
 
     cog: Polls
@@ -117,22 +115,20 @@ class Poll(BaseRecord):
     )
 
     def __init__(self, **kwargs: Any) -> None:
+        self.message: discord.Message = MISSING
+        self.ping_message: discord.Message = MISSING
         super().__init__(**kwargs)
         self.bot: Bot = self.cog.bot
 
-        self.args: list[Any] = self.metadata.get("args", [])
-        self.kwargs: dict[str, Any] = self.metadata.get("kwargs", {})
-
-        self.message: discord.Message = MISSING
-        self.ping_message: discord.Message = MISSING
-
-        self.question: str = self.kwargs.get("question", "N/A")
-        self.votes: int = self.kwargs.get("votes", 0)
-        self.description: str = self.kwargs.get("description", "N/A")
-        self.options: list[VoteOption] = self.kwargs.get("options", [])
-        self.color: helpers.Colour = helpers.Colour.from_str(self.kwargs.get("color") or "#ffffff")
-
-        self.entries: set[PollEntry] = {PollEntry(record=entry) for entry in self.entries or []}
+    def _coerce(self) -> None:
+        self.args = self.metadata.get("args", [])
+        self.kwargs = self.metadata.get("kwargs", {})
+        self.question = self.kwargs.get("question", "N/A")
+        self.votes = self.kwargs.get("votes", 0)
+        self.description = self.kwargs.get("description", "N/A")
+        self.options = self.kwargs.get("options", [])
+        self.color = helpers.Colour.from_str(self.kwargs.get("color") or "#ffffff")
+        self.entries = {PollEntry(record=entry) for entry in self.entries or []}
 
     @property
     def jump_url(self) -> str | None:
@@ -153,38 +149,6 @@ class Poll(BaseRecord):
     def choice_text(self) -> str:
         """The text to use for the autocomplete."""
         return f"[{self.id}] {self.question}"
-
-    async def _update(
-        self,
-        key: Callable[[tuple[int, str]], str],
-        values: dict[str, Any],
-        *,
-        connection: asyncpg.Connection | None = None,
-    ) -> Poll:
-        """|coro|
-
-        Updates the poll.
-
-        Parameters
-        ----------
-        key: Callable[[tuple[int, str]], str]
-            The key to use for the update.
-        values: dict[str, Any]
-            The values to use for the update.
-        connection: asyncpg.Connection
-            The connection to use for the update.
-
-        Returns
-        -------
-        Poll
-            The updated poll.
-        """
-        record = await self.bot.db.polls.update(self.id, key, values, connection=connection)
-
-        cls = self.__class__(cog=self.cog, record=record)
-        cls.message = self.message
-        cls.ping_message = self.ping_message
-        return cls
 
     def get_option(self, index: int) -> VoteOption | None:
         """Gets an option from the poll.
@@ -415,8 +379,8 @@ class Poll(BaseRecord):
         return await self.update(metadata=self.metadata, entries=[(e.user_id, e.vote) for e in self.entries])  # type: ignore[return-value]
 
     async def delete(self) -> None:
-        """Deletes the poll."""
-        await self.bot.db.polls.delete(self.id)
+        """Deletes the poll from the database and removes the Discord message."""
+        await super().delete()
 
         if self.message_id is not None and self.message is MISSING:
             await self.fetch_message()

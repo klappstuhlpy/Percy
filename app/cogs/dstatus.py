@@ -49,7 +49,7 @@ class Status(enum.Enum):
         }.get(self.value)
 
 
-class IncidentItem(BaseRecord):
+class IncidentItem(BaseRecord, table="discord_incidents", pk="guild_id"):
     """Represents a Discord Status Feed incident item."""
 
     bot: Bot

@@ -1332,16 +1332,12 @@ class Stats(Cog):
         embed = discord.Embed(title="Bot Health Report")
 
         # Gather the raw runtime observations; the analysis is delegated to the service.
-        db = self.bot.db._internal_pool
-        total_waiting = len(db._queue._getters)  # type: ignore[union-attr]
-        current_generation = db._generation
+        pool = self.bot.db.pool_stats()
+        total_waiting = pool.waiting
+        current_generation = pool.generation
         connections = [
-            ConnectionState(
-                generation=holder._generation,
-                in_use=holder._in_use is not None,
-                is_closed=holder._con is None or holder._con.is_closed(),
-            )
-            for holder in db._holders
+            ConnectionState(generation=c.generation, in_use=c.in_use, is_closed=c.is_closed)
+            for c in pool.connections
         ]
 
         being_spammed = self.bot.spam_control.current_spammers
@@ -1367,7 +1363,7 @@ class Stats(Cog):
         description = [
             f"Total `Pool.acquire` Waiters: {total_waiting}",
             f"Current Pool Generation: {current_generation}",
-            f"Connections In Use: {len(db._holders) - db._queue.qsize()}",  # type: ignore[union-attr]
+            f"Connections In Use: {pool.in_use}",
             f"Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}",
             f"Questionable Connections: {report.questionable_connections}",
             f"Commands Waiting: {command_waiters}",

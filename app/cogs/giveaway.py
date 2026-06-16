@@ -149,7 +149,7 @@ class GiveawayEnterButton(discord.ui.DynamicItem[discord.ui.Button], template=r"
         await interaction.followup.send(f"{Emojis.success} You have successfully entered this giveaway.", ephemeral=True)
 
 
-class Giveaway(BaseRecord):
+class Giveaway(BaseRecord, table="giveaways", pk="id"):
     """Represents a giveaway item."""
 
     cog: Giveaways
@@ -180,17 +180,15 @@ class Giveaway(BaseRecord):
     )
 
     def __init__(self, **kwargs: Any) -> None:
+        self.message: discord.Message = MISSING
         super().__init__(**kwargs)
 
-        self.args: list[Any] = self.metadata.get("args", [])
-        self.kwargs: dict[str, Any] = self.metadata.get("kwargs", {})
-
-        self.message: discord.Message = MISSING
-
+    def _coerce(self) -> None:
+        self.args = self.metadata.get("args", [])
+        self.kwargs = self.metadata.get("kwargs", {})
         self.prize = self.kwargs.get("prize")
         self.description = self.kwargs.get("description")
         self.winner_count = self.kwargs.get("winner_count", 0)
-
         self.entries = set(self.entries or [])
 
     @property
