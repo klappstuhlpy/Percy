@@ -139,7 +139,7 @@ def lock(
     """
 
     def decorator(func: types.FunctionType) -> Callable[..., Coroutine[Any, Any, Any]]:
-        if not asyncio.iscoroutinefunction(func):
+        if not inspect.iscoroutinefunction(func):
             raise RuntimeError("The function to lock must be a coroutine function.")
 
         name = func.__name__
@@ -212,7 +212,7 @@ def lock_from(
     wait: :class:`bool`
         Whether to wait until the lock becomes available.
     """
-    if not asyncio.iscoroutinefunction(to_wait):
+    if not inspect.iscoroutinefunction(to_wait):
         raise RuntimeError("The function to wait for must be a coroutine function.")
 
     if not hasattr(to_wait, "__wrapped__"):
@@ -225,7 +225,7 @@ def lock_from(
         raise RuntimeError("The function to wait for must be decorated with `lock` or `lock_arg`.")
 
     def decorator(func: types.FunctionType) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
-        if not asyncio.iscoroutinefunction(func):
+        if not inspect.iscoroutinefunction(func):
             raise RuntimeError("The function to lock must be a coroutine function.")
 
         name = func.__name__
