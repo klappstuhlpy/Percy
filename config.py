@@ -42,9 +42,9 @@ for _directory in (data_path, logs_path):
 name: str = 'Percy'
 version: VersionInfo = VersionInfo(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
 description: str = 'A multipurpose bot for Discord'
-support_server: str = 'https://discord.com/eKwMtGydqh'
-website: str = 'https://percy.klappstuhl.me/'
-repo_url: str = 'https://github.com/klappstuhlpy/Percy-v2/'
+support_server: str = 'https://discord.com/invite/3jSYQ9VNbA'
+website: str = 'https://klappstuhl.me/percy/dashboard'
+repo_url: str = 'https://github.com/klappstuhlpy/Percy/'
 
 owners: Collection[int] | int = 991398932397703238
 test_guild_id: int = 1062074624935993424
@@ -134,6 +134,8 @@ locg_api_url: str = env('LOCG_API_URL') or 'http://127.0.0.1:8070'
 
 
 class Emojis:
+    # EMOJIS ARE STORED INSIDE PERCY'S PERSONAL STORAGE AT https://discord.dev/ !
+
     info: ClassVar[str] = '<:discord_info:1322338333027995778>'
     success: ClassVar[str] = '<:greenTick:1322354661289754755>'
     error: ClassVar[str] = '<:redTick:1322355105231671296>'
