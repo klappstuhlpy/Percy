@@ -642,3 +642,70 @@ class StarboardRepository(BaseRepository):
         """Removes several starboard entries by original message id."""
         await self.execute(
             "DELETE FROM starboard_entries WHERE message_id = ANY($1::bigint[]);", list(message_ids))
+
+    # -- leaderboards / stats ---------------------------------------------
+
+    async def top_entries(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Returns a guild's most-starred entries, highest first (ties broken by recency)."""
+        return await self.fetch(
+            """
+            SELECT message_id, channel_id, author_id, starboard_message_id, star_count, created_at
+            FROM starboard_entries
+            WHERE guild_id = $1
+            ORDER BY star_count DESC, created_at DESC
+            LIMIT $2;
+            """,
+            guild_id,
+            limit,
+        )
+
+    async def top_authors(self, guild_id: int, limit: int = 100) -> list[asyncpg.Record]:
+        """Returns authors ranked by total stars received, with their post count."""
+        return await self.fetch(
+            """
+            SELECT author_id, SUM(star_count) AS stars, COUNT(*) AS posts
+            FROM starboard_entries
+            WHERE guild_id = $1
+            GROUP BY author_id
+            ORDER BY stars DESC, posts DESC
+            LIMIT $2;
+            """,
+            guild_id,
+            limit,
+        )
+
+    async def author_stats(self, guild_id: int, author_id: int) -> asyncpg.Record | None:
+        """Returns an author's total stars received, post count, and best single post.
+
+        Returns ``None`` when the author has no entries in the guild.
+        """
+        return await self.fetchrow(
+            """
+            SELECT
+                COALESCE(SUM(star_count), 0) AS stars,
+                COUNT(*)                     AS posts,
+                COALESCE(MAX(star_count), 0) AS best
+            FROM starboard_entries
+            WHERE guild_id = $1 AND author_id = $2
+            HAVING COUNT(*) > 0;
+            """,
+            guild_id,
+            author_id,
+        )
+
+    async def guild_totals(self, guild_id: int) -> asyncpg.Record:
+        """Returns the guild's total starred posts, total stars, and distinct authors."""
+        return cast(
+            "asyncpg.Record",
+            await self.fetchrow(
+                """
+                SELECT
+                    COUNT(*)                            AS posts,
+                    COALESCE(SUM(star_count), 0)        AS stars,
+                    COUNT(DISTINCT author_id)           AS authors
+                FROM starboard_entries
+                WHERE guild_id = $1;
+                """,
+                guild_id,
+            ),
+        )

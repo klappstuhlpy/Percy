@@ -23,6 +23,8 @@ class StarboardConfig:
     self_star: bool
     enabled: bool
     ignored_channel_ids: frozenset[int]
+    max_age_hours: int
+    allow_nsfw: bool
 
     @classmethod
     def from_record(cls, record: asyncpg.Record) -> StarboardConfig:
@@ -34,6 +36,8 @@ class StarboardConfig:
             self_star=record['self_star'],
             enabled=record['enabled'],
             ignored_channel_ids=frozenset(record['ignored_channel_ids'] or ()),
+            max_age_hours=record['max_age_hours'],
+            allow_nsfw=record['allow_nsfw'],
         )
 
     @property

@@ -7,10 +7,11 @@ import discord
 from discord.ext import commands  # noqa: TC002  (runtime-resolved command annotation)
 
 from app.cogs.starboard import ui
-from app.cogs.starboard.engine import StarboardAction, decide_action
-from app.cogs.starboard.models import DEFAULT_EMOJI, DEFAULT_THRESHOLD, StarboardConfig
+from app.cogs.starboard.engine import StarboardAction, decide_action, is_too_old
+from app.cogs.starboard.models import StarboardConfig
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, describe, group
+from app.core.pagination import LinePaginator
 from app.utils import helpers
 
 if TYPE_CHECKING:
@@ -124,10 +125,12 @@ class Starboard(Cog):
             return
 
         if action is StarboardAction.CREATE:
+            if not self._eligible_to_create(message, config, starboard):
+                return
             content = ui.build_starboard_content(config.emoji, star_count, message.channel)
-            embed = ui.build_starboard_embed(message)
+            embed, view = ui.build_starboard_embed(message, star_count=star_count, threshold=config.threshold)
             try:
-                posted = await starboard.send(content, embed=embed)
+                posted = await starboard.send(content, embed=embed, view=view)
             except discord.HTTPException:
                 return
             await self.bot.db.starboard.create_entry(
@@ -142,8 +145,10 @@ class Starboard(Cog):
             await self.bot.db.starboard.update_star_count(message.id, star_count)
             if star_message is not None:
                 content = ui.build_starboard_content(config.emoji, star_count, message.channel)
+                embed, _ = ui.build_starboard_embed(message, star_count=star_count, threshold=config.threshold)
                 try:
-                    await star_message.edit(content=content)
+                    # Re-send the embed too so its colour warms with the rising star count.
+                    await star_message.edit(content=content, embed=embed)
                 except discord.HTTPException:
                     pass
         elif action is StarboardAction.DELETE:
@@ -164,6 +169,22 @@ class Starboard(Cog):
             return await starboard.fetch_message(message_id)
         except discord.HTTPException:
             return None
+
+    @staticmethod
+    def _eligible_to_create(
+        message: discord.Message, config: StarboardConfig, starboard: discord.TextChannel | discord.Thread
+    ) -> bool:
+        """Gate the *first* post of a message: too-old and NSFW-spillover messages are skipped.
+
+        Only enforced on creation — once a message is on the board it keeps receiving
+        count/colour updates even if it later ages past the limit.
+        """
+        if is_too_old(message.created_at, discord.utils.utcnow(), config.max_age_hours):
+            return False
+        source = message.channel
+        source_nsfw = isinstance(source, (discord.TextChannel, discord.Thread, discord.VoiceChannel)) and source.is_nsfw()
+        # NSFW spillover: a message from an NSFW channel may only land on a non-NSFW board if allowed.
+        return not (source_nsfw and not config.allow_nsfw and not starboard.is_nsfw())
 
     # -- listeners --------------------------------------------------------
 
@@ -226,23 +247,7 @@ class Starboard(Cog):
         """Show the current starboard configuration."""
         assert ctx.guild is not None
         config = await self.get_config(ctx.guild.id)
-
-        embed = discord.Embed(title='Starboard Configuration', colour=helpers.Colour.energy_yellow())
-        if config is None:
-            embed.description = 'The starboard is **not configured** yet. Set a channel with `starboard channel`.'
-            embed.add_field(name='Threshold', value=str(DEFAULT_THRESHOLD))
-            embed.add_field(name='Emoji', value=DEFAULT_EMOJI)
-        else:
-            channel = f'<#{config.channel_id}>' if config.channel_id else '*not set*'
-            state = 'Enabled' if config.enabled else 'Disabled'
-            ignored = ', '.join(f'<#{cid}>' for cid in config.ignored_channel_ids) or '*none*'
-            embed.add_field(name='Status', value=state)
-            embed.add_field(name='Channel', value=channel)
-            embed.add_field(name='Threshold', value=str(config.threshold))
-            embed.add_field(name='Emoji', value=config.emoji)
-            embed.add_field(name='Allow self-star', value='Yes' if config.self_star else 'No')
-            embed.add_field(name='Ignored channels', value=ignored, inline=False)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=ui.build_config_embed(config, ctx.guild))
 
     @starboard.command(
         'channel',
@@ -344,6 +349,116 @@ class Starboard(Cog):
         ignored.discard(channel.id)
         await self._update_config(ctx.guild.id, ignored_channel_ids=list(ignored))
         await ctx.send_success(f'{channel.mention} can contribute to the starboard again.')
+
+    @starboard.command(
+        'maxage',
+        description='Ignore messages older than a number of hours (0 disables the limit).',
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(hours='Maximum message age in hours, or 0 for no limit.')
+    async def starboard_maxage(self, ctx: Context, hours: commands.Range[int, 0, 8760]) -> None:
+        """Set the maximum age a message can be to reach the starboard."""
+        assert ctx.guild is not None
+        await self._update_config(ctx.guild.id, max_age_hours=hours)
+        if hours == 0:
+            await ctx.send_success('Messages of any age can now reach the starboard.')
+        else:
+            await ctx.send_success(f'Only messages newer than **{hours}h** can reach the starboard.')
+
+    @starboard.command(
+        'nsfw',
+        description='Allow or disallow NSFW-channel messages on a non-NSFW starboard.',
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(allowed='Whether messages from NSFW channels may be mirrored.')
+    async def starboard_nsfw(self, ctx: Context, allowed: bool) -> None:
+        """Toggle whether NSFW-channel messages may reach the starboard."""
+        assert ctx.guild is not None
+        await self._update_config(ctx.guild.id, allow_nsfw=allowed)
+        verb = 'can now' if allowed else 'can no longer'
+        await ctx.send_success(f'Messages from NSFW channels {verb} reach the starboard.')
+
+    @starboard.command(
+        'config',
+        description='Open the interactive starboard settings panel.',
+        user_permissions=PermissionTemplate.manager,
+    )
+    async def starboard_config(self, ctx: Context) -> None:
+        """Open the interactive configuration panel."""
+        assert ctx.guild is not None
+        config = await self.get_config(ctx.guild.id)
+        view = ui.StarboardConfigView(self, ctx, config)
+        view.message = await ctx.send(embed=view.embed(), view=view)
+
+    @starboard.command(
+        'top',
+        description='Show the most-starred messages in this server.',
+        guild_only=True,
+    )
+    async def starboard_top(self, ctx: Context) -> None:
+        """Show the server's most-starred messages."""
+        assert ctx.guild is not None
+        entries = await self.bot.db.starboard.top_entries(ctx.guild.id, limit=100)
+        if not entries:
+            await ctx.send_info('No messages have reached the starboard yet.')
+            return
+
+        guild_id = ctx.guild.id
+        lines = [
+            f"**{record['star_count']}** \N{WHITE MEDIUM STAR} — <@{record['author_id']}> · "
+            f"[jump](https://discord.com/channels/{guild_id}/{record['channel_id']}/{record['message_id']})"
+            for record in entries
+        ]
+        embed = discord.Embed(title='\N{GLOWING STAR} Starboard Leaderboard', colour=helpers.Colour.energy_yellow())
+        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+        await LinePaginator.start(
+            ctx, entries=lines, per_page=10, location='description', numerate=True, embed=embed
+        )
+
+    @starboard.command(
+        'stats',
+        description='Show starboard statistics for the server or a member.',
+        guild_only=True,
+    )
+    @describe(member='The member to show stats for (defaults to server-wide stats).')
+    async def starboard_stats(self, ctx: Context, member: discord.Member | None = None) -> None:
+        """Show starboard statistics for the server or a specific member."""
+        assert ctx.guild is not None
+        repo = self.bot.db.starboard
+
+        if member is not None:
+            stats = await repo.author_stats(ctx.guild.id, member.id)
+            embed = discord.Embed(
+                title=f'Starboard stats for {member.display_name}',
+                colour=helpers.Colour.energy_yellow(),
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            if stats is None:
+                embed.description = 'This member has no messages on the starboard yet.'
+            else:
+                embed.add_field(name='Stars received', value=f"{stats['stars']} \N{WHITE MEDIUM STAR}")
+                embed.add_field(name='Messages on board', value=str(stats['posts']))
+                embed.add_field(name='Best post', value=f"{stats['best']} \N{WHITE MEDIUM STAR}")
+            await ctx.send(embed=embed)
+            return
+
+        totals = await repo.guild_totals(ctx.guild.id)
+        top_authors = await repo.top_authors(ctx.guild.id, limit=5)
+        embed = discord.Embed(title='\N{GLOWING STAR} Server Starboard Stats', colour=helpers.Colour.energy_yellow())
+        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+        embed.add_field(name='Starred messages', value=str(totals['posts']))
+        embed.add_field(name='Total stars', value=f"{totals['stars']} \N{WHITE MEDIUM STAR}")
+        embed.add_field(name='Starred authors', value=str(totals['authors']))
+
+        if top_authors:
+            medals = ('\N{FIRST PLACE MEDAL}', '\N{SECOND PLACE MEDAL}', '\N{THIRD PLACE MEDAL}')
+            leaderboard = '\n'.join(
+                f"{medals[i] if i < len(medals) else f'`{i + 1}.`'} <@{record['author_id']}> — "
+                f"**{record['stars']}** \N{WHITE MEDIUM STAR} ({record['posts']} posts)"
+                for i, record in enumerate(top_authors)
+            )
+            embed.add_field(name='Top authors', value=leaderboard, inline=False)
+        await ctx.send(embed=embed)
 
 
 async def setup(bot: Bot) -> None:
