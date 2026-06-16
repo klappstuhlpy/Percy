@@ -371,6 +371,8 @@ class BasePaginator[T](View, metaclass=ABCMeta):
                     self._current_page = self.total_pages - 1
             elif count > 0 and self._current_page > self.total_pages - 1:
                 self._current_page = 0
+        else:
+            self._current_page = max(0, min(self._current_page, self.total_pages - 1))
 
         self.update_buttons()
         return self.pages[self._current_page]
@@ -704,7 +706,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
         self, ctx: Context, *, prefix: str = "```", suffix: str = "```", max_size: int = 2000, timeout: int = 180
     ) -> None:
         self.interface: TextSource = TextSource(prefix=prefix, suffix=suffix, max_size=max_size)
-        super().__init__(entries=[], per_page=1, clamp_pages=False, timeout=timeout)
+        super().__init__(entries=[], per_page=1, clamp_pages=True, timeout=timeout)
         self.ctx: Context = ctx
 
     async def format_page(self, entries: list[AnyStr], /) -> str:
@@ -741,6 +743,7 @@ class TextSourcePaginator(BasePaginator[AnyStr]):
         # override the entries with the finished pages
         self.entries = self.interface.pages
         self.pages = [self.entries[i: i + 1] for i in range(0, len(self.entries), 1)]
+        self.update_buttons()
 
         page = await self.format_page(self.pages[0])
         kwargs = self.resolve_msg_kwargs(page)
