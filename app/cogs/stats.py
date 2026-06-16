@@ -1360,15 +1360,21 @@ class Stats(Cog):
             global_rate_limit=global_rate_limit,
         )
 
+        uptime = human_timedelta(self.bot.startup_timestamp, suffix=False)
+        ws_latency = self.bot.latency * 1000
+
         description = [
-            f"Total `Pool.acquire` Waiters: {total_waiting}",
-            f"Current Pool Generation: {current_generation}",
-            f"Connections In Use: {pool.in_use}",
-            f"Current Spammers: {', '.join(str(being_spammed)) if being_spammed else 'None'}",
+            f"Uptime: **{uptime}**",
+            f"WebSocket Latency: `{ws_latency:.1f}ms`",
+            f"Global Rate Limit: {'**YES**' if global_rate_limit else 'No'}",
+            "",
+            f"Pool Waiters: {total_waiting} | Generation: {current_generation}",
+            f"Connections In Use: {pool.in_use}/{pool.size}",
             f"Questionable Connections: {report.questionable_connections}",
+            "",
+            f"Current Spammers: {', '.join(str(s) for s in being_spammed) if being_spammed else 'None'}",
             f"Commands Waiting: {command_waiters}",
             f"Avatars Waiting: {len(self._avatar_data_batch)}",
-            f"Global Rate Limit: {global_rate_limit}",
         ]
 
         connection_value = "\n".join(
@@ -1379,9 +1385,37 @@ class Stats(Cog):
         embed.add_field(name="Inner Tasks", value=f"Total: {len(inner_tasks)}\nFailed: {bad_inner_tasks or 'None'}")
         embed.add_field(name="Events Waiting", value=f"Total: {len(event_tasks)}", inline=False)
 
+        # Database query metrics
+        tracker = self.bot.db.query_tracker
+        db_lines = [
+            f"Total Queries: {fnumb(tracker.total_queries)}",
+            f"Avg Duration: `{tracker.avg_duration_ms:.2f}ms`",
+            f"Slow Queries (>{tracker._threshold_ms:.0f}ms): {len(tracker._slow_queries)}",
+        ]
+        top_slow = tracker.slow_queries(3)
+        if top_slow:
+            db_lines.append("")
+            db_lines.extend(f"`{sq['duration_ms']}ms` {sq['query'][:60]}" for sq in top_slow)
+        embed.add_field(name="Database", value="\n".join(db_lines), inline=False)
+
+        # Cache stats
+        guild_size, guild_max = self.bot.db.get_guild_config.get_stats()
+        user_size, user_max = self.bot.db.get_user_config.get_stats()
+        sentinel_size, sentinel_max = self.bot.db.get_guild_sentinel.get_stats()
+        cache_lines = [
+            f"Guilds: {guild_size}/{guild_max}",
+            f"Users: {user_size}/{user_max}",
+            f"Sentinels: {sentinel_size}/{sentinel_max}",
+        ]
+        embed.add_field(name="Cache", value="\n".join(cache_lines))
+
+        # Process info
         memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
-        embed.add_field(name="Process", value=f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU", inline=False)
+        embed.add_field(name="Process", value=f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU")
+
+        # Extension status
+        embed.add_field(name="Extensions", value=f"Loaded: {len(self.bot.extensions)}\nCogs: {len(self.bot.cogs)}")
 
         embed.colour = LEVEL_COLOURS[report.level]
         embed.set_footer(text=f"{report.warnings} warning(s)")

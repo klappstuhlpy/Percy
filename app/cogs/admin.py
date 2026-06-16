@@ -46,54 +46,6 @@ class Admin(Cog):
     async def cog_check(self, ctx: commands.Context) -> bool:
         return await self.bot.is_owner(ctx.author)
 
-    @group(invoke_without_command=True, guild_only=True)
-    async def sync(self, ctx: Context, guild_id: int | None, copy: bool = False) -> None:
-        """Syncs the slash commands with the given guild"""
-
-        if guild_id is not None:
-            guild: discord.abc.Snowflake = discord.Object(id=guild_id)
-        else:
-            assert ctx.guild is not None
-            guild = ctx.guild
-
-        if copy:
-            assert guild is not None
-            self.bot.tree.copy_global_to(guild=guild)
-
-        commands = await self.bot.tree.sync(guild=guild)
-        self.bot._app_command_ids_resolved = False  # IDs may have changed; let help re-resolve them.
-        await ctx.send(f"Successfully synced {len(commands)} commands")
-
-    @sync.command(name="global", guild_only=False)
-    async def sync_global(self, ctx: Context) -> None:
-        """Syncs the commands globally"""
-
-        commands = await self.bot.tree.sync(guild=None)
-        self.bot._app_command_ids_resolved = False  # IDs may have changed; let help re-resolve them.
-        await ctx.send(f"Successfully synced {len(commands)} commands")
-
-    @group(invoke_without_command=True, alias="rl")
-    async def reload(self, ctx: Context) -> None:
-        """Command group for module reloading purposes."""
-        pass
-
-    @reload.command(name="module", alias="m")
-    async def reload_module(self, ctx: Context, name: str) -> None:
-        """Reloads a non-cog module using importlib. (unsafe)"""
-        try:
-            file = sys.modules[name]
-        except KeyError:
-            await ctx.send_error("Module not found.")
-            return
-
-        try:
-            importlib.reload(file)
-        except Exception as e:
-            await ctx.send_error(f"Failed to reload module: {e}")
-            return
-
-        await ctx.send_success(f"`{file}` reloaded.")
-
     @command()
     async def pm(self, ctx: Context, user_id: int, *, content: str) -> None:
         """Sends a DM to a user by ID."""
@@ -320,6 +272,42 @@ class Admin(Cog):
         """Shows all guilds the bot is in."""
         guilds = len(self.bot.guilds)
         await ctx.send(f'`{guilds}`')
+
+    @command(name='adminhelp')
+    async def adminhelp(self, ctx: Context) -> None:
+        """Lists all owner-only commands grouped by cog."""
+        entries: dict[str, list[str]] = {}
+
+        for cog_name, cog in sorted(self.bot.cogs.items()):
+            cog_is_owner_only = getattr(cog, '__hidden__', False) and hasattr(cog, 'cog_check')
+            owner_cmds: list[str] = []
+            for cmd in cog.walk_commands():
+                if cog_is_owner_only or self._has_owner_check(cmd):
+                    sig = f"`{ctx.prefix}{cmd.qualified_name}`"
+                    if cmd.short_doc:
+                        sig += f" — {cmd.short_doc}"
+                    owner_cmds.append(sig)
+            if owner_cmds:
+                entries[cog_name] = owner_cmds
+
+        paginator = TextSourcePaginator(ctx, prefix="", suffix="", max_size=1900)
+        for cog_name, cmds in entries.items():
+            paginator.add_line(f"**{cog_name}**")
+            for line in cmds:
+                paginator.add_line(f"  {line}")
+            paginator.add_line("")
+        await paginator.start()
+
+    @staticmethod
+    def _has_owner_check(cmd: commands.Command) -> bool:
+        """Whether a command or any of its parents has an ``is_owner()`` check."""
+        current: commands.Command | commands.Group | None = cmd
+        while current is not None:
+            for check in current.checks:
+                if getattr(check, '__qualname__', '').startswith('is_owner'):
+                    return True
+            current = current.parent
+        return False
 
 
 async def setup(bot) -> None:
