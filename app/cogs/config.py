@@ -567,12 +567,36 @@ class Config(Cog):
         """Handles global bot configuration."""
         pass
 
+    @_global.command("show", description="Shows all globally blocked entities.", hidden=True)
+    @commands.is_owner()
+    async def global_show(self, ctx: Context) -> None:
+        """Shows all globally blocked users and guilds."""
+        blacklist = self.bot.blacklist
+        if not blacklist.all():
+            await ctx.send_info("No globally blocked entities.")
+            return
+
+        entries: list[str] = []
+        for raw_id in blacklist:
+            entity_id = int(raw_id)
+            user = self.bot.get_user(entity_id)
+            guild = self.bot.get_guild(entity_id)
+            if user:
+                entries.append(f"`{entity_id}` — {user} (user)")
+            elif guild:
+                entries.append(f"`{entity_id}` — {guild.name} (guild)")
+            else:
+                entries.append(f"`{entity_id}` — *unknown*")
+
+        embed = discord.Embed(title="Global Blacklist", color=helpers.Colour.white())
+        await LinePaginator.start(ctx, entries=entries, per_page=15, embed=embed, location="description", numerate=True)
+
     @_global.command("block", description="Blocks a user or guild globally.", hidden=True)
     @describe(object_id="The user or guild ID to block.")
     @commands.is_owner()
-    async def global_block(self, ctx: Context, object_id: discord.abc.Snowflake) -> None:
+    async def global_block(self, ctx: Context, object_id: int) -> None:
         """Blocks a user or guild globally."""
-        await self.bot.add_to_blacklist(object_id)
+        await self.bot.add_to_blacklist(discord.Object(id=object_id))
         await ctx.send_success('User or guild blocked globally.')
 
     @_global.command(
@@ -582,9 +606,9 @@ class Config(Cog):
     )
     @describe(object_id='The user or guild ID to unblock.')
     @commands.is_owner()
-    async def global_unblock(self, ctx: Context, object_id: discord.abc.Snowflake) -> None:
+    async def global_unblock(self, ctx: Context, object_id: int) -> None:
         """Unblocks a user or guild globally."""
-        await self.bot.remove_from_blacklist(object_id)
+        await self.bot.remove_from_blacklist(discord.Object(id=object_id))
         await ctx.send_success('User or guild unblocked globally.')
 
 
