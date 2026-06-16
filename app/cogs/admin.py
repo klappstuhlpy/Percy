@@ -1,10 +1,7 @@
 import asyncio
 import copy
-import importlib
 import io
 import re
-import subprocess
-import sys
 import time
 import traceback
 from pathlib import Path
@@ -32,16 +29,6 @@ class Admin(Cog):
 
     __hidden__ = True
     emoji = "<:originally_known_as:1322355070578327692>"
-
-    async def run_process(self, command: str) -> list[str]:
-        try:
-            process = await asyncio.create_subprocess_shell(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            result = await process.communicate()
-        except NotImplementedError:
-            process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            result = await self.bot.loop.run_in_executor(None, process.communicate)  # type: ignore[attr-defined]
-
-        return [output.decode() for output in result]
 
     async def cog_check(self, ctx: commands.Context) -> bool:
         return await self.bot.is_owner(ctx.author)
