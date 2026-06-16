@@ -336,7 +336,9 @@ class GuildHandlers(InternalAPIHandlers):
                 return web.json_response({'ok': True, 'status': 'already_disabled'})
             await gatekeeper.disable()
 
-        self.bot.db.signals.fire("gatekeeper_changed", guild_id)
+        # ``enable``/``disable`` mutate the cached gatekeeper in place; firing the
+        # invalidation signal here would cancel the role loop that ``disable`` needs to
+        # drain its pending-removal queue, so we intentionally don't re-invalidate.
         return web.json_response({'ok': True, 'status': 'enabled' if enabled else 'disabled'})
 
     async def _get_user_guilds(self, request: web.Request) -> web.Response:

@@ -375,15 +375,47 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
         if role is not None:
             await self.request_permission_sync(channel, role, interaction)
 
-        message = self.gatekeeper.message
-        if message is not None:
-            await message.delete()
+        # The deployed verification message lives in the *old* channel, so it must be
+        # removed when the channel changes. Remember whether one existed so we can
+        # automatically redeploy it to the new channel instead of forcing the operator
+        # to recreate it by hand.
+        had_message = self.gatekeeper.message_id is not None
+        old_message = self.gatekeeper.message
+        if old_message is not None:
+            with suppress(discord.HTTPException):
+                await old_message.delete()
 
         await self.gatekeeper.edit(channel_id=channel.id, message_id=None)
-        await interaction.followup.send(
-            f"{Emojis.success} Verification channel set to {channel.mention}",
-            ephemeral=True,
-        )
+
+        redeployed = False
+        if had_message:
+            verify_view = GatekeeperVerifyView(
+                self.view.config,
+                self.gatekeeper,
+                body=(
+                    "To access this server you must complete a quick verification.\n"
+                    "**Tap the button below to begin.**"
+                ),
+            )
+            try:
+                new_message = await channel.send(view=verify_view)
+            except discord.HTTPException:
+                pass
+            else:
+                await self.gatekeeper.edit(message_id=new_message.id)
+                redeployed = True
+
+        if redeployed:
+            await interaction.followup.send(
+                f"{Emojis.success} Verification channel set to {channel.mention} — "
+                f"the verification message was redeployed there.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                f"{Emojis.success} Verification channel set to {channel.mention}",
+                ephemeral=True,
+            )
         self.view.update_state()
         await interaction.edit_original_response(view=self.view)
 
@@ -1022,10 +1054,12 @@ class GatekeeperVerifyButton(
             send_messages=True,
         )
 
-        # Captcha challenge as a CV2 card
+        # Captcha challenge as a CV2 card. The MediaGallery only references the image by
+        # ``attachment://captcha.png``, so the file itself must be uploaded alongside the
+        # view or Discord rejects the body ("referenced attachment was not found").
         captcha_view = _CaptchaChallengeView(captcha.file)
         message = await interaction.followup.send(
-            view=captcha_view, ephemeral=True
+            view=captcha_view, file=captcha.file, ephemeral=True
         )
 
         try:

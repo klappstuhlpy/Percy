@@ -177,14 +177,17 @@ def cache(
             # Add a default docstring if none is present
             func.__doc__ = DEFAULT_DOCSTRING
 
+        def _true_repr(o: Any) -> str:
+            if o.__class__.__repr__ is object.__repr__:
+                return f"<{o.__class__.__module__}.{o.__class__.__name__}>"
+            return repr(o)
+
         def _make_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
-            """Generate a cache key from the given arguments."""
+            """Generate a cache key from raw positional/keyword arguments.
 
-            def _true_repr(o: Any) -> str:
-                if o.__class__.__repr__ is object.__repr__:
-                    return f"<{o.__class__.__module__}.{o.__class__.__name__}>"
-                return repr(o)
-
+            Used as the fallback when the call cannot be bound to the signature
+            (and for the ``ignore_kwargs`` strategy, which keys on positionals only).
+            """
             key_parts = [f"{func.__module__}.{func.__name__}"]
 
             for arg in args:
@@ -199,22 +202,48 @@ def cache(
             return ":".join(key_parts)
 
         # Compute once at decoration time rather than on every call.
+        _signature = inspect.signature(func)
         _all_params: list[inspect.Parameter] = list(
-            filter(lambda x: x._kind != inspect.Parameter.KEYWORD_ONLY, inspect.signature(func).parameters.values())
+            filter(lambda x: x._kind != inspect.Parameter.KEYWORD_ONLY, _signature.parameters.values())
         )
         _skip_first_param: bool = any(p.name in ("self", "cls") for p in _all_params)
         _is_coroutine: bool = inspect.iscoroutinefunction(func)
+        # A view of the signature with the bound ``self``/``cls`` removed, so that a
+        # call's *logical* arguments (everything after ``self``) can be bound and
+        # normalised regardless of whether they were passed positionally or by keyword.
+        _sig_logical = _signature.replace(
+            parameters=[p for p in _signature.parameters.values() if p.name not in ("self", "cls")]
+        )
+
+        def _key_for_call(logical_args: tuple[Any, ...], logical_kwargs: dict[str, Any]) -> str:
+            """Build a cache key that is invariant to positional/keyword call style.
+
+            ``logical_args`` must already have ``self``/``cls`` stripped. Binding the
+            arguments to the signature means ``f(123)`` and ``f(guild_id=123)`` map to
+            the same key, so signal-based invalidation (which always fires positionally)
+            reliably busts entries cached by keyword callers, and vice versa.
+            """
+            if ignore_kwargs:
+                return _make_key(logical_args, logical_kwargs)
+            try:
+                bound = _sig_logical.bind(*logical_args, **logical_kwargs)
+            except TypeError:
+                # *args/**kwargs or arity mismatch — fall back to the raw key.
+                return _make_key(logical_args, logical_kwargs)
+            key_parts = [f"{func.__module__}.{func.__name__}"]
+            for name, value in bound.arguments.items():
+                if name in ("connection", "pool"):
+                    continue
+                key_parts.append(f"{name}={_true_repr(value)}")
+            return ":".join(key_parts)
 
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R] | R:
             """The actual wrapper for the cache to be assigned to the corresponding function."""
 
-            # we only want to cache the positional arguments
-            if _skip_first_param:
-                paired = zip(args, _all_params)
-                key = _make_key(tuple(arg for arg, param in paired if param.name not in ("self", "cls")), kwargs)
-            else:
-                key = _make_key(args, kwargs)
+            # Strip the bound ``self``/``cls`` (always the first positional) before keying.
+            logical_args = args[1:] if _skip_first_param else args
+            key = _key_for_call(logical_args, kwargs)
 
             try:
                 task = _internal_cache[key]
@@ -230,11 +259,11 @@ def cache(
         def _invalidate(*args: Any, **kwargs: Any) -> bool:
             """Invalidate a cache entry.
 
-            If a call is provided, execute the method from the cached object.
-            The call should be a string representing the method to call, for example: ``'a.b.c()'``.
+            Callers pass the *logical* arguments (no ``self``), matching how the wrapper
+            keys entries after stripping ``self``.
             """
             try:
-                item = _internal_cache.pop(_make_key(args, kwargs))
+                item = _internal_cache.pop(_key_for_call(args, kwargs))
             except KeyError:
                 return False
             else:
@@ -260,8 +289,8 @@ def cache(
                         action(item)
 
         def _get_key(*args: Any, **kwargs: Any) -> str:
-            """Get the cache key for the given arguments."""
-            return _make_key(args, kwargs)
+            """Get the cache key for the given (logical, ``self``-less) arguments."""
+            return _key_for_call(args, kwargs)
 
         wrapper: Callable[P, asyncio.Task[R] | R]
         result = cast('CacheProtocol[P, R]', wrapper)

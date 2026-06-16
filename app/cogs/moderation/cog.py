@@ -372,11 +372,14 @@ class Moderation(Cog):
         if config.flags.gatekeeper:
             gatekeeper = await self.bot.db.get_guild_gatekeeper(role.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.role_id == role.id:
-                if gatekeeper.started_at is not None:
-                    await config.send_alert(
-                        "Gatekeeper **role** has been deleted while it's active, therefore it's been automatically disabled."
-                    )
+                was_active = gatekeeper.started_at is not None
                 await gatekeeper.edit(started_at=None, role_id=None)
+                await config.send_alert(
+                    "Gatekeeper **lockdown role** was deleted, so it has been "
+                    + ("disabled and reset" if was_active else "reset")
+                    + ". Re-select a lockdown role to re-enable it."
+                )
+                await self._refresh_gatekeeper_menu(role.guild.id)
                 return
 
     @Cog.listener()
@@ -457,12 +460,16 @@ class Moderation(Cog):
         if config.flags.gatekeeper:
             gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.channel_id == channel.id:
-                if gatekeeper.started_at is not None:
-                    await config.send_alert(
-                        "Gatekeeper **channel** has been deleted while it's active, "
-                        "therefore it's been automatically disabled."
-                    )
-                await gatekeeper.edit(started_at=None, channel_id=None)
+                was_active = gatekeeper.started_at is not None
+                # Deleting the channel also destroys the verification message inside it,
+                # so clear both references (and deactivate) to avoid a dangling message_id.
+                await gatekeeper.edit(started_at=None, channel_id=None, message_id=None)
+                await config.send_alert(
+                    "Gatekeeper **verification channel** was deleted, so it has been "
+                    + ("disabled and reset" if was_active else "reset")
+                    + ". Re-select a channel and redeploy the verification message to re-enable it."
+                )
+                await self._refresh_gatekeeper_menu(channel.guild.id)
                 return
 
     @Cog.listener()
@@ -492,12 +499,14 @@ class Moderation(Cog):
         if config.flags.gatekeeper:
             gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.message_id == payload.message_id:
-                if gatekeeper.started_at is not None:
-                    await config.send_alert(
-                        "Gatekeeper **starter message** has been deleted while it's active, "
-                        "therefore it's been automatically disabled."
-                    )
+                was_active = gatekeeper.started_at is not None
                 await gatekeeper.edit(started_at=None, message_id=None)
+                await config.send_alert(
+                    "Gatekeeper **verification message** was deleted, so it has been "
+                    + ("disabled and reset" if was_active else "reset")
+                    + ". Redeploy the verification message to re-enable it."
+                )
+                await self._refresh_gatekeeper_menu(payload.guild_id)
                 return
 
     @Cog.listener()
@@ -527,12 +536,29 @@ class Moderation(Cog):
         if config.flags.gatekeeper:
             gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
             if gatekeeper is not None and gatekeeper.message_id in payload.message_ids:
-                if gatekeeper.started_at is not None:
-                    await config.send_alert(
-                        "Gatekeeper starter message has been deleted while it's active, therefore it's been automatically disabled."
-                    )
+                was_active = gatekeeper.started_at is not None
                 await gatekeeper.edit(started_at=None, message_id=None)
+                await config.send_alert(
+                    "Gatekeeper **verification message** was deleted, so it has been "
+                    + ("disabled and reset" if was_active else "reset")
+                    + ". Redeploy the verification message to re-enable it."
+                )
+                await self._refresh_gatekeeper_menu(payload.guild_id)
                 return
+
+    async def _refresh_gatekeeper_menu(self, guild_id: int) -> None:
+        """Re-render an open gatekeeper setup menu so it reflects an external change.
+
+        The menu drives off the cached gatekeeper (mutated in place by ``edit``), so its
+        data is already current; this just repaints the message after a deletion listener
+        disables/resets the gatekeeper underneath it.
+        """
+        view = self._gatekeeper_menus.get(guild_id)
+        if view is None or view.message is None:
+            return
+        with suppress(discord.HTTPException):
+            view.update_state()
+            await view.message.edit(view=view)
 
     @Cog.listener()
     async def on_voice_state_update(
@@ -942,14 +968,21 @@ class Moderation(Cog):
             await previous.on_timeout()
             previous.stop()
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=ctx.guild.id)
-        gatekeeper_record, config_record = await self.bot.db.moderation.setup_gatekeeper(
+        gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)
+        await self.bot.db.moderation.setup_gatekeeper(
             ctx.guild.id, AutoModFlags.gatekeeper.flag, create_gatekeeper=gatekeeper is None
         )
 
+        # Always drive the view off the cached gatekeeper/config so in-place edits made
+        # here (and by the dashboard or the deletion listeners) stay coherent. ``setup``
+        # invalidates both caches, so these re-fetches return fresh, shared instances.
         if gatekeeper is None:
-            gatekeeper = Gatekeeper([], bot=self.bot, record=gatekeeper_record)
-        config = GuildConfig(bot=self.bot, record=config_record)
+            gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)
+        config = await self.bot.db.get_guild_config(ctx.guild.id)
+
+        if gatekeeper is None:
+            await ctx.send_error("Failed to initialise the gatekeeper. Please try again.")
+            return
 
         # The explanatory header now lives inside the Components V2 view's container.
         self._gatekeeper_menus[ctx.guild.id] = view = GatekeeperSetUpView(self, ctx.author, config, gatekeeper)  # type: ignore[arg-type]

@@ -1057,7 +1057,6 @@ class Gatekeeper(BaseRecord):
     rate: tuple[int, int] | str | None
 
     __slots__ = (
-        "__members",
         "__stop_event",
         "bot",
         "bypass_action",
@@ -1075,7 +1074,6 @@ class Gatekeeper(BaseRecord):
 
     def __init__(self, members: list[Any], **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.__members = members
         self.members: set[int] = {r["user_id"] for r in members if r["state"] == "added"}
 
         if self.rate is not None:
@@ -1169,9 +1167,17 @@ class Gatekeeper(BaseRecord):
             WHERE id = $1
             RETURNING *;
         """
-        record = await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
-        self.bot.db.signals.fire("gatekeeper_changed", self.id)
-        return self.__class__(self.__members, bot=self.bot, record=record)  # type: ignore[return-value]
+        await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
+        # NOTE: we deliberately mutate ``self`` in place (see ``edit``) and return it
+        # rather than constructing a fresh instance. ``self`` is the cached gatekeeper
+        # returned by ``get_guild_gatekeeper`` (every caller fetches it through that
+        # getter), so editing in place keeps the cache, the open setup menu, and the
+        # background role loop coherent. Constructing a new instance here would spawn a
+        # second ``role_loop`` task on every edit, and firing ``gatekeeper_changed``
+        # would invalidate the cache and cancel the very task ``disable()`` relies on to
+        # drain its pending-removal queue. Raw-SQL mutations (the dashboard's
+        # ``upsert_gatekeeper``) still fire the signal to force a rebuild.
+        return self
 
     async def edit(
         self,

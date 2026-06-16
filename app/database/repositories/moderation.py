@@ -211,6 +211,10 @@ class ModerationRepository(BaseRepository):
                 guild_id, flags_value)
 
         self.invalidate_cache("guild_config_changed", guild_id)
+        if create_gatekeeper:
+            # Bust the cached ``None`` from the pre-setup lookup so the next
+            # ``get_guild_gatekeeper`` builds (and caches) the freshly-created record.
+            self.invalidate_cache("gatekeeper_changed", guild_id)
         return gatekeeper_record, config_record
 
     async def toggle_raid_protection(self, guild_id: int, flag: int, enabled: bool | None) -> bool:
