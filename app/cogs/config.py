@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from itertools import accumulate
 from typing import TYPE_CHECKING, Annotated
@@ -578,7 +579,9 @@ class Config(Cog):
 
         entries: list[str] = []
         for raw_id in blacklist:
-            entity_id = int(raw_id)
+            raw_str = str(raw_id)
+            match = re.search(r'(\d+)', raw_str)
+            entity_id = int(match.group(1)) if match else int(raw_str)
             user = self.bot.get_user(entity_id)
             guild = self.bot.get_guild(entity_id)
             if user:

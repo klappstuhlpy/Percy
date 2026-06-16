@@ -708,7 +708,7 @@ class Bot(commands.Bot):
         object_id = timer['object_id']
 
         if object_id:
-            await self.remove_from_blacklist(object_id)
+            await self.remove_from_blacklist(discord.Object(id=int(object_id)))
 
     # UTILS
 
@@ -909,9 +909,9 @@ class Bot(commands.Bot):
         """
         if duration is not None:
             when = datetime.datetime.now() + datetime.timedelta(seconds=duration)
-            await self.timers.create(when, 'blacklist', object_id=obj)
+            await self.timers.create(when, 'blacklist', object_id=obj.id)
 
-        await self.blacklist.put(obj, True)
+        await self.blacklist.put(obj.id, True)
 
     async def remove_from_blacklist(self, obj: discord.abc.Snowflake) -> None:
         """|coro|
@@ -924,7 +924,7 @@ class Bot(commands.Bot):
             The object to remove.
         """
         with suppress(KeyError):
-            await self.blacklist.remove(obj)
+            await self.blacklist.remove(obj.id)
 
     async def close(self) -> None:
         """Closes this bot and it's aiohttp ClientSession."""
