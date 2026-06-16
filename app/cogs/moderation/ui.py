@@ -84,7 +84,7 @@ class MuteRoleCreateModal(discord.ui.Modal, title="Create Mute Role"):
 class MuteRoleSetUpView(LayoutView):
     """The mute role setup dashboard — a single CV2 container.
 
-    Mirrors the gatekeeper menu: every control (role select, buttons, status
+    Mirrors the sentinel menu: every control (role select, buttons, status
     text) lives inside one Container so it renders as a continuous card. The
     layout is rebuilt on every state change. A single ``?muterole`` command
     surfaces all of bind / create / sync / unbind from one place.

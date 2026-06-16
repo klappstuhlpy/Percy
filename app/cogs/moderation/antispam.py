@@ -16,7 +16,7 @@ from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSeq
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, MutableMapping
 
-    from app.database.base import Gatekeeper, GuildConfig
+    from app.database.base import Sentinel, GuildConfig
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ class SpamChecker:
         self._by_mentions_rate: int | None = None
 
         self._join_rate: tuple[int, int] | None = None
-        self.auto_gatekeeper: ListedRateLimit | None = None
-        # Enabled if alerts are on but gatekeeper isn't
+        self.auto_sentinel: ListedRateLimit | None = None
+        # Enabled if alerts are on but sentinel isn't
         self._default_join_spam = ListedRateLimit(10, 5, key=attrgetter("joined_at"))
 
         self.last_created: datetime.datetime | None = None
@@ -239,8 +239,8 @@ class SpamChecker:
         mention_count = sum(not m.bot and m.id != message.author.id for m in message.mentions)
         return mention_bucket is not None and mention_bucket.update_rate_limit(current, tokens=mention_count) is not None
 
-    def check_gatekeeper(self, member: discord.Member, gatekeeper: Gatekeeper) -> list[discord.Member]:
-        """Check if a member is ratelimited by the gatekeeper.
+    def check_sentinel(self, member: discord.Member, sentinel: Sentinel) -> list[discord.Member]:
+        """Check if a member is ratelimited by the sentinel.
 
         This will return a list of members that are ratelimited.
 
@@ -248,30 +248,30 @@ class SpamChecker:
         ----------
         member: :class:`discord.Member`
             The member to check.
-        gatekeeper: :class:`Gatekeeper
-            The gatekeeper to check against.
+        sentinel: :class:`Sentinel
+            The sentinel to check against.
         """
-        if gatekeeper.started_at is not None:
+        if sentinel.started_at is not None:
             return []
 
-        rate = gatekeeper.rate
+        rate = sentinel.rate
         if rate is None:
             self._join_rate = None
             return []
 
         if rate != self._join_rate:
             # Might be worth considering swapping over the tat/member list? Probably complicated though
-            self.auto_gatekeeper = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter("joined_at"))
+            self.auto_sentinel = ListedRateLimit(int(rate[0]), int(rate[1]), key=attrgetter("joined_at"))
             self._join_rate = rate  # type: ignore[arg-type]
 
-        if self.auto_gatekeeper is not None:
-            return self.auto_gatekeeper.is_ratelimited(member)
+        if self.auto_sentinel is not None:
+            return self.auto_sentinel.is_ratelimited(member)
 
         return []
 
     def is_alertable_join_spam(self, member: discord.Member) -> list[discord.Member]:
         """Check if a member is ratelimited by the join spam checker."""
-        if self.auto_gatekeeper is not None:
+        if self.auto_sentinel is not None:
             return []
 
         return self._default_join_spam.is_ratelimited(member)

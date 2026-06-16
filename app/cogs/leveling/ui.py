@@ -121,7 +121,7 @@ class RemoveLevelRolesSelect(discord.ui.RoleSelect["InteractiveLevelRolesView | 
 class InteractiveLevelRolesView(LayoutView):
     """Components V2 dashboard for managing level-up reward roles.
 
-    Mirrors the gatekeeper/mute-role setup cards: a single brand-accented container
+    Mirrors the sentinel/mute-role setup cards: a single brand-accented container
     holds the live role list, the role-stacking status and every control, rebuilt on
     each interaction.
     """

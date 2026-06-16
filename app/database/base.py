@@ -58,7 +58,7 @@ __all__ = (
     "Balance",
     "BaseRecord",
     "Database",
-    "Gatekeeper",
+    "Sentinel",
     "GuildConfig",
     "UserConfig",
 )
@@ -253,7 +253,7 @@ class Database(_Database):
         s = self.signals
         s.register("guild_config_changed").connect(self.get_guild_config, None)
         s.register("user_config_changed").connect(self.get_user_config, None)
-        s.register("gatekeeper_changed").connect(self.get_guild_gatekeeper, None)
+        s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -275,30 +275,30 @@ class Database(_Database):
         return GuildConfig(bot=self.bot, record=record)
 
     @cache.cache(action=lambda g: g.cancel_task())
-    async def get_guild_gatekeeper(self, guild_id: int | None) -> Gatekeeper | None:
+    async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:
         """|coro|
 
-        Get the gatekeeper for the guild.
+        Get the sentinel for the guild.
 
         Parameters
         ----------
         guild_id: :class:`int`
-            The guild ID to get the gatekeeper from.
+            The guild ID to get the sentinel from.
 
         Returns
         -------
-        :class:`Gatekeeper`
-            The gatekeeper if it exists, else ``None``.
+        :class:`Sentinel`
+            The sentinel if it exists, else ``None``.
         """
         if guild_id is None:
             return None
 
-        record = await self.guilds.get_gatekeeper_record(guild_id)
+        record = await self.guilds.get_sentinel_record(guild_id)
         if record is None:
             return None
 
-        members = await self.guilds.get_gatekeeper_members(guild_id)
-        return Gatekeeper(members, bot=self.bot, record=record)
+        members = await self.guilds.get_sentinel_members(guild_id)
+        return Sentinel(members, bot=self.bot, record=record)
 
     @cache.cache()
     async def get_user_config(self, user_id: int, /) -> UserConfig:
@@ -692,8 +692,8 @@ class GuildConfig(BaseRecord):
             return 4
 
         @flag_value
-        def gatekeeper(self) -> int:
-            """Whether the server has gatekeeper enabled."""
+        def sentinel(self) -> int:
+            """Whether the server has sentinel enabled."""
             return 8
 
         @flag_value
@@ -984,8 +984,8 @@ class UserConfig(BaseRecord):
         return dateutil.tz.gettz(self.timezone) or datetime.UTC
 
 
-class Gatekeeper(BaseRecord):
-    """A gatekeeper (Captcha-Verify-System) that prevents users from participating
+class Sentinel(BaseRecord):
+    """A sentinel (Captcha-Verify-System) that prevents users from participating
     in the server until certain conditions are met.
 
     This is currently implemented as the user must solve a generated captcha image of six random characters.
@@ -995,50 +995,50 @@ class Gatekeeper(BaseRecord):
     id : int
         The ID of the guild.
     started_at : datetime.datetime | None
-        The time when the gatekeeper was started.
+        The time when the sentinel was started.
     role_id : int | None
         The role ID to add to members.
     starter_role_id : int | None
-        The role ID to add to members that bypass the gatekeeper.
+        The role ID to add to members that bypass the sentinel.
     channel_id : int | None
-        The channel ID where the gatekeeper is active.
+        The channel ID where the sentinel is active.
     message_id : int | None
-        The message ID that the gatekeeper is using.
+        The message ID that the sentinel is using.
     bypass_action : Literal['ban', 'kick']
-        The action to take when someone bypasses the gatekeeper.
+        The action to take when someone bypasses the sentinel.
     rate : tuple[int, int] | None
         The rate limit for joining the server.
     members : set[int]
         The members that have the role and are pending to be verified.
     task : asyncio.Task
         The task that adds and removes the role from members.
-    queue : CancellableQueue[int, tuple[int, GatekeeperRoleState]]
+    queue : CancellableQueue[int, tuple[int, SentinelRoleState]]
         The queue that is being processed in the background.
 
     Behavior Overview
     ------------------
-    - Gatekeeper.members
+    - Sentinel.members
         This is a set of members that have the role and are pending to
         receive the role. Anyone in this set is technically being gatekept.
         If they talk in any channel while technically gatekept then they
         should get autobanned/autokicked.
 
-        If the gatekeeper is disabled, then this list should be cleared,
+        If the sentinel is disabled, then this list should be cleared,
         probably one by one during clean-up.
-    - Gatekeeper.started_at is None
-        This signals that the gatekeeper is fully disabled.
+    - Sentinel.started_at is None
+        This signals that the sentinel is fully disabled.
         If this is true, then all members should lose their role
         and the table **should not** be cleared.
 
         There is a special case where this is true, but there
         are still members. In this case, clean up should resume.
-    - Gatekeeper.started_at is not None
-        This one's simple, the gatekeeper is fully operational
+    - Sentinel.started_at is not None
+        This one's simple, the sentinel is fully operational
         and serving captchas and adding roles.
     """
 
-    class GatekeeperRoleState(enum.Enum):
-        """The state of a member in the gatekeeper."""
+    class SentinelRoleState(enum.Enum):
+        """The state of a member in the sentinel."""
 
         added = "added"
         pending_add = "pending_add"
@@ -1087,18 +1087,18 @@ class Gatekeeper(BaseRecord):
         self.task: asyncio.Task = asyncio.create_task(self.role_loop())
         self.task._log_destroy_pending = False  # type: ignore[attr-defined]
 
-        self.log.debug("Gatekeeper %r has started.", self.id)
+        self.log.debug("Sentinel %r has started.", self.id)
         if self.started_at is not None:
             self.started_at = self.started_at.replace(tzinfo=datetime.UTC)
 
-        self.queue: CancellableQueue[int, tuple[int, Gatekeeper.GatekeeperRoleState]] = CancellableQueue(
+        self.queue: CancellableQueue[int, tuple[int, Sentinel.SentinelRoleState]] = CancellableQueue(
             hook_check=self.__stop_event.is_set
         )
 
         for member in members:
-            state = self.GatekeeperRoleState(member["state"])
+            state = self.SentinelRoleState(member["state"])
             member_id = member["user_id"]
-            if state is not self.GatekeeperRoleState.added:
+            if state is not self.SentinelRoleState.added:
                 self.queue.put(member_id, (member_id, state))
 
     def __repr__(self) -> str:
@@ -1118,7 +1118,7 @@ class Gatekeeper(BaseRecord):
 
     @property
     def status(self) -> str:
-        """The status of the gatekeeper."""
+        """The status of the sentinel."""
         headers = [
             ("Blocked Members", f"**{len(self.members)}**"),
             ("Enabled", discord.utils.format_dt(self.started_at) if self.started_at is not None else "False"),
@@ -1162,21 +1162,21 @@ class Gatekeeper(BaseRecord):
             The connection to use for the update operation.
         """
         query = f"""
-            UPDATE guild_gatekeeper
+            UPDATE guild_sentinel
             SET {", ".join(map(key, enumerate(values.keys(), start=2)))}
             WHERE id = $1
             RETURNING *;
         """
         await (connection or self.bot.db).fetchrow(query, self.id, *values.values())
         # NOTE: we deliberately mutate ``self`` in place (see ``edit``) and return it
-        # rather than constructing a fresh instance. ``self`` is the cached gatekeeper
-        # returned by ``get_guild_gatekeeper`` (every caller fetches it through that
+        # rather than constructing a fresh instance. ``self`` is the cached sentinel
+        # returned by ``get_guild_sentinel`` (every caller fetches it through that
         # getter), so editing in place keeps the cache, the open setup menu, and the
         # background role loop coherent. Constructing a new instance here would spawn a
-        # second ``role_loop`` task on every edit, and firing ``gatekeeper_changed``
+        # second ``role_loop`` task on every edit, and firing ``sentinel_changed``
         # would invalidate the cache and cancel the very task ``disable()`` relies on to
         # drain its pending-removal queue. Raw-SQL mutations (the dashboard's
-        # ``upsert_gatekeeper``) still fire the signal to force a rebuild.
+        # ``upsert_sentinel``) still fire the signal to force a rebuild.
         return self
 
     async def edit(
@@ -1192,22 +1192,22 @@ class Gatekeeper(BaseRecord):
     ) -> None:
         """|coro|
 
-        Edits the gatekeeper.
+        Edits the sentinel.
 
         Parameters
         ----------
         started_at : datetime.datetime | None
-            The time when the gatekeeper was started.
+            The time when the sentinel was started.
         role_id : int | None
             The role ID to add to members.
         starter_role_id : int | None
-            The role ID to add to members that bypass the gatekeeper.
+            The role ID to add to members that bypass the sentinel.
         channel_id : int | None
-            The channel ID where the gatekeeper is active.
+            The channel ID where the sentinel is active.
         message_id : int | None
-            The message ID that the gatekeeper is using.
+            The message ID that the sentinel is using.
         bypass_action : Literal['ban', 'kick']
-            The action to take when someone bypasses the gatekeeper.
+            The action to take when someone bypasses the sentinel.
         rate : tuple[int, int] | None
             The rate limit for joining the server.
         """
@@ -1234,7 +1234,7 @@ class Gatekeeper(BaseRecord):
         await self.update(**form)
 
         if role_id is not MISSING:
-            await self.bot.db.execute("DELETE FROM guild_gatekeeper_members WHERE guild_id = $1;", self.id)
+            await self.bot.db.execute("DELETE FROM guild_sentinel_members WHERE guild_id = $1;", self.id)
 
             self.members.clear()
             self.queue.cancel_all()
@@ -1268,18 +1268,18 @@ class Gatekeeper(BaseRecord):
             member_id, action = await self.queue.get()
 
             try:
-                if action is self.GatekeeperRoleState.pending_remove:
-                    await self.bot.http.remove_role(self.id, member_id, role_id, reason="Completed Gatekeeper verification")
-                    query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
+                if action is self.SentinelRoleState.pending_remove:
+                    await self.bot.http.remove_role(self.id, member_id, role_id, reason="Completed Sentinel verification")
+                    query = "DELETE FROM guild_sentinel_members WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
 
                     if self.starter_role:
                         await self.bot.http.add_role(
-                            self.id, member_id, self.starter_role_id, reason="Completed Gatekeeper verification"
+                            self.id, member_id, self.starter_role_id, reason="Completed Sentinel verification"
                         )  # type: ignore[arg-type]
-                elif action is self.GatekeeperRoleState.pending_add:
-                    await self.bot.http.add_role(self.id, member_id, role_id, reason="Started Gatekeeper verification")
-                    query = "UPDATE guild_gatekeeper_members SET state = 'added' WHERE guild_id = $1 AND user_id = $2;"
+                elif action is self.SentinelRoleState.pending_add:
+                    await self.bot.http.add_role(self.id, member_id, role_id, reason="Started Sentinel verification")
+                    query = "UPDATE guild_sentinel_members SET state = 'added' WHERE guild_id = $1 AND user_id = $2;"
                     await self.bot.db.execute(query, self.id, member_id)
             except discord.DiscordServerError:
                 self.queue.put(member_id, (member_id, action))
@@ -1287,10 +1287,10 @@ class Gatekeeper(BaseRecord):
                 if e.code not in (10011, 10013):
                     break
                 if e.code == 10011:
-                    # Unknown role, disable the gatekeeper.
+                    # Unknown role, disable the sentinel.
                     config = await self.bot.db.get_guild_config(self.id)  # type: ignore
                     await config.send_alert(
-                        "A Role you've set up for the gatekeeper was not found, please review! Disabling the gatekeeper."
+                        "A Role you've set up for the sentinel was not found, please review! Disabling the sentinel."
                     )
                     needs_migration = {}
                     if self.role is None:
@@ -1301,7 +1301,7 @@ class Gatekeeper(BaseRecord):
                     break
                 continue
             except Exception:
-                self.log.exception("[Gatekeeper] An exception happened in the role loop of guild ID %d", self.id)
+                self.log.exception("[Sentinel] An exception happened in the role loop of guild ID %d", self.id)
                 continue
 
     async def cleanup_loop(self, members: set[int]) -> None:
@@ -1330,7 +1330,7 @@ class Gatekeeper(BaseRecord):
                 continue
             except Exception as exc:
                 self.log.exception(
-                    "[Gatekeeper] An exception happened in the role cleanup loop of guild ID %d: %r", self.id, exc
+                    "[Sentinel] An exception happened in the role cleanup loop of guild ID %d: %r", self.id, exc
                 )
 
     @property
@@ -1341,7 +1341,7 @@ class Gatekeeper(BaseRecord):
     async def enable(self) -> None:
         """|coro|
 
-        Enables the gatekeeper.
+        Enables the sentinel.
         This will set the started_at field to the current time.
         """
         await self.edit(started_at=discord.utils.utcnow())
@@ -1349,16 +1349,16 @@ class Gatekeeper(BaseRecord):
     async def disable(self) -> None:
         """|coro|
 
-        Disables the gatekeeper.
+        Disables the sentinel.
         This will remove the role from all members and clear the queue.
         """
         await self.edit(started_at=None)
 
         async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            query = "UPDATE guild_gatekeeper_members SET state = 'pending_remove' WHERE guild_id = $1 AND state = 'added';"
+            query = "UPDATE guild_sentinel_members SET state = 'pending_remove' WHERE guild_id = $1 AND state = 'added';"
             await conn.execute(query, self.id)
             for member_id in self.members:
-                self.queue.put(member_id, (member_id, self.GatekeeperRoleState.pending_remove))
+                self.queue.put(member_id, (member_id, self.SentinelRoleState.pending_remove))
             self.members.clear()
 
     @property
@@ -1371,7 +1371,7 @@ class Gatekeeper(BaseRecord):
 
     @property
     def starter_role(self) -> discord.Role | None:
-        """The role that is being added to members that bypass the gatekeeper."""
+        """The role that is being added to members that bypass the sentinel."""
         guild = self.bot.get_guild(self.id)
         if guild and self.starter_role_id:
             return guild.get_role(self.starter_role_id)  # type: ignore[return-value]
@@ -1379,7 +1379,7 @@ class Gatekeeper(BaseRecord):
 
     @property
     def channel(self) -> discord.TextChannel | None:
-        """The channel where the gatekeeper is active."""
+        """The channel where the sentinel is active."""
         guild = self.bot.get_guild(self.id)
         if guild and self.channel_id:
             return guild.get_channel(self.channel_id)  # type: ignore[return-value]
@@ -1387,7 +1387,7 @@ class Gatekeeper(BaseRecord):
 
     @property
     def message(self) -> discord.PartialMessage | None:
-        """The message that the gatekeeper is using."""
+        """The message that the sentinel is using."""
         if self.channel_id is None or self.message_id is None:
             return None
 
@@ -1396,7 +1396,7 @@ class Gatekeeper(BaseRecord):
 
     @property
     def requires_setup(self) -> bool:
-        """Whether the gatekeeper requires setup."""
+        """Whether the sentinel requires setup."""
         return self.role_id is None or self.channel_id is None or self.message_id is None
 
     def is_blocked(self, user_id: int, /) -> bool:
@@ -1404,11 +1404,11 @@ class Gatekeeper(BaseRecord):
         return user_id in self.members
 
     def has_role(self, member: discord.Member, /) -> bool:
-        """Checks if a user has the gatekeeper role."""
+        """Checks if a user has the sentinel role."""
         return self.role_id is not None and member._roles.has(self.role_id)
 
     def is_bypassing(self, member: discord.Member) -> bool:
-        """Whether the member is bypassing the gatekeeper."""
+        """Whether the member is bypassing the sentinel."""
         if self.started_at is None:
             return False
         if member.joined_at is None:
@@ -1428,14 +1428,14 @@ class Gatekeeper(BaseRecord):
             The member to block.
         """
         self.members.add(member.id)
-        query = "INSERT INTO guild_gatekeeper_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
+        query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
         await self.bot.db.execute(query, self.id, member.id)
-        self.queue.put(member.id, (member.id, self.GatekeeperRoleState.pending_add))
+        self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
 
     async def force_enable_with(self, members: Sequence[discord.Member]) -> None:
         """|coro|
 
-        Forces the gatekeeper to enable with the given members.
+        Forces the sentinel to enable with the given members.
         This will add the members to the queue and the members set.
 
         Parameters
@@ -1447,11 +1447,11 @@ class Gatekeeper(BaseRecord):
         await self.edit(started_at=discord.utils.utcnow())
 
         async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            query = "INSERT INTO guild_gatekeeper_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
+            query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
             await conn.executemany(query, [(self.id, m.id) for m in members])
 
         for member in members:
-            self.queue.put(member.id, (member.id, self.GatekeeperRoleState.pending_add))
+            self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
 
     async def unblock(self, member: discord.Member) -> None:
         """|coro|
@@ -1466,13 +1466,13 @@ class Gatekeeper(BaseRecord):
         """
         self.members.discard(member.id)
         if self.queue.is_pending(member.id):
-            query = "DELETE FROM guild_gatekeeper_members WHERE guild_id = $1 AND user_id = $2;"
+            query = "DELETE FROM guild_sentinel_members WHERE guild_id = $1 AND user_id = $2;"
             await self.bot.db.execute(query, self.id, member.id)
             self.queue.cancel(member.id)
         else:
-            query = "UPDATE guild_gatekeeper_members SET state = 'pending_remove' WHERE guild_id = $1 AND user_id = $2;"
+            query = "UPDATE guild_sentinel_members SET state = 'pending_remove' WHERE guild_id = $1 AND user_id = $2;"
             await self.bot.db.execute(query, self.id, member.id)
-            self.queue.put(member.id, (member.id, self.GatekeeperRoleState.pending_remove))
+            self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_remove))
 
 
 class Balance(BaseRecord):

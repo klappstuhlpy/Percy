@@ -69,7 +69,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Mute role management** | Create, bind, sync and unbind a mute role; permission overwrites are applied across channels automatically (and kept in sync as channels are created).                          |
 | **Lockdowns**            | Lock down individual channels or the whole server (`lockdown` group), with automatic, timed un-locking via the timer system and lockout protection for the bot.                 |
 | **Auto-moderation**      | Configurable automod rules linked to Discord's native AutoMod, mention-spam detection, and **raid protection** that auto-bans spammers.                                         |
-| **Gatekeeper**           | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
+| **Sentinel**           | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
 | **Anti-spam**            | A global `SpamChecker` that throttles command abuse, flags mention spam, and detects rapid-join raids.                                                                          |
 | **Audit logging**        | Broadcast a configurable subset of server audit-log events to a channel/webhook.                                                                                                |
 
@@ -167,7 +167,7 @@ A few representative command groups:
 | Group         | Examples                                                                                                                                                |
 |---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                                      |
-| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, gatekeeper setup                                                                         |
+| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, sentinel setup                                                                         |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                                 |
 | Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …` |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                                               |
@@ -305,12 +305,12 @@ The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns t
 
 ### Per-guild configuration
 
-Once the bot is in your server, use the `/config` slash command (or `?config`) — and the dedicated `automod`, audit-log and gatekeeper setup commands — to configure, per guild:
+Once the bot is in your server, use the `/config` slash command (or `?config`) — and the dedicated `automod`, audit-log and sentinel setup commands — to configure, per guild:
 
 - Custom command prefixes
 - Audit-log channel/webhook and which events to broadcast
 - Automod rules, raid protection and alert webhooks
-- The captcha **gatekeeper** (role, channel, bypass action, auto-trigger rate)
+- The captcha **sentinel** (role, channel, bypass action, auto-trigger rate)
 - Poll channel, poll-reason channel and ping role
 - Music panel channel
 - Leveling (via `/level config …`)

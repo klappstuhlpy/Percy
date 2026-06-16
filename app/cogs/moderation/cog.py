@@ -18,7 +18,7 @@ from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, Ign
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
-from app.database.base import Gatekeeper, GuildConfig
+from app.database.base import Sentinel, GuildConfig
 from app.services import build_purge_predicate
 from app.utils import (
     checks,
@@ -34,11 +34,11 @@ from app.utils.lock import lock
 from config import Emojis
 
 from .antispam import SpamChecker, check_raid, mention_spam_ban
-from .gatekeeper import (
-    GatekeeperAlertMassbanButton,
-    GatekeeperAlertResolveButton,
-    GatekeeperSetUpView,
-    GatekeeperVerifyButton,
+from .sentinel import (
+    SentinelAlertMassbanButton,
+    SentinelAlertResolveButton,
+    SentinelSetUpView,
+    SentinelVerifyButton,
 )
 from .infractions import check_member_hierarchy, default_reason, safe_reason_append, update_role_permissions
 from .lockdown import (
@@ -101,10 +101,10 @@ class Moderation(Cog):
         self.bulk_mute_insert.add_exception_type(asyncpg.PostgresConnectionError)
         self.bulk_mute_insert.start()
 
-        self._gatekeeper_menus: dict[int, GatekeeperSetUpView] = {}
-        self._gatekeepers: dict[int, Gatekeeper] = {}
+        self._sentinel_menus: dict[int, SentinelSetUpView] = {}
+        self._sentinels: dict[int, Sentinel] = {}
 
-        bot.add_dynamic_items(GatekeeperVerifyButton, GatekeeperAlertMassbanButton, GatekeeperAlertResolveButton)
+        bot.add_dynamic_items(SentinelVerifyButton, SentinelAlertMassbanButton, SentinelAlertResolveButton)
 
     def cog_unload(self) -> None:
         self.bulk_mute_insert.stop()
@@ -196,11 +196,11 @@ class Moderation(Cog):
 
         await check_raid(self._spam_check[message.guild.id], config, message.guild, author, message)
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(message.guild.id)  # type: ignore[arg-type]
-            if gatekeeper is not None and gatekeeper.is_bypassing(author) and message.channel.id != gatekeeper.channel_id:
-                reason = "Bypassing gatekeeper by messaging early"
-                coro = author.ban if gatekeeper.bypass_action == "ban" else author.kick
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(message.guild.id)  # type: ignore[arg-type]
+            if sentinel is not None and sentinel.is_bypassing(author) and message.channel.id != sentinel.channel_id:
+                reason = "Bypassing sentinel by messaging early"
+                coro = author.ban if sentinel.bypass_action == "ban" else author.kick
                 with suppress(discord.HTTPException):
                     await coro(reason=reason)
                 return
@@ -234,7 +234,7 @@ class Moderation(Cog):
 
         This listener is used to check if a member is a fast joiner or a suspicious joiner.
         If a member is a fast joiner, they are flagged and if they are a suspicious joiner, they are flagged as well.
-        If the guild has the `gatekeeper` flag enabled, the gatekeeper is used to check if the member is a spammer.
+        If the guild has the `sentinel` flag enabled, the sentinel is used to check if the member is a spammer.
 
         Parameters
         ----------
@@ -252,43 +252,43 @@ class Moderation(Cog):
             await config.apply_mute(member, "Member was previously muted.")
             return
 
-        if not config.flags.gatekeeper:
+        if not config.flags.sentinel:
             return
 
         checker = self._spam_check[member.guild.id]
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[arg-type]
-            if gatekeeper is not None:
-                if gatekeeper.started_at is not None:
-                    await gatekeeper.block(member)
-                elif not gatekeeper.requires_setup:
-                    spammers = checker.check_gatekeeper(member, gatekeeper)
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(member.guild.id)  # type: ignore[arg-type]
+            if sentinel is not None:
+                if sentinel.started_at is not None:
+                    await sentinel.block(member)
+                elif not sentinel.requires_setup:
+                    spammers = checker.check_sentinel(member, sentinel)
                     if spammers:
-                        await gatekeeper.force_enable_with(spammers)
+                        await sentinel.force_enable_with(spammers)
                         for member in spammers:
                             checker.flag_member(member)
 
                         if config.flags.alerts:
                             embed = discord.Embed(
-                                title="Gatekeeper - Rapid Join",
+                                title="Sentinel - Rapid Join",
                                 description=(
                                     f"Detected {pluralize(len(spammers)):member} joining in rapid succession. "
                                     "The following actions have been automatically taken:\n"
-                                    "- Enabled Gatekeeper to block them from participating.\n"
+                                    "- Enabled Sentinel to block them from participating.\n"
                                 ),
                                 colour=helpers.Colour.light_orange(),
                             )
                             view = View(timeout=None)
-                            view.add_item(GatekeeperAlertMassbanButton(self))
-                            view.add_item(GatekeeperAlertResolveButton(gatekeeper))
+                            view.add_item(SentinelAlertMassbanButton(self))
+                            view.add_item(SentinelAlertResolveButton(sentinel))
                             await config.send_alert(embed=embed, view=view)
 
         if config.flags.alerts:
             spammers = checker.is_alertable_join_spam(member)
             if spammers:
                 view = View(timeout=None)
-                view.add_item(GatekeeperAlertMassbanButton(self))
+                view.add_item(SentinelAlertMassbanButton(self))
                 await config.send_alert(
                     f"Detected **{pluralize(len(spammers)):member}** joining in rapid succession. **Please review!**",
                     view=view,
@@ -369,17 +369,17 @@ class Moderation(Cog):
             await config.send_alert("Mute role has been deleted, therefore it's been automatically reset.")
             return
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(role.guild.id)  # type: ignore[arg-type]
-            if gatekeeper is not None and gatekeeper.role_id == role.id:
-                was_active = gatekeeper.started_at is not None
-                await gatekeeper.edit(started_at=None, role_id=None)
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(role.guild.id)  # type: ignore[arg-type]
+            if sentinel is not None and sentinel.role_id == role.id:
+                was_active = sentinel.started_at is not None
+                await sentinel.edit(started_at=None, role_id=None)
                 await config.send_alert(
-                    "Gatekeeper **lockdown role** was deleted, so it has been "
+                    "Sentinel **lockdown role** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
                     + ". Re-select a lockdown role to re-enable it."
                 )
-                await self._refresh_gatekeeper_menu(role.guild.id)
+                await self._refresh_sentinel_menu(role.guild.id)
                 return
 
     @Cog.listener()
@@ -387,7 +387,7 @@ class Moderation(Cog):
         """|coro|
 
         This listener is used to check if a channel has been created.
-        Handles all permission updates for Mute Configuration and Gatekeeper Configuration.
+        Handles all permission updates for Mute Configuration and Sentinel Configuration.
 
         Parameters
         ----------
@@ -407,17 +407,17 @@ class Moderation(Cog):
                     f"Failed to update permissions for the **mute role** on channel creation. [{channel.mention}]"
                 )
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=channel.guild.id)
-            if gatekeeper is not None and gatekeeper.role_id:
-                role = channel.guild.get_role(gatekeeper.role_id)
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(guild_id=channel.guild.id)
+            if sentinel is not None and sentinel.role_id:
+                role = channel.guild.get_role(sentinel.role_id)
                 if role is not None:
                     _, failed, _ = await update_role_permissions(
                         role, channel.guild, me, update_read_permissions=True, channels=[channel]
                     )
                     if failed:
                         await config.send_alert(
-                            f"Failed to update permissions for the **gatekeeper role** on channel creation. [{channel.mention}]"
+                            f"Failed to update permissions for the **sentinel role** on channel creation. [{channel.mention}]"
                         )
 
     @Cog.listener()
@@ -425,8 +425,8 @@ class Moderation(Cog):
         """|coro|
 
         This listener is used to check if a channel has been deleted.
-        If a channel has been deleted, the gatekeeper channel is checked and if the channel is the gatekeeper channel,
-        the gatekeeper channel is removed.
+        If a channel has been deleted, the sentinel channel is checked and if the channel is the sentinel channel,
+        the sentinel channel is removed.
 
         Parameters
         ----------
@@ -457,19 +457,19 @@ class Moderation(Cog):
             await config.send_alert("Alert channel has been deleted, therefore it's been automatically disabled.")
             return
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(channel.guild.id)  # type: ignore[arg-type]
-            if gatekeeper is not None and gatekeeper.channel_id == channel.id:
-                was_active = gatekeeper.started_at is not None
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(channel.guild.id)  # type: ignore[arg-type]
+            if sentinel is not None and sentinel.channel_id == channel.id:
+                was_active = sentinel.started_at is not None
                 # Deleting the channel also destroys the verification message inside it,
                 # so clear both references (and deactivate) to avoid a dangling message_id.
-                await gatekeeper.edit(started_at=None, channel_id=None, message_id=None)
+                await sentinel.edit(started_at=None, channel_id=None, message_id=None)
                 await config.send_alert(
-                    "Gatekeeper **verification channel** was deleted, so it has been "
+                    "Sentinel **verification channel** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
                     + ". Re-select a channel and redeploy the verification message to re-enable it."
                 )
-                await self._refresh_gatekeeper_menu(channel.guild.id)
+                await self._refresh_sentinel_menu(channel.guild.id)
                 return
 
     @Cog.listener()
@@ -477,8 +477,8 @@ class Moderation(Cog):
         """|coro|
 
         This listener is used to check if a message has been deleted.
-        If a message has been deleted, the gatekeeper starter message is checked and if the message is the gatekeeper
-        starter message, the gatekeeper starter message is removed.
+        If a message has been deleted, the sentinel starter message is checked and if the message is the sentinel
+        starter message, the sentinel starter message is removed.
 
         Parameters
         ----------
@@ -496,17 +496,17 @@ class Moderation(Cog):
             await config.send_alert("Music panel message has been deleted, therefore it's been automatically disabled.")
             return
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
-            if gatekeeper is not None and gatekeeper.message_id == payload.message_id:
-                was_active = gatekeeper.started_at is not None
-                await gatekeeper.edit(started_at=None, message_id=None)
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(payload.guild_id)  # type: ignore[arg-type]
+            if sentinel is not None and sentinel.message_id == payload.message_id:
+                was_active = sentinel.started_at is not None
+                await sentinel.edit(started_at=None, message_id=None)
                 await config.send_alert(
-                    "Gatekeeper **verification message** was deleted, so it has been "
+                    "Sentinel **verification message** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
                     + ". Redeploy the verification message to re-enable it."
                 )
-                await self._refresh_gatekeeper_menu(payload.guild_id)
+                await self._refresh_sentinel_menu(payload.guild_id)
                 return
 
     @Cog.listener()
@@ -514,8 +514,8 @@ class Moderation(Cog):
         """|coro|
 
         This listener is used to check if a message has been deleted in bulk.
-        If a message has been deleted in bulk, the gatekeeper starter message is checked and if the message is the gatekeeper
-        starter message, the gatekeeper starter message is removed.
+        If a message has been deleted in bulk, the sentinel starter message is checked and if the message is the sentinel
+        starter message, the sentinel starter message is removed.
 
         Parameters
         ----------
@@ -533,27 +533,27 @@ class Moderation(Cog):
             await config.send_alert("Music panel message has been deleted, therefore it's been automatically disabled.")
             return
 
-        if config.flags.gatekeeper:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(payload.guild_id)  # type: ignore[arg-type]
-            if gatekeeper is not None and gatekeeper.message_id in payload.message_ids:
-                was_active = gatekeeper.started_at is not None
-                await gatekeeper.edit(started_at=None, message_id=None)
+        if config.flags.sentinel:
+            sentinel = await self.bot.db.get_guild_sentinel(payload.guild_id)  # type: ignore[arg-type]
+            if sentinel is not None and sentinel.message_id in payload.message_ids:
+                was_active = sentinel.started_at is not None
+                await sentinel.edit(started_at=None, message_id=None)
                 await config.send_alert(
-                    "Gatekeeper **verification message** was deleted, so it has been "
+                    "Sentinel **verification message** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
                     + ". Redeploy the verification message to re-enable it."
                 )
-                await self._refresh_gatekeeper_menu(payload.guild_id)
+                await self._refresh_sentinel_menu(payload.guild_id)
                 return
 
-    async def _refresh_gatekeeper_menu(self, guild_id: int) -> None:
-        """Re-render an open gatekeeper setup menu so it reflects an external change.
+    async def _refresh_sentinel_menu(self, guild_id: int) -> None:
+        """Re-render an open sentinel setup menu so it reflects an external change.
 
-        The menu drives off the cached gatekeeper (mutated in place by ``edit``), so its
+        The menu drives off the cached sentinel (mutated in place by ``edit``), so its
         data is already current; this just repaints the message after a deletion listener
-        disables/resets the gatekeeper underneath it.
+        disables/resets the sentinel underneath it.
         """
-        view = self._gatekeeper_menus.get(guild_id)
+        view = self._sentinel_menus.get(guild_id)
         if view is None or view.message is None:
             return
         with suppress(discord.HTTPException):
@@ -567,7 +567,7 @@ class Moderation(Cog):
         """|coro|
 
         This listener is used to check if a member has joined a voice channel.
-        If a member has joined a voice channel, the gatekeeper is checked and if the member is bypassing the gatekeeper,
+        If a member has joined a voice channel, the sentinel is checked and if the member is bypassing the sentinel,
         the member is banned or kicked.
 
         Parameters
@@ -587,14 +587,14 @@ class Moderation(Cog):
         if config is None:
             return
 
-        if not config.flags.gatekeeper:
+        if not config.flags.sentinel:
             return
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(member.guild.id)  # type: ignore[arg-type]
-        # Joined VC and is bypassing gatekeeper
-        if gatekeeper is not None and gatekeeper.is_bypassing(member):
-            reason = "Bypassing gatekeeper by joining a voice channel early"
-            coro = member.ban if gatekeeper.bypass_action == "ban" else member.kick
+        sentinel = await self.bot.db.get_guild_sentinel(member.guild.id)  # type: ignore[arg-type]
+        # Joined VC and is bypassing sentinel
+        if sentinel is not None and sentinel.is_bypassing(member):
+            reason = "Bypassing sentinel by joining a voice channel early"
+            coro = member.ban if sentinel.bypass_action == "ban" else member.kick
             with suppress(discord.HTTPException):
                 await coro(reason=reason)
 
@@ -686,18 +686,18 @@ class Moderation(Cog):
             )
         )
 
-        if ctx.guild_config.flags.gatekeeper:
+        if ctx.guild_config.flags.sentinel:
             enabled += 1
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)  # type: ignore[arg-type]
-            if gatekeeper is not None:
-                gatekeeper_status = gatekeeper.status
+            sentinel = await self.bot.db.get_guild_sentinel(ctx.guild.id)  # type: ignore[arg-type]
+            if sentinel is not None:
+                sentinel_status = sentinel.status
             else:
-                gatekeeper_status = "Partially Disabled (Configuration Setup, but not enabled)"
+                sentinel_status = "Partially Disabled (Configuration Setup, but not enabled)"
         else:
-            gatekeeper_status = "Completely Disabled"
+            sentinel_status = "Completely Disabled"
 
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"**\N{LOCK} Gatekeeper**\n{gatekeeper_status}"))
+        container.add_item(discord.ui.TextDisplay(f"**\N{LOCK} Sentinel**\n{sentinel_status}"))
 
         if ctx.guild_config.safe_automod_entity_ids:
             resolved = [resolve_entity_id(c, guild=ctx.guild) for c in ctx.guild_config.safe_automod_entity_ids]  # type: ignore[arg-type]
@@ -865,14 +865,14 @@ class Moderation(Cog):
             app_commands.Choice(name="Raid protection", value="raid"),
             app_commands.Choice(name="Mention spam protection", value="mentions"),
             app_commands.Choice(name="Audit Logging", value="auditlog"),
-            app_commands.Choice(name="Gatekeeper", value="gatekeeper"),
+            app_commands.Choice(name="Sentinel", value="sentinel"),
         ]
     )
     async def moderation_disable(
         self,
         ctx: ModGuildContext,
         *,
-        protection: Literal["all", "raid", "mentions", "auditlog", "alerts", "gatekeeper"] = "all",
+        protection: Literal["all", "raid", "mentions", "auditlog", "alerts", "sentinel"] = "all",
     ) -> None:
         """Disables Moderation on the server.
 
@@ -882,7 +882,7 @@ class Moderation(Cog):
         - **raid**: to disable raid protection
         - **mentions**: to disable mention spam protection
         - **auditlog**: to disable audit logging
-        - **gatekeeper**: to disable gatekeeper
+        - **sentinel**: to disable sentinel
 
         If not given then it defaults to 'all'.
         """
@@ -901,9 +901,9 @@ class Moderation(Cog):
         elif protection == "auditlog":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, audit_log_channel = NULL, audit_log_flags = NULL"
             message = "Audit logging has been disabled."
-        elif protection == "gatekeeper":
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.gatekeeper.flag}"
-            message = "Gatekeeper has been disabled."
+        elif protection == "sentinel":
+            updates = f"flags = guild_config.flags & ~{AutoModFlags.sentinel.flag}"
+            message = "Sentinel has been disabled."
         else:
             raise commands.BadArgument(f"Unknown protection {protection}")
 
@@ -928,16 +928,16 @@ class Moderation(Cog):
                 except discord.HTTPException:
                     warnings.append(f"The webhook `{record[1]}` could not be deleted for some reason.")
 
-        if protection in ("all", "gatekeeper"):
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id=guild_id)
-            if gatekeeper is not None and gatekeeper.started_at is not None:
-                await gatekeeper.disable()
-                warnings.append("Gatekeeper was previously running and has been forcibly disabled.")
-                members = gatekeeper.pending_members
+        if protection in ("all", "sentinel"):
+            sentinel = await self.bot.db.get_guild_sentinel(guild_id=guild_id)
+            if sentinel is not None and sentinel.started_at is not None:
+                await sentinel.disable()
+                warnings.append("Sentinel was previously running and has been forcibly disabled.")
+                members = sentinel.pending_members
                 if members:
                     warnings.append(
                         f"There {pluralize(members):is|are!} still {pluralize(members):member} waiting in the role queue."
-                        " **The queue will be paused until gatekeeper is re-enabled**"
+                        " **The queue will be paused until sentinel is re-enabled**"
                     )
 
         if warnings:
@@ -947,45 +947,45 @@ class Moderation(Cog):
         await ctx.send_success(message)
 
     @moderation.command(
-        "gatekeeper",
-        description="Enables and shows the gatekeeper settings menu for the server.",
+        "sentinel",
+        description="Enables and shows the sentinel settings menu for the server.",
         guild_only=True,
         # Creates/assigns the unverified role and edits channel overwrites (manage_roles),
         # and removes bypassers via the configurable ban/kick action.
         bot_permissions=["manage_roles", "ban_members", "kick_members"],
         user_permissions=PermissionTemplate.mod,
     )
-    async def moderation_gatekeeper(self, ctx: ModGuildContext) -> None:
-        """Enables and shows the gatekeeper settings menu for the server.
+    async def moderation_sentinel(self, ctx: ModGuildContext) -> None:
+        """Enables and shows the sentinel settings menu for the server.
 
-        Gatekeeper automatically assigns a role to members who join to prevent
+        Sentinel automatically assigns a role to members who join to prevent
         them from participating in the server until they verify themselves by
         pressing a button.
         """
         assert ctx.guild is not None
-        previous = self._gatekeeper_menus.pop(ctx.guild.id, None)
+        previous = self._sentinel_menus.pop(ctx.guild.id, None)
         if previous is not None:
             await previous.on_timeout()
             previous.stop()
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)
-        await self.bot.db.moderation.setup_gatekeeper(
-            ctx.guild.id, AutoModFlags.gatekeeper.flag, create_gatekeeper=gatekeeper is None
+        sentinel = await self.bot.db.get_guild_sentinel(ctx.guild.id)
+        await self.bot.db.moderation.setup_sentinel(
+            ctx.guild.id, AutoModFlags.sentinel.flag, create_sentinel=sentinel is None
         )
 
-        # Always drive the view off the cached gatekeeper/config so in-place edits made
+        # Always drive the view off the cached sentinel/config so in-place edits made
         # here (and by the dashboard or the deletion listeners) stay coherent. ``setup``
         # invalidates both caches, so these re-fetches return fresh, shared instances.
-        if gatekeeper is None:
-            gatekeeper = await self.bot.db.get_guild_gatekeeper(ctx.guild.id)
+        if sentinel is None:
+            sentinel = await self.bot.db.get_guild_sentinel(ctx.guild.id)
         config = await self.bot.db.get_guild_config(ctx.guild.id)
 
-        if gatekeeper is None:
-            await ctx.send_error("Failed to initialise the gatekeeper. Please try again.")
+        if sentinel is None:
+            await ctx.send_error("Failed to initialise the sentinel. Please try again.")
             return
 
         # The explanatory header now lives inside the Components V2 view's container.
-        self._gatekeeper_menus[ctx.guild.id] = view = GatekeeperSetUpView(self, ctx.author, config, gatekeeper)  # type: ignore[arg-type]
+        self._sentinel_menus[ctx.guild.id] = view = SentinelSetUpView(self, ctx.author, config, sentinel)  # type: ignore[arg-type]
         view.message = await ctx.send(view=view)
 
     @moderation.command(

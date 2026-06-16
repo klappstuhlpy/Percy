@@ -17,7 +17,7 @@ __all__ = (
 )
 
 
-# -- Moderation (lockdowns, mute role, alerts, gatekeeper) -----------------
+# -- Moderation (lockdowns, mute role, alerts, sentinel) -----------------
 
 
 class ModerationRepository(BaseRepository):
@@ -184,21 +184,21 @@ class ModerationRepository(BaseRepository):
         self.invalidate_cache("guild_config_changed", guild_id)
         return cast('asyncpg.Record', record)
 
-    # -- Gatekeeper & raid/mention protection (guild_config) --------------
+    # -- Sentinel & raid/mention protection (guild_config) --------------
 
-    async def setup_gatekeeper(
-            self, guild_id: int, flags_value: int, *, create_gatekeeper: bool
+    async def setup_sentinel(
+            self, guild_id: int, flags_value: int, *, create_sentinel: bool
     ) -> tuple[asyncpg.Record | None, asyncpg.Record | None]:
-        """Enables the gatekeeper flag for a guild, optionally creating its gatekeeper row.
+        """Enables the sentinel flag for a guild, optionally creating its sentinel row.
 
-        Returns the (gatekeeper, guild_config) records; the gatekeeper record is
-        ``None`` when ``create_gatekeeper`` is ``False``.
+        Returns the (sentinel, guild_config) records; the sentinel record is
+        ``None`` when ``create_sentinel`` is ``False``.
         """
         async with self.acquire(timeout=300.0) as conn, conn.transaction():
-            gatekeeper_record = None
-            if create_gatekeeper:
-                gatekeeper_record = await conn.fetchrow(
-                    "INSERT INTO guild_gatekeeper(id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *;", guild_id)
+            sentinel_record = None
+            if create_sentinel:
+                sentinel_record = await conn.fetchrow(
+                    "INSERT INTO guild_sentinel(id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *;", guild_id)
 
             config_record = await conn.fetchrow(
                 """
@@ -211,11 +211,11 @@ class ModerationRepository(BaseRepository):
                 guild_id, flags_value)
 
         self.invalidate_cache("guild_config_changed", guild_id)
-        if create_gatekeeper:
+        if create_sentinel:
             # Bust the cached ``None`` from the pre-setup lookup so the next
-            # ``get_guild_gatekeeper`` builds (and caches) the freshly-created record.
-            self.invalidate_cache("gatekeeper_changed", guild_id)
-        return gatekeeper_record, config_record
+            # ``get_guild_sentinel`` builds (and caches) the freshly-created record.
+            self.invalidate_cache("sentinel_changed", guild_id)
+        return sentinel_record, config_record
 
     async def toggle_raid_protection(self, guild_id: int, flag: int, enabled: bool | None) -> bool:
         """Toggles raid protection for a guild and returns its resulting state."""

@@ -1,4 +1,4 @@
-"""Pure generation logic for the gatekeeper captcha image."""
+"""Pure generation logic for the sentinel captcha image."""
 
 from __future__ import annotations
 

@@ -68,11 +68,11 @@ class InternalAPI(
         self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/avatars', self._get_member_avatars)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/members/{user_id}/action', self._member_action)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/members/{user_id}/roles', self._member_roles)
-        # Gatekeeper
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/gatekeeper', self._get_gatekeeper)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/gatekeeper', self._patch_gatekeeper)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/gatekeeper/message', self._send_gatekeeper_message)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/gatekeeper/toggle', self._toggle_gatekeeper)
+        # Sentinel
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/sentinel', self._get_sentinel)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/sentinel', self._patch_sentinel)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/sentinel/message', self._send_sentinel_message)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/sentinel/toggle', self._toggle_sentinel)
         # User
         self._app.router.add_get('/api/internal/users/{discord_id}/guilds', self._get_user_guilds)
         self._app.router.add_get('/api/internal/users/{discord_id}/avatar', self._get_user_avatar)

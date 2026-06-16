@@ -2,7 +2,7 @@
 
 The infraction *commands* themselves live on the :class:`Moderation` cog (they must, to be
 registered as commands), but the reusable mechanics they delegate to live here so that the cog
-stays focused on routing and so other modules (e.g. the gatekeeper UI) can share them without
+stays focused on routing and so other modules (e.g. the sentinel UI) can share them without
 reaching back into the cog.
 """
 
@@ -165,7 +165,7 @@ async def sync_permissions_with_progress(
 ) -> tuple[int, int, int]:
     """Run :func:`update_role_permissions` with a live ephemeral progress message.
 
-    Shared by the mute-role and gatekeeper setup views so heavy multi-channel syncs
+    Shared by the mute-role and sentinel setup views so heavy multi-channel syncs
     surface a ``done/total`` counter instead of a frozen typing indicator. The
     interaction must already be deferred or responded to. Status edits are throttled
     to roughly one per 1.5s (plus a final tick) to stay within Discord's rate limits.

@@ -15,16 +15,16 @@ __all__ = (
 )
 
 
-# -- Guilds (config, gatekeeper, plonks, command toggles) ------------------
+# -- Guilds (config, sentinel, plonks, command toggles) ------------------
 
 
 class GuildsRepository(BaseRepository):
     """Data access for the per-guild configuration tables.
 
-    Covers ``guild_config`` and ``guild_gatekeeper`` as well as the ignore list
+    Covers ``guild_config`` and ``guild_sentinel`` as well as the ignore list
     (``plonks``) and per-channel command toggles (``command_config``). The methods
     return raw records and scalars; mapping them onto the
-    :class:`~app.database.base.GuildConfig` / :class:`~app.database.base.Gatekeeper`
+    :class:`~app.database.base.GuildConfig` / :class:`~app.database.base.Sentinel`
     domain objects (and caching the result) is left to :class:`~app.database.base.Database`.
     """
 
@@ -42,30 +42,30 @@ class GuildsRepository(BaseRepository):
         """Deletes the config row for a guild (e.g. when the bot leaves it)."""
         await self.execute("DELETE FROM guild_config WHERE id = $1;", guild_id)
 
-    # -- guild_gatekeeper -------------------------------------------------
+    # -- guild_sentinel -------------------------------------------------
 
-    async def get_gatekeeper_record(self, guild_id: int) -> asyncpg.Record | None:
-        """Fetches the gatekeeper row for a guild, or ``None`` if none is configured."""
-        return await self.fetchrow("SELECT * FROM guild_gatekeeper WHERE id=$1;", guild_id)
+    async def get_sentinel_record(self, guild_id: int) -> asyncpg.Record | None:
+        """Fetches the sentinel row for a guild, or ``None`` if none is configured."""
+        return await self.fetchrow("SELECT * FROM guild_sentinel WHERE id=$1;", guild_id)
 
-    async def get_gatekeeper_members(self, guild_id: int) -> list[asyncpg.Record]:
-        """Fetches all gatekeeper member rows for a guild."""
-        return await self.fetch("SELECT * FROM guild_gatekeeper_members WHERE guild_id=$1;", guild_id)
+    async def get_sentinel_members(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches all sentinel member rows for a guild."""
+        return await self.fetch("SELECT * FROM guild_sentinel_members WHERE guild_id=$1;", guild_id)
 
-    async def upsert_gatekeeper(self, guild_id: int, fields: dict[str, Any]) -> None:
-        """Ensures a gatekeeper row exists for a guild and updates the given columns.
+    async def upsert_sentinel(self, guild_id: int, fields: dict[str, Any]) -> None:
+        """Ensures a sentinel row exists for a guild and updates the given columns.
 
-        ``fields`` keys must be ``guild_gatekeeper`` column names (callers pass a
-        validated allow-list). Invalidates the cached gatekeeper record afterwards.
+        ``fields`` keys must be ``guild_sentinel`` column names (callers pass a
+        validated allow-list). Invalidates the cached sentinel record afterwards.
         """
         async with self.acquire() as con, con.transaction():
             await con.execute(
-                "INSERT INTO guild_gatekeeper (id) VALUES ($1) ON CONFLICT (id) DO NOTHING;", guild_id)
+                "INSERT INTO guild_sentinel (id) VALUES ($1) ON CONFLICT (id) DO NOTHING;", guild_id)
             if fields:
                 set_clause = ", ".join(f'"{col}" = ${i}' for i, col in enumerate(fields, start=2))
                 await con.execute(
-                    f"UPDATE guild_gatekeeper SET {set_clause} WHERE id = $1;", guild_id, *fields.values())
-        self.invalidate_cache("gatekeeper_changed", guild_id)
+                    f"UPDATE guild_sentinel SET {set_clause} WHERE id = $1;", guild_id, *fields.values())
+        self.invalidate_cache("sentinel_changed", guild_id)
 
     # -- plonks (ignore list) --------------------------------------------
 

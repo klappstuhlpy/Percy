@@ -11,7 +11,7 @@ import discord
 from app.core import Bot
 from app.core.models import AppBadArgument
 from app.core.views import ConfirmationView, LayoutView
-from app.database.base import Gatekeeper, GuildConfig
+from app.database.base import Sentinel, GuildConfig
 from app.utils import checks, get_asset_url, merge_perms, pluralize
 from config import Emojis
 
@@ -25,12 +25,12 @@ _BRAND = discord.Colour(0xD97757)  # --branding
 _SUCCESS = discord.Colour(0x166534)  # --success-border
 
 
-class GatekeeperSetupRoleView(LayoutView):
+class SentinelSetupRoleView(LayoutView):
     """CV2 sub-view for selecting or creating the lockdown role."""
 
     def __init__(
         self,
-        parent: GatekeeperSetUpView,
+        parent: SentinelSetUpView,
         selected_role: discord.Role | None,
         created_role: discord.Role | None,
         starter_role: discord.Role | None,
@@ -192,7 +192,7 @@ class GatekeeperSetupRoleView(LayoutView):
         self.stop()
 
 
-class GatekeeperRateLimitModal(discord.ui.Modal, title="Auto-Trigger Threshold"):
+class SentinelRateLimitModal(discord.ui.Modal, title="Auto-Trigger Threshold"):
     """Modal for configuring the join-rate auto-trigger."""
 
     rate = discord.ui.TextInput(
@@ -203,7 +203,7 @@ class GatekeeperRateLimitModal(discord.ui.Modal, title="Auto-Trigger Threshold")
     )
 
     def __init__(self) -> None:
-        super().__init__(custom_id="gatekeeper-rate-limit-modal")
+        super().__init__(custom_id="sentinel-rate-limit-modal")
         self.final_rate: tuple[int, int] | None = None
 
     async def on_submit(self, interaction: discord.Interaction, /) -> None:
@@ -232,12 +232,12 @@ class GatekeeperRateLimitModal(discord.ui.Modal, title="Auto-Trigger Threshold")
         self.final_rate = (rate, per)
         await interaction.response.send_message(
             f"{Emojis.success} Auto-trigger set: **{rate}** joins "
-            f"within **{per}s** activates gatekeeper.",
+            f"within **{per}s** activates sentinel.",
             ephemeral=True,
         )
 
 
-class GatekeeperMessageModal(discord.ui.Modal, title="Verification Message"):
+class SentinelMessageModal(discord.ui.Modal, title="Verification Message"):
     """Modal for customizing the captcha verification message content."""
 
     header = discord.ui.TextInput(
@@ -257,9 +257,9 @@ class GatekeeperMessageModal(discord.ui.Modal, title="Verification Message"):
         self.stop()
 
 
-class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
-    def __init__(self, gatekeeper: Gatekeeper) -> None:
-        channel = gatekeeper.channel_id
+class SentinelChannelSelect(discord.ui.ChannelSelect["SentinelSetUpView"]):
+    def __init__(self, sentinel: Sentinel) -> None:
+        channel = sentinel.channel_id
         default_values = (
             [
                 discord.SelectDefaultValue(
@@ -276,8 +276,8 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
             default_values=default_values,
             placeholder="Select verification channel...",
         )
-        self.bot: Bot = gatekeeper.bot
-        self.gatekeeper: Gatekeeper = gatekeeper
+        self.bot: Bot = sentinel.bot
+        self.sentinel: Sentinel = sentinel
         self.selected_channel: discord.TextChannel | None = None
 
     @staticmethod
@@ -306,7 +306,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
             return
 
         reason = (
-            f"Gatekeeper permission sync requested by "
+            f"Sentinel permission sync requested by "
             f"{interaction.user} (ID: {interaction.user.id})"
         )
         try:
@@ -371,7 +371,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
 
         await interaction.response.defer(ephemeral=True)
 
-        role = self.gatekeeper.role
+        role = self.sentinel.role
         if role is not None:
             await self.request_permission_sync(channel, role, interaction)
 
@@ -379,19 +379,19 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
         # removed when the channel changes. Remember whether one existed so we can
         # automatically redeploy it to the new channel instead of forcing the operator
         # to recreate it by hand.
-        had_message = self.gatekeeper.message_id is not None
-        old_message = self.gatekeeper.message
+        had_message = self.sentinel.message_id is not None
+        old_message = self.sentinel.message
         if old_message is not None:
             with suppress(discord.HTTPException):
                 await old_message.delete()
 
-        await self.gatekeeper.edit(channel_id=channel.id, message_id=None)
+        await self.sentinel.edit(channel_id=channel.id, message_id=None)
 
         redeployed = False
         if had_message:
-            verify_view = GatekeeperVerifyView(
+            verify_view = SentinelVerifyView(
                 self.view.config,
-                self.gatekeeper,
+                self.sentinel,
                 body=(
                     "To access this server you must complete a quick verification.\n"
                     "**Tap the button below to begin.**"
@@ -402,7 +402,7 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
             except discord.HTTPException:
                 pass
             else:
-                await self.gatekeeper.edit(message_id=new_message.id)
+                await self.sentinel.edit(message_id=new_message.id)
                 redeployed = True
 
         if redeployed:
@@ -420,8 +420,8 @@ class GatekeeperChannelSelect(discord.ui.ChannelSelect["GatekeeperSetUpView"]):
         await interaction.edit_original_response(view=self.view)
 
 
-class GatekeeperSetUpView(LayoutView):
-    """The gatekeeper setup dashboard — single CV2 container.
+class SentinelSetUpView(LayoutView):
+    """The sentinel setup dashboard — single CV2 container.
 
     Everything (selects, buttons, text) lives inside one Container so it
     renders as a continuous card. Rebuilt on every state change.
@@ -432,24 +432,24 @@ class GatekeeperSetUpView(LayoutView):
         cog: Moderation,
         member: discord.Member,
         config: GuildConfig,
-        gatekeeper: Gatekeeper,
+        sentinel: Sentinel,
     ) -> None:
         super().__init__(timeout=900.0, members=member, delete_on_timeout=True)
         self.cog = cog
         self.config = config
-        self.gatekeeper = gatekeeper
+        self.sentinel = sentinel
 
         self.created_role: discord.Role | None = None
-        self.selected_role: discord.Role | None = gatekeeper.role
-        self.selected_starter_role: discord.Role | None = gatekeeper.starter_role
-        self.selected_message_id: int | None = gatekeeper.message_id
+        self.selected_role: discord.Role | None = sentinel.role
+        self.selected_starter_role: discord.Role | None = sentinel.starter_role
+        self.selected_message_id: int | None = sentinel.message_id
 
-        guild = gatekeeper.bot.get_guild(gatekeeper.id)
+        guild = sentinel.bot.get_guild(sentinel.id)
         assert guild is not None
         self.guild: discord.Guild = guild
 
         # -- interactive components (stable instances, mutated by update_state)
-        self.channel_select = GatekeeperChannelSelect(gatekeeper)
+        self.channel_select = SentinelChannelSelect(sentinel)
 
         self.starter_role_select: discord.ui.RoleSelect = discord.ui.RoleSelect(
             min_values=1, max_values=1,
@@ -501,19 +501,19 @@ class GatekeeperSetUpView(LayoutView):
         self.clear_items()
 
         enabled = (
-            self.config.flags.gatekeeper
-            and self.gatekeeper.started_at is not None
+            self.config.flags.sentinel
+            and self.sentinel.started_at is not None
         )
-        role = self.gatekeeper.role
-        rate = self.gatekeeper.rate
-        channel_id = self.gatekeeper.channel_id
+        role = self.sentinel.role
+        rate = self.sentinel.rate
+        channel_id = self.sentinel.channel_id
 
         container = discord.ui.Container(accent_colour=_BRAND)
 
         # --- Header ---
         container.add_item(
             discord.ui.Section(
-                "## Gatekeeper\n-# Entrance protection & captcha verification",
+                "## Sentinel\n-# Entrance protection & captcha verification",
                 accessory=discord.ui.Thumbnail(get_asset_url(self.guild)),
             )
         )
@@ -551,7 +551,7 @@ class GatekeeperSetUpView(LayoutView):
 
         # --- Post-Verification Role ---
         container.add_item(discord.ui.Separator())
-        starter_role = self.gatekeeper.starter_role
+        starter_role = self.sentinel.starter_role
         starter_display = starter_role.mention if starter_role else "`none`"
         container.add_item(discord.ui.TextDisplay(
             f"### Post-Verification Role\n"
@@ -562,7 +562,7 @@ class GatekeeperSetUpView(LayoutView):
 
         # --- Captcha Message ---
         container.add_item(discord.ui.Separator())
-        msg_deployed = self.gatekeeper.message_id is not None
+        msg_deployed = self.sentinel.message_id is not None
         msg_display = "`deployed`" if msg_deployed else "`awaiting deployment`"
         container.add_item(discord.ui.TextDisplay(
             f"### Captcha Message\n"
@@ -577,12 +577,12 @@ class GatekeeperSetUpView(LayoutView):
         rate_display = (
             f"`{rate[0]}` joins / `{rate[1]}s`" if rate else "`disabled`"
         )
-        bypass_display = (self.gatekeeper.bypass_action or "kick").upper()
+        bypass_display = (self.sentinel.bypass_action or "kick").upper()
         container.add_item(discord.ui.TextDisplay(
             f"### Enforcement Rules\n"
             f"**Bypass action** — `{bypass_display}` any member who speaks "
             f"or joins voice before verifying.\n"
-            f"**Auto-trigger** — {rate_display} activates gatekeeper when "
+            f"**Auto-trigger** — {rate_display} activates sentinel when "
             f"join velocity spikes."
         ))
         container.add_item(discord.ui.ActionRow(self.setup_bypass_action))
@@ -595,10 +595,10 @@ class GatekeeperSetUpView(LayoutView):
     def update_state(self, *, invalidate: bool = True) -> None:
         if invalidate:
             self.cog.bot.db.signals.fire(
-                "gatekeeper_changed", self.gatekeeper.id
+                "sentinel_changed", self.sentinel.id
             )
 
-        role = self.gatekeeper.role
+        role = self.sentinel.role
         if role is not None:
             label = f'Change: "{role.name}"'
             self.setup_role.label = (
@@ -609,7 +609,7 @@ class GatekeeperSetUpView(LayoutView):
             self.setup_role.label = "Configure Role"
             self.setup_role.style = discord.ButtonStyle.blurple
 
-        rate = self.gatekeeper.rate
+        rate = self.sentinel.rate
         if rate is not None:
             rate_val, per_val = rate
             self.setup_auto.label = f"Auto: {rate_val}/{per_val}s"
@@ -619,8 +619,8 @@ class GatekeeperSetUpView(LayoutView):
             self.setup_auto.style = discord.ButtonStyle.blurple
 
         enabled = (
-            self.config.flags.gatekeeper
-            and self.gatekeeper.started_at is not None
+            self.config.flags.sentinel
+            and self.sentinel.started_at is not None
         )
         if enabled:
             self.toggle_flag.label = "Deactivate"
@@ -630,12 +630,12 @@ class GatekeeperSetUpView(LayoutView):
             self.toggle_flag.style = discord.ButtonStyle.green
 
         for option in self.setup_bypass_action.options:
-            option.default = option.value == self.gatekeeper.bypass_action
+            option.default = option.value == self.sentinel.bypass_action
 
-        if self.gatekeeper.starter_role:
+        if self.sentinel.starter_role:
             self.starter_role_select.default_values = [
                 discord.SelectDefaultValue.from_role(  # type: ignore[arg-type]
-                    self.gatekeeper.starter_role
+                    self.sentinel.starter_role
                 )
             ]
 
@@ -644,27 +644,27 @@ class GatekeeperSetUpView(LayoutView):
         self.setup_role.disabled = False
         self.starter_role_select.disabled = False
 
-        channel_id = self.gatekeeper.channel_id
+        channel_id = self.sentinel.channel_id
         if channel_id is None:
             self.setup_message.disabled = True
 
-        if self.gatekeeper.message_id is not None:
+        if self.sentinel.message_id is not None:
             self.setup_message.disabled = True
 
-        if self.gatekeeper.started_at is not None:
+        if self.sentinel.started_at is not None:
             self.channel_select.disabled = True
             self.setup_role.disabled = True
             self.starter_role_select.disabled = True
             self.setup_message.disabled = True
 
         if not enabled:
-            self.toggle_flag.disabled = self.gatekeeper.requires_setup
+            self.toggle_flag.disabled = self.sentinel.requires_setup
 
         self._rebuild_layout()
 
     def stop(self) -> None:
         super().stop()
-        self.cog._gatekeeper_menus.pop(self.gatekeeper.id, None)
+        self.cog._sentinel_menus.pop(self.sentinel.id, None)
 
     async def _on_starter_role(
         self, interaction: discord.Interaction
@@ -701,7 +701,7 @@ class GatekeeperSetUpView(LayoutView):
 
         self.selected_starter_role = role
         if self.selected_starter_role is not None:  # type: ignore[arg-type]
-            await self.gatekeeper.edit(
+            await self.sentinel.edit(
                 starter_role_id=self.selected_starter_role.id  # type: ignore[arg-type]
             )
 
@@ -714,7 +714,7 @@ class GatekeeperSetUpView(LayoutView):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         value: Literal["ban", "kick"] = self.setup_bypass_action.values[0]  # type: ignore[arg-type]
-        await self.gatekeeper.edit(bypass_action=value)
+        await self.sentinel.edit(bypass_action=value)
         await interaction.followup.send(
             f"{Emojis.success} Bypass action set to **{value}**.",
             ephemeral=True,
@@ -734,7 +734,7 @@ class GatekeeperSetUpView(LayoutView):
             )
             return
 
-        view = GatekeeperSetupRoleView(
+        view = SentinelSetupRoleView(
             self, self.selected_role,
             self.created_role, self.selected_starter_role,  # type: ignore[arg-type]
         )
@@ -744,11 +744,11 @@ class GatekeeperSetUpView(LayoutView):
         self.created_role = view.created_role
         self.selected_role = view.selected_role
         if self.selected_role is not None:
-            await self.gatekeeper.edit(role_id=self.selected_role.id)
+            await self.sentinel.edit(role_id=self.selected_role.id)
 
-            channel = self.gatekeeper.channel
+            channel = self.sentinel.channel
             if channel is not None:
-                await GatekeeperChannelSelect.request_permission_sync(
+                await SentinelChannelSelect.request_permission_sync(
                     channel, self.selected_role, interaction
                 )
 
@@ -764,14 +764,14 @@ class GatekeeperSetUpView(LayoutView):
     async def _on_setup_message(
         self, interaction: discord.Interaction
     ) -> None:
-        channel = self.gatekeeper.channel
-        if self.gatekeeper.role is None:
+        channel = self.sentinel.channel
+        if self.sentinel.role is None:
             await interaction.response.send_message(
                 f"{Emojis.error} Set up the lockdown role first.",
                 ephemeral=True,
             )
             return
-        if self.gatekeeper.message is not None:
+        if self.sentinel.message is not None:
             await interaction.response.send_message(
                 f"{Emojis.error} A verification message is already deployed.",
                 ephemeral=True,
@@ -784,17 +784,17 @@ class GatekeeperSetUpView(LayoutView):
             )
             return
 
-        modal = GatekeeperMessageModal(
+        modal = SentinelMessageModal(
             "To access this server you must complete a quick verification.\n"
             "**Tap the button below to begin.**"
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
 
-        # The message posted to the channel uses the GatekeeperVerifyView
+        # The message posted to the channel uses the SentinelVerifyView
         # CV2 layout so it's a branded card with the button embedded.
-        verify_view = GatekeeperVerifyView(
-            self.config, self.gatekeeper,
+        verify_view = SentinelVerifyView(
+            self.config, self.sentinel,
             title=modal.header.value or "Identity Verification",
             body=modal.message.value or "",
         )
@@ -805,7 +805,7 @@ class GatekeeperSetUpView(LayoutView):
                 f"{Emojis.error} Failed to send: {e}", ephemeral=True
             )
         else:
-            await self.gatekeeper.edit(message_id=message.id)
+            await self.sentinel.edit(message_id=message.id)
             await interaction.followup.send(
                 f"{Emojis.success} Verification message deployed.",
                 ephemeral=True,
@@ -820,7 +820,7 @@ class GatekeeperSetUpView(LayoutView):
     async def __rate_limit_modal_response(
         existing_rate: tuple[int, int], interaction: discord.Interaction
     ) -> tuple[int, int] | None:
-        modal = GatekeeperRateLimitModal()
+        modal = SentinelRateLimitModal()
         rate, per = existing_rate
         modal.rate.default = str(rate)
         modal.per.default = str(per)
@@ -834,7 +834,7 @@ class GatekeeperSetUpView(LayoutView):
     async def _on_setup_auto(
         self, interaction: discord.Interaction
     ) -> None:
-        rate = self.gatekeeper.rate
+        rate = self.sentinel.rate
         if rate is not None:
             view = ConfirmationView(
                 interaction.user,
@@ -848,13 +848,13 @@ class GatekeeperSetUpView(LayoutView):
             view.message = await interaction.original_response()
             await view.wait()
             new_rate = None if not view.value else view.hook_value
-            await self.gatekeeper.edit(rate=new_rate)
+            await self.sentinel.edit(rate=new_rate)
         else:
-            modal = GatekeeperRateLimitModal()
+            modal = SentinelRateLimitModal()
             await interaction.response.send_modal(modal)
             await modal.wait()
             if modal.final_rate is not None:
-                await self.gatekeeper.edit(rate=modal.final_rate)
+                await self.sentinel.edit(rate=modal.final_rate)
 
         self.update_state()
 
@@ -864,15 +864,15 @@ class GatekeeperSetUpView(LayoutView):
     async def _on_toggle_flag(
         self, interaction: discord.Interaction
     ) -> None:
-        enabled = self.gatekeeper.started_at is not None
+        enabled = self.sentinel.started_at is not None
         if enabled:
-            newest = await self.cog.bot.db.get_guild_gatekeeper(
-                self.gatekeeper.id  # type: ignore[arg-type]
+            newest = await self.cog.bot.db.get_guild_sentinel(
+                self.sentinel.id  # type: ignore[arg-type]
             )
             if newest is not None:
-                self.gatekeeper = newest
+                self.sentinel = newest
 
-            members = self.gatekeeper.pending_members
+            members = self.sentinel.pending_members
             if members:
                 confirm = ConfirmationView(
                     interaction.user, timeout=180.0, delete_after=True,
@@ -891,13 +891,13 @@ class GatekeeperSetUpView(LayoutView):
             else:
                 await interaction.response.defer()
 
-            await self.gatekeeper.disable()
+            await self.sentinel.disable()
             await interaction.followup.send(
-                f"{Emojis.success} Gatekeeper deactivated."
+                f"{Emojis.success} Sentinel deactivated."
             )
         else:
             try:
-                await self.gatekeeper.enable()
+                await self.sentinel.enable()
             except asyncpg.IntegrityConstraintViolationError:
                 await interaction.response.send_message(
                     f"{Emojis.error} Cannot activate — ensure role, channel, "
@@ -909,7 +909,7 @@ class GatekeeperSetUpView(LayoutView):
                 )
             else:
                 await interaction.response.send_message(
-                    f"{Emojis.success} Gatekeeper activated. "
+                    f"{Emojis.success} Sentinel activated. "
                     f"New members are now held."
                 )
 
@@ -919,7 +919,7 @@ class GatekeeperSetUpView(LayoutView):
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
 
 
-class GatekeeperVerifyView(LayoutView):
+class SentinelVerifyView(LayoutView):
     """The persistent CV2 verification card posted in the verification channel.
 
     Contains a branded container with the customizable title/body text and the
@@ -929,14 +929,14 @@ class GatekeeperVerifyView(LayoutView):
     def __init__(
         self,
         config: GuildConfig | None,
-        gatekeeper: Gatekeeper | None,
+        sentinel: Sentinel | None,
         *,
         title: str = "Identity Verification",
         body: str = "",
     ) -> None:
         super().__init__(timeout=None)
         self.config = config
-        self.gatekeeper = gatekeeper
+        self.sentinel = sentinel
 
         container = discord.ui.Container(accent_colour=_SUCCESS)
         container.add_item(discord.ui.TextDisplay(
@@ -952,35 +952,35 @@ class GatekeeperVerifyView(LayoutView):
             discord.ui.Button(
                 label="Begin Verification",
                 style=discord.ButtonStyle.green,
-                custom_id="gatekeeper:verify:captcha",
+                custom_id="sentinel:verify:captcha",
             )
         ))
         self.add_item(container)
 
 
-class GatekeeperVerifyButton(
+class SentinelVerifyButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template="gatekeeper:verify:captcha",
+    template="sentinel:verify:captcha",
 ):
     """The dynamic handler for the captcha verify button."""
 
     def __init__(
         self,
         config: GuildConfig | None,
-        gatekeeper: Gatekeeper | None,
+        sentinel: Sentinel | None,
     ) -> None:
         super().__init__(discord.ui.Button(
             label="Begin Verification",
             style=discord.ButtonStyle.green,
-            custom_id="gatekeeper:verify:captcha",
+            custom_id="sentinel:verify:captcha",
         ))
         self.config = config
-        self.gatekeeper = gatekeeper
+        self.sentinel = sentinel
 
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction[Bot], _, __, /
-    ) -> GatekeeperVerifyButton | None:
+    ) -> SentinelVerifyButton | None:
         _cog = interaction.client.get_cog("Moderation")
         if _cog is None:
             await interaction.response.send_message(
@@ -996,10 +996,10 @@ class GatekeeperVerifyButton(
         if config is None:
             return cls(None, None)
 
-        gatekeeper = await cog.bot.db.get_guild_gatekeeper(
+        sentinel = await cog.bot.db.get_guild_sentinel(
             interaction.guild_id
         )
-        return cls(config, gatekeeper)
+        return cls(config, sentinel)
 
     async def interaction_check(
         self, interaction: discord.Interaction, /
@@ -1007,14 +1007,14 @@ class GatekeeperVerifyButton(
         if interaction.guild_id is None:
             return False
 
-        if self.config is None or not self.config.flags.gatekeeper:
+        if self.config is None or not self.config.flags.sentinel:
             await interaction.response.send_message(
                 f"{Emojis.error} Verification is not active.",
                 ephemeral=True,
             )
             return False
 
-        if self.gatekeeper is None or self.gatekeeper.started_at is None:
+        if self.sentinel is None or self.sentinel.started_at is None:
             await interaction.response.send_message(
                 f"{Emojis.error} Verification is not active.",
                 ephemeral=True,
@@ -1024,9 +1024,9 @@ class GatekeeperVerifyButton(
         if not isinstance(interaction.user, discord.Member):
             return False
 
-        if not self.gatekeeper.is_blocked(interaction.user.id):
-            if self.gatekeeper.has_role(interaction.user):
-                await self.gatekeeper.block(interaction.user)
+        if not self.sentinel.is_blocked(interaction.user.id):
+            if self.sentinel.has_role(interaction.user):
+                await self.sentinel.block(interaction.user)
                 return True
 
             await interaction.response.send_message(
@@ -1038,18 +1038,18 @@ class GatekeeperVerifyButton(
         return True
 
     async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
-        assert self.gatekeeper is not None
+        assert self.sentinel is not None
         assert isinstance(interaction.user, discord.Member)
         assert isinstance(interaction.channel, discord.abc.GuildChannel)
 
         await interaction.response.defer(ephemeral=True)
 
-        captcha = await self.gatekeeper.bot.render.captcha()
+        captcha = await self.sentinel.bot.render.captcha()
 
         await interaction.channel.set_permissions(
             interaction.user,
             reason=(
-                f"Gatekeeper Verification (ID: {interaction.user.id})"
+                f"Sentinel Verification (ID: {interaction.user.id})"
             ),
             send_messages=True,
         )
@@ -1085,7 +1085,7 @@ class GatekeeperVerifyButton(
             await interaction.channel.set_permissions(
                 interaction.user,
                 reason=(
-                    f"Gatekeeper Verification (ID: {interaction.user.id})"
+                    f"Sentinel Verification (ID: {interaction.user.id})"
                 ),
                 send_messages=False,
             )
@@ -1099,7 +1099,7 @@ class GatekeeperVerifyButton(
             )
             return
 
-        await self.gatekeeper.unblock(interaction.user)
+        await self.sentinel.unblock(interaction.user)
         await interaction.followup.send(
             f"{Emojis.success} Verification complete — welcome to the "
             f"server!",
@@ -1128,24 +1128,24 @@ class _CaptchaChallengeView(LayoutView):
         self.add_item(container)
 
 
-class GatekeeperAlertResolveButton(
+class SentinelAlertResolveButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template="gatekeeper:alert:resolve",
+    template="sentinel:alert:resolve",
 ):
-    """Button on the alert message to stand down the gatekeeper."""
+    """Button on the alert message to stand down the sentinel."""
 
-    def __init__(self, gatekeeper: Gatekeeper | None) -> None:
+    def __init__(self, sentinel: Sentinel | None) -> None:
         super().__init__(discord.ui.Button(
             label="Stand Down",
             style=discord.ButtonStyle.blurple,
-            custom_id="gatekeeper:alert:resolve",
+            custom_id="sentinel:alert:resolve",
         ))
-        self.gatekeeper = gatekeeper
+        self.sentinel = sentinel
 
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction[Bot], _, __, /
-    ) -> GatekeeperAlertResolveButton | None:
+    ) -> SentinelAlertResolveButton | None:
         _cog = interaction.client.get_cog("Moderation")
         if _cog is None:
             await interaction.response.send_message(
@@ -1157,19 +1157,19 @@ class GatekeeperAlertResolveButton(
             )
         cog = cast("Moderation", _cog)
 
-        gatekeeper = await cog.bot.db.get_guild_gatekeeper(
+        sentinel = await cog.bot.db.get_guild_sentinel(
             interaction.guild_id  # type: ignore[arg-type]
         )
-        return cls(gatekeeper)
+        return cls(sentinel)
 
     async def interaction_check(
         self, interaction: discord.Interaction[Bot], /
     ) -> bool:
         if interaction.guild_id is None:
             return False
-        if self.gatekeeper is None or self.gatekeeper.started_at is None:
+        if self.sentinel is None or self.sentinel.started_at is None:
             await interaction.response.send_message(
-                f"{Emojis.error} Gatekeeper is already inactive.",
+                f"{Emojis.error} Sentinel is already inactive.",
                 ephemeral=True,
             )
             return False
@@ -1178,8 +1178,8 @@ class GatekeeperAlertResolveButton(
     async def callback(
         self, interaction: discord.Interaction[Bot]
     ) -> Any:
-        assert self.gatekeeper is not None
-        members = self.gatekeeper.pending_members
+        assert self.sentinel is not None
+        members = self.sentinel.pending_members
         if members:
             confirm = ConfirmationView(
                 interaction.user, timeout=180.0,
@@ -1197,17 +1197,17 @@ class GatekeeperAlertResolveButton(
         else:
             await interaction.response.defer()
 
-        await self.gatekeeper.disable()
+        await self.sentinel.disable()
         await interaction.followup.send(
-            f"{Emojis.success} Gatekeeper stood down.", ephemeral=True
+            f"{Emojis.success} Sentinel stood down.", ephemeral=True
         )
         if interaction.message is not None:
             await interaction.message.edit(view=None)
 
 
-class GatekeeperAlertMassbanButton(
+class SentinelAlertMassbanButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template="gatekeeper:alert:massban",
+    template="sentinel:alert:massban",
 ):
     """Button on the alert message to mass-ban detected raiders."""
 
@@ -1215,14 +1215,14 @@ class GatekeeperAlertMassbanButton(
         super().__init__(discord.ui.Button(
             label="Ban All Raiders",
             style=discord.ButtonStyle.red,
-            custom_id="gatekeeper:alert:massban",
+            custom_id="sentinel:alert:massban",
         ))
         self.cog: Moderation = cog
 
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction[Bot], _, __, /
-    ) -> GatekeeperAlertMassbanButton | None:
+    ) -> SentinelAlertMassbanButton | None:
         _cog = interaction.client.get_cog("Moderation")
         if _cog is None:
             await interaction.response.send_message(

@@ -29,7 +29,7 @@ class GuildHandlers(InternalAPIHandlers):
                 'audit_log': guild_config.flags.audit_log,
                 'raid': guild_config.flags.raid,
                 'alerts': guild_config.flags.alerts,
-                'gatekeeper': guild_config.flags.gatekeeper,
+                'sentinel': guild_config.flags.sentinel,
                 'mentions': guild_config.flags.mentions,
             },
             'audit_log_channel': self._resolve_channel(guild, guild_config.audit_log_channel_id),
@@ -82,7 +82,7 @@ class GuildHandlers(InternalAPIHandlers):
             elif key == 'flags' and isinstance(value, dict):
                 # Flags are a bitmask — compute the new value.
                 new_flags = guild_config.flags.value
-                flag_map = {'audit_log': 1, 'raid': 2, 'alerts': 4, 'gatekeeper': 8, 'mentions': 16}
+                flag_map = {'audit_log': 1, 'raid': 2, 'alerts': 4, 'sentinel': 8, 'mentions': 16}
                 for flag_name, bit in flag_map.items():
                     if flag_name in value:
                         if value[flag_name]:
@@ -194,31 +194,31 @@ class GuildHandlers(InternalAPIHandlers):
         ]
         return web.json_response(channels)
 
-    async def _get_gatekeeper(self, request: web.Request) -> web.Response:
+    async def _get_sentinel(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+        sentinel = await self.bot.db.get_guild_sentinel(guild_id)
 
-        if gatekeeper is None:
+        if sentinel is None:
             return web.json_response(None)
 
         payload = {
-            'channel': self._resolve_channel(guild, gatekeeper.channel_id),
-            'role': self._resolve_role(guild, gatekeeper.role_id),
-            'message': gatekeeper.message_id,
-            'starter_role': self._resolve_role(guild, gatekeeper.starter_role_id),
-            'bypass_action': gatekeeper.bypass_action,
-            'rate': gatekeeper.rate if isinstance(gatekeeper.rate, str) else (f"{gatekeeper.rate[0]}/{gatekeeper.rate[1]}" if gatekeeper.rate else None),
-            'started_at': gatekeeper.started_at.isoformat() if gatekeeper.started_at else None,
-            'member_count': len(gatekeeper.members),
-            'needs_setup': gatekeeper.requires_setup
+            'channel': self._resolve_channel(guild, sentinel.channel_id),
+            'role': self._resolve_role(guild, sentinel.role_id),
+            'message': sentinel.message_id,
+            'starter_role': self._resolve_role(guild, sentinel.starter_role_id),
+            'bypass_action': sentinel.bypass_action,
+            'rate': sentinel.rate if isinstance(sentinel.rate, str) else (f"{sentinel.rate[0]}/{sentinel.rate[1]}" if sentinel.rate else None),
+            'started_at': sentinel.started_at.isoformat() if sentinel.started_at else None,
+            'member_count': len(sentinel.members),
+            'needs_setup': sentinel.requires_setup
         }
         return web.json_response(payload)
 
-    async def _patch_gatekeeper(self, request: web.Request) -> web.Response:
+    async def _patch_sentinel(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
         if guild is None:
@@ -247,15 +247,15 @@ class GuildHandlers(InternalAPIHandlers):
             raise web.HTTPBadRequest(text='no valid fields to update')
 
         # Repository upsert ensures the row exists, updates it, and invalidates the cache.
-        await self.bot.db.guilds.upsert_gatekeeper(guild_id, updates)
+        await self.bot.db.guilds.upsert_sentinel(guild_id, updates)
 
         return web.json_response({'ok': True})
 
-    async def _send_gatekeeper_message(self, request: web.Request) -> web.Response:
-        """Send a gatekeeper verification embed to a channel and store the message_id."""
+    async def _send_sentinel_message(self, request: web.Request) -> web.Response:
+        """Send a sentinel verification embed to a channel and store the message_id."""
         import discord
 
-        from app.cogs.moderation.gatekeeper import GatekeeperVerifyButton
+        from app.cogs.moderation.sentinel import SentinelVerifyButton
         from app.core.views import View
         from app.utils import helpers
 
@@ -284,7 +284,7 @@ class GuildHandlers(InternalAPIHandlers):
             raise web.HTTPBadRequest(text='channel must be a text channel')
 
         config = await self.bot.db.get_guild_config(guild_id)
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+        sentinel = await self.bot.db.get_guild_sentinel(guild_id)
 
         embed = discord.Embed(title=title, description=content, colour=helpers.Colour.lime_green())
         embed.set_footer(
@@ -292,19 +292,19 @@ class GuildHandlers(InternalAPIHandlers):
             "This bot will never ask for your personal information, nor is it related to Discord"
         )
 
-        view = View(timeout=None).add_item(GatekeeperVerifyButton(config, gatekeeper))
+        view = View(timeout=None).add_item(SentinelVerifyButton(config, sentinel))
         try:
             message = await channel.send(view=view, embed=embed)
         except discord.HTTPException as e:
             raise web.HTTPServiceUnavailable(text=f'failed to send message: {e}')
 
-        await self.bot.db.guilds.upsert_gatekeeper(
+        await self.bot.db.guilds.upsert_sentinel(
             guild_id, {'message_id': message.id, 'channel_id': int(channel_id)})
 
         return web.json_response({'ok': True, 'message_id': message.id})
 
-    async def _toggle_gatekeeper(self, request: web.Request) -> web.Response:
-        """Enable or disable the gatekeeper."""
+    async def _toggle_sentinel(self, request: web.Request) -> web.Response:
+        """Enable or disable the sentinel."""
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
         if guild is None:
@@ -319,24 +319,24 @@ class GuildHandlers(InternalAPIHandlers):
         if enabled is None:
             raise web.HTTPBadRequest(text='enabled field is required')
 
-        gatekeeper = await self.bot.db.get_guild_gatekeeper(guild_id)
+        sentinel = await self.bot.db.get_guild_sentinel(guild_id)
 
         if enabled:
-            if gatekeeper is None:
-                raise web.HTTPBadRequest(text='gatekeeper has not been configured')
-            if gatekeeper.requires_setup:
-                raise web.HTTPBadRequest(text='gatekeeper requires setup (channel, role, and message must be set)')
-            if gatekeeper.started_at is not None:
+            if sentinel is None:
+                raise web.HTTPBadRequest(text='sentinel has not been configured')
+            if sentinel.requires_setup:
+                raise web.HTTPBadRequest(text='sentinel requires setup (channel, role, and message must be set)')
+            if sentinel.started_at is not None:
                 return web.json_response({'ok': True, 'status': 'already_enabled'})
-            await gatekeeper.enable()
+            await sentinel.enable()
         else:
-            if gatekeeper is None:
+            if sentinel is None:
                 return web.json_response({'ok': True, 'status': 'not_configured'})
-            if gatekeeper.started_at is None:
+            if sentinel.started_at is None:
                 return web.json_response({'ok': True, 'status': 'already_disabled'})
-            await gatekeeper.disable()
+            await sentinel.disable()
 
-        # ``enable``/``disable`` mutate the cached gatekeeper in place; firing the
+        # ``enable``/``disable`` mutate the cached sentinel in place; firing the
         # invalidation signal here would cancel the role loop that ``disable`` needs to
         # drain its pending-removal queue, so we intentionally don't re-invalidate.
         return web.json_response({'ok': True, 'status': 'enabled' if enabled else 'disabled'})

@@ -2,10 +2,10 @@
 
 The key regression these guard against: cache keys must be invariant to whether an
 argument is passed positionally or by keyword. Percy's cached getters
-(``get_guild_config`` / ``get_guild_gatekeeper``) are called both ways across the
+(``get_guild_config`` / ``get_guild_sentinel``) are called both ways across the
 codebase, while signal-based invalidation always fires positionally. If the key
 generation distinguished ``f(123)`` from ``f(guild_id=123)``, keyword-cached entries
-would never be busted -- which is exactly the gatekeeper "stale config" bug.
+would never be busted -- which is exactly the sentinel "stale config" bug.
 """
 
 from __future__ import annotations
