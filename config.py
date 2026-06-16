@@ -118,6 +118,8 @@ groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or '
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
 images_key: str | None = env('IMAGES_API_TOKEN')
+
+
 def _optional_int(value: str | None) -> int | None:
     """Parse an optional integer env var, tolerating blank or malformed values so boot never fails."""
     try:
