@@ -16,8 +16,8 @@ from discord.ext import commands
 
 from app.cogs.doc import client, engine
 from app.cogs.doc.cache import doc_cache
-from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem
-from app.cogs.doc.ui import DocView
+from app.cogs.doc.models import PRIORITY_PACKAGES, DocItem, DocResult
+from app.cogs.doc.ui import DocSearchView, DocView, build_symbol_container
 from app.core import Bot, Cog, Context
 from app.core.models import command, describe, group
 from app.core.pagination import LinePaginator
@@ -183,7 +183,12 @@ class Documentation(Cog):
             package_name = "python"
 
         _, matches = await self.get_symbol_item(package_name, current, 15)  # type: ignore
-        return [app_commands.Choice(name=m.symbol_id, value=m.symbol_id) for m in matches]
+        # ``value`` must be the inventory name (the lookup key); ``name`` is the user-facing label.
+        # Page/label entries have no anchor, so never fall back to the empty ``symbol_id`` here.
+        return [
+            app_commands.Choice(name=truncate(m.display_name, 100), value=truncate(m.display_name, 100))
+            for m in matches
+        ]
 
     async def package_autocomplete(self, _, current: str) -> list[Choice[str | int | float]]:
         return [
@@ -206,8 +211,8 @@ class Documentation(Cog):
         self.doc_symbols.setdefault(package_name, {})
 
         for dgroup, items in inventory.items():
+            domain, _, group_name = dgroup.partition(":")
             for symbol_name, relative_doc_url in items:
-                group_name = dgroup.split(":")[1]
                 symbol_name = self.ensure_unique_symbol_name(
                     package_name,
                     group_name,
@@ -221,6 +226,8 @@ class Documentation(Cog):
                     base_url,
                     sys.intern(relative_url_path),
                     symbol_id,
+                    domain=sys.intern(domain),
+                    name=symbol_name,
                 )
                 self.doc_symbols[package_name] |= {symbol_name: doc_item}
                 self.item_fetcher.add_item(doc_item)
@@ -371,71 +378,41 @@ class Documentation(Cog):
             return symbol_name, None
         return symbol_name, [result[1] for result in results]
 
-    async def get_symbol_markdown(self, doc_item: DocItem) -> str:
-        """Get the Markdown from the symbol `doc_item` refers to.
+    async def resolve_symbol(self, doc_item: DocItem) -> DocResult:
+        """Return the parsed documentation for `doc_item`.
 
-        First a redis lookup is attempted, if that fails the `item_fetcher`
-        is used to fetch the page and parse the HTML from it into Markdown.
+        A cache lookup is attempted first; on a miss the `item_fetcher` fetches the page and parses
+        the HTML into a structured :class:`DocResult`. Always returns a result (a placeholder one
+        carrying an error message when scraping fails) so the renderer never has to special-case None.
         """
-        markdown = await doc_cache.get(doc_item)
+        result = await doc_cache.get(doc_item)
 
-        if markdown is None:
+        if result is None:
             log.debug("Doc cache miss with %s.", doc_item)
             try:
-                markdown = await self.item_fetcher.get_markdown(doc_item)
+                result = await self.item_fetcher.get_symbol(doc_item)
             except aiohttp.ClientError as e:
                 log.warning("A network error has occurred when requesting parsing of %s.", doc_item, exc_info=e)
-                return "Unable to parse the requested symbol due to a network error."
+                return DocResult(description="Unable to parse the requested symbol due to a network error.")
             except Exception:
                 log.exception("An unexpected error has occurred when requesting parsing of %s.", doc_item)
-                return "Unable to parse the requested symbol due to an error."
-            else:
-                if markdown is None:
-                    return "Unable to parse the requested symbol."
-        return markdown
+                return DocResult(description="Unable to parse the requested symbol due to an error.")
+
+        if result is None or result.is_empty():
+            return DocResult(description="Unable to parse the requested symbol.")
+        return result
 
     @lock_from(refresh_inventories, wait=True)
     async def create_symbol_container(self, item: DocItem) -> discord.ui.Container | None:
         """Scrape (once) the docs for `item` and build a Components V2 card from its contents.
 
-        The scraped markdown is cached on the :class:`DocItem`, so switching between similar
-        symbols and re-rendering never re-scrapes. Returns ``None`` if the symbol is unknown.
+        The parsed result is cached on the :class:`DocItem`, so switching between similar symbols and
+        re-rendering never re-scrapes.
         """
         with self.symbol_get_event:
-            if item.markdown is None:
-                item.markdown = await self.get_symbol_markdown(item)
-
-            container = discord.ui.Container(accent_colour=helpers.Colour.brand())
-
-            body = f"## {discord.utils.escape_markdown(item.symbol_id)}\n"
-
-            if item.markdown:
-                body += truncate(item.markdown, 3500 - len(body))
-
-            container.add_item(
-                discord.ui.Section(body, accessory=discord.ui.Thumbnail("https://klappstuhl.me/gallery/raw/lVUYV.png"))
-            )
-
-            if item.resolved_fields:
-                container.add_item(discord.ui.Separator())
-                for name, value in item.resolved_fields.items():
-                    container.add_item(discord.ui.TextDisplay(f"### {name}\n{value}"))
-
-            container.add_item(discord.ui.Separator())
-
-            container.add_item(
-                discord.ui.ActionRow(
-                    discord.ui.Button(
-                        label="View Documentation",
-                        style=discord.ButtonStyle.link,
-                        url=f"{item.url}#{item.symbol_id}",
-                    )
-                )
-            )
-            container.add_item(discord.ui.Separator())
-
-            container.add_item(discord.ui.TextDisplay(f"-# {item.package} Documentation"))
-            return container
+            if item.result is None:
+                item.result = await self.resolve_symbol(item)
+            return build_symbol_container(item)
 
     @group("docs", fallback="search", alias="d", description="Look up documentation for Python symbols.", hybrid=True)
     @describe(symbol_name="The symbol to look up documentation for.", package="The package to look up documentation for.")
@@ -582,11 +559,7 @@ class Documentation(Cog):
             await ctx.send_error(f'The symbol `{symbol_name}` was not found.')
             return
 
-        embed = discord.Embed(title=f'{package} Search', colour=helpers.Colour.white())
-        embed.description = '\n'.join(
-            f'**{doc_item.group}** [`{doc_item.symbol_id}`]({doc_item.url})'
-            for doc_item in matches)
-        await ctx.send(embed=embed, reference=ctx.replied_reference)
+        await DocSearchView.start(ctx, package=package, query=symbol_name, matches=matches)
 
 
 async def setup(bot: Bot) -> None:

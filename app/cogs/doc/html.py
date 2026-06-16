@@ -2,14 +2,12 @@ import logging
 import re
 from collections.abc import Callable, Container, Iterable
 from functools import partial
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urljoin
 
 import markdownify
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PageElement, SoupStrainer, Tag
-
-from app.cogs.doc.models import MAX_SIGNATURE_AMOUNT
 
 log = logging.getLogger(__name__)
 
@@ -17,6 +15,7 @@ log = logging.getLogger(__name__)
 # Also See https://github.com/matthewwithanm/python-markdownify/issues/31
 markdownify.whitespace_re = re.compile(r"[\r\n\s\t ]+")
 
+#: Tags/classes that terminate a sibling-walk for the *general* (sectionless) description.
 _SEARCH_END_TAG_ATTRS = (
     "data",
     "function",
@@ -28,6 +27,13 @@ _SEARCH_END_TAG_ATTRS = (
     "rubric",
     "sphinxsidebar",
 )
+
+#: Wrapper ``div`` classes that hold a Sphinx version directive.
+VERSION_DIV_CLASSES = ("versionadded", "versionchanged", "deprecated", "versionremoved")
+#: ``div`` classes that should be lifted out of the body and shown as a callout banner.
+_ADMONITION_CLASSES = ("admonition", "seealso")
+_WHITESPACE_RE = re.compile(r"[ \t]*\n[ \t]*")
+_BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 
 class Strainer(SoupStrainer):
@@ -85,7 +91,6 @@ def _find_elements_until_tag(
     return elements
 
 
-_find_next_children_until_tag = partial(_find_elements_until_tag, func=partial(BeautifulSoup.find_all, recursive=False))
 _find_recursive_children_until_tag = partial(_find_elements_until_tag, func=BeautifulSoup.find_all)
 _find_next_siblings_until_tag = partial(_find_elements_until_tag, func=BeautifulSoup.find_next_siblings)
 _find_previous_siblings_until_tag = partial(_find_elements_until_tag, func=BeautifulSoup.find_previous_siblings)
@@ -115,124 +120,25 @@ def get_general_description(start_element: Tag) -> list[Tag | NavigableString]:
     return _find_next_siblings_until_tag(start_tag, _class_filter_factory(_SEARCH_END_TAG_ATTRS), include_strings=True)
 
 
-class FilterAttributes:
-    """Class to hold attributes for filtering tags in the :func:`get_dd_description` function."""
-
-    def __init__(self, group: str, action: Literal["extract", "discard", "ignore", "return"], **kwargs: str) -> None:
-        self.group: str = group
-        self.action: str = action
-        self.kwargs: dict[str, str] = kwargs
-
-    def unpack(self) -> tuple[str, str, dict]:
-        return self.group, self.action, self.kwargs
-
-
-def get_dd_description(
-    symbol: PageElement, *, attributes: FilterAttributes = None
-) -> list[Tag | NavigableString] | Tag | None:
-    """Get the contents of the next dd tag, up to a dt or a dl tag.
-
-    Parameters
-    ----------
-    symbol : PageElement
-        The tag to start the search from.
-    attributes : FilterAttributes
-        The attributes to use for the search.
-    """
-    description_tag = symbol.find_next("dd")
-
-    # For Supported Operations Category
-    if attributes:
-        group, action, kwargs = attributes.unpack()
-
-        if action == "extract":
-            # Only use if you want to remove the tag from the document and return it
-            # Remove the tag from the document and return it
-            dvmop = description_tag.find(group, **kwargs)
-            if dvmop:
-                dvmop.extract()
-        elif action == "discard":
-            # Only use if you want to remove the tag from the document recursively but not return it
-            # Remove the tag from the document
-            dvmop = description_tag.find(group, **kwargs)
-            if dvmop:
-                dvmop.decompose()
-        elif action == "return":
-            # Only use if you want to return the tag without removing it from the document
-            if not description_tag:
-                return None
-
-            # Escape the function early and return the tag
-            # This is used for the `__init__` method of the `Symbol` class
-            # We only want to get the corresponding tag and not the rest of the description
-            dvmop = description_tag.find(group, **kwargs)
-            if dvmop:
-                return dvmop
-        else:
-            # Ignore the tag
-            # Remove the tag from the document
-            dvmop = description_tag.find(group, **kwargs)
-            if dvmop:
-                dvmop.clear()
-
-    return _find_next_children_until_tag(description_tag, ("dt", "dl"), include_strings=True)
-
-
-def _create_markdown_for_element(elem: Tag, template: str = "[{}]({})") -> str:
-    """Create a markdown string for a tag."""
-
-    def is_valid(item: Tag, name: str) -> bool:
-        return item.name == name
-
-    if is_valid(elem, "a"):
-        tag_name = elem.text
-        tag_href = elem["href"]
-
-        return template.format(tag_name, tag_href)
-
-    if is_valid(elem, "strong"):
-        return f"**{elem.text}**"
-
-    if is_valid(elem, "code"):
-        return f"`{elem.text}`"
-
-
-def get_text(element: PageElement | Tag) -> str:
-    """Recursively parse an element and its children into a markdown string."""
-
-    if not hasattr(element, "contents"):
-        element.contents = [element]
-
-    text = []
-    for child in element.contents:
-        if isinstance(child, Tag):
-            result = _create_markdown_for_element(child)
-            if result:
-                text.append(result)
-            else:
-                text.append(child.text)
-        else:
-            text.append(child)
-
-    return " ".join(text)
-
-
-def get_signatures(start_signature: PageElement, groups: list[str] = ["dd"]) -> list[str]:  # type: ignore[no-untyped-def]
-    """Collect up to `_MAX_SIGNATURE_AMOUNT` signatures from dt tags around the `start_signature` dt tag.
+def get_signatures(start_signature: PageElement) -> list[str]:
+    """Collect up to `MAX_SIGNATURE_AMOUNT` signatures from `dt` tags around the `start_signature` `dt` tag.
 
     First the signatures under the `start_signature` are included;
     if less than 2 are found, tags above the start signature are added to the result if any are present.
     """
+    # Imported lazily to keep this module free of intra-package import cycles.
+    from .models import MAX_SIGNATURE_AMOUNT
+
     signatures = []
     for element in (
-        *reversed(_find_previous_siblings_until_tag(start_signature, groups, limit=2)),
+        *reversed(_find_previous_siblings_until_tag(start_signature, ("dd",), limit=2)),
         start_signature,
-        *_find_next_siblings_until_tag(start_signature, groups, limit=2),
+        *_find_next_siblings_until_tag(start_signature, ("dd",), limit=2),
     )[-MAX_SIGNATURE_AMOUNT:]:
         for tag in element.find_all(_filter_signature_links, recursive=False):
             tag.decompose()
 
-        signature = element.text
+        signature = _collapse_whitespace(element.text)
         if signature:
             signatures.append(signature)
 
@@ -251,10 +157,104 @@ def _filter_signature_links(tag: Tag) -> bool:
     return False
 
 
+def is_member_definition(tag: Tag) -> bool:
+    """Return True if `tag` is a `dl` documenting a *nested* member (its own symbol), not a field list."""
+    if tag.name != "dl":
+        return False
+    classes = tag.get("class", [])  # type: ignore
+    if "field-list" in classes:
+        return False
+    # A documented Python member carries a ``py`` domain class and an id'd ``dt``.
+    if "py" in classes:
+        return True
+    first_dt = tag.find("dt", recursive=False)
+    return bool(first_dt and first_dt.get("id"))
+
+
+def is_version_div(tag: Tag) -> bool:
+    """Return True if `tag` is a Sphinx ``versionadded`` / ``versionchanged`` / ``deprecated`` directive."""
+    if tag.name != "div":
+        return False
+    return any(cls in tag.get("class", []) for cls in VERSION_DIV_CLASSES)  # type: ignore
+
+
+def is_admonition(tag: Tag) -> bool:
+    """Return True if `tag` is an admonition / see-also callout block."""
+    if tag.name != "div":
+        return False
+    return any(cls in tag.get("class", []) for cls in _ADMONITION_CLASSES)  # type: ignore
+
+
+def admonition_kind(tag: Tag) -> str:
+    """Return the lowercase kind of an admonition tag (e.g. ``note``, ``warning``, ``see also``)."""
+    classes: list[str] = tag.get("class", [])  # type: ignore
+    for cls in classes:
+        if cls not in ("admonition",):
+            return cls.replace("seealso", "see also").replace("-", " ").lower()
+    return "note"
+
+
+def clean_version_text(tag: Tag) -> str:
+    """Collapse a version directive into a single tidy line such as ``New in version 2.0``."""
+    text = _collapse_whitespace(tag.get_text(" ", strip=True))
+    return text.rstrip(".") if text else ""
+
+
+def format_version_note(note: str) -> str:
+    """Render a version note (``New in version 2.0``) as a tabbed subtext line on its own row."""
+    return f"\n-# \N{DOWNWARDS ARROW WITH TIP RIGHTWARDS} {note}\n"
+
+
+#: Maps a Sphinx domain to the Discord code-fence language that highlights it best.
+_FENCE_LANGUAGES = {
+    "py": "py",
+    "python": "py",
+    "c": "c",
+    "cpp": "cpp",
+    "c++": "cpp",
+    "js": "js",
+    "javascript": "js",
+    "ts": "ts",
+    "rust": "rust",
+    "go": "go",
+}
+
+
+def fence_language(domain: str) -> str:
+    """Return the code-fence language for a Sphinx `domain` (``""`` when none fits)."""
+    return _FENCE_LANGUAGES.get(domain.lower(), "")
+
+
+def clean_signature(term: Tag) -> str:
+    """Extract a single collapsed signature string from a ``dt`` term, dropping its permalink anchors.
+
+    Operates on a copy so the shared page soup is left intact. Text nodes are joined without an extra
+    separator — Sphinx emits explicit whitespace spans — so ``void f ( int )`` stays ``void f(int)``.
+    """
+    term = term.__copy__()
+    for anchor in term.find_all(_filter_signature_links, recursive=False):
+        anchor.decompose()
+    for line_break in term.find_all("br"):
+        line_break.replace_with(" ")
+    return _collapse_whitespace(term.get_text())
+
+
+def _collapse_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def normalise_markdown(markdown: str) -> str:
+    """Tidy converter output: collapse trailing spaces and runs of blank lines."""
+    markdown = _WHITESPACE_RE.sub("\n", markdown)
+    markdown = _BLANK_LINES_RE.sub("\n\n", markdown)
+    return markdown.strip()
+
+
 class DocMarkdownConverter(markdownify.MarkdownConverter):
-    """Subclass markdownify's MarkdownCoverter to provide custom conversion methods."""
+    """Subclass markdownify's MarkdownConverter to provide custom conversion methods."""
 
     def __init__(self, *, page_url: str, **options: Any) -> None:
+        options.setdefault("bullets", "-")
         super().__init__(**options)
         self.page_url = page_url
 
@@ -262,32 +262,42 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
         """Fix markdownify's erroneous indexing in ol tags."""
         parent = el.parent
         if parent is not None and parent.name == "ol":
-            li_tags = parent.find_all("li")
-            bullet = f"{li_tags.index(el) + 1}."
+            li_tags = parent.find_all("li", recursive=False)
+            try:
+                start = int(parent.get("start", 1))
+            except (TypeError, ValueError):
+                start = 1
+            bullet = f"{li_tags.index(el) + start}."
         else:
             depth = -1
-            while el:
-                if el.name == "ul":
+            cursor: Tag | None = el
+            while cursor:
+                if cursor.name == "ul":
                     depth += 1
-                el = el.parent
+                cursor = cursor.parent
             bullets = self.options["bullets"]
             bullet = bullets[depth % len(bullets)]
-        return f"{bullet} {text}\n"
+        return f"{bullet} {text.strip()}\n"
 
-    def convert_hn(self, _n: int, text: str, convert_as_inline: bool) -> str:
-        """Convert h tags to bold text with ** instead of adding #."""
+    def _convert_hn(self, n: int, el: Tag, text: str, convert_as_inline: bool) -> str:
+        """Convert ``h1`` to ``h6`` tags to bold text instead of `#` headings (Discord renders those huge)."""
         if convert_as_inline:
             return text
-        return f"**{text}**\n\n"
+        return f"**{text.strip()}**\n\n"
 
     def convert_code(self, el: Tag, text: str, convert_as_inline: bool) -> str:
-        """Undo `markdownify`s underscore escaping."""
-        return f"`{text}`".replace("\\", "")
+        """Undo `markdownify`s underscore escaping and keep inline code as backticks."""
+        if el.parent is not None and el.parent.name in ("pre",):
+            return text
+        text = text.replace("\\", "").strip("`")
+        return f"`{text}`" if text else ""
 
     def convert_pre(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Wrap any codeblocks in `py` for syntax highlighting."""
-        code = "".join(el.strings)
-        return f"```py\n{code}```"
+        code = "".join(el.strings).rstrip()
+        if not code:
+            return ""
+        return f"```py\n{code}\n```\n"
 
     def convert_a(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Resolve relative URLs to `self.page_url`."""
@@ -306,44 +316,47 @@ class DocMarkdownConverter(markdownify.MarkdownConverter):
             and not title
             and not self.options["default_title"]
         ):
-            # We have a link that matches the text, and we're allowed to use
-            # autolinks, and we don't have a title, and we don't want to use
-            # the default title, so we just return the URL.
+            # Bare self-link: render as an autolink instead of a redundant ``[url](url)``.
             return f"<{href}>"
 
         return f"{prefix}[{text}]({href}){suffix}" if href else text
 
     def convert_p(self, el: Tag, text: str, convert_as_inline: bool) -> str:
-        """Include only one newline instead of two when the parent is a li tag."""
+        """Include only one newline instead of two when the parent is a `li` tag."""
         if convert_as_inline:
             return text
 
         parent = el.parent
-
         if parent is not None and parent.name == "li":
-            return f"{text}\n"
-
-        if parent is not None and _class_filter_factory(["admonition"])(parent):
-            # Now we search for possible admonition titles and convert them to h2s
-            # (In Discord's markdown, it's ##)
-
-            ADMONITION_REGEX = re.compile(r"^(Note|Warning|Tip|Danger|Error|Info|Hint|Success)")
-            # Also ensure that the Title is at the start of the paragraph
-
-            # Because admonition paragraphs also include the raw text of the admonition as a child,
-            # We need to find the admonition titles and replace them with h2s,
-            # so that the text is not duplicated in the final output and displayed normaly, because
-            # only the headers should be h2s, not the text
-
-            match = ADMONITION_REGEX.match(text)
-            if match:
-                # If the text matches the regex, we replace it with a h2
-                text = text.replace(match.group(1), f"## {match.group(1)}")
-
-            # If the parent is a blockquote, we add a newline to the end of the paragraph
-            return f"{text}\n"
+            return f"{text.strip()}\n"
         return super().convert_p(el, text, convert_as_inline)
+
+    def convert_div(self, el: Tag, text: str, convert_as_inline: bool) -> str:
+        """Render Sphinx version directives as a tabbed subtext note; pass every other div through.
+
+        This is what makes a ``New in version …`` note that lives *inside* a field value (e.g. a single
+        ``Parameters`` entry) tab neatly under that entry, exactly like the *Supported Operations* notes,
+        instead of being inlined into the running text.
+        """
+        if is_version_div(el):
+            note = clean_version_text(el)
+            return format_version_note(note) if note else ""
+        return text
 
     def convert_hr(self, el: Tag, text: str, convert_as_inline: bool) -> str:
         """Ignore `hr` tag."""
         return ""
+
+
+def elements_to_markdown(
+    elements: Iterable[Tag | NavigableString],
+    converter: DocMarkdownConverter,
+) -> str:
+    """Convert a flat sequence of soup nodes into a single tidy markdown string."""
+    parts: list[str] = []
+    for element in elements:
+        if isinstance(element, Tag):
+            parts.append(converter.process_tag(element, convert_as_inline=False))
+        elif isinstance(element, NavigableString):
+            parts.append(converter.process_text(element))
+    return normalise_markdown("".join(parts))

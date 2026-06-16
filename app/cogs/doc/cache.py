@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from app.utils.lock import lock
 
 if TYPE_CHECKING:
-    from .models import DocItem
+    from .models import DocItem, DocResult
 
 WEEK_SECONDS = int(datetime.timedelta(weeks=1).total_seconds())
 
@@ -23,19 +23,19 @@ def serialize_resource_id_from_doc_item(bound_args: dict) -> str:
 
 
 class DocCache:
-    """Custom Cache class for storing Markdown content of documentation symbols.
+    """Custom cache class for storing the parsed documentation of symbols.
 
-    This class is used to store the Markdown content of documentation symbols.
-    The items in the cache are stored with time-to-live (TTL) and are expired after a week.
+    Parsed :class:`DocResult` objects are stored per page with a time-to-live (TTL) and expire after
+    a week, so switching between symbols on the same page never triggers a re-scrape.
     """
 
     def __init__(self) -> None:
-        self._internal_cache: dict[str, Any] = {}
+        self._internal_cache: dict[str, dict[str, DocResult]] = {}
         self._set_expires: dict[str, Any] = {}
 
     @lock("DocCache.set", serialize_resource_id_from_doc_item, wait=True)
-    async def set(self, item: DocItem, value: str) -> None:
-        """Set the Markdown `value` for the symbol `item`.
+    async def set(self, item: DocItem, value: DocResult) -> None:
+        """Store the parsed `value` for the symbol `item`.
 
         All keys from a single page are stored together, expiring a week after the first set.
         """
@@ -66,12 +66,10 @@ class DocCache:
             self._set_expires[cache_key] = time.monotonic() + WEEK_SECONDS
             log.info("Set %s to expire in a week.", cache_key)
 
-    async def get(self, item: DocItem) -> str | None:
-        """Return the Markdown content of the symbol `item` if it exists."""
+    async def get(self, item: DocItem) -> DocResult | None:
+        """Return the parsed documentation of the symbol `item` if it exists."""
         cache_key = item_key(item)
-        if cache_key in self._internal_cache and item.symbol_id in self._internal_cache[cache_key]:
-            return self._internal_cache[cache_key][item.symbol_id]
-        return None
+        return self._internal_cache.get(cache_key, {}).get(item.symbol_id)
 
     async def delete(self, package: str) -> bool:
         """Remove all values for `package`; return True if at least one key was deleted, False otherwise."""

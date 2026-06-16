@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import collections
-import copy
-import functools
 import logging
 import re
 import string
@@ -11,45 +9,58 @@ import textwrap
 from collections import defaultdict, deque, namedtuple
 from contextlib import suppress
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
-from app.utils import executor, find_nth_occurrence, pagify
+from app.utils import executor
 
 from .cache import doc_cache
 from .html import (
     DocMarkdownConverter,
-    FilterAttributes,
-    get_dd_description,
+    admonition_kind,
+    clean_signature,
+    clean_version_text,
+    elements_to_markdown,
     get_general_description,
     get_signatures,
+    is_admonition,
+    is_member_definition,
+    is_version_div,
 )
-from .models import MAX_SIGNATURE_AMOUNT, DocItem
+from .models import MAX_SIGNATURE_AMOUNT, Admonition, DocField, DocItem, DocResult, Member, Operation
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Iterator
+    from collections.abc import Collection, Iterator
 
     from app.core import Bot
 
 log = logging.getLogger(__name__)
 
-_WHITESPACE_AFTER_NEWLINES_RE = re.compile(r"(?<=\n\n)(\s+)")
 _PARAMETERS_RE = re.compile(r"\((.+)\)")
 
+#: Groups that have no call signature to scrape (settings, glossary terms, …).
 _NO_SIGNATURE_GROUPS = {
     "envvar",
     "setting",
-    "tempaltefilter",
+    "templatefilter",
     "templatetag",
     "term",
 }
+#: Heading tag names that carry a description in a sibling ``dd`` (Python domain objects).
 _HEADING_DESC_GROUPS = {"dt", "dl"}
-_NO_FIELD_GROUPS = {"Parameters"}
+#: Field names we never surface verbatim (handled elsewhere or pure noise).
+_SKIP_FIELDS = {"supported operations"}
+
 _EMBED_CODE_BLOCK_LINE_LENGTH = 61
 _MAX_SIGNATURES_LENGTH = (_EMBED_CODE_BLOCK_LINE_LENGTH + 8) * MAX_SIGNATURE_AMOUNT
-_MAX_DESCRIPTION_LENGTH = 4096 - _MAX_SIGNATURES_LENGTH
+_MAX_DESCRIPTION_LENGTH = 2500
+_MAX_FIELD_LENGTH = 1024
+#: A section lookup lists at most this many member definitions, each capped at this description length.
+_MAX_MEMBERS = 12
+_MAX_MEMBER_DESC = 350
+_HEADING_TAGS = ("h1", "h2", "h3", "h4", "h5", "h6")
 _TRUNCATE_STRIP_CHARACTERS = "!?:;." + string.whitespace
 
 BracketPair = namedtuple("BracketPair", ["opening_bracket", "closing_bracket"])
@@ -62,8 +73,7 @@ _BRACKET_PAIRS = {
 
 
 def _split_parameters(parameters_string: str) -> Iterator[str]:
-    """
-    Split parameters of a signature into individual parameter strings on commas.
+    """Split parameters of a signature into individual parameter strings on commas.
 
     Long string literals are not accounted for.
     """
@@ -73,7 +83,7 @@ def _split_parameters(parameters_string: str) -> Iterator[str]:
 
     enumerated_string = enumerate(parameters_string)
     for index, character in enumerated_string:
-        if character in {""", """}:
+        if character in {"'", '"'}:
             quote_character = character
             preceding_backslashes = 0
             for _, character in enumerated_string:
@@ -103,16 +113,17 @@ def _split_parameters(parameters_string: str) -> Iterator[str]:
     yield parameters_string[last_split:]
 
 
-def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[str]:
+def _truncate_signatures(signatures: Collection[str]) -> list[str]:
     """Truncate passed signatures to not exceed `_MAX_SIGNATURES_LENGTH`.
 
-    If the signatures need to be truncated, parameters are collapsed until they fit withing the limit.
-    Individual signatures can consist of max 1, 2, ..., `_MAX_SIGNATURE_AMOUNT` lines of text,
+    If the signatures need to be truncated, parameters are collapsed until they fit within the limit.
+    Individual signatures can consist of max 1, 2, ..., `MAX_SIGNATURE_AMOUNT` lines of text,
     inversely proportional to the amount of signatures.
-    A maximum of `_MAX_SIGNATURE_AMOUNT` signatures is assumed to be passed.
     """
+    if not signatures:
+        return []
     if sum(len(signature) for signature in signatures) <= _MAX_SIGNATURES_LENGTH:
-        return signatures
+        return [signature.strip() for signature in signatures]
 
     max_signature_length = _EMBED_CODE_BLOCK_LINE_LENGTH * (MAX_SIGNATURE_AMOUNT + 1 - len(signatures))
     formatted_signatures = []
@@ -140,190 +151,335 @@ def _truncate_signatures(signatures: Collection[str]) -> list[str] | Collection[
     return formatted_signatures
 
 
-def _get_truncated_description(
-    elements: Iterable[Tag | NavigableString],
-    markdown_converter: DocMarkdownConverter,
-    max_length: int,
-    max_lines: int,
-) -> str:
-    """Truncate the Markdown from `elements` to be at most `max_length` characters when rendered or `max_lines` newlines.
+def _strip_headerlinks(nodes: list[Tag | NavigableString]) -> None:
+    """Remove the ¶ permalink anchors Sphinx sprinkles after every heading/term."""
+    for node in nodes:
+        if isinstance(node, Tag):
+            for anchor in node.find_all("a", class_="headerlink"):
+                anchor.decompose()
 
-    `max_length` limits the length of the rendered characters in the string,
-    with the real string length limited to `_MAX_DESCRIPTION_LENGTH` to accommodate discord length limits.
-    """
-    result = ""
-    markdown_element_ends = []
-    rendered_length = 0
 
-    tag_end_index = 0
-    for element in elements:
-        is_tag = isinstance(element, Tag)
-        element_length = len(element.text) if is_tag else len(element)
+def _safe_truncate(markdown: str, max_length: int) -> str:
+    """Truncate `markdown` to `max_length`, never splitting inside a fenced code block."""
+    if len(markdown) <= max_length:
+        return markdown
 
-        if rendered_length + element_length < max_length:
-            if is_tag:
-                element_markdown = markdown_converter.process_tag(element, convert_as_inline=False)
-            else:
-                element_markdown = markdown_converter.process_text(element)
+    cut = markdown[:max_length]
+    # Don't leave a code fence open.
+    if cut.count("```") % 2:
+        cut = cut[: cut.rfind("```")]
 
-            rendered_length += element_length
-            tag_end_index += len(element_markdown)
-
-            if not element_markdown.isspace():
-                markdown_element_ends.append(tag_end_index)
-            result += element_markdown
-        else:
+    for delimiter in ("\n\n", "\n", ". ", ", ", " "):
+        index = cut.rfind(delimiter)
+        if index > max_length // 2:
+            cut = cut[:index]
             break
 
-    if not markdown_element_ends:
-        return ""
+    return cut.strip(_TRUNCATE_STRIP_CHARACTERS) + " …"
 
-    newline_truncate_index = find_nth_occurrence(result, "\n", max_lines)
-    if newline_truncate_index is not None and newline_truncate_index < _MAX_DESCRIPTION_LENGTH - 3:
-        truncate_index = newline_truncate_index
+
+def _parse_admonition(div: Tag, converter: DocMarkdownConverter) -> Admonition:
+    """Lift an admonition / see-also callout into a structured banner."""
+    kind = admonition_kind(div)
+    title_tag = div.find(class_="admonition-title")
+    if title_tag is not None:
+        title = title_tag.get_text(" ", strip=True)
+        title_tag.extract()
     else:
-        truncate_index = _MAX_DESCRIPTION_LENGTH - 3
+        title = kind.title()
 
-    if truncate_index >= markdown_element_ends[-1]:
-        return result
-
-    possible_truncation_indices = [cut for cut in markdown_element_ends if cut < truncate_index]
-    if not possible_truncation_indices:
-        force_truncated = result[:truncate_index]
-        if force_truncated.count("```") % 2:
-            force_truncated = force_truncated[: force_truncated.rfind("```")]
-        for string_ in ("\n\n", "\n", ". ", ", ", ",", " "):
-            cutoff = force_truncated.rfind(string_)
-
-            if cutoff != -1:
-                truncated_result = force_truncated[:cutoff]
-                break
-        else:
-            truncated_result = force_truncated
-
-    else:
-        markdown_truncate_index = possible_truncation_indices[-1]
-        truncated_result = result[:markdown_truncate_index]
-
-    return truncated_result.strip(_TRUNCATE_STRIP_CHARACTERS) + "..."
+    body = _safe_truncate(elements_to_markdown(list(div.children), converter), _MAX_FIELD_LENGTH)
+    return Admonition(title=title or kind.title(), body=body, kind=kind)
 
 
-_pagify_description = functools.partial(pagify, page_length=1024, priority=True, delims=["\n", " "])
+def _parse_operations(div: Tag, converter: DocMarkdownConverter) -> list[Operation]:
+    """Parse a discord.py *Supported Operations* block into ordered :class:`Operation`s.
 
-
-def _create_markdown(
-    signatures: list[str] | None,
-    description: Iterable[Tag],
-    url: str,
-    *,
-    truncate: bool = True,
-    max_length: int = 2700,
-    max_lines: int = 13,
-) -> str:
-    """Create a Markdown string with the signatures at the top, and the converted html description below them.
-
-    The signatures are wrapped in python codeblocks, separated from the description by a newline.
-    The result Markdown string is max 750 rendered characters for the description with signatures at the start.
+    A ``New in version`` / ``Changed in version`` note nested under an operation is detached and
+    stored on the operation so the renderer can tab it neatly beneath that single entry.
     """
-    markdown_converter = DocMarkdownConverter(bullets="-", page_url=url)
-    if truncate:
-        description = _get_truncated_description(
-            description, markdown_converter=markdown_converter, max_length=max_length, max_lines=max_lines
-        )
-    else:
-        iter = copy.copy(description)
+    operations: list[Operation] = []
+    # Each ``.. describe::`` becomes its own ``dl.describe`` block, so collect every ``dt`` in the div
+    # rather than assuming a single definition list holds them all.
+    for term in div.find_all("dt"):
+        description_tag = term.find_next_sibling("dd")
+        name = " ".join(term.get_text(" ", strip=True).split())
+        if not name:
+            continue
+
+        version: str | None = None
         description = ""
-        for element in iter:
-            if isinstance(element, Tag):
-                description += markdown_converter.process_tag(element, convert_as_inline=False)
-            else:
-                description += markdown_converter.process_text(element)
+        if description_tag is not None:
+            version_tag = description_tag.find(is_version_div)
+            if version_tag is not None:
+                version = clean_version_text(version_tag)
+                version_tag.extract()
+            _strip_headerlinks([description_tag])
+            description = elements_to_markdown(list(description_tag.children), converter)
 
-    description = _WHITESPACE_AFTER_NEWLINES_RE.sub("", description)
-    if signatures is not None:
-        signature = "".join(f"```py\n{signature}```" for signature in _truncate_signatures(signatures))
-        return f"{signature}\n{description}"
-    return description
+        operations.append(Operation(name=name, description=description, version=version))
 
-
-@executor
-def get_symbol_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> str | None:
-    """@executor
-
-    Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
-
-    The method of parsing and what information gets included depends on the symbol's group.
-    """
-    symbol_heading = soup.find(id=symbol_data.symbol_id)
-
-    if symbol_heading is None:
-        return None
-
-    signature = None
-    if symbol_heading.name not in _HEADING_DESC_GROUPS:
-        # No signature, no text description
-        description = get_general_description(symbol_heading)
-    else:
-        if symbol_data.group not in _NO_SIGNATURE_GROUPS:
-            signature = get_signatures(symbol_heading)
-        description = get_dd_description(symbol_heading, attributes=FilterAttributes("div", "ignore", class_="operations"))
-
-    for description_element in description:  # type: ignore
-        if isinstance(description_element, Tag):
-            for tag in description_element.find_all("a", class_="headerlink"):
-                tag.decompose()
-
-    return _create_markdown(signature, description, symbol_data.url).strip()  # type: ignore
+    return operations
 
 
-@executor
-def get_field_markdown(soup: BeautifulSoup, symbol_data: DocItem) -> dict[str, Any] | None:
-    """@executor
+def _parse_field_list(definition_list: Tag, converter: DocMarkdownConverter) -> list[DocField]:
+    """Parse a ``dl.field-list`` (Parameters / Raises / Returns / Return type / Yields / …)."""
+    fields: list[DocField] = []
+    for term in definition_list.find_all("dt", recursive=False):
+        description_tag = term.find_next_sibling("dd")
+        # numpydoc decorates the field name with a CSS ``<span class="colon">:</span>``; drop it.
+        name = " ".join(term.get_text(" ", strip=True).split()).rstrip(":").strip()
+        if not name or description_tag is None or name.lower() in _SKIP_FIELDS:
+            continue
 
-    Return parsed Markdown of the passed item using the passed in soup, truncated to fit within a discord message.
-
-    This is for special fields of the items description, like `Supported Operations` for classes.
-    """
-    symbol_heading = soup.find(id=symbol_data.symbol_id)
-
-    if symbol_heading is None:
-        return None
-
-    fields: dict[str, str] = {}
-
-    operations = get_dd_description(symbol_heading, attributes=FilterAttributes("div", "return", class_="operations"))
-    items: list[tuple[str, str]] = []
-    for operation in operations:  # type: ignore
-        if isinstance(operation, Tag):
-            for tag in operation.find_all("a", class_="headerlink"):
-                tag.decompose()
-
-            if operation.find("dt") and operation.find("dd"):
-                operation_name = operation.find("dt").text.strip()
-                operation_description = operation.find("dd").text.strip()
-                items.append((operation_name, operation_description))
-
-    if items:
-        fields["**Supported Operations**"] = "\n".join([f"`{name}` - {description}" for name, description in items])
-
-    parent_dd = symbol_heading.find_next("dd")
-    assert parent_dd is not None
-    for field in parent_dd.find_all("dl", class_="field-list simple", recursive=False):
-        if field.find("dt") and field.find("dd"):
-            name = field.find("dt").text.strip()
-
-            if name in _NO_FIELD_GROUPS:
-                continue
-
-            description = _create_markdown(None, field.find_all("dd"), symbol_data.url, truncate=False)
-
-            if len(description) > 1024:
-                for i, chunk in enumerate(_pagify_description(description)):
-                    fields[name if i == 0 else "\u200b"] = chunk
-            else:
-                fields[name] = description
+        _strip_headerlinks([description_tag])
+        value = _safe_truncate(_render_field_value(description_tag, converter), _MAX_FIELD_LENGTH)
+        if value:
+            fields.append(DocField(name=name, value=value))
 
     return fields
+
+
+def _render_field_value(description_tag: Tag, converter: DocMarkdownConverter) -> str:
+    """Render a field's value, handling numpydoc's ``name : type`` definition-list parameters.
+
+    Sphinx renders Parameters/Returns as a ``<ul>``; numpydoc renders them as a nested
+    ``<dl>`` whose ``:`` separator is CSS-only — so a naive conversion glues the parameter name to
+    its type (``xarray_like``). When that nested list is present we rebuild each entry explicitly.
+    """
+    nested = next((c for c in description_tag.find_all("dl", recursive=False)), None)
+    if nested is not None and (rendered := _render_parameter_list(nested, converter)):
+        return rendered
+    return elements_to_markdown(list(description_tag.children), converter)
+
+
+def _render_parameter_list(definition_list: Tag, converter: DocMarkdownConverter) -> str:
+    """Render a numpydoc ``name : type`` parameter ``dl`` as a bullet list tying each name to its type."""
+    lines: list[str] = []
+    for term in definition_list.find_all("dt", recursive=False):
+        working = term.__copy__()
+        classifiers = [
+            " ".join(span.get_text(" ", strip=True).split()) for span in working.find_all("span", class_="classifier")
+        ]
+        for span in working.find_all("span", class_="classifier"):
+            span.extract()
+        name = " ".join(working.get_text(" ", strip=True).split())
+
+        types = ", ".join(c for c in classifiers if c)
+        if name:
+            head = f"- **{name}**" + (f" (*{types}*)" if types else "")
+        elif types:
+            head = f"- *{types}*"
+        else:
+            continue
+
+        description_tag = term.find_next_sibling("dd")
+        if description_tag is not None:
+            description = " ".join(elements_to_markdown(list(description_tag.children), converter).split())
+            if description:
+                head += f" — {description}"
+        lines.append(head)
+
+    return "\n".join(lines)
+
+
+def _member_domain(definition_list: Tag) -> str:
+    """Return the Sphinx domain (``c`` / ``py`` / ``cpp`` / …) of a member ``dl``."""
+    classes: list[str] = definition_list.get("class", [])  # type: ignore
+    return classes[0] if classes else "py"
+
+
+def _parse_member(definition_list: Tag, converter: DocMarkdownConverter) -> Member | None:
+    """Parse a single member ``dl`` (a struct / function / macro / attribute) into a :class:`Member`.
+
+    Only a one-line *summary* (the lead paragraph) is kept, so a category page that documents whole
+    methods — like pygit2's commit-log tutorial — stays a tidy list instead of inlining every method's
+    full body, prose lists and examples.
+    """
+    term = definition_list.find("dt", recursive=False)
+    if term is None:
+        return None
+
+    signature = clean_signature(term)
+    if not signature:
+        return None
+
+    description = ""
+    version: str | None = None
+    description_tag = term.find_next_sibling("dd")
+    if description_tag is not None:
+        version_tag = description_tag.find(is_version_div)
+        if version_tag is not None:
+            version = clean_version_text(version_tag)
+
+        # Use only the lead paragraph as a summary; the member's own lookup shows the full body.
+        lead = description_tag.find("p", recursive=False) or description_tag.find("p")
+        if lead is not None:
+            _strip_headerlinks([lead])
+            summary = " ".join(elements_to_markdown([lead], converter).split())
+            description = _safe_truncate(summary, _MAX_MEMBER_DESC)
+
+    return Member(
+        signature=signature,
+        description=description,
+        version=version,
+        domain=_member_domain(definition_list),
+    )
+
+
+def _parse_section(section: Tag, converter: DocMarkdownConverter) -> DocResult:
+    """Parse a documentation *section* (a category page) into intro text plus a list of members.
+
+    This is what makes category pages such as CPython's "Create Config" render as a clean list where
+    each ``struct`` / ``void`` / function signature is tied to its own description, instead of a flat
+    blob. It works for any Sphinx domain (``c``, ``py``, ``cpp``, …).
+    """
+    result = DocResult()
+
+    heading = section.find(_HEADING_TAGS, recursive=False)
+    if heading is not None:
+        for anchor in heading.find_all("a", class_="headerlink"):
+            anchor.decompose()
+        result.title = " ".join(heading.get_text(" ", strip=True).split())
+
+    intro_nodes: list[Tag | NavigableString] = []
+    seen_member = False
+    for child in section.children:
+        if isinstance(child, NavigableString):
+            if child.strip() and not seen_member:
+                intro_nodes.append(child)
+            continue
+        if not isinstance(child, Tag):
+            continue
+
+        if child.name in _HEADING_TAGS:
+            continue
+        if child.name == "section":
+            # Don't dive into sub-sections — they own their own lookups.
+            break
+
+        if is_admonition(child):
+            result.admonitions.append(_parse_admonition(child, converter))
+        elif is_version_div(child):
+            if note := clean_version_text(child):
+                result.version_changes.append(note)
+        elif child.name == "dl" and is_member_definition(child):
+            seen_member = True
+            if len(result.members) < _MAX_MEMBERS and (member := _parse_member(child, converter)) is not None:
+                result.members.append(member)
+        elif not seen_member:
+            intro_nodes.append(child)
+
+    _strip_headerlinks(intro_nodes)
+    result.description = _safe_truncate(elements_to_markdown(intro_nodes, converter), _MAX_DESCRIPTION_LENGTH)
+
+    # A pure landing section (only sub-sections, no prose or members): offer a table of contents so
+    # the card is useful instead of empty.
+    if not result.description and not result.members and not result.admonitions:
+        result.description = _section_table_of_contents(section, converter.page_url)
+
+    return result
+
+
+def _find_main_section(soup: BeautifulSoup) -> Tag | None:
+    """Locate a page's primary content container for anchorless (whole-page) lookups."""
+    main = soup.find(attrs={"role": "main"}) or soup
+    section = main.find("section") or main.find("div", class_="section")
+    if section is not None:
+        return section
+    # Older Sphinx themes wrap the body in ``div.body``/``div.document`` with no ``section`` element.
+    return main if isinstance(main, Tag) and main is not soup else None
+
+
+def _section_table_of_contents(section: Tag, page_url: str) -> str:
+    """Build a bullet list linking to a section's direct sub-sections (used for landing pages)."""
+    links: list[str] = []
+    for subsection in section.find_all("section", recursive=False):
+        sub_id = subsection.get("id")
+        heading = subsection.find(_HEADING_TAGS, recursive=False)
+        if not sub_id or heading is None:
+            continue
+        for anchor in heading.find_all("a", class_="headerlink"):
+            anchor.decompose()
+        title = " ".join(heading.get_text(" ", strip=True).split())
+        if title:
+            links.append(f"- [{title}]({page_url}#{sub_id})")
+
+    if not links:
+        return ""
+    return "**In this section**\n" + "\n".join(links[:15])
+
+
+@executor
+def parse_symbol(soup: BeautifulSoup, doc_item: DocItem) -> DocResult | None:
+    """@executor
+
+    Parse the HTML page in `soup` into a structured :class:`DocResult` for `doc_item`.
+
+    The signature, description, callout banners, version notes, supported operations, field lists and
+    section members are extracted independently so the renderer can lay each out on its own terms.
+    Domain-agnostic: handles object pages (a ``dt`` + ``dd``) and category pages (a ``section``) for
+    any Sphinx site — discord.py, CPython's Python and C API, aiohttp, and so on.
+    """
+    converter = DocMarkdownConverter(page_url=doc_item.url)
+
+    # Page/label entries (``std:doc`` / ``std:module``) carry no anchor at all: render the page's
+    # main section so the lookup still produces a useful overview instead of failing.
+    if not doc_item.symbol_id:
+        main_section = _find_main_section(soup)
+        return _parse_section(main_section, converter) if main_section is not None else None
+
+    heading = soup.find(id=doc_item.symbol_id)
+    if heading is None:
+        return None
+
+    # Sections / labels / glossary anchors: render the category's intro plus its member definitions.
+    if heading.name not in _HEADING_DESC_GROUPS:
+        section = heading if heading.name == "section" else heading.find_parent("section")
+        if section is not None:
+            return _parse_section(section, converter)
+
+        # Fallback for label targets that live outside any section: a flat description.
+        description_nodes = get_general_description(heading)
+        _strip_headerlinks(description_nodes)
+        markdown = _safe_truncate(elements_to_markdown(description_nodes, converter), _MAX_DESCRIPTION_LENGTH)
+        return DocResult(description=markdown)
+
+    result = DocResult()
+    if doc_item.group not in _NO_SIGNATURE_GROUPS:
+        result.signatures = _truncate_signatures(get_signatures(heading))
+
+    description_tag = heading.find_next_sibling("dd")
+    if description_tag is None:
+        return result
+
+    description_nodes: list[Tag | NavigableString] = []
+    for child in description_tag.children:
+        if isinstance(child, NavigableString):
+            if child.strip():
+                description_nodes.append(child)
+            continue
+        if not isinstance(child, Tag):
+            continue
+
+        if is_admonition(child):
+            result.admonitions.append(_parse_admonition(child, converter))
+        elif is_version_div(child):
+            if note := clean_version_text(child):
+                result.version_changes.append(note)
+        elif child.name == "div" and "operations" in child.get("class", []):
+            result.operations.extend(_parse_operations(child, converter))
+        elif child.name == "dl" and "field-list" in child.get("class", []):
+            result.fields.extend(_parse_field_list(child, converter))
+        elif is_member_definition(child):
+            # A nested, separately-documented member: it owns its own DocItem, stop here.
+            break
+        else:
+            description_nodes.append(child)
+
+    _strip_headerlinks(description_nodes)
+    result.description = _safe_truncate(elements_to_markdown(description_nodes, converter), _MAX_DESCRIPTION_LENGTH)
+    return result
 
 
 class QueueItem(NamedTuple):
@@ -332,10 +488,13 @@ class QueueItem(NamedTuple):
     doc_item: DocItem
     soup: BeautifulSoup
 
-    def __eq__(self, other: QueueItem | DocItem) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, DocItem):
             return self.doc_item == other
         return NamedTuple.__eq__(self, other)
+
+    def __hash__(self) -> int:
+        return hash(self.doc_item)
 
 
 class ParseResultFuture(asyncio.Future):
@@ -351,11 +510,11 @@ class ParseResultFuture(asyncio.Future):
 
 
 class BatchParser:
-    """Get the Markdown of all symbols on a page and send them to redis when a symbol is requested.
+    """Parse the documentation of every symbol on a page once the first symbol from it is requested.
 
-    DocItems are added through the `add_item` method which adds them to the `_page_doc_items` dict.
-    `get_markdown` is used to fetch the Markdown; when this is used for the first time on a page,
-    all the symbols are queued to be parsed to avoid multiple web requests to the same page.
+    DocItems are added through the `add_item` method which maps them to their page; the first
+    `get_symbol` call for a page fetches the HTML and queues every symbol on it, avoiding repeated
+    requests to the same page.
     """
 
     if TYPE_CHECKING:
@@ -373,23 +532,13 @@ class BatchParser:
         self._item_futures: dict[DocItem, ParseResultFuture] = defaultdict(ParseResultFuture)
         self.__task: asyncio.Task | None = None
 
-    async def get_markdown(self, doc_item: DocItem) -> str | None:
+    async def get_symbol(self, doc_item: DocItem) -> DocResult | None:
         """|coro|
 
-        If no symbols were fetched from `doc_item`s page before,
-        the HTML has to be fetched and then all items from the page are put into the parse queue.
+        Return the parsed :class:`DocResult` for `doc_item`.
 
-        Not safe to run while `self.clear` is running.
-
-        Parameters
-        ----------
-        doc_item : DocItem
-            The symbol to get the Markdown for.
-
-        Returns
-        -------
-        str | None
-            The Markdown of the symbol or None if the symbol could not be found.
+        If no symbol from `doc_item`'s page was fetched before, the HTML is fetched and every item
+        from the page is queued for parsing. Not safe to run while `self.clear` is running.
         """
         if doc_item not in self._item_futures and doc_item not in self.queue:
             self._item_futures[doc_item].user_requested = True
@@ -397,10 +546,10 @@ class BatchParser:
             async with self.bot.session.get(doc_item.url, raise_for_status=True) as response:
 
                 @executor
-                def bs4(text: str) -> BeautifulSoup:
+                def soupify(text: str) -> BeautifulSoup:
                     return BeautifulSoup(text, "lxml")
 
-                soup = await bs4(await response.text(encoding="utf8"))
+                soup = await soupify(await response.text(encoding="utf8"))
 
             self.queue.extendleft(QueueItem(item, soup) for item in self._page_doc_items[doc_item.url])
             log.debug("Added items from %s to the parse queue.", doc_item.url)
@@ -409,6 +558,7 @@ class BatchParser:
                 self.__task = self.bot.loop.create_task(self._parse_queue(), name="Doc Item parsing Queue")
         else:
             self._item_futures[doc_item].user_requested = True
+
         with suppress(ValueError):
             self._move_to_front(doc_item)
         return await self._item_futures[doc_item]
@@ -416,27 +566,27 @@ class BatchParser:
     async def _parse_queue(self) -> None:
         """|coro|
 
-        Parse all items from the queue, setting their result Markdown on the futures and sending them to redis.
-        The coroutine will run as long as the queue is not empty, resetting `self.__task` to None when finished.
+        Parse all items from the queue, setting their result on the futures and caching them.
+        The coroutine runs as long as the queue is not empty, resetting `self.__task` to None when done.
         """
         log.debug("Starting queue parsing.")
         try:
             while self.queue:
                 item, soup = self.queue.pop()
-                markdown = None
 
                 if (future := self._item_futures[item]).done():
                     continue
 
+                result: DocResult | None = None
                 try:
-                    fields_markdown = await get_field_markdown(soup, item)  # type: ignore
-                    markdown = await get_symbol_markdown(soup, item)  # type: ignore
-                    if markdown is not None:
-                        item.resolved_fields = fields_markdown
-                        await doc_cache.set(item, markdown)
+                    result = await parse_symbol(soup, item)  # type: ignore[misc]
+                    if result is not None:
+                        item.result = result
+                        await doc_cache.set(item, result)
                 except Exception:
                     log.exception("Unexpected error when handling %s.", item)
-                future.set_result(markdown)
+
+                future.set_result(result)
                 del self._item_futures[item]
                 await asyncio.sleep(0.1)
         finally:
@@ -456,20 +606,17 @@ class BatchParser:
         """Map a DocItem to its page so that the symbol will be parsed once the page is requested."""
         self._page_doc_items[doc_item.url].append(doc_item)
 
-    async def remove(self, doc_key: str) -> None:
+    async def remove(self, package: str) -> None:
         """|coro|
 
-        Remove all items from the queue that are from the page with the given key.
-
-        Parameters
-        ----------
-        doc_key : str
-            The URL of the page to remove all items from.
+        Drop every queued item, future and page mapping belonging to `package`.
         """
-        for item in filter(lambda i: i.doc_item.url == doc_key, self.queue):
-            self.queue.remove(item)
-            del self._item_futures[item.doc_item]
-        del self._page_doc_items[doc_key]
+        for queue_item in [i for i in self.queue if i.doc_item.package == package]:
+            self.queue.remove(queue_item)
+            self._item_futures.pop(queue_item.doc_item, None)
+
+        for url in [url for url, items in self._page_doc_items.items() if items and items[0].package == package]:
+            self._page_doc_items.pop(url, None)
 
     async def clear(self) -> None:
         """|coro|
@@ -477,8 +624,9 @@ class BatchParser:
         Clear all internal symbol data.
         Wait for all user-requested symbols to be parsed before clearing the parser.
         """
-        for future in filter(attrgetter('user_requested'), self._item_futures.values()):
-            await future
+        for future in filter(attrgetter("user_requested"), self._item_futures.values()):
+            with suppress(asyncio.CancelledError):
+                await future
 
         if self.__task is not None:
             self.__task.cancel()
