@@ -1309,14 +1309,16 @@ class Stats(Cog):
         emoji = attributes.get(record.levelname, "\N{CROSS MARK}")
         dt = datetime.datetime.fromtimestamp(record.created, datetime.UTC)
         msg = textwrap.shorten(f"{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}", width=1990)
+        silent: bool = False
         if record.name == "discord.gateway":
             username = "Gateway"
             avatar_url = "https://klappstuhl.me/gallery/raw/xNZqq.png"
+            silent = True
         else:
             username = f"{record.name} Logger"
             avatar_url = discord.utils.MISSING
 
-        await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url)
+        await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url, silent=silent)
 
     @command(hidden=True, description="Shows the current log level.")
     @commands.is_owner()
