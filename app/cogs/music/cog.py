@@ -13,7 +13,7 @@ import discord
 import wavelink
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
-from discord import app_commands, player
+from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands, tasks
 from discord.utils import MISSING

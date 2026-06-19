@@ -13,8 +13,6 @@ from app.core import Bot, Context, LayoutView
 from app.core.pagination import BasePaginator
 from app.core.views import ConfirmationView
 from app.utils import (
-    PlayerStamp,
-    ProgressBar,
     convert_duration,
     helpers,
     letter_emoji,
@@ -125,7 +123,13 @@ class PlayerPanel(LayoutView):
         """
         self.update_buttons()
         self.clear_items()
+        self._bar_files: list[discord.File] = []
         self.add_item(self.build_container())
+
+    async def _respond_with_rebuild(self, interaction: discord.Interaction) -> None:
+        """Edit the interaction response with the rebuilt view and attached bar files."""
+        files = self._bar_files or []
+        await interaction.response.edit_message(view=self, attachments=files)
 
     def build_container(self) -> discord.ui.Container:
         """Builds the Components V2 now-playing card for the panel."""
@@ -182,29 +186,38 @@ class PlayerPanel(LayoutView):
             # Lavalink may report a non-stream track with an absurd length (max int64)
             # for radio/live sources. Treat anything over 24h as a stream for display.
             effectively_stream = track.is_stream or track.length > 86_400_000
-            status = (
-                f"```swift\n{PlayerStamp(track.length, position)}```"
-                if not effectively_stream
-                else "```swift\n[ 🔴 LIVE STREAM ]```"
-            )
+
+            container.add_item(discord.ui.Separator())
+
+            if effectively_stream:
+                live_file = self.bot.render.progress_bar(0, variant='live', filename='live.png')
+                self._bar_files.append(live_file)
+                container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(live_file)))
+            else:
+                pos_ratio = round((position / track.length) * 50) if track.length > 0 else 0
+                pos_file = self.bot.render.progress_bar(pos_ratio, variant='position', filename='pos.png')
+                self._bar_files.append(pos_file)
+                container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(pos_file)))
+                container.add_item(discord.ui.TextDisplay(
+                    f"`{convert_duration(max(position, 0.0))}` / `{convert_duration(track.length)}`"
+                ))
+
+            vol_ratio = round((self.player.volume / 100) * 50)
+            vol_file = self.bot.render.progress_bar(vol_ratio, variant='volume', filename='vol.png')
+            self._bar_files.append(vol_file)
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(vol_file)))
+            container.add_item(discord.ui.TextDisplay(f"🔊 **{self.player.volume}%**"))
+
+            container.add_item(discord.ui.Separator())
+
             loop_mode = self.player.queue.mode.name.replace("_", " ").upper()
             shuffle = {
                 ShuffleMode.off: "<:off1:1322338488443736257> **``Off``**",
                 ShuffleMode.on: "<:on1:1322338500300771458> **``On``**",
             }.get(self.player.queue.shuffle)
 
-            container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay(f"### Status\n{status}"))
-            container.add_item(discord.ui.Separator())
-
             container.add_item(discord.ui.TextDisplay(
-                f"**Loop Mode:** `{loop_mode}` {Emojis.empty} • {Emojis.empty} **Shuffle Mode:** {shuffle}"
-            ))
-            container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay(
-                f"### Volume\n"
-                f"```swift\n"
-                f"{ProgressBar(0, 100, self.player.volume)} [ {self.player.volume}% ]```"
+                f"**Loop:** `{loop_mode}` {Emojis.empty} • {Emojis.empty} **Shuffle:** {shuffle}"
             ))
 
             extras: list[str] = []
@@ -431,10 +444,11 @@ class PlayerPanel(LayoutView):
         if self.msg is MISSING and not self.__is_temporary__:
             await self.get_player_message()
 
+        files = getattr(self, '_bar_files', None) or []
         if self.msg is not MISSING:
-            await self.msg.edit(view=self)
+            await self.msg.edit(view=self, attachments=files)
         else:
-            self.msg = await self.channel.send(view=self)
+            self.msg = await self.channel.send(view=self, files=files)
 
         return self.msg
 
@@ -453,27 +467,27 @@ class PlayerPanel(LayoutView):
         self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)
 
         self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._respond_with_rebuild(interaction)
 
     async def _on_back(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):
             return
 
         self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._respond_with_rebuild(interaction)
         await self.player.back()
 
     async def _on_pause_play(self, interaction: discord.Interaction) -> None:
         await self.player.pause(not self.player.paused)
         self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._respond_with_rebuild(interaction)
 
     async def _on_forward(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):
             return
 
         self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._respond_with_rebuild(interaction)
         await self.player.skip()
 
     async def _on_loop(self, interaction: discord.Interaction) -> None:
@@ -488,7 +502,7 @@ class PlayerPanel(LayoutView):
         self.player.queue.mode = TRANSITIONS.get(self.player.queue.mode)
 
         self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._respond_with_rebuild(interaction)
 
     async def _on_stop(self, interaction: discord.Interaction) -> None:
         if not await self._require_dj(interaction):

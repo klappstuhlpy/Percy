@@ -92,6 +92,11 @@ class RenderingService:
         buffer = await asyncio.to_thread(templates.draw_equalizer, gains)
         return discord.File(buffer, filename=filename)
 
+    def progress_bar(self, filled: int, *, variant: str = 'position', filename: str = "bar.png") -> discord.File:
+        """Return a pre-cached progress bar image (synchronous — no thread needed)."""
+        buffer = templates.draw_progress_bar(filled, variant=variant)
+        return discord.File(buffer, filename=filename)
+
     async def bar_chart(
         self, data: dict[str, int | float], title: str, *, merge: bool = False, filename: str = "bar_chart.png"
     ) -> discord.File | list[discord.File]:

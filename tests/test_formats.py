@@ -253,4 +253,5 @@ class TestPlayerStamp:
         result = formats.PlayerStamp(60_000, 30_000)
         assert result.startswith('00:30')
         assert result.endswith('01:00')
-        assert '🔘' in result
+        assert '▰' in result
+        assert '▱' in result

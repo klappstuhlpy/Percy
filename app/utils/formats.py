@@ -628,34 +628,24 @@ def txt(path: str | Path) -> str:
         return file.read()
 
 
-def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: int = 32) -> str | None:
-    """
-    Example
-    -------
+def ProgressBar(key_min: float, key_max: float, key_current: float, key_full: int = 14) -> str:
+    """Render a styled Unicode progress bar using filled/empty parallelograms.
 
-    .. code-block:: python
-        ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬🔘▬▬▬▬▬▬▬
+    Example output: ``▰▰▰▰▰▰▱▱▱▱▱▱▱▱``
     """
-    if key_min == key_current:
-        before = key_max
-        after = key_min
-    else:
-        before = key_min + key_current
-        after = key_max - key_current
-    for i in range(int(key_min + 2), int(key_max)):
-        if len(int(before / i) * '▬' + '🔘' + int(
-                after / i) * '▬') <= key_full:
-            return str(int(before / i) * '▬' + '🔘' + int(
-                after / i) * '▬')
+    span = key_max - key_min
+    if span <= 0:
+        return '▱' * key_full
+    ratio = max(0.0, min((key_current - key_min) / span, 1.0))
+    filled = round(ratio * key_full)
+    return '▰' * filled + '▱' * (key_full - filled)
 
 
 def PlayerStamp(length: float, position: float) -> str:
-    """Converts a position and length to a human-readable format."""
+    """Render a track position bar with timestamps: ``01:23 ▰▰▰▰▱▱▱▱▱▱ 04:12``"""
     from app.utils.timetools import convert_duration
 
-    convertable = [
-        convert_duration(position if not position < 0 else 0.0),
-        ProgressBar(0, length, position),
-        convert_duration(length)
-    ]
-    return ' '.join(convertable)
+    pos_str = convert_duration(max(position, 0.0))
+    len_str = convert_duration(length)
+    bar = ProgressBar(0, length, position)
+    return f"{pos_str} {bar} {len_str}"
