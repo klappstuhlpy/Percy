@@ -31,6 +31,7 @@ from app.database.repositories import (
     IncidentsRepository,
     LevelingRepository,
     ModerationRepository,
+    MusicSessionsRepository,
     PlaylistsRepository,
     PollsRepository,
     RoleMenusRepository,
@@ -273,6 +274,7 @@ class Database(_Database):
     highlights: HighlightsRepository
     temp_channels: TempChannelsRepository
     playlists: PlaylistsRepository
+    music_sessions: MusicSessionsRepository
     admin: AdminRepository
     timers: TimersRepository
     comics: ComicsRepository
@@ -299,6 +301,7 @@ class Database(_Database):
         self.highlights = HighlightsRepository(self)
         self.temp_channels = TempChannelsRepository(self)
         self.playlists = PlaylistsRepository(self)
+        self.music_sessions = MusicSessionsRepository(self)
         self.admin = AdminRepository(self)
         self.timers = TimersRepository(self)
         self.comics = ComicsRepository(self)
@@ -906,6 +909,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     music_panel_channel_id: int | None
     music_panel_message_id: int | None
     use_music_panel: bool
+    music_dj_mode: int
 
     prefixes: set[str]
 
@@ -926,6 +930,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "mention_count",
         "message_log_channel_id",
         "mod_log_channel_id",
+        "music_dj_mode",
         "music_panel_channel_id",
         "music_panel_message_id",
         "mute_role_id",

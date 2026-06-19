@@ -102,6 +102,26 @@ class SearchReturn(enum.Enum):
     NO_RESULTS = 1
     CANCELLED = 2
     NO_YOUTUBE_ALLOWED = 3
+    AMAZON_UNSUPPORTED = 4
+
+
+class DJMode(enum.IntEnum):
+    """Controls who can interact with the music player.
+
+    Attributes
+    ----------
+    everyone
+        Anyone in the voice channel can use all controls (default).
+    dj_only
+        Only DJ role holders or members with manage_guild can control playback.
+    hybrid
+        Everyone can use basic controls (pause, volume); destructive actions
+        (stop, shuffle, loop, skip) require DJ.
+    """
+
+    everyone = 0
+    dj_only = 1
+    hybrid = 2
 
 
 from app.utils.checks import is_dj as is_dj

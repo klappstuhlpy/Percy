@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, Self
@@ -16,7 +17,7 @@ from app.core import Context
 from app.utils import convert_duration, helpers
 from config import Emojis
 
-from .models import PlayerState, Queue, SearchReturn, is_dj
+from .models import PlayerState, Queue, SearchReturn, ShuffleMode, is_dj
 
 if TYPE_CHECKING:
     from discord.abc import Connectable
@@ -27,6 +28,17 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Maps between wavelink's QueueMode enum and the small ints we persist in the DB.
+_QUEUE_MODE_TO_INT: dict[wavelink.QueueMode, int] = {
+    wavelink.QueueMode.normal: 0,
+    wavelink.QueueMode.loop: 1,
+    wavelink.QueueMode.loop_all: 2,
+}
+_INT_TO_QUEUE_MODE: dict[int, wavelink.QueueMode] = {v: k for k, v in _QUEUE_MODE_TO_INT.items()}
+
+# Maximum consecutive playback failures before a 24/7 player gives up (avoids hot loops).
+MAX_CONSECUTIVE_ERRORS = 5
+
 
 class Player(wavelink.Player):
     """Custom mdded-wavelink Player class."""
@@ -36,6 +48,21 @@ class Player(wavelink.Player):
 
         self.panel: PlayerPanel = MISSING
         self.queue: Queue = Queue()
+
+        # -- 24/7 ("always-on") state --------------------------------------
+        # When ``always_on`` is set the player never disconnects on inactivity or an
+        # empty queue; instead it refills itself based on ``always_on_mode``:
+        #   'radio'    -> re-plays ``always_on_source`` (an endless stream URL)
+        #   'playlist' -> reloads the saved playlist/album/playlist-query and loops it
+        #   'autoplay' -> lets wavelink autoplay keep generating similar tracks forever
+        self.always_on: bool = False
+        self.always_on_mode: str | None = None
+        self.always_on_source: str | None = None
+
+        # Guards refill so two near-simultaneous track-end events can't double-fill.
+        self._refilling: bool = False
+        # Counts consecutive playback failures to break retry loops on a dead source.
+        self._consecutive_errors: int = 0
 
     @property
     def djs(self) -> list[discord.Member]:
@@ -101,10 +128,21 @@ class Player(wavelink.Player):
                     if not results:
                         return SearchReturn.CANCELLED
             else:
-                if 'youtube' in query.casefold():
+                lowered = query.casefold()
+                if 'youtube' in lowered:
                     return SearchReturn.NO_YOUTUBE_ALLOWED
 
+                # Amazon Music has no Lavalink/LavaSrc source and no public streaming API,
+                # so we can't resolve these links. Fail fast with a clear signal.
+                if 'music.amazon.' in lowered or 'amazon.com/music' in lowered:
+                    return SearchReturn.AMAZON_UNSUPPORTED
+
                 results = await wavelink.Playable.search(query)
+        except wavelink.LavalinkLoadException as exc:
+            # Expected "can't load this" outcome (bad/unsupported URL, non-stream page,
+            # geo-blocked track, ...). Not a code error — log concisely, no traceback.
+            log.warning("Lavalink could not load '%s': %s", query, getattr(exc, "error", None) or exc)
+            return SearchReturn.NO_RESULTS
         except Exception as exc:
             log.error("Error while searching for '%s'", query, exc_info=exc)
             return SearchReturn.NO_RESULTS
@@ -150,8 +188,263 @@ class Player(wavelink.Player):
         self.panel = await PlayerPanel.start(self, channel=obj.channel, disabled=disabled)  # type: ignore
         return self
 
+    @property
+    def db(self):  # noqa: ANN201 - returns app.database.Database
+        """Shortcut to the bot's database from inside the player."""
+        return self.client.db  # type: ignore[attr-defined]
+
+    def _serialize_track(self, track: wavelink.Playable) -> dict[str, Any]:
+        """Serialise a track to the minimal JSON we persist for restore."""
+        return {
+            'uri': track.uri,
+            'title': track.title,
+            'requester_id': getattr(track.extras, 'requester_id', None),
+        }
+
+    async def persist(self, *, position: int | None = None) -> None:
+        """|coro|
+
+        Snapshots the current player state into the ``music_sessions`` table so it can
+        be restored after a restart or node reconnect. Best-effort: never raises.
+        """
+        if self.guild is None or self.channel is None:
+            return
+
+        text_channel_id: int | None = None
+        if self.panel is not MISSING and self.panel.channel is not MISSING:
+            text_channel_id = self.panel.channel.id
+
+        # Live streams aren't seekable and their "position" grows unbounded — store 0.
+        resume_position = position if position is not None else self.position
+        if self.current is not None and self.current.is_stream:
+            resume_position = 0
+
+        try:
+            await self.db.music_sessions.upsert_session(
+                self.guild.id,
+                voice_channel_id=self.channel.id,
+                text_channel_id=text_channel_id,
+                volume=self.volume,
+                paused=self.paused,
+                queue_mode=_QUEUE_MODE_TO_INT.get(self.queue.mode, 0),
+                shuffle=bool(self.queue.shuffle),
+                autoplay=self.autoplay.value,
+                always_on=self.always_on,
+                always_on_mode=self.always_on_mode,
+                always_on_source=self.always_on_source,
+                current_uri=self.current.uri if self.current else None,
+                position=resume_position,
+                tracks=[self._serialize_track(t) for t in self.queue],
+            )
+        except Exception as exc:
+            log.debug('Failed to persist music session for guild %s: %s', self.guild.id, exc)
+
+    async def refill_always_on(self) -> None:
+        """|coro|
+
+        Re-fills an empty 24/7 player according to its configured mode. Safe to call
+        repeatedly; a re-entrancy guard prevents overlapping refills.
+        """
+        if not self.always_on or self._refilling or not self.always_on_source:
+            return
+
+        self._refilling = True
+        try:
+            source = self.always_on_source
+            mode = self.always_on_mode
+
+            if mode == 'autoplay':
+                # Let wavelink keep generating recommendations; only re-seed if it dried up.
+                self.autoplay = wavelink.AutoPlayMode.enabled
+                if self.queue.is_empty and not self.playing:
+                    result = await self.search(source, return_first=True)
+                    if isinstance(result, (Playable, Playlist)):
+                        await self.queue.put_wait(result)
+            elif mode == 'playlist':
+                if source.startswith('percy:playlist:'):
+                    playlist_id = int(source.removeprefix('percy:playlist:'))
+                    tracks = await self.db.playlists.get_playlist_tracks(playlist_id)
+                    for track_record in tracks:
+                        resolved = await self.search(track_record['url'], return_first=True)
+                        if isinstance(resolved, (Playable, Playlist)):
+                            await self.queue.put_wait(resolved)
+                else:
+                    result = await self.search(source, return_first=True)
+                    if isinstance(result, (Playable, Playlist)):
+                        await self.queue.put_wait(result)
+                self.queue.mode = wavelink.QueueMode.loop_all
+            else:  # 'radio' / direct stream
+                result = await self.search(source, return_first=True)
+                if isinstance(result, (Playable, Playlist)):
+                    await self.queue.put_wait(result)
+
+            if not self.playing and not self.queue.is_empty:
+                await self.play(self.queue.get())
+
+            self._consecutive_errors = 0
+        except Exception as exc:
+            log.warning(
+                'Failed to refill 24/7 player in guild %s: %s',
+                self.guild.id if self.guild else None, exc,
+            )
+        finally:
+            self._refilling = False
+
+    @classmethod
+    async def restore(cls, bot: Any, record: Any) -> Self | None:
+        """|coro|
+
+        Rebuilds a player from a persisted ``music_sessions`` row after a restart.
+
+        Reconnects to the saved voice channel, restores volume/loop/shuffle/autoplay and
+        the 24/7 configuration, re-resolves the current + queued tracks by URI, then
+        resumes playback (seeking back to the saved position). Returns ``None`` if the
+        guild/channel is gone or reconnecting fails.
+        """
+        from .ui import PlayerPanel
+
+        guild = bot.get_guild(record['guild_id'])
+        if guild is None:
+            return None
+
+        channel = guild.get_channel(record['voice_channel_id'])
+        if not isinstance(channel, discord.VoiceChannel | discord.StageChannel):
+            return None
+
+        try:
+            self = await channel.connect(cls=cls, self_deaf=True)
+        except Exception as exc:
+            log.warning('Failed to reconnect player to %s during restore: %s', channel, exc)
+            return None
+
+        self.always_on = bool(record['always_on'])
+        self.always_on_mode = record['always_on_mode']
+        self.always_on_source = record['always_on_source']
+        self.queue.mode = _INT_TO_QUEUE_MODE.get(record['queue_mode'], wavelink.QueueMode.normal)
+        self.queue.shuffle = ShuffleMode.on if record['shuffle'] else ShuffleMode.off
+        try:
+            self.autoplay = wavelink.AutoPlayMode(record['autoplay'])
+        except ValueError:
+            self.autoplay = wavelink.AutoPlayMode.partial
+        if self.always_on:
+            self.inactive_timeout = None
+
+        config: GuildConfig = await bot.db.get_guild_config(guild.id)
+        disabled = bool(config and not config.use_music_panel)
+        messageable = (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel)
+        text_channel = config.music_panel_channel
+        if text_channel is None and record['text_channel_id']:
+            resolved = guild.get_channel(record['text_channel_id'])
+            text_channel = resolved if isinstance(resolved, messageable) else None  # type: ignore[assignment]
+        if text_channel is not None:
+            with suppress(Exception):
+                self.panel = await PlayerPanel.start(self, channel=text_channel, disabled=disabled)  # type: ignore[arg-type]
+
+        tracks = record['tracks']
+        if isinstance(tracks, str):
+            tracks = json.loads(tracks)
+
+        uris: list[str] = []
+        if record['current_uri']:
+            uris.append(record['current_uri'])
+        uris.extend(t['uri'] for t in (tracks or []) if t.get('uri'))
+
+        for uri in uris:
+            result = await cls.search(uri, return_first=True)
+            if isinstance(result, Playable | Playlist):
+                await self.queue.put_wait(result)
+
+        if self.queue.is_empty:
+            if self.always_on:
+                await self.refill_always_on()
+            else:
+                await self.disconnect()
+                return None
+        else:
+            await self.play(self.queue.get(), volume=record['volume'])
+            if record['position'] and record['current_uri']:
+                with suppress(Exception):
+                    await self.seek(record['position'])
+            if record['paused']:
+                await self.pause(True)
+
+        with suppress(Exception):
+            await self.set_volume(record['volume'])
+        if self.panel is not MISSING:
+            try:
+                await self.panel.update()
+            except Exception as exc:
+                log.warning('Failed to update panel during restore for guild %s: %s', guild.id, exc)
+
+        log.info('Restored music session for guild %s (always_on=%s)', guild.id, self.always_on)
+        return self
+
+    async def hydrate(self, record: Any) -> None:
+        """|coro|
+
+        Re-apply persisted metadata onto an already-connected (wavelink-resumed) player.
+
+        After a quick restart the Lavalink session resumes and audio keeps playing, but
+        the reconstructed player has default state. This restores our 24/7 flags, panel
+        and upcoming queue **without** re-playing the current track.
+        """
+        from .ui import PlayerPanel
+
+        self.always_on = bool(record['always_on'])
+        self.always_on_mode = record['always_on_mode']
+        self.always_on_source = record['always_on_source']
+        if self.always_on:
+            self.inactive_timeout = None
+        try:
+            self.autoplay = wavelink.AutoPlayMode(record['autoplay'])
+        except ValueError:
+            pass
+        self.queue.mode = _INT_TO_QUEUE_MODE.get(record['queue_mode'], wavelink.QueueMode.normal)
+        self.queue.shuffle = ShuffleMode.on if record['shuffle'] else ShuffleMode.off
+
+        if self.panel is MISSING and self.guild is not None:
+            config = await self.client.db.get_guild_config(self.guild.id)  # type: ignore[attr-defined]
+            disabled = bool(config and not config.use_music_panel)
+            messageable = (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel)
+            text_channel = config.music_panel_channel
+            if text_channel is None and record['text_channel_id']:
+                resolved = self.guild.get_channel(record['text_channel_id'])
+                text_channel = resolved if isinstance(resolved, messageable) else None  # type: ignore[assignment]
+            if text_channel is not None:
+                with suppress(Exception):
+                    self.panel = await PlayerPanel.start(self, channel=text_channel, disabled=disabled)  # type: ignore[arg-type]
+
+        if self.queue.is_empty:
+            tracks = record['tracks']
+            if isinstance(tracks, str):
+                tracks = json.loads(tracks)
+            for entry in (tracks or []):
+                uri = entry.get('uri')
+                if not uri:
+                    continue
+                result = await self.search(uri, return_first=True)
+                if isinstance(result, Playable | Playlist):
+                    await self.queue.put_wait(result)
+
+        if self.panel is not MISSING:
+            try:
+                await self.panel.update()
+            except Exception as exc:
+                log.warning('Failed to update panel during hydrate for guild %s: %s',
+                            self.guild.id if self.guild else None, exc)
+
     async def disconnect(self, **kwargs: Any) -> None:
-        """Disconnects the player from the voice channel."""
+        """Disconnects the player from the voice channel.
+
+        Only an *explicit* (non-forced) disconnect forgets the persisted session.
+        discord.py calls ``disconnect(force=True)`` for every voice client during bot
+        shutdown — if we deleted the row there, a restart would have nothing to resume.
+        So a forced disconnect keeps the session intact for restore.
+        """
+        if self.guild is not None and not kwargs.get("force"):
+            with suppress(Exception):
+                await self.db.music_sessions.delete_session(self.guild.id)
+
         if self.panel is not MISSING:
             if self.panel.state != PlayerState.STOPPED:
                 await self.panel.stop()
@@ -274,7 +567,7 @@ class Player(wavelink.Player):
             return await self.panel.channel.send(embed=embed)
 
         if not short:
-            embed.set_footer(text=f'Requested by {obj.user}', icon_url=obj.user.display_avatar.url)
+            embed.set_footer(text=f"Requested by {obj.user}", icon_url=obj.user.display_avatar.url)
 
         if isinstance(obj, Context):
             return await obj.send(embed=embed, delete_after=15)
@@ -285,16 +578,23 @@ class Player(wavelink.Player):
                 return await obj.response.send_message(embed=embed, delete_after=15)
 
     @classmethod
-    def preview_embed(cls, guild: discord.Guild) -> discord.Embed:
-        embed = discord.Embed(
-            title='Music Player Panel',
-            description='The control panel was closed, the queue is currently empty and I got nothing to do.\n'
-                        'You can start a new player session by invoking the </play:1070054930125176923> command.\n\n'
-                        '*Once you play a new track, this message is going to be the new player panel if it\'s not deleted, '
-                        'otherwise I\'m going to create a new panel.*',
-            timestamp=discord.utils.utcnow(),
-            color=helpers.Colour.white())
-        embed.set_footer(text='last updated')
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        return embed
+    def preview_container(cls, guild: discord.Guild) -> discord.ui.Container:
+        container = discord.ui.Container(accent_color=helpers.Colour.brand())
+
+        heading = (
+            "## Music Player Panel\n"
+            "The control panel was closed, the queue is currently empty and I got nothing to do.\n"
+            "You can start a new player session by invoking the </play:1070054930125176923> command.\n\n"
+            "*Once you play a new track, this message is going to be the new player panel if it's not deleted, "
+            "otherwise I'm going to create a new panel.*"
+        )
+        icon = guild.icon.url if guild is not None and guild.icon else None
+        if icon is not None:
+            container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(icon)))
+        else:
+            container.add_item(discord.ui.TextDisplay(heading))
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay("-# last updated"))
+
+        return container

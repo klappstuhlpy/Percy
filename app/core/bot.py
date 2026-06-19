@@ -164,6 +164,7 @@ class Bot(commands.Bot):
         self.i18n: I18n = I18n()
 
         self.initial_extensions: list[str] = EXTENSIONS
+        self._setup_finished: asyncio.Event = asyncio.Event()
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
@@ -246,7 +247,18 @@ class Bot(commands.Bot):
         try:
             await wavelink.Pool.connect(
                 nodes=[
-                    wavelink.Node(uri=ns.uri, password=ns.password, retries=2) for ns in lavalink_nodes
+                    wavelink.Node(
+                        uri=ns.uri,
+                        password=ns.password,
+                        retries=5,
+                        # Keep the Lavalink session alive for 5 minutes after a disconnect so a
+                        # brief network blip or a fast bot restart resumes playback instead of
+                        # tearing the player down.
+                        resume_timeout=300,
+                        # Default inactivity timeout for new players (overridden per-player for 24/7).
+                        inactive_player_timeout=600,
+                    )
+                    for ns in lavalink_nodes
                 ],
                 client=self,
                 cache_capacity=100
@@ -264,6 +276,15 @@ class Bot(commands.Bot):
 
         if test_guild_id is not None:
             self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
+
+        self._setup_finished.set()
+
+    async def wait_until_setup_finished(self) -> None:
+        """|coro|
+
+        Waits until the setup hook task has finished (Lavalink, internal API, extensions).
+        """
+        await self._setup_finished.wait()
 
     async def get_context(
             self,

@@ -16,6 +16,7 @@ from app.database.repositories.content import (
 from app.database.repositories.economy import EconomyRepository, LevelingRepository
 from app.database.repositories.guilds import AdminRepository, GuildsRepository
 from app.database.repositories.moderation import CasesRepository, IncidentsRepository, ModerationRepository
+from app.database.repositories.music import MusicSessionsRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
 from app.database.repositories.users import AniListRepository, PlaylistsRepository, UsersRepository
@@ -36,6 +37,7 @@ __all__ = (
     'IncidentsRepository',
     'LevelingRepository',
     'ModerationRepository',
+    'MusicSessionsRepository',
     'PlaylistsRepository',
     'PollsRepository',
     'RoleMenusRepository',

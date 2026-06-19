@@ -13,9 +13,9 @@ import discord
 import wavelink
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
-from discord import app_commands
+from discord import app_commands, player
 from discord.app_commands import Choice
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.utils import MISSING
 from wavelink import Playable
 
@@ -35,16 +35,34 @@ from app.utils import (
 from config import Emojis, genius_key
 
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
-from .player import Player
+from .player import MAX_CONSECUTIVE_ERRORS, Player
 from .ui import MusicSetupView, PlaylistPaginator
 
 log = logging.getLogger(__name__)
+
+# Curated, verified direct-stream radio presets for `music 247 radio <name>`.
+# Each value is (human label, direct stream URL). These are real audio streams
+# (SomaFM / Antenne Bayern), not station landing pages, so Lavalink can play them.
+RADIO_PRESETS: dict[str, tuple[str, str]] = {
+    "lofi": ("Fluid — instrumental hip-hop / lofi", "https://ice.somafm.com/fluid-128-mp3"),
+    "chill": ("Groove Salad — chilled ambient beats", "https://ice.somafm.com/groovesalad-128-mp3"),
+    "ambient": ("Drone Zone — atmospheric ambient", "https://ice.somafm.com/dronezone-128-mp3"),
+    "space": ("Space Station Soma — ambient electronica", "https://ice.somafm.com/spacestation-128-mp3"),
+    "vocals": ("Lush — electronic female vocals", "https://ice.somafm.com/lush-128-mp3"),
+    "house": ("Beat Blender — deep house & downtempo", "https://ice.somafm.com/beatblender-128-mp3"),
+    "indie": ("Indie Pop Rocks!", "https://ice.somafm.com/indiepop-128-mp3"),
+    "pop": ("PopTron — electro-pop & indie dance", "https://ice.somafm.com/poptron-128-mp3"),
+    "lounge": ("Secret Agent — spy lounge", "https://ice.somafm.com/secretagent-128-mp3"),
+    "70s": ("Left Coast 70s — mellow album rock", "https://ice.somafm.com/seventies-128-mp3"),
+    "metal": ("Metal Detector — all things metal", "https://ice.somafm.com/bagel-128-mp3"),
+    "antenne": ("ANTENNE BAYERN — German pop & hits", "https://s1-webradio.antenne.de/antenne"),
+}
 
 
 class PlayFlags(Flags):
     """Flags for the music commands."""
 
-    source: Literal["yt", "sp", "sc"] = flag(
+    source: Literal["yt", "sp", "sc", "am"] = flag(
         name="source", description="What source to search for your query.", aliases=["s"], default="yt"
     )
     force: bool = store_true(name="force", description="Whether to force play the track/playlist.", aliases=["f"])
@@ -77,46 +95,198 @@ class Music(Cog):
 
     emoji = "<:music:1322338453937193000>"
 
+    def __init__(self, bot: Bot) -> None:
+        super().__init__(bot)
+        # Guards the one-shot session restore (node-ready can fire multiple times).
+        self._restored: bool = False
+        self.persist_sessions.start()
+        # The node is already connected by the time this cog loads (setup() checks
+        # Pool.get_node()), so on_wavelink_node_ready has already fired and won't
+        # re-fire. Kick off restore immediately.
+        self._restored = True
+        self.bot.loop.create_task(self._restore_sessions())
+
+    async def cog_load(self) -> None:
+        await self.bot.wait_until_ready()
+
+        self.playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
+
+    async def cog_unload(self) -> None:
+        self.persist_sessions.cancel()
+        # Persist final state and destroy players on the Lavalink node so it
+        # doesn't keep streaming audio after the bot process exits. We call
+        # _destroy() directly (not disconnect()) because discord.py will handle
+        # the voice state change during close(), and we need the Lavalink-side
+        # teardown to happen while the websocket is still open.
+        for guild in list(self.bot.guilds):
+            player = guild.voice_client
+            if isinstance(player, Player) and player.connected:
+                with suppress(Exception):
+                    await player.persist()
+                with suppress(Exception):
+                    await player._destroy()
+
+    @tasks.loop(seconds=20)
+    async def persist_sessions(self) -> None:
+        """Periodically snapshot active players so a crash/restart can resume them.
+
+        Runs cheaply: only touches guilds that currently have a connected player.
+        """
+        for guild in list(self.bot.guilds):
+            player = guild.voice_client
+            if isinstance(player, Player) and player.connected and player.current is not None:
+                await player.persist()
+
+    @persist_sessions.before_loop
+    async def _before_persist(self) -> None:
+        await self.bot.wait_until_ready()
+
+    async def _purge_music_channels(self) -> None:
+        """Delete non-pinned messages that accumulated in music panel channels while offline."""
+        rows = await self.bot.db.fetch(
+            "SELECT id, music_panel_channel_id, music_panel_message_id FROM guild_config "
+            "WHERE music_panel_channel_id IS NOT NULL AND music_panel_message_id IS NOT NULL"
+        )
+        for row in rows:
+            channel = self.bot.get_channel(row["music_panel_channel_id"])
+            if channel is None or not isinstance(channel, discord.TextChannel):
+                continue
+            panel_id = row["music_panel_message_id"]
+            try:
+                await channel.purge(
+                    limit=50,
+                    check=lambda msg: not msg.pinned and msg.id != panel_id,
+                )
+            except discord.HTTPException:
+                pass
+
+    async def _restore_sessions(self) -> None:
+        """Reconnect and resume every persisted player after a (re)start."""
+        await self.bot.wait_until_ready()
+        await self._purge_music_channels()
+        try:
+            records = await self.bot.db.music_sessions.get_all_sessions()
+        except Exception as exc:
+            log.error("Failed to load persisted music sessions: %s", exc)
+            return
+        log.info("Restoring %d persisted music session(s).", len(records))
+        for record in records:
+            guild = self.bot.get_guild(record["guild_id"])
+            if guild is None:
+                continue
+
+            vc = guild.voice_client
+            if isinstance(vc, Player):
+                # wavelink already resumed this session — just re-apply our metadata.
+                try:
+                    await vc.hydrate(record)
+                except Exception as exc:
+                    log.error("Failed to hydrate resumed session for guild %s: %s", record["guild_id"], exc)
+                continue
+            if vc is not None:
+                continue  # some other/unknown voice client; leave it alone
+
+            try:
+                await Player.restore(self.bot, record)
+            except Exception as exc:
+                log.error("Failed to restore music session for guild %s: %s", record["guild_id"], exc)
+            await asyncio.sleep(1)  # stagger reconnects to avoid a thundering herd
+
     async def cog_before_invoke(self, ctx: Context) -> None:
         playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
         if playlist_tools:
             await playlist_tools.initizalize_user(ctx.author)
 
-    @Cog.listener(name="on_wavelink_track_exception")
-    @Cog.listener(name="on_wavelink_track_stuck")
-    @Cog.listener(name="on_wavelink_websocket_closed")
-    @Cog.listener(name="on_wavelink_extra_event")
-    async def on_wavelink_intercourse(
+    @Cog.listener()
+    async def on_wavelink_websocket_closed(self, payload: wavelink.WebsocketClosedEventPayload) -> None:
+        """Handle a closed voice websocket.
+
+        We deliberately do **not** tear the player down here. Benign codes (normal close,
+        session invalid, disconnected) need no action, and for everything else the node's
+        ``resume_timeout`` lets Lavalink recover the session without cutting off audio.
+        """
+        if payload.code.value in (1000, 4006, 4014):
+            return
+        log.warning(
+            "Voice websocket closed: code=%s reason=%r by_remote=%s",
+            payload.code, getattr(payload, "reason", None), getattr(payload, "by_remote", None),
+        )
+
+    @Cog.listener()
+    async def on_wavelink_track_exception(self, payload: wavelink.TrackExceptionEventPayload) -> None:
+        await self._recover_player(payload, reason=f"track exception: {getattr(payload, 'exception', None)}")
+
+    @Cog.listener()
+    async def on_wavelink_track_stuck(self, payload: wavelink.TrackStuckEventPayload) -> None:
+        await self._recover_player(payload, reason="track stuck (no audio data received)")
+
+    @Cog.listener()
+    async def on_wavelink_extra_event(self, payload: wavelink.ExtraEventPayload) -> None:
+        log.debug("Wavelink extra event: %s", getattr(payload, "data", payload))
+
+    async def _recover_player(
         self,
-        payload: wavelink.TrackExceptionEventPayload
-        | wavelink.TrackStuckEventPayload
-        | wavelink.WebsocketClosedEventPayload
-        | wavelink.ExtraEventPayload,
+        payload: wavelink.TrackExceptionEventPayload | wavelink.TrackStuckEventPayload,
+        *,
+        reason: str,
     ) -> None:
-        """Handle Wavelink errors."""
-        if isinstance(payload, wavelink.WebsocketClosedEventPayload) and payload.code.value in (1000, 4006, 4014):
-            # Normal close, Sessions Invalid, Disconnected
+        """Recover from a track failure without dropping the whole session.
+
+        Instead of disconnecting on every error (which is what caused playback to "cut
+        off"), we advance to the next track. Only after repeated, consecutive failures do
+        we give up — and for 24/7 players we refill rather than leave.
+        """
+        player: Player | None = cast("Player", payload.player)
+        if not player:
             return
 
-        player: Player | None = cast("Player", payload.player)
+        guild_id = player.guild.id if player.guild else None
+        log.warning("Music recovery in guild %s — %s", guild_id, reason)
 
-        if player:
-            try:
+        player._consecutive_errors += 1
+        if player._consecutive_errors > MAX_CONSECUTIVE_ERRORS:
+            log.error("Too many consecutive playback errors in guild %s; aborting current source.", guild_id)
+            if player.panel is not MISSING:
+                with suppress(discord.HTTPException):
+                    await player.panel.channel.send(
+                        f"{Emojis.error} Too many playback errors in a row — I had to stop the current source."
+                    )
+            player._consecutive_errors = 0
+            if player.always_on:
+                await player.refill_always_on()
+            else:
                 await player.disconnect()
-            except Exception as exc:
-                log.debug("Error while destroying player: %s", exc)
-                pass
+            return
 
-        args = [f"{k}={v!r}" for k, v in vars(payload).items()]
-        log.warning("Wavelink Error occurred: %s | %s", payload.__class__.__name__, ", ".join(args))
+        try:
+            if not player.queue.is_empty:
+                await player.skip(force=True)
+            elif player.always_on:
+                await player.refill_always_on()
+            elif player.autoplay != wavelink.AutoPlayMode.enabled and player.panel is not MISSING:
+                with suppress(discord.HTTPException):
+                    await player.panel.channel.send(
+                        f"{Emojis.warning} That track failed to play and the queue is empty.", delete_after=15
+                    )
+        except Exception as exc:
+            log.debug("Error while recovering player in guild %s: %s", guild_id, exc)
 
     @Cog.listener()
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
-        logging.info("Wavelink Node connected: %s | Resumed: %s", payload.node.uri, payload.resumed)
+        log.info("Wavelink Node connected: %s | Resumed: %s", payload.node.uri, payload.resumed)
+        if not self._restored:
+            self._restored = True
+            self.bot.loop.create_task(self._restore_sessions())
 
     @Cog.listener()
     async def on_wavelink_inactive_player(self, player: Player) -> None:
         if not player:
+            return
+
+        # 24/7 players never time out — keep the session alive and refill if needed.
+        if player.always_on:
+            if player.connected and not player.playing:
+                await player.refill_always_on()
             return
 
         with suppress(discord.HTTPException):
@@ -161,6 +331,10 @@ class Music(Cog):
             return
 
         if player.autoplay != wavelink.AutoPlayMode.enabled and player.queue.is_empty:
+            # A 24/7 player must never leave — refill from its configured source instead.
+            if player.always_on:
+                await player.refill_always_on()
+                return
             # we gracefully disconnect if there are no tracks left
             # in the queue and autoplay is disabled/partial enabled
             await player.disconnect()
@@ -192,15 +366,22 @@ class Music(Cog):
         if not player:
             return
 
+        # A track started cleanly — clear the failure streak used by _recover_player.
+        player._consecutive_errors = 0
+
         if player.current is not None and player.current.recommended:
             assert player.queue.history is not None
             current = player.current
             assert current is not None
             player.queue.history.put(current)
 
-        while not player.queue.all or player.current not in player.queue.all:
-            # ensure that the current track is in the queue
+        # Wait (bounded) until the current track is registered in the queue. The cap
+        # prevents the handler from hanging forever — which would stop the panel from
+        # ever rendering — if a track never lands in the queue (e.g. some stream cases).
+        waited = 0.0
+        while (not player.queue.all or player.current not in player.queue.all) and waited < 10:
             await asyncio.sleep(0.5)
+            waited += 0.5
 
         channel = player.channel
         if isinstance(channel, discord.StageChannel):
@@ -211,7 +392,10 @@ class Music(Cog):
             else:
                 await intance.edit(topic=player.current.title)
 
-        await player.panel.update()
+        if player.panel is not MISSING:
+            await player.panel.update()
+        # Snapshot the new now-playing state so a restart resumes at the right track.
+        await player.persist()
 
     @staticmethod
     def _get_spotify_activity(member: discord.Member) -> discord.Spotify | None:
@@ -290,15 +474,23 @@ class Music(Cog):
         source=[
             app_commands.Choice(name="SoundCloud (Default)", value="sc"),
             app_commands.Choice(name="Spotify", value="sp"),
+            app_commands.Choice(name="Apple Music", value="am"),
         ],
     )
     @checks.is_author_connected()
     @checks.is_listen_together()
     async def play(self, ctx: Context, *, query: str, flags: PlayFlags) -> None:
         """Play Music in a voice channel by searching for a track/playlist."""
+        player: Player = cast("Player", ctx.voice_client)
+        if player and player.always_on:
+            await ctx.send_error(
+                f"A 24/7 session is currently active. "
+                f"Disable it first with `{ctx.clean_prefix}music 247 off` before playing new tracks."
+            )
+            return
+
         await ctx.defer()
 
-        player: Player = cast("Player", ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 
@@ -307,6 +499,7 @@ class Music(Cog):
             # 'yt': wavelink.TrackSource.YouTubeMusic,
             "sp": "spsearch",
             "sc": wavelink.TrackSource.SoundCloud,
+            "am": "amsearch",  # Apple Music (LavaSrc)
         }
         source = SOURCE_LOOKUP.get(flags.source, wavelink.TrackSource.SoundCloud)
 
@@ -323,6 +516,11 @@ class Music(Cog):
                 await ctx.send_error("Sorry! No results found matching your query.")
             elif result == SearchReturn.NO_YOUTUBE_ALLOWED:
                 await ctx.send_error("Sorry, you can't play YouTube tracks from this bot.")
+            elif result == SearchReturn.AMAZON_UNSUPPORTED:
+                await ctx.send_error(
+                    "Amazon Music isn't supported \N{EM DASH} there's no streaming source for it.\n"
+                    "Try Spotify, Apple Music, or SoundCloud instead."
+                )
             return
 
         if isinstance(result, wavelink.Playlist):
@@ -660,10 +858,90 @@ class Music(Cog):
         await ctx.send_success("Cleaned up the queue.", delete_after=10)
 
     @group(description="Manage Advanced Filters to specify you listening experience.", guild_only=True, hybrid=True)
+    @checks.is_player_playing()
     async def filter(self, ctx: Context) -> None:
-        """Find useful information about the filter command group."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+        """Display all active filters and the current equalizer, or use a subcommand to modify them."""
+        if ctx.invoked_subcommand is not None:
+            return
+
+        player: Player = cast("Player", ctx.voice_client)
+        if not player:
+            return
+
+        await ctx.defer()
+
+        filters: wavelink.Filters = player.filters
+        eq_gains = [entry["gain"] for entry in filters.equalizer.payload.values()]
+
+        active: list[str] = []
+
+        # Timescale (nightcore etc.)
+        ts = filters.timescale.payload
+        if ts:
+            parts = [f"{k}={v}" for k, v in ts.items()]
+            active.append(f"**Timescale** — {', '.join(parts)}")
+
+        # Rotation (8D)
+        rot = filters.rotation.payload
+        if rot:
+            hz = rot.get("rotationHz", 0)
+            active.append(f"**Rotation (8D)** — {hz} Hz")
+
+        # Low Pass
+        lp = filters.low_pass.payload
+        if lp:
+            smoothing = lp.get("smoothing", 0)
+            active.append(f"**Low Pass** — smoothing: {smoothing}")
+
+        # Tremolo
+        trem = filters.tremolo.payload
+        if trem:
+            parts = [f"{k}={v}" for k, v in trem.items()]
+            active.append(f"**Tremolo** — {', '.join(parts)}")
+
+        # Vibrato
+        vib = filters.vibrato.payload
+        if vib:
+            parts = [f"{k}={v}" for k, v in vib.items()]
+            active.append(f"**Vibrato** — {', '.join(parts)}")
+
+        # Karaoke
+        kar = filters.karaoke.payload
+        if kar:
+            parts = [f"{k}={v}" for k, v in kar.items()]
+            active.append(f"**Karaoke** — {', '.join(parts)}")
+
+        # Distortion
+        dist = filters.distortion.payload
+        if dist:
+            active.append(f"**Distortion** — {len(dist)} parameter(s) set")
+
+        # Channel Mix
+        cm = filters.channel_mix.payload
+        if cm:
+            parts = [f"{k}={v}" for k, v in cm.items()]
+            active.append(f"**Channel Mix** — {', '.join(parts)}")
+
+        # Equalizer (non-flat = active)
+        eq_active = any(g != 0.0 for g in eq_gains)
+        if eq_active:
+            active.append("**Equalizer** — custom (see chart below)")
+
+        embed = discord.Embed(
+            title="Active Audio Filters",
+            color=helpers.Colour.white(),
+        )
+
+        if active:
+            embed.description = "\n".join(f"• {entry}" for entry in active)
+        else:
+            embed.description = "*No filters are currently active.* All audio is playing at default settings."
+
+        embed.set_footer(text=f"Use \"{ctx.clean_prefix}filter <subcommand>\" to modify filters.")
+
+        image = await self.bot.render.equalizer(eq_gains)
+        embed.set_image(url="attachment://image.png")
+        await ctx.send(embed=embed, file=image)
 
     @filter.command("equalizer", description="Set the equalizer for the current Track.")
     @describe(band="The Band you want to change. (1-15)", gain="The Gain you want to set. (-0.25-+1.0)")
@@ -901,7 +1179,7 @@ class Music(Cog):
             def fmt(track: wavelink.Playable, index: int) -> str:
                 return (
                     f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** "
-                    f"[`{convert_duration(track.length)}`]"
+                    f"[`{convert_duration(track.length) if not track.is_stream else 'LIVE'}`]"
                 )
 
             async def format_page(self, entries: list, /) -> discord.Embed:
@@ -1119,6 +1397,259 @@ class Music(Cog):
         config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)
         view = MusicSetupView(self.bot, ctx.author, config)
         view.message = await ctx.send(view=view)
+
+    # -- 24/7 ("always-on") -------------------------------------------------
+
+    async def _resolve_user_playlist(self, user_id: int, source: str) -> Playlist | None:
+        """Try to resolve source as a user playlist by index or name. Returns None if not matched."""
+        pt: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore[assignment]
+        if pt is None:
+            return None
+        playlists = await pt.get_playlists(user_id=user_id)
+        if not playlists:
+            return None
+        try:
+            playlist_id = int(source)
+            for p in playlists:
+                if p.id == playlist_id:
+                    return p
+        except ValueError:
+            pass
+        source_lower = source.lower()
+        for p in playlists:
+            if p.name.lower() == source_lower:
+                return p
+        return None
+
+    async def enable_always_on(
+        self,
+        guild: discord.Guild,
+        voice_channel: discord.VoiceChannel | discord.StageChannel,
+        text_channel: discord.abc.MessageableChannel | None,
+        mode: str,
+        source: str,
+    ) -> Player:
+        """Connect (if needed) and switch a guild's player into 24/7 mode.
+
+        Shared by the ``/music 247`` command and the dashboard internal API so both
+        behave identically. Resets the queue and starts the configured endless source.
+        """
+        from .ui import PlayerPanel
+
+        player = cast("Player", guild.voice_client)
+        if not isinstance(player, Player):
+            player = await voice_channel.connect(cls=Player, self_deaf=True)  # type: ignore[assignment]
+            with suppress(discord.HTTPException):
+                if guild.me is not None:
+                    await guild.me.edit(deafen=True)
+
+        # Ensure a control panel exists (also when converting an already-connected player).
+        if player.panel is MISSING:
+            config = await self.bot.db.get_guild_config(guild.id)
+            disabled = bool(config and not config.use_music_panel)
+            # Prefer the configured panel channel; otherwise fall back to where the command
+            # ran. Accept any messageable guild channel (text, thread, or a voice text-chat),
+            # since the panel only needs send/fetch_message.
+            messageable = (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel)
+            panel_channel = config.music_panel_channel or (
+                text_channel if isinstance(text_channel, messageable) else None
+            )
+            if panel_channel is not None:
+                try:
+                    player.panel = await PlayerPanel.start(player, channel=panel_channel, disabled=disabled)  # type: ignore[arg-type]
+                    log.info(
+                        "24/7 panel started in guild %s (channel=%s, disabled=%s)",
+                        guild.id, panel_channel.id, disabled,
+                    )
+                except Exception as exc:
+                    log.warning("Failed to start music panel for 24/7 in guild %s: %s", guild.id, exc, exc_info=exc)
+            else:
+                log.warning(
+                    "24/7 in guild %s: no usable panel channel (configured=%s, fallback=%s) — panel not shown",
+                    guild.id, config.music_panel_channel_id, type(text_channel).__name__,
+                )
+
+        player.always_on = True
+        player.always_on_mode = mode
+        player.always_on_source = source
+        player.inactive_timeout = None  # never time out
+        if mode == "autoplay":
+            player.autoplay = wavelink.AutoPlayMode.enabled
+
+        player.queue.reset()
+        if player.playing:
+            await player.stop()
+        await player.refill_always_on()
+        # Render the panel immediately so it reflects the now-playing track right away
+        # (don't rely solely on the track-start event, which may race with this).
+        if player.panel is not MISSING:
+            with suppress(Exception):
+                await player.panel.update()
+        await player.persist()
+        return player
+
+    async def disable_always_on(self, guild: discord.Guild) -> bool:
+        """Turn off 24/7 mode for a guild. Returns whether a player was affected."""
+        player = cast("Player", guild.voice_client)
+        if not isinstance(player, Player):
+            await self.bot.db.music_sessions.delete_session(guild.id)
+            return False
+
+        player.always_on = False
+        player.always_on_mode = None
+        player.always_on_source = None
+        player.inactive_timeout = 600  # restore a sane default
+        await player.persist()
+        return True
+
+    @_music.command(
+        "247",
+        description="Set up a 24/7 always-on player that keeps playing a stream, playlist, or autoplay.",
+    )
+    @describe(
+        mode="The kind of endless source to keep playing (or 'off' to disable).",
+        source="A stream/radio URL, a playlist/album link or search, or an autoplay seed. Leave empty to turn off.",
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="Radio / Stream URL", value="radio"),
+            app_commands.Choice(name="Playlist (looped)", value="playlist"),
+            app_commands.Choice(name="Autoplay (endless recommendations)", value="autoplay"),
+            app_commands.Choice(name="Off", value="off"),
+        ]
+    )
+    async def music_247(
+        self,
+        ctx: Context,
+        mode: Literal["radio", "playlist", "autoplay", "off"],
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Configure a 24/7 always-on player.
+
+        The player reconnects automatically after a disconnect or bot restart and keeps
+        the chosen source running forever:
+        - **radio** — an endless internet-radio / live-stream URL
+        - **playlist** — a playlist/album link or search, looped endlessly
+        - **autoplay** — seed a track and let recommendations keep it going
+        """
+        assert ctx.guild is not None
+
+        if mode == "off":
+            affected = await self.disable_always_on(ctx.guild)
+            if affected:
+                await ctx.send_success("24/7 mode disabled. The player will now time out when idle.")
+            else:
+                await ctx.send_error("There is no 24/7 player running in this server.")
+            return
+
+        if not source:
+            await ctx.send_error("Please provide a source (a stream URL, playlist link/search, or autoplay seed).")
+            return
+
+        # Radio mode accepts a friendly preset name (e.g. "lofi") as a shortcut.
+        preset_label: str | None = None
+        if mode == "radio":
+            preset = RADIO_PRESETS.get(source.strip().lower())
+            if preset:
+                preset_label, source = preset[0], preset[1]
+
+        # Playlist mode accepts a user playlist index/name as a shortcut.
+        playlist_label: str | None = None
+        if mode == "playlist":
+            resolved_playlist = await self._resolve_user_playlist(ctx.author.id, source)
+            if resolved_playlist is not None:
+                if len(resolved_playlist) == 0:
+                    await ctx.send_error("That playlist is empty — add some tracks first.")
+                    return
+                playlist_label = resolved_playlist.name
+                source = f"percy:playlist:{resolved_playlist.id}"
+
+        channel: discord.VoiceChannel | discord.StageChannel | None = None
+        if isinstance(ctx.author, discord.Member) and ctx.author.voice and ctx.author.voice.channel:
+            channel = ctx.author.voice.channel
+        elif ctx.voice_client is not None:
+            channel = cast("Player", ctx.voice_client).channel  # type: ignore[assignment]
+
+        if channel is None:
+            await ctx.send_error("Join a voice channel first, or have me already connected to one.")
+            return
+
+        await ctx.defer()
+
+        # User playlists are DB-backed; skip the external probe.
+        if not source.startswith("percy:playlist:"):
+            probe = await Player.search(source, return_first=True)
+            if isinstance(probe, SearchReturn) or not probe:
+                if probe == SearchReturn.AMAZON_UNSUPPORTED:
+                    await ctx.send_error("Amazon Music isn't supported. Try Spotify, Apple Music, SoundCloud, or a stream URL.")
+                elif mode == "radio":
+                    await ctx.send_error(
+                        "I couldn't load that radio source. **Radio needs a *direct* stream URL** "
+                        "(ending in `.mp3`/`.aac`/`.m3u8`/`.pls`), not a station web page.\n"
+                        "For example, `https://www.radio.de/s/antennebayern` won't work — use the actual stream, "
+                        "e.g. `https://s1-webradio.antenne.de/antenne`.\n"
+                        f"No URL handy? Pick a built-in preset — see `{ctx.clean_prefix}music radios`."
+                    )
+                else:
+                    await ctx.send_error("I couldn't resolve that source. Double-check the URL or search term.")
+                return
+
+        await self.enable_always_on(ctx.guild, channel, ctx.channel, mode, source)
+        target = f"**{playlist_label}**" if playlist_label else (f"**{preset_label}**" if preset_label else f"**24/7 ({mode})**")
+        await ctx.send_success(
+            f"Now running {target} in {channel.mention}.\n"
+            f"I'll automatically reconnect and resume after disconnects or restarts."
+        )
+
+    @music_247.autocomplete("source")
+    async def music_247_source_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[Choice[str]]:
+        """Suggest radio presets or user playlists depending on the selected mode."""
+        mode = interaction.namespace.mode
+        if mode == "radio":
+            current_l = current.lower()
+            choices: list[Choice[str]] = []
+            for slug, preset in RADIO_PRESETS.items():
+                label = preset[0]
+                if current_l in slug or current_l in label.lower():
+                    choices.append(Choice(name=f"{slug} — {label}"[:100], value=slug))
+                if len(choices) >= 25:
+                    break
+            return choices
+
+        if mode == "playlist":
+            pt: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore[assignment]
+            if pt is None:
+                return []
+            playlists = await pt.get_playlists(user_id=interaction.user.id)
+            current_l = current.lower()
+            choices = []
+            for p in playlists:
+                display = f"[{p.id}] {p.name} ({len(p.tracks)} tracks)"
+                if not current_l or current_l in p.name.lower() or current_l in str(p.id):
+                    choices.append(Choice(name=display[:100], value=str(p.id)))
+                if len(choices) >= 25:
+                    break
+            return choices
+        return []
+
+    @_music.command("radios", description="List the built-in 24/7 radio presets.")
+    async def music_radios(self, ctx: Context) -> None:
+        """List the curated radio presets usable with `music 247 radio <name>`."""
+        embed = discord.Embed(
+            title="\N{RADIO} 24/7 Radio Presets",
+            description=(
+                f"Use any of these with `{ctx.clean_prefix}music 247 radio <name>` "
+                f"(e.g. `{ctx.clean_prefix}music 247 radio lofi`):"
+            ),
+            colour=helpers.Colour.white(),
+        )
+        for slug, preset in RADIO_PRESETS.items():
+            embed.add_field(name=f"`{slug}`", value=preset[0], inline=True)
+        embed.set_footer(text="You can also pass any direct stream URL (.mp3 / .aac / .m3u8 / .pls).")
+        await ctx.send(embed=embed)
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -1351,6 +1882,14 @@ class PlaylistTools(Cog):
         name_or_id: Annotated[str | int, PlaylistNameOrID(lower=True, with_id=True)],
     ) -> None:
         """Add the songs from you playlist to the plugins queue and play them."""
+        player: Player = cast("Player", ctx.voice_client)
+        if player and player.always_on:
+            await ctx.send_error(
+                f"A 24/7 session is currently active. "
+                f"Disable it first with `{ctx.clean_prefix}music 247 off` before playing a playlist."
+            )
+            return
+
         playlist = await self.get_playlist(ctx, name_or_id)
         if playlist is None:
             await ctx.send_error("There is no playlist with this id.")
@@ -1360,7 +1899,6 @@ class PlaylistTools(Cog):
             await ctx.send_error("There are no tracks in this playlist, please add some using `/playlist add`.")
             return
 
-        player: Player = cast("Player", ctx.voice_client)
         if not player:
             player = await Player.join(ctx)
 

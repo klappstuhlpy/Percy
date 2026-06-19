@@ -23,7 +23,7 @@ from app.utils import (
 )
 from config import Emojis
 
-from .models import PlayerState, Playlist, ShuffleMode, is_dj
+from .models import DJMode, PlayerState, Playlist, ShuffleMode, is_dj
 
 if TYPE_CHECKING:
     from app.database.base import GuildConfig
@@ -73,13 +73,14 @@ class PlayerPanel(LayoutView):
         channel: discord.TextChannel
         cooldown: commands.CooldownMapping
 
-    def __init__(self, *, player: Player, state: PlayerState, disabled: bool) -> None:
+    def __init__(self, *, player: Player, state: PlayerState, disabled: bool, guild_config: GuildConfig | None = None) -> None:
         super().__init__(timeout=None)
         self.bot: Bot = player.client  # type: ignore
 
         self.player: Player = player
         self.state: PlayerState = state
         self._disabled = disabled
+        self._guild_config: GuildConfig | None = guild_config
 
         self.msg: discord.Message = MISSING
         self.channel: discord.TextChannel = MISSING
@@ -130,8 +131,7 @@ class PlayerPanel(LayoutView):
         """Builds the Components V2 now-playing card for the panel."""
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
 
-        if self.state == PlayerState.PLAYING:
-            assert self.player.current is not None
+        if self.state == PlayerState.PLAYING and self.player.current is not None:
             assert self.player.guild is not None
 
             track = self.player.current
@@ -147,13 +147,19 @@ class PlayerPanel(LayoutView):
                 container.add_item(discord.ui.TextDisplay(heading))
 
             container.add_item(discord.ui.Separator())
+            try:
+                queue_pos = self.player.queue.all.index(self.player.current) + 1
+            except ValueError:
+                queue_pos = 1
+            queue_total = len(self.player.queue.all) or 1
+
             container.add_item(discord.ui.TextDisplay(
                 f"### Now Playing\n"
                 f"**Track:** [{track.title}]({track.uri})\n"
                 f"**Artist:** {artist}\n"
                 f"**Bound to:** {self.player.channel.mention}\n"
                 f"**Position in Queue:** "
-                f"{self.player.queue.all.index(self.player.current) + 1}/{len(self.player.queue.all)}"
+                f"{queue_pos}/{queue_total}"
             ))
 
             details: list[str] = []
@@ -172,9 +178,13 @@ class PlayerPanel(LayoutView):
             if details:
                 container.add_item(discord.ui.TextDisplay("\n".join(details)))
 
+            position = min(max(self.player.position, 0), track.length)
+            # Lavalink may report a non-stream track with an absurd length (max int64)
+            # for radio/live sources. Treat anything over 24h as a stream for display.
+            effectively_stream = track.is_stream or track.length > 86_400_000
             status = (
-                f"```swift\n{PlayerStamp(track.length, self.player.position)}```"
-                if not track.is_stream
+                f"```swift\n{PlayerStamp(track.length, position)}```"
+                if not effectively_stream
                 else "```swift\n[ 🔴 LIVE STREAM ]```"
             )
             loop_mode = self.player.queue.mode.name.replace("_", " ").upper()
@@ -200,8 +210,9 @@ class PlayerPanel(LayoutView):
             extras: list[str] = []
             if track.recommended:
                 extras.append(f"**Recommended via:** {EMOJI_KEYS[track.source]} **`{track.source.title()}`**")
-            if not self.player.queue.is_empty and (upcoming := self.player.queue.peek(0)):
-                eta = discord.utils.utcnow() + datetime.timedelta(milliseconds=(track.length - self.player.position))
+            if not effectively_stream and not self.player.queue.is_empty and (upcoming := self.player.queue.peek(0)):
+                remaining_ms = max(track.length - position, 0)
+                eta = discord.utils.utcnow() + datetime.timedelta(milliseconds=remaining_ms)
                 extras.append(f"**Next Track:** [{upcoming.title}]({upcoming.uri}) {discord.utils.format_dt(eta, 'R')}")
             if extras:
                 container.add_item(discord.ui.TextDisplay("\n".join(extras)))
@@ -275,6 +286,27 @@ class PlayerPanel(LayoutView):
             if emoji is not None:
                 button.emoji = emoji  # type: ignore
 
+    def _has_dj_access(self, member: discord.Member) -> bool:
+        """Returns True if the member has DJ-level access (DJ role or manage_guild)."""
+        return is_dj(member) or member.guild_permissions.manage_guild
+
+    @property
+    def _dj_mode(self) -> DJMode:
+        return DJMode(getattr(self._guild_config, "music_dj_mode", 0))
+
+    async def _require_dj(self, interaction: discord.Interaction) -> bool:
+        """Check DJ permission for hybrid mode destructive actions.
+
+        Returns True if the user is allowed. Sends an error and returns False otherwise.
+        """
+        assert isinstance(interaction.user, discord.Member)
+        if self._dj_mode == DJMode.hybrid and not self._has_dj_access(interaction.user):
+            await interaction.response.send_message(
+                f"{Emojis.error} This action requires the **DJ** role.", ephemeral=True
+            )
+            return False
+        return True
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         assert isinstance(interaction.user, discord.Member)
         assert interaction.guild is not None
@@ -289,8 +321,16 @@ class PlayerPanel(LayoutView):
             )
             return False
 
-        if is_dj(interaction.user) and bot_vc and not author_vc:
+        # DJs and manage_guild members can always interact (even from outside voice).
+        if self._has_dj_access(interaction.user):
             return True
+
+        # DJ-only mode: reject everyone else immediately.
+        if self._dj_mode == DJMode.dj_only:
+            await interaction.response.send_message(
+                f"{Emojis.error} Only members with the **DJ** role can control the player.", ephemeral=True
+            )
+            return False
 
         if (
             author_vc
@@ -406,6 +446,9 @@ class PlayerPanel(LayoutView):
         super().stop()
 
     async def _on_shuffle(self, interaction: discord.Interaction) -> None:
+        if not await self._require_dj(interaction):
+            return
+
         TOGGLE = {ShuffleMode.off: ShuffleMode.on, ShuffleMode.on: ShuffleMode.off}
         self.player.queue.shuffle = TOGGLE.get(self.player.queue.shuffle)
 
@@ -413,6 +456,9 @@ class PlayerPanel(LayoutView):
         await interaction.response.edit_message(view=self)
 
     async def _on_back(self, interaction: discord.Interaction) -> None:
+        if not await self._require_dj(interaction):
+            return
+
         self._rebuild()
         await interaction.response.edit_message(view=self)
         await self.player.back()
@@ -423,11 +469,17 @@ class PlayerPanel(LayoutView):
         await interaction.response.edit_message(view=self)
 
     async def _on_forward(self, interaction: discord.Interaction) -> None:
+        if not await self._require_dj(interaction):
+            return
+
         self._rebuild()
         await interaction.response.edit_message(view=self)
         await self.player.skip()
 
     async def _on_loop(self, interaction: discord.Interaction) -> None:
+        if not await self._require_dj(interaction):
+            return
+
         TRANSITIONS = {
             QueueMode.normal: QueueMode.loop,
             QueueMode.loop: QueueMode.loop_all,
@@ -439,6 +491,9 @@ class PlayerPanel(LayoutView):
         await interaction.response.edit_message(view=self)
 
     async def _on_stop(self, interaction: discord.Interaction) -> None:
+        if not await self._require_dj(interaction):
+            return
+
         await self.player.disconnect()
         await interaction.response.send_message(f"{Emojis.success} Stopped Track and cleaned up queue.", delete_after=10)
 
@@ -500,7 +555,9 @@ class PlayerPanel(LayoutView):
         :class:`PlayerPanel`
             The paginator object.
         """
-        self = cls(player=player, state=state, disabled=disabled)
+        assert player.guild is not None
+        config = await player.client.db.get_guild_config(player.guild.id)  # type: ignore[attr-defined]
+        self = cls(player=player, state=state, disabled=disabled, guild_config=config)
 
         await self.fetch_player_channel(channel)
 
@@ -690,6 +747,18 @@ class MusicSetupView(LayoutView):
     Consolidates setup, panel toggle, and reset into one CV2 card.
     """
 
+    _DJ_MODE_LABELS: dict[DJMode, str] = {
+        DJMode.everyone: "DJ Mode: Everyone",
+        DJMode.dj_only: "DJ Mode: DJ Only",
+        DJMode.hybrid: "DJ Mode: Hybrid",
+    }
+
+    _DJ_MODE_STYLES: dict[DJMode, discord.ButtonStyle] = {
+        DJMode.everyone: discord.ButtonStyle.grey,
+        DJMode.dj_only: discord.ButtonStyle.red,
+        DJMode.hybrid: discord.ButtonStyle.blurple,
+    }
+
     def __init__(self, bot: Bot, member: discord.Member, config: GuildConfig) -> None:
         super().__init__(timeout=300.0, members=member, delete_on_timeout=True)
         self.bot = bot
@@ -713,6 +782,11 @@ class MusicSetupView(LayoutView):
         )
         self._toggle_panel_btn.callback = self._on_toggle_panel
 
+        self._dj_mode_btn: discord.ui.Button = discord.ui.Button(
+            label="DJ Mode: Everyone", style=discord.ButtonStyle.grey,
+        )
+        self._dj_mode_btn.callback = self._on_cycle_dj_mode
+
         self._reset_btn: discord.ui.Button = discord.ui.Button(
             label="Reset Configuration", style=discord.ButtonStyle.red,
         )
@@ -723,6 +797,11 @@ class MusicSetupView(LayoutView):
 
     def _update_state(self) -> None:
         has_config = bool(self.config.music_panel_channel_id)
+        dj_mode = DJMode(getattr(self.config, "music_dj_mode", 0))
+
+        # DJ mode button is always available (not tied to channel setup).
+        self._dj_mode_btn.label = self._DJ_MODE_LABELS[dj_mode]
+        self._dj_mode_btn.style = self._DJ_MODE_STYLES[dj_mode]
 
         if has_config:
             self._channel_select.disabled = True
@@ -786,6 +865,21 @@ class MusicSetupView(LayoutView):
             container.add_item(discord.ui.ActionRow(self._channel_select))
             container.add_item(discord.ui.ActionRow(self._create_btn))
 
+        # DJ mode is independent of channel setup — always shown.
+        dj_mode = DJMode(getattr(self.config, "music_dj_mode", 0))
+        dj_descriptions = {
+            DJMode.everyone: "Anyone in the voice channel can use all player controls.",
+            DJMode.dj_only: "Only DJ role holders (or Manage Server) can control the player.",
+            DJMode.hybrid: "Everyone can pause/resume and adjust volume; skip, stop, shuffle, and loop require the DJ role.",
+        }
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            f"### DJ Mode\n"
+            f"{dj_descriptions[dj_mode]}\n"
+            f"-# Click the button to cycle between modes."
+        ))
+        container.add_item(discord.ui.ActionRow(self._dj_mode_btn))
+
         self.add_item(container)
 
     async def _setup_channel(self, channel: discord.TextChannel, interaction: discord.Interaction) -> None:
@@ -797,7 +891,11 @@ class MusicSetupView(LayoutView):
         )
 
         from .player import Player
-        message = await channel.send(embed=Player.preview_embed(self.guild))
+
+        view = LayoutView()
+        view.add_item(Player.preview_container(channel.guild))
+        message = await channel.send(view=view)
+
         await message.pin()
         await channel.purge(limit=5, check=lambda msg: not msg.pinned)
 
@@ -852,6 +950,17 @@ class MusicSetupView(LayoutView):
     async def _on_toggle_panel(self, interaction: discord.Interaction) -> None:
         new_value = not self.config.use_music_panel
         self.config = await self.config.update(use_music_panel=new_value)
+
+        self._update_state()
+        self._rebuild_layout()
+
+        await interaction.response.edit_message(view=self)
+
+    async def _on_cycle_dj_mode(self, interaction: discord.Interaction) -> None:
+        current = DJMode(getattr(self.config, "music_dj_mode", 0))
+        cycle = {DJMode.everyone: DJMode.dj_only, DJMode.dj_only: DJMode.hybrid, DJMode.hybrid: DJMode.everyone}
+        new_mode = cycle[current]
+        self.config = await self.config.update(music_dj_mode=new_mode.value)
 
         self._update_state()
         self._rebuild_layout()

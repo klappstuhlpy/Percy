@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import discord
+from discord.ui.view import LayoutView
 import wavelink
 from aiohttp import web
 
@@ -45,7 +46,25 @@ class MusicHandlers(InternalAPIHandlers):
                 'channel_id': str(config.music_panel_channel_id),
                 'message_id': str(config.music_panel_message_id) if config.music_panel_message_id else None,
                 'use_panel': config.use_music_panel,
+                'dj_mode': getattr(config, 'music_dj_mode', 0),
             }
+
+        # 24/7 ("always-on") state: prefer the live player, fall back to the persisted row.
+        always_on = {'enabled': False, 'mode': None, 'source': None}
+        if player is not None and getattr(player, 'always_on', False):
+            always_on = {
+                'enabled': True,
+                'mode': player.always_on_mode,
+                'source': player.always_on_source,
+            }
+        else:
+            session = await self.bot.db.music_sessions.get_session(guild_id)
+            if session and session['always_on']:
+                always_on = {
+                    'enabled': True,
+                    'mode': session['always_on_mode'],
+                    'source': session['always_on_source'],
+                }
 
         if player is None:
             return web.json_response({
@@ -54,6 +73,7 @@ class MusicHandlers(InternalAPIHandlers):
                 'filters': {'nightcore': False, '8d': False, 'lowpass': None},
                 'presets': list(PRESETS.keys()),
                 'setup': setup,
+                'always_on': always_on,
             })
 
         eq_payload = player.filters.equalizer.payload
@@ -82,7 +102,64 @@ class MusicHandlers(InternalAPIHandlers):
             'now_playing': now_playing,
             'channel': str(player.channel.id) if player.channel else None,
             'setup': setup,
+            'always_on': always_on,
         })
+
+    async def _post_music_247(self, request: web.Request) -> web.Response:
+        """Enable or disable the 24/7 always-on player for a guild."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Music')
+        if cog is None:
+            raise web.HTTPBadRequest(text='music feature is unavailable')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        if not body.get('enabled', True):
+            await cog.disable_always_on(guild)  # type: ignore[attr-defined]
+            return web.json_response({'ok': True, 'always_on': {'enabled': False, 'mode': None, 'source': None}})
+
+        mode = body.get('mode')
+        source = body.get('source')
+        if mode not in ('radio', 'playlist', 'autoplay') or not source:
+            raise web.HTTPBadRequest(text="'mode' (radio|playlist|autoplay) and 'source' are required")
+
+        # Radio mode accepts a friendly preset name (e.g. "lofi") as a shortcut.
+        if mode == 'radio':
+            from app.cogs.music.cog import RADIO_PRESETS
+            preset = RADIO_PRESETS.get(source.strip().lower())
+            if preset:
+                source = preset[1]
+
+        channel: discord.VoiceChannel | discord.StageChannel | None = None
+        vc_id = body.get('voice_channel_id')
+        if vc_id:
+            resolved = guild.get_channel(int(vc_id))
+            if isinstance(resolved, discord.VoiceChannel | discord.StageChannel):
+                channel = resolved
+        elif isinstance(player := guild.voice_client, wavelink.Player):
+            channel = player.channel  # type: ignore[assignment]
+
+        if channel is None:
+            raise web.HTTPBadRequest(text='a valid voice_channel_id is required to start 24/7')
+
+        from app.cogs.music.models import SearchReturn
+        from app.cogs.music.player import Player
+
+        probe = await Player.search(source, return_first=True)
+        if isinstance(probe, SearchReturn) or not probe:
+            raise web.HTTPBadRequest(text='could not resolve that source')
+
+        await cog.enable_always_on(guild, channel, None, mode, source)  # type: ignore[attr-defined]
+        return web.json_response(
+            {'ok': True, 'always_on': {'enabled': True, 'mode': mode, 'source': source}}
+        )
 
     async def _post_music_setup(self, request: web.Request) -> web.Response:
         """Set up the music panel: create or use a channel, send the panel message."""
@@ -119,7 +196,11 @@ class MusicHandlers(InternalAPIHandlers):
         )
 
         from app.cogs.music.player import Player
-        message = await channel.send(embed=Player.preview_embed(guild))
+
+        view = LayoutView()
+        view.add_item(Player.preview_container(guild))
+        message = await channel.send(view=view)
+
         await message.pin()
         await channel.purge(limit=5, check=lambda msg: not msg.pinned)
 
@@ -228,3 +309,24 @@ class MusicHandlers(InternalAPIHandlers):
 
         await player.set_filters(filters)
         return web.json_response({'ok': True})
+
+    async def _patch_music_dj_mode(self, request: web.Request) -> web.Response:
+        """Update the DJ mode setting for a guild's music player."""
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        mode = body.get('dj_mode')
+        if mode not in (0, 1, 2):
+            raise web.HTTPBadRequest(text='dj_mode must be 0, 1, or 2')
+
+        config = await self.bot.db.get_guild_config(guild_id)
+        await config.update(music_dj_mode=mode)
+
+        return web.json_response({'ok': True, 'dj_mode': mode})
