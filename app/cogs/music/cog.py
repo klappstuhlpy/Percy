@@ -494,14 +494,13 @@ class Music(Cog):
         if not player:
             player = await Player.join(ctx)
 
-        # Note: Due to Discords ToS, we can't use YouTube as our source of music
         SOURCE_LOOKUP = {
-            # 'yt': wavelink.TrackSource.YouTubeMusic,
+            "yt": wavelink.TrackSource.YouTubeMusic,
             "sp": "spsearch",
             "sc": wavelink.TrackSource.SoundCloud,
             "am": "amsearch",  # Apple Music (LavaSrc)
         }
-        source = SOURCE_LOOKUP.get(flags.source, wavelink.TrackSource.SoundCloud)
+        source = SOURCE_LOOKUP.get(flags.source, wavelink.TrackSource.YouTubeMusic)
 
         player.autoplay = wavelink.AutoPlayMode.enabled if flags.recommendations else wavelink.AutoPlayMode.partial
 
@@ -514,8 +513,6 @@ class Music(Cog):
         if isinstance(result, SearchReturn):
             if result == SearchReturn.NO_RESULTS:
                 await ctx.send_error("Sorry! No results found matching your query.")
-            elif result == SearchReturn.NO_YOUTUBE_ALLOWED:
-                await ctx.send_error("Sorry, you can't play YouTube tracks from this bot.")
             elif result == SearchReturn.AMAZON_UNSUPPORTED:
                 await ctx.send_error(
                     "Amazon Music isn't supported \N{EM DASH} there's no streaming source for it.\n"
@@ -548,9 +545,10 @@ class Music(Cog):
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
-            app_commands.Choice(name="YouTube (Default)", value="yt"),
+            app_commands.Choice(name="YouTube Music (Default)", value="yt"),
             app_commands.Choice(name="Spotify", value="sp"),
             app_commands.Choice(name="SoundCloud", value="sc"),
+            app_commands.Choice(name="Apple Music", value="am"),
         ]
     )
     @checks.is_author_connected()
@@ -1978,8 +1976,6 @@ class PlaylistTools(Cog):
             if isinstance(result, SearchReturn):
                 if result == SearchReturn.NO_RESULTS:
                     await ctx.send_error("Sorry! No results found matching your query.")
-                elif result == SearchReturn.NO_YOUTUBE_ALLOWED:
-                    await ctx.send_error("Sorry, you can't add YouTube tracks with this bot.")
                 return
 
             added = [track.url for track in playlist.tracks]

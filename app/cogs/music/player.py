@@ -88,7 +88,7 @@ class Player(wavelink.Player):
             ctx: discord.Interaction | Context | None = None,
             return_first: bool = False
     ) -> Literal[
-             SearchReturn.CANCELLED, SearchReturn.NO_YOUTUBE_ALLOWED, SearchReturn.NO_RESULTS] | Playable | Playlist | \
+             SearchReturn.CANCELLED, SearchReturn.NO_RESULTS, SearchReturn.AMAZON_UNSUPPORTED] | Playable | Playlist | \
          list[Playable]:
         """Searches for a keyword/url on YouTube, Spotify, or SoundCloud.
 
@@ -129,8 +129,6 @@ class Player(wavelink.Player):
                         return SearchReturn.CANCELLED
             else:
                 lowered = query.casefold()
-                if 'youtube' in lowered:
-                    return SearchReturn.NO_YOUTUBE_ALLOWED
 
                 # Amazon Music has no Lavalink/LavaSrc source and no public streaming API,
                 # so we can't resolve these links. Fail fast with a clear signal.
