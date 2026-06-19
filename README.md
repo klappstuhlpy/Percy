@@ -105,8 +105,10 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 | Feature              | What it does                                                                                                                                                  |
 |----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Lavalink player**  | High-quality audio playback backed by a [Lavalink](https://github.com/lavalink-devs/Lavalink) node ([wavelink](https://github.com/PythonistaGuild/Wavelink)). |
+| **Lavalink player**  | High-quality audio playback backed by a [Lavalink](https://github.com/lavalink-devs/Lavalink) node ([wavelink](https://github.com/PythonistaGuild/Wavelink)). Sources: Spotify, Apple Music, SoundCloud (Amazon Music is unsupported). |
 | **Queue & controls** | Play, pause, skip, seek, loop, shuffle, an equalizer and a full queue.                                                                                        |
+| **24/7 always-on**   | `/music 247` keeps the bot permanently connected to a voice channel playing a radio/stream URL, a looping playlist (Spotify/Apple/SoundCloud links work directly), or endless autoplay. Ships curated radio presets (`/music radios`, e.g. `lofi`, `chill`, `antenne`) so no stream URL is needed. Sessions persist to PostgreSQL and auto-reconnect/resume after disconnects or restarts. |
+| **Resilience**       | Lavalink session resume + self-healing recovery: stuck/failed tracks are skipped instead of dropping the player, so playback doesn't cut off.                  |
 | **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                         |
 | **Playlists**        | Save, load and manage personal playlists (`PlaylistTools`), persisted in PostgreSQL.                                                                          |
 | **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                              |
