@@ -99,6 +99,8 @@ class Music(Cog):
         super().__init__(bot)
         # Guards the one-shot session restore (node-ready can fire multiple times).
         self._restored: bool = False
+        # Guards the rebuild that runs after Lavalink comes back without resuming.
+        self._resyncing: bool = False
         self.persist_sessions.start()
         # The node is already connected by the time this cog loads (setup() checks
         # Pool.get_node()), so on_wavelink_node_ready has already fired and won't
@@ -192,6 +194,58 @@ class Music(Cog):
                 log.error("Failed to restore music session for guild %s: %s", record["guild_id"], exc)
             await asyncio.sleep(1)  # stagger reconnects to avoid a thundering herd
 
+    async def _resync_after_node_loss(self) -> None:
+        """Rebuild orphaned players after Lavalink came back without resuming.
+
+        When the node reconnects with ``resumed=False`` (a Lavalink restart, or an
+        outage longer than its resume window) every player session is gone, yet our
+        ``Player`` objects stay attached to their guilds and go stale — Lavalink
+        answers "not found" for anything we send them. We snapshot each one, tear the
+        dead player down (keeping its persisted row), then restore from the snapshots
+        so audio picks back up at the saved position.
+        """
+        if self._resyncing:
+            return
+        self._resyncing = True
+        try:
+            await self.bot.wait_until_ready()
+
+            stale: list[int] = []
+            for guild in list(self.bot.guilds):
+                player = guild.voice_client
+                if isinstance(player, Player) and player.connected:
+                    stale.append(guild.id)
+                    with suppress(Exception):
+                        await player.persist()
+                    with suppress(Exception):
+                        # force=True keeps the persisted session row for the restore below.
+                        await player.disconnect(force=True)
+
+            if not stale:
+                return
+
+            log.warning("Lavalink lost %d player session(s) on reconnect; rebuilding.", len(stale))
+            await asyncio.sleep(1)  # let Discord settle the voice-state teardown first
+
+            for guild_id in stale:
+                guild = self.bot.get_guild(guild_id)
+                if guild is None or isinstance(guild.voice_client, Player):
+                    continue  # gone, or already reconnected by some other path
+                try:
+                    record = await self.bot.db.music_sessions.get_session(guild_id)
+                except Exception as exc:
+                    log.error("Failed to load music session for guild %s during resync: %s", guild_id, exc)
+                    continue
+                if record is None:
+                    continue
+                try:
+                    await Player.restore(self.bot, record)
+                except Exception as exc:
+                    log.error("Failed to rebuild music session for guild %s: %s", guild_id, exc)
+                await asyncio.sleep(1)  # stagger reconnects to avoid a thundering herd
+        finally:
+            self._resyncing = False
+
     async def cog_before_invoke(self, ctx: Context) -> None:
         playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
         if playlist_tools:
@@ -277,6 +331,14 @@ class Music(Cog):
         if not self._restored:
             self._restored = True
             self.bot.loop.create_task(self._restore_sessions())
+        elif not payload.resumed:
+            # The node reconnected but Lavalink lost every player session — a full
+            # restart, or an outage longer than the node's resume window. The Player
+            # objects still attached to each guild are now orphaned on the Lavalink
+            # side: any operation on them (pause/skip/seek, or a dashboard control
+            # action) returns "not found". Rebuild them from the persisted snapshots
+            # so playback resumes cleanly instead of leaving dead players behind.
+            self.bot.loop.create_task(self._resync_after_node_loss())
 
     @Cog.listener()
     async def on_wavelink_inactive_player(self, player: Player) -> None:
