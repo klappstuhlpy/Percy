@@ -8,13 +8,14 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
-from app.core import Bot, Cog
+from app.core import Cog
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.database import BaseRecord
 from app.utils import fuzzy, helpers, pluralize
 from config import Emojis
 
 if TYPE_CHECKING:
+    from app.core import Bot
     from app.database.base import GuildConfig
 
 
@@ -47,10 +48,8 @@ class TempChannel(BaseRecord, table="temp_channels", pk=("guild_id", "channel_id
         await self.bot.db.temp_channels.delete_guild_channels(self.guild_id)
 
 
-class TempChannels(Cog):
+class TempChannelsMixin:
     """Create temporary voice hub channels for users to join."""
-
-    emoji = "\N{HOURGLASS}"
 
     async def get_guild_temp_channels(
         self, guild_id: int, convert: bool = False
@@ -226,7 +225,3 @@ class TempChannels(Cog):
                     elif member.guild.system_channel is not None:
                         with suppress(discord.HTTPException):
                             await member.guild.system_channel.send(message)
-
-
-async def setup(bot) -> None:
-    await bot.add_cog(TempChannels(bot))

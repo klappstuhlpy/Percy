@@ -42,6 +42,7 @@ from app.database.repositories import (
     TempChannelsRepository,
     TimersRepository,
     UsersRepository,
+    VotesRepository,
 )
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
 from app.utils.query_tracker import QueryTracker
@@ -284,6 +285,7 @@ class Database(_Database):
     rolemenu: RoleMenusRepository
     autoresponders: AutoRespondersRepository
     stat_counters: StatCountersRepository
+    votes: VotesRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -312,6 +314,7 @@ class Database(_Database):
         self.autoresponders = AutoRespondersRepository(self)
         self.stat_counters = StatCountersRepository(self)
         self.anilist = AniListRepository(self)
+        self.votes = VotesRepository(self)
 
         self._register_cache_signals()
 

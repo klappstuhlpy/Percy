@@ -133,10 +133,8 @@ class GithubError(commands.BadArgument):
     pass
 
 
-class Meta(Cog):
+class MetaMixin:
     """Commands for utilities related to Discord or the Bot itself."""
-
-    emoji = "<a:staff_animated:1322337965774602313>"
 
     MENTION_REGEX: ClassVar[re.Pattern[str]] = re.compile(r"<@!?\d+>")
 
@@ -160,7 +158,7 @@ class Meta(Cog):
             (self.GITHUB_GIST_RE, self._fetch_github_gist_snippet),
         ]
 
-    async def cog_unload(self) -> None:
+    async def _teardown_meta(self) -> None:
         self.auto_archive_old_forum_threads.cancel()
 
     async def _prepare_invites(self) -> None:
@@ -993,11 +991,47 @@ class Meta(Cog):
         await config.update(prefixes=[])
         await ctx.send_success("Cleared all prefixes.")
 
-    @command(name="vote", alias="v", description="Shows the vote link for the bot.")
+    @command(name="vote", alias="v", description="Vote for the bot to earn an XP boost.")
     @cooldown(1, 3)
     async def vote(self, ctx: Context) -> None:
-        """Shows the vote link for the bot."""
-        await ctx.send("You can vote for me on Top.gg [here](https://top.gg/bot/1070054930125176923/vote)!")
+        """Vote for the bot on a bot list to earn a renewable XP boost.
+
+        Each vote grants a **+10% XP boost for 12 hours** that applies in every server
+        you share with me. Voting again refreshes the timer — you can vote every 12
+        hours on each site.
+        """
+        bot_id = ctx.bot.user.id
+        embed = discord.Embed(
+            title="Vote for Percy",
+            description=(
+                "Voting grants a **+10% XP boost for 12 hours**, active in every server we share. "
+                "Vote again any time to refresh it — you can vote every 12 hours on each site!"
+            ),
+            colour=helpers.Colour.white(),
+        )
+        embed.add_field(
+            name="Vote links",
+            value=(
+                f"- [top.gg](https://top.gg/bot/{bot_id}/vote)\n"
+                f"- [discordbotlist.com](https://discordbotlist.com/bots/{bot_id}/upvote)"
+            ),
+            inline=False,
+        )
+
+        status = await ctx.bot.db.votes.get_status(ctx.author.id)
+        now = datetime.datetime.now(datetime.UTC)
+        expires = status["expires_at"].replace(tzinfo=datetime.UTC) if status is not None else None
+        if expires is not None and expires > now:
+            percent = round((status["multiplier"] - 1.0) * 100)
+            embed.add_field(
+                name="Your boost",
+                value=f"**+{percent}% XP** active — expires {discord.utils.format_dt(expires, 'R')}.",
+                inline=False,
+            )
+        else:
+            embed.add_field(name="Your boost", value="No active boost — vote now to start one!", inline=False)
+
+        await ctx.send(embed=embed)
 
     @staticmethod
     def _ping_metric(latency: float, bad: float, good: float) -> AnsiColor:
@@ -1107,7 +1141,3 @@ class Meta(Cog):
         """
         channel = channel or ctx.channel
         await self.say_permissions(ctx, ctx.guild.me, channel)  # type: ignore[union-attr, arg-type]
-
-
-async def setup(bot) -> None:
-    await bot.add_cog(Meta(bot))

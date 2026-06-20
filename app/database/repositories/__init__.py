@@ -19,7 +19,12 @@ from app.database.repositories.moderation import CasesRepository, IncidentsRepos
 from app.database.repositories.music import MusicSessionsRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
-from app.database.repositories.users import AniListRepository, PlaylistsRepository, UsersRepository
+from app.database.repositories.users import (
+    AniListRepository,
+    PlaylistsRepository,
+    UsersRepository,
+    VotesRepository,
+)
 
 __all__ = (
     'AdminRepository',
@@ -48,4 +53,5 @@ __all__ = (
     'TempChannelsRepository',
     'TimersRepository',
     'UsersRepository',
+    'VotesRepository',
 )

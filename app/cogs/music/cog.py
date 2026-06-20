@@ -38,6 +38,7 @@ from config import Emojis, genius_key
 
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import MAX_CONSECUTIVE_ERRORS, Player
+from .playlist import PlaylistNameOrID
 from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator
 
 if TYPE_CHECKING:
@@ -117,8 +118,6 @@ class Music(Cog):
 
     async def cog_load(self) -> None:
         await self.bot.wait_until_ready()
-
-        self.playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
 
     async def cog_unload(self) -> None:
         self.persist_sessions.cancel()
@@ -254,9 +253,7 @@ class Music(Cog):
             self._resyncing = False
 
     async def cog_before_invoke(self, ctx: Context) -> None:
-        playlist_tools: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore
-        if playlist_tools:
-            await playlist_tools.initizalize_user(ctx.author)
+        await self.initizalize_user(ctx.author)
 
     @Cog.listener()
     async def on_wavelink_websocket_closed(self, payload: wavelink.WebsocketClosedEventPayload) -> None:
@@ -1626,10 +1623,7 @@ class Music(Cog):
 
     async def _resolve_user_playlist(self, user_id: int, source: str) -> Playlist | None:
         """Try to resolve source as a user playlist by index or name. Returns None if not matched."""
-        pt: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore[assignment]
-        if pt is None:
-            return None
-        playlists = await pt.get_playlists(user_id=user_id)
+        playlists = await self.get_playlists(user_id=user_id)
         if not playlists:
             return None
         try:
@@ -1844,10 +1838,7 @@ class Music(Cog):
             return choices
 
         if mode == "playlist":
-            pt: PlaylistTools | None = self.bot.get_cog("PlaylistTools")  # type: ignore[assignment]
-            if pt is None:
-                return []
-            playlists = await pt.get_playlists(user_id=interaction.user.id)
+            playlists = await self.get_playlists(user_id=interaction.user.id)
             current_l = current.lower()
             choices = []
             for p in playlists:
@@ -1893,53 +1884,9 @@ class Music(Cog):
         ):
             await message.delete(delay=60)
 
-
-class PlaylistNameOrID(commands.clean_content):
-    """Converts the content to either an integer or string."""
-
-    def __init__(self, *, lower: bool = False, with_id: bool = False) -> None:
-        self.lower: bool = lower
-        self.with_id: bool = with_id
-        super().__init__()
-
-    async def convert(self, ctx: Context, argument: str) -> str | int:
-        converted = await super().convert(ctx, argument)
-        lower = converted.lower().strip()
-
-        if not lower:
-            raise commands.BadArgument("Please enter a valid playlist name" + " or id." if self.with_id else ".")
-
-        if len(lower) > 100:
-            raise commands.BadArgument(
-                f"Playlist names must be 100 characters or less. (You have *{len(lower)}* characters)"
-            )
-
-        cog: PlaylistTools | None = ctx.bot.get_cog("PlaylistTools")  # type: ignore
-        if cog is None:
-            raise commands.BadArgument("Playlist tools are currently unavailable.")
-
-        if self.with_id and converted and converted.isdigit():
-            return int(converted)
-
-        return converted.strip() if not self.lower else lower
-
-
-class PlaylistTools(Cog):
-    """Additional Music Tools for the Music Cog.
-    Like: Playlist, DJ, Setup etc."""
-
-    emoji = "\N{GUITAR}"
-
-    async def cog_before_invoke(self, ctx: Context) -> None:
-        await self.initizalize_user(ctx.author)
+    # -- Playlist management --------------------------------------------------
 
     async def initizalize_user(self, user: discord.abc.User | discord.Member) -> int | None:
-        # Creates a static Playlist for every new User that interacts with the Bot
-        # called 'Liked Songs', this Playlist cannot be deleted
-        # and is used to store all liked songs from the user.
-
-        # The User can store Liked Songs using the Button the Player Control Panel
-
         playlists = await self.get_playlists(user_id=user.id)
         if any(playlist.is_liked_songs for playlist in playlists):
             return None
@@ -1973,22 +1920,7 @@ class PlaylistTools(Cog):
     async def get_playlist(
         self, ctx: Context | discord.Interaction, name_or_id: str | int, *, pass_tracks: bool = False
     ) -> Playlist | None:
-        """Gets a poll by ID.
-
-        Parameters
-        ----------
-        ctx: Context | discord.Interaction
-            The Context or Interaction.
-        name_or_id: str | int
-            The name or ID of the playlist.
-        pass_tracks: bool
-            Whether to skip gathering the tracks of the playlist.
-
-        Returns
-        -------
-        Playlist
-            The Playlist if found, else None.
-        """
+        """Gets a playlist by name or ID."""
         if isinstance(name_or_id, int):
             record = await self.bot.db.playlists.get_playlist_by_id(name_or_id)
         else:
@@ -2011,18 +1943,7 @@ class PlaylistTools(Cog):
 
     @cache.cache()
     async def get_playlists(self, user_id: int) -> list[Playlist]:
-        """Get all playlists from a user.
-
-        Parameters
-        ----------
-        user_id: int
-            The user id to get the playlists from.
-
-        Returns
-        -------
-        list[Playlist]
-            A list of all playlists from the user.
-        """
+        """Get all playlists from a user."""
         records = await self.bot.db.playlists.get_user_playlists(user_id)
         playlists = [Playlist(cog=self, record=record) for record in records]
 
@@ -2330,4 +2251,3 @@ async def setup(bot: Bot) -> None:
         return
 
     await bot.add_cog(Music(bot))
-    await bot.add_cog(PlaylistTools(bot))

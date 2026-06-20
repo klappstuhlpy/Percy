@@ -55,16 +55,14 @@ def render_name(template: str, kind: str, count: int) -> str:
     return truncate(template.replace('{name}', label).replace('{count}', f'{count:,}'), 100)
 
 
-class StatCounters(Cog):
+class StatCountersMixin:
     """Voice channels whose names display a live server statistic."""
-
-    emoji = '\N{BAR CHART}'
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
         self.refresh_counters.start()
 
-    async def cog_unload(self) -> None:
+    async def _teardown_counters(self) -> None:
         self.refresh_counters.cancel()
 
     @tasks.loop(minutes=10)
@@ -189,7 +187,3 @@ class StatCounters(Cog):
         with contextlib.suppress(discord.HTTPException):
             await channel.delete(reason='Stat counter removed')
         await ctx.send_success('Removed the stat counter.')
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(StatCounters(bot))

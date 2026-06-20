@@ -286,6 +286,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
         multiplier = self.get_multiplier(message)
         # Item-shop XP boosts multiply on top of role/channel multipliers.
         multiplier *= await self.cog.bot.db.economy.get_boost_multiplier(self.user_id, self.guild_id, 'xp')
+        # Bot-list vote rewards stack on top (global, renewable 12h boost).
+        multiplier *= await self.cog.bot.db.votes.get_active_multiplier(self.user_id)
         gain = self.config.spec.get_xp_gain(multiplier)
         await self.add_xp(gain, message=message)
 

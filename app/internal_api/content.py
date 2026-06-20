@@ -612,7 +612,7 @@ class ContentHandlers(InternalAPIHandlers):
 
     async def _get_status_feed(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
-        cog = self.bot.get_cog('DiscordStatus')
+        cog = self.bot.get_cog('Misc')
         if cog is None:
             return web.json_response({'subscribed': False, 'channel': None})
 
@@ -637,9 +637,9 @@ class ContentHandlers(InternalAPIHandlers):
         if not channel_id:
             raise web.HTTPBadRequest(text='channel_id is required')
 
-        cog = self.bot.get_cog('DiscordStatus')
+        cog = self.bot.get_cog('Misc')
         if cog is None:
-            raise web.HTTPServiceUnavailable(text='DiscordStatus cog not loaded')
+            raise web.HTTPServiceUnavailable(text='Misc cog not loaded')
 
         existing = await cog.get_subscriber(guild_id)
         if existing:
@@ -652,9 +652,9 @@ class ContentHandlers(InternalAPIHandlers):
 
     async def _delete_status_feed(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
-        cog = self.bot.get_cog('DiscordStatus')
+        cog = self.bot.get_cog('Misc')
         if cog is None:
-            raise web.HTTPServiceUnavailable(text='DiscordStatus cog not loaded')
+            raise web.HTTPServiceUnavailable(text='Misc cog not loaded')
 
         await self.bot.db.incidents.unsubscribe(guild_id)
         cog.get_subscriber.invalidate(guild_id)

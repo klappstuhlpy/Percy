@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.clients import TranslateClient, TranslationError
 from app.clients.base import HTTPClientError
-from app.core import Accent, Bot, Cog, Context, command, describe, make_notice
+from app.core import Accent, Bot, Context, command, describe, make_notice
 from app.core.errors import ServiceUnavailableError
 from app.utils import truncate
 
@@ -23,10 +23,8 @@ def resolve_language(value: str) -> str:
     return LANGUAGE_ALIASES.get(value.strip().lower(), value.strip())
 
 
-class Translator(Cog):
+class TranslatorMixin:
     """Translate text between languages, powered by a keyless translation backend."""
-
-    emoji = '\N{GLOBE WITH MERIDIANS}'
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -64,7 +62,3 @@ class Translator(Cog):
             footer=f'{result.source_language} → {result.target_language}',
         )
         await ctx.send(view=view)
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(Translator(bot))

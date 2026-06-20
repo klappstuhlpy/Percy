@@ -13,6 +13,7 @@ __all__ = (
     'AniListRepository',
     'PlaylistsRepository',
     'UsersRepository',
+    'VotesRepository',
 )
 
 
@@ -219,3 +220,51 @@ class AniListRepository(BaseRepository):
     async def delete_token(self, user_id: int) -> bool:
         result = await self.delete_where("anilist_users", ("user_id",), (user_id,))
         return result == 'DELETE 1'
+
+
+# -- Vote rewards (bot-list upvotes -> renewable global XP boost) ------------
+
+
+class VotesRepository(BaseRepository):
+    """Data access for the ``vote_rewards`` table.
+
+    A vote on a bot list grants the user a single, global, renewable XP boost. The
+    boost is applied wherever XP is awarded via :meth:`get_active_multiplier`, which
+    returns ``1.0`` when no reward is currently running.
+    """
+
+    async def record_vote(
+        self, user_id: int, source: str, *, multiplier: float = 1.10, duration_hours: int = 12
+    ) -> datetime.datetime:
+        """Grant (or renew) a user's vote reward, returning the new expiry (naive UTC).
+
+        Each vote resets ``expires_at`` to ``now + duration_hours`` (renew, not stack)
+        and bumps the running vote counter. ``source`` records the originating bot list.
+        """
+        query = """
+            INSERT INTO vote_rewards (user_id, multiplier, expires_at, last_source, total_votes)
+            VALUES ($1, $2, (now() at time zone 'utc') + make_interval(hours => $4), $3, 1)
+            ON CONFLICT (user_id) DO UPDATE
+                SET multiplier = EXCLUDED.multiplier,
+                    expires_at = (now() at time zone 'utc') + make_interval(hours => $4),
+                    last_source = EXCLUDED.last_source,
+                    last_voted_at = now() at time zone 'utc',
+                    total_votes = vote_rewards.total_votes + 1
+            RETURNING expires_at;
+        """
+        return await self.fetchval(query, user_id, multiplier, source, duration_hours)
+
+    async def get_active_multiplier(self, user_id: int) -> float:
+        """The user's currently-running vote XP multiplier (``1.0`` when none active)."""
+        value = await self.fetchval(
+            """
+            SELECT multiplier FROM vote_rewards
+            WHERE user_id = $1 AND expires_at > (now() at time zone 'utc');
+            """,
+            user_id,
+        )
+        return value or 1.0
+
+    async def get_status(self, user_id: int) -> asyncpg.Record | None:
+        """Fetches a user's vote-reward row (active or expired), or ``None`` if they never voted."""
+        return await self.fetchrow("SELECT * FROM vote_rewards WHERE user_id = $1;", user_id)

@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import random
 import re
-from typing import Annotated, Final
+from typing import TYPE_CHECKING, Annotated, Final
 
 import discord
 from discord import CategoryChannel, ForumChannel, StageChannel, TextChannel, VoiceChannel
 from discord.ext import commands
 
-from app.core import Cog, Context
-from app.core.models import HybridContext, command, cooldown, describe
+from app.core.models import command, cooldown, describe
 from app.core.pagination import BasePaginator
 from app.utils import helpers
 from config import Emojis, main_guild_id
+
+if TYPE_CHECKING:
+    from app.core import Context
 
 
 def cmyk_to_rgb(c: int, m: int, y: int, k: int) -> tuple[int, int, int]:
@@ -118,9 +120,9 @@ class FeedbackModal(discord.ui.Modal, title="Submit Feedback"):
     summary = discord.ui.TextInput(label="Summary", placeholder="A brief explanation of what you want")
     details = discord.ui.TextInput(label="Details", style=discord.TextStyle.long, required=False)
 
-    def __init__(self, cog: Gimmicks) -> None:
+    def __init__(self, cog: GimmicksMixin) -> None:
         super().__init__()
-        self.cog: Gimmicks = cog
+        self.cog: GimmicksMixin = cog
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         channel = self.cog.feedback_channel
@@ -135,10 +137,8 @@ class FeedbackModal(discord.ui.Modal, title="Submit Feedback"):
         await interaction.response.send_message(f"{Emojis.success} Thank you for your feedback!", ephemeral=True)
 
 
-class Gimmicks(Cog):
-    """Annotations that make you feel."""
-
-    emoji = "<a:bulbasaurrun:1322366217658568704>"
+class GimmicksMixin:
+    """Fun, random-content commands (feedback, urban, color, meme, fact)."""
 
     @discord.utils.cached_property
     def feedback_channel(self) -> None | VoiceChannel | StageChannel | ForumChannel | TextChannel | CategoryChannel:
@@ -299,7 +299,3 @@ class Gimmicks(Cog):
 
         embed = discord.Embed(title='Random Fact', description=res['text'], colour=helpers.Colour.white())
         await ctx.send(embed=embed)
-
-
-async def setup(bot) -> None:
-    await bot.add_cog(Gimmicks(bot))

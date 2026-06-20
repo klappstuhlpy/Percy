@@ -103,6 +103,8 @@ class Leveling(Cog):
                         continue
 
                     boost = await self.bot.db.economy.get_boost_multiplier(member.id, guild.id, 'xp')
+                    # Bot-list vote rewards stack on top (global, renewable 12h boost).
+                    boost *= await self.bot.db.votes.get_active_multiplier(member.id)
                     await level_config.add_voice_xp(round(config.voice_xp * boost), channel=channel)
 
     @award_voice_xp.before_loop

@@ -5,17 +5,19 @@ import dataclasses
 import datetime
 import enum
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 import discord
 from discord.ext import tasks
 
-from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.database import BaseRecord
 from app.utils import cache, utcparse
 from config import Emojis
+
+if TYPE_CHECKING:
+    from app.core import Bot
 
 DS_ENDPOINT = "https://discordstatus.com/api/v2/incidents.json"
 DISCORD_ICON_URL = "https://klappstuhl.me/gallery/raw/EzWyA.png"
@@ -188,18 +190,16 @@ class Incident:
         return dataclasses.asdict(self)
 
 
-class DiscordStatus(Cog):
+class DiscordStatusMixin:
     """Discord Status Feed related commands.
 
     Visit: https://discordstatus.com/ for more information.
     """
 
-    emoji = "<:redinfo:1322338316435062974>"
-
-    async def cog_load(self) -> None:
+    async def _setup_status(self) -> None:
         self.check_new_incident.start()
 
-    async def cog_unload(self) -> None:
+    async def _teardown_status(self) -> None:
         self.check_new_incident.stop()
 
     @cache.cache()
@@ -460,7 +460,3 @@ class DiscordStatus(Cog):
         for incident in incidents:
             for subscriber in subscribers:
                 await self._compare_changes_and_update(incident, subscriber)
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(DiscordStatus(bot))

@@ -16,7 +16,7 @@ from discord.automod import AutoModRule
 from discord.ext import commands
 from discord.utils import MISSING
 
-from app.core import Cog, Context, View, command
+from app.core import Context, View, command
 from app.utils import TimeDelta, format_fields, get_asset_url, helpers, letter_emoji
 from config import Emojis
 
@@ -548,10 +548,8 @@ class InteractiveAutoModRuleSetupView(View):
         )
 
 
-class AutoMod(Cog):
-    """A cog for automoderation features."""
-
-    emoji = "<:automod:1322338624121077851>"
+class AutoModMixin:
+    """Mixin providing the ``/automod`` preset management command."""
 
     @command(
         "automod",
@@ -589,7 +587,3 @@ class AutoMod(Cog):
 
         view = InteractiveAutoModRuleSetupView(ctx, presets=presets, linked_rules=linked_rules)
         view.message = await ctx.send(embed=embed, view=view)
-
-
-async def setup(bot) -> None:
-    await bot.add_cog(AutoMod(bot))

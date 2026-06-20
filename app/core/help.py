@@ -86,6 +86,9 @@ class HelpView(LayoutView):
         self.mapping: dict[Cog, list[AnyCommand]] = mapping
         self.group: Cog | None = group
         self.with_index: bool = with_index
+
+        self.container: discord.ui.Container | None = None
+
         self._set_entries(entries or [])
 
     def _set_entries(self, entries: list[AnyCommand]) -> None:
@@ -130,17 +133,20 @@ class HelpView(LayoutView):
     async def compose(self) -> None:
         """Rebuild every component for the current state (card + nav + selects)."""
         self.clear_items()
-        self.add_item(await self._current_container())
+        self.container = await self._current_container()
 
+        assert self.container is not None
         if self.group is not None and self.total_pages > 1:
-            self.add_item(self._make_nav_row())
+            self.container.add_item(self._make_nav_row())
 
         default = self.group if self.group in self.mapping else None
         for select in build_category_selects(
             self.helper.context.bot, self.mapping, with_index=self.with_index, default=default
         ):
             select.bind(self)
-            self.add_item(discord.ui.ActionRow(select))
+            self.container.add_item(discord.ui.ActionRow(select))
+
+        self.add_item(self.container)
 
     def show_group(self, cog: Cog, entries: list[AnyCommand]) -> None:
         """Switch the view to a category's command list (page 0)."""
@@ -335,6 +341,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         spec = command.permissions
         return bool(spec.user)
 
+    @staticmethod
+    def _help_sort_key(command: AnyCommand) -> tuple[bool, str]:
+        """Sort key for category command lists.
+
+        Unrestricted commands come first, then permission-gated ones, each group
+        ordered alphabetically. Relies on ``is_locked`` set in :meth:`_get_all_subcommands`.
+        """
+        return (bool(getattr(command, "is_locked", False)), command.qualified_name)
+
     def _get_all_subcommands(self, command: AnyCommand | AnyGroup, names: set[str]) -> set[AnyCommand]:
         """Returns all subcommands of a command."""
         subcommands: set[AnyCommand] = set()
@@ -390,7 +405,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             The filtered Commands.
         """
         if sort and key is None:
-            key = lambda c: c.name
+            key = self._help_sort_key
 
         iterator = commands if self.show_hidden else filter(lambda c: not c.hidden, commands)
 
@@ -564,6 +579,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if cog and not command.hidden:
                 grouped.setdefault(cog, []).append(command)
 
+        for cog_commands in grouped.values():
+            cog_commands.sort(key=self._help_sort_key)
+
         grouped = dict(sorted(grouped.items(), key=lambda x: x[0].qualified_name))
         await HelpView.start(self, mapping=grouped)
 
@@ -624,43 +642,29 @@ class PaginatedHelpCommand(commands.HelpCommand):
         bot_user = ctx.bot.user if isinstance(ctx, commands.Context) else ctx.client.user
         thumb = get_asset_url(ctx.guild) if ctx.guild else get_asset_url(bot_user)
 
-        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container = discord.ui.Container()
         container.add_item(
             discord.ui.Section(
                 f"## {bot_user.name if bot_user else 'Percy'} Help\n"
-                f"Check out Percy's dashboard by clicking [here](https://r.klappstuhl.me/db)!\n\n"
-                f"**Privacy Policy**: [Click here](https://r.klappstuhl.me/pp)\n"
-                f"**Terms of Service**: [Click here](https://r.klappstuhl.me/tos)",
+                "Use the select below to choose between available categories to explore Percy!\n"
+                f"-# `{prefix}help <command>` · `{prefix}help <category>` · `{prefix}help flags`",
                 accessory=discord.ui.Thumbnail(thumb),
             )
         )
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
-            "### More Help\n"
-            "Alternatively you can use the following commands to get information about a specific command or category:\n"
-            f"- `{prefix}help <command>`\n"
-            f"- `{prefix}help <category>`\n\n"
-            f"You can also use `{prefix}help flags` to get an overview of how to use flags."
-        ))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(
-            "### Your Data & Privacy\n"
-            "Percy stores some data about you to power features like presence graphs and "
-            "name/avatar history. This tracking is **on by default**, and you're always in control:\n"
-            f"- `{prefix}settings tracking false` — turn off **all** tracking at once\n"
-            f"- `{prefix}settings presence false` / `{prefix}settings history false` — turn off one kind\n"
-            f"- `{prefix}settings request-data` — export a copy of your stored data\n"
-            f"- `{prefix}settings remove-personal-data` — permanently delete it"
-        ))
-        container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(
-            f"### Stats\n"
-            f"**Total Commands:** `{len(ctx.bot.commands)}`\n"
-            f"**Total Commands Invoked:** `{await self.total_commands_invoked()}`"
+            f"### Links\n"
+            f"[Dashboard](https://r.klappstuhl.me/db) · "
+            f"[Privacy Policy](https://r.klappstuhl.me/pp) · "
+            f"[Terms of Service](https://r.klappstuhl.me/tos)\n"
+            f"`{prefix}settings` to manage your data"
         ))
         container.add_item(discord.ui.Separator())
         created = discord.utils.format_dt(bot_user.created_at, "R") if bot_user else ""
-        container.add_item(discord.ui.TextDisplay(f"-# {bot_user} • created {created}"))
+        container.add_item(discord.ui.TextDisplay(
+            f"-# {len(ctx.bot.commands)} commands · {await self.total_commands_invoked()} invoked · "
+            f"{bot_user} created {created}"
+        ))
         return container
 
     def build_group_container(
@@ -674,16 +678,17 @@ class PaginatedHelpCommand(commands.HelpCommand):
     ) -> discord.ui.Container:
         """Build the Components V2 card listing one page of a category's commands."""
         emoji = getattr(group, "emoji", "")
-        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container = discord.ui.Container()
         container.add_item(discord.ui.TextDisplay(f"## {emoji} {group.qualified_name}\n{group.description or ''}"))
         container.add_item(discord.ui.Separator())
 
         is_any_locked = any(getattr(cmd, "is_locked", False) for cmd in entries)
         any_has_more_help = any(getattr(cmd, "has_more_help", False) for cmd in entries)
 
+        lines: list[str] = []
         for cmd in entries:
             prefixes = create_prefixes(cmd)
-            prefix = (" ".join(prefixes) + " | ") if prefixes else ""
+            prefix = (" ".join(prefixes) + " ") if prefixes else ""
             # When help was run as a slash command, show the clickable mention followed by
             # just the argument signature; otherwise (and for commands without an app-command
             # counterpart) fall back to the full prefixed signature.
@@ -694,11 +699,8 @@ class PaginatedHelpCommand(commands.HelpCommand):
             else:
                 label = f"**`{self.get_command_signature(cmd)}`**"
             description = cmd.description or "…"
-            examples = cmd.extras.get("examples")
-            if examples:
-                cmd_sig = self.get_command_signature(cmd, no_signature=True)
-                description += f"\n-# e.g. `{cmd_sig} {examples[0]}`"
-            container.add_item(discord.ui.TextDisplay(f"{prefix}{label}\n{description}"))
+            lines.append(f"{prefix}{label}\n-# {description}")
+        container.add_item(discord.ui.TextDisplay("\n".join(lines)))
 
         notes = list(iter_help_notes(is_any_locked, any_has_more_help, self.context.clean_prefix))
         if notes:
@@ -707,8 +709,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
-            f"-# {pluralize(total_commands):command} • Page {index + 1}/{total_pages} • "
-            f"Showing only commands available to you in this category."
+            f"-# {pluralize(total_commands):command} • Page {index + 1}/{total_pages}"
         ))
         return container
 
@@ -717,7 +718,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         ctx = self.context
         prefix = ctx.clean_prefix
 
-        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container = discord.ui.Container()
         thumb = get_asset_url(ctx.guild) if ctx.guild else None
         header = "## Command Argument Overview\n**```\nType command arguments without the brackets shown here!```**"
         if thumb is not None:
@@ -765,7 +766,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         from app.core import Command, HybridCommand
 
         ctx = self.context
-        container = discord.ui.Container(accent_colour=helpers.Colour.white())
+        container = discord.ui.Container()
 
         signature = AnsiStringBuilder()
         signature.append(ctx.clean_prefix, color=AnsiColor.white, bold=True)

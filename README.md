@@ -110,7 +110,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **24/7 always-on**   | `/music 247` keeps the bot permanently connected to a voice channel playing a radio/stream URL, a looping playlist (Spotify/Apple/SoundCloud links work directly), or endless autoplay. Ships curated radio presets (`/music radios`, e.g. `lofi`, `chill`, `antenne`) so no stream URL is needed. Sessions persist to PostgreSQL and auto-reconnect/resume after disconnects or restarts. |
 | **Resilience**       | Lavalink session resume + self-healing recovery: stuck/failed tracks are skipped instead of dropping the player, so playback doesn't cut off.                  |
 | **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                         |
-| **Playlists**        | Save, load and manage personal playlists (`PlaylistTools`), persisted in PostgreSQL.                                                                          |
+| **Playlists**        | Save, load and manage personal playlists (part of `Music` cog), persisted in PostgreSQL.                                                                          |
 | **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                              |
 
 ### Community & Engagement
@@ -148,7 +148,8 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set. |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                       |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                 |
-| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg and top.gg when those tokens are configured.                                                                                   |
+| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg, top.gg and discordbotlist.com when those tokens are configured.                                                               |
+| **Vote rewards**         | Voting on top.gg or discordbotlist.com grants a renewable **+10% XP boost for 12 hours**, applied in every shared server. Webhooks land on `/api/webhooks/{topgg,discordbotlist}`; `?vote` shows links and live boost status. |
 
 ---
 
@@ -274,6 +275,9 @@ GROQ_MODEL=                          # optional Groq model override (default: ll
 GITHUB_TOKEN=                        # GitHub API (source links, gists)
 DBOTS_TOKEN=                         # discord.bots.gg stats posting
 TOPGG_TOKEN=                         # top.gg stats posting
+DISCORDBOTLIST_TOKEN=                # discordbotlist.com stats posting
+TOPGG_WEBHOOK_SECRET=                # top.gg vote-webhook Authorization secret (POST /api/webhooks/topgg)
+DISCORDBOTLIST_WEBHOOK_SECRET=       # discordbotlist.com vote-webhook Authorization secret (POST /api/webhooks/discordbotlist)
 IMAGES_API_TOKEN=                    # image API integrations
 LOCG_API_URL=                        # self-hosted League of Comic Geeks API wrapper (locg-api; comic subscriptions). Docker: http://host.docker.internal:8070 (host-gateway); bare metal: http://127.0.0.1:8070
 GROQ_API_KEY=                        # Groq API Token for /ai command

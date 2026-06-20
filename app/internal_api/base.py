@@ -17,6 +17,7 @@ from .members import MemberHandlers
 from .moderation import ModerationHandlers
 from .music import MusicHandlers
 from .stats import StatsHandlers
+from .votes import VoteHandlers
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -35,6 +36,7 @@ class InternalAPI(
     ContentHandlers,
     MusicHandlers,
     StatsHandlers,
+    VoteHandlers,
 ):
     """Manages the internal HTTP API server lifecycle."""
 
@@ -165,6 +167,11 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/feature-flags', self._post_feature_flags)
         # Metrics (command latency, query timing)
         self._app.router.add_get('/api/internal/bot/metrics', self._get_bot_metrics)
+
+        # Public vote webhooks (bot lists). Exempt from the bearer middleware; each
+        # handler validates the per-service secret instead. Expose via your reverse proxy.
+        self._app.router.add_post('/api/webhooks/topgg', self._vote_topgg)
+        self._app.router.add_post('/api/webhooks/discordbotlist', self._vote_discordbotlist)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()

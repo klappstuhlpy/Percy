@@ -117,7 +117,13 @@ github_key: str | None = env('GITHUB_TOKEN')
 groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or 'llama-3.3-70b-versatile')
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
+discordbotlist_key: str | None = env('DISCORDBOTLIST_TOKEN')
 images_key: str | None = env('IMAGES_API_TOKEN')
+
+# Vote webhook secrets (the Authorization value each bot list sends; configured in
+# their respective dashboards). Used to authenticate inbound vote webhooks.
+topgg_webhook_secret: str | None = env('TOPGG_WEBHOOK_SECRET')
+discordbotlist_webhook_secret: str | None = env('DISCORDBOTLIST_WEBHOOK_SECRET')
 
 
 def _optional_int(value: str | None) -> int | None:

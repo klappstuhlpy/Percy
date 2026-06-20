@@ -7,6 +7,10 @@ from aiohttp import web
 
 import config
 
+#: Public webhook routes are reached by external bot lists, not the BFF, so they are
+#: exempt from the internal bearer token and validate their own per-service secret.
+WEBHOOK_PREFIX = '/api/webhooks/'
+
 
 def _check_auth(request: web.Request) -> bool:
     token = request.headers.get('Authorization')
@@ -18,6 +22,8 @@ async def auth_middleware(
     request: web.Request,
     handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
 ) -> web.StreamResponse:
+    if request.path.startswith(WEBHOOK_PREFIX):
+        return await handler(request)
     if not _check_auth(request):
         raise web.HTTPUnauthorized(text='invalid or missing token')
     return await handler(request)

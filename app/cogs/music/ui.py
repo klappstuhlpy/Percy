@@ -521,15 +521,15 @@ class PlayerPanel(LayoutView):
         await interaction.response.send_modal(AdjustVolumeModal(self))
 
     async def _on_like(self, interaction: discord.Interaction) -> None:
-        playlist_tools: Any = self.bot.get_cog("PlaylistTools")
-        if not playlist_tools:
+        music_cog: Any = self.bot.get_cog("Music")
+        if not music_cog:
             await interaction.response.send_message("This feature is currently disabled.", ephemeral=True)
             return
 
-        liked_songs = await playlist_tools.get_liked_songs(interaction.user.id)
+        liked_songs = await music_cog.get_liked_songs(interaction.user.id)
 
         if not liked_songs:
-            await playlist_tools.initizalize_user(interaction.user)
+            await music_cog.initizalize_user(interaction.user)
 
         assert self.player.current is not None
         track_urls = [t.url for t in liked_songs.tracks]
@@ -544,7 +544,7 @@ class PlayerPanel(LayoutView):
                 f"{Emojis.success} Removed `{self.player.current.title}` from your liked songs.", ephemeral=True
             )
 
-        playlist_tools.get_playlists.invalidate(interaction.user.id)
+        music_cog.get_playlists.invalidate(interaction.user.id)
 
     @classmethod
     async def start(

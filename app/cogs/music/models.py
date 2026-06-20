@@ -15,7 +15,7 @@ from app.utils import merge, pluralize
 if TYPE_CHECKING:
     import datetime
 
-    from .cog import PlaylistTools
+    from .cog import Music
 
 
 class ShuffleMode(enum.IntEnum):
@@ -128,7 +128,7 @@ from app.utils.checks import is_dj as is_dj
 
 
 class Playlist(BaseRecord, table="playlist", pk="id"):
-    cog: PlaylistTools
+    cog: Music
     id: int
     name: str
     owner_id: int

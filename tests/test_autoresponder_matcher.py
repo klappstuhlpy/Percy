@@ -6,7 +6,7 @@ which is exactly what makes the on-message hot path testable in isolation.
 
 from __future__ import annotations
 
-from app.cogs.autoresponder.engine import is_valid_regex, matches
+from app.cogs.automation.engine import is_valid_regex, matches
 
 
 # -- contains --------------------------------------------------------------

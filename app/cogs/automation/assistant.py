@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import contextlib
+from typing import TYPE_CHECKING
 
 import discord
 
 from app.clients import GroqClient, GroqResponseError
 from app.clients.base import HTTPClientError
-from app.core import Accent, Bot, Cog, Context, command, cooldown, describe, make_notice
+from app.core import Accent, Context, command, cooldown, describe, make_notice
 from app.core.errors import ServiceUnavailableError
 from app.utils import truncate
 from config import groq
+
+if TYPE_CHECKING:
+    from app.core import Bot
 
 #: Steers the model toward short, Discord-appropriate replies.
 SYSTEM_PROMPT = (
@@ -23,10 +27,8 @@ SYSTEM_PROMPT = (
 MAX_REPLY_CHARS = 3900
 
 
-class Assistant(Cog):
+class AssistantMixin:
     """A conversational AI assistant backed by Groq's fast open models."""
-
-    emoji = '\N{ROBOT FACE}'
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
@@ -85,7 +87,3 @@ class Assistant(Cog):
             footer=f'Asked by {ctx.author.display_name} · powered by Groq',
         )
         await ctx.send(view=view)
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(Assistant(bot))

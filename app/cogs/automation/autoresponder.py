@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from app.cogs.autoresponder.engine import MATCH_TYPES, MatchType, is_valid_regex, matches
-from app.core import Accent, Bot, Cog, Context, NoticeView, describe, group
+from app.cogs.automation.engine import MATCH_TYPES, MatchType, is_valid_regex, matches
+from app.core import Accent, Cog, Context, NoticeView, describe, group
 from app.core.models import PermissionTemplate
 from app.utils import cache, truncate
 from config import Emojis
@@ -33,10 +33,8 @@ def render_response(template: str, message: discord.Message) -> str:
     )
 
 
-class AutoResponder(Cog):
+class AutoResponderMixin:
     """Automatic replies that fire when a message matches a configured trigger phrase."""
-
-    emoji = '\N{SPEECH BALLOON}'
 
     @cache.cache()
     async def get_responders(self, guild_id: int) -> list[asyncpg.Record]:
@@ -180,7 +178,3 @@ class AutoResponder(Cog):
         self.get_responders.invalidate(ctx.guild.id)
         fmt = 'enabled' if enabled else 'disabled'
         await ctx.send_success(f'Autoresponder for **{truncate(record["trigger"], 80)}** {fmt}.')
-
-
-async def setup(bot: Bot) -> None:
-    await bot.add_cog(AutoResponder(bot))

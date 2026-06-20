@@ -2,12 +2,13 @@ import json
 import logging
 
 from app.core import Cog
-from config import dbots_key, top_gg_key
+from config import dbots_key, discordbotlist_key, top_gg_key
 
 log = logging.getLogger(__name__)
 
 DISCORD_BOTS_API = "https://discord.bots.gg/api/v1"
 TOP_GG_API = "https://top.gg/api/"
+DISCORD_BOT_LIST_API = "https://discordbotlist.com/api/v1"
 
 
 class WebUtils(Cog):
@@ -47,16 +48,37 @@ class WebUtils(Cog):
 
             log.info("Top.gg statistics returned %d for %s", resp.status, payload)
 
+    # https://discordbotlist.com/:
+
+    async def update_discordbotlist(self) -> None:
+        """Updates the server count on discordbotlist.com"""
+        if not discordbotlist_key:
+            return
+
+        payload = json.dumps({"guilds": len(self.bot.guilds)})
+        headers = {"Authorization": discordbotlist_key, "Content-Type": "application/json"}
+
+        async with self.bot.session.post(
+            f"{DISCORD_BOT_LIST_API}/bots/{self.bot.user.id}/stats", data=payload, headers=headers
+        ) as resp:
+            if resp.status not in (200, 204):
+                log.warning("DiscordBotList statistics returned %d for %s", resp.status, payload)
+                return
+
+            log.info("DiscordBotList statistics returned %d for %s", resp.status, payload)
+
     @Cog.listener("on_guild_join")
     @Cog.listener("on_guild_remove")
     async def on_guild_update(self, _) -> None:
         await self.update_dbots()
         await self.update_top_gg()
+        await self.update_discordbotlist()
 
     @Cog.listener()
     async def on_ready(self) -> None:
         await self.update_dbots()
         await self.update_top_gg()
+        await self.update_discordbotlist()
 
 
 async def setup(bot) -> None:
