@@ -386,8 +386,14 @@ class TimerManager:
                 timer = self._loaded_timer = await self.wait(days=self.MAX_DAYS)
                 now = utcnow()
 
-                if timer.expires.replace(tzinfo=datetime.UTC) >= now:
-                    to_sleep = (timer.expires - now).total_seconds()
+                # ``expires`` comes back from asyncpg as a naive datetime (the column is
+                # ``TIMESTAMP`` without a zone), so it must be made UTC-aware before any
+                # arithmetic against the aware ``now`` -- otherwise subtracting the two
+                # raises ``TypeError`` and kills the whole dispatch loop, leaving every
+                # future timer (polls, reminders, tempbans) stuck forever.
+                expires = timer.expires.replace(tzinfo=datetime.UTC)
+                if expires >= now:
+                    to_sleep = (expires - now).total_seconds()
                     await asyncio.sleep(to_sleep)
 
                 log.debug("Dispatching timer %r for event %s now.", timer.id, timer.event)

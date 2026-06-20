@@ -79,6 +79,21 @@ class PollsRepository(BaseRepository):
         """Fetches the IDs of every poll (used to generate a unique new ID)."""
         return await self.fetch("SELECT id FROM polls;")
 
+    async def get_overdue_running(self) -> list[asyncpg.Record]:
+        """Fetches every still-running poll whose expiry has already passed.
+
+        Used by the ``Polls`` cog to recover polls whose end timer was missed
+        (e.g. the scheduler was offline when the timer was due). ``expires`` is a
+        naive-UTC ``TIMESTAMP``, so it is compared against ``now() AT TIME ZONE 'utc'``
+        -- the same UTC wall-clock expression the ``created`` column defaults to.
+        """
+        query = """
+            SELECT * FROM polls
+            WHERE expires < (now() AT TIME ZONE 'utc')
+              AND metadata #>> ARRAY['kwargs', 'running'] = 'true';
+        """
+        return await self.fetch(query)
+
     async def search_for_guild(
             self, guild_id: int, *, sort: str | None = None, active: bool = False
     ) -> list[asyncpg.Record]:

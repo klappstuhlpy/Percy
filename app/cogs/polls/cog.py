@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     from app.database.base import GuildConfig
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
+
+log = logging.getLogger(__name__)
 
 
 class PollCreateFlags(Flags):
@@ -116,10 +119,41 @@ class Polls(Cog):
 
     async def cog_load(self) -> None:
         self.cleanup_message_cache.start()
+        self._reconcile_task = self.bot.loop.create_task(self._reconcile_overdue_polls())
+
+    async def cog_unload(self) -> None:
+        self.cleanup_message_cache.cancel()
+        task = getattr(self, "_reconcile_task", None)
+        if task is not None:
+            task.cancel()
 
     @tasks.loop(hours=1.0)
     async def cleanup_message_cache(self) -> None:
         self._message_cache.clear()
+
+    async def _reconcile_overdue_polls(self) -> None:
+        """End polls that are past their expiry but were never closed by the scheduler.
+
+        The scheduler dispatches ``on_poll_timer_complete`` per poll, but if the
+        dispatch loop was down when a poll fell due, its timer can linger and the
+        poll stays "running" forever. On startup we sweep for running, past-due
+        polls and end them -- which also deletes the stale ``timers`` row.
+        """
+        await self.bot.wait_until_ready()
+        try:
+            records = await self.bot.db.polls.get_overdue_running()
+        except Exception:
+            log.exception("Failed to load overdue polls for reconciliation.")
+            return
+
+        for record in records:
+            poll = Poll(cog=self, record=record)
+            try:
+                await self.end_poll(poll)
+            except Exception:
+                log.exception("Failed to end overdue poll %s during reconciliation.", poll.id)
+            else:
+                log.info("Ended overdue poll %s [#%s] during startup reconciliation.", poll.id, poll.kwargs.get("index"))
 
     async def get_message(self, channel: discord.abc.Messageable, message_id: int) -> discord.Message | None:
         try:

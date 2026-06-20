@@ -148,11 +148,19 @@ class PollClearVoteButton(
             return
 
         entry = self.poll.get_entry(interaction.user.id)
+        if entry is None:
+            return
 
-        self.poll.entries.discard(entry)
-        options: list[VoteOption] = self.poll.options.copy()
-        options[entry[1]]["votes"] -= 1  # type: ignore[index]
-        self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
+        # ``entries`` holds ``PollEntry`` objects whose hash/eq are record-based, so
+        # discarding the plain ``(user, vote)`` tuple from ``get_entry`` would match
+        # nothing. Rebuild the set by user id instead (handles tuples and PollEntry).
+        self.poll.entries = {e for e in self.poll.entries if next(iter(e)) != interaction.user.id}
+
+        option = self.poll.get_option(entry[1])
+        if option is not None:
+            option["votes"] = max(0, option["votes"] - 1)
+
+        self.poll = await self.poll.edit(options=self.poll.options, votes=len(self.poll.entries))
 
         await interaction.response.edit_message(view=create_view(self.poll))
 
