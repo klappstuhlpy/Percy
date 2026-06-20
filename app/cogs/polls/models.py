@@ -376,7 +376,10 @@ class Poll(BaseRecord, table="polls", pk="id"):
 
         self.metadata.get("kwargs").update(form)  # type: ignore[union-attr]
         self.cog.get_guild_polls.invalidate(self.guild_id)
-        return await self.update(metadata=self.metadata, entries=[(e.user_id, e.vote) for e in self.entries])  # type: ignore[return-value]
+        # ``entries`` may hold ``PollEntry`` objects (from ``_coerce``) or raw
+        # ``(user_id, vote)`` tuples appended by the vote callbacks; ``tuple()``
+        # normalises both since ``PollEntry.__iter__`` yields the same pair.
+        return await self.update(metadata=self.metadata, entries=[tuple(e) for e in self.entries])  # type: ignore[return-value]
 
     async def delete(self) -> None:
         """Deletes the poll from the database and removes the Discord message."""
