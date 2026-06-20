@@ -34,6 +34,7 @@ class VoteHandlers(InternalAPIHandlers):
     async def _vote_topgg(self, request: web.Request) -> web.Response:
         """top.gg webhook: body ``{"user", "type": "upvote"|"test", ...}``."""
         secret = config.topgg_webhook_secret
+        print(secret, request.headers.get('Authorization'))
         if not secret or request.headers.get('Authorization') != secret:
             raise web.HTTPUnauthorized(text='invalid webhook secret')
 
