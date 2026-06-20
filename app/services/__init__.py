@@ -17,6 +17,7 @@ from app.services.economy import (
     validate_item_effect,
 )
 from app.services.gateway_stats import GatewayTraffic, summarize_gateway_traffic
+from app.services.lyrics import LyricLine, LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
 from app.services.presence_stats import PRESENCE_STATUSES, PresenceBreakdown, summarize_presence
 from app.services.purge import PurgeMessage, PurgePlan, build_purge_predicate
 from app.services.recurrence import (
@@ -39,14 +40,18 @@ __all__ = (
     'DailyResult',
     'GatewayTraffic',
     'HealthLevel',
+    'LyricLine',
+    'LyricsResult',
     'PresenceBreakdown',
     'PurgeMessage',
     'PurgePlan',
     'RecurrenceResult',
+    'SyncedLyrics',
     'advance_recurrence',
     'assess_bot_health',
     'boost_multiplier',
     'build_purge_predicate',
+    'clean_track_title',
     'compute_daily',
     'compute_spam_penalty',
     'count_code_stats',
@@ -56,6 +61,7 @@ __all__ = (
     'interval_too_short',
     'next_occurrence',
     'normalize_interval',
+    'parse_lrc',
     'roll_lootbox',
     'sell_price',
     'summarize_gateway_traffic',

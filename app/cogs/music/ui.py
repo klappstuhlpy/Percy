@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
+import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +14,7 @@ from wavelink import QueueMode
 from app.core import Bot, Context, LayoutView
 from app.core.pagination import BasePaginator
 from app.core.views import ConfirmationView
+from app.services import LyricsResult
 from app.utils import (
     convert_duration,
     helpers,
@@ -26,7 +29,10 @@ from .models import DJMode, PlayerState, Playlist, ShuffleMode, is_dj
 if TYPE_CHECKING:
     from app.database.base import GuildConfig
 
+    from .cog import Music
     from .player import Player
+
+log = logging.getLogger(__name__)
 
 EMOJI_KEYS: dict[str, dict[ShuffleMode, str] | dict[bool, str] | dict[QueueMode, str] | str] = {
     "shuffle": {ShuffleMode.on: "<:shuffleTrue:1322338138932248667>", ShuffleMode.off: "<:shuffleNone:1322338127511293962>"},
@@ -1009,3 +1015,225 @@ class MusicSetupView(LayoutView):
         )
         if interaction.message is not None:
             await interaction.message.edit(view=self)
+
+
+class LiveLyricsView(LayoutView):
+    """A self-updating message that follows the playing track's synced lyrics.
+
+    Rate-limit strategy (the whole point of the design):
+
+    * The lyrics are fetched **once** per track; line timing is driven entirely by
+      ``player.position``, which wavelink interpolates locally -- so following the
+      song costs **no** network/Lavalink calls.
+    * The message is edited **only when the highlighted line changes** *and* at
+      most once every :attr:`MIN_EDIT_INTERVAL` seconds. Faster line changes are
+      coalesced -- at the next allowed edit we render whatever the live position
+      says is current -- so a dense rap section can never trigger a burst of edits.
+    * The loop sleeps until the next line boundary (cheap, no edit) instead of
+      polling every second, then re-checks.
+
+    The session binds to the player (``player.lyrics_session``); starting a new one
+    replaces the old. It ends itself when the player disconnects or stops, and can
+    auto-follow into the next track (re-fetching its lyrics once).
+
+    **Edits go through the slash-command interaction token** (the ``@original`` /
+    followup webhook route). Per Discord's docs those endpoints are *not* counted
+    against the bot's global 50-req/s budget and live in a separate rate-limit
+    bucket from normal channel sends -- so the live feed never contends with the
+    player panel or other messages in the channel. The catch is that interaction
+    tokens die after 15 minutes; shortly before that we transparently migrate to a
+    normal channel message (:meth:`_migrate_to_channel`) and keep going.
+    """
+
+    #: Hard floor between message edits. Even on the (global-exempt) interaction
+    #: route the webhook bucket still applies, so we edit on line-change only and
+    #: never more than once per this many seconds.
+    MIN_EDIT_INTERVAL: float = 5.0
+    #: Interaction tokens are valid for 15 minutes; migrate to a real message a
+    #: minute early so an edit never lands on a dead token.
+    TOKEN_LIFETIME: datetime.timedelta = datetime.timedelta(minutes=14)
+
+    def __init__(self, *, player: Player, cog: Music, result: LyricsResult) -> None:
+        super().__init__(timeout=None)
+        self.player: Player = player
+        self.cog: Music = cog
+        self.result: LyricsResult = result
+        self.bot: Bot = player.client  # type: ignore[assignment]
+
+        self.message: discord.Message = MISSING
+        self._track = player.current
+        self._task: asyncio.Task[None] | None = None
+        self._closed: bool = False
+        self._finalized: bool = False
+        self._last_index: int = -2
+        self._last_edit: float = 0.0
+
+        # Interaction-token edit backend (slash command). Once the token nears
+        # expiry we flip ``_using_interaction`` off and edit a plain channel message.
+        self._interaction: discord.Interaction | None = None
+        self._channel: discord.abc.Messageable | None = None
+        self._using_interaction: bool = False
+        self._token_deadline: datetime.datetime = MISSING
+
+        self.stop_button = discord.ui.Button(
+            style=discord.ButtonStyle.red, emoji="⏹️", label="Stop Live Lyrics"
+        )
+        self.stop_button.callback = self._on_close
+
+    # -- rendering -------------------------------------------------------
+
+    def _build(self, *, footer: str | None = None) -> discord.ui.Container:
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+
+        track = self.player.current or self._track
+        title = self.result.title or (track.title if track else "Unknown")
+        header = f"## 🎤 Live Lyrics\n**{title}**"
+        if track is not None and track.artwork:
+            container.add_item(discord.ui.Section(header, accessory=discord.ui.Thumbnail(track.artwork)))
+        else:
+            container.add_item(discord.ui.TextDisplay(header))
+
+        container.add_item(discord.ui.Separator())
+
+        if self.result.has_synced and self.result.synced is not None:
+            body = self.result.synced.render(self.player.position) or "♪"
+        else:
+            body = "*No time-synced lyrics are available for this track.*"
+        container.add_item(discord.ui.TextDisplay(body))
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(footer or f"-# Source: {self.result.source} • updates live"))
+        if not self._closed:
+            container.add_item(discord.ui.ActionRow(self.stop_button))
+        return container
+
+    def _rebuild(self, *, footer: str | None = None) -> None:
+        self.clear_items()
+        self.add_item(self._build(footer=footer))
+
+    async def _safe_edit(self, *, footer: str | None = None) -> None:
+        self._rebuild(footer=footer)
+        if self.message is not MISSING:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
+
+    # -- lifecycle -------------------------------------------------------
+
+    async def start_from_interaction(self, interaction: discord.Interaction) -> discord.Message:
+        """Post the public live message via the interaction token and start the loop.
+
+        The message is sent as a (non-ephemeral) followup so it is edited through the
+        global-exempt interaction route; the original ephemeral defer is resolved with
+        a small confirmation. Assumes the command already deferred the interaction.
+        """
+        prev = getattr(self.player, "lyrics_session", None)
+        if prev is not None and prev is not self:
+            await prev.stop()
+
+        self._interaction = interaction
+        self._channel = interaction.channel  # type: ignore[assignment]
+        self._token_deadline = interaction.created_at + self.TOKEN_LIFETIME
+
+        self._rebuild()
+        self.message = await interaction.followup.send(view=self, wait=True)
+        self._using_interaction = True
+        with suppress(discord.HTTPException):
+            await interaction.edit_original_response(content=f"{Emojis.success} Showing **live** lyrics below.")
+
+        self.player.lyrics_session = self
+        self._task = self.bot.loop.create_task(self._run())
+        return self.message
+
+    async def _migrate_to_channel(self) -> None:
+        """Move off the (soon-to-expire) interaction token onto a normal channel message."""
+        if not self._using_interaction:
+            return
+        self._using_interaction = False
+
+        old = self.message
+        self.message = MISSING
+        if self._channel is not None:
+            with suppress(discord.HTTPException):
+                self._rebuild()
+                self.message = await self._channel.send(view=self)
+        # Token is still valid for ~1 more minute, so the stale followup can be removed.
+        with suppress(discord.HTTPException, AttributeError):
+            if old is not MISSING:
+                await old.delete()
+
+    async def _run(self) -> None:
+        loop = self.bot.loop
+        try:
+            while not self._closed:
+                if not self.player.connected or self.player.current is None:
+                    break
+
+                # Interaction token is about to expire -> switch to a normal message.
+                if self._using_interaction and discord.utils.utcnow() >= self._token_deadline:
+                    await self._migrate_to_channel()
+
+                # Track changed -> re-fetch lyrics for the new track (once) and follow it.
+                if self.player.current != self._track:
+                    self._track = self.player.current
+                    self._last_index = -2
+                    self.result = await self.cog.fetch_lyrics_for_player(self.player) or LyricsResult(
+                        title=self.player.current.title, source="—"
+                    )
+
+                if self.player.paused:
+                    await asyncio.sleep(2.0)
+                    continue
+
+                synced = self.result.synced if self.result.has_synced else None
+                if synced is None:
+                    # Nothing to sync for this track: render the notice once, then idle.
+                    if self._last_index != -3:
+                        await self._safe_edit()
+                        self._last_index = -3
+                    await asyncio.sleep(3.0)
+                    continue
+
+                position = self.player.position
+                index = synced.active_index(position)
+                now = loop.time()
+                if index != self._last_index and (now - self._last_edit) >= self.MIN_EDIT_INTERVAL:
+                    await self._safe_edit()
+                    self._last_index = index
+                    self._last_edit = now
+
+                # Sleep until the next line is due (cheap; edits stay gated above).
+                nxt = synced.next_timestamp(index)
+                if nxt is None:
+                    await asyncio.sleep(3.0)
+                else:
+                    await asyncio.sleep(max(0.3, min((nxt - position) / 1000 + 0.05, 5.0)))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Live lyrics loop crashed for guild %s", getattr(self.player.guild, "id", None))
+        finally:
+            await self._finalize()
+
+    async def _on_close(self, interaction: discord.Interaction) -> None:
+        with suppress(discord.HTTPException):
+            await interaction.response.defer()
+        await self.stop()
+
+    async def stop(self) -> None:
+        """Stop following and finalise the message (idempotent)."""
+        if self._closed:
+            return
+        self._closed = True
+        if getattr(self.player, "lyrics_session", None) is self:
+            self.player.lyrics_session = None
+        if self._task is not None and self._task is not asyncio.current_task():
+            self._task.cancel()
+        await self._finalize()
+
+    async def _finalize(self) -> None:
+        if self._finalized:
+            return
+        self._finalized = True
+        self._closed = True
+        await self._safe_edit(footer="-# Live lyrics ended.")
+        super().stop()

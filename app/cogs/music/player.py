@@ -63,6 +63,8 @@ class Player(wavelink.Player):
         self._refilling: bool = False
         # Counts consecutive playback failures to break retry loops on a dead source.
         self._consecutive_errors: int = 0
+        # Active live-lyrics session (a ui.LiveLyricsView), if one is running.
+        self.lyrics_session: Any = None
 
     @property
     def djs(self) -> list[discord.Member]:
@@ -439,6 +441,10 @@ class Player(wavelink.Player):
         shutdown — if we deleted the row there, a restart would have nothing to resume.
         So a forced disconnect keeps the session intact for restore.
         """
+        if self.lyrics_session is not None:
+            with suppress(Exception):
+                await self.lyrics_session.stop()
+
         if self.guild is not None and not kwargs.get("force"):
             with suppress(Exception):
                 await self.db.music_sessions.delete_session(self.guild.id)

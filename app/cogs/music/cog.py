@@ -19,8 +19,10 @@ from discord.ext import commands, tasks
 from discord.utils import MISSING
 from wavelink import Playable
 
+from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
+from app.services import LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
 from app.utils import (
     ProgressBar,
     cache,
@@ -36,7 +38,7 @@ from config import Emojis, genius_key
 
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import MAX_CONSECUTIVE_ERRORS, Player
-from .ui import MusicSetupView, PlaylistPaginator
+from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +99,8 @@ class Music(Cog):
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
+        # Free, key-less synced-lyrics provider (Genius scrape stays a plain fallback).
+        self.lyrics_client: LRCLibClient = LRCLibClient(self.bot.session)
         # Guards the one-shot session restore (node-ready can fire multiple times).
         self._restored: bool = False
         # Guards the rebuild that runs after Lavalink comes back without resuming.
@@ -1286,7 +1290,16 @@ class Music(Cog):
         elif element.name == "br":
             return "\n"
         else:
-            return "".join(cls._get_text(child) for child in element.contents)  # type: ignore
+            # Genius embeds non-lyric UI inside the lyrics container (contributor
+            # counts, translation pickers, "Read More" blurbs, song-bio teasers),
+            # all flagged with data-exclude-from-selection="true". Skip those
+            # subtrees so only the actual lyrics are scraped.
+            parts = []
+            for child in element.contents:
+                if isinstance(child, Tag) and child.get("data-exclude-from-selection") == "true":
+                    continue
+                parts.append(cls._get_text(child))
+            return "".join(parts)
 
     @classmethod
     def _extract_lyrics(cls, html: str) -> str | None:
@@ -1302,61 +1315,185 @@ class Music(Cog):
 
         return "\n".join(text_parts)
 
-    @command(description="Search for some lyrics.", hybrid=True, guild_only=True)
-    @describe(song="The song you want to search for.")
-    @commands.guild_only()
-    async def lyrics(self, ctx: Context, *, song: str | None = None) -> None:
-        """Search for some lyrics."""
-        await ctx.defer(ephemeral=True)
+    async def fetch_lyrics_for_player(self, player: Player) -> LyricsResult | None:
+        """Resolve lyrics for the player's current track (artist/duration-aware)."""
+        track = player.current
+        if track is None:
+            return None
+        return await self._fetch_lyrics(
+            title=track.title,
+            artist=track.author,
+            duration=track.length,
+            thumbnail=track.artwork,
+        )
 
-        player: Player = cast("Player", ctx.voice_client)
-        if not player and not song:
-            await ctx.send_error("Please provide a song to search for.")
-            return
+    async def _fetch_lyrics(
+        self,
+        *,
+        title: str,
+        artist: str | None = None,
+        duration: int | None = None,
+        thumbnail: str | None = None,
+    ) -> LyricsResult | None:
+        """Resolve lyrics via LRCLIB (synced → plain), falling back to a Genius scrape."""
+        cleaned = clean_track_title(title)
+        duration_s = round(duration / 1000) if duration else None
 
-        song = song or (player.current.title if player and player.current else None)
-        if not song:
-            await ctx.send_error("Please provide a song to search for.")
-            return
+        record: dict[str, Any] | None = None
+        try:
+            if artist:
+                record = await self.lyrics_client.get_lyrics(track=cleaned, artist=artist, duration=duration_s)
+            if record is None:
+                hits = await self.lyrics_client.search_lyrics(track=cleaned, artist=artist)
+                record = self._best_lyrics_hit(hits, duration_s)
+        except Exception as exc:
+            log.debug("LRCLIB lookup failed for %r: %s", cleaned, exc)
 
-        async with ctx.progress("Searching for lyrics...") as progress:
-            headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
+        if record is not None:
+            synced_raw: str | None = record.get("syncedLyrics")
+            plain: str | None = record.get("plainLyrics")
+            synced = SyncedLyrics(parse_lrc(synced_raw)) if synced_raw else None
+            if (synced and synced.lines) or plain:
+                return LyricsResult(
+                    title=self._lyrics_display_title(record, fallback=title),
+                    source="LRCLIB",
+                    synced=synced if (synced and synced.lines) else None,
+                    plain=discord.utils.escape_markdown(plain),
+                    thumbnail=thumbnail,
+                )
 
+        # Genius fallback (plain text only).
+        query = f"{title} {artist}" if artist else title
+        return await self._genius_lyrics(query, thumbnail=thumbnail)
+
+    @staticmethod
+    def _lyrics_display_title(record: dict[str, Any], *, fallback: str) -> str:
+        name = record.get("trackName") or fallback
+        artist = record.get("artistName")
+        return f"{name} — {artist}" if artist else name
+
+    @staticmethod
+    def _best_lyrics_hit(hits: list[dict[str, Any]], duration_s: int | None) -> dict[str, Any] | None:
+        """Pick the closest-duration search hit, preferring ones that have synced lyrics."""
+        if not hits:
+            return None
+
+        def score(hit: dict[str, Any]) -> tuple[int, float]:
+            has_synced = 0 if hit.get("syncedLyrics") else 1
+            delta = abs(float(hit["duration"]) - duration_s) if duration_s and hit.get("duration") else 0.0
+            return (has_synced, delta)
+
+        best = min(hits, key=score)
+        # Reject a wildly mismatched result when we know the real duration (> 8s off).
+        if duration_s and best.get("duration") and abs(float(best["duration"]) - duration_s) > 8:
+            return None
+        return best
+
+    async def _genius_lyrics(self, query: str, *, thumbnail: str | None = None) -> LyricsResult | None:
+        """Scrape Genius for plain lyrics as a last resort. Returns ``None`` on any miss."""
+        if not genius_key:
+            return None
+
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
+        try:
             async with self.bot.session.get(
                 "https://api.genius.com/search",
                 headers=headers,
-                params={"q": song.replace("by", "").replace("from", "").strip()},
+                params={"q": query.replace("by", "").replace("from", "").strip()},
             ) as resp:
                 if resp.status != 200:
-                    await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
-                    return
-
-                data = (await resp.json())["response"]["hits"][0]["result"]
+                    return None
+                hits = (await resp.json())["response"]["hits"]
+                if not hits:
+                    return None
+                data = hits[0]["result"]
                 song_url = urljoin("https://genius.com", data["path"])
 
-            await progress.update("Fetching lyrics page...")
             async with self.bot.session.get(song_url) as res:
                 if res.status != 200:
-                    await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
-                    return
-
+                    return None
                 html = await res.text()
+        except Exception as exc:
+            log.debug("Genius lookup failed for %r: %s", query, exc)
+            return None
 
-            await progress.update("Extracting lyrics...")
-            lyrics_data = self._extract_lyrics(html)
+        text = self._extract_lyrics(html)
+        if not text:
+            return None
 
-            if lyrics_data is None:
-                await ctx.send_error(f"{Emojis.error} I cannot find lyrics for the current track.")
-                return
+        return LyricsResult(
+            title=data.get("full_title", query),
+            source="Genius",
+            plain=discord.utils.escape_markdown(text),
+            url=song_url,
+            thumbnail=data.get("header_image_url") or thumbnail,
+        )
 
-            mapped = list(pagify(lyrics_data, page_length=4096))
+    @command(
+        description="Show lyrics for a song; live-syncs to the current track when possible.",
+        hybrid=True,
+        guild_only=True,
+    )
+    @describe(song="The song to search for. Defaults to the currently playing track.")
+    @commands.guild_only()
+    async def lyrics(self, ctx: Context, *, song: str | None = None) -> None:
+        """Show lyrics for a song.
+
+        Invoked as the **/lyrics** slash command while a track is playing, this
+        follows the song with live, auto-scrolling synced lyrics. The prefix
+        command (and any plain text search) always returns static lyrics.
+        """
+        await ctx.defer(ephemeral=True)
+        is_slash = ctx.interaction is not None
+
+        player: Player = cast("Player", ctx.voice_client)
+        current = player.current if player else None
+
+        if song is None and current is None:
+            await ctx.send_error("Please provide a song to search for.")
+            return
+
+        async with ctx.progress("Searching for lyrics..."):
+            if song is None and current is not None:
+                result = await self.fetch_lyrics_for_player(player)
+            else:
+                result = await self._fetch_lyrics(title=cast("str", song))
+
+        if result is None:
+            await ctx.send_error(f"{Emojis.error} I couldn't find any lyrics for that.")
+            return
+
+        # Live mode is exclusive to the slash command: it edits via the interaction
+        # token (global-rate-limit exempt). Only when we're following the *playing*
+        # track and actually have time-synced lyrics.
+        following_current = song is None and current is not None
+        if is_slash and following_current and result.has_synced and ctx.interaction is not None:
+            view = LiveLyricsView(player=player, cog=self, result=result)
+            try:
+                await view.start_from_interaction(ctx.interaction)
+            except discord.HTTPException:
+                await ctx.send_error("I couldn't start live lyrics here.")
+            return
+
+        # Static lyrics (prefix command, plain searches, or no synced lyrics).
+        text = result.best_text()
+        if not text:
+            await ctx.send_error(f"{Emojis.error} I couldn't find any lyrics for that.")
+            return
+
+        mapped = list(pagify(text, page_length=4096))
+        title, url, thumbnail, source = result.title, result.url, result.thumbnail, result.source
+        # Point prefix users at the slash command for the live experience.
+        tip = None if is_slash else "🔴 Use the **/lyrics** slash command while a track is playing for live, auto-scrolling lyrics."
 
         class TextPaginator(BasePaginator):
             async def format_page(self, entries: list, /) -> discord.Embed:
-                embed = discord.Embed(
-                    title=data["full_title"], url=song_url, description=entries[0], colour=helpers.Colour.white()
-                )
-                embed.set_thumbnail(url=data["header_image_url"])
+                embed = discord.Embed(title=title, url=url, description=entries[0], colour=helpers.Colour.white())
+                if thumbnail:
+                    embed.set_thumbnail(url=thumbnail)
+                if tip:
+                    embed.add_field(name="​", value=tip, inline=False)
+                embed.set_footer(text=f"Source: {source}")
                 return embed
 
         await TextPaginator.start(ctx, entries=mapped, per_page=1, ephemeral=True)
