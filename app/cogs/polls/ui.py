@@ -289,14 +289,12 @@ class PollEnterButton(
             await interaction.message.edit(view=create_view(self.poll))
             return
 
-        await interaction.response.defer(ephemeral=True)
-
         self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
         options: list[VoteOption] = self.poll.options.copy()
         options[option["index"]]["votes"] += 1
         self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
-        await interaction.edit_original_response(view=create_view(self.poll))
+        await interaction.response.edit_message(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
             f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
@@ -384,14 +382,12 @@ class PollEnterSelect(
             await interaction.message.edit(view=create_view(self.poll))
             return
 
-        await interaction.response.defer(ephemeral=True)
-
         self.poll.entries.add((interaction.user.id, option["index"]))  # type: ignore
         options: list[VoteOption] = self.poll.options.copy()
         options[option["index"]]["votes"] += 1
         self.poll = await self.poll.edit(options=options, votes=len(self.poll.entries))
 
-        await interaction.edit_original_response(view=create_view(self.poll))
+        await interaction.response.edit_message(view=create_view(self.poll))
         await interaction.followup.send(
             f"On the poll *{self.poll.question}* [`{self.poll.id}`], you voted:\n"
             f"{self.poll.to_emoji(option['index'])} - `{option['content']}`",
