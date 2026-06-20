@@ -6,7 +6,7 @@ import logging
 import random
 import re
 from contextlib import suppress
-from typing import Annotated, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 from urllib.parse import urljoin
 
 import discord
@@ -39,6 +39,9 @@ from config import Emojis, genius_key
 from .models import Playlist, PlaylistTrack, SearchReturn, ShuffleMode
 from .player import MAX_CONSECUTIVE_ERRORS, Player
 from .ui import LiveLyricsView, MusicSetupView, PlaylistPaginator
+
+if TYPE_CHECKING:
+    from app.utils.progress import ProgressTracker
 
 log = logging.getLogger(__name__)
 
@@ -1315,7 +1318,9 @@ class Music(Cog):
 
         return "\n".join(text_parts)
 
-    async def fetch_lyrics_for_player(self, player: Player) -> LyricsResult | None:
+    async def fetch_lyrics_for_player(
+        self, player: Player, *, progress: ProgressTracker | None = None
+    ) -> LyricsResult | None:
         """Resolve lyrics for the player's current track (artist/duration-aware)."""
         track = player.current
         if track is None:
@@ -1325,6 +1330,7 @@ class Music(Cog):
             artist=track.author,
             duration=track.length,
             thumbnail=track.artwork,
+            progress=progress,
         )
 
     async def _fetch_lyrics(
@@ -1334,13 +1340,20 @@ class Music(Cog):
         artist: str | None = None,
         duration: int | None = None,
         thumbnail: str | None = None,
+        progress: ProgressTracker | None = None,
     ) -> LyricsResult | None:
-        """Resolve lyrics via LRCLIB (synced → plain), falling back to a Genius scrape."""
+        """Resolve lyrics via LRCLIB (synced → plain), falling back to a Genius scrape.
+
+        ``progress`` (when given) is advanced through the lookup stages so the
+        command shows live feedback instead of one static loading line.
+        """
         cleaned = clean_track_title(title)
         duration_s = round(duration / 1000) if duration else None
 
         record: dict[str, Any] | None = None
         try:
+            if progress:
+                await progress.update("Searching LRCLIB for synced lyrics...")
             if artist:
                 record = await self.lyrics_client.get_lyrics(track=cleaned, artist=artist, duration=duration_s)
             if record is None:
@@ -1358,13 +1371,13 @@ class Music(Cog):
                     title=self._lyrics_display_title(record, fallback=title),
                     source="LRCLIB",
                     synced=synced if (synced and synced.lines) else None,
-                    plain=discord.utils.escape_markdown(plain),
+                    plain=discord.utils.escape_markdown(plain) if plain else None,
                     thumbnail=thumbnail,
                 )
 
         # Genius fallback (plain text only).
         query = f"{title} {artist}" if artist else title
-        return await self._genius_lyrics(query, thumbnail=thumbnail)
+        return await self._genius_lyrics(query, thumbnail=thumbnail, progress=progress)
 
     @staticmethod
     def _lyrics_display_title(record: dict[str, Any], *, fallback: str) -> str:
@@ -1389,13 +1402,17 @@ class Music(Cog):
             return None
         return best
 
-    async def _genius_lyrics(self, query: str, *, thumbnail: str | None = None) -> LyricsResult | None:
+    async def _genius_lyrics(
+        self, query: str, *, thumbnail: str | None = None, progress: ProgressTracker | None = None
+    ) -> LyricsResult | None:
         """Scrape Genius for plain lyrics as a last resort. Returns ``None`` on any miss."""
         if not genius_key:
             return None
 
         headers = {"Accept": "application/json", "Authorization": f"Bearer {genius_key}"}
         try:
+            if progress:
+                await progress.update("Searching Genius...")
             async with self.bot.session.get(
                 "https://api.genius.com/search",
                 headers=headers,
@@ -1409,6 +1426,8 @@ class Music(Cog):
                 data = hits[0]["result"]
                 song_url = urljoin("https://genius.com", data["path"])
 
+            if progress:
+                await progress.update("Fetching lyrics page...")
             async with self.bot.session.get(song_url) as res:
                 if res.status != 200:
                     return None
@@ -1417,6 +1436,8 @@ class Music(Cog):
             log.debug("Genius lookup failed for %r: %s", query, exc)
             return None
 
+        if progress:
+            await progress.update("Extracting lyrics...")
         text = self._extract_lyrics(html)
         if not text:
             return None
@@ -1443,7 +1464,6 @@ class Music(Cog):
         follows the song with live, auto-scrolling synced lyrics. The prefix
         command (and any plain text search) always returns static lyrics.
         """
-        await ctx.defer(ephemeral=True)
         is_slash = ctx.interaction is not None
 
         player: Player = cast("Player", ctx.voice_client)
@@ -1453,11 +1473,13 @@ class Music(Cog):
             await ctx.send_error("Please provide a song to search for.")
             return
 
-        async with ctx.progress("Searching for lyrics..."):
+        # ``progress`` defers the interaction and shows a loading message it advances
+        # through the lookup stages, then removes it on exit.
+        async with ctx.progress("Searching for lyrics...", ephemeral=True) as progress:
             if song is None and current is not None:
-                result = await self.fetch_lyrics_for_player(player)
+                result = await self.fetch_lyrics_for_player(player, progress=progress)
             else:
-                result = await self._fetch_lyrics(title=cast("str", song))
+                result = await self._fetch_lyrics(title=cast("str", song), progress=progress)
 
         if result is None:
             await ctx.send_error(f"{Emojis.error} I couldn't find any lyrics for that.")
@@ -1483,8 +1505,13 @@ class Music(Cog):
 
         mapped = list(pagify(text, page_length=4096))
         title, url, thumbnail, source = result.title, result.url, result.thumbnail, result.source
+
         # Point prefix users at the slash command for the live experience.
-        tip = None if is_slash else "🔴 Use the **/lyrics** slash command while a track is playing for live, auto-scrolling lyrics."
+        await self.bot.resolve_app_command_ids(guild=ctx.guild)
+        lyrics_command = self.bot.get_command('lyrics')
+        cmd_disp = getattr(lyrics_command, 'mention', '**/lyrics**')
+
+        tip = None if is_slash else f"`🔴` Use the {cmd_disp} slash command while a track is playing for live, auto-scrolling lyrics."
 
         class TextPaginator(BasePaginator):
             async def format_page(self, entries: list, /) -> discord.Embed:
