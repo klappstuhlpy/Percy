@@ -16,6 +16,7 @@ from .leveling import LevelingHandlers
 from .members import MemberHandlers
 from .moderation import ModerationHandlers
 from .music import MusicHandlers
+from .profile import ProfileHandlers
 from .stats import StatsHandlers
 from .votes import VoteHandlers
 
@@ -35,6 +36,7 @@ class InternalAPI(
     EconomyHandlers,
     ContentHandlers,
     MusicHandlers,
+    ProfileHandlers,
     StatsHandlers,
     VoteHandlers,
 ):
@@ -161,6 +163,10 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/247', self._post_music_247)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/music/dj-mode', self._patch_music_dj_mode)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/control', self._post_music_control)
+        # Custom Bot Profile
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/custom-bot', self._get_custom_bot)
+        self._app.router.add_patch('/api/internal/guilds/{guild_id}/custom-bot', self._patch_custom_bot)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/custom-bot/reset', self._reset_custom_bot)
 
         # Feature flags (runtime enable/disable)
         self._app.router.add_get('/api/internal/feature-flags', self._get_feature_flags)
