@@ -77,12 +77,23 @@ class VoteHandlers(InternalAPIHandlers):
         except Exception:
             raise web.HTTPBadRequest(text='invalid JSON body')
 
-        # top.gg sends {"type": "test"} when you press "Test" in the webhook dashboard.
-        if body.get('type') == 'test':
-            log.info('Received top.gg webhook test ping')
-            return web.json_response({'ok': True})
+        # v1 wraps the vote in an envelope ({"type": "vote.create", "data": {...}}); the
+        # user's Discord id is data.user.platform_id (data.user.id is the top.gg id).
+        # v0 is flat ({"user": "<discord id>", "type": "upvote"|"test"}).
+        data = body.get('data')
+        if isinstance(data, dict):
+            event_type = body.get('type', '')
+            if event_type != 'vote.create':
+                log.info('Received top.gg v1 webhook event %r (ignored)', event_type)
+                return web.json_response({'ok': True})
+            user_id = (data.get('user') or {}).get('platform_id')
+        else:
+            # top.gg sends {"type": "test"} when you press "Test" in the v0 dashboard.
+            if body.get('type') == 'test':
+                log.info('Received top.gg webhook test ping')
+                return web.json_response({'ok': True})
+            user_id = body.get('user')
 
-        user_id = body.get('user')
         if not user_id:
             raise web.HTTPBadRequest(text='missing user')
 
