@@ -74,6 +74,7 @@ class MusicHandlers(InternalAPIHandlers):
                 'presets': list(PRESETS.keys()),
                 'setup': setup,
                 'always_on': always_on,
+                'listeners': [],
             })
 
         eq_payload = player.filters.equalizer.payload
@@ -94,6 +95,13 @@ class MusicHandlers(InternalAPIHandlers):
                 'position': player.position,
             }
 
+        # IDs of the (non-bot) members sharing the bot's voice channel. The
+        # dashboard's public overview uses this to decide whether a viewer may
+        # control playback; the control endpoint re-verifies server-side.
+        listeners = []
+        if player.channel:
+            listeners = [str(m.id) for m in player.channel.members if not m.bot]
+
         return web.json_response({
             'active': True,
             'equalizer': gains,
@@ -103,6 +111,7 @@ class MusicHandlers(InternalAPIHandlers):
             'channel': str(player.channel.id) if player.channel else None,
             'setup': setup,
             'always_on': always_on,
+            'listeners': listeners,
         })
 
     async def _post_music_247(self, request: web.Request) -> web.Response:
@@ -330,3 +339,63 @@ class MusicHandlers(InternalAPIHandlers):
         await config.update(music_dj_mode=mode)
 
         return web.json_response({'ok': True, 'dj_mode': mode})
+
+    async def _post_music_control(self, request: web.Request) -> web.Response:
+        """Control the live player from the dashboard's public overview.
+
+        A viewer may only control playback while sharing the bot's voice channel
+        (or holding DJ access), and the guild's DJ mode governs which actions are
+        allowed — mirroring the in-Discord control panel exactly.
+        """
+        from app.cogs.music.models import DJMode, is_dj
+
+        guild_id = int(request.match_info['guild_id'])
+        guild, player = self._get_guild_player(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+        if player is None:
+            raise web.HTTPBadRequest(text='no active player in this guild')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        action = body.get('action')
+        user_id = body.get('user_id')
+        if action not in ('pause', 'resume', 'skip', 'stop'):
+            raise web.HTTPBadRequest(text='unknown action')
+        if not user_id:
+            raise web.HTTPBadRequest(text="'user_id' is required")
+
+        member = guild.get_member(int(user_id))
+        if member is None:
+            raise web.HTTPForbidden(text='you are not a member of this server')
+
+        has_dj = is_dj(member) or member.guild_permissions.manage_guild
+        bot_vc = guild.me.voice and guild.me.voice.channel
+        author_vc = member.voice and member.voice.channel
+        in_voice = bool(bot_vc and author_vc and author_vc == bot_vc)
+        dj_mode = DJMode(getattr(await self.bot.db.get_guild_config(guild_id), 'music_dj_mode', 0))
+
+        # Base gate: DJs can always act; otherwise the viewer must share the VC.
+        if not has_dj:
+            if dj_mode == DJMode.dj_only:
+                raise web.HTTPForbidden(text='only members with the DJ role can control the player')
+            if not in_voice:
+                raise web.HTTPForbidden(text='join the bot\'s voice channel to control playback')
+            # Hybrid mode restricts destructive actions to DJs.
+            if dj_mode == DJMode.hybrid and action in ('skip', 'stop'):
+                raise web.HTTPForbidden(text='this action requires the DJ role')
+
+        if action == 'pause':
+            await player.pause(True)
+        elif action == 'resume':
+            await player.pause(False)
+        elif action == 'skip':
+            await player.skip()
+        elif action == 'stop':
+            player.queue.reset()
+            await player.disconnect()
+
+        return web.json_response({'ok': True, 'action': action, 'paused': player.paused if player.connected else False})

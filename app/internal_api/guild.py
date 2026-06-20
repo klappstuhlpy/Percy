@@ -342,24 +342,31 @@ class GuildHandlers(InternalAPIHandlers):
         return web.json_response({'ok': True, 'status': 'enabled' if enabled else 'disabled'})
 
     async def _get_user_guilds(self, request: web.Request) -> web.Response:
+        """Return every guild the user shares with Percy.
+
+        Each entry carries a ``manageable`` flag (admin or Manage Server). The
+        dashboard splits these into managed servers and read-only public
+        overviews; servers the user can manage but Percy is *not* in come from
+        the dashboard's stored Discord OAuth guild list, not this endpoint.
+        """
         discord_id = int(request.match_info['discord_id'])
 
-        manageable = []
+        guilds = []
         for guild in self.bot.guilds:
             member = guild.get_member(discord_id)
             if member is None:
                 continue
             perms = member.guild_permissions
-            if perms.administrator or perms.manage_guild:
-                manageable.append({
-                    'id': str(guild.id),
-                    'name': guild.name,
-                    'icon_url': guild.icon.url if guild.icon else None,
-                    'member_count': guild.member_count,
-                    'owner': guild.owner_id == discord_id,
-                })
+            guilds.append({
+                'id': str(guild.id),
+                'name': guild.name,
+                'icon_url': guild.icon.url if guild.icon else None,
+                'member_count': guild.member_count,
+                'owner': guild.owner_id == discord_id,
+                'manageable': perms.administrator or perms.manage_guild,
+            })
 
-        return web.json_response(manageable)
+        return web.json_response(guilds)
 
     async def _get_user_avatar(self, request: web.Request) -> web.Response:
         """Resolve a user's *current* avatar URL straight from Discord.

@@ -158,6 +158,7 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/filters', self._post_music_filters)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/247', self._post_music_247)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/music/dj-mode', self._patch_music_dj_mode)
+        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/control', self._post_music_control)
 
         # Feature flags (runtime enable/disable)
         self._app.router.add_get('/api/internal/feature-flags', self._get_feature_flags)
