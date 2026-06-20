@@ -190,7 +190,6 @@ class Bot(commands.Bot):
 
         DoNotLoadOnBeta = (
             'app.cogs.web_utils',
-            'app.cogs.comic'
         )
         for extension in self.initial_extensions:
             if beta and extension in DoNotLoadOnBeta:
