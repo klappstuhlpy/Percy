@@ -7,6 +7,9 @@ A successful vote grants the user a global, renewable XP boost via the votes rep
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 
 from aiohttp import web
@@ -31,15 +34,46 @@ class VoteHandlers(InternalAPIHandlers):
         )
         log.info('Recorded %s vote from user %d (XP boost until %s UTC)', source, user_id, expires)
 
+    @staticmethod
+    def _verify_topgg_signature(secret: str, raw_body: bytes, signature: str) -> bool:
+        """Validate a top.gg v1 ``x-topgg-signature`` HMAC header.
+
+        The header is ``t={unix ts},v1={hex hmac}``; the signed message is
+        ``{timestamp}.{rawBody}`` keyed with the webhook secret (SHA-256).
+        """
+        parts = dict(p.split('=', 1) for p in signature.split(',') if '=' in p)
+        timestamp, received = parts.get('t'), parts.get('v1')
+        if not timestamp or not received:
+            return False
+
+        expected = hmac.new(
+            secret.encode(), f'{timestamp}.{raw_body.decode("utf-8")}'.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, received)
+
     async def _vote_topgg(self, request: web.Request) -> web.Response:
-        """top.gg webhook: body ``{"user", "type": "upvote"|"test", ...}``."""
+        """top.gg webhook: body ``{"user", "type": "upvote"|"test", ...}``.
+
+        Supports v1 (``x-topgg-signature`` HMAC verification) and falls back to the
+        legacy v0 scheme (raw secret in the ``Authorization`` header). A failed check
+        returns 4xx (top.gg does not retry those); processing errors surface as 5xx so
+        delivery is retried.
+        """
         secret = config.topgg_webhook_secret
-        print(secret, request.headers.get('Authorization'))
-        if not secret or request.headers.get('Authorization') != secret:
+        if not secret:
+            raise web.HTTPUnauthorized(text='webhook secret not configured')
+
+        # Read the raw body once: v1 signing is computed over the exact bytes.
+        raw_body = await request.read()
+        signature = request.headers.get('x-topgg-signature')
+        if signature is not None:
+            if not self._verify_topgg_signature(secret, raw_body, signature):
+                raise web.HTTPUnauthorized(text='invalid webhook signature')
+        elif request.headers.get('Authorization') != secret:  # legacy v0 fallback
             raise web.HTTPUnauthorized(text='invalid webhook secret')
 
         try:
-            body = await request.json()
+            body = json.loads(raw_body)
         except Exception:
             raise web.HTTPBadRequest(text='invalid JSON body')
 
