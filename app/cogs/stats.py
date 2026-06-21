@@ -11,10 +11,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict
 
+import aiohttp
 import asyncpg
 import discord
 import psutil
 import pygit2
+import wavelink
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands, tasks
@@ -31,8 +33,10 @@ from app.rendering import resize_to_limit
 from app.services import (
     ConnectionState,
     HealthLevel,
+    LavalinkMetrics,
     assess_bot_health,
     count_code_stats,
+    parse_lavalink_metrics,
     summarize_gateway_traffic,
     summarize_presence,
 )
@@ -1320,6 +1324,28 @@ class Stats(Cog):
 
         await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url, silent=silent)
 
+    async def _fetch_lavalink_metrics(self) -> LavalinkMetrics | None:
+        """Scrape the connected Lavalink node's Prometheus ``/metrics`` endpoint.
+
+        Returns ``None`` when no node is connected, the scrape fails, or the node has
+        metrics disabled — the ``bothealth`` report degrades gracefully in that case.
+        """
+        try:
+            node = wavelink.Pool.get_node()
+        except (wavelink.InvalidNodeException, RuntimeError):
+            return None
+
+        url = node.uri.rstrip("/") + "/metrics"
+        try:
+            async with self.bot.session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status != 200:
+                    return None
+                text = await resp.text()
+        except (aiohttp.ClientError, TimeoutError):
+            return None
+
+        return parse_lavalink_metrics(text)
+
     @command(hidden=True, description="Shows the current log level.")
     @commands.is_owner()
     async def bothealth(self, ctx: Context) -> None:
@@ -1418,6 +1444,24 @@ class Stats(Cog):
 
         # Extension status
         embed.add_field(name="Extensions", value=f"Loaded: {len(self.bot.extensions)}\nCogs: {len(self.bot.cogs)}")
+
+        # Lavalink node (scraped from its Prometheus /metrics endpoint)
+        ll = await self._fetch_lavalink_metrics()
+        if ll is not None:
+            ll_uptime = human_timedelta(
+                discord.utils.utcnow() - datetime.timedelta(seconds=ll.uptime_seconds), suffix=False
+            )
+            ll_lines = [
+                f"Players: {ll.playing_players} playing / {ll.players} total",
+                f"Uptime: **{ll_uptime}**",
+                f"Memory: {ll.memory_used_bytes / 1024**2:.0f} MiB used "
+                f"({ll.memory_used_ratio * 100:.0f}% of {ll.memory_allocated_bytes / 1024**2:.0f} MiB)",
+                f"CPU: {ll.lavalink_load * 100:.1f}% LL / {ll.system_load * 100:.1f}% system "
+                f"({ll.cpu_cores} cores)",
+            ]
+            embed.add_field(name="Lavalink", value="\n".join(ll_lines), inline=False)
+        else:
+            embed.add_field(name="Lavalink", value="No node connected or metrics unavailable.", inline=False)
 
         embed.colour = LEVEL_COLOURS[report.level]
         embed.set_footer(text=f"{report.warnings} warning(s)")

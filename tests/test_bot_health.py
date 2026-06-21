@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.services import BotHealthReport, ConnectionState, HealthLevel, assess_bot_health
+from app.services.bot_health import parse_lavalink_metrics, parse_prometheus_samples
 
 GEN = 5
 
@@ -106,3 +107,61 @@ def test_warnings_accumulate_across_sources() -> None:
     assert report.warnings == 4
     # Below the UNHEALTHY threshold, but spammers/backed-up queue keep it at WARNING.
     assert report.level == HealthLevel.WARNING
+
+
+# -- Lavalink metrics parsing ---------------------------------------------------
+
+# A trimmed but faithful sample of a real Lavalink ``/metrics`` payload, including the
+# comment lines, scientific-notation values and labelled histogram series that the parser
+# must skip.
+LAVALINK_SAMPLE = """\
+# HELP lavalink_players_total Total number of players connected.
+# TYPE lavalink_players_total gauge
+lavalink_players_total 3.0
+# HELP lavalink_playing_players_total Number of players currently playing audio.
+# TYPE lavalink_playing_players_total gauge
+lavalink_playing_players_total 2.0
+# HELP lavalink_uptime_milliseconds Uptime of the node in milliseconds.
+# TYPE lavalink_uptime_milliseconds gauge
+lavalink_uptime_milliseconds 5.8102206E7
+lavalink_memory_free_bytes 1.24235832E8
+lavalink_memory_used_bytes 1.68316872E8
+lavalink_memory_allocated_bytes 2.92552704E8
+lavalink_memory_reservable_bytes 2.147483648E9
+lavalink_cpu_cores 6.0
+lavalink_cpu_system_load_percentage 0.25
+lavalink_cpu_lavalink_load_percentage 0.05
+lavalink_gc_pauses_seconds_bucket{le="0.025",} 12.0
+lavalink_gc_pauses_seconds_count 12.0
+process_cpu_seconds_total 191.01
+"""
+
+
+def test_parse_prometheus_samples_skips_comments_and_labelled_series() -> None:
+    samples = parse_prometheus_samples(LAVALINK_SAMPLE)
+
+    assert samples["lavalink_players_total"] == 3.0
+    assert samples["lavalink_uptime_milliseconds"] == 5.8102206e7  # scientific notation
+    assert samples["process_cpu_seconds_total"] == 191.01
+    # Labelled histogram series are ignored.
+    assert "lavalink_gc_pauses_seconds_bucket" not in samples
+
+
+def test_parse_lavalink_metrics_maps_units() -> None:
+    metrics = parse_lavalink_metrics(LAVALINK_SAMPLE)
+
+    assert metrics is not None
+    assert metrics.players == 3
+    assert metrics.playing_players == 2
+    assert metrics.uptime_seconds == 58102.206  # milliseconds -> seconds
+    assert metrics.cpu_cores == 6
+    # Loads stay raw fractions; the cog multiplies by 100 for display.
+    assert metrics.system_load == 0.25
+    assert metrics.lavalink_load == 0.05
+    assert metrics.memory_used_ratio == 168316872.0 / 292552704.0
+
+
+def test_parse_lavalink_metrics_returns_none_without_lavalink_gauges() -> None:
+    # A payload with only JVM/process metrics is not a Lavalink stats payload.
+    assert parse_lavalink_metrics("process_cpu_seconds_total 191.01\n") is None
+    assert parse_lavalink_metrics("") is None

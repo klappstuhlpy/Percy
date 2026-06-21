@@ -4,7 +4,14 @@ Cogs act as controllers and delegate non-trivial logic (counting, multi-step
 orchestration, math) to the pure, unit-testable helpers in this package.
 """
 
-from app.services.bot_health import BotHealthReport, ConnectionState, HealthLevel, assess_bot_health
+from app.services.bot_health import (
+    BotHealthReport,
+    ConnectionState,
+    HealthLevel,
+    LavalinkMetrics,
+    assess_bot_health,
+    parse_lavalink_metrics,
+)
 from app.services.char_info import MAX_CHARACTERS, CharInfo, get_char_info
 from app.services.code_stats import CodeStats, count_code_stats
 from app.services.economy import (
@@ -40,6 +47,7 @@ __all__ = (
     'DailyResult',
     'GatewayTraffic',
     'HealthLevel',
+    'LavalinkMetrics',
     'LyricLine',
     'LyricsResult',
     'PresenceBreakdown',
@@ -61,6 +69,7 @@ __all__ = (
     'interval_too_short',
     'next_occurrence',
     'normalize_interval',
+    'parse_lavalink_metrics',
     'parse_lrc',
     'roll_lootbox',
     'sell_price',
