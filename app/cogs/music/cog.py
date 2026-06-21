@@ -25,6 +25,7 @@ from app.core.pagination import BasePaginator
 from app.services import LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
 from app.utils import (
     ProgressBar,
+    WrapList,
     cache,
     checks,
     convert_duration,
@@ -1241,67 +1242,80 @@ class Music(Cog):
 
     @command(description="Display the active queue.", hybrid=True, guild_only=True)
     async def queue(self, ctx: Context) -> None:
-        """Display the active queue."""
+        """Display the active queue, plus recently played history on a separate page."""
         assert ctx.guild is not None
         player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
-        # In autoplay mode the manual queue is usually empty (tracks play straight
-        # from wavelink's auto_queue), so include the upcoming recommendations too.
-        autoplay_on = player.autoplay is wavelink.AutoPlayMode.enabled
+        # Up Next: the manual queue, plus wavelink's autoplay recommendations when
+        # 24/7 autoplay is active (those play once the manual queue drains).
         upcoming: list[wavelink.Playable] = list(player.queue)
-        if autoplay_on:
+        if player.autoplay is wavelink.AutoPlayMode.enabled:
             upcoming += list(player.auto_queue)
 
-        if player.queue.all_is_empty and not upcoming:
+        # History: already-played tracks. Recommendations play with add_history=False,
+        # so they land in auto_queue.history rather than queue.history — merge both,
+        # drop the current track, and show most-recent-first (capped).
+        played: list[wavelink.Playable] = list(player.queue.history) + list(player.auto_queue.history)
+        played = [t for t in played if t is not player.current][::-1][:100]
+
+        if player.current is None and not upcoming and not played:
             await ctx.send_error("No items currently in the queue.", ephemeral=True)
             return
 
         await ctx.defer()
 
-        class QueuePaginator(BasePaginator):
-            @staticmethod
-            def fmt(track: wavelink.Playable, index: int) -> str:
-                tag = " *(autoplay)*" if track.recommended else ""
-                return (
-                    f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** "
-                    f"[`{convert_duration(track.length) if not track.is_stream else 'LIVE'}`]{tag}"
-                )
+        PER_PAGE = 20
+        current = player.current
+        djs = ", ".join(x.mention for x in player.djs)
 
+        def fmt(track: wavelink.Playable, index: int) -> str:
+            tag = " *(autoplay)*" if track.recommended else ""
+            dur = convert_duration(track.length) if not track.is_stream else "LIVE"
+            return f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** [`{dur}`]{tag}"
+
+        # Pre-build the pages: Up Next chunk(s) first, then History chunk(s). Each
+        # page is a (section, lines) tuple so the paginator can flip between them.
+        up_lines = [fmt(t, i) for i, t in enumerate(upcoming, 1)]
+        hist_lines = [fmt(t, i) for i, t in enumerate(played, 1)]
+
+        pages: list[tuple[str, list[str]]] = [("Up Next", chunk) for chunk in (WrapList(up_lines, PER_PAGE) or [[]])]
+        pages += [("History", chunk) for chunk in WrapList(hist_lines, PER_PAGE)]
+
+        total_up, total_hist = len(upcoming), len(played)
+
+        class QueuePaginator(BasePaginator):
             async def format_page(self, entries: list, /) -> discord.Embed:
                 assert ctx.guild is not None
-                assert player.current is not None
-                assert player.queue.history is not None
+                section, lines = entries[0]
                 embed = discord.Embed(color=helpers.Colour.white())
                 icon_url = ctx.guild.icon.url if ctx.guild.icon else None
                 embed.set_author(name=f"{ctx.guild.name}'s Current Queue", icon_url=icon_url)
 
-                embed.description = (
-                    "**╔ Now Playing:**\n"
-                    f"[{player.current.title}]({player.current.uri}) by **{player.current.author or 'Unknown'}** "
-                    f"[`{convert_duration(player.current.length)}`]\n\n"
-                )
-
-                tracks = (
-                    "\n".join(
-                        self.fmt(track, i) for i, track in enumerate(entries, (self._current_page * self.per_page) + 1)
+                embed.description = ""
+                if current is not None:
+                    cur_dur = convert_duration(current.length) if not current.is_stream else "LIVE"
+                    embed.description = (
+                        "**╔ Now Playing:**\n"
+                        f"[{current.title}]({current.uri}) by **{current.author or 'Unknown'}** [`{cur_dur}`]\n\n"
                     )
-                    if not isinstance(entries[0], str)
-                    else (
-                        "*It seems like there are currently no upcoming tracks.*\nAdd one with </play:1207828024037216283>."
+
+                if section == "Up Next":
+                    body = "\n".join(lines) if lines else (
+                        "*It seems like there are currently no upcoming tracks.*\n"
+                        "Add one with </play:1207828024037216283>."
                     )
-                )
+                    embed.description += "**╠ Up Next:**\n" + body
+                else:
+                    body = "\n".join(lines) if lines else "*Nothing has played yet.*"
+                    embed.description += "**╠ History** *(most recent first)*\n" + body
 
-                embed.description += "**╠ Up Next:**\n" + tracks
-
-                embed.add_field(
-                    name="╚ Settings:", value=f"DJ(s): {', '.join([x.mention for x in player.djs])}", inline=False
-                )
-                embed.set_footer(text=f"Total: {len(player.queue.all)} • History: {len(player.queue.history) - 1}")
+                embed.add_field(name="╚ Settings:", value=f"DJ(s): {djs}", inline=False)
+                embed.set_footer(text=f"Up Next: {total_up} • History: {total_hist}")
                 return embed
 
-        await QueuePaginator.start(ctx, entries=upcoming or ["PLACEHOLDER"], per_page=30)
+        await QueuePaginator.start(ctx, entries=pages, per_page=1)
 
     # Lyrics Stuff
 

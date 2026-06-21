@@ -181,6 +181,17 @@ class MusicHandlers(InternalAPIHandlers):
                 data['autoplay'] = True
                 queue.append(data)
 
+        # Recently played history for the dashboard's "History" tab. Autoplay
+        # recommendations play with add_history=False, so they accumulate in
+        # auto_queue.history rather than queue.history — merge both, drop the
+        # current track, show most-recent-first, and cap the payload.
+        played = list(player.queue.history) + list(player.auto_queue.history)
+        played = [t for t in played if t is not player.current][::-1][:50]
+        history = []
+        for t in played:
+            player._normalise_artwork(t)
+            history.append(self._serialize_track(guild, t))
+
         # IDs of the (non-bot) members sharing the bot's voice channel. The
         # dashboard's public overview uses this to decide whether a viewer may
         # control playback; the control endpoint re-verifies server-side.
@@ -195,6 +206,7 @@ class MusicHandlers(InternalAPIHandlers):
             'presets': list(PRESETS.keys()),
             'now_playing': now_playing,
             'queue': queue,
+            'history': history,
             'channel': str(player.channel.id) if player.channel else None,
             'channel_name': player.channel.name if player.channel else None,
             'setup': setup,
