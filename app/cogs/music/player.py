@@ -348,7 +348,12 @@ class Player(wavelink.Player):
                     await self.queue.put_wait(result)
 
             if not self.playing and not self.queue.is_empty:
-                await self.play(self.queue.get())
+                # In autoplay mode, eagerly populate the auto_queue with recommendations
+                # so "up next" is visible immediately. wavelink otherwise only fills the
+                # auto_queue on track end, leaving /queue and the dashboard empty right
+                # after autoplay is enabled.
+                populate = self.autoplay is wavelink.AutoPlayMode.enabled
+                await self.play(self.queue.get(), populate=populate, max_populate=10)
 
             self._consecutive_errors = 0
         except Exception as exc:

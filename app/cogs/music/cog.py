@@ -7,7 +7,7 @@ import random
 import re
 from contextlib import suppress
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import discord
 import wavelink
@@ -63,6 +63,15 @@ RADIO_PRESETS: dict[str, tuple[str, str]] = {
     "metal": ("Metal Detector — all things metal", "https://ice.somafm.com/bagel-128-mp3"),
     "antenne": ("ANTENNE BAYERN — German pop & hits", "https://s1-webradio.antenne.de/antenne"),
 }
+
+# Hosts accepted as autoplay seeds (recommendations only generate from YouTube).
+_YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "music.youtube.com")
+
+
+def _is_youtube_url(url: str) -> bool:
+    """True if ``url`` points at a YouTube domain (any subdomain like ``www.``)."""
+    host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+    return host in _YOUTUBE_HOSTS
 
 
 class PlayFlags(Flags):
@@ -1238,7 +1247,14 @@ class Music(Cog):
         if not player:
             return
 
-        if player.queue.all_is_empty:
+        # In autoplay mode the manual queue is usually empty (tracks play straight
+        # from wavelink's auto_queue), so include the upcoming recommendations too.
+        autoplay_on = player.autoplay is wavelink.AutoPlayMode.enabled
+        upcoming: list[wavelink.Playable] = list(player.queue)
+        if autoplay_on:
+            upcoming += list(player.auto_queue)
+
+        if player.queue.all_is_empty and not upcoming:
             await ctx.send_error("No items currently in the queue.", ephemeral=True)
             return
 
@@ -1247,9 +1263,10 @@ class Music(Cog):
         class QueuePaginator(BasePaginator):
             @staticmethod
             def fmt(track: wavelink.Playable, index: int) -> str:
+                tag = " *(autoplay)*" if track.recommended else ""
                 return (
                     f"`[ {index}. ]` [{track.title}]({track.uri}) by **{track.author or 'Unknown'}** "
-                    f"[`{convert_duration(track.length) if not track.is_stream else 'LIVE'}`]"
+                    f"[`{convert_duration(track.length) if not track.is_stream else 'LIVE'}`]{tag}"
                 )
 
             async def format_page(self, entries: list, /) -> discord.Embed:
@@ -1284,7 +1301,7 @@ class Music(Cog):
                 embed.set_footer(text=f"Total: {len(player.queue.all)} • History: {len(player.queue.history) - 1}")
                 return embed
 
-        await QueuePaginator.start(ctx, entries=list(player.queue) or ["PLACEHOLDER"], per_page=30)
+        await QueuePaginator.start(ctx, entries=upcoming or ["PLACEHOLDER"], per_page=30)
 
     # Lyrics Stuff
 
@@ -1788,6 +1805,21 @@ class Music(Cog):
                     return
                 playlist_label = resolved_playlist.name
                 source = f"percy:playlist:{resolved_playlist.id}"
+
+        # Autoplay relies on wavelink recommendations, which only generate from
+        # YouTube seeds. Plain queries are already searched on YouTube, but a
+        # non-YouTube *link* would seed something wavelink can't recommend from,
+        # leaving the auto-queue permanently empty — reject those up front.
+        if mode == "autoplay":
+            parsed = urlparse(source)
+            is_url = bool(parsed.scheme and parsed.netloc)
+            if is_url and not _is_youtube_url(source):
+                await ctx.send_error(
+                    "Autoplay only supports **YouTube links** as a seed "
+                    "(`youtube.com`, `youtu.be`, or `music.youtube.com`).\n"
+                    "Or just type a search query — those are searched on YouTube automatically."
+                )
+                return
 
         channel: discord.VoiceChannel | discord.StageChannel | None = None
         if isinstance(ctx.author, discord.Member) and ctx.author.voice and ctx.author.voice.channel:
