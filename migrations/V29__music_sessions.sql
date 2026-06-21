@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS music_sessions (
     current_uri      TEXT,
     position         BIGINT NOT NULL DEFAULT 0,     -- playback position of current track, in ms
     tracks           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    panel_message_id BIGINT,
     updated_at       TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
 );
 

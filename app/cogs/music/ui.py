@@ -562,6 +562,7 @@ class PlayerPanel(LayoutView):
         channel: discord.TextChannel,
         disabled: bool,
         state: PlayerState = PlayerState.STOPPED,
+        existing_message_id: int | None = None,
     ) -> PlayerPanel:
         """|coro|
 
@@ -577,6 +578,8 @@ class PlayerPanel(LayoutView):
             Whether the panel should be disabled.
         state: :class:`PlayerState`
             The state of the player.
+        existing_message_id: :class:`int` | None
+            An optional message ID to try fetching and reusing (for temporary panels after restart).
 
         Returns
         -------
@@ -588,6 +591,10 @@ class PlayerPanel(LayoutView):
         self = cls(player=player, state=state, disabled=disabled, guild_config=config)
 
         await self.fetch_player_channel(channel)
+
+        if existing_message_id and self.__is_temporary__:
+            with suppress(discord.HTTPException):
+                self.msg = await self.channel.fetch_message(existing_message_id)
 
         self.msg = await self.update(state=state)  # type: ignore
         return self

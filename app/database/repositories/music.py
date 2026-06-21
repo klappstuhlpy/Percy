@@ -33,6 +33,7 @@ class MusicSessionsRepository(BaseRepository):
         *,
         voice_channel_id: int,
         text_channel_id: int | None,
+        panel_message_id: int | None,
         volume: int,
         paused: bool,
         queue_mode: int,
@@ -49,15 +50,16 @@ class MusicSessionsRepository(BaseRepository):
         await self.execute(
             """
             INSERT INTO music_sessions (
-                guild_id, voice_channel_id, text_channel_id, volume, paused, queue_mode,
-                shuffle, autoplay, always_on, always_on_mode, always_on_source,
+                guild_id, voice_channel_id, text_channel_id, panel_message_id, volume, paused,
+                queue_mode, shuffle, autoplay, always_on, always_on_mode, always_on_source,
                 current_uri, position, tracks, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb,
                     (now() AT TIME ZONE 'utc'))
             ON CONFLICT (guild_id) DO UPDATE SET
                 voice_channel_id = EXCLUDED.voice_channel_id,
                 text_channel_id  = EXCLUDED.text_channel_id,
+                panel_message_id = EXCLUDED.panel_message_id,
                 volume           = EXCLUDED.volume,
                 paused           = EXCLUDED.paused,
                 queue_mode       = EXCLUDED.queue_mode,
@@ -71,8 +73,8 @@ class MusicSessionsRepository(BaseRepository):
                 tracks           = EXCLUDED.tracks,
                 updated_at       = EXCLUDED.updated_at;
             """,
-            guild_id, voice_channel_id, text_channel_id, volume, paused, queue_mode,
-            shuffle, autoplay, always_on, always_on_mode, always_on_source,
+            guild_id, voice_channel_id, text_channel_id, panel_message_id, volume, paused,
+            queue_mode, shuffle, autoplay, always_on, always_on_mode, always_on_source,
             current_uri, position, json.dumps(tracks),
         )
 

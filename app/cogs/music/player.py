@@ -299,8 +299,11 @@ class Player(wavelink.Player):
             return
 
         text_channel_id: int | None = None
+        panel_message_id: int | None = None
         if self.panel is not MISSING and self.panel.channel is not MISSING:
             text_channel_id = self.panel.channel.id
+            if self.panel.msg is not MISSING:
+                panel_message_id = self.panel.msg.id
 
         # Live streams aren't seekable and their "position" grows unbounded — store 0.
         resume_position = position if position is not None else self.position
@@ -312,6 +315,7 @@ class Player(wavelink.Player):
                 self.guild.id,
                 voice_channel_id=self.channel.id,
                 text_channel_id=text_channel_id,
+                panel_message_id=panel_message_id,
                 volume=self.volume,
                 paused=self.paused,
                 queue_mode=_QUEUE_MODE_TO_INT.get(self.queue.mode, 0),
@@ -435,7 +439,10 @@ class Player(wavelink.Player):
             text_channel = resolved if isinstance(resolved, messageable) else None  # type: ignore[assignment]
         if text_channel is not None:
             with suppress(Exception):
-                self.panel = await PlayerPanel.start(self, channel=text_channel, disabled=disabled)  # type: ignore[arg-type]
+                self.panel = await PlayerPanel.start(
+                    self, channel=text_channel, disabled=disabled,  # type: ignore[arg-type]
+                    existing_message_id=record.get('panel_message_id'),
+                )
 
         tracks = record['tracks']
         if isinstance(tracks, str):
@@ -509,7 +516,10 @@ class Player(wavelink.Player):
                 text_channel = resolved if isinstance(resolved, messageable) else None  # type: ignore[assignment]
             if text_channel is not None:
                 with suppress(Exception):
-                    self.panel = await PlayerPanel.start(self, channel=text_channel, disabled=disabled)  # type: ignore[arg-type]
+                    self.panel = await PlayerPanel.start(
+                        self, channel=text_channel, disabled=disabled,  # type: ignore[arg-type]
+                        existing_message_id=record.get('panel_message_id'),
+                    )
 
         if self.queue.is_empty:
             tracks = record['tracks']

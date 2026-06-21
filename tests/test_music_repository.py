@@ -49,6 +49,7 @@ async def test_upsert_session_serialises_tracks_and_upserts(mock_db: MagicMock) 
         999,
         voice_channel_id=10,
         text_channel_id=20,
+        panel_message_id=30,
         volume=80,
         paused=True,
         queue_mode=2,
