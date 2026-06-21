@@ -436,6 +436,11 @@ class Music(Cog):
         player._consecutive_errors = 0
 
         if player.current is not None and player.current.recommended:
+            # Autoplay recommendations are fetched by wavelink directly, bypassing
+            # Player.search, so normalise their cover art here too (search already
+            # handles every other entry path).
+            player._normalise_artwork(player.current)
+
             assert player.queue.history is not None
             current = player.current
             assert current is not None

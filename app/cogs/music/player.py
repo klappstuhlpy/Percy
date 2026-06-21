@@ -39,6 +39,9 @@ _INT_TO_QUEUE_MODE: dict[int, wavelink.QueueMode] = {v: k for k, v in _QUEUE_MOD
 # Maximum consecutive playback failures before a 24/7 player gives up (avoids hot loops).
 MAX_CONSECUTIVE_ERRORS = 5
 
+# Direct stream/radio tracks carry no cover art, so we brand them with a fixed image.
+RADIO_ARTWORK_URL = "https://klappstuhl.me/gallery/raw/gERCu.avif"
+
 
 class Player(wavelink.Player):
     """Custom mdded-wavelink Player class."""
@@ -179,6 +182,18 @@ class Player(wavelink.Player):
         if isinstance(results, list) and is_url:
             results = results[0]
 
+        # Normalise cover art once, right here, so every downstream consumer
+        # (the panel, the dashboard, the internal API) can simply read
+        # ``track.artwork`` without re-resolving the YouTube fallback.
+        if isinstance(results, wavelink.Playlist):
+            normalise = results.tracks
+        elif isinstance(results, list):
+            normalise = results
+        else:
+            normalise = [results]
+        for track in normalise:
+            cls._normalise_artwork(track)
+
         return results
 
     @classmethod
@@ -230,6 +245,17 @@ class Player(wavelink.Player):
             if not artwork or 'maxresdefault' in artwork:
                 return hq
         return artwork
+
+    @classmethod
+    def _normalise_artwork(cls, track: wavelink.Playable) -> None:
+        """Write the display-ready cover-art URL back onto the track in place.
+
+        ``Playable.artwork`` has no public setter, so we assign the backing field.
+        Centralised so every track-entry path (search, 24/7 refill, autoplay) yields
+        tracks whose ``artwork`` is ready to use without callers re-resolving. Safe to
+        call more than once — ``_resolve_artwork`` is idempotent.
+        """
+        track._artwork = cls._resolve_artwork(track)
 
     @staticmethod
     def _serialize_track(track: wavelink.Playable) -> dict[str, Any]:
@@ -315,6 +341,10 @@ class Player(wavelink.Player):
             else:  # 'radio' / direct stream
                 result = await self.search(source, return_first=True)
                 if isinstance(result, (Playable, Playlist)):
+                    # Radio streams have no cover art — brand them with a fixed image.
+                    tracks = result.tracks if isinstance(result, Playlist) else [result]
+                    for track in tracks:
+                        track._artwork = RADIO_ARTWORK_URL  # no public setter on Playable.artwork
                     await self.queue.put_wait(result)
 
             if not self.playing and not self.queue.is_empty:

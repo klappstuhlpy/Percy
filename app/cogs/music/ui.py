@@ -151,7 +151,7 @@ class PlayerPanel(LayoutView):
                 "## Music Player Panel\n"
                 "This is the Bot's control panel where you can easily perform actions of the bot without using a command."
             )
-            if artwork := self.player._resolve_artwork(track):
+            if artwork := track.artwork:
                 container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(artwork)))
             else:
                 container.add_item(discord.ui.TextDisplay(heading))

@@ -1,14 +1,10 @@
 """InternalAPI music/equalizer endpoints."""
 from __future__ import annotations
 
-from contextlib import suppress
-from typing import Callable
-
 import discord
 import wavelink
 from aiohttp import web
 from discord.ui.view import LayoutView
-from discord.utils import MISSING
 
 from .models import InternalAPIHandlers
 
@@ -57,18 +53,22 @@ class MusicHandlers(InternalAPIHandlers):
             'avatar': member.display_avatar.url,
         }
 
-    def _serialize_track(self, guild, track, *, full: bool = False, artwork_func: Callable | None = None) -> dict:
+    def _serialize_track(self, guild, track, *, full: bool = False) -> dict:
         """Serialise a wavelink track into the JSON the dashboard player consumes."""
         is_stream = self._effectively_stream(track)
         data = {
             'title': track.title,
             'author': track.author,
             'uri': track.uri,
-            'artwork': artwork_func(track) if artwork_func else track.artwork,
+            # Artwork is already normalised at search time (Player.search), so we
+            # can read it straight off the track without re-resolving here.
+            'artwork': track.artwork,
             'duration': 0 if is_stream else track.length,
             'is_stream': is_stream,
             'source': track.source,
             'requester': self._resolve_requester(guild, track),
+            # True for wavelink autoplay recommendations (not in the manual queue).
+            'autoplay': False,
         }
         if full:
             album = None
@@ -97,7 +97,7 @@ class MusicHandlers(InternalAPIHandlers):
             wavelink.QueueMode.loop: 1,
             wavelink.QueueMode.loop_all: 2,
         }
-        data = self._serialize_track(guild, track, full=True, artwork_func=player._resolve_artwork)
+        data = self._serialize_track(guild, track, full=True)
         is_stream = data['is_stream']
         data.update({
             'position': 0 if is_stream else player.position,
@@ -168,7 +168,18 @@ class MusicHandlers(InternalAPIHandlers):
         # Upcoming tracks (capped) so the dashboard can render a live queue. The
         # bot itself is excluded; history is intentionally omitted to keep the
         # payload small — the panel mirrors the in-Discord "Up Next" view.
-        queue = [self._serialize_track(guild, t, artwork_func=player._resolve_artwork) for t in list(player.queue)[:50]]
+        queue = [self._serialize_track(guild, t) for t in list(player.queue)[:50]]
+
+        # When autoplay/24-7 is on, wavelink pre-fetches recommendations into
+        # ``auto_queue``; these play once the manual queue drains. Append them
+        # (flagged ``autoplay``) so the dashboard shows what's coming next.
+        # They bypass Player.search, so normalise their cover art here too.
+        if len(queue) < 50 and player.autoplay is wavelink.AutoPlayMode.enabled:
+            for t in list(player.auto_queue)[: 50 - len(queue)]:
+                player._normalise_artwork(t)
+                data = self._serialize_track(guild, t)
+                data['autoplay'] = True
+                queue.append(data)
 
         # IDs of the (non-bot) members sharing the bot's voice channel. The
         # dashboard's public overview uses this to decide whether a viewer may
