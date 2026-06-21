@@ -1068,6 +1068,9 @@ class SentinelVerifyButton(
                 await message.edit(view=captcha_view, attachments=[captcha.file])
                 return
 
+            with suppress(discord.HTTPException):
+                await msg.delete()
+
             if msg.content != captcha.text:
                 captcha = await self.sentinel.bot.render.captcha()
                 captcha_view = captcha_view.prepare_retry(captcha.file)
