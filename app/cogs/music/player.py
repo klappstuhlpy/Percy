@@ -480,7 +480,7 @@ class Player(wavelink.Player):
             except Exception as exc:
                 log.warning('Failed to update panel during restore for guild %s: %s', guild.id, exc)
 
-        log.info('Restored music session for guild %s (always_on=%s)', guild.id, self.always_on)
+        log.debug('Restored music session for guild %s (always_on=%s)', guild.id, self.always_on)
         return self
 
     async def hydrate(self, record: Any) -> None:
