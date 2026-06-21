@@ -243,7 +243,7 @@ class PlayerPanel(LayoutView):
 
             container.add_item(discord.ui.Separator())
             mode = "Auto-Playing" if self.player.autoplay != 2 else "Manual-Playing"
-            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')}"))
+            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')} • [Web Panel](https://klappstuhl.me/percy/dashboard/guild/{self.player.guild.id}/overview)"))
         else:
             heading = (
                 "## Music Player Panel\n"
@@ -264,7 +264,7 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay("-# last updated"))
+            container.add_item(discord.ui.TextDisplay("-# last updated • [Web Panel](https://klappstuhl.me/percy/dashboard/guild/{self.player.guild.id}/overview)"))
 
         return container
 
@@ -816,76 +816,85 @@ class MusicSetupView(LayoutView):
         self._rebuild_layout()
 
     def _update_state(self) -> None:
-        has_config = bool(self.config.music_panel_channel_id)
+        has_channel = bool(self.config.music_panel_channel_id)
         dj_mode = DJMode(getattr(self.config, "music_dj_mode", 0))
 
         # DJ mode button is always available (not tied to channel setup).
         self._dj_mode_btn.label = self._DJ_MODE_LABELS[dj_mode]
         self._dj_mode_btn.style = self._DJ_MODE_STYLES[dj_mode]
 
-        if has_config:
-            self._channel_select.disabled = True
-            self._create_btn.disabled = True
-            self._toggle_panel_btn.disabled = False
-            self._reset_btn.disabled = False
-
-            if self.config.use_music_panel:
-                self._toggle_panel_btn.label = "Panel: Enabled"
-                self._toggle_panel_btn.style = discord.ButtonStyle.green
-            else:
-                self._toggle_panel_btn.label = "Panel: Disabled"
-                self._toggle_panel_btn.style = discord.ButtonStyle.grey
+        # Panel toggle is always available — it controls whether a panel is
+        # shown at all, regardless of whether a dedicated channel exists.
+        if self.config.use_music_panel:
+            self._toggle_panel_btn.label = "Panel: Enabled"
+            self._toggle_panel_btn.style = discord.ButtonStyle.green
         else:
-            self._channel_select.disabled = False
-            self._create_btn.disabled = False
-            self._toggle_panel_btn.disabled = True
-            self._reset_btn.disabled = True
+            self._toggle_panel_btn.label = "Panel: Disabled"
+            self._toggle_panel_btn.style = discord.ButtonStyle.grey
+        self._toggle_panel_btn.disabled = False
+
+        # Channel setup controls — only allow changes when no channel is configured.
+        self._channel_select.disabled = has_channel
+        self._create_btn.disabled = has_channel
+        self._reset_btn.disabled = not has_channel
 
     def _rebuild_layout(self) -> None:
         self.clear_items()
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
 
         container.add_item(discord.ui.Section(
-            "## Music Player Setup\n-# Configure the dedicated music player channel",
+            "## Music Player Setup\n-# Configure the music player panel and dedicated channel",
             accessory=discord.ui.Thumbnail(
                 self.guild.icon.url if self.guild.icon else "https://cdn.discordapp.com/embed/avatars/0.png"
             ),
         ))
         container.add_item(discord.ui.Separator())
 
-        has_config = bool(self.config.music_panel_channel_id)
-        if has_config:
-            channel_display = f"<#{self.config.music_panel_channel_id}>"
-            panel_status = "Enabled" if self.config.use_music_panel else "Disabled"
+        # --- Panel toggle (always available, independent of channel) ---
+        if self.config.use_music_panel:
+            has_channel = bool(self.config.music_panel_channel_id)
+            if has_channel:
+                panel_desc = (
+                    f"The player panel is pinned in <#{self.config.music_panel_channel_id}>. "
+                    "Messages are auto-deleted after 60s."
+                )
+            else:
+                panel_desc = (
+                    "A temporary panel appears in the channel where playback starts "
+                    "and is removed when the session ends."
+                )
             container.add_item(discord.ui.TextDisplay(
-                f"### Current Configuration\n"
-                f"**Channel:** {channel_display}\n"
-                f"**Panel:** `{panel_status}`\n\n"
-                f"-# The player panel lives in this channel. Messages are auto-deleted after 60s."
+                f"### Player Panel\n"
+                f"-# {panel_desc}\n"
+                f"-# Disable the panel to hide all in-channel player controls."
             ))
-            container.add_item(discord.ui.Separator())
+        else:
             container.add_item(discord.ui.TextDisplay(
-                "### Toggle Panel\n"
-                "-# Enable or disable the embedded player panel without removing the channel."
+                "### Player Panel\n"
+                "-# The panel is disabled — no in-channel player controls will be shown."
             ))
-            container.add_item(discord.ui.ActionRow(self._toggle_panel_btn))
-            container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.ActionRow(self._toggle_panel_btn))
+        container.add_item(discord.ui.Separator())
+
+        # --- Dedicated channel (optional) ---
+        has_channel = bool(self.config.music_panel_channel_id)
+        if has_channel:
             container.add_item(discord.ui.TextDisplay(
-                "### Reset\n"
-                "-# Deletes the music channel and removes all configuration."
+                f"### Dedicated Channel\n"
+                f"**Channel:** <#{self.config.music_panel_channel_id}>\n"
+                f"-# The panel is permanently pinned here. Remove the channel to switch back to temporary panels."
             ))
             container.add_item(discord.ui.ActionRow(self._reset_btn))
         else:
             container.add_item(discord.ui.TextDisplay(
-                "### Setup\n"
-                "Select an existing text channel or create a new one to use as the music player channel.\n"
-                "-# The bot will configure the channel with slowmode and pin a player panel message."
+                "### Dedicated Channel\n"
+                "Optionally assign a permanent channel for the player panel.\n"
+                "-# The bot will configure it with slowmode and pin a persistent panel message."
             ))
-            container.add_item(discord.ui.Separator())
             container.add_item(discord.ui.ActionRow(self._channel_select))
             container.add_item(discord.ui.ActionRow(self._create_btn))
 
-        # DJ mode is independent of channel setup — always shown.
+        # --- DJ mode (always shown) ---
         dj_mode = DJMode(getattr(self.config, "music_dj_mode", 0))
         dj_descriptions = {
             DJMode.everyone: "Anyone in the voice channel can use all player controls.",
@@ -990,7 +999,7 @@ class MusicSetupView(LayoutView):
     async def _on_reset(self, interaction: discord.Interaction) -> None:
         confirm = ConfirmationView(
             interaction.user, timeout=60.0, delete_after=True,
-            content="This will delete the music channel and remove all configuration. Continue?",
+            content="This will delete the dedicated music channel. The panel will continue as a temporary one. Continue?",
         )
         await interaction.response.send_message(view=confirm, ephemeral=True)
         confirm.message = await interaction.original_response()
@@ -1000,18 +1009,19 @@ class MusicSetupView(LayoutView):
 
         channel = self.config.music_panel_channel
         self.config = await self.config.update(
-            music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False
+            music_panel_channel_id=None, music_panel_message_id=None
         )
 
         if channel:
             with suppress(discord.HTTPException):
-                await channel.delete(reason="Music configuration reset")
+                await channel.delete(reason="Dedicated music channel removed")
 
         self._update_state()
         self._rebuild_layout()
 
         await interaction.followup.send(
-            f"{Emojis.success} Music configuration has been reset.", ephemeral=True
+            f"{Emojis.success} Dedicated channel removed. The panel will now appear temporarily where playback starts.",
+            ephemeral=True,
         )
         if interaction.message is not None:
             await interaction.message.edit(view=self)

@@ -1,10 +1,13 @@
 """InternalAPI music/equalizer endpoints."""
 from __future__ import annotations
 
+from contextlib import suppress
+
 import discord
-from discord.ui.view import LayoutView
 import wavelink
 from aiohttp import web
+from discord.ui.view import LayoutView
+from discord.utils import MISSING
 
 from .models import InternalAPIHandlers
 
@@ -24,7 +27,7 @@ You can interact with the **control panel** and manage the current songs.
 class MusicHandlers(InternalAPIHandlers):
     """Music/equalizer internal API handlers."""
 
-    def _get_guild_player(self, guild_id: int):
+    def _get_guild_player(self, guild_id: int) -> tuple[discord.Guild | None, wavelink.Player | None]:
         guild = self.bot.get_guild(guild_id)
         if guild is None:
             return None, None
@@ -33,6 +36,96 @@ class MusicHandlers(InternalAPIHandlers):
             return guild, None
         return guild, player
 
+    @staticmethod
+    def _effectively_stream(track) -> bool:
+        # Lavalink reports radio/live sources as non-streams with an absurd length
+        # (≈max int64). Treat anything over 24h as a stream for display purposes.
+        return bool(track.is_stream or track.length > 86_400_000)
+
+    def _resolve_requester(self, guild, track) -> dict | None:
+        """Resolve the member who queued ``track`` to a small {id, name, avatar} dict."""
+        requester_id = getattr(track.extras, 'requester_id', None)
+        if not requester_id:
+            return None
+        member = guild.get_member(int(requester_id))
+        if member is None:
+            return {'id': str(requester_id), 'name': None, 'avatar': None}
+        return {
+            'id': str(member.id),
+            'name': member.display_name,
+            'avatar': member.display_avatar.url,
+        }
+
+    @staticmethod
+    def _resolve_artwork(track) -> str | None:
+        """Best-effort cover art URL for a track.
+
+        Lavalink hands YouTube tracks a ``maxresdefault`` thumbnail that 404s for any
+        non-HD upload (and is sometimes absent entirely). Discord proxies images so it
+        never notices, but a browser <img> just fails. Fall back to ``hqdefault``,
+        which exists for every video, when there's no artwork or it's a maxres URL.
+        """
+        artwork = track.artwork
+        source = (track.source or '').lower()
+        is_youtube = source.startswith('youtube')
+        if is_youtube and track.identifier:
+            hq = f'https://i.ytimg.com/vi/{track.identifier}/hqdefault.jpg'
+            if not artwork or 'maxresdefault' in artwork:
+                return hq
+        return artwork
+
+    def _serialize_track(self, guild, track, *, full: bool = False) -> dict:
+        """Serialise a wavelink track into the JSON the dashboard player consumes."""
+        is_stream = self._effectively_stream(track)
+        data = {
+            'title': track.title,
+            'author': track.author,
+            'uri': track.uri,
+            'artwork': self._resolve_artwork(track),
+            'duration': 0 if is_stream else track.length,
+            'is_stream': is_stream,
+            'source': track.source,
+            'requester': self._resolve_requester(guild, track),
+        }
+        if full:
+            album = None
+            if track.album and track.album.name:
+                album = {'name': track.album.name, 'url': track.album.url}
+            playlist = None
+            if track.playlist:
+                playlist = {'name': track.playlist.name, 'url': track.playlist.url}
+            data.update({
+                'artist_url': track.artist.url if track.artist else None,
+                'album': album,
+                'playlist': playlist,
+                'recommended': bool(track.recommended),
+                'isrc': track.isrc,
+            })
+        return data
+
+    def _now_playing_payload(self, guild, player) -> dict | None:
+        """Full now-playing snapshot for the live dashboard player."""
+        track = player.current
+        if track is None:
+            return None
+
+        _loop_map = {
+            wavelink.QueueMode.normal: 0,
+            wavelink.QueueMode.loop: 1,
+            wavelink.QueueMode.loop_all: 2,
+        }
+        data = self._serialize_track(guild, track, full=True)
+        is_stream = data['is_stream']
+        data.update({
+            'position': 0 if is_stream else player.position,
+            'paused': player.paused,
+            'volume': player.volume,
+            'loop': _loop_map.get(player.queue.mode, 0),
+            'shuffle': bool(player.queue.shuffle),
+            'autoplay': player.autoplay.value,
+        })
+        return data
+
     async def _get_music(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild, player = self._get_guild_player(guild_id)
@@ -40,14 +133,15 @@ class MusicHandlers(InternalAPIHandlers):
             raise web.HTTPNotFound(text='guild not found')
 
         config = await self.bot.db.get_guild_config(guild_id)
-        setup = None
-        if config.music_panel_channel_id:
-            setup = {
-                'channel_id': str(config.music_panel_channel_id),
-                'message_id': str(config.music_panel_message_id) if config.music_panel_message_id else None,
-                'use_panel': config.use_music_panel,
-                'dj_mode': getattr(config, 'music_dj_mode', 0),
-            }
+        # The panel state and the (optional) dedicated channel are independent:
+        # ``use_panel`` may be on with no channel (a temporary panel created in the
+        # channel where playback starts) and a channel can exist with the panel off.
+        setup = {
+            'channel_id': str(config.music_panel_channel_id) if config.music_panel_channel_id else None,
+            'message_id': str(config.music_panel_message_id) if config.music_panel_message_id else None,
+            'use_panel': config.use_music_panel,
+            'dj_mode': getattr(config, 'music_dj_mode', 0),
+        }
 
         # 24/7 ("always-on") state: prefer the live player, fall back to the persisted row.
         always_on = {'enabled': False, 'mode': None, 'source': None}
@@ -86,14 +180,12 @@ class MusicHandlers(InternalAPIHandlers):
             'lowpass': player.filters.low_pass.payload.get('smoothing', None),
         }
 
-        now_playing = None
-        if player.current:
-            now_playing = {
-                'title': player.current.title,
-                'author': player.current.author,
-                'duration': player.current.length,
-                'position': player.position,
-            }
+        now_playing = self._now_playing_payload(guild, player)
+
+        # Upcoming tracks (capped) so the dashboard can render a live queue. The
+        # bot itself is excluded; history is intentionally omitted to keep the
+        # payload small — the panel mirrors the in-Discord "Up Next" view.
+        queue = [self._serialize_track(guild, t) for t in list(player.queue)[:50]]
 
         # IDs of the (non-bot) members sharing the bot's voice channel. The
         # dashboard's public overview uses this to decide whether a viewer may
@@ -108,7 +200,9 @@ class MusicHandlers(InternalAPIHandlers):
             'filters': filters_state,
             'presets': list(PRESETS.keys()),
             'now_playing': now_playing,
+            'queue': queue,
             'channel': str(player.channel.id) if player.channel else None,
+            'channel_name': player.channel.name if player.channel else None,
             'setup': setup,
             'always_on': always_on,
             'listeners': listeners,
@@ -226,7 +320,12 @@ class MusicHandlers(InternalAPIHandlers):
         })
 
     async def _post_music_reset(self, request: web.Request) -> web.Response:
-        """Reset the music configuration: delete the channel and clear config."""
+        """Remove the dedicated panel channel (delete it and clear the channel config).
+
+        Deliberately leaves ``use_music_panel`` untouched: removing the dedicated
+        channel just demotes the panel to a temporary one (created where playback
+        starts) — it does not turn the panel off. That's a separate toggle.
+        """
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
         if guild is None:
@@ -234,14 +333,14 @@ class MusicHandlers(InternalAPIHandlers):
 
         config = await self.bot.db.get_guild_config(guild_id)
         if not config.music_panel_channel_id:
-            raise web.HTTPBadRequest(text='no music configuration to reset')
+            raise web.HTTPBadRequest(text='no dedicated channel to remove')
 
         channel = config.music_panel_channel
-        await config.update(music_panel_channel_id=None, music_panel_message_id=None, use_music_panel=False)
+        await config.update(music_panel_channel_id=None, music_panel_message_id=None)
 
         if channel:
             try:
-                await channel.delete(reason="Music configuration reset via dashboard")
+                await channel.delete(reason="Music panel channel removed via dashboard")
             except discord.HTTPException:
                 pass
 
@@ -361,9 +460,14 @@ class MusicHandlers(InternalAPIHandlers):
         except Exception:
             raise web.HTTPBadRequest(text='invalid JSON body')
 
+        # Basic actions are available to any listener; destructive ones are
+        # DJ-gated in hybrid mode (mirrors the in-Discord panel exactly).
+        BASIC = {'pause', 'resume', 'volume', 'seek'}
+        DESTRUCTIVE = {'skip', 'stop', 'back', 'shuffle', 'loop', 'jump', 'move'}
+
         action = body.get('action')
         user_id = body.get('user_id')
-        if action not in ('pause', 'resume', 'skip', 'stop'):
+        if action not in BASIC | DESTRUCTIVE:
             raise web.HTTPBadRequest(text='unknown action')
         if not user_id:
             raise web.HTTPBadRequest(text="'user_id' is required")
@@ -385,17 +489,130 @@ class MusicHandlers(InternalAPIHandlers):
             if not in_voice:
                 raise web.HTTPForbidden(text='join the bot\'s voice channel to control playback')
             # Hybrid mode restricts destructive actions to DJs.
-            if dj_mode == DJMode.hybrid and action in ('skip', 'stop'):
+            if dj_mode == DJMode.hybrid and action in DESTRUCTIVE:
                 raise web.HTTPForbidden(text='this action requires the DJ role')
+
+        from wavelink import QueueMode
+
+        from app.cogs.music.models import ShuffleMode
+
+        # Track-changing actions (skip/back/jump/stop) re-render the panel through
+        # wavelink's track-start event; the rest need an explicit panel refresh so
+        # the in-Discord embed stays in lock-step with the dashboard.
+        refresh_panel = False
 
         if action == 'pause':
             await player.pause(True)
+            refresh_panel = True
         elif action == 'resume':
             await player.pause(False)
+            refresh_panel = True
         elif action == 'skip':
             await player.skip()
+        elif action == 'back':
+            await player.back()
         elif action == 'stop':
             player.queue.reset()
             await player.disconnect()
+        elif action == 'volume':
+            try:
+                value = int(body.get('value'))
+            except (TypeError, ValueError):
+                raise web.HTTPBadRequest(text="'value' (0-100) is required")
+            await player.set_volume(max(0, min(value, 100)))
+            refresh_panel = True
+        elif action == 'seek':
+            if player.current is None or self._effectively_stream(player.current):
+                raise web.HTTPBadRequest(text='this track cannot be seeked')
+            try:
+                position = int(body.get('position'))
+            except (TypeError, ValueError):
+                raise web.HTTPBadRequest(text="'position' (milliseconds) is required")
+            position = max(0, min(position, player.current.length))
+            await player.seek(position)
+            refresh_panel = True
+        elif action == 'loop':
+            mode = body.get('mode')
+            if mode in (0, 1, 2):
+                player.queue.mode = {0: QueueMode.normal, 1: QueueMode.loop, 2: QueueMode.loop_all}[mode]
+            else:
+                cycle = {
+                    QueueMode.normal: QueueMode.loop,
+                    QueueMode.loop: QueueMode.loop_all,
+                    QueueMode.loop_all: QueueMode.normal,
+                }
+                player.queue.mode = cycle.get(player.queue.mode, QueueMode.normal)
+            refresh_panel = True
+        elif action == 'shuffle':
+            value = body.get('value')
+            if value is None:
+                player.queue.shuffle = ShuffleMode.off if player.queue.shuffle else ShuffleMode.on
+            else:
+                player.queue.shuffle = ShuffleMode.on if value else ShuffleMode.off
+            refresh_panel = True
+        elif action == 'jump':
+            try:
+                index = int(body.get('index'))
+            except (TypeError, ValueError):
+                raise web.HTTPBadRequest(text="'index' is required")
+            if not await player.jump_to(index):
+                raise web.HTTPBadRequest(text='invalid queue index')
+            await player.stop()
+        elif action == 'move':
+            # Reorder an upcoming track. Indices match the dashboard queue, which
+            # serialises ``list(player.queue)`` — i.e. the queue's ``_items`` order.
+            try:
+                from_idx = int(body.get('from'))
+                to_idx = int(body.get('to'))
+            except (TypeError, ValueError):
+                raise web.HTTPBadRequest(text="'from' and 'to' indices are required")
+            items = player.queue._items  # wavelink stores the upcoming queue here
+            if not (0 <= from_idx < len(items)) or not (0 <= to_idx < len(items)):
+                raise web.HTTPBadRequest(text='index out of range')
+            items.insert(to_idx, items.pop(from_idx))
+            refresh_panel = True
+
+        if refresh_panel and player.connected and getattr(player, 'panel', MISSING) is not MISSING:
+            with suppress(Exception):
+                await player.panel.update()
 
         return web.json_response({'ok': True, 'action': action, 'paused': player.paused if player.connected else False})
+
+    async def _get_music_lyrics(self, request: web.Request) -> web.Response:
+        """Resolve time-synced lyrics for the current track.
+
+        The dashboard player drives the karaoke highlight entirely client-side from
+        the live playback position, so this is fetched once per track (not polled).
+        """
+        guild_id = int(request.match_info['guild_id'])
+        guild, player = self._get_guild_player(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        empty = {'ok': True, 'has_synced': False, 'title': None, 'source': None, 'lines': [], 'plain': None}
+        if player is None or player.current is None:
+            return web.json_response(empty)
+
+        cog = self.bot.get_cog('Music')
+        if cog is None:
+            return web.json_response(empty)
+
+        try:
+            result = await cog.fetch_lyrics_for_player(player)
+        except Exception:
+            result = None
+        if result is None:
+            return web.json_response(empty)
+
+        lines = []
+        if result.has_synced and result.synced is not None:
+            lines = [{'time': line.timestamp, 'text': line.text} for line in result.synced.lines]
+
+        return web.json_response({
+            'ok': True,
+            'has_synced': result.has_synced,
+            'title': result.title,
+            'source': result.source,
+            'lines': lines,
+            'plain': result.plain,
+        })

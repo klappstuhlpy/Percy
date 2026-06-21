@@ -163,6 +163,7 @@ class InternalAPI(
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/247', self._post_music_247)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/music/dj-mode', self._patch_music_dj_mode)
         self._app.router.add_post('/api/internal/guilds/{guild_id}/music/control', self._post_music_control)
+        self._app.router.add_get('/api/internal/guilds/{guild_id}/music/lyrics', self._get_music_lyrics)
         # Custom Bot Profile
         self._app.router.add_get('/api/internal/guilds/{guild_id}/custom-bot', self._get_custom_bot)
         self._app.router.add_patch('/api/internal/guilds/{guild_id}/custom-bot', self._patch_custom_bot)

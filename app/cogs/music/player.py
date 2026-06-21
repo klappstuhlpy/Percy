@@ -453,7 +453,7 @@ class Player(wavelink.Player):
             if self.panel.state != PlayerState.STOPPED:
                 await self.panel.stop()
 
-            if self.panel.__is_temporary__:
+            if self.panel.__is_temporary__ and self.panel.msg:
                 with suppress(discord.HTTPException):
                     await self.panel.msg.delete()
 
