@@ -109,7 +109,7 @@ class Player(wavelink.Player):
             cls,
             query: str,
             *,
-            source: wavelink.TrackSource | str = wavelink.TrackSource.SoundCloud,
+            source: wavelink.TrackSource | str = wavelink.TrackSource.YouTubeMusic,
             ctx: discord.Interaction | Context | None = None,
             return_first: bool = False
     ) -> Literal[

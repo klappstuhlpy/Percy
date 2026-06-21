@@ -543,6 +543,7 @@ class Music(Cog):
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
+            app_commands.Choice(name="YouTube (Default)", value="yt"),
             app_commands.Choice(name="SoundCloud (Default)", value="sc"),
             app_commands.Choice(name="Spotify", value="sp"),
             app_commands.Choice(name="Apple Music", value="am"),
