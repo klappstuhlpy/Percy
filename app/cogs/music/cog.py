@@ -448,19 +448,22 @@ class Music(Cog):
         if player.current is not None and player.current.recommended:
             # Autoplay recommendations are fetched by wavelink directly, bypassing
             # Player.search, so normalise their cover art here too (search already
-            # handles every other entry path).
+            # handles every other entry path). We deliberately do NOT add them to
+            # queue.history — wavelink already tracks recommended tracks in
+            # auto_queue.history (adding them here duplicates them in the merged
+            # history view and pollutes wavelink's recommendation seeding).
             player._normalise_artwork(player.current)
 
-            assert player.queue.history is not None
-            current = player.current
-            assert current is not None
-            player.queue.history.put(current)
-
-        # Wait (bounded) until the current track is registered in the queue. The cap
-        # prevents the handler from hanging forever — which would stop the panel from
-        # ever rendering — if a track never lands in the queue (e.g. some stream cases).
+        # Wait (bounded) until the current track is registered before rendering the
+        # panel. Autoplay recommendations never land in queue.all (they play straight
+        # from auto_queue), so treat a recommended current track as already ready.
+        # The cap prevents the handler from hanging forever on tracks that never
+        # register (e.g. some stream cases).
         waited = 0.0
-        while (not player.queue.all or player.current not in player.queue.all) and waited < 10:
+        while waited < 10:
+            cur = player.current
+            if cur is not None and (cur.recommended or (player.queue.all and cur in player.queue.all)):
+                break
             await asyncio.sleep(0.5)
             waited += 0.5
 
