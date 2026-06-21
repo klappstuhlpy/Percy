@@ -348,7 +348,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         Unrestricted commands come first, then permission-gated ones, each group
         ordered alphabetically. Relies on ``is_locked`` set in :meth:`_get_all_subcommands`.
         """
-        return (bool(getattr(command, "is_locked", False)), command.qualified_name)
+        return bool(getattr(command, "is_locked", False)), command.qualified_name
 
     def _get_all_subcommands(self, command: AnyCommand | AnyGroup, names: set[str]) -> set[AnyCommand]:
         """Returns all subcommands of a command."""
@@ -777,7 +777,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
         rendered = signature.ensure_codeblock(fallback="md").dynamic(ctx)  # type: ignore
         container.add_item(
             discord.ui.Section(
-                f"## Command Help\n"
                 f"{rendered}\n"
                 f"{description}",
                 accessory=discord.ui.Thumbnail(COMMAND_ICON_URL)
@@ -796,22 +795,23 @@ class PaginatedHelpCommand(commands.HelpCommand):
         extra: list[str] = []
         if getattr(command, "aliases", None):
             extra.append(
-                f"**{Emojis.Command.alias} | Aliases**\n" + " ".join(f"`{alias}`" for alias in command.aliases)
+                f"### Aliases\n" + " ".join(f"`{alias}`" for alias in command.aliases)
             )
 
         if cooldown := command._buckets._cooldown:
             extra.append(
-                f"**\N{HOURGLASS} Cooldown**\n{cooldown.rate} time(s) per {humanize_duration(cooldown.per)}"
+                f"### \N{HOURGLASS} Cooldown\n"
+                f"{cooldown.rate} time(s) per {humanize_duration(cooldown.per)}"
             )
 
         if getattr(command, "commands", None):
             resolved_sub_commands = [
-                f"- {(self._render_mentions and getattr(cmd, 'mention', None)) or f'`{self.get_command_signature(cmd)}`'}"
+                f"- {(self._render_mentions and getattr(cmd, 'mention', None)) or f'`{self.get_command_signature(cmd, no_signature=True)}`'}"
                 for cmd in command.walk_commands()  # type: ignore[attr-defined]
                 if not cmd.hidden
             ]
             if resolved_sub_commands:
-                extra.append(f"**{Emojis.info} | Subcommands**\n" + "\n".join(resolved_sub_commands))
+                extra.append(f"### Subcommands**\n" + "\n".join(resolved_sub_commands))
 
         if isinstance(command, (Command, HybridCommand)):
             spec = command.permissions
@@ -821,12 +821,12 @@ class PaginatedHelpCommand(commands.HelpCommand):
             if bot := spec.bot:
                 parts.append("**Bot:** " + ", ".join(map(spec.permission_as_str, bot)))
             if parts:
-                extra.append(f"**{Emojis.Command.locked} | Required Permissions**\n" + "\n".join(parts))
+                extra.append(f"### {Emojis.Command.locked} | Required Permissions\n" + "\n".join(parts))
 
         if examples := command.extras.get("examples"):
             command_signature = self.get_command_signature(command, no_signature=True)
             extra.append(
-                f"**{Emojis.Command.example} | Examples**\n"
+                f"### Examples\n"
                 + "\n".join(f"* `{command_signature} {example}`" for example in examples)
             )
 
@@ -836,7 +836,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 (self._render_mentions and getattr(cmd, "mention", None)) or f"`{self.get_command_signature(cmd, no_signature=True)}`"
                 for cmd in related[:5]
             ]
-            extra.append(f"**{Emojis.info} | Related Commands**\n" + " • ".join(related_lines))
+            extra.append(f"### Related Commands\n" + " • ".join(related_lines))
 
         if extra:
             container.add_item(discord.ui.Separator())
