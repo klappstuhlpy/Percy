@@ -84,6 +84,29 @@ class Player(wavelink.Player):
         """Returns True if the player is connected to a voice channel."""
         return self.channel is not None
 
+    @property
+    def played_history(self) -> list[wavelink.Playable]:
+        """All played tracks in chronological order (oldest first).
+
+        Manual/seed plays live in ``queue.history`` and autoplay recommendations in
+        ``auto_queue.history`` — wavelink keeps the two separate. The currently
+        playing track is the most recent entry. Used for the panel's queue position,
+        the back-button gating and ``back()`` itself.
+        """
+        hist = list(self.queue.history) if self.queue.history is not None else []
+        auto = list(self.auto_queue.history) if self.auto_queue.history is not None else []
+        return hist + auto
+
+    @property
+    def upcoming(self) -> list[wavelink.Playable]:
+        """Upcoming tracks: the manual queue, plus autoplay recommendations from
+        ``auto_queue`` when autoplay is enabled (they play once the queue drains).
+        """
+        items = list(self.queue)
+        if self.autoplay is wavelink.AutoPlayMode.enabled:
+            items += list(self.auto_queue)
+        return items
+
     async def refresh_panel(self) -> None:
         """Re-render the control panel if one exists.
 
@@ -539,61 +562,94 @@ class Player(wavelink.Player):
         await super().disconnect(**kwargs)
 
     async def cleanupleft(self) -> None:
-        """Removes all tracks from the queue that are not in the voice channel."""
-        assert self.queue.history is not None
-        member_ids = {m.id for m in self.channel.members}
-        for track in self.queue.all:
-            if not hasattr(track.extras, 'requester_id'):
-                continue
-            if track.extras.requester_id not in member_ids:
-                if self.current == track:
-                    await self.stop()
+        """Remove upcoming tracks requested by members who left the voice channel.
 
-                if track in self.queue.history:
-                    self.queue.history.remove(track)
-                else:
-                    self.queue.remove(track)
+        Only the upcoming queue is pruned — already-played history is left intact
+        (purging it would corrupt the history view and ``back()``). Autoplay
+        recommendations have no requester and are never touched. If the currently
+        playing track was requested by someone who left, it is skipped.
+        """
+        member_ids = {m.id for m in self.channel.members}
+
+        def _requester_left(track: wavelink.Playable) -> bool:
+            requester_id = getattr(track.extras, 'requester_id', None)
+            return requester_id is not None and requester_id not in member_ids
+
+        # Snapshot first — we mutate the queue while iterating.
+        for track in list(self.queue):
+            if _requester_left(track):
+                self.queue.remove(track)
+
+        # Skip the currently playing track if its requester is gone.
+        if self.current is not None and _requester_left(self.current):
+            await self.skip()
 
     async def back(self) -> bool:
-        """Goes back to the previous track in the queue."""
-        if self.queue.history_is_empty:
+        """Replay the previously played track.
+
+        Works for both the manual queue (history in ``queue.history``) and autoplay
+        (recommendation history in ``auto_queue.history``): it pulls the current and
+        previous tracks out of whichever history actually holds them, re-queues them
+        at the front (previous first), then stops so the next-track machinery plays
+        them back in order. Returns ``False`` when there is no previous track.
+        """
+        assert self.queue.history is not None and self.auto_queue.history is not None
+        q_items = self.queue.history._items
+        a_items = self.auto_queue.history._items
+
+        # The current track is the tail of whichever history it was added to
+        # (manual plays -> queue.history, autoplay recommendations ->
+        # auto_queue.history). Anchor on that so back() works in pure-manual,
+        # pure-autoplay, and mixed sessions alike.
+        if a_items and a_items[-1] is self.current:
+            primary, secondary = a_items, q_items
+        elif q_items and q_items[-1] is self.current:
+            primary, secondary = q_items, a_items
+        else:
             return False
 
-        assert self.queue.history is not None
-        current_track = self.queue.history._items.pop()
-        track_to_revert = self.queue.history._items.pop()
+        current = primary.pop()
+        # The previous track is the new tail of the same history, or — if that
+        # history only held the current track — the tail of the other one.
+        if primary:
+            previous = primary.pop()
+        elif secondary:
+            previous = secondary.pop()
+        else:
+            primary.append(current)  # nothing to go back to; restore and bail
+            return False
 
-        self.queue.put_at(0, track_to_revert)
-        self.queue.put_at(1, current_track)
+        self.queue.put_at(0, previous)
+        self.queue.put_at(1, current)
 
         await self.stop()
         return True
 
     async def jump_to(self, index: int) -> bool:
-        """Jumps to a specific track in the queue.
+        """Jump to the track at ``index`` (0-based) in the *upcoming* queue.
+
+        Tracks before the target are skipped (dropped from the queue); the target
+        and everything after it stay queued. The caller is expected to ``stop()``
+        afterwards so the target starts playing. History is left untouched — the
+        currently playing track is already recorded there and remains the most
+        recent entry, so ``back()`` keeps working.
 
         Parameters
         ----------
         index : int
-            The index to jump to.
+            The index into the upcoming queue to jump to.
 
         Returns
         -------
         bool
             Whether the jump was successful.
         """
-        if index < 0 or index >= len(self.queue.all):
+        upcoming = list(self.queue)
+        if index < 0 or index >= len(upcoming):
             return False
 
-        tracks_to_queue = self.queue.all[index:]
-        tracks_to_history = self.queue.all[:index]
-
         self.queue.clear()
-        await self.queue.put_wait(tracks_to_queue)
-
-        assert self.queue.history is not None
-        self.queue.history.clear()
-        await self.queue.history.put_wait(tracks_to_history)
+        await self.queue.put_wait(upcoming[index:])
         return True
 
     async def send_track_add(

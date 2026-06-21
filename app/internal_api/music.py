@@ -181,12 +181,10 @@ class MusicHandlers(InternalAPIHandlers):
                 data['autoplay'] = True
                 queue.append(data)
 
-        # Recently played history for the dashboard's "History" tab. Autoplay
-        # recommendations play with add_history=False, so they accumulate in
-        # auto_queue.history rather than queue.history — merge both, drop the
-        # current track, show most-recent-first, and cap the payload.
-        played = list(player.queue.history) + list(player.auto_queue.history)
-        played = [t for t in played if t is not player.current][::-1][:50]
+        # Recently played history for the dashboard's "History" tab — merges the
+        # manual and autoplay histories (Player.played_history), drops the current
+        # track, shows most-recent-first, and caps the payload.
+        played = [t for t in player.played_history if t is not player.current][::-1][:50]
         history = []
         for t in played:
             player._normalise_artwork(t)

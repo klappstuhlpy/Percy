@@ -1196,21 +1196,18 @@ class Music(Cog):
     @checks.is_listen_together()
     async def jump_to(self, ctx: Context, position: int) -> None:
         """Jump to a track in the Queue.
-        Note: The number you enter is the count of how many tracks in the queue will be skipped."""
+        Note: The position is the 1-based spot in the upcoming queue (1 = the next track)."""
         player: Player = cast("Player", ctx.voice_client)
         if not player:
             return
 
-        if player.queue.all_is_empty:
-            await ctx.send_error("The queue is empty.")
+        upcoming = list(player.queue)
+        if not upcoming:
+            await ctx.send_error("There are no upcoming tracks in the queue.")
             return
 
-        if position < 0:
-            await ctx.send_error("The index must be greater than or 0.")
-            return
-
-        if (position - 1) > len(player.queue.all):
-            await ctx.send_error("There are not that many tracks in the queue.")
+        if position < 1 or position > len(upcoming):
+            await ctx.send_error(f"Enter a position between 1 and {len(upcoming)}.")
             return
 
         success = await player.jump_to(position - 1)
@@ -1253,15 +1250,11 @@ class Music(Cog):
 
         # Up Next: the manual queue, plus wavelink's autoplay recommendations when
         # 24/7 autoplay is active (those play once the manual queue drains).
-        upcoming: list[wavelink.Playable] = list(player.queue)
-        if player.autoplay is wavelink.AutoPlayMode.enabled:
-            upcoming += list(player.auto_queue)
+        upcoming: list[wavelink.Playable] = player.upcoming
 
-        # History: already-played tracks. Recommendations play with add_history=False,
-        # so they land in auto_queue.history rather than queue.history — merge both,
-        # drop the current track, and show most-recent-first (capped).
-        played: list[wavelink.Playable] = list(player.queue.history) + list(player.auto_queue.history)
-        played = [t for t in played if t is not player.current][::-1][:100]
+        # History: already-played tracks (merges manual + autoplay history), with the
+        # current track dropped, shown most-recent-first and capped.
+        played: list[wavelink.Playable] = [t for t in player.played_history if t is not player.current][::-1][:100]
 
         if player.current is None and not upcoming and not played:
             await ctx.send_error("No items currently in the queue.", ephemeral=True)

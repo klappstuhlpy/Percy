@@ -147,30 +147,30 @@ class PlayerPanel(LayoutView):
             track = self.player.current
             artist = f"[{track.author}]({track.artist.url})" if track.artist.url else track.author
 
-            heading = (
-                "## Music Player Panel\n"
-                "This is the Bot's control panel where you can easily perform actions of the bot without using a command."
-            )
-            if artwork := track.artwork:
-                container.add_item(discord.ui.Section(heading, accessory=discord.ui.Thumbnail(artwork)))
-            else:
-                container.add_item(discord.ui.TextDisplay(heading))
-
-            container.add_item(discord.ui.Separator())
+            # Position accounts for autoplay: recommendations live in auto_queue /
+            # auto_queue.history, so plain queue.all would always read 1/1 in 24/7
+            # autoplay. played_history holds every played track (current last) and
+            # upcoming holds what's still to come (manual queue + auto_queue).
+            history = self.player.played_history
+            upcoming = self.player.upcoming
             try:
-                queue_pos = self.player.queue.all.index(self.player.current) + 1
+                queue_pos = history.index(self.player.current) + 1
             except ValueError:
-                queue_pos = 1
-            queue_total = len(self.player.queue.all) or 1
+                queue_pos = len(history) or 1
+            queue_total = max(len(history) + len(upcoming), queue_pos, 1)
 
-            container.add_item(discord.ui.TextDisplay(
-                f"### Now Playing\n"
+            now_playing = (
+                f"## Now Playing\n"
                 f"**Track:** [{track.title}]({track.uri})\n"
                 f"**Artist:** {artist}\n"
                 f"**Bound to:** {self.player.channel.mention}\n"
-                f"**Position in Queue:** "
-                f"{queue_pos}/{queue_total}"
-            ))
+                f"**Position in Queue:** {queue_pos}/{queue_total}"
+            )
+
+            if artwork := track.artwork:
+                container.add_item(discord.ui.Section(now_playing, accessory=discord.ui.Thumbnail(artwork)))
+            else:
+                container.add_item(discord.ui.TextDisplay(now_playing))
 
             details: list[str] = []
             if track.album and track.album.name:
@@ -185,6 +185,7 @@ class PlayerPanel(LayoutView):
                 user = self.player.guild.get_member(self.player.queue.listen_together)
                 user_mention = user.mention if user is not None else "Unknown"
                 details.append(f"**Listening-together with:** {user_mention}'s Spotify")
+
             if details:
                 container.add_item(discord.ui.TextDisplay("\n".join(details)))
 
@@ -281,19 +282,26 @@ class PlayerPanel(LayoutView):
         bool
             Whether the button should be disabled.
         """
-        return check or bool(self.state == PlayerState.STOPPED) or self.player.queue.all_is_empty
+        # Only treat the player as "empty" when nothing is playing AND there's
+        # nothing queued anywhere — under 24/7 autoplay the manual queue/history can
+        # be empty while a recommendation plays and more sit in the auto_queue.
+        empty = self.player.queue.all_is_empty and not self.player.upcoming and self.player.current is None
+        return bool(check) or self.state == PlayerState.STOPPED or empty
 
     def update_buttons(self) -> None:
         """Updates the buttons of the panel."""
         button_updates: list[tuple[discord.Button, bool, str | None]] = [
             (self.on_shuffle, self.disabled_state(), EMOJI_KEYS["shuffle"][self.player.queue.shuffle]),
-            (self.on_back, self.disabled_state(self.player.queue.history_is_empty), None),
+            # Back needs a previous track; forward needs a next one. Both account for
+            # autoplay, where played/upcoming tracks live in auto_queue(.history)
+            # rather than the manual queue (which is empty in 24/7 autoplay).
+            (self.on_back, self.disabled_state(len(self.player.played_history) < 2), None),
             (
                 self.on_pause_play,
                 self.disabled_state(),
                 EMOJI_KEYS["pause_play"][bool(not self.player.paused and self.player.playing)],
             ),
-            (self.on_forward, self.disabled_state(self.player.queue.is_empty), None),
+            (self.on_forward, self.disabled_state(not self.player.upcoming), None),
             (self.on_loop, self.disabled_state(), EMOJI_KEYS["loop"][self.player.queue.mode]),  # type: ignore
             (self.on_stop, self.disabled_state(), None),
             (self.on_volume, self.disabled_state(), None),
@@ -649,8 +657,7 @@ class TrackDisambiguatorView[T](LayoutView):
         container = discord.ui.Container(accent_colour=helpers.Colour.brand())
         container.add_item(discord.ui.TextDisplay(f"## Choose a Track\n{description}"))
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.ActionRow(select))
-        container.add_item(discord.ui.ActionRow(cancel_btn))
+        container.add_item(discord.ui.ActionRow(select, cancel_btn))
         self.add_item(container)
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
