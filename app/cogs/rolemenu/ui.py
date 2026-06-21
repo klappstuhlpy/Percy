@@ -1,4 +1,4 @@
-"""Persistent button view and embed for self-assignable role menus."""
+"""Persistent Components V2 role menu — buttons embedded inside a Container."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.cogs.rolemenu.engine import resolve_toggle
+from app.core.views import LayoutView
 from app.utils import helpers
 from config import Emojis
 
@@ -17,7 +18,9 @@ if TYPE_CHECKING:
 
     from app.core.bot import Bot
 
-__all__ = ('RoleMenuButton', 'build_menu_embed', 'build_menu_view')
+__all__ = ('RoleMenuButton', 'build_menu_view')
+
+BUTTONS_PER_ROW = 5
 
 
 class RoleMenuButton(discord.ui.DynamicItem[discord.ui.Button], template=r'rolemenu:(?P<menu>[0-9]+):(?P<role>[0-9]+)'):
@@ -96,40 +99,64 @@ class RoleMenuButton(discord.ui.DynamicItem[discord.ui.Button], template=r'rolem
         await interaction.response.send_message(f'{Emojis.success} {verb} {role.mention}.', ephemeral=True)
 
 
-def build_menu_embed(
-    title: str, description: str | None, entries: list[asyncpg.Record], *, unique: bool
-) -> discord.Embed:
-    """Builds the embed shown above a role menu's buttons."""
-    embed = discord.Embed(title=title, description=description or None, colour=helpers.Colour.white())
+def _build_container(
+    menu_id: int,
+    title: str,
+    description: str | None,
+    entries: list[asyncpg.Record],
+    guild: discord.Guild,
+    *,
+    unique: bool,
+) -> discord.ui.Container:
+    """Builds the CV2 container with heading, role list, and action-row buttons."""
+    container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+
+    header = f'## {title}'
+    if description:
+        header += f'\n{description}'
+    container.add_item(discord.ui.TextDisplay(header))
+
+    container.add_item(discord.ui.Separator())
 
     if entries:
-        lines = []
+        lines: list[str] = []
         for entry in entries:
             emoji = f"{entry['emoji']} " if entry['emoji'] else ''
+            role = guild.get_role(entry['role_id'])
+            mention = role.mention if role else f"<@&{entry['role_id']}>"
             label = entry['label'] or ''
-            lines.append(f"{emoji}<@&{entry['role_id']}>{f' — {label}' if label else ''}")
-        embed.add_field(name='Roles', value='\n'.join(lines), inline=False)
+            lines.append(f"{emoji}{mention}{f' — {label}' if label else ''}")
+        container.add_item(discord.ui.TextDisplay('\n'.join(lines)))
     else:
-        embed.add_field(name='Roles', value='*No roles yet. Add some with `rolemenu add`.*', inline=False)
+        container.add_item(discord.ui.TextDisplay('*No roles yet. Add some with `rolemenu add`.*'))
 
-    embed.set_footer(text='Pick one role at a time.' if unique else 'Pick as many roles as you like.')
-    return embed
+    container.add_item(discord.ui.Separator())
+
+    if entries:
+        for i in range(0, len(entries), BUTTONS_PER_ROW):
+            chunk = entries[i:i + BUTTONS_PER_ROW]
+            row = discord.ui.ActionRow()
+            for entry in chunk:
+                role = guild.get_role(entry['role_id'])
+                label = role.name if role is not None else (entry['label'] or 'Unknown role')
+                row.add_item(RoleMenuButton(menu_id, entry['role_id'], label=label[:80], emoji=entry['emoji']))
+            container.add_item(row)
+
+    footer = 'Pick one role at a time.' if unique else 'Pick as many roles as you like.'
+    container.add_item(discord.ui.TextDisplay(f'-# {footer}'))
+    return container
 
 
 def build_menu_view(
-    menu_id: int, entries: list[asyncpg.Record], guild: discord.Guild
-) -> discord.ui.View:
-    """Builds the (timeout-free) button view for a role menu.
-
-    Each button is labelled with its role's current name (falling back to the stored
-    label, then a placeholder, if the role was deleted). Discord caps button labels at
-    80 characters.
-    """
-    view = discord.ui.View(timeout=None)
-    for entry in entries:
-        role = guild.get_role(entry['role_id'])
-        label = role.name if role is not None else (entry['label'] or 'Unknown role')
-        view.add_item(
-            RoleMenuButton(menu_id, entry['role_id'], label=label[:80], emoji=entry['emoji'])
-        )
+    menu_id: int,
+    title: str,
+    description: str | None,
+    entries: list[asyncpg.Record],
+    guild: discord.Guild,
+    *,
+    unique: bool,
+) -> LayoutView:
+    """Builds the persistent CV2 layout view for a role menu."""
+    view = LayoutView(timeout=None)
+    view.add_item(_build_container(menu_id, title, description, entries, guild, unique=unique))
     return view

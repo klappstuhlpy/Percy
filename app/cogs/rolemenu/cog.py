@@ -13,7 +13,7 @@ from app.utils import helpers
 if TYPE_CHECKING:
     import asyncpg
 
-#: Discord allows at most 25 components (5 rows of 5) on a message.
+#: Discord allows at most 5 action rows of 5 buttons inside a container.
 MAX_ROLES = 25
 
 
@@ -35,13 +35,12 @@ class RoleMenus(Cog):
             return
 
         entries = await self.bot.db.rolemenu.get_entries(menu['id'])
-        embed = ui.build_menu_embed(
-            menu['title'], menu['description'], entries, unique=menu['unique_roles']
+        view = ui.build_menu_view(
+            menu['id'], menu['title'], menu['description'], entries, channel.guild, unique=menu['unique_roles']
         )
-        view = ui.build_menu_view(menu['id'], entries, channel.guild)
         try:
             message = await channel.fetch_message(menu['message_id'])
-            await message.edit(embed=embed, view=view)
+            await message.edit(view=view)
         except discord.HTTPException:
             pass
 
@@ -83,9 +82,9 @@ class RoleMenus(Cog):
         assert ctx.guild is not None
         record = await self.bot.db.rolemenu.create_menu(ctx.guild.id, channel.id, title, description)
 
-        embed = ui.build_menu_embed(title, description, [], unique=False)
+        view = ui.build_menu_view(record['id'], title, description, [], channel.guild, unique=False)
         try:
-            message = await channel.send(embed=embed, view=ui.build_menu_view(record['id'], [], channel.guild))
+            message = await channel.send(view=view)
         except discord.HTTPException:
             await self.bot.db.rolemenu.delete_menu(record['id'])
             await ctx.send_error(f"I couldn't post a message in {channel.mention}.")
