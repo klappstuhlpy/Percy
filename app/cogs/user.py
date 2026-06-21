@@ -323,18 +323,30 @@ class UserSettings(Cog, name="User Settings"):
     async def settings_request_data(self, ctx: Context) -> None:
         """Request a copy of your stored personal data (a GDPR-style data export).
 
-        Sends you a JSON file containing your settings and your stored presence,
-        name/nickname and avatar history.
+        DMs you a JSON file with **all** the data Percy has stored about you: your
+        settings, consent-tracked history (presence, name/nickname, avatar), leveling,
+        economy, game stats, content you created (tags, notes, reminders, playlists,
+        giveaways, poll answers, highlights), linked accounts, vote rewards and the
+        moderation cases that reference you.
         """
         await ctx.defer(ephemeral=True)
-        data = await self.bot.db.users.export_personal_data(ctx.author.id)
+        data = await self.bot.db.users.export_all_user_data(ctx.author.id)
         payload = json.dumps(data, indent=2, default=str, ensure_ascii=False)
         file = discord.File(io.BytesIO(payload.encode("utf-8")), filename=f"percy-data-{ctx.author.id}.json")
-        await ctx.send_success(
-            "Here is a copy of the personal data Percy has stored about you.",
-            file=file,
-            ephemeral=True,
-        )
+
+        try:
+            await ctx.author.send(
+                "Here is a copy of all the personal data Percy has stored about you.",
+                file=file,
+            )
+        except discord.Forbidden:
+            await ctx.send_error(
+                "I couldn't DM you — enable direct messages from server members and run this again.",
+                ephemeral=True,
+            )
+            return
+
+        await ctx.send_success("I've sent a copy of your stored data to your DMs.", ephemeral=True)
 
     @settings.command(
         name="remove-personal-data",

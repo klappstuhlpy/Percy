@@ -68,19 +68,32 @@ class UsersRepository(BaseRepository):
                 user_id,
             )
 
-    async def export_personal_data(self, user_id: int) -> dict[str, object]:
-        """Collects a user's stored personal data for a data-access (export) request.
+    async def export_all_user_data(self, user_id: int) -> dict[str, object]:
+        """Collects *all* personal data Percy stores about a user, for a data-access request.
 
-        Mirrors :meth:`delete_personal_data`: returns the settings row plus the
-        presence, name/nickname and avatar history. Avatar image bytes are omitted
-        (only the format and timestamp are exported) to keep the payload portable.
+        A GDPR-style access/portability export spanning every user-keyed table, mirroring
+        the categories in the Privacy Policy: settings and consent-tracked history
+        (presence, name/nickname, avatar), leveling/activity counts, game statistics,
+        economy, content the user created (tags, notes, reminders, playlists, giveaways,
+        poll answers, highlights), linked accounts, vote rewards, and the moderation cases
+        that reference them. Sensitive credentials (the AniList access token) and bulky
+        blobs (avatar image bytes — only the format and timestamp are exported) are
+        deliberately excluded to keep the payload safe and portable.
+
+        Reaches across domains by design: this is the single aggregation point for a user's
+        data, so it queries tables owned by other cogs rather than fanning out to their
+        repositories.
         """
+        uid_text = str(user_id)
+
         settings = await self.fetchrow("SELECT * FROM user_settings WHERE id = $1;", user_id)
+
+        # Consent-tracked history.
         presence = await self.fetch(
             "SELECT status, status_before, changed_at FROM presence_history WHERE uuid = $1 ORDER BY changed_at;",
             user_id,
         )
-        items = await self.fetch(
+        names = await self.fetch(
             "SELECT item_type, item_value, changed_at FROM item_history WHERE uuid = $1 ORDER BY changed_at;",
             user_id,
         )
@@ -88,11 +101,139 @@ class UsersRepository(BaseRepository):
             "SELECT format, changed_at FROM avatar_history WHERE uuid = $1 ORDER BY changed_at;",
             user_id,
         )
+
+        # Leveling / activity counts and game statistics (per guild).
+        levels = await self.fetch(
+            "SELECT guild_id, level, xp, messages FROM levels WHERE user_id = $1 ORDER BY guild_id;", user_id
+        )
+        games = await self.fetch(
+            "SELECT guild_id, game, played, won, lost, tied, wagered, profit, biggest_win, "
+            "current_streak, best_streak, last_played FROM game_stats WHERE user_id = $1 ORDER BY guild_id, game;",
+            user_id,
+        )
+
+        # Economy.
+        balances = await self.fetch(
+            "SELECT guild_id, cash, bank FROM economy WHERE user_id = $1 ORDER BY guild_id;", user_id
+        )
+        inventory = await self.fetch(
+            "SELECT inv.guild_id, it.name, inv.quantity FROM economy_inventory inv "
+            "JOIN economy_items it ON it.id = inv.item_id WHERE inv.user_id = $1 ORDER BY inv.guild_id;",
+            user_id,
+        )
+        dailies = await self.fetch(
+            "SELECT guild_id, last_claim, streak FROM economy_dailies WHERE user_id = $1 ORDER BY guild_id;", user_id
+        )
+        boosts = await self.fetch(
+            "SELECT guild_id, kind, multiplier, expires_at FROM economy_boosts WHERE user_id = $1;", user_id
+        )
+        lottery = await self.fetch(
+            "SELECT guild_id, tickets FROM economy_lottery_entries WHERE user_id = $1;", user_id
+        )
+
+        # Content the user created.
+        tags = await self.fetch(
+            "SELECT name, content, uses, location_id, created_at, use_embed FROM tags "
+            "WHERE owner_id = $1 ORDER BY created_at;",
+            user_id,
+        )
+        tag_aliases = await self.fetch(
+            "SELECT name, location_id, created_at FROM tag_lookup WHERE owner_id = $1 ORDER BY created_at;", user_id
+        )
+        notes = await self.fetch(
+            "SELECT id, topic, content, created_at FROM user_notes WHERE owner_id = $1 ORDER BY created_at;", user_id
+        )
+        highlights = await self.fetch(
+            "SELECT location_id, lookup, blocked FROM highlights WHERE user_id = $1;", user_id
+        )
+        reminders = await self.fetch(
+            "SELECT id, created, expires, metadata #>> '{args,2}' AS message, "
+            "metadata #>> '{kwargs,recur_label}' AS recurrence FROM timers "
+            "WHERE event = 'reminder' AND metadata #>> '{args,0}' = $1 ORDER BY created;",
+            uid_text,
+        )
+        giveaways = await self.fetch(
+            "SELECT id, guild_id, channel_id, message_id, metadata, "
+            "(author_id = $1) AS created_by_you, ($1 = ANY(entries)) AS entered "
+            "FROM giveaways WHERE author_id = $1 OR $1 = ANY(entries);",
+            user_id,
+        )
+        poll_answers = await self.fetch(
+            "SELECT p.id, p.guild_id, p.message_id, e.vote FROM polls p, unnest(p.entries) e "
+            "WHERE e.user_id = $1;",
+            user_id,
+        )
+
+        playlists_raw = await self.fetch("SELECT id, name, created FROM playlist WHERE user_id = $1 ORDER BY created;", user_id)
+        playlists: list[dict[str, object]] = []
+        for playlist in playlists_raw:
+            tracks = await self.fetch("SELECT name, url FROM playlist_lookup WHERE playlist_id = $1;", playlist['id'])
+            playlists.append({**dict(playlist), 'tracks': [dict(track) for track in tracks]})
+
+        # Linked accounts — the access token is intentionally NOT exported.
+        anilist = await self.fetchrow("SELECT expires_at FROM anilist_users WHERE user_id = $1;", user_id)
+
+        votes = await self.fetchrow(
+            "SELECT multiplier, expires_at, last_source, last_voted_at, total_votes "
+            "FROM vote_rewards WHERE user_id = $1;",
+            user_id,
+        )
+
+        # Moderation cases that reference the user (as the target, or as the acting moderator).
+        cases_against = await self.fetch(
+            "SELECT guild_id, case_index, action, reason, created_at FROM mod_cases "
+            "WHERE target_id = $1 ORDER BY created_at;",
+            user_id,
+        )
+        cases_by = await self.fetch(
+            "SELECT guild_id, case_index, action, reason, created_at FROM mod_cases "
+            "WHERE moderator_id = $1 ORDER BY created_at;",
+            user_id,
+        )
+
+        # Command-usage log: bounded to a total plus the 100 most recent to keep the export portable.
+        commands_total = await self.fetchval("SELECT COUNT(*) FROM commands WHERE author_id = $1;", user_id)
+        recent_commands = await self.fetch(
+            "SELECT used, command, guild_id, channel_id, failed, app_command FROM commands "
+            "WHERE author_id = $1 ORDER BY used DESC LIMIT 100;",
+            user_id,
+        )
+
         return {
+            'user_id': user_id,
             'settings': dict(settings) if settings is not None else None,
             'presence_history': [dict(row) for row in presence],
-            'name_history': [dict(row) for row in items],
+            'name_history': [dict(row) for row in names],
             'avatar_history': [dict(row) for row in avatars],
+            'leveling': [dict(row) for row in levels],
+            'game_stats': [dict(row) for row in games],
+            'economy': {
+                'balances': [dict(row) for row in balances],
+                'inventory': [dict(row) for row in inventory],
+                'dailies': [dict(row) for row in dailies],
+                'boosts': [dict(row) for row in boosts],
+                'lottery_entries': [dict(row) for row in lottery],
+            },
+            'tags': [dict(row) for row in tags],
+            'tag_aliases': [dict(row) for row in tag_aliases],
+            'notes': [dict(row) for row in notes],
+            'highlights': [dict(row) for row in highlights],
+            'reminders': [dict(row) for row in reminders],
+            'giveaways': [dict(row) for row in giveaways],
+            'poll_answers': [dict(row) for row in poll_answers],
+            'playlists': playlists,
+            'linked_accounts': {
+                'anilist': {'linked': anilist is not None, 'expires_at': anilist['expires_at'] if anilist else None},
+            },
+            'vote_rewards': dict(votes) if votes is not None else None,
+            'moderation_cases': {
+                'against_you': [dict(row) for row in cases_against],
+                'issued_by_you': [dict(row) for row in cases_by],
+            },
+            'command_usage': {
+                'total': commands_total,
+                'recent': [dict(row) for row in recent_commands],
+            },
         }
 
     # -- economy ----------------------------------------------------------
