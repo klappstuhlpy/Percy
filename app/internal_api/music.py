@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from typing import Callable
 
 import discord
 import wavelink
@@ -56,32 +57,14 @@ class MusicHandlers(InternalAPIHandlers):
             'avatar': member.display_avatar.url,
         }
 
-    @staticmethod
-    def _resolve_artwork(track) -> str | None:
-        """Best-effort cover art URL for a track.
-
-        Lavalink hands YouTube tracks a ``maxresdefault`` thumbnail that 404s for any
-        non-HD upload (and is sometimes absent entirely). Discord proxies images so it
-        never notices, but a browser <img> just fails. Fall back to ``hqdefault``,
-        which exists for every video, when there's no artwork or it's a maxres URL.
-        """
-        artwork = track.artwork
-        source = (track.source or '').lower()
-        is_youtube = source.startswith('youtube')
-        if is_youtube and track.identifier:
-            hq = f'https://i.ytimg.com/vi/{track.identifier}/hqdefault.jpg'
-            if not artwork or 'maxresdefault' in artwork:
-                return hq
-        return artwork
-
-    def _serialize_track(self, guild, track, *, full: bool = False) -> dict:
+    def _serialize_track(self, guild, track, *, full: bool = False, artwork_func: Callable | None = None) -> dict:
         """Serialise a wavelink track into the JSON the dashboard player consumes."""
         is_stream = self._effectively_stream(track)
         data = {
             'title': track.title,
             'author': track.author,
             'uri': track.uri,
-            'artwork': self._resolve_artwork(track),
+            'artwork': artwork_func(track) if artwork_func else track.artwork,
             'duration': 0 if is_stream else track.length,
             'is_stream': is_stream,
             'source': track.source,
@@ -114,7 +97,7 @@ class MusicHandlers(InternalAPIHandlers):
             wavelink.QueueMode.loop: 1,
             wavelink.QueueMode.loop_all: 2,
         }
-        data = self._serialize_track(guild, track, full=True)
+        data = self._serialize_track(guild, track, full=True, artwork_func=player._resolve_artwork)
         is_stream = data['is_stream']
         data.update({
             'position': 0 if is_stream else player.position,
@@ -185,7 +168,7 @@ class MusicHandlers(InternalAPIHandlers):
         # Upcoming tracks (capped) so the dashboard can render a live queue. The
         # bot itself is excluded; history is intentionally omitted to keep the
         # payload small — the panel mirrors the in-Discord "Up Next" view.
-        queue = [self._serialize_track(guild, t) for t in list(player.queue)[:50]]
+        queue = [self._serialize_track(guild, t, artwork_func=player._resolve_artwork) for t in list(player.queue)[:50]]
 
         # IDs of the (non-bot) members sharing the bot's voice channel. The
         # dashboard's public overview uses this to decide whether a viewer may

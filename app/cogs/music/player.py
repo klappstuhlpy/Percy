@@ -193,7 +193,26 @@ class Player(wavelink.Player):
         """Shortcut to the bot's database from inside the player."""
         return self.client.db  # type: ignore[attr-defined]
 
-    def _serialize_track(self, track: wavelink.Playable) -> dict[str, Any]:
+    @staticmethod
+    def _resolve_artwork(track: wavelink.Playable) -> str | None:
+        """Best-effort cover art URL for a track.
+
+        Lavalink hands YouTube tracks a ``maxresdefault`` thumbnail that 404s for any
+        non-HD upload (and is sometimes absent entirely). Discord proxies images so it
+        never notices, but a browser <img> just fails. Fall back to ``hqdefault``,
+        which exists for every video, when there's no artwork or it's a maxres URL.
+        """
+        artwork = track.artwork
+        source = (track.source or "").lower()
+        is_youtube = source.startswith("youtube")
+        if is_youtube and track.identifier:
+            hq = f'https://i.ytimg.com/vi/{track.identifier}/hqdefault.jpg'
+            if not artwork or 'maxresdefault' in artwork:
+                return hq
+        return artwork
+
+    @staticmethod
+    def _serialize_track(track: wavelink.Playable) -> dict[str, Any]:
         """Serialise a track to the minimal JSON we persist for restore."""
         return {
             'uri': track.uri,
