@@ -555,9 +555,8 @@ class MusicHandlers(InternalAPIHandlers):
             items.insert(to_idx, items.pop(from_idx))
             refresh_panel = True
 
-        if refresh_panel and player.connected and getattr(player, 'panel', MISSING) is not MISSING:
-            with suppress(Exception):
-                await player.panel.update()
+        if refresh_panel and player.connected:
+            await player.refresh_panel()
 
         return web.json_response({'ok': True, 'action': action, 'paused': player.paused if player.connected else False})
 

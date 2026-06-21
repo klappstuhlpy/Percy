@@ -459,7 +459,7 @@ class Music(Cog):
                 await intance.edit(topic=player.current.title)
 
         if player.panel is not MISSING:
-            await player.panel.update()
+            await player.refresh_panel()
         # Snapshot the new now-playing state so a restart resumes at the right track.
         await player.persist()
 
@@ -489,7 +489,7 @@ class Music(Cog):
                 position = round((now - start).total_seconds()) * 1000
 
                 await player.seek(position)
-                await player.panel.update()
+                await player.refresh_panel()
             else:
                 new_activity = self._get_spotify_activity(after)
                 if new_activity and new_activity.title == before_activity.title:
@@ -601,7 +601,7 @@ class Music(Cog):
             await player.play(player.queue.get(), volume=70)
         else:
             short = False
-            await player.panel.update()
+            await player.refresh_panel()
         await player.send_track_add(result, ctx, short=short)
 
     @command(
@@ -693,7 +693,7 @@ class Music(Cog):
         await player.seek(poss)
 
         await player.send_track_add(track, ctx)
-        await player.panel.update()
+        await player.refresh_panel()
 
     @listen_together.command(name="stop", description="Stops the current listen-together activity.")
     async def listen_together_stop(self, ctx: Context) -> None:
@@ -769,7 +769,7 @@ class Music(Cog):
             delete_after=10,
             suppress_embeds=True,
         )
-        await player.panel.update()
+        await player.refresh_panel()
 
     @command(description="Sets a loop mode for the plugins.", hybrid=True, guild_only=True)
     @describe(mode="Select a loop mode.")
@@ -795,7 +795,7 @@ class Music(Cog):
             mode, _QueueMode.normal
         )
 
-        await player.panel.update()
+        await player.refresh_panel()
         await ctx.send_success(f"Loop Mode changed to `{mode}`", delete_after=10)
 
     @command(description="Sets the shuffle mode for the plugins.", hybrid=True, guild_only=True)
@@ -810,7 +810,7 @@ class Music(Cog):
             return
 
         player.queue.shuffle = ShuffleMode.on if mode else ShuffleMode.off
-        await player.panel.update()
+        await player.refresh_panel()
         await ctx.send_success(f"Shuffle Mode changed to `{mode}`", delete_after=10)
 
     @command(description="Seek to a specific position in the tack.", hybrid=True, guild_only=True)
@@ -849,7 +849,7 @@ class Music(Cog):
                 return
 
         await ctx.send_success(f"Seeked to position `{convert_duration(seconds)}`", delete_after=10)
-        await player.panel.update()
+        await player.refresh_panel()
 
     @seek.autocomplete("position")
     async def seek_autocomplete(
@@ -896,7 +896,7 @@ class Music(Cog):
             return
 
         await player.set_volume(amount)
-        await player.panel.update()
+        await player.refresh_panel()
 
         embed = discord.Embed(
             title="Changed Volume",
@@ -918,7 +918,7 @@ class Music(Cog):
             return
 
         await player.cleanupleft()
-        await player.panel.update()
+        await player.refresh_panel()
         await ctx.send_success("Cleaned up the queue.", delete_after=10)
 
     @group(description="Manage Advanced Filters to specify you listening experience.", guild_only=True, hybrid=True)
@@ -1702,7 +1702,7 @@ class Music(Cog):
         # (don't rely solely on the track-start event, which may race with this).
         if player.panel is not MISSING:
             with suppress(Exception):
-                await player.panel.update()
+                await player.refresh_panel()
         await player.persist()
         return player
 
@@ -2074,7 +2074,7 @@ class Music(Cog):
             player.autoplay = wavelink.AutoPlayMode.enabled
             await player.play(player.queue.get(), volume=70)
         else:
-            await player.panel.update()
+            await player.refresh_panel()
 
     @playlist.command(name="add", description="Adds the current playing track or a track via a direct-url to your playlist.")
     @app_commands.rename(name_or_id="name-or-id")

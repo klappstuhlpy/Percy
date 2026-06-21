@@ -81,6 +81,26 @@ class Player(wavelink.Player):
         """Returns True if the player is connected to a voice channel."""
         return self.channel is not None
 
+    async def refresh_panel(self) -> None:
+        """Re-render the control panel if one exists.
+
+        Manual commands (volume, loop, shuffle, ...) call this to reflect their
+        change in the panel. It is a no-op when no panel is active (disabled in
+        config, or never started), so callers don't need to guard against the
+        ``MISSING`` sentinel.
+        """
+        if self.panel is MISSING:
+            return
+        if self.panel.channel is MISSING:
+            return
+        if self.panel.message is MISSING:
+            return
+
+        try:
+            await self.panel.update()
+        except Exception as exc:
+            log.warning('Failed to refresh music panel for guild %s: %s', getattr(self.guild, 'id', None), exc)
+
     @classmethod
     async def search(
             cls,
