@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from contextlib import suppress
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, Self
 
 import asyncpg
 import discord
@@ -14,6 +14,7 @@ from app.core.views import ConfirmationView, LayoutView
 from app.database.base import Sentinel, GuildConfig
 from app.utils import checks, get_asset_url, merge_perms, pluralize
 from config import Emojis
+from discord.ui.media_gallery import MediaGalleryItem
 
 from .infractions import sync_permissions_with_progress
 
@@ -1048,8 +1049,8 @@ class SentinelVerifyButton(
         # Captcha challenge as a CV2 card. The MediaGallery only references the image by
         # ``attachment://captcha.png``, so the file itself must be uploaded alongside the
         # view or Discord rejects the body ("referenced attachment was not found").
-        captcha_view = _CaptchaChallengeView(captcha.file)
-        message = await interaction.followup.send(
+        captcha_view = CaptchaChallengeView(captcha.file)
+        message: discord.Message = await interaction.followup.send(
             view=captcha_view, file=captcha.file, ephemeral=True
         )
 
@@ -1063,12 +1064,9 @@ class SentinelVerifyButton(
                 timeout=90.0,
             )
         except TimeoutError:
-            await message.edit(
-                content=f"{Emojis.error} Time expired. "
-                f"Press the button again to retry.",
-                view=None,
-                attachments=[],
-            )
+            captcha = await self.sentinel.bot.render.captcha()
+            captcha_view = captcha_view.prepare_retry(captcha.file)
+            await message.edit(view=captcha_view, attachments=[captcha.file])
             return
         else:
             await msg.delete()
@@ -1082,12 +1080,9 @@ class SentinelVerifyButton(
             )
 
         if msg.content != captcha.text:
-            await message.edit(
-                content=f"{Emojis.error} Incorrect. "
-                f"Press the button to try again.",
-                view=None,
-                attachments=[],
-            )
+            captcha = await self.sentinel.bot.render.captcha()
+            captcha_view = captcha_view.prepare_retry(captcha.file)
+            await message.edit(view=captcha_view, attachments=[captcha.file])
             return
 
         await self.sentinel.unblock(interaction.user)
@@ -1098,25 +1093,42 @@ class SentinelVerifyButton(
         )
 
 
-class _CaptchaChallengeView(LayoutView):
+class CaptchaChallengeView(LayoutView):
     """Ephemeral CV2 card shown to the user with the captcha image."""
 
     def __init__(self, file: discord.File) -> None:
         super().__init__(timeout=90.0)
-        from discord.ui.media_gallery import MediaGalleryItem
 
+        self.file: discord.File = file
+        self.add_item(self.build_container())
+
+    def build_container(self, retry: bool = False) -> discord.ui.Container:
+        """The persistent CV2 card shown to the user with the captcha image."""
         container = discord.ui.Container(accent_colour=_BRAND)
         container.add_item(discord.ui.TextDisplay(
             "## Solve the Captcha\n"
             "Type the **6 characters** shown below. Case-sensitive.\n"
-            "-# You have 90 seconds. Your answer will be deleted "
-            "automatically."
+            "-# You have 90 seconds. Your answer will be deleted automatically."
         ))
+
+        if retry:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                f"{Emojis.error} That didnt work :/\n"
+                f"-# Here's a new captcha, try again!"
+            ))
+
         container.add_item(discord.ui.Separator())
         container.add_item(
-            discord.ui.MediaGallery(MediaGalleryItem(file))
+            discord.ui.MediaGallery(MediaGalleryItem(self.file))
         )
-        self.add_item(container)
+        return container
+
+    def prepare_retry(self, file: discord.File) -> Self:
+        self.file = file
+        self.clear_items()
+        self.add_item(self.build_container(True))
+        return self
 
 
 class SentinelAlertResolveButton(
