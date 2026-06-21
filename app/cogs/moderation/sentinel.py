@@ -25,6 +25,13 @@ _BRAND = discord.Colour(0xD97757)  # --branding
 _SUCCESS = discord.Colour(0x166534)  # --success-border
 
 
+SENTINEL_DEFAULT_MESSAGE_TITLE: str = "Identity Verification"
+SENTINEL_DEFAULT_MESSAGE_BODY: str = (
+    "To access this server you must complete a quick verification.\n"
+    "**Tap the button below to begin.**"
+)
+
+
 class SentinelSetupRoleView(LayoutView):
     """CV2 sub-view for selecting or creating the lockdown role."""
 
@@ -241,11 +248,11 @@ class SentinelMessageModal(discord.ui.Modal, title="Verification Message"):
     """Modal for customizing the captcha verification message content."""
 
     header = discord.ui.TextInput(
-        label="Embed Title", style=discord.TextStyle.short,
-        max_length=256, default="Identity Verification",
+        label="Title", style=discord.TextStyle.short,
+        max_length=256, default=SENTINEL_DEFAULT_MESSAGE_TITLE
     )
     message = discord.ui.TextInput(
-        label="Embed Body", style=discord.TextStyle.long, max_length=2000
+        label="Body", style=discord.TextStyle.long, max_length=2000, default=SENTINEL_DEFAULT_MESSAGE_BODY
     )
 
     def __init__(self, default: str) -> None:
@@ -389,14 +396,7 @@ class SentinelChannelSelect(discord.ui.ChannelSelect["SentinelSetUpView"]):
 
         redeployed = False
         if had_message:
-            verify_view = SentinelVerifyView(
-                self.view.config,
-                self.sentinel,
-                body=(
-                    "To access this server you must complete a quick verification.\n"
-                    "**Tap the button below to begin.**"
-                ),
-            )
+            verify_view = SentinelVerifyView(self.view.config, self.sentinel)
             try:
                 new_message = await channel.send(view=verify_view)
             except discord.HTTPException:
@@ -784,10 +784,7 @@ class SentinelSetUpView(LayoutView):
             )
             return
 
-        modal = SentinelMessageModal(
-            "To access this server you must complete a quick verification.\n"
-            "**Tap the button below to begin.**"
-        )
+        modal = SentinelMessageModal(SENTINEL_DEFAULT_MESSAGE_BODY)
         await interaction.response.send_modal(modal)
         await modal.wait()
 
@@ -795,8 +792,8 @@ class SentinelSetUpView(LayoutView):
         # CV2 layout so it's a branded card with the button embedded.
         verify_view = SentinelVerifyView(
             self.config, self.sentinel,
-            title=modal.header.value or "Identity Verification",
-            body=modal.message.value or "",
+            title=modal.header.value or SENTINEL_DEFAULT_MESSAGE_TITLE,
+            body=modal.message.value or SENTINEL_DEFAULT_MESSAGE_BODY,
         )
         try:
             message = await channel.send(view=verify_view)
@@ -931,8 +928,8 @@ class SentinelVerifyView(LayoutView):
         config: GuildConfig | None,
         sentinel: Sentinel | None,
         *,
-        title: str = "Identity Verification",
-        body: str = "",
+        title: str = SENTINEL_DEFAULT_MESSAGE_TITLE,
+        body: str = SENTINEL_DEFAULT_MESSAGE_BODY,
     ) -> None:
         super().__init__(timeout=None)
         self.config = config
@@ -948,13 +945,7 @@ class SentinelVerifyView(LayoutView):
             "This bot will never ask for personal information and is not "
             "affiliated with Discord."
         ))
-        container.add_item(discord.ui.ActionRow(
-            discord.ui.Button(
-                label="Begin Verification",
-                style=discord.ButtonStyle.green,
-                custom_id="sentinel:verify:captcha",
-            )
-        ))
+        container.add_item(discord.ui.ActionRow(SentinelVerifyButton(config, sentinel)))
         self.add_item(container)
 
 

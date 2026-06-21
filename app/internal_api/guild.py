@@ -254,10 +254,7 @@ class GuildHandlers(InternalAPIHandlers):
     async def _send_sentinel_message(self, request: web.Request) -> web.Response:
         """Send a sentinel verification embed to a channel and store the message_id."""
         import discord
-
-        from app.cogs.moderation.sentinel import SentinelVerifyButton
-        from app.core.views import View
-        from app.utils import helpers
+        from app.cogs.moderation.sentinel import SentinelVerifyView
 
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
@@ -286,15 +283,9 @@ class GuildHandlers(InternalAPIHandlers):
         config = await self.bot.db.get_guild_config(guild_id)
         sentinel = await self.bot.db.get_guild_sentinel(guild_id)
 
-        embed = discord.Embed(title=title, description=content, colour=helpers.Colour.lime_green())
-        embed.set_footer(
-            text="⚠️ This message was set up by the moderators of this server. "
-            "This bot will never ask for your personal information, nor is it related to Discord"
-        )
-
-        view = View(timeout=None).add_item(SentinelVerifyButton(config, sentinel))
+        view = SentinelVerifyView(config, sentinel, title=title, body=content)
         try:
-            message = await channel.send(view=view, embed=embed)
+            message = await channel.send(view=view)
         except discord.HTTPException as e:
             raise web.HTTPServiceUnavailable(text=f'failed to send message: {e}')
 
