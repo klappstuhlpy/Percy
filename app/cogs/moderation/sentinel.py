@@ -1040,9 +1040,7 @@ class SentinelVerifyButton(
 
         await interaction.channel.set_permissions(
             interaction.user,
-            reason=(
-                f"Sentinel Verification (ID: {interaction.user.id})"
-            ),
+            reason=f"Sentinel Verification (ID: {interaction.user.id})",
             send_messages=True,
         )
 
@@ -1054,43 +1052,35 @@ class SentinelVerifyButton(
             view=captcha_view, file=captcha.file, ephemeral=True
         )
 
-        try:
-            msg = await interaction.client.wait_for(
-                "message",
-                check=lambda m: (
-                    m.author.id == interaction.user.id
-                    and m.channel.id == interaction.channel.id
-                ),
-                timeout=90.0,
-            )
-        except TimeoutError:
-            captcha = await self.sentinel.bot.render.captcha()
-            captcha_view = captcha_view.prepare_retry(captcha.file)
-            await message.edit(view=captcha_view, attachments=[captcha.file])
-            return
-        else:
-            await msg.delete()
-        finally:
+        while True:
+            try:
+                msg = await interaction.client.wait_for(
+                    "message",
+                    check=lambda m: (
+                        m.author.id == interaction.user.id
+                        and m.channel.id == interaction.channel.id
+                    ),
+                    timeout=90.0,
+                )
+            except TimeoutError:
+                captcha = await self.sentinel.bot.render.captcha()
+                captcha_view = captcha_view.prepare_retry(captcha.file)
+                await message.edit(view=captcha_view, attachments=[captcha.file])
+                return
+
+            if msg.content != captcha.text:
+                captcha = await self.sentinel.bot.render.captcha()
+                captcha_view = captcha_view.prepare_retry(captcha.file)
+                await message.edit(view=captcha_view, attachments=[captcha.file])
+                continue
+
             await interaction.channel.set_permissions(
                 interaction.user,
-                reason=(
-                    f"Sentinel Verification (ID: {interaction.user.id})"
-                ),
+                reason=f"Sentinel Verification (ID: {interaction.user.id})",
                 send_messages=False,
             )
 
-        if msg.content != captcha.text:
-            captcha = await self.sentinel.bot.render.captcha()
-            captcha_view = captcha_view.prepare_retry(captcha.file)
-            await message.edit(view=captcha_view, attachments=[captcha.file])
-            return
-
-        await self.sentinel.unblock(interaction.user)
-        await interaction.followup.send(
-            f"{Emojis.success} Verification complete — welcome to the "
-            f"server!",
-            ephemeral=True,
-        )
+            await self.sentinel.unblock(interaction.user)
 
 
 class CaptchaChallengeView(LayoutView):
