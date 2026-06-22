@@ -121,6 +121,8 @@ class StatsHandlers(InternalAPIHandlers):
                 continue
             if cmd.cog and getattr(cmd.cog, "__hidden__", False):
                 continue
+            if cmd.cog and cmd.cog.qualified_name == "Jishaku":
+                continue
 
             cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
             commands.append({
