@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+from contextlib import suppress
 
 import discord
 from aiohttp import web
@@ -232,6 +233,135 @@ class ContentHandlers(InternalAPIHandlers):
         giveaways = giveaways[offset:offset + limit]
         return web.json_response({'giveaways': giveaways, 'total': total})
 
+    async def _create_giveaway(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Giveaways')
+        if cog is None:
+            raise web.HTTPServiceUnavailable(text='giveaways cog not loaded')
+        if self.bot.timers is None:
+            raise web.HTTPServiceUnavailable(text='the timers system is not available')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        prize = (body.get('prize') or '').strip()
+        if not prize:
+            raise web.HTTPBadRequest(text='prize is required')
+        if len(prize) > 256:
+            raise web.HTTPBadRequest(text='prize must be 256 characters or less')
+
+        try:
+            duration = int(body.get('duration_seconds') or 0)
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='invalid duration')
+        if duration <= 0:
+            raise web.HTTPBadRequest(text='duration must be a positive number of seconds')
+
+        try:
+            winners = int(body.get('winners') or 1)
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='invalid winner count')
+        if winners < 1 or winners > 100:
+            raise web.HTTPBadRequest(text='winner count must be between 1 and 100')
+
+        description = (body.get('description') or '').strip() or None
+
+        channel_id = body.get('channel_id')
+        try:
+            channel = guild.get_channel(int(channel_id)) if channel_id else None
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='invalid channel')
+        if not isinstance(channel, discord.TextChannel):
+            raise web.HTTPBadRequest(text='a valid text channel is required')
+
+        from app.cogs.giveaway import GiveawayEnterButton
+
+        expires = discord.utils.utcnow() + datetime.timedelta(seconds=duration)
+        message = await channel.send(embed=discord.Embed(description='*Preparing Giveaway...*'))
+        giveaway = await cog.create_giveaway(
+            message.channel.id,
+            message.id,
+            guild_id,
+            self.bot.user.id,
+            description=description,
+            prize=prize,
+            winner_count=winners,
+            created=discord.utils.utcnow().isoformat(),
+            expires=expires.isoformat(),
+        )
+
+        await self.bot.timers.create(
+            expires,
+            'giveaway',
+            giveaway_id=giveaway.id,
+            created=discord.utils.utcnow(),
+            timezone='UTC',
+        )
+
+        view = discord.ui.View(timeout=None)
+        view.add_item(GiveawayEnterButton(giveaway))
+        await message.edit(embed=giveaway.to_embed(), view=view)
+
+        return web.json_response({'ok': True, 'id': giveaway.id})
+
+    async def _end_giveaway(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        giveaway_id = int(request.match_info['giveaway_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Giveaways')
+        if cog is None:
+            raise web.HTTPServiceUnavailable(text='giveaways cog not loaded')
+
+        giveaway = await cog.get_guild_giveaway(guild_id, giveaway_id)
+        if giveaway is None:
+            raise web.HTTPNotFound(text='giveaway not found')
+
+        # Draws winners now and tidies the message (same path as the timer firing).
+        await cog.end_giveaway(giveaway.id)
+        return web.json_response({'ok': True})
+
+    async def _delete_giveaway(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        giveaway_id = int(request.match_info['giveaway_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        cog = self.bot.get_cog('Giveaways')
+        if cog is None:
+            raise web.HTTPServiceUnavailable(text='giveaways cog not loaded')
+
+        giveaway = await cog.get_guild_giveaway(guild_id, giveaway_id)
+        if giveaway is None:
+            raise web.HTTPNotFound(text='giveaway not found')
+
+        # Cancel without drawing: drop the pending timer, delete the record, and
+        # strike through the announcement message so nobody keeps entering.
+        if self.bot.timers is not None:
+            with suppress(Exception):
+                await self.bot.timers.delete('giveaway', giveaway_id=str(giveaway_id))
+        await self.bot.db.giveaways.delete_giveaway(giveaway_id)
+
+        with suppress(Exception):
+            if giveaway.message is discord.utils.MISSING:
+                await giveaway.fetch_message()
+            if giveaway.message:
+                await giveaway.message.edit(
+                    content=f'This giveaway for *{giveaway.prize}* was cancelled.', embed=None, view=None)
+
+        return web.json_response({'ok': True})
+
     async def _get_tags(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         guild = self.bot.get_guild(guild_id)
@@ -239,16 +369,17 @@ class ContentHandlers(InternalAPIHandlers):
             raise web.HTTPNotFound(text='guild not found')
 
         total = await self.bot.db.tags.count_tags(guild_id)
-        most_used = await self.bot.db.tags.get_most_used_tags(guild_id, limit=25)
+        # Full directory (every parent tag), used by the dashboard's searchable
+        # table, export selection and per-tag preview. Owners are resolved from
+        # the member cache only (no per-tag fetch_user — the list can be large).
+        all_tags = await self.bot.db.tags.get_guild_tags(guild_id)
         top_creators = await self.bot.db.tags.get_top_tag_creators(guild_id, limit=10)
         total_uses = await self.bot.db.tags.count_tag_command_uses(guild_id)
 
         tags = []
-        for record in most_used:
+        for record in sorted(all_tags, key=lambda r: r.get('uses', 0), reverse=True):
             owner_id = record.get('owner_id')
             member = guild.get_member(owner_id) if owner_id else None
-            if not member:
-                member = await self.bot.fetch_user(owner_id) if owner_id else None
 
             tags.append({
                 'id': record['id'],
@@ -276,6 +407,134 @@ class ContentHandlers(InternalAPIHandlers):
             'tags': tags,
             'top_creators': creators,
         })
+
+    async def _get_tag_detail(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            tag_id = int(request.match_info['tag_id'])
+        except (TypeError, ValueError):
+            raise web.HTTPNotFound(text='tag not found')
+
+        record = await self.bot.db.tags.get_tag_record(tag_id, location_id=guild_id)
+        if record is None:
+            raise web.HTTPNotFound(text='tag not found')
+
+        owner_id = record.get('owner_id')
+        member = guild.get_member(owner_id) if owner_id else None
+        return web.json_response({
+            'id': record['id'],
+            'name': record['name'],
+            'content': record['content'],
+            'owner_id': str(owner_id) if owner_id else None,
+            'owner_name': member.display_name if member else None,
+            'uses': record.get('uses', 0),
+            'created_at': record['created_at'].isoformat() if record.get('created_at') else None,
+        })
+
+    async def _delete_tag(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            tag_id = int(request.match_info['tag_id'])
+        except (TypeError, ValueError):
+            raise web.HTTPNotFound(text='tag not found')
+
+        record = await self.bot.db.tags.get_tag_record(tag_id, location_id=guild_id)
+        if record is None:
+            raise web.HTTPNotFound(text='tag not found')
+
+        # delete_tag also removes every alias that points to it.
+        await self.bot.db.tags.delete_tag(record['id'])
+        return web.json_response({'ok': True})
+
+    async def _export_tags(self, request: web.Request) -> web.Response:
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        records = await self.bot.db.tags.export_tags(guild_id)
+        tags = [{'name': r['name'], 'content': r['content']} for r in records]
+        return web.json_response({'tags': tags})
+
+    async def _import_tags(self, request: web.Request) -> web.Response:
+        """Bulk-create tags from a parsed (name, content) list.
+
+        Access is gated server-side (admin/Manage-Server) by the dashboard, which
+        also malware-scans and sanitises the uploaded file. Tag creation goes
+        through the parameterised repo layer (no string-built SQL), so the import
+        cannot inject SQL. Duplicates and reserved names are skipped, not failed.
+        """
+        guild_id = int(request.match_info['guild_id'])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        raw = body.get('tags')
+        if not isinstance(raw, list):
+            raise web.HTTPBadRequest(text='tags must be a list')
+
+        try:
+            owner_id = int(body.get('owner_id')) if body.get('owner_id') else self.bot.user.id
+        except (TypeError, ValueError):
+            owner_id = self.bot.user.id
+
+        root = self.bot.get_command('tag')
+        reserved = set(root.all_commands) if root else set()
+
+        created = 0
+        skipped = 0
+        failed: list[dict] = []
+        seen: set[str] = set()
+
+        for item in raw[:1000]:
+            if not isinstance(item, dict):
+                continue
+            name = (item.get('name') or '').strip()
+            content = (item.get('content') or '').strip()
+            if not name or not content:
+                failed.append({'name': name or '(empty)', 'error': 'name and content are required'})
+                continue
+            if len(name) > 100:
+                failed.append({'name': name[:60], 'error': 'name exceeds 100 characters'})
+                continue
+            if len(content) > 2000:
+                failed.append({'name': name, 'error': 'content exceeds 2000 characters'})
+                continue
+
+            lname = name.lower()
+            if lname.partition(' ')[0] in reserved:
+                failed.append({'name': name, 'error': 'reserved tag name'})
+                continue
+            if lname in seen:
+                skipped += 1
+                continue
+            seen.add(lname)
+
+            existing = await self.bot.db.tags.get_tag_record(name, location_id=guild_id)
+            if existing is not None:
+                skipped += 1
+                continue
+
+            try:
+                await self.bot.db.tags.create_tag(name, content, owner_id, guild_id)
+                created += 1
+            except Exception:
+                failed.append({'name': name, 'error': 'could not be created'})
+
+        return web.json_response({'ok': True, 'created': created, 'skipped': skipped, 'failed': failed})
 
     async def _get_commands(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
@@ -583,14 +842,38 @@ class ContentHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
+        # Live spawned channels are tracked globally in ``bot.temp_channels``
+        # ({channel_id: True}); there is no stored hub->spawned link, so we group
+        # the currently-active ones by their category and attach them to the hub
+        # that lives in the same category (the spawner always inherits the hub's
+        # category). Multiple hubs sharing a category will list the same actives.
+        actives_by_category: dict[int | None, list[dict]] = {}
+        for raw_id in self.bot.temp_channels.all():
+            ch = guild.get_channel(int(raw_id))
+            if not isinstance(ch, discord.VoiceChannel):
+                continue
+            members = [m for m in ch.members if not m.bot]
+            actives_by_category.setdefault(ch.category_id, []).append({
+                'channel_id': str(ch.id),
+                'channel_name': ch.name,
+                'user_count': len(members),
+            })
+
         records = await self.bot.db.temp_channels.get_guild_channels(guild_id)
         entries = []
         for r in records:
             ch = guild.get_channel(r['channel_id'])
+            category_id = ch.category_id if isinstance(ch, discord.VoiceChannel) else None
+            active = sorted(
+                actives_by_category.get(category_id, []) if ch else [],
+                key=lambda a: a['channel_name'].lower(),
+            )
             entries.append({
                 'channel_id': str(r['channel_id']),
                 'channel_name': ch.name if ch else 'deleted-channel',
                 'format': r['format'],
+                'active_channels': active,
+                'total_users': sum(a['user_count'] for a in active),
             })
         return web.json_response({'entries': entries})
 

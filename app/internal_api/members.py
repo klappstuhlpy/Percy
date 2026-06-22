@@ -185,6 +185,13 @@ class MemberHandlers(InternalAPIHandlers):
         avatar_records = await self.bot.db.stats.get_avatar_history(user_id, limit=100)
         avatar_count = len(avatar_records)
 
+        # Tags this user owns in the guild (most-used first), for the profile.
+        owned_tag_records = await self.bot.db.tags.get_owned_tags(guild_id, user_id)
+        owned_tags = [
+            {'id': r['id'], 'name': r['name'], 'uses': r.get('uses', 0)}
+            for r in sorted(owned_tag_records, key=lambda r: r.get('uses', 0), reverse=True)[:50]
+        ]
+
         return web.json_response({
             **identity,
             'leveling': leveling,
@@ -195,6 +202,7 @@ class MemberHandlers(InternalAPIHandlers):
             'last_seen': last_seen,
             'names': names,
             'avatar_count': avatar_count,
+            'owned_tags': owned_tags,
         })
 
     async def _get_member_self(self, request: web.Request) -> web.Response:
@@ -274,11 +282,19 @@ class MemberHandlers(InternalAPIHandlers):
             ] if top_commands else [],
         }
 
+        # Tags this member owns in the guild (most-used first).
+        owned_tag_records = await self.bot.db.tags.get_owned_tags(guild_id, user_id)
+        owned_tags = [
+            {'id': r['id'], 'name': r['name'], 'uses': r.get('uses', 0)}
+            for r in sorted(owned_tag_records, key=lambda r: r.get('uses', 0), reverse=True)[:50]
+        ]
+
         return web.json_response({
             **identity,
             'leveling': leveling,
             'economy': economy,
             'command_stats': command_stats,
+            'owned_tags': owned_tags,
         })
 
     async def _member_action(self, request: web.Request) -> web.Response:

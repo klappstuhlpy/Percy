@@ -110,8 +110,15 @@ class InternalAPI(
         r.add_post(f'{g}/polls/{{poll_id}}/end', self._end_poll)
         # Giveaways
         r.add_get(f'{g}/giveaways', self._get_giveaways)
-        # Tags
+        r.add_post(f'{g}/giveaways', self._create_giveaway)
+        r.add_post(f'{g}/giveaways/{{giveaway_id}}/end', self._end_giveaway)
+        r.add_delete(f'{g}/giveaways/{{giveaway_id}}', self._delete_giveaway)
+        # Tags (static sub-paths before the dynamic {tag_id} matcher)
         r.add_get(f'{g}/tags', self._get_tags)
+        r.add_get(f'{g}/tags/export', self._export_tags)
+        r.add_post(f'{g}/tags/import', self._import_tags)
+        r.add_get(f'{g}/tags/{{tag_id}}', self._get_tag_detail)
+        r.add_delete(f'{g}/tags/{{tag_id}}', self._delete_tag)
         # Commands
         r.add_get(f'{g}/commands', self._get_commands)
         r.add_post(f'{g}/commands/toggle', self._toggle_command)
