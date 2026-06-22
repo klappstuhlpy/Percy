@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zoneinfo
-from typing import TYPE_CHECKING, ClassVar, Final, NamedTuple
+from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 import dateutil.tz
 import discord
@@ -12,12 +12,14 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from lxml import etree
 
+from app.core import LayoutView
 from app.core.models import Cog, describe, group
-from app.utils import fuzzy, helpers, timetools
+from app.utils import fuzzy, get_asset_url, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
     from app.core import Bot, Context
+    from app.database.base import UserConfig
 
 
 class TimeZone(NamedTuple):
@@ -53,6 +55,228 @@ class CLDRDataEntry(NamedTuple):
     aliases: list[str]
     deprecated: bool
     preferred: str | None
+
+
+def _timezone_state(config: UserConfig) -> str:
+    """Render the body line for the timezone setting section."""
+    if config.timezone:
+        time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
+        offset = timetools.get_timezone_offset(time, with_name=True)
+        clock = time.strftime("%Y-%m-%d %I:%M %p")
+        return f"-# **{config.timezone}** · `{clock} {offset}`"
+    return "-# Not set — used to localise reminders and other times."
+
+
+def _toggle_state(enabled: bool) -> str:
+    """Render the body line for a boolean tracking setting section."""
+    if enabled:
+        return f"-# {Emojis.success} Currently **on** — Percy stores this for you."
+    return f"-# {Emojis.error} Currently **off** — nothing new is stored."
+
+
+class TimezoneModal(discord.ui.Modal, title="Set Your Timezone"):
+    """Collects a timezone string (or blank to clear) from the settings card."""
+
+    tz_input = discord.ui.TextInput(
+        label="Timezone",
+        placeholder="e.g. Europe/Berlin, Eastern Time — leave empty to clear",
+        required=False,
+        max_length=100,
+    )
+
+    def __init__(self, view: SettingsView) -> None:
+        super().__init__(timeout=120)
+        self._view = view
+        if view.config.timezone:
+            self.tz_input.default = view.config.timezone
+
+    async def on_submit(self, interaction: discord.Interaction[Bot]) -> None:
+        value = self.tz_input.value.strip()
+
+        if not value:
+            await interaction.client.db.users.clear_timezone(self._view.user.id)
+            await self._view.refresh(interaction, status=f"{Emojis.success} Timezone cleared.")
+            return
+
+        resolved = self._view.cog.resolve_timezone(value)
+        if resolved is None:
+            await interaction.response.send_message(
+                f"{Emojis.error} Could not find a timezone matching {value!r}.", ephemeral=True
+            )
+            return
+
+        await interaction.client.db.users.set_timezone(self._view.user.id, resolved.key)
+        await self._view.refresh(interaction, status=f"{Emojis.success} Timezone set to **{resolved.label}**.")
+
+
+class DeleteDataModal(discord.ui.Modal, title="Delete Personal Data"):
+    """Type-to-confirm gate before erasing a user's stored history."""
+
+    confirm = discord.ui.TextInput(
+        label='Type "DELETE" to confirm',
+        placeholder="DELETE",
+        required=True,
+        max_length=10,
+    )
+
+    def __init__(self, view: SettingsView) -> None:
+        super().__init__(timeout=120)
+        self._view = view
+
+    async def on_submit(self, interaction: discord.Interaction[Bot]) -> None:
+        if self.confirm.value.strip().upper() != "DELETE":
+            await interaction.response.send_message(
+                f"{Emojis.error} Confirmation text didn't match — nothing was deleted.", ephemeral=True
+            )
+            return
+
+        await interaction.client.db.users.delete_personal_data(self._view.user.id)
+        await interaction.response.send_message(
+            f"{Emojis.success} Your stored presence, name/nickname and avatar history has been removed.",
+            ephemeral=True,
+        )
+
+
+class SettingsView(LayoutView):
+    """Components V2 overview of a user's personal settings.
+
+    Each setting is rendered as a :class:`discord.ui.Section`: the title and current
+    state sit on the left, with the button that manages it as the section accessory.
+    """
+
+    def __init__(self, ctx: Context, *, cog: UserSettings, config: UserConfig) -> None:
+        super().__init__(timeout=300, members=ctx.author)
+        self.ctx = ctx
+        self.cog = cog
+        self.user = ctx.author
+        self.config = config
+        self._status: str | None = None
+
+        self.timezone_btn: discord.ui.Button = discord.ui.Button(style=discord.ButtonStyle.blurple)
+        self.timezone_btn.callback = self._on_timezone  # type: ignore[assignment]
+
+        self.presence_btn: discord.ui.Button = discord.ui.Button()
+        self.presence_btn.callback = self._on_toggle_presence  # type: ignore[assignment]
+
+        self.history_btn: discord.ui.Button = discord.ui.Button()
+        self.history_btn.callback = self._on_toggle_history  # type: ignore[assignment]
+
+        self.export_btn: discord.ui.Button = discord.ui.Button(
+            label="Export", style=discord.ButtonStyle.secondary, emoji="📤"
+        )
+        self.export_btn.callback = self._on_export  # type: ignore[assignment]
+
+        self.delete_btn: discord.ui.Button = discord.ui.Button(
+            label="Delete", style=discord.ButtonStyle.danger, emoji=Emojis.trash
+        )
+        self.delete_btn.callback = self._on_delete  # type: ignore[assignment]
+
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        self.clear_items()
+
+        self.timezone_btn.label = "Change" if self.config.timezone else "Set"
+        self.presence_btn.label = "Enabled" if self.config.track_presence else "Disabled"
+        self.presence_btn.style = (
+            discord.ButtonStyle.success if self.config.track_presence else discord.ButtonStyle.danger
+        )
+        self.history_btn.label = "Enabled" if self.config.track_history else "Disabled"
+        self.history_btn.style = (
+            discord.ButtonStyle.success if self.config.track_history else discord.ButtonStyle.danger
+        )
+
+        container = discord.ui.Container(accent_colour=helpers.Colour.brand())
+        container.add_item(
+            discord.ui.Section(
+                "## User Settings\n-# Manage your personal preferences and the data Percy keeps about you.",
+                accessory=discord.ui.Thumbnail(get_asset_url(self.user)),
+            )
+        )
+        container.add_item(discord.ui.Separator())
+
+        container.add_item(
+            discord.ui.Section(f"### Timezone\n{_timezone_state(self.config)}", accessory=self.timezone_btn)
+        )
+        container.add_item(
+            discord.ui.Section(
+                f"### Presence Tracking\n{_toggle_state(self.config.track_presence)}",
+                accessory=self.presence_btn,
+            )
+        )
+        container.add_item(
+            discord.ui.Section(
+                f"### Name & Avatar History\n{_toggle_state(self.config.track_history)}",
+                accessory=self.history_btn,
+            )
+        )
+
+        container.add_item(discord.ui.Separator())
+        container.add_item(
+            discord.ui.Section(
+                "### Export My Data\n-# Get a copy of everything Percy has stored about you, sent to your DMs.",
+                accessory=self.export_btn,
+            )
+        )
+        container.add_item(
+            discord.ui.Section(
+                "### Delete My Data\n-# Permanently erase your stored presence, name/nickname and avatar history.",
+                accessory=self.delete_btn,
+            )
+        )
+
+        container.add_item(discord.ui.Separator())
+        footer = self._status or "Tracking is on by default — toggle it off any time."
+        container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
+
+        self.add_item(container)
+
+    async def refresh(self, interaction: discord.Interaction[Bot], *, status: str | None = None) -> None:
+        """Re-read the config, rebuild the card and edit the message in place."""
+        self.config = await interaction.client.db.get_user_config(self.user.id)
+        self._status = status
+        self._rebuild()
+        if interaction.response.is_done():
+            await interaction.edit_original_response(view=self)
+        else:
+            await interaction.response.edit_message(view=self)
+
+    async def _on_timezone(self, interaction: discord.Interaction[Bot]) -> None:
+        await interaction.response.send_modal(TimezoneModal(self))
+
+    async def _on_toggle_presence(self, interaction: discord.Interaction[Bot]) -> None:
+        self.config = await self.config.update(track_presence=not self.config.track_presence)
+        state = "enabled" if self.config.track_presence else "disabled"
+        await self.refresh(interaction, status=f"{Emojis.success} Presence tracking {state}.")
+
+    async def _on_toggle_history(self, interaction: discord.Interaction[Bot]) -> None:
+        self.config = await self.config.update(track_history=not self.config.track_history)
+        state = "enabled" if self.config.track_history else "disabled"
+        await self.refresh(interaction, status=f"{Emojis.success} Name/avatar history tracking {state}.")
+
+    async def _on_export(self, interaction: discord.Interaction[Bot]) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        data = await interaction.client.db.users.export_all_user_data(self.user.id)
+        payload = json.dumps(data, indent=2, default=str, ensure_ascii=False)
+        file = discord.File(io.BytesIO(payload.encode("utf-8")), filename=f"percy-data-{self.user.id}.json")
+
+        try:
+            await self.user.send(
+                "Here is a copy of all the personal data Percy has stored about you.", file=file
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                f"{Emojis.error} I couldn't DM you — enable direct messages from server members and try again.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"{Emojis.success} I've sent a copy of your stored data to your DMs.", ephemeral=True
+        )
+
+    async def _on_delete(self, interaction: discord.Interaction[Bot]) -> None:
+        await interaction.response.send_modal(DeleteDataModal(self))
 
 
 class UserSettings(Cog, name="User Settings"):
@@ -163,31 +387,21 @@ class UserSettings(Cog, name="User Settings"):
     async def settings(self, ctx: Context) -> None:
         """Shows your settings."""
         config = await self.bot.db.get_user_config(ctx.author.id)
+        view = SettingsView(ctx, cog=self, config=config)
+        view.message = await ctx.send(view=view)
 
-        embed = discord.Embed(title="User Settings", colour=helpers.Colour.white())
+    def resolve_timezone(self, query: str) -> TimeZone | None:
+        """Best-effort, non-interactive timezone resolution for the settings card.
 
-        if config.timezone:
-            time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
-            offset = timetools.get_timezone_offset(time, with_name=True)
-            time = time.strftime("%Y-%m-%d %I:%M %p")
-            tz_text = f"**{config.timezone}** - `{time} {offset}`"
-        else:
-            tz_text = "Not set"
-
-        embed.add_field(name="Time", value=tz_text, inline=False)
-        embed.add_field(name="Track Presence", value="Yes" if config.track_presence else "No")
-        embed.add_field(name="Track Name/Avatar History", value="Yes" if config.track_history else "No")
-        embed.add_field(
-            name="Your data",
-            value=(
-                f"Tracking is on by default. Turn it **all** off with `{ctx.clean_prefix}settings tracking false`, "
-                f"export a copy with `{ctx.clean_prefix}settings request-data`, "
-                f"or delete it with `{ctx.clean_prefix}settings remove-personal-data`."
-            ),
-            inline=False,
-        )
-
-        await ctx.send(embed=embed)
+        Mirrors :meth:`TimeZone.convert` but, since a modal can't disambiguate, falls
+        back to the first fuzzy match instead of prompting.
+        """
+        if query in self.timezone_aliases:
+            return TimeZone(key=self.timezone_aliases[query], label=query)
+        if query in self.valid_timezones:
+            return TimeZone(key=query, label=query)
+        matches = self.find_timezones(query)
+        return matches[0] if matches else None
 
     @settings.group(
         name="timezone",
