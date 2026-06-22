@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import importlib.resources
 import io
 import json
 import zoneinfo
@@ -12,12 +14,14 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from lxml import etree
 
-from app.core import LayoutView
+from app.core import Accent, LayoutView, make_notice
 from app.core.models import Cog, describe, group
 from app.utils import fuzzy, get_asset_url, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
+    import datetime
+
     from app.core import Bot, Context
     from app.database.base import UserConfig
 
@@ -57,12 +61,82 @@ class CLDRDataEntry(NamedTuple):
     preferred: str | None
 
 
+# ISO 3166-1 alpha-2 codes of countries that conventionally write the time of day
+# on a 12-hour clock (AM/PM). Everywhere else Percy renders a 24-hour clock. This is
+# a pragmatic convention map for display, not an exhaustive locale database.
+_TWELVE_HOUR_COUNTRIES: frozenset[str] = frozenset(
+    {
+        "US",  # United States
+        "CA",  # Canada
+        "AU",  # Australia
+        "NZ",  # New Zealand
+        "PH",  # Philippines
+        "IN",  # India
+        "PK",  # Pakistan
+        "BD",  # Bangladesh
+        "EG",  # Egypt
+        "MY",  # Malaysia
+        "MX",  # Mexico
+        "CO",  # Colombia
+        "SV",  # El Salvador
+        "HN",  # Honduras
+        "NI",  # Nicaragua
+        "CR",  # Costa Rica
+        "GT",  # Guatemala
+        "DO",  # Dominican Republic
+        "SA",  # Saudi Arabia
+        "JO",  # Jordan
+        "IE",  # Ireland
+        "GB",  # United Kingdom
+    }
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _timezone_country_map() -> dict[str, str]:
+    """Map each IANA timezone to its primary ISO 3166 country code.
+
+    Parsed once from the ``zone1970.tab`` table bundled with the ``tzdata`` package
+    (the first code in each row is the zone's primary country). Returns an empty map
+    if the table can't be read, in which case callers fall back to a 24-hour clock.
+    """
+    mapping: dict[str, str] = {}
+    try:
+        table = importlib.resources.files("tzdata").joinpath("zoneinfo", "zone1970.tab").read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        return mapping
+
+    for line in table.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        codes, zone = parts[0], parts[2]
+        mapping[zone] = codes.split(",")[0]
+    return mapping
+
+
+def _uses_12_hour(tz_name: str | None) -> bool:
+    """Whether ``tz_name``'s country conventionally uses a 12-hour (AM/PM) clock."""
+    if not tz_name:
+        return False
+    return _timezone_country_map().get(tz_name) in _TWELVE_HOUR_COUNTRIES
+
+
+def _format_clock(dt: datetime.datetime, tz_name: str | None) -> str:
+    """Format ``dt`` using the 12- or 24-hour convention usual for ``tz_name``."""
+    if _uses_12_hour(tz_name):
+        return dt.strftime("%Y-%m-%d %I:%M %p")
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+
 def _timezone_state(config: UserConfig) -> str:
     """Render the body line for the timezone setting section."""
     if config.timezone:
         time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
         offset = timetools.get_timezone_offset(time, with_name=True)
-        clock = time.strftime("%Y-%m-%d %I:%M %p")
+        clock = _format_clock(time, config.timezone)
         return f"-# **{config.timezone}** · `{clock} {offset}`"
     return "-# Not set — used to localise reminders and other times."
 
@@ -420,28 +494,39 @@ class UserSettings(Cog, name="User Settings"):
 
         time = discord.utils.utcnow().astimezone(dateutil.tz.gettz(config.timezone))
         offset = timetools.get_timezone_offset(time, with_name=True)
-        time = time.strftime("%Y-%m-%d %I:%M %p")
+        clock = _format_clock(time, config.timezone)
 
-        if user.id == ctx.author.id:
-            await ctx.send_success(f"Your timezone is *{config.timezone!r}*. The current time is `{time} {offset}`.")
-        else:
-            await ctx.send_success(f"The current time for {user} is `{time} {offset}`.")
+        is_self = user.id == ctx.author.id
+        card = make_notice(
+            title="Your Timezone" if is_self else f"{user.display_name}'s Timezone",
+            description=(
+                f"Your timezone is set to **{config.timezone}**." if is_self
+                else f"The current time for {user.mention} is shown below."
+            ),
+            accent=Accent.success,
+            thumbnail=get_asset_url(user),
+            fields=[("Current Time", f"`{clock} {offset}`")],
+        )
+        await ctx.send(view=card)
 
     @timezone.command(name="info", description="Retrieves info about a timezone.")
     @describe(tz="The timezone to get info about.")
     async def timezone_info(self, ctx: Context, *, tz: TimeZone) -> None:
         """Retrieves info about a timezone."""
-
-        embed = discord.Embed(title=f"ID: {tz.key}", colour=helpers.Colour.white())
         dt = discord.utils.utcnow().astimezone(dateutil.tz.gettz(tz.key))
-        time = dt.strftime("%Y-%m-%d %I:%M %p")
 
-        embed.add_field(name="Current Time", value=time, inline=False)
-        embed.add_field(name="UTC Offset", value=timetools.get_timezone_offset(dt))
-        embed.add_field(name="Daylight Savings", value="Yes" if dt.dst() else "No")
-        embed.add_field(name="Abbreviation", value=dt.tzname())
-
-        await ctx.send(embed=embed)
+        card = make_notice(
+            title=f"Timezone: {tz.key}",
+            accent=Accent.info,
+            fields=[
+                ("Current Time", f"`{_format_clock(dt, tz.key)}`"),
+                ("UTC Offset", timetools.get_timezone_offset(dt)),
+                ("Daylight Savings", "Yes" if dt.dst() else "No"),
+                ("Abbreviation", dt.tzname() or "—"),
+                ("Clock Format", "12-hour (AM/PM)" if _uses_12_hour(tz.key) else "24-hour"),
+            ],
+        )
+        await ctx.send(view=card)
 
     @timezone.command(
         name="set",
@@ -468,10 +553,10 @@ class UserSettings(Cog, name="User Settings"):
         return [tz.to_choice() for tz in matches[:25]]
 
     @timezone.command(
-        name="purge",
-        description="Clears the timezone of a user.",
+        name="reset",
+        description="Clears your timezone. This is useful if you want to stop using timezone-aware features or if you want to reset a misconfigured timezone.",
     )
-    async def timezone_purge(self, ctx: Context) -> None:
+    async def timezone_reset(self, ctx: Context) -> None:
         """Clears your timezone."""
         config = await self.bot.db.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
@@ -486,49 +571,6 @@ class UserSettings(Cog, name="User Settings"):
 
         keys = fuzzy.finder(query, self.timezone_aliases.keys())
         return [TimeZone(label=k, key=self.timezone_aliases[k]) for k in keys]
-
-    @settings.command(
-        name="tracking",
-        description="Turn ALL of Percy's data tracking about you on or off in one go.",
-    )
-    @describe(enabled="True keeps tracking on (the default); False disables presence and name/avatar history.")
-    async def settings_tracking(self, ctx: Context, enabled: bool) -> None:
-        """Master switch for every kind of data tracking Percy keeps about you.
-
-        Turning this off disables both presence tracking and name/avatar history. It
-        does not delete data already stored — use `settings remove-personal-data` for that.
-        """
-        config = await self.bot.db.get_user_config(ctx.author.id)
-        await config.update(track_presence=enabled, track_history=enabled)
-        if enabled:
-            await ctx.send_success("All data tracking has been **enabled**.")
-        else:
-            await ctx.send_success(
-                "All data tracking has been **disabled**. Nothing new will be stored. "
-                f"To erase what's already saved, use `{ctx.clean_prefix}settings remove-personal-data`."
-            )
-
-    @settings.command(
-        name="presence",
-        description="Toggles tracking of your presence status.",
-    )
-    @describe(enabled="Whether to enable or disable presence tracking.")
-    async def settings_presence(self, ctx: Context, enabled: bool) -> None:
-        """Toggles tracking of your presence status."""
-        config = await self.bot.db.get_user_config(ctx.author.id)
-        await config.update(track_presence=enabled)
-        await ctx.send_success(f"Presence tracking has been {'enabled' if enabled else 'disabled'}.")
-
-    @settings.command(
-        name="history",
-        description="Toggles tracking of your username, nickname and avatar history.",
-    )
-    @describe(enabled="Whether to enable or disable name/nickname/avatar history tracking.")
-    async def settings_history(self, ctx: Context, enabled: bool) -> None:
-        """Toggles tracking of your username, nickname and avatar history."""
-        config = await self.bot.db.get_user_config(ctx.author.id)
-        await config.update(track_history=enabled)
-        await ctx.send_success(f"Name/avatar history tracking has been {'enabled' if enabled else 'disabled'}.")
 
     @settings.command(
         name="request-data",
