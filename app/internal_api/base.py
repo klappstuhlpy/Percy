@@ -90,6 +90,9 @@ class InternalAPI(
         r.add_get(f'{API_V1}/users/{{discord_id}}/avatar', self._get_user_avatar)
         r.add_get(f'{API_V1}/users/{{discord_id}}/settings', self._get_user_settings)
         r.add_patch(f'{API_V1}/users/{{discord_id}}/settings', self._patch_user_settings)
+        r.add_get(f'{API_V1}/users/{{discord_id}}/history', self._get_user_history)
+        r.add_get(f'{API_V1}/users/{{discord_id}}/data-export', self._export_user_data)
+        r.add_delete(f'{API_V1}/users/{{discord_id}}/personal-data', self._delete_user_data)
         # Leveling
         r.add_get(f'{g}/leveling/config', self._get_leveling_config)
         r.add_get(f'{g}/leveling/leaderboard', self._get_leveling_leaderboard)

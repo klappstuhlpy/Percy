@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 
 from aiohttp import web
 
@@ -415,5 +416,59 @@ class MemberHandlers(InternalAPIHandlers):
         if 'track_history' in body:
             await config.update(track_history=bool(body['track_history']))
 
+        return web.json_response({'ok': True})
+
+    async def _get_user_history(self, request: web.Request) -> web.Response:
+        """GET /api/v1/users/{discord_id}/history — consent-tracked history.
+
+        Returns the user's username/nickname change log, avatar snapshots
+        (base64-encoded, newest-capped) and presence transitions over the last
+        30 days — the data Percy keeps when ``track_history``/``track_presence``
+        are on. Feeds the member's personal-dashboard history view.
+        """
+        user_id = int(request.match_info['discord_id'])
+        avatar_limit = min(int(request.query.get('avatar_limit', '24')), 50)
+
+        usernames = await self.bot.db.stats.get_item_history(user_id, 'name')
+        nicknames = await self.bot.db.stats.get_item_history(user_id, 'nickname')
+        avatars = await self.bot.db.stats.get_avatar_history(user_id, limit=avatar_limit)
+        presence = await self.bot.db.stats.get_presence_history(user_id, days=30)
+
+        def _ts(record: object) -> str | None:
+            value = record['changed_at']  # type: ignore[index]
+            return value.isoformat() if value else None
+
+        return web.json_response({
+            'usernames': [{'name': r['item_value'], 'changed_at': _ts(r)} for r in usernames],
+            'nicknames': [{'name': r['item_value'], 'changed_at': _ts(r)} for r in nicknames],
+            'avatars': [
+                {'image': base64.b64encode(r['avatar']).decode(), 'changed_at': _ts(r)}
+                for r in avatars
+            ],
+            'presence': [
+                {'status': r['status'], 'status_before': r['status_before'], 'changed_at': _ts(r)}
+                for r in presence
+            ],
+        })
+
+    async def _export_user_data(self, request: web.Request) -> web.Response:
+        """GET /api/v1/users/{discord_id}/data-export — full GDPR-style export.
+
+        Mirrors the ``settings request-data`` command: every user-keyed table
+        Percy stores, aggregated by :meth:`UsersRepository.export_all_user_data`.
+        ``default=str`` serialises the datetimes/Decimals the payload contains.
+        """
+        user_id = int(request.match_info['discord_id'])
+        data = await self.bot.db.users.export_all_user_data(user_id)
+        return web.json_response(data, dumps=lambda obj: json.dumps(obj, default=str, ensure_ascii=False))
+
+    async def _delete_user_data(self, request: web.Request) -> web.Response:
+        """DELETE /api/v1/users/{discord_id}/personal-data — erase tracked history.
+
+        Permanently removes the user's stored presence, avatar and name/nickname
+        history (the same data the ``settings remove-personal-data`` command wipes).
+        """
+        user_id = int(request.match_info['discord_id'])
+        await self.bot.db.users.delete_personal_data(user_id)
         return web.json_response({'ok': True})
 
