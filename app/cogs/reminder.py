@@ -22,6 +22,20 @@ if TYPE_CHECKING:
     from dateutil.relativedelta import relativedelta
 
 
+class FriendList(commands.Converter):
+    """Resolve a whitespace-separated list of member references into a list of members.
+
+    Backs the reminder ``--with`` flag. Each token is converted with the standard
+    :class:`~discord.ext.commands.MemberConverter`, so mentions, ids and names all work.
+    A plain :class:`~discord.ext.commands.Converter` (rather than a ``list[Member]`` hint) is
+    used so the flag still maps onto a single supported option when exposed as a slash command.
+    """
+
+    async def convert(self, ctx: Context, argument: str) -> list[discord.Member]:  # type: ignore[override]
+        member_converter = commands.MemberConverter()
+        return [await member_converter.convert(ctx, token) for token in argument.split()]
+
+
 class SnoozeModal(discord.ui.Modal, title="Snooze"):
     duration = discord.ui.TextInput(
         label="Duration", placeholder="e.g. 10 minutes (Must be a future time.)", default="10 minutes", min_length=2
@@ -111,6 +125,11 @@ class ReminderTimer(Timer):
         """The recurrence interval (relativedelta kwargs), if this reminder repeats."""
         return self.get("recur")
 
+    @property
+    def shared(self) -> list[int]:
+        """Friend user ids this reminder is also delivered to ("shared with friends")."""
+        return self.get("shared") or []
+
 
 class ReminderFlags(Flags):
     timezone: TimeZone = flag(alias="tz", short="t", description="The timezone to use for the reminder.")
@@ -125,12 +144,19 @@ class ReminderFlags(Flags):
         short="c",
         description="Stop a recurring reminder after this many times (requires --every).",
     )
+    share: FriendList = flag(
+        aliases=("with", "friends"),
+        short="w",
+        description="Also remind these friends at the same time (mention them).",
+    )
 
 
 class Reminder(Cog):
     """Set reminders for a certain period of time and get notified."""
 
     emoji = "<a:clock:1322338395799945247>"
+
+    MAX_SHARED = 10
 
     @group(
         "reminder",
@@ -142,6 +168,7 @@ class Reminder(Cog):
             "do the dishes tomorrow",
             "in 3 days do the thing",
             "2d unmute someone",
+            "tomorrow at 8pm raid night --with @friend1 @friend2",
         ],
         hybrid=True,
     )
@@ -176,6 +203,11 @@ class Reminder(Cog):
 
         recur, recur_label, recur_remaining = self._build_recurrence(flags, reference=prompt.dt)
 
+        share = cast("list[discord.Member] | None", flags.share)
+        if share and flags.dm:
+            raise commands.BadArgument("A reminder delivered to your DMs can't be shared with friends.")
+        shared_ids = self._resolve_shared(share, ctx.author)
+
         zone = flags.timezone or await self.bot.db.get_user_timezone(ctx.author.id)
 
         channel = ctx.channel
@@ -196,6 +228,7 @@ class Reminder(Cog):
             recur=recur,
             recur_label=recur_label,
             recur_remaining=recur_remaining,
+            shared=shared_ids or None,
         )
 
         message = (
@@ -205,7 +238,32 @@ class Reminder(Cog):
         if recur_label:
             suffix = f" ({pluralize(recur_remaining + 1):time} total)" if recur_remaining is not None else ""
             message += f"\n{Emojis.success} Then repeating every **{recur_label}**{suffix}."
-        await ctx.send_success(message)
+        if shared_ids:
+            friends = ", ".join(f"<@{uid}>" for uid in shared_ids)
+            message += f"\n{Emojis.success} I'll ping {friends} at the same time."
+        # Only ping the author on confirmation; shared friends are pinged when the reminder fires.
+        await ctx.send_success(message, allowed_mentions=discord.AllowedMentions(users=[ctx.author]))
+
+    @classmethod
+    def _resolve_shared(cls, members: list[discord.Member] | None, author: discord.abc.User) -> list[int]:
+        """Normalise the ``--with`` members into a capped, de-duplicated list of user ids.
+
+        Bots and the author themselves are dropped (the author is always reminded), and the
+        result is limited to :attr:`MAX_SHARED` to keep shared reminders from becoming mass pings.
+        """
+        if not members:
+            return []
+
+        seen: dict[int, None] = {}
+        for member in members:
+            if member.bot or member.id == author.id:
+                continue
+            seen[member.id] = None
+
+        ids = list(seen)
+        if len(ids) > cls.MAX_SHARED:
+            raise commands.BadArgument(f"You can only share a reminder with up to {cls.MAX_SHARED} friends.")
+        return ids
 
     @staticmethod
     def _build_recurrence(
@@ -263,11 +321,13 @@ class Reminder(Cog):
         embed.set_author(name=str(ctx.author), icon_url=get_asset_url(ctx.author))
         embed.set_footer(text=f"Showing {pluralize(len(records)):Reminder}")
 
-        for index, (reminder_id, expires, message, recur_label) in enumerate(records, 1):
+        for index, (reminder_id, expires, message, recur_label, shared_count) in enumerate(records, 1):
             shorten = textwrap.shorten(message, width=512)
             value = f"*{shorten!r}* expires {discord.utils.format_dt(expires, style='R')}"
             if recur_label:
                 value += f"\n\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS} repeats every **{recur_label}**"
+            if shared_count:
+                value += f"\n\N{BUSTS IN SILHOUETTE} shared with **{pluralize(shared_count):friend}**"
             embed.add_field(name=f"#{index} • [{reminder_id}]", value=value, inline=False)
 
         await ctx.send(embed=embed)
@@ -345,6 +405,7 @@ class Reminder(Cog):
             recur=recur,
             recur_label=timer.get("recur_label"),
             recur_remaining=result.remaining,
+            shared=timer.shared or None,
         )
 
     @Cog.listener()
@@ -377,9 +438,15 @@ class Reminder(Cog):
             url = f"https://discord.com/channels/{guild_id}/{channel.id}/{message_id}"
             view = SnoozeTimerView(self, url=url, timer=timer, author_id=timer.author_id)
 
-        to_send = f"<@{timer.author_id}>, {timer.human_delta()}: *{timer.text}*"
+        recipients = [timer.author_id, *timer.shared]
+        mentions = " ".join(f"<@{uid}>" for uid in recipients)
+        to_send = f"{mentions}, {timer.human_delta()}: *{timer.text}*"
         try:
-            msg = await channel.send(to_send, view=view)
+            msg = await channel.send(
+                to_send,
+                view=view,
+                allowed_mentions=discord.AllowedMentions(users=True, everyone=False, roles=False),
+            )
         except discord.HTTPException:
             return
         else:

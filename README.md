@@ -12,7 +12,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://docs.astral.sh/ruff/)
 
 [Add Percy to your server](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) ·
-[Website](https://klappstuhl.me/percy/dashboard/) ·
+[Website](https://percy.klappstuhl.me/dashboard/) ·
 [Support server](https://discord.gg/3jSYQ9VNbA)
 
 </div>

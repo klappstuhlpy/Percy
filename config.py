@@ -43,7 +43,7 @@ name: str = 'Percy'
 version: VersionInfo = VersionInfo(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
 description: str = 'A multipurpose bot for Discord'
 support_server: str = 'https://discord.com/invite/3jSYQ9VNbA'
-website: str = 'https://klappstuhl.me/percy/dashboard'
+website: str = 'https://percy.klappstuhl.me/dashboard'
 repo_url: str = 'https://github.com/klappstuhlpy/Percy/'
 
 owners: Collection[int] | int = 991398932397703238

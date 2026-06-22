@@ -120,11 +120,13 @@ class TimersRepository(BaseRepository):
     async def get_user_reminders(self, user_id: int) -> list[asyncpg.Record]:
         """Fetches a user's running reminders, soonest first.
 
-        Returns ``(id, expires, message, recurrence_label)`` per row; the label is
-        ``NULL`` for one-shot reminders.
+        Returns ``(id, expires, message, recurrence_label, shared_count)`` per row; the
+        label is ``NULL`` for one-shot reminders and ``shared_count`` is the number of
+        friends the reminder is also delivered to (``0`` when not shared).
         """
         query = """
-            SELECT id, expires, metadata #>> '{args,2}', metadata #>> '{kwargs,recur_label}'
+            SELECT id, expires, metadata #>> '{args,2}', metadata #>> '{kwargs,recur_label}',
+                   COALESCE(jsonb_array_length(metadata #> '{kwargs,shared}'), 0)
             FROM timers
             WHERE event = 'reminder'
               AND metadata #>> '{args,0}' = $1

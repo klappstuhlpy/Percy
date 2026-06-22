@@ -244,7 +244,7 @@ class PlayerPanel(LayoutView):
 
             container.add_item(discord.ui.Separator())
             mode = "Auto-Playing" if self.player.autoplay != 2 else "Manual-Playing"
-            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')} • [Web Panel](https://klappstuhl.me/percy/dashboard/guild/{self.player.guild.id}/overview)"))
+            container.add_item(discord.ui.TextDisplay(f"-# {mode} • last updated {discord.utils.format_dt(discord.utils.utcnow(), 'R')} • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
         else:
             heading = (
                 "## Music Player Panel\n"
@@ -265,7 +265,7 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay("-# last updated • [Web Panel](https://klappstuhl.me/percy/dashboard/guild/{self.player.guild.id}/overview)"))
+            container.add_item(discord.ui.TextDisplay("-# last updated • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
 
         return container
 
