@@ -554,10 +554,10 @@ class UserSettings(Cog, name="User Settings"):
 
     @timezone.command(
         name="reset",
-        description="Clears your timezone. This is useful if you want to stop using timezone-aware features or if you want to reset a misconfigured timezone.",
+        description="Resets your timezone to UTC.",
     )
     async def timezone_reset(self, ctx: Context) -> None:
-        """Clears your timezone."""
+        """This is useful if you want to stop using timezone-aware features or if you want to reset a misconfigured timezone."""
         config = await self.bot.db.get_user_config(ctx.author.id)
         if config is None or (config and config.timezone is None):
             raise commands.BadArgument("You have not set your timezone.")
