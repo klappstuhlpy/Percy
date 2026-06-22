@@ -27,6 +27,8 @@ log = logging.getLogger(__name__)
 
 __all__ = ('InternalAPI',)
 
+API_V1 = '/api/v1'
+
 
 class InternalAPI(
     GuildHandlers,
@@ -60,125 +62,133 @@ class InternalAPI(
         assert self._app is not None
 
         self._app['bot'] = self.bot
-        # Guild config
-        self._app.router.add_get('/api/internal/guilds/{guild_id}', self._get_guild_config)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/config', self._patch_guild_config)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/roles', self._get_guild_roles)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/channels', self._get_guild_channels)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/audit-log-flags', self._patch_audit_log_flags)
-        # Members
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/members', self._get_guild_members)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/detail', self._get_member_detail)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/avatars', self._get_member_avatars)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/members/{user_id}/action', self._member_action)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/members/{user_id}/roles', self._member_roles)
-        # Sentinel
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/sentinel', self._get_sentinel)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/sentinel', self._patch_sentinel)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/sentinel/message', self._send_sentinel_message)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/sentinel/toggle', self._toggle_sentinel)
-        # User
-        self._app.router.add_get('/api/internal/users/{discord_id}/guilds', self._get_user_guilds)
-        self._app.router.add_get('/api/internal/users/{discord_id}/avatar', self._get_user_avatar)
-        # Leveling
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/config', self._get_leveling_config)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/leaderboard', self._get_leveling_leaderboard)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/leveling/xp-history', self._get_leveling_xp_history)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/users/{user_id}', self._patch_leveling_user)
-        # Polls
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/polls', self._get_polls)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/polls', self._create_poll)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/polls/{poll_id}', self._patch_poll)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/polls/{poll_id}/end', self._end_poll)
-        # Giveaways
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/giveaways', self._get_giveaways)
-        # Tags
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/tags', self._get_tags)
-        # Commands
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/commands', self._get_commands)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/commands/toggle', self._toggle_command)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/plonks', self._manage_plonk)
-        # Stats
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/stats', self._get_guild_stats)
-        self._app.router.add_get('/api/internal/bot/stats', self._get_bot_stats)
-        # Autoresponders
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/autoresponders', self._get_autoresponders)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/autoresponders', self._create_autoresponder)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/autoresponders/{trigger}', self._delete_autoresponder)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/autoresponders/{trigger}', self._patch_autoresponder)
-        # Economy
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/economy', self._get_economy)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/economy/items', self._create_economy_item)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/economy/items/{name}', self._delete_economy_item)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/economy/balances', self._get_economy_balances)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/economy/balances/{user_id}', self._patch_economy_balance)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/economy/lottery', self._create_lottery)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/economy/lottery', self._delete_lottery)
-        # Comics
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/comics', self._get_comics)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/comics', self._create_comic)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/comics/{brand}', self._patch_comic)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/comics/{brand}', self._delete_comic)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/comics/{brand}/push', self._push_comic)
-        # Temp Channels
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/temp-channels', self._get_temp_channels)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/temp-channels', self._create_temp_channel)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/temp-channels/{channel_id}', self._patch_temp_channel)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/temp-channels/{channel_id}', self._delete_temp_channel)
-        # Status Feed
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/status-feed', self._get_status_feed)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/status-feed', self._post_status_feed)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/status-feed', self._delete_status_feed)
-        # Lockdowns
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/lockdowns', self._get_lockdowns)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/lockdowns/lock', self._lock_channels)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/lockdowns/unlock', self._unlock_channels)
-        # Moderation ignore list (safe automod entities)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/moderation/ignore', self._manage_moderation_ignore)
-        # Highlights
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/highlights', self._get_highlights)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/highlights/{user_id}', self._delete_highlight)
-        # Emoji Stats
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/emoji-stats', self._get_emoji_stats)
-        # Leveling (extended)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/leveling/config', self._patch_leveling_config)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles', self._post_leveling_roles)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/roles/preset', self._create_leveling_role_preset)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/multipliers', self._post_leveling_multipliers)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/leveling/blacklist', self._post_leveling_blacklist)
-        # Moderation (cases browser + management, bulk actions, activity)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/cases', self._get_cases)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/cases', self._create_case)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/cases/recent', self._get_recent_cases)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/cases/{case_index}', self._patch_case)
-        self._app.router.add_delete('/api/internal/guilds/{guild_id}/cases/{case_index}', self._delete_case)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/members/bulk-action', self._bulk_member_action)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/members/{user_id}/activity', self._get_member_activity)
-        # Music
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/music', self._get_music)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/setup', self._post_music_setup)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/reset', self._post_music_reset)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/equalizer', self._post_music_equalizer)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/filters', self._post_music_filters)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/247', self._post_music_247)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/music/dj-mode', self._patch_music_dj_mode)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/music/control', self._post_music_control)
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/music/lyrics', self._get_music_lyrics)
-        # Custom Bot Profile
-        self._app.router.add_get('/api/internal/guilds/{guild_id}/custom-bot', self._get_custom_bot)
-        self._app.router.add_patch('/api/internal/guilds/{guild_id}/custom-bot', self._patch_custom_bot)
-        self._app.router.add_post('/api/internal/guilds/{guild_id}/custom-bot/reset', self._reset_custom_bot)
 
+        r = self._app.router
+        g = f'{API_V1}/guilds/{{guild_id}}'
+
+        # Guild config
+        r.add_get(f'{g}', self._get_guild_config)
+        r.add_patch(f'{g}/config', self._patch_guild_config)
+        r.add_post(f'{g}/batch', self._batch_guild_config)
+        r.add_get(f'{g}/roles', self._get_guild_roles)
+        r.add_get(f'{g}/channels', self._get_guild_channels)
+        r.add_patch(f'{g}/audit-log-flags', self._patch_audit_log_flags)
+        # Members
+        r.add_get(f'{g}/members', self._get_guild_members)
+        r.add_get(f'{g}/members/{{user_id}}/self', self._get_member_self)
+        r.add_get(f'{g}/members/{{user_id}}/detail', self._get_member_detail)
+        r.add_get(f'{g}/members/{{user_id}}/avatars', self._get_member_avatars)
+        r.add_post(f'{g}/members/{{user_id}}/action', self._member_action)
+        r.add_patch(f'{g}/members/{{user_id}}/roles', self._member_roles)
+        # Sentinel
+        r.add_get(f'{g}/sentinel', self._get_sentinel)
+        r.add_patch(f'{g}/sentinel', self._patch_sentinel)
+        r.add_post(f'{g}/sentinel/message', self._send_sentinel_message)
+        r.add_post(f'{g}/sentinel/toggle', self._toggle_sentinel)
+        # User
+        r.add_get(f'{API_V1}/users/{{discord_id}}/guilds', self._get_user_guilds)
+        r.add_get(f'{API_V1}/users/{{discord_id}}/avatar', self._get_user_avatar)
+        r.add_get(f'{API_V1}/users/{{discord_id}}/settings', self._get_user_settings)
+        r.add_patch(f'{API_V1}/users/{{discord_id}}/settings', self._patch_user_settings)
+        # Leveling
+        r.add_get(f'{g}/leveling/config', self._get_leveling_config)
+        r.add_get(f'{g}/leveling/leaderboard', self._get_leveling_leaderboard)
+        r.add_get(f'{g}/leveling/xp-history', self._get_leveling_xp_history)
+        r.add_patch(f'{g}/leveling/users/{{user_id}}', self._patch_leveling_user)
+        r.add_patch(f'{g}/leveling/config', self._patch_leveling_config)
+        r.add_post(f'{g}/leveling/roles', self._post_leveling_roles)
+        r.add_post(f'{g}/leveling/roles/preset', self._create_leveling_role_preset)
+        r.add_post(f'{g}/leveling/multipliers', self._post_leveling_multipliers)
+        r.add_post(f'{g}/leveling/blacklist', self._post_leveling_blacklist)
+        # Polls
+        r.add_get(f'{g}/polls', self._get_polls)
+        r.add_post(f'{g}/polls', self._create_poll)
+        r.add_patch(f'{g}/polls/{{poll_id}}', self._patch_poll)
+        r.add_post(f'{g}/polls/{{poll_id}}/end', self._end_poll)
+        # Giveaways
+        r.add_get(f'{g}/giveaways', self._get_giveaways)
+        # Tags
+        r.add_get(f'{g}/tags', self._get_tags)
+        # Commands
+        r.add_get(f'{g}/commands', self._get_commands)
+        r.add_post(f'{g}/commands/toggle', self._toggle_command)
+        r.add_post(f'{g}/plonks', self._manage_plonk)
+        # Stats
+        r.add_get(f'{g}/stats', self._get_guild_stats)
+        r.add_get(f'{g}/overview', self._get_guild_overview)
+        r.add_get(f'{API_V1}/bot/stats', self._get_bot_stats)
+        r.add_get(f'{API_V1}/bot/metrics', self._get_bot_metrics)
+        r.add_get(f'{API_V1}/bot/changelog', self._get_changelog)
+        r.add_get(f'{API_V1}/commands/public', self._get_public_commands)
+        # Autoresponders
+        r.add_get(f'{g}/autoresponders', self._get_autoresponders)
+        r.add_post(f'{g}/autoresponders', self._create_autoresponder)
+        r.add_delete(f'{g}/autoresponders/{{trigger}}', self._delete_autoresponder)
+        r.add_patch(f'{g}/autoresponders/{{trigger}}', self._patch_autoresponder)
+        # Economy
+        r.add_get(f'{g}/economy', self._get_economy)
+        r.add_post(f'{g}/economy/items', self._create_economy_item)
+        r.add_delete(f'{g}/economy/items/{{name}}', self._delete_economy_item)
+        r.add_get(f'{g}/economy/balances', self._get_economy_balances)
+        r.add_patch(f'{g}/economy/balances/{{user_id}}', self._patch_economy_balance)
+        r.add_post(f'{g}/economy/lottery', self._create_lottery)
+        r.add_delete(f'{g}/economy/lottery', self._delete_lottery)
+        # Comics
+        r.add_get(f'{g}/comics', self._get_comics)
+        r.add_post(f'{g}/comics', self._create_comic)
+        r.add_patch(f'{g}/comics/{{brand}}', self._patch_comic)
+        r.add_delete(f'{g}/comics/{{brand}}', self._delete_comic)
+        r.add_post(f'{g}/comics/{{brand}}/push', self._push_comic)
+        # Temp Channels
+        r.add_get(f'{g}/temp-channels', self._get_temp_channels)
+        r.add_post(f'{g}/temp-channels', self._create_temp_channel)
+        r.add_patch(f'{g}/temp-channels/{{channel_id}}', self._patch_temp_channel)
+        r.add_delete(f'{g}/temp-channels/{{channel_id}}', self._delete_temp_channel)
+        # Status Feed
+        r.add_get(f'{g}/status-feed', self._get_status_feed)
+        r.add_post(f'{g}/status-feed', self._post_status_feed)
+        r.add_delete(f'{g}/status-feed', self._delete_status_feed)
+        # Lockdowns
+        r.add_get(f'{g}/lockdowns', self._get_lockdowns)
+        r.add_post(f'{g}/lockdowns/lock', self._lock_channels)
+        r.add_post(f'{g}/lockdowns/unlock', self._unlock_channels)
+        # Moderation ignore list (safe automod entities)
+        r.add_post(f'{g}/moderation/ignore', self._manage_moderation_ignore)
+        # Highlights
+        r.add_get(f'{g}/highlights', self._get_highlights)
+        r.add_delete(f'{g}/highlights/{{user_id}}', self._delete_highlight)
+        # Emoji Stats
+        r.add_get(f'{g}/emoji-stats', self._get_emoji_stats)
+        # Moderation (cases browser + management, bulk actions, activity)
+        r.add_get(f'{g}/cases', self._get_cases)
+        r.add_post(f'{g}/cases', self._create_case)
+        r.add_get(f'{g}/cases/recent', self._get_recent_cases)
+        r.add_patch(f'{g}/cases/{{case_index}}', self._patch_case)
+        r.add_delete(f'{g}/cases/{{case_index}}', self._delete_case)
+        r.add_post(f'{g}/members/bulk-action', self._bulk_member_action)
+        r.add_get(f'{g}/members/{{user_id}}/activity', self._get_member_activity)
+        # Music
+        r.add_get(f'{g}/music', self._get_music)
+        r.add_post(f'{g}/music/setup', self._post_music_setup)
+        r.add_post(f'{g}/music/reset', self._post_music_reset)
+        r.add_post(f'{g}/music/equalizer', self._post_music_equalizer)
+        r.add_post(f'{g}/music/filters', self._post_music_filters)
+        r.add_post(f'{g}/music/247', self._post_music_247)
+        r.add_patch(f'{g}/music/dj-mode', self._patch_music_dj_mode)
+        r.add_post(f'{g}/music/control', self._post_music_control)
+        r.add_get(f'{g}/music/lyrics', self._get_music_lyrics)
+        # Custom Bot Profile
+        r.add_get(f'{g}/custom-bot', self._get_custom_bot)
+        r.add_patch(f'{g}/custom-bot', self._patch_custom_bot)
+        r.add_post(f'{g}/custom-bot/reset', self._reset_custom_bot)
         # Feature flags (runtime enable/disable)
-        self._app.router.add_get('/api/internal/feature-flags', self._get_feature_flags)
-        self._app.router.add_post('/api/internal/feature-flags', self._post_feature_flags)
-        # Metrics (command latency, query timing)
-        self._app.router.add_get('/api/internal/bot/metrics', self._get_bot_metrics)
+        r.add_get(f'{API_V1}/feature-flags', self._get_feature_flags)
+        r.add_post(f'{API_V1}/feature-flags', self._post_feature_flags)
 
         # Public vote webhooks (bot lists). Exempt from the bearer middleware; each
         # handler validates the per-service secret instead. Expose via your reverse proxy.
-        self._app.router.add_post('/api/webhooks/topgg', self._vote_topgg)
-        self._app.router.add_post('/api/webhooks/discordbotlist', self._vote_discordbotlist)
+        r.add_post('/api/webhooks/topgg', self._vote_topgg)
+        r.add_post('/api/webhooks/discordbotlist', self._vote_discordbotlist)
 
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()

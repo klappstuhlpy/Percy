@@ -53,7 +53,7 @@ from app.utils import (
 )
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
-from config import Emojis, beta, path, repo_url, version
+from config import Emojis, beta, get_full_version, path, repo_url, version
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -595,7 +595,7 @@ class Stats(Cog):
         embed.set_author(name=str(owner), icon_url=get_asset_url(owner) if owner else None)
         embed.set_thumbnail(url=get_asset_url(self.bot.user) if self.bot.user else None)  # type: ignore
 
-        embed.add_field(name="Version", value=version, inline=False)
+        embed.add_field(name="Version", value=get_full_version(), inline=False)
 
         total_members = 0
         total_unique = len(self.bot.users)

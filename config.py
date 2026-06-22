@@ -27,6 +27,47 @@ class VersionInfo(NamedTuple):
         }
         return f'{self.major}.{self.minor}.{self.micro}{RELEASE_MAP.get(self.release, '')}'
 
+    @property
+    def semver(self) -> str:
+        """SemVer string without pre-release suffix (e.g. '2.1.0')."""
+        return f'{self.major}.{self.minor}.{self.micro}'
+
+
+def get_full_version() -> str:
+    """Return the full version string with git metadata when available.
+
+    In production (tagged commit): '2.1.0'
+    In development (commits past tag): '2.1.0+14.a3f2c1'
+    If git is unavailable: falls back to the base version string.
+    """
+    base = str(version)
+    try:
+        import pygit2
+
+        repo = pygit2.Repository(str(Path(__file__).parent))
+        head = repo.head.target
+        short_sha = str(head)[:7]
+
+        # Count commits since the latest version tag
+        tag_prefix = f'v{version.semver}'
+        distance = 0
+        for tag_ref in repo.references:
+            if tag_ref.startswith('refs/tags/') and tag_ref.removeprefix('refs/tags/') == tag_prefix:
+                tag_oid = repo.references[tag_ref].resolve().target
+                # Peel annotated tags to the commit
+                tag_obj = repo.get(tag_oid)
+                if hasattr(tag_obj, 'target'):
+                    tag_oid = tag_obj.target
+                ahead, _ = repo.ahead_behind(head, tag_oid)
+                distance = ahead
+                break
+
+        if distance > 0:
+            return f'{base}+{distance}.{short_sha}'
+    except Exception:
+        pass
+    return base
+
 
 beta: bool = system() != 'Linux'
 path: Path = Path(__file__).parent
@@ -40,10 +81,10 @@ for _directory in (data_path, logs_path):
     _directory.mkdir(exist_ok=True)
 
 name: str = 'Percy'
-version: VersionInfo = VersionInfo(major=2, minor=0, micro=3, release='beta' if beta else 'alpha')
+version: VersionInfo = VersionInfo(major=2, minor=1, micro=0, release='beta' if beta else 'final')
 description: str = 'A multipurpose bot for Discord'
 support_server: str = 'https://discord.com/invite/3jSYQ9VNbA'
-website: str = 'https://percy.klappstuhl.me/dashboard'
+website: str = 'https://percy.klappstuhl.me'
 repo_url: str = 'https://github.com/klappstuhlpy/Percy/'
 
 owners: Collection[int] | int = 991398932397703238

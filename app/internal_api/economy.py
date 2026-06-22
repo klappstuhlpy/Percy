@@ -86,10 +86,9 @@ class EconomyHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
-        limit = int(request.query.get('limit', '25'))
-        # One ordered query returns the actual top balances; member identity is then
-        # resolved from the in-memory cache (no per-row DB round-trips).
-        records = await self.bot.db.users.get_top_balance_records(guild_id, limit)
+        limit = min(int(request.query.get('limit', '25')), 100)
+        offset = int(request.query.get('offset', '0'))
+        records = await self.bot.db.users.get_top_balance_records(guild_id, limit + offset)
         entries = []
         for r in records:
             member = guild.get_member(r['user_id'])
@@ -101,7 +100,9 @@ class EconomyHandlers(InternalAPIHandlers):
                 'bank': r['bank'],
                 'total': r['total'],
             })
-        return web.json_response({'entries': entries})
+        total = len(entries)
+        entries = entries[offset:offset + limit]
+        return web.json_response({'entries': entries, 'total': total})
 
     async def _patch_economy_balance(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])

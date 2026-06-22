@@ -66,7 +66,8 @@ class LevelingHandlers(InternalAPIHandlers):
             raise web.HTTPNotFound(text='guild not found')
 
         limit = min(int(request.query.get('limit', '25')), 100)
-        records = await self.bot.db.leveling.get_leaderboard(guild_id, limit=limit)
+        offset = int(request.query.get('offset', '0'))
+        records = await self.bot.db.leveling.get_leaderboard(guild_id, limit=limit + offset)
 
         entries = []
         for record in records:
@@ -81,7 +82,9 @@ class LevelingHandlers(InternalAPIHandlers):
                 'total_xp': record.get('total_xp', record['xp']),
             })
 
-        return web.json_response({'entries': entries, 'total': len(entries)})
+        total = len(entries)
+        entries = entries[offset:offset + limit]
+        return web.json_response({'entries': entries, 'total': total})
 
     async def _get_leveling_xp_history(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])

@@ -21,11 +21,21 @@ class MemberHandlers(InternalAPIHandlers):
         limit = min(int(request.query.get('limit', '100')), 1000)
         after = int(request.query.get('after', '0'))
 
-        members_iter = (m for m in guild.members if m.id > after)
+        search = (request.query.get('search') or '').lower()
+
+        all_members = sorted(
+            (m for m in guild.members if m.id > after),
+            key=lambda m: m.id,
+        )
+
+        if search:
+            all_members = [
+                m for m in all_members
+                if search in m.name.lower() or search in m.display_name.lower()
+            ]
+
         members = []
-        for i, member in enumerate(sorted(members_iter, key=lambda m: m.id)):
-            if i >= limit:
-                break
+        for member in all_members[:limit]:
             members.append({
                 'id': str(member.id),
                 'name': member.name,
@@ -36,7 +46,7 @@ class MemberHandlers(InternalAPIHandlers):
                 'bot': member.bot,
             })
 
-        return web.json_response(members)
+        return web.json_response({'members': members, 'total': len(all_members)})
 
     async def _get_member_detail(self, request: web.Request) -> web.Response:
         """Aggregated profile for one user: identity, leveling, moderation history, stats."""
@@ -186,6 +196,90 @@ class MemberHandlers(InternalAPIHandlers):
             'avatar_count': avatar_count,
         })
 
+    async def _get_member_self(self, request: web.Request) -> web.Response:
+        """Personal profile: leveling, economy, command stats — no moderation cases.
+
+        Designed for non-admin members viewing their own profile. Same data as
+        member_detail minus the sensitive moderation history, plus economy balance.
+        """
+        guild_id = int(request.match_info['guild_id'])
+        user_id = int(request.match_info['user_id'])
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='guild not found')
+
+        member = guild.get_member(user_id)
+        if member is None:
+            raise web.HTTPNotFound(text='member not found')
+
+        sorted_members = sorted(
+            (m for m in guild.members if m.joined_at),
+            key=lambda m: m.joined_at,
+        )
+        join_position = next(
+            (i for i, m in enumerate(sorted_members, 1) if m.id == member.id), None
+        )
+
+        identity = {
+            'id': str(member.id),
+            'name': member.name,
+            'display_name': member.display_name,
+            'avatar_url': member.display_avatar.url,
+            'joined_at': member.joined_at.isoformat() if member.joined_at else None,
+            'created_at': member.created_at.isoformat(),
+            'roles': [
+                {'id': str(r.id), 'name': r.name, 'color': r.color.value}
+                for r in member.roles if r != guild.default_role
+            ],
+            'top_role': member.top_role.name if member.top_role != guild.default_role else None,
+            'top_role_color': member.top_role.color.value if member.top_role != guild.default_role else 0,
+            'join_position': join_position,
+            'member_count': guild.member_count or len(guild.members),
+            'boosting_since': member.premium_since.isoformat() if member.premium_since else None,
+        }
+
+        # Leveling
+        leveling = None
+        level_record = await self.bot.db.leveling.get_user_level(user_id, guild_id)
+        if level_record is not None:
+            rank = await self.bot.db.leveling.get_rank(user_id, guild_id)
+            leveling = {
+                'level': level_record['level'],
+                'xp': level_record['xp'],
+                'total_xp': level_record.get('total_xp', level_record['xp']),
+                'messages': level_record['messages'],
+                'rank': rank,
+            }
+
+        # Economy balance
+        balance = await self.bot.db.get_user_balance(user_id, guild_id)
+        economy = {
+            'cash': balance.cash if balance else 0,
+            'bank': balance.bank if balance else 0,
+            'total': (balance.cash + balance.bank) if balance else 0,
+        }
+
+        # Command usage stats
+        command_summary = await self.bot.db.stats.get_command_summary(guild_id, user_id)
+        top_commands = await self.bot.db.stats.get_command_usage(
+            guild_id=guild_id, author_id=user_id, group_by='command', limit=5
+        )
+        command_stats = {
+            'total_commands': command_summary[0] if command_summary else 0,
+            'first_command_at': command_summary[1].isoformat() if command_summary and command_summary[1] else None,
+            'top_commands': [
+                {'command': r['command'], 'uses': r['uses']} for r in top_commands
+            ] if top_commands else [],
+        }
+
+        return web.json_response({
+            **identity,
+            'leveling': leveling,
+            'economy': economy,
+            'command_stats': command_stats,
+        })
+
     async def _member_action(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
         user_id = int(request.match_info['user_id'])
@@ -282,4 +376,44 @@ class MemberHandlers(InternalAPIHandlers):
         ]
 
         return web.json_response({'avatars': avatars, 'total': len(records)})
+
+    async def _get_user_settings(self, request: web.Request) -> web.Response:
+        """GET /api/v1/users/{discord_id}/settings — user's personal bot settings."""
+        user_id = int(request.match_info['discord_id'])
+        config = await self.bot.db.get_user_config(user_id)
+
+        return web.json_response({
+            'timezone': config.timezone,
+            'track_presence': config.track_presence,
+            'track_history': config.track_history,
+        })
+
+    async def _patch_user_settings(self, request: web.Request) -> web.Response:
+        """PATCH /api/v1/users/{discord_id}/settings — update personal bot settings."""
+        user_id = int(request.match_info['discord_id'])
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text='invalid JSON body')
+
+        config = await self.bot.db.get_user_config(user_id)
+
+        if 'timezone' in body:
+            tz = body['timezone']
+            if tz is None or tz == '':
+                await self.bot.db.users.clear_timezone(user_id)
+            else:
+                import zoneinfo
+                if tz not in zoneinfo.available_timezones():
+                    raise web.HTTPBadRequest(text=f'invalid timezone: {tz}')
+                await self.bot.db.users.set_timezone(user_id, tz)
+
+        if 'track_presence' in body:
+            await config.update(track_presence=bool(body['track_presence']))
+
+        if 'track_history' in body:
+            await config.update(track_history=bool(body['track_history']))
+
+        return web.json_response({'ok': True})
 

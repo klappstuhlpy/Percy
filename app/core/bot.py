@@ -57,6 +57,7 @@ from config import (
     beta,
     default_prefix,
     description,
+    get_full_version,
     lavalink_nodes,
     owners,
     resolved_token,
@@ -190,6 +191,8 @@ class Bot(commands.Bot):
 
         DoNotLoadOnBeta = (
             'app.cogs.web_utils',
+            'app.cogs.comic',
+            'app.cogs.music',
         )
         for extension in self.initial_extensions:
             if beta and extension in DoNotLoadOnBeta:
@@ -397,7 +400,7 @@ class Bot(commands.Bot):
             self.startup_timestamp = discord.utils.utcnow()
 
             text = f'Ready as {self.user} ({self.user.id})'
-            center = f' {bot_name} v{version} '
+            center = f' {bot_name} v{get_full_version()} '
 
             print(format(center, f'=^{len(text)}'))
             print(text)

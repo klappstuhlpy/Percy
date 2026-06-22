@@ -26,5 +26,7 @@ async def auth_middleware(
         return await handler(request)
     if not _check_auth(request):
         raise web.HTTPUnauthorized(text='invalid or missing token')
-    return await handler(request)
+    response = await handler(request)
+    response.headers['X-API-Version'] = '1'
+    return response
 

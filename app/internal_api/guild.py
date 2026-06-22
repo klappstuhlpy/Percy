@@ -111,6 +111,90 @@ class GuildHandlers(InternalAPIHandlers):
 
         return web.json_response({"ok": True})
 
+    async def _batch_guild_config(self, request: web.Request) -> web.Response:
+        """Apply multiple config mutations in one request.
+
+        Body: {"operations": [{"type": "config", "data": {...}}, {"type": "sentinel", "data": {...}}, ...]}
+        Supported types: "config" (same as PATCH /config), "sentinel" (same as PATCH /gatekeeper),
+        "sentinel_toggle" (same as POST /gatekeeper/toggle), "audit_log_flags" (same as PATCH /audit-log-flags).
+        """
+        guild_id = int(request.match_info["guild_id"])
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text="guild not found")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise web.HTTPBadRequest(text="invalid JSON body")
+
+        operations = body.get("operations")
+        if not isinstance(operations, list) or not operations:
+            raise web.HTTPBadRequest(text="operations must be a non-empty array")
+
+        results: list[dict] = []
+        for op in operations:
+            op_type = op.get("type")
+            data = op.get("data", {})
+
+            if op_type == "config":
+                guild_config = await self.bot.db.get_guild_config(guild_id)
+                allowed_fields = {
+                    "audit_log_channel_id", "poll_channel_id", "poll_ping_role_id",
+                    "poll_reason_channel_id", "mention_count", "mute_role_id",
+                    "alert_channel_id", "music_panel_channel_id", "use_music_panel",
+                    "mod_log_channel_id", "message_log_channel_id", "voice_log_channel_id",
+                }
+                updates: dict[str, object] = {}
+                for key, value in data.items():
+                    if key in allowed_fields:
+                        updates[key] = value
+                    elif key == "flags" and isinstance(value, dict):
+                        new_flags = guild_config.flags.value
+                        flag_map = {"audit_log": 1, "raid": 2, "alerts": 4, "sentinel": 8, "mentions": 16}
+                        for flag_name, bit in flag_map.items():
+                            if flag_name in value:
+                                if value[flag_name]:
+                                    new_flags |= bit
+                                else:
+                                    new_flags &= ~bit
+                        updates["flags"] = new_flags
+                    elif key == "prefixes" and isinstance(value, list):
+                        updates["prefixes"] = value
+                if updates:
+                    await guild_config.update(**updates)
+                results.append({"type": "config", "ok": True})
+
+            elif op_type == "sentinel":
+                allowed = {"channel_id", "role_id", "starter_role_id", "bypass_action", "rate"}
+                updates = {k: v for k, v in data.items() if k in allowed}
+                if updates:
+                    await self.bot.db.guilds.upsert_sentinel(guild_id, updates)
+                results.append({"type": "sentinel", "ok": True})
+
+            elif op_type == "sentinel_toggle":
+                enabled = data.get("enabled")
+                sentinel = await self.bot.db.get_guild_sentinel(guild_id)
+                if enabled and sentinel and not sentinel.requires_setup and sentinel.started_at is None:
+                    await sentinel.enable()
+                elif not enabled and sentinel and sentinel.started_at is not None:
+                    await sentinel.disable()
+                results.append({"type": "sentinel_toggle", "ok": True})
+
+            elif op_type == "audit_log_flags":
+                config = await self.bot.db.get_guild_config(guild_id)
+                current_flags = config.audit_log_flags or {}
+                for key, value in data.items():
+                    if key in current_flags:
+                        current_flags[key] = bool(value)
+                await self.bot.db.moderation.set_audit_log_flags(guild_id, current_flags)
+                results.append({"type": "audit_log_flags", "ok": True})
+
+            else:
+                results.append({"type": op_type, "ok": False, "error": f"unknown operation type: {op_type}"})
+
+        return web.json_response({"ok": True, "results": results})
+
     async def _manage_moderation_ignore(self, request: web.Request) -> web.Response:
         """Adds or removes roles/members/channels from the moderation ignore list."""
         guild_id = int(request.match_info["guild_id"])

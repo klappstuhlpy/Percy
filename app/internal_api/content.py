@@ -18,6 +18,9 @@ class ContentHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
+        limit = min(int(request.query.get('limit', '50')), 100)
+        offset = int(request.query.get('offset', '0'))
+
         records = await self.bot.db.polls.get_for_guild(guild_id)
 
         polls = []
@@ -39,7 +42,9 @@ class ContentHandlers(InternalAPIHandlers):
                 'total_votes': _kwargs.get('votes', 0),
             })
 
-        return web.json_response({'polls': polls})
+        total = len(polls)
+        polls = polls[offset:offset + limit]
+        return web.json_response({'polls': polls, 'total': total})
 
     async def _create_poll(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
@@ -201,6 +206,9 @@ class ContentHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
+        limit = min(int(request.query.get('limit', '50')), 100)
+        offset = int(request.query.get('offset', '0'))
+
         records = await self.bot.db.giveaways.get_guild_giveaways(guild_id)
 
         giveaways = []
@@ -220,7 +228,9 @@ class ContentHandlers(InternalAPIHandlers):
                 'ends_at': _kwargs.get('expires'),
             })
 
-        return web.json_response({'giveaways': giveaways})
+        total = len(giveaways)
+        giveaways = giveaways[offset:offset + limit]
+        return web.json_response({'giveaways': giveaways, 'total': total})
 
     async def _get_tags(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
@@ -393,6 +403,10 @@ class ContentHandlers(InternalAPIHandlers):
 
     async def _get_autoresponders(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
+        limit = min(int(request.query.get('limit', '50')), 100)
+        offset = int(request.query.get('offset', '0'))
+        search = (request.query.get('search') or '').lower()
+
         records = await self.bot.db.autoresponders.get_all(guild_id)
         entries = [
             {
@@ -407,7 +421,13 @@ class ContentHandlers(InternalAPIHandlers):
             }
             for r in records
         ]
-        return web.json_response({'entries': entries, 'total': len(entries)})
+
+        if search:
+            entries = [e for e in entries if search in e['trigger'].lower() or search in e['response'].lower()]
+
+        total = len(entries)
+        entries = entries[offset:offset + limit]
+        return web.json_response({'entries': entries, 'total': total})
 
     async def _create_autoresponder(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
@@ -735,6 +755,9 @@ class ContentHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
+        limit = min(int(request.query.get('limit', '50')), 100)
+        offset = int(request.query.get('offset', '0'))
+
         records = await self.bot.db.highlights.get_guild_configs(guild_id)
         entries = []
         for r in records:
@@ -747,7 +770,10 @@ class ContentHandlers(InternalAPIHandlers):
                 'triggers': lookup if isinstance(lookup, list) else list(lookup),
                 'blocked_count': len(blocked) if isinstance(blocked, (list, set)) else 0,
             })
-        return web.json_response({'entries': entries})
+
+        total = len(entries)
+        entries = entries[offset:offset + limit]
+        return web.json_response({'entries': entries, 'total': total})
 
     async def _delete_highlight(self, request: web.Request) -> web.Response:
         guild_id = int(request.match_info['guild_id'])
@@ -764,9 +790,10 @@ class ContentHandlers(InternalAPIHandlers):
         if guild is None:
             raise web.HTTPNotFound(text='guild not found')
 
-        limit = int(request.query.get('limit', '50'))
+        limit = min(int(request.query.get('limit', '50')), 200)
+        offset = int(request.query.get('offset', '0'))
         summary = await self.bot.db.emoji_stats.get_guild_summary(guild_id)
-        top = await self.bot.db.emoji_stats.get_top_guild_emojis(guild_id, limit=limit)
+        top = await self.bot.db.emoji_stats.get_top_guild_emojis(guild_id, limit=limit + offset)
 
         entries = []
         for r in top:
@@ -778,9 +805,12 @@ class ContentHandlers(InternalAPIHandlers):
                 'total': r['total'],
             })
 
+        total = len(entries)
+        entries = entries[offset:offset + limit]
         return web.json_response({
             'total_uses': summary['Count'] if summary else 0,
             'distinct_emojis': summary['Emoji'] if summary else 0,
             'entries': entries,
+            'total': total,
         })
 
