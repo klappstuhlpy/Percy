@@ -117,6 +117,8 @@ class StatsHandlers(InternalAPIHandlers):
         """All bot commands grouped by cog, without guild-specific disable state."""
         commands = []
         for cmd in self.bot.walk_commands():
+            if cmd.hidden:
+                continue
             cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
             commands.append({
                 'name': cmd.qualified_name,
