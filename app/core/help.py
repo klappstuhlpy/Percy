@@ -811,7 +811,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 if not cmd.hidden
             ]
             if resolved_sub_commands:
-                extra.append(f"### Subcommands**\n" + "\n".join(resolved_sub_commands))
+                extra.append(f"### Subcommands\n" + "\n".join(resolved_sub_commands))
 
         if isinstance(command, (Command, HybridCommand)):
             spec = command.permissions
