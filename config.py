@@ -220,7 +220,7 @@ class Emojis:
     snowflake: ClassVar[str] = '<:snowflake:1519094196764672091>'
 
     higherlower: ClassVar[str] = '<:higherlower:1519094990352154734>'
-    blackjack: ClassVar[str] = '<:blackjack:1519094990352154734>'
+    blackjack: ClassVar[str] = '<:blackjack:1519095618772008980>'
     lotteryslots: ClassVar[str] = '<:lotteryslots:1519095850578739231>'
 
     class Arrows:
