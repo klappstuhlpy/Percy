@@ -97,6 +97,9 @@ class View(discord.ui.View):
             return await self.message.delete()
         self.disable_all()
 
+    async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
+        await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]
+
     def disable_item(self, item: discord.ui.Item) -> "View":
         """Disables the given item.
 
@@ -210,6 +213,9 @@ class LayoutView(discord.ui.LayoutView):
         if self._delete_on_timeout and self.message:
             with suppress(discord.HTTPException):
                 await self.message.delete()
+
+    async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
+        await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]
 
 
 class TrashView(View):

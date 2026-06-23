@@ -508,6 +508,55 @@ class Bot(commands.Bot):
                 delete_after=15,
             )
 
+    async def handle_interaction_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        """|coro|
+
+        Centralized handler for errors raised inside view/modal callbacks.
+
+        Sends user-facing errors (BadArgument, AppBadArgument) as ephemeral
+        messages on the interaction. Unexpected errors are logged and reported
+        to the stats webhook.
+        """
+        from app.core.models import BadArgument as _BadArgument
+
+        error = getattr(error, "original", error)
+
+        if isinstance(error, (commands.BadArgument, _BadArgument, AppBadArgument)):
+            msg = f"{Emojis.error} {error}"
+            if not interaction.response.is_done():
+                await interaction.response.send_message(msg, ephemeral=True)
+            else:
+                await interaction.followup.send(msg, ephemeral=True)
+            return
+
+        if isinstance(error, (discord.Forbidden, discord.NotFound)):
+            return
+
+        self.log.exception(
+            "Unhandled exception in interaction callback (user=%s, guild=%s)",
+            interaction.user.id,
+            interaction.guild_id,
+            exc_info=error,
+        )
+
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                f"{Emojis.error} Something went wrong.", ephemeral=True
+            )
+
+        trace = "".join(traceback.format_exception(type(error), error, error.__traceback__, chain=False))
+        embed = discord.Embed(
+            title=f"{Emojis.warning} View/Modal Error",
+            description=f"```py\n{trace[:3900]}\n```",
+            timestamp=discord.utils.utcnow(),
+            colour=helpers.Colour.burgundy(),
+        )
+        embed.add_field(name="User", value=f"{interaction.user} (ID: {interaction.user.id})")
+        if interaction.guild:
+            embed.add_field(name="Guild", value=f"{interaction.guild} (ID: {interaction.guild.id})")
+        with suppress(discord.HTTPException, ValueError):
+            await self.stats_webhook.send(embed=embed)
+
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         """|coro|
 
