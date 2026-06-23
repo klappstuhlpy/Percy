@@ -10,7 +10,7 @@ services:
       INTERNAL_API_HOST: "0.0.0.0"
       # Inside Docker, localhost is the container — default to host.docker.internal
       # to reach Postgres on the bare host. Override DATABASE_HOST in .env if needed.
-      DATABASE_HOST: ${DATABASE_HOST:-host.docker.internal}
+      DATABASE_HOST: "host.docker.internal"
     ports:
       - "${INTERNAL_API_PORT:-8090}:${INTERNAL_API_PORT:-8090}"
     # Lets the container reach services on the host (Postgres, locg-api, etc.)
