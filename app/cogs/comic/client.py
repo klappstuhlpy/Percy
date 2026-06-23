@@ -23,7 +23,7 @@ class LOCGClient:
     Calls the locg-api Express service to fetch weekly Marvel/DC releases.
     """
 
-    def __init__(self, session: aiohttp.ClientSession, *, base_url: str = "http://127.0.0.1:8070") -> None:
+    def __init__(self, session: aiohttp.ClientSession, *, base_url: str) -> None:
         self.session = session
         self.base_url = base_url.rstrip("/")
 
