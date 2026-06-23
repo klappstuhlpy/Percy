@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import MISSING
 
-from app.cogs.polls.models import Poll, VoteOption, uuid
+from app.cogs.polls.models import Poll, VoteOption
 from app.cogs.polls.ui import (
     EditModal,
     PollClearVoteButton,
@@ -183,7 +183,6 @@ class Polls(Cog):
 
     async def create_poll(
         self,
-        poll_id: int,
         channel_id: int,
         message_id: int,
         guild_id: int,
@@ -196,8 +195,6 @@ class Polls(Cog):
 
         Parameters
         -----------
-        poll_id
-            The unqiue ID of the poll to manage it.
         channel_id
             The channel ID of the poll.
         message_id
@@ -233,7 +230,7 @@ class Polls(Cog):
         )
 
         poll.id = await self.bot.db.polls.create(
-            poll_id, channel_id, message_id, guild_id, published, expires, {"args": args, "kwargs": kwargs}
+            channel_id, message_id, guild_id, published, expires, {"args": args, "kwargs": kwargs}
         )
 
         self.get_guild_polls.invalidate(guild_id)
@@ -273,10 +270,8 @@ class Polls(Cog):
             await thread_message.pin(reason="Poll Discussion")
 
         new_index = len(await self.get_guild_polls(guild.id)) + 1  # type: ignore[misc]
-        unique_id = uuid([rec[0] for rec in await self.bot.db.polls.get_all_ids()])
 
         poll = await self.create_poll(
-            unique_id,
             channel.id,
             message.id,
             guild.id,
@@ -437,7 +432,6 @@ class Polls(Cog):
             ping_message = await channel.send("*...*")
 
         new_index = len(await self.get_guild_polls(ctx.guild.id)) + 1  # type: ignore[misc]
-        unique_id = uuid([rec[0] for rec in await self.bot.db.polls.get_all_ids()])
 
         if flags.thread_question:
             thread = await message.create_thread(name=question, auto_archive_duration=4320)
@@ -453,7 +447,6 @@ class Polls(Cog):
             return
 
         poll = await self.create_poll(
-            unique_id,
             channel.id,
             message.id,
             ctx.guild.id,
@@ -807,7 +800,7 @@ class Polls(Cog):
     async def polls_history(self, ctx: Context, member: discord.Member | None = None) -> None:
         """Shows the vote history of a user for polls."""
         assert ctx.guild is not None
-        polls = await self.get_guild_polls(guild_id=ctx.guild.id)
+        polls = await self.get_guild_polls(ctx.guild.id)
         if not polls:
             await ctx.send_error("No polls found.")
             return

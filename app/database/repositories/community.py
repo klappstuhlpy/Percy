@@ -43,7 +43,6 @@ class PollsRepository(BaseRepository):
 
     async def create(
             self,
-            poll_id: int,
             channel_id: int,
             message_id: int,
             guild_id: int,
@@ -51,14 +50,14 @@ class PollsRepository(BaseRepository):
             expires: datetime.datetime,
             metadata: dict[str, Any],
     ) -> int:
-        """Inserts a new poll and returns its generated ``id``."""
+        """Inserts a new poll and returns its auto-generated ``id``."""
         query = """
-            INSERT INTO polls (id, channel_id, message_id, guild_id, published, expires, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            INSERT INTO polls (channel_id, message_id, guild_id, published, expires, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
             RETURNING id;
         """
         return await self.fetchval(
-            query, poll_id, channel_id, message_id, guild_id, published, expires, metadata)
+            query, channel_id, message_id, guild_id, published, expires, metadata)
 
     async def get(self, poll_id: int, guild_id: int) -> asyncpg.Record | None:
         """Fetches a single poll scoped to a guild."""
@@ -75,9 +74,6 @@ class PollsRepository(BaseRepository):
         query = "SELECT * FROM polls WHERE guild_id = $1;"
         return await self.fetch(query, guild_id)
 
-    async def get_all_ids(self) -> list[asyncpg.Record]:
-        """Fetches the IDs of every poll (used to generate a unique new ID)."""
-        return await self.fetch("SELECT id FROM polls;")
 
     async def get_overdue_running(self) -> list[asyncpg.Record]:
         """Fetches every still-running poll whose expiry has already passed.

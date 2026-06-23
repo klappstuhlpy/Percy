@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -26,7 +25,6 @@ __all__ = (
     "PollEntry",
     "VoteOption",
     "lineformat",
-    "uuid",
 )
 
 _MAX_VOTE_BAR_LENGTH = 10
@@ -41,13 +39,6 @@ def lineformat(x: int) -> str:
     txt[0] = Emojis.PollVoteBar.start
 
     return "".join(txt)
-
-
-def uuid(ids: list[int]) -> int:
-    _id = random.randint(10000, 99999)
-    while _id in ids:
-        _id = random.randint(10000, 99999)
-    return _id
 
 
 class VoteOption(TypedDict):
