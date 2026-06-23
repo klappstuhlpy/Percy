@@ -3,23 +3,16 @@ services:
     container_name: percy
     build: .
     restart: unless-stopped
-    env_file: .env
-    environment:
-      # Docker-specific overrides (take precedence over .env values):
-      # Bind the internal API to all interfaces so the host can reach it.
-      INTERNAL_API_HOST: "0.0.0.0"
-      # Inside Docker, localhost is the container — default to host.docker.internal
-      # to reach Postgres on the bare host. Override DATABASE_HOST in .env if needed.
-      DATABASE_HOST: "172.17.0.1"
-    ports:
-      - "${INTERNAL_API_PORT:-8090}:${INTERNAL_API_PORT:-8090}"
-    # Lets the container reach services on the host (Postgres, locg-api, etc.)
-    # via host.docker.internal. `host-gateway` works on Linux Docker too.
-    extra_hosts:
-      - "host.docker.internal:172.17.0.1"
-    networks:
-      - bot
 
-networks:
-  bot:
-    driver: bridge
+    env_file: .env
+
+    # Host networking: container shares host network stack
+    network_mode: host
+
+    # Helps debugging logs (optional but very useful)
+    tty: true
+    stdin_open: true
+
+    # Ensure container uses same timezone as host (logs consistency)
+    environment:
+      PYTHONUNBUFFERED: "1"
