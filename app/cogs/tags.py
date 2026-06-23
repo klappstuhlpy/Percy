@@ -12,9 +12,8 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from app.core import Bot, Cog, Context, Flags, View, flag, store_true
+from app.core import Bot, Cog, Context, Flags, LayoutView, flag, store_true, ConfirmationView
 from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
-from app.core.pagination import LinePaginator
 from app.database import BaseRecord
 from app.utils import (
     TabularData,
@@ -31,6 +30,9 @@ from config import Emojis
 if TYPE_CHECKING:
     import re
     from collections.abc import Callable, Generator
+
+
+# region Converters & Flags
 
 
 class TagPageEntry(BaseRecord, table="tags", pk="id"):
@@ -97,7 +99,6 @@ class TagContent(commands.clean_content):
 
 
 class TagSearchFlags(Flags):
-    query: str | None = flag(description="The query to search for", aliases=["q"])
     sort: Literal["name", "newest", "oldest", "id"] = flag(
         description="The key to sort the results.", aliases=["s"], default="name"
     )
@@ -106,11 +107,539 @@ class TagSearchFlags(Flags):
 
 class TagListFlags(Flags):
     member: discord.Member | None = flag(description="The member to search for", aliases=["m"])
-    query: str | None = flag(description="The query to search for", aliases=["q"])
     sort: Literal["name", "newest", "oldest", "id"] = flag(
         description="The key to sort the results.", aliases=["s"], default="name"
     )
     to_text: bool = store_true(description="Whether to output the results as raw tabular text.", aliases=["tt"])
+
+
+# endregion
+
+# region Components V2 Views
+
+
+class TagLayoutView(LayoutView):
+    """Base Components V2 view for all tag displays.
+
+    Provides common structure: a single container with accent colour,
+    optional header section, content, and action row. Subclasses override
+    ``_build()`` to compose the container.
+    """
+
+    def __init__(
+        self,
+        *,
+        accent: discord.Colour = helpers.Colour.brand(),
+        timeout: float | None = 180.0,
+        members: discord.abc.Snowflake | None = None,
+    ) -> None:
+        super().__init__(timeout=timeout, members=members)
+        self._accent = accent
+
+    def _make_container(self) -> discord.ui.Container:
+        return discord.ui.Container(accent_colour=self._accent)
+
+    def _build(self) -> None:
+        """Rebuild the view layout. Called by subclasses after state changes."""
+        self.clear_items()
+
+
+class TagInfoView(TagLayoutView):
+    """Displays detailed tag metadata in a CV2 card with manage buttons for the owner."""
+
+    def __init__(self, tag: Tag, *, ctx: Context, rank: int | None = None) -> None:
+        super().__init__(members=ctx.author)
+        self.tag = tag
+        self.ctx = ctx
+        self._rank = rank
+        self._is_owner = ctx.author.id == tag.owner_id
+        self._build_layout()
+
+    def _build_layout(self) -> None:
+        self.clear_items()
+        container = self._make_container()
+        tag = self.tag
+
+        container.add_item(discord.ui.Section(
+            f"## {tag.name}\n-# Tag Information",
+            accessory=discord.ui.Thumbnail(get_asset_url(self.ctx.guild) or "")
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        fields: list[str] = []
+        fields.append(f"**Owner** — <@{tag.owner_id}>")
+        uses_line = f"**Uses** — {tag.uses}"
+        if self._rank and self._rank in (1, 2, 3):
+            uses_line += f" • **#{self._rank}** {medal_emoji(self._rank - 1)}"
+        fields.append(uses_line)
+        fields.append(f"**Created** — {discord.utils.format_dt(tag.created_at.replace(tzinfo=datetime.UTC), 'R')}")
+        fields.append(f"**ID** — `{tag.id}`")
+
+        container.add_item(discord.ui.TextDisplay("\n".join(fields)))
+
+        if tag.aliases:
+            container.add_item(discord.ui.Separator())
+            aliases_text = "\n".join(
+                f"• **{alias.name}** [`{alias.id}`] — {discord.utils.format_dt(alias.created_at.replace(tzinfo=datetime.UTC), 'D')}"
+                for alias in tag.aliases
+            )
+            container.add_item(discord.ui.TextDisplay(
+                f"### Aliases ({len(tag.aliases)})\n{aliases_text}"
+            ))
+
+        view_btn = discord.ui.Button(label="View Content", style=discord.ButtonStyle.secondary)
+        view_btn.callback = self._view_content
+
+        if self._is_owner:
+            edit_btn = discord.ui.Button(label="Edit", style=discord.ButtonStyle.primary)
+            edit_btn.callback = self._edit_tag
+            delete_btn = discord.ui.Button(label="Delete", style=discord.ButtonStyle.red)
+            delete_btn.callback = self._delete_tag
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(view_btn, edit_btn, delete_btn))
+        else:
+            container.add_item(discord.ui.Separator())
+            container.add_item(discord.ui.ActionRow(view_btn))
+
+        self.add_item(container)
+
+    async def _view_content(self, interaction: discord.Interaction) -> None:
+        content = self.tag.content
+        if len(content) > 2000:
+            content = content[:1997] + "…"
+        await interaction.response.send_message(content, ephemeral=True)
+
+    async def _edit_tag(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.tag.owner_id:
+            await interaction.response.send_message(
+                f"{Emojis.error} You are not the owner of this tag.", ephemeral=True
+            )
+            return
+
+        modal = TagEditModal(self.tag)
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            return
+        content = modal.content.value
+        name = modal.tag_name.value
+        if content and len(content) <= 2000:
+            await self.tag.update(name=name, content=content)
+            self.tag.content = content
+            self.tag.name = name
+            self._build_layout()
+            await modal.interaction.response.edit_message(view=self)
+
+    async def _delete_tag(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.tag.owner_id:
+            await interaction.response.send_message(
+                f"{Emojis.error} You are not the owner of this tag.", ephemeral=True
+            )
+            return
+
+        confirm = ConfirmationView(interaction.user, delete_after=True, timeout=60.0, content="Are you sure you want to delete this tag? This cannot be undone.")
+        confirm.message = await interaction.response.send_message(view=confirm)
+        await confirm.wait()
+        if not confirm.value:
+            return
+
+        await self.tag.delete()
+        self.clear_items()
+        container = discord.ui.Container(accent_colour=helpers.Colour.success_accent())
+        container.add_item(discord.ui.TextDisplay(
+            f"{Emojis.success} Tag **{self.tag.name}** [`{self.tag.id}`] has been deleted."
+        ))
+        self.add_item(container)
+        await interaction.followup.send(view=self, ephemeral=True)
+        self.stop()
+
+
+class TagSuggestView(TagLayoutView):
+    """'Did you mean ...' disambiguation using a select menu."""
+
+    def __init__(self, results: list[AliasTag], *, ctx: Context) -> None:
+        super().__init__(accent=helpers.Colour.warning_accent(), members=ctx.author)
+        self.results = results
+        self.ctx = ctx
+        self._build_layout()
+
+    def _build_layout(self) -> None:
+        self.clear_items()
+        container = self._make_container()
+
+        container.add_item(discord.ui.TextDisplay("## Did you mean …\n-# Your query didn't match any tags, but I found some similar ones:"))
+
+        lines = []
+        options = []
+        for i, tag in enumerate(self.results[:25]):
+            options.append(
+                discord.SelectOption(
+                    label=tag.name[:100],
+                    value=str(i),
+                    description=f"ID: {tag.id}",
+                )
+            )
+            entry = TagPageEntry(record={"name": tag.name, "id": tag.id})
+            lines.append(f"`{i + 1}.` {entry}")
+        container.add_item(discord.ui.TextDisplay("\n".join(lines)))
+
+        container.add_item(discord.ui.Separator())
+
+        self._select = discord.ui.Select(placeholder="Select a tag…", options=options)
+        self._select.callback = self._on_select
+        container.add_item(discord.ui.ActionRow(self._select))
+
+        container.add_item(discord.ui.TextDisplay(
+            f"-# {pluralize(len(self.results)):similar tag|similar tags} found - showing {len(self.results[:25])}"
+        ))
+        self.add_item(container)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        index = int(self._select.values[0])
+        selected = self.results[index]
+
+        cog: Tags | None = cast("Tags | None", interaction.client.get_cog("Tags"))  # type: ignore[union-attr]
+        if cog is None:
+            return
+
+        tag = await cog.get_tag(selected.name, location_id=selected.location_id)
+        if not isinstance(tag, Tag):
+            await interaction.response.send_message(
+                f"{Emojis.error} Could not resolve that tag.", ephemeral=True
+            )
+            return
+
+        content = tag.content
+        if len(content) > 2000:
+            content = content[:1997] + "…"
+        await interaction.response.send_message(content)
+        if interaction.message:
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.message.delete()
+        await tag.add(uses=1)
+        self.stop()
+
+
+class TagListView(TagLayoutView):
+    """Paginated CV2 view for tag list and search results."""
+
+    PER_PAGE = 15
+
+    def __init__(
+        self,
+        entries: list[asyncpg.Record],
+        *,
+        ctx: Context,
+        title: str = "Tags",
+        description: str = "",
+        sort: str = "name",
+    ) -> None:
+        super().__init__(members=ctx.author)
+        self.entries = entries
+        self.ctx = ctx
+        self._title = title
+        self._description = description
+        self._sort = sort
+        self._page = 0
+        self._total_pages = max(1, (len(entries) + self.PER_PAGE - 1) // self.PER_PAGE)
+        self._build_page()
+
+    def _build_page(self) -> None:
+        self.clear_items()
+        container = self._make_container()
+
+        header = f"## {self._title}"
+        if self._description:
+            header += f"\n-# {self._description}"
+        container.add_item(discord.ui.TextDisplay(header))
+        container.add_item(discord.ui.Separator())
+
+        start = self._page * self.PER_PAGE
+        end = start + self.PER_PAGE
+        page_entries = self.entries[start:end]
+
+        lines = []
+        for i, row in enumerate(page_entries, start + 1):
+            entry = TagPageEntry(record=row)
+            lines.append(f"`{i}.` {entry}")
+        container.add_item(discord.ui.TextDisplay("\n".join(lines)))
+
+        container.add_item(discord.ui.Separator())
+
+        footer = f"-# Page {self._page + 1}/{self._total_pages} • {pluralize(len(self.entries)):entry|entries} • Sorted by: {self._sort}"
+        container.add_item(discord.ui.TextDisplay(footer))
+
+        if self._total_pages > 1:
+            prev_btn = discord.ui.Button(
+                label="◀",
+                style=discord.ButtonStyle.secondary,
+                disabled=self._page == 0,
+            )
+            prev_btn.callback = self._prev
+
+            page_btn = discord.ui.Button(
+                label=f"{self._page + 1}/{self._total_pages}",
+                style=discord.ButtonStyle.secondary,
+                disabled=True,
+            )
+
+            next_btn = discord.ui.Button(
+                label="▶",
+                style=discord.ButtonStyle.secondary,
+                disabled=self._page >= self._total_pages - 1,
+            )
+            next_btn.callback = self._next
+
+            search_btn = discord.ui.Button(
+                label="Jump",
+                style=discord.ButtonStyle.primary,
+            )
+            search_btn.callback = self._jump
+
+            container.add_item(discord.ui.ActionRow(prev_btn, page_btn, next_btn, search_btn))
+
+        self.add_item(container)
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        self._page = max(0, self._page - 1)
+        self._build_page()
+        await interaction.response.edit_message(view=self)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        self._page = min(self._total_pages - 1, self._page + 1)
+        self._build_page()
+        await interaction.response.edit_message(view=self)
+
+    async def _jump(self, interaction: discord.Interaction) -> None:
+        modal = _JumpToPageModal(self._total_pages)
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            return
+        self._page = modal.page
+        self._build_page()
+        await modal.interaction.response.edit_message(view=self)
+
+
+class _JumpToPageModal(discord.ui.Modal, title="Jump to Page"):
+    page_number = discord.ui.TextInput(label="Page Number", style=discord.TextStyle.short)
+
+    def __init__(self, total: int) -> None:
+        super().__init__(timeout=30)
+        self._total = total
+        self.page_number.placeholder = f"1 – {total}"
+        self.page: int = 0
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = self.page_number.value
+        if not value.isdigit() or not (1 <= int(value) <= self._total):
+            await interaction.response.send_message(
+                f"{Emojis.error} Enter a number between 1 and {self._total}.", ephemeral=True
+            )
+            self.stop()
+            return
+        self.page = int(value) - 1
+        self.interaction = interaction
+        self.stop()
+
+
+class TagGuildStatsView(TagLayoutView):
+    """Displays guild-wide tag statistics in a CV2 card."""
+
+    def __init__(
+        self,
+        *,
+        ctx: Context,
+        total_tags: int,
+        total_uses: int,
+        uses_per_day: float,
+        most_used: list[asyncpg.Record],
+        top_users: list[asyncpg.Record],
+        top_creators: list[asyncpg.Record],
+    ) -> None:
+        super().__init__(members=ctx.author)
+        self.ctx = ctx
+        container = self._make_container()
+
+        guild = ctx.guild
+        assert guild is not None
+
+        container.add_item(discord.ui.Section(
+            f"## Tag Statistics\n-# {guild.name}",
+            accessory=discord.ui.Thumbnail(get_asset_url(guild) or "")
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        stats_text = (
+            f"**Total Tags** — {total_tags}\n"
+            f"**Total Uses** — {total_uses}\n"
+            f"**Uses/Day** — {uses_per_day:.2f}"
+        )
+        container.add_item(discord.ui.TextDisplay(stats_text))
+
+        if most_used:
+            container.add_item(discord.ui.Separator())
+            most_used_text = "\n".join(
+                f"{medal_emoji(i)} **{record['name']}** — {record['uses']} uses"
+                for i, record in enumerate(most_used)
+            )
+            container.add_item(discord.ui.TextDisplay(f"### Most Used Tags\n{most_used_text}"))
+
+        if top_users:
+            container.add_item(discord.ui.Separator())
+            top_users_text = "\n".join(
+                f"{medal_emoji(i)} <@{record['author_id']}> — {record['uses']} times"
+                for i, record in enumerate(top_users)
+            )
+            container.add_item(discord.ui.TextDisplay(f"### Top Tag Users\n{top_users_text}"))
+
+        if top_creators:
+            container.add_item(discord.ui.Separator())
+            top_creators_text = "\n".join(
+                f"{medal_emoji(i)} <@{record['owner_id']}> — {record['count']} tags"
+                for i, record in enumerate(top_creators)
+            )
+            container.add_item(discord.ui.TextDisplay(f"### Top Creators\n{top_creators_text}"))
+
+        self.add_item(container)
+
+
+class TagMemberStatsView(TagLayoutView):
+    """Displays per-member tag statistics in a CV2 card."""
+
+    def __init__(
+        self,
+        *,
+        ctx: Context,
+        member: discord.Member | discord.User,
+        command_uses: int,
+        owned_count: int,
+        total_uses: int,
+        top_tags: list[asyncpg.Record],
+    ) -> None:
+        super().__init__(members=ctx.author)
+
+        container = self._make_container()
+
+        container.add_item(discord.ui.Section(
+            f"## {member.display_name}\n-# Tag Statistics",
+            accessory=discord.ui.Thumbnail(member.display_avatar.url)
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        stats_text = (
+            f"**Tag Commands Used** — {command_uses}\n"
+            f"**Owned Tags** — {owned_count}\n"
+            f"**Owned Tags Used** — {total_uses}"
+        )
+        container.add_item(discord.ui.TextDisplay(stats_text))
+
+        if top_tags:
+            container.add_item(discord.ui.Separator())
+            top_text = "\n".join(
+                f"{medal_emoji(i)} **{record['name']}** — {record['uses']} uses"
+                for i, record in enumerate(top_tags)
+            )
+            container.add_item(discord.ui.TextDisplay(f"### Top Tags\n{top_text}"))
+
+        self.add_item(container)
+
+
+class TagTransferView(TagLayoutView):
+    """CV2 transfer request card sent to the recipient's DMs."""
+
+    def __init__(self, tag: Tag, *, from_user: discord.Member | discord.User, guild: discord.Guild) -> None:
+        super().__init__(accent=helpers.Colour.info_accent(), timeout=None)
+        self.tag = tag
+        self.from_id = from_user.id
+
+        container = self._make_container()
+
+        container.add_item(discord.ui.TextDisplay(
+            f"## Tag Transfer Request\n"
+            f"**{from_user}** from **{guild.name}** wants to transfer the tag "
+            f"**{tag.name}** [`{tag.id}`] to you.\n\n"
+            f"Do you want to accept this transfer?"
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        accept_btn = discord.ui.Button(
+            label="Accept",
+            style=discord.ButtonStyle.green,
+            custom_id=f"tag:transfer:confirm:{tag.id}:{from_user.id}",
+        )
+        decline_btn = discord.ui.Button(
+            label="Decline",
+            style=discord.ButtonStyle.red,
+            custom_id=f"tag:transfer:decline:{tag.id}:{from_user.id}",
+        )
+        container.add_item(discord.ui.ActionRow(accept_btn, decline_btn))
+
+        self.add_item(container)
+
+
+# endregion
+
+# region Modals
+
+
+class TagEditModal(discord.ui.Modal, title="Edit Tag"):
+    tag_name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
+    content = discord.ui.TextInput(
+        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
+    )
+
+    def __init__(self, tag: Tag) -> None:
+        super().__init__()
+        self.content.default = tag.content
+        self.tag_name.default = tag.name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+        self.stop()
+
+
+class TagMakeModal(discord.ui.Modal, title="Create a New Tag"):
+    name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
+    content = discord.ui.TextInput(
+        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
+    )
+
+    def __init__(self, cog: Tags, ctx: Context) -> None:
+        super().__init__()
+        self.cog: Tags = cog
+        self.ctx: Context = ctx
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        name = str(self.name)
+        try:
+            name = await TagNameOrID().convert(self.ctx, name)
+        except BadArgument as e:
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return
+
+        self.ctx.interaction = interaction  # type: ignore
+        content = str(self.content)
+        if len(content) > 2000:
+            await interaction.response.send_message(
+                f"{Emojis.error} Consider using a shorter description for your Tag. (2000 max characters)", ephemeral=True
+            )
+        else:
+            if interaction.guild_id is None:
+                await interaction.response.send_message(
+                    f"{Emojis.error} This command can only be used in a server.", ephemeral=True
+                )
+                return
+            assert isinstance(name, str)
+            with self.cog.reserve_tag(interaction.guild_id, name):
+                await self.cog.create_tag(self.ctx, name, content)
+
+
+# endregion
+
+# region Dynamic Items (persistent transfer buttons)
 
 
 class TagTransferConfirmButton(
@@ -215,56 +744,9 @@ class TagTransferDeclineButton(
         await interaction.response.send_message(f"{Emojis.success} Tag transfer was declined.", ephemeral=True)
 
 
-class TagEditModal(discord.ui.Modal, title="Edit Tag"):
-    tag_name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
-    content = discord.ui.TextInput(
-        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
-    )
+# endregion
 
-    def __init__(self, tag: Tag) -> None:
-        super().__init__()
-        self.content.default = tag.content
-        self.tag_name.default = tag.name
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        self.interaction = interaction
-        self.stop()
-
-
-class TagMakeModal(discord.ui.Modal, title="Create a New Tag"):
-    name = discord.ui.TextInput(label="Name", required=True, max_length=100, min_length=1)
-    content = discord.ui.TextInput(
-        label="Content", required=True, style=discord.TextStyle.long, min_length=1, max_length=2000
-    )
-
-    def __init__(self, cog: Tags, ctx: Context) -> None:
-        super().__init__()
-        self.cog: Tags = cog
-        self.ctx: Context = ctx
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        name = str(self.name)
-        try:
-            name = await TagNameOrID().convert(self.ctx, name)
-        except BadArgument as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-
-        self.ctx.interaction = interaction  # type: ignore
-        content = str(self.content)
-        if len(content) > 2000:
-            await interaction.response.send_message(
-                f"{Emojis.error} Consider using a shorter description for your Tag. (2000 max characters)", ephemeral=True
-            )
-        else:
-            if interaction.guild_id is None:
-                await interaction.response.send_message(
-                    f"{Emojis.error} This command can only be used in a server.", ephemeral=True
-                )
-                return
-            assert isinstance(name, str)
-            with self.cog.reserve_tag(interaction.guild_id, name):
-                await self.cog.create_tag(self.ctx, name, content)
+# region Domain Models
 
 
 class Tag(BaseRecord, table="tags", pk="id"):
@@ -305,13 +787,6 @@ class Tag(BaseRecord, table="tags", pk="id"):
     def raw_content(self) -> str:
         return discord.utils.escape_markdown(self.content)
 
-    @property
-    def to_embed(self) -> discord.Embed:
-        embed = discord.Embed(title=self.name, description=self.content)
-        embed.timestamp = self.created_at.replace(tzinfo=datetime.UTC)
-        embed.set_footer(text=f"[{self.id}] • Created at")
-        return embed
-
     async def _update(
         self,
         key: Callable[[tuple[int, str]], str],
@@ -329,36 +804,12 @@ class Tag(BaseRecord, table="tags", pk="id"):
             raise BadArgument("Tag Content is missing.", "name_or_id")
 
     async def get_rank(self) -> int:
-        """|coro|
-
-        Gets the rank of the tag.
-
-        Returns
-        -------
-        int
-            The rank of the tag.
-        """
         return await self.bot.db.tags.get_tag_rank(self.id)
 
     async def delete(self) -> None:
-        """|coro|
-
-        Deletes the tag and all corresponding aliases.
-        """
         await self.bot.db.tags.delete_tag(self.id)
 
     async def transfer(self, to: discord.Member, only_parent: bool = False) -> None:
-        """|coro|
-
-        Transfers the tag to another user.
-
-        Parameters
-        ----------
-        to: discord.Member
-            The member to transfer the tag to.
-        only_parent: bool
-            Whether to only transfer the parent tag or all aliases as well.
-        """
         async with self.bot.db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             await self.update(owner_id=to.id, connection=conn)  # type: ignore[arg-type]
             if not only_parent:
@@ -383,30 +834,18 @@ class AliasTag(BaseRecord, table="tag_lookup", pk="id"):
         return f"[{self.id}] {self.name}"
 
     async def transfer(self, to: discord.Member, /, *, connection: asyncpg.Connection | None = None) -> None:
-        """|coro|
-
-        Transfers the alias to another user.
-
-        Parameters
-        ----------
-        to: discord.Member
-            The member to transfer the alias to.
-        connection: asyncpg.Connection | None
-            The connection to use. Defaults to the bot's db.
-            Needs to be used if there is no :attr:`parent` attribute.
-
-        """
         db = self.parent.bot.db if self.parent else connection
         async with db.acquire() as conn, conn.transaction():  # type: ignore[union-attr]
             await db.tags.transfer_alias(self.id, to.id, connection=conn)  # type: ignore[union-attr]
 
     async def delete(self) -> None:
-        """|coro|
-
-        Deletes the alias.
-        """
         assert self.parent is not None, "AliasTag.delete requires a parent tag with a bot reference"
         await self.parent.bot.db.tags.delete_alias(self.id)
+
+
+# endregion
+
+# region Cog
 
 
 class Tags(Cog):
@@ -419,16 +858,11 @@ class Tags(Cog):
 
         bot.add_dynamic_items(TagTransferConfirmButton, TagTransferDeclineButton)
 
-        # We create this temporary cache to avoid Users creating two Tags with the
-        # same name at the same time to avoid conflicts
         self._temporary_reserved_tags: dict[int, set[str]] = {}
 
     @contextlib.contextmanager
     def reserve_tag(self, guild_id: int, name: str, /) -> Generator[None, None, None]:
-        """Reserves a tag name for a guild.
-
-        This is to avoid two users creating a tag with the same name at the same time.
-        """
+        """Reserves a tag name for a guild."""
         name = name.lower()
 
         if guild_id not in self._temporary_reserved_tags:
@@ -460,31 +894,6 @@ class Tags(Cog):
 
         Gets the Original :class:`Tag` with Optional all :class:`AliasTag`s of it.
         If no exact_match match is found, it will return a list of :class:`AliasTag`s that are similar to the name.
-
-        Note
-        ----
-        Returning a list with similar Tags is only possible if :attr:`name_or_id` is a string and :attr:`similarites` is True.
-
-        Parameters
-        ----------
-        name_or_id: str | int
-            The name or ID of the tag to get.
-        owner_id: int | None
-            The ID of the user to get the tag from.
-        location_id: int | None
-            The ID of the guild to get the tag from.
-        only_parent: bool
-            Whether to only get the parent tag.
-        similarites: bool
-            Whether to return similar tags if no tag(s) were found.
-        exact_match: bool
-            Checks if no parent was found with the provided name/id,
-            if there is an AliasTag with the provided name/id.
-
-        Returns
-        -------
-        list[AliasTag] | Tag | AliasTag | None
-            The Tag or a list of AliasTags or None if no Tag was found.
         """
         repo = self.bot.db.tags
 
@@ -510,46 +919,30 @@ class Tags(Cog):
             assert location_id is not None
             rows = await repo.get_similar_aliases(location_id, name_or_id)
             return [AliasTag(parent=parent, record=row) for row in rows]
+        return None
 
     async def send_tag(self, ctx: Context, name_or_id: str | int, *, escape_markdown: bool = False) -> None:
         """|coro|
 
         Look up a Tag by name in the given guild. Searching with similarity queries.
-
-        If a Tag is found, sends it with the proper formatting to the destination.
-        If no Tag with the exact_match (LOWERED) name is found, a disambiguation prompt is sent.
-
-        Parameters
-        ----------
-        ctx: Context
-            The invocation context.
-        name_or_id: str | int
-            The name or ID of the Tag to get.
-        escape_markdown: bool
-            Whether to escape the markdown in the Tag content.
         """
         assert ctx.guild is not None
         result = await self.get_tag(name_or_id, location_id=ctx.guild.id, similarites=True)
 
         if isinstance(result, list):
-            # Assuming no tags were found and similarites are returned instead
             if len(result) == 0:
                 raise BadArgument(f"No Tag with the name or ID `{name_or_id}` found.", "name_or_id")
             else:
-                embed = discord.Embed(title="*Did you mean ...*", colour=helpers.Colour.white())
-                await LinePaginator.start(
-                    ctx, entries=[f"* **{r.name}** [`{r.id}`]" for r in result], embed=embed, per_page=20
-                )
+                view = TagSuggestView(result, ctx=ctx)
+                await ctx.send(view=view, reference=ctx.replied_reference)
             return
 
         if not result:
             raise BadArgument(f"No Tag with the name or ID `{name_or_id}` found.", "name_or_id")
 
         tag: Tag = result  # type: ignore
-        if tag.use_embed and not escape_markdown:
-            await ctx.send(embed=tag.to_embed, reference=ctx.replied_reference)
-        else:
-            await ctx.send(tag.content if not escape_markdown else tag.raw_content, reference=ctx.replied_reference)
+        content = tag.raw_content if escape_markdown else tag.content
+        await ctx.send(content, reference=ctx.replied_reference)
 
         _aliases = getattr(tag, "aliases", None)
         updated = await tag.add(uses=1)
@@ -562,19 +955,6 @@ class Tags(Cog):
         """|coro|
 
         Creates a new Tag in the Guild.
-        Inserts into `tag_lookup` and `tags` table, `tag_lookup` is the summary of origin tags and aliases.
-        In the `tags` table are the root tags with their original names, contents etc.
-
-        Using a `transaction` session to avoid conflicts on inserting.
-
-        Parameters
-        ----------
-        ctx: Context
-            The invocation context.
-        name: str
-            The name of the Tag.
-        content: str
-            The content of the Tag.
         """
         async with ctx.db.acquire() as connection:
             tr = connection.transaction()
@@ -602,13 +982,7 @@ class Tags(Cog):
                 await ctx.send_success(f"Tag `{name}` was successfully created.")
 
     def is_tag_reserved(self, guild_id: int, name: str) -> bool:
-        """Helper method to check if a Tag with ``name`` is currently being made or reserved.
-
-        Note
-        ----
-        This doesn't check if the Tag exact_matchly exists.
-        This needs to be handled by the caller.
-        """
+        """Helper method to check if a Tag with ``name`` is currently being made or reserved."""
         first_word, *_ = name.partition(" ")
 
         root: commands.GroupMixin = self.bot.get_command("tag")  # type: ignore
@@ -807,53 +1181,33 @@ class Tags(Cog):
 
     async def guild_tag_stats(self, ctx: Context) -> None:
         assert ctx.guild is not None
-        embed = discord.Embed(colour=helpers.Colour.white(), title=f"Tag Statistics for {ctx.guild.name}")
-        embed.set_thumbnail(url=get_asset_url(ctx.guild))  # type: ignore[arg-type]
-        embed.set_footer(text="Tag Statistics for this Server.")
-
         repo = self.bot.db.tags
         total_tags = await repo.count_tags(ctx.guild.id)
 
         if not total_tags:
-            embed.description = "*There are no statistics available.*"
-        else:
-            total_uses = await repo.count_tag_command_uses(ctx.guild.id)
+            await ctx.send_error("There are no tag statistics available for this server.")
+            return
 
-            joined_at = ctx.me.joined_at if isinstance(ctx.me, discord.Member) else None
-            embed.add_field(
-                name="**Guild Stats**",
-                value=f"Total Tags: **{total_tags}**\n"
-                f"Total Uses: **{total_uses}**\n\n"
-                f"*with **{usage_per_day(joined_at, total_uses):.2f}** tag uses per day*",  # type: ignore[arg-type]
-                inline=False,
-            )
+        total_uses = await repo.count_tag_command_uses(ctx.guild.id)
+        joined_at = ctx.me.joined_at if isinstance(ctx.me, discord.Member) else None
+        upd = usage_per_day(joined_at, total_uses)  # type: ignore[arg-type]
 
         most_used_records = await repo.get_most_used_tags(ctx.guild.id)
-        most_used_tags_value = "\n".join(
-            f"{medal_emoji(index)}: {name} (**{uses}** uses)" for index, (name, uses) in enumerate(most_used_records)
-        )
-
-        embed.add_field(name="**Most Used Tags**", value=most_used_tags_value, inline=False)
-
         top_tag_users_records = await repo.get_top_tag_users(ctx.guild.id)
-        top_tag_users_value = "\n".join(
-            f"{medal_emoji(index)}: <@{author_id}> (**{uses}** times)"
-            for index, (uses, author_id) in enumerate(top_tag_users_records)
-        )
-
-        embed.add_field(name="**Top Tag Users**", value=top_tag_users_value, inline=False)
-
         top_creators_records = await repo.get_top_tag_creators(ctx.guild.id)
-        top_creators_value = "\n".join(
-            f"{medal_emoji(index)}: <@{owner_id}> (**{count}** tags)"
-            for index, (count, owner_id) in enumerate(top_creators_records)
+
+        view = TagGuildStatsView(
+            ctx=ctx,
+            total_tags=total_tags,
+            total_uses=total_uses,
+            uses_per_day=upd,
+            most_used=list(most_used_records),
+            top_users=list(top_tag_users_records),
+            top_creators=list(top_creators_records),
         )
-        embed.add_field(name="**Top Creators**", value=top_creators_value, inline=False)
+        await ctx.send(view=view)
 
-        await ctx.send(embed=embed)
-
-    @staticmethod
-    async def member_tag_stats(ctx: Context, member: discord.Member | discord.User) -> None:
+    async def member_tag_stats(self, ctx: Context, member: discord.Member | discord.User) -> None:
         assert ctx.guild is not None
         repo = ctx.db.tags
         records = await repo.get_member_tag_summary(ctx.guild.id, member.id)
@@ -862,24 +1216,18 @@ class Tags(Cog):
             await ctx.send_error("No Tag Statistics found for this member.")
             return
 
-        embed = discord.Embed(color=helpers.Colour.white())
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-        embed.set_thumbnail(url=get_asset_url(member))
-        embed.set_footer(text="Tag Stats for this Member.")
-
         count = await repo.count_member_tag_command_uses(ctx.guild.id, member.id)
-
-        embed.add_field(name="**Tag Command invoked**", value=f"**{count}** times", inline=False)
-        embed.add_field(name="**Owned Tags**", value=records["count"])
-        embed.add_field(name="**Owned Tags Used**", value=records["total_uses"])
-
         top_records = await repo.get_member_top_tags(ctx.guild.id, member.id)
-        for index, (name, uses) in enumerate(top_records):
-            embed.add_field(
-                name=f"**#{index + 1} {medal_emoji(index)}**", value=f"**{name}** (**{uses}** uses)", inline=False
-            )
 
-        await ctx.send(embed=embed)
+        view = TagMemberStatsView(
+            ctx=ctx,
+            member=member,
+            command_uses=count,
+            owned_count=records["count"],
+            total_uses=records["total_uses"],
+            top_tags=list(top_records),
+        )
+        await ctx.send(view=view)
 
     @staticmethod
     async def send_tags_to_text(ctx: Context, tags: list[asyncpg.Record]) -> None:
@@ -997,29 +1345,10 @@ class Tags(Cog):
             raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
 
         tag: Tag = raw_tag
-        embed = discord.Embed(title="Tag Info", description=f"**```{tag.name}```**\n")
-        embed.add_field(name="**Owner**", value=f"<@{tag.owner_id}>")
-
-        user = self.bot.get_user(tag.owner_id) or (await self.bot.fetch_user(tag.owner_id))
-        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
-
-        embed.timestamp = tag.created_at.replace(tzinfo=datetime.UTC)
-        embed.set_footer(text=f"[{tag.id}] • Tag created at")
-
         rank = await tag.get_rank()
-        if rank and rank in (1, 2, 3):
-            embed.add_field(name="**Rank**", value=f"**#{rank}** {chr(129350 + int(rank))}")
 
-        embed.add_field(name="**Tag Used**", value=tag.uses)
-
-        if tag.aliases:
-            aliases_info = [
-                f"**{alias.name}** [`{alias.id}`] ({discord.utils.format_dt(alias.created_at, style='D')})"
-                for alias in tag.aliases
-            ]
-            embed.add_field(name=f"**Aliases ({len(tag.aliases)})**", value="\n".join(aliases_info), inline=False)
-
-        await ctx.send(embed=embed)
+        view = TagInfoView(tag, ctx=ctx, rank=rank)
+        await ctx.send(view=view, allowed_mentions=None)
 
     @tag.command("raw", description="This displays you the raw content of a tag.", aliases=["content"], guild_only=True)
     @describe(name_or_id="The name or id of the tag to display the escaped markdown content.")
@@ -1035,32 +1364,15 @@ class Tags(Cog):
         await self.send_tag(ctx, name_or_id, escape_markdown=True)
 
     @staticmethod
-    async def filter_tags(ctx: Context, flags: TagListFlags | TagSearchFlags) -> list[asyncpg.Record]:
-        """|coro|
-
-        Filters the Tags based on the given flags.
-        This is used for the `tag list` and `tag search` commands.
-
-        Parameters
-        ----------
-        ctx: Context
-            The invocation context.
-        flags: TagListFlags | TagSearchFlags
-            The flags to filter the Tags with.
-
-        Returns
-        -------
-        list[asyncpg.Record]
-            The list of Tags that were found.
-        """
+    async def filter_tags(ctx: Context, flags: TagListFlags | TagSearchFlags, query: str | None = None) -> list[asyncpg.Record]:
         assert ctx.guild is not None
         member: discord.Member | None = None
-        if isinstance(flags, TagListFlags):
+        if query is None:
             raw_member = flags.member or ctx.author
             member = raw_member if isinstance(raw_member, discord.Member) else None
 
         return await ctx.db.tags.filter_tags(
-            ctx.guild.id, query=flags.query, owner_id=member.id if member else None, sort=flags.sort
+            ctx.guild.id, query=query, owner_id=member.id if member else None, sort=flags.sort
         )
 
     @tag.command("list", description="Shows a list of Tags owned by yourself or a given member.", guild_only=True)
@@ -1074,19 +1386,19 @@ class Tags(Cog):
             return
 
         if flags.to_text:
-            return await self.send_tags_to_text(ctx, rows)
+            await self.send_tags_to_text(ctx, rows)
+            return
 
         guild_name = ctx.guild.name if ctx.guild is not None else "this server"
-        embed = discord.Embed(
-            title="Tag Search",
-            description=f"**{member}'s** Tags in {guild_name}\nSorted by: **{flags.sort}**",
-            colour=helpers.Colour.white(),
-            timestamp=discord.utils.utcnow(),
+        view = TagListView(
+            rows,
+            ctx=ctx,
+            title="Tag List",
+            description=f"{member}'s tags in {guild_name}",
+            sort=flags.sort,
         )
-        embed.set_footer(text=f"{pluralize(len(rows)):entry|entries}")
-
-        results = [f"`{index}.` {entry}" for index, entry in enumerate([TagPageEntry(record=row) for row in rows], 1)]
-        await LinePaginator.start(ctx, entries=results, search_for=True, per_page=20, embed=embed)
+        msg = await ctx.send(view=view)
+        view.message = msg
 
     @tag.command("search", description="Search for tags matching the given query.", guild_only=True)
     @describe(query="The tag name to search for")
@@ -1098,28 +1410,28 @@ class Tags(Cog):
             app_commands.Choice(name="ID", value="id"),
         ]
     )
-    async def tags_search(self, ctx: Context, *, flags: TagSearchFlags) -> None:
+    async def tags_search(self, ctx: Context, *, query: str, flags: TagSearchFlags) -> None:
         """Search for tags matching the given query.
         `Note:` To use autocomplete, you have to at least provide three characters.
         """
-        rows = await self.filter_tags(ctx, flags)
+        rows = await self.filter_tags(ctx, flags, query)
         if not rows:
             await ctx.send_error("No tags found.")
             return
 
         if flags.to_text:
-            return await self.send_tags_to_text(ctx, rows)
+            await self.send_tags_to_text(ctx, rows)
+            return
 
-        embed = discord.Embed(
+        view = TagListView(
+            rows,
+            ctx=ctx,
             title="Tag Search",
-            description=f"Sorted by: **{flags.sort}**",
-            colour=helpers.Colour.white(),
-            timestamp=discord.utils.utcnow(),
+            description=f"Results for \"{query}\"",
+            sort=flags.sort,
         )
-        embed.set_footer(text=f"{pluralize(len(rows)):entry|entries}")
-
-        results = [f"`{index}.` {TagPageEntry(record=row)}" for index, row in enumerate(rows, 1)]
-        await LinePaginator.start(ctx, entries=results, search_for=True, per_page=20, embed=embed)
+        msg = await ctx.send(view=view)
+        view.message = msg
 
     @tag.command(
         "purge",
@@ -1143,9 +1455,37 @@ class Tags(Cog):
         if not confirm:
             return
 
-        await ctx.db.tags.delete_owned_tags(ctx.guild.id, member.id)  # guild already asserted above
+        await ctx.db.tags.delete_owned_tags(ctx.guild.id, member.id)
 
         await ctx.send_success(f"Successfully removed all **{count}** tags that belong to **{member}**.")
+
+    @tag.command("transfer", description="Transfer a tag owned by you to another member.", guild_only=True)
+    @describe(member="The member to transfer the tag to.", name_or_id="The tag to transfer.")
+    @app_commands.rename(name_or_id="name-or-id")
+    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
+    async def tag_transfer(
+        self,
+        ctx: Context,
+        member: discord.Member,
+        *,
+        name_or_id: Annotated[str, TagNameOrID(with_id=True)],
+    ) -> None:
+        """Transfer a tag owned by you to another member."""
+        assert ctx.guild is not None
+        if member.bot:
+            await ctx.send_error("You cannot transfer tags to bots.")
+            return
+
+        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
+
+        if raw_tag is None or not isinstance(raw_tag, Tag):
+            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
+
+        tag: Tag = raw_tag
+        view = TagTransferView(tag, from_user=ctx.author, guild=ctx.guild)
+        await member.send(view=view)
+        await ctx.send_info(f"Transfer request for tag **{tag.name}** has been sent to **{member}**.")
+        await tag.update(owner_id=-1)
 
     @tag.command(
         "claim",
@@ -1184,43 +1524,6 @@ class Tags(Cog):
 
         await ctx.send_success("Successfully transferred tag ownership to you.")
 
-    @tag.command("transfer", description="Transfer a tag owned by you to another member.", guild_only=True)
-    @describe(member="The member to transfer the tag to.", name_or_id="The tag to transfer.")
-    @app_commands.rename(name_or_id="name-or-id")
-    @app_commands.autocomplete(name_or_id=aliased_tag_autocomplete)  # type: ignore
-    async def tag_transfer(
-        self,
-        ctx: Context,
-        member: discord.Member,
-        *,
-        name_or_id: Annotated[str, TagNameOrID(with_id=True)],
-    ) -> None:
-        """Transfer a tag owned by you to another member."""
-        assert ctx.guild is not None
-        if member.bot:
-            await ctx.send_error("You cannot transfer tags to bots.")
-            return
-
-        raw_tag = await self.get_tag(name_or_id, location_id=ctx.guild.id, owner_id=ctx.author.id, only_parent=True)
-
-        if raw_tag is None or not isinstance(raw_tag, Tag):
-            raise BadArgument("Could not find a tag with that name, are you sure it exists or you own it?", "name_or_id")
-
-        tag: Tag = raw_tag
-        view = View.from_items(
-            TagTransferConfirmButton(tag, ctx.author.id), TagTransferDeclineButton(tag, ctx.author.id), timeout=None
-        )
-        embed = discord.Embed(
-            title="Tag Transfer Request",
-            description=f"User **{ctx.author}** from Server **{ctx.guild}** wants to transfer the tag **{tag.name}** [`{tag.id}`] to you."
-            f"\n\nDo you want to accept this transfer?",
-            color=helpers.Colour.light_grey(),
-            timestamp=ctx.utcnow(),
-        )
-        await member.send(embed=embed, view=view)
-        await ctx.send_info(f"Transfer request for tag **{tag.name}** has been sent to **{member}**.")
-        await tag.update(owner_id=-1)  # -1 indicates that the tag is in transfer
-
     @tag.command("export", description="Exports all your tags/server tags to a csv file.", guild_only=True)
     @cooldown(1, 30, commands.BucketType.member)
     @describe(which="Whether to export server tags or personal tags. (Server tags only for server owners)")
@@ -1255,6 +1558,9 @@ class Tags(Cog):
             fp=buffer, filename=f'{ctx.author.id}_tags.csv' if which == 'personal' else f'{ctx.guild.id}_tags.csv'
         )
         await ctx.send(file=file)
+
+
+# endregion
 
 
 async def setup(bot: Bot) -> None:
