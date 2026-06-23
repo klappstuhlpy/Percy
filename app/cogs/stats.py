@@ -28,7 +28,7 @@ from app.cogs.games.models import Game
 from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
-from app.core.views import UserInfoView
+from app.core.views import UserInfoView, LayoutView
 from app.rendering import resize_to_limit
 from app.services import (
     ConnectionState,
@@ -53,7 +53,7 @@ from app.utils import (
 )
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
-from config import Emojis, beta, get_full_version, path, repo_url, version
+from config import Emojis, beta, get_full_version, path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -478,7 +478,7 @@ class Stats(Cog):
         commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
 
         offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), "R")
-        return f"[`{short_sha2}`]({repo_url}commit/{commit.id!s}) {short} ({offset})"
+        return f"[`{short_sha2}`]({config.repo_url}commit/{commit.id!s}) {short} ({offset})"
 
     def get_last_commits(self, count: int = 4, repo_path: str = str(path)) -> str:
         repo = pygit2.Repository(Path(repo_path, ".git"))
@@ -491,17 +491,17 @@ class Stats(Cog):
         stats = count_code_stats(root, ignored=[root / "venv"])
 
         builder = AnsiStringBuilder()
-        builder.append("Files:       ", color=AnsiColor.gray)
+        builder.append("Files:       ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.files), color=AnsiColor.green).newline()
-        builder.append("Classes:     ", color=AnsiColor.gray)
+        builder.append("Classes:     ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.classes), color=AnsiColor.green).newline()
-        builder.append("Functions:   ", color=AnsiColor.gray)
+        builder.append("Functions:   ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.functions), color=AnsiColor.green).newline()
-        builder.append("Comments:    ", color=AnsiColor.gray)
+        builder.append("Comments:    ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.comments), color=AnsiColor.green).newline()
-        builder.append("Lines:       ", color=AnsiColor.gray)
+        builder.append("Lines:       ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.lines), color=AnsiColor.green).newline()
-        builder.append("Characters:  ", color=AnsiColor.gray)
+        builder.append("Characters:  ", color=AnsiColor.white, bold=True)
         builder.append(str(stats.characters), color=AnsiColor.green)
 
         return str(builder)
@@ -576,26 +576,25 @@ class Stats(Cog):
             revision = "*Not available.*"
 
         assert ctx.bot.user is not None
-        url = discord.utils.oauth_url(
+        oauth_url = discord.utils.oauth_url(
             client_id=ctx.bot.user.id,
             permissions=discord.Permissions(8),
             scopes=("bot", "applications.commands"),
         )
-
-        embed = discord.Embed(
-            url=url,
-            title="Official Bot Invite",
-            description="[**Support Server Invite**](https://discord.com/3jSYQ9VNbA)\n\nLatest Changes:\n" + revision,
-            colour=helpers.Colour.white(),
-        )
-
         assert isinstance(config.owners, int)
         owner = ctx.bot.get_user(config.owners)
 
-        embed.set_author(name=str(owner), icon_url=get_asset_url(owner) if owner else None)
-        embed.set_thumbnail(url=get_asset_url(self.bot.user) if self.bot.user else None)  # type: ignore
+        container = discord.ui.Container()
 
-        embed.add_field(name="Version", value=get_full_version(), inline=False)
+        container.add_item(
+            discord.ui.Section(
+                f"## {ctx.bot.user}\n"
+                f"-# Version: `{get_full_version()}`\n"
+                f"### Latest Commits:\n{revision}",
+                accessory=discord.ui.Thumbnail(get_asset_url(self.bot.user) if self.bot.user else None)
+            )
+        )
+        container.add_item(discord.ui.Separator())
 
         total_members = 0
         total_unique = len(self.bot.users)
@@ -614,38 +613,55 @@ class Stats(Cog):
                     case discord.VoiceChannel:
                         voice += 1
 
-        embed.add_field(
-            name="Members",
-            value=f"`{total_members}` total\n`{total_unique}` unique\n"
-            f"Bot percentage: `{(total_unique / total_members):.2%}`",
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"### Stats\n"
+                f"Members: `{total_members}` total | `{total_unique}` unique | `{(total_unique / total_members):.2%}` bots\n"
+                f"Channels: `{text + voice}` total | `{text}` text | `{voice}` voice\n"
+                f"Guilds: `{guilds}`\n"
+                f"Commands run since last reboot: `{sum(self.bot.command_stats.values())}`"
+            )
         )
-        embed.add_field(name="Channels", value=f"`{text + voice}` total\n`{text}` text\n`{voice}` voice")
+        container.add_item(discord.ui.Separator())
 
-        memory_usage = self.process.memory_full_info().uss / 1024**2
-        cpu_usage = self.process.cpu_percent() / (psutil.cpu_count() or 1)
-
-        embed.add_field(name="Guilds", value=guilds)
-        embed.add_field(name="Commands run since last reboot", value=sum(self.bot.command_stats.values()))
-        embed.add_field(name="Uptime", value=self.get_bot_uptime(brief=True))
-        embed.add_field(name="​", value="​")
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"### System Stats\n"
+                f"Uptime: `{self.get_bot_uptime(brief=True)}`\n"
+                f"Memory Usage: `{psutil.virtual_memory().percent:.2f}%`\n"
+                f"CPU Usage: `{psutil.cpu_percent():.2f}%`\n"
+                f"Disk Usage: `{psutil.disk_usage(str(Path(__file__).parent.parent)).percent:.2f}%`"
+            )
+        )
+        container.add_item(discord.ui.Separator())
 
         file_stats = await self.project_stats_counter()
-        embed.add_field(name="File Stats", value=f"```ansi\n{file_stats}```")
-
-        builder = AnsiStringBuilder()
-        builder.append("Memory Usage:  ", color=AnsiColor.gray)
-        builder.append(f"{memory_usage:.2f} MiB", color=AnsiColor.green).newline()
-        builder.append("CPU Usage:     ", color=AnsiColor.gray)
-        builder.append(f"{cpu_usage:.2f}%", color=AnsiColor.green).newline()
-        builder.append("Disk Usage:    ", color=AnsiColor.gray)
-        builder.append(f"{psutil.disk_usage(str(Path(__file__).parent.parent)).percent}%", color=AnsiColor.green).newline()
-        embed.add_field(name="System Stats", value=f"```ansi\n{builder!s}```")
-
-        embed.set_footer(
-            text=f"Made with discord.py v{discord.__version__}", icon_url="https://klappstuhl.me/gallery/raw/lVUYV.png"
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"## File Stats\n"
+                f"```ansi\n{file_stats}```"
+            )
         )
-        embed.timestamp = discord.utils.utcnow()
-        await ctx.send(embed=embed)
+        container.add_item(discord.ui.Separator())
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"-# made by **{owner}** with **discord.py v{discord.__version__}**"
+            )
+        )
+        container.add_item(discord.ui.Separator())
+        container.add_item(
+            discord.ui.ActionRow(
+                discord.ui.Button(label="Invite", url=oauth_url, style=discord.ButtonStyle.link),
+                discord.ui.Button(label='Support', url=config.support_server, style=discord.ButtonStyle.link),
+                discord.ui.Button(label='Source', url=config.repo_url, style=discord.ButtonStyle.link),
+                discord.ui.Button(label='Dashboard', url=config.website, style=discord.ButtonStyle.link)
+            )
+        )
+
+        view = LayoutView()
+        view.add_item(container)
+        await ctx.send(view=view)
 
     @group(
         name="stats",
