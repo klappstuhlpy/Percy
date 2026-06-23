@@ -4,6 +4,8 @@ from enum import StrEnum
 
 __all__ = ('Game', 'GameResult')
 
+from config import Emojis
+
 
 class GameResult(StrEnum):
     """The outcome of a single round from the playing member's perspective.
@@ -71,14 +73,14 @@ _LABELS: dict[Game, str] = {
 
 _ICONS: dict[Game, str] = {
     Game.POKER: "\N{PLAYING CARD BLACK JOKER}",
-    Game.BLACKJACK: "\N{BLACK SPADE SUIT}",
-    Game.SLOTS: "\N{SLOT MACHINE}",
+    Game.BLACKJACK: Emojis.blackjack,
+    Game.SLOTS: Emojis.lotteryslots,
     Game.ROULETTE: "\N{GAME DIE}",
-    Game.TOWER: "\N{CARD INDEX DIVIDERS}",
+    Game.TOWER: "\N{HOUSE WITH GARDEN}",
     Game.TICTACTOE: "\N{HEAVY MULTIPLICATION X}",
     Game.MINESWEEPER: "\N{BOMB}",
     Game.HANGMAN: "\N{INPUT SYMBOL FOR LATIN LETTERS}",
-    Game.HIGHERLOWER: "\N{UP DOWN ARROW}",
+    Game.HIGHERLOWER: Emojis.higherlower,
     Game.DICE: "\N{DIRECT HIT}",
     Game.MINES: "\N{GEM STONE}",
     Game.TRIVIA: "\N{BLACK QUESTION MARK ORNAMENT}",

@@ -216,6 +216,13 @@ class Emojis:
 
     empty: ClassVar[str] = '<:__:1322354521997054044>'
 
+    fire: ClassVar[str] = '<a:fire:1519092561279717476>'
+    snowflake: ClassVar[str] = '<:snowflake:1519094196764672091>'
+
+    higherlower: ClassVar[str] = '<:higherlower:1519094990352154734>'
+    blackjack: ClassVar[str] = '<:blackjack:1519094990352154734>'
+    lotteryslots: ClassVar[str] = '<:lotteryslots:1519095850578739231>'
+
     class Arrows:
         right: ClassVar[str] = '<a:vega_arrow_right:1322337825198313512>'
         left: ClassVar[str] = '<a:vega_arrow_left:1322337776812949514>'

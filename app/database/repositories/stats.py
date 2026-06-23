@@ -528,7 +528,9 @@ class GameStatsRepository(BaseRepository):
                    COALESCE(SUM(tied), 0)    AS tied,
                    COALESCE(SUM(wagered), 0) AS wagered,
                    COALESCE(SUM(profit), 0)  AS profit,
-                   COALESCE(MAX(biggest_win), 0) AS biggest_win
+                   COALESCE(MAX(biggest_win), 0) AS biggest_win,
+                (SELECT MAX(current_streak) FROM game_stats WHERE guild_id = $1 AND user_id = $2) AS current_streak,
+                (SELECT MAX(best_streak) FROM game_stats WHERE guild_id = $1 AND user_id = $2) AS best_streak
             FROM game_stats
             WHERE guild_id = $1 AND user_id = $2
             HAVING COUNT(*) > 0;

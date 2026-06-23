@@ -869,7 +869,7 @@ class Stats(Cog):
 
         await ctx.send(embed=embed)
 
-    async def game_autocomplete(self, _: discord.Interaction, current: str) -> list[Choice[str]]:
+    async def game_autocomplete(self, _: discord.Interaction, current: str) -> list[Choice[str | int | float]]:
         """Autocomplete over the tracked games."""
         return [
             Choice(name=f"{game.icon} {game.label}", value=game.value)
@@ -878,12 +878,14 @@ class Stats(Cog):
         ][:25]
 
     @staticmethod
-    def _format_streak(current_streak: int) -> str:
+    def _format_streak(current_streak: int, static: bool = True) -> str:
         """Pretty-prints an active win/loss streak."""
+        fire = "\N{FIRE}" if static else Emojis.fire
+        snowflake = "\N{SNOWFLAKE}" if static else Emojis.snowflake
         if current_streak > 0:
-            return f"\N{FIRE} {current_streak}W"
+            return f"{fire} {current_streak}W"
         if current_streak < 0:
-            return f"\N{SNOWFLAKE} {abs(current_streak)}L"
+            return f"{snowflake} {abs(current_streak)}L"
         return "—"
 
     @staticmethod
@@ -910,16 +912,37 @@ class Stats(Cog):
         totals = await ctx.db.game_stats.get_member_totals(ctx.guild.id, target.id)
         assert totals is not None
 
-        embed = discord.Embed(title="Game Stats", colour=target.colour)
-        embed.set_author(name=str(target), icon_url=get_asset_url(target))
+        container = discord.ui.Container()
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"## {target}'s Game Stats\n"
+                f"-# {target.display_name} has played a total of **{totals['played']}** games in this server.\n"
+                f"### This overview shows the users stats about their game history!"
+            )
+        )
+        container.add_item(discord.ui.Separator())
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"```diff\n"
+                f"+ Current streak: {self._format_streak(totals['current_streak'])}\n"
+                f"+ Best streak:    {self._format_streak(totals['best_streak'])}\n"
+                f"```"
+            )
+        )
+        container.add_item(discord.ui.Separator())
 
         win_rate = self._winrate(totals["won"], totals["played"])
-        embed.description = (
-            f"**{totals['played']}** rounds played • **{totals['won']}**W / **{totals['lost']}**L "
-            f"({win_rate:.0f}% win-rate)\n"
-            f"Net profit: {Emojis.Economy.cash} **{fnumb(totals['profit'])}** • "
-            f"Biggest win: {Emojis.Economy.cash} **{fnumb(totals['biggest_win'])}**"
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"**{totals['played']}** rounds played • **{totals['won']}**W / **{totals['lost']}**L "
+                f"({win_rate:.0f}% win-rate)\n"
+                f"Net profit: {Emojis.Economy.cash} **{fnumb(totals['profit'])}** • "
+                f"Biggest win: {Emojis.Economy.cash} **{fnumb(totals['biggest_win'])}**"
+            )
         )
+        container.add_item(discord.ui.Separator())
 
         for record in rows:
             game = Game(record["game"])
@@ -928,12 +951,17 @@ class Stats(Cog):
                 f"`{record['played']}` played • `{record['won']}`W / `{record['lost']}`L"
                 f"{f' / `{record['tied']}`T' if record['tied'] else ''} • **{rate:.0f}%**\n"
                 f"Net: {Emojis.Economy.cash} **{fnumb(record['profit'])}** • "
-                f"Streak: {self._format_streak(record['current_streak'])} "
+                f"Streak: {self._format_streak(record['current_streak'], static=False)} "
                 f"(best {record['best_streak']}W)"
             )
-            embed.add_field(name=f"{game.icon} {game.label}", value=value, inline=False)
+            container.add_item(discord.ui.TextDisplay(f"### {game.icon} {game.label}\n" + value))
+            container.add_item(discord.ui.Separator())
 
-        await ctx.send(embed=embed)
+        container.add_item(discord.ui.TextDisplay(f"-# want to play? checkout ?help Games for further info"))
+
+        view = LayoutView()
+        view.add_item(container)
+        await ctx.send(view=view)
 
     @stats.command(
         name="gameboard",
