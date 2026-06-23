@@ -112,7 +112,13 @@ class DatabaseConfig:
     user: str = 'percy'
     password: str = env('DATABASE_PASSWORD')
     host: str = env('DATABASE_HOST')
-    port: int = 5432
+    port: int = int(env('DATABASE_PORT') or 5432)
+
+    ssh_host: str | None = env('SSH_TUNNEL_HOST')
+    ssh_port: int = int(env('SSH_TUNNEL_PORT') or '22')
+    ssh_user: str | None = env('SSH_TUNNEL_USER')
+    ssh_key_path: str | None = env('SSH_TUNNEL_KEY_PATH')
+    ssh_key_passphrase: str | None = env('SSH_TUNNEL_KEY_PASSPHRASE')
 
     @classmethod
     def to_url(cls) -> str:
@@ -175,9 +181,12 @@ def _optional_int(value: str | None) -> int | None:
         return None
 
 
-anilist = SimpleNamespace(client_id=_optional_int(env('ANILIST_CLIENT_ID')), client_secret=env('ANILIST_CLIENT_SECRET'),
-                          redirect_uri='https://anilist.co/api/v2/oauth/pin')
-locg_api_url: str = env('LOCG_API_URL') or 'http://127.0.0.1:8070'
+anilist = SimpleNamespace(
+    client_id=_optional_int(env('ANILIST_CLIENT_ID')),
+    client_secret=env('ANILIST_CLIENT_SECRET'),
+    redirect_uri='https://anilist.co/api/v2/oauth/pin'
+)
+locg_api_url: str = 'https://locg.klappstuhl.me/'
 
 
 class Emojis:

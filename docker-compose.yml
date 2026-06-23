@@ -3,33 +3,18 @@ services:
     container_name: percy
     build: .
     restart: unless-stopped
+    env_file: .env
     environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
-      DISCORD_BETA_TOKEN: ${DISCORD_BETA_TOKEN}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-      DATABASE_HOST: ${DATABASE_HOST}
-      LAVALINK_NODE_1_PASSWORD: ${LAVALINK_NODE_1_PASSWORD}
-      STATS_WEBHOOK_TOKEN: ${STATS_WEBHOOK_TOKEN}
-      GENIUS_TOKEN: ${GENIUS_TOKEN}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-      DBOTS_TOKEN: ${DBOTS_TOKEN}
-      TOPGG_TOKEN: ${TOPGG_TOKEN}
-      IMAGES_API_TOKEN: ${IMAGES_API_TOKEN}
-      ANILIST_CLIENT_ID: ${ANILIST_CLIENT_ID}
-      ANILIST_CLIENT_SECRET: ${ANILIST_CLIENT_SECRET}
-      LOCG_API_URL: ${LOCG_API_URL:-http://host.docker.internal:8070}
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
-      INTERNAL_API_PORT: ${INTERNAL_API_PORT:-8090}
+      # Docker-specific overrides (take precedence over .env values):
+      # Bind the internal API to all interfaces so the host can reach it.
       INTERNAL_API_HOST: "0.0.0.0"
-      DISCORDBOTLIST_TOKEN: ${DISCORDBOTLIST_TOKEN}
-      TOPGG_WEBHOOK_SECRET: ${TOPGG_WEBHOOK_SECRET}
-      DISCORDBOTLIST_WEBHOOK_SECRET: ${DISCORDBOTLIST_WEBHOOK_SECRET}
+      # Inside Docker, localhost is the container — default to host.docker.internal
+      # to reach Postgres on the bare host. Override DATABASE_HOST in .env if needed.
+      DATABASE_HOST: ${DATABASE_HOST:-host.docker.internal}
     ports:
       - "${INTERNAL_API_PORT:-8090}:${INTERNAL_API_PORT:-8090}"
-    # Lets the container reach services published on the host (locg-api on :8070)
-    # via http://host.docker.internal:8070. `host-gateway` works on Linux Docker too.
+    # Lets the container reach services on the host (Postgres, locg-api, etc.)
+    # via host.docker.internal. `host-gateway` works on Linux Docker too.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

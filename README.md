@@ -243,49 +243,13 @@ Percy is configured in three layers: **secrets** in `.env`, **deployment constan
 
 ### Environment variables (`.env`)
 
-Create a `.env` file in the project root. **Never commit this file** (it is git-ignored).
+Copy the template and fill in your values:
 
-```env
-# ── Discord ──────────────────────────────────────────────
-# Production token (used when running on Linux).
-DISCORD_TOKEN=
-# Beta token (used automatically on non-Linux systems / local dev — see "Beta mode").
-DISCORD_BETA_TOKEN=
-# OAuth2 client secret (needed for OAuth flows, e.g. AniList linking / web features).
-DISCORD_CLIENT_SECRET=
-
-# ── Database ─────────────────────────────────────────────
-DATABASE_PASSWORD=your_password      # required
-DATABASE_HOST=localhost              # required
-DATABASE_POOL_MIN_SIZE=10            # optional; warm connections kept open (default 10)
-DATABASE_POOL_MAX_SIZE=20            # optional; pool ceiling under load (default 20)
-DATABASE_COMMAND_TIMEOUT=300         # optional; per-query timeout in seconds (default 300)
-DATABASE_POOL_MAX_IDLE=300           # optional; recycle idle connections after N seconds (default 300)
-
-# ── Lavalink (music) ─────────────────────────────────────
-LAVALINK_NODE_1_PASSWORD=            # required for music playback
-
-# ── Optional integrations ────────────────────────────────
-ANILIST_CLIENT_ID=                   # AniList OAuth client (anime/manga linking); disabled if blank
-ANILIST_CLIENT_SECRET=
-STATS_WEBHOOK_TOKEN=                 # webhook token for posting bot stats/errors
-GENIUS_TOKEN=                        # Genius API (music lyrics)
-GROQ_API_KEY=                        # Groq API key (AI assistant — /ask); disabled if blank
-GROQ_MODEL=                          # optional Groq model override (default: llama-3.3-70b-versatile)
-GITHUB_TOKEN=                        # GitHub API (source links, gists)
-DBOTS_TOKEN=                         # discord.bots.gg stats posting
-TOPGG_TOKEN=                         # top.gg stats posting
-DISCORDBOTLIST_TOKEN=                # discordbotlist.com stats posting
-TOPGG_WEBHOOK_SECRET=                # top.gg vote-webhook Authorization secret (POST /api/webhooks/topgg)
-DISCORDBOTLIST_WEBHOOK_SECRET=       # discordbotlist.com vote-webhook Authorization secret (POST /api/webhooks/discordbotlist)
-IMAGES_API_TOKEN=                    # image API integrations
-LOCG_API_URL=                        # self-hosted League of Comic Geeks API wrapper (locg-api; comic subscriptions). Docker: http://host.docker.internal:8070 (host-gateway); bare metal: http://127.0.0.1:8070
-GROQ_API_KEY=                        # Groq API Token for /ai command
-
-# ── Web Dashboard (klappstuhl.me BFF) ───────────────────
-INTERNAL_API_TOKEN=                  # pre-shared bearer token for the dashboard BFF
-INTERNAL_API_PORT=8090               # port for internal API (default 8090)
+```bash
+cp .env.example .env
 ```
+
+**Never commit `.env`** (it is git-ignored). See [`.env.example`](.env.example) for the full list of variables with descriptions.
 
 ### Internal API (Web Dashboard)
 
@@ -346,6 +310,38 @@ Percy uses **forward-only versioned SQL migrations** in `migrations/` (`V1__….
 
 > Always create schema changes via a **new** `migrations/V<N>__name.sql` file (`db migrate`); never edit a migration that has already been applied — `db verify` flags such drift via checksums. The connection pool also applies any pending migrations automatically on startup. Each migration runs in its own transaction; add `-- migration: no-transaction` to a file's header to run it outside one (e.g. `CREATE INDEX CONCURRENTLY`).
 
+### Database connectivity
+
+Percy connects to PostgreSQL differently depending on the environment:
+
+| Environment | How it connects | `DATABASE_HOST` value |
+|---|---|---|
+| **Production (bare metal)** | Percy and Postgres on the same server — direct connection | `localhost` or `127.0.0.1` |
+| **Production (Docker)** | Percy in Docker, Postgres on the bare host — routed through Docker's host gateway | `host.docker.internal` (compose default) |
+| **Local dev (Windows/macOS)** | Percy on your machine, Postgres on a remote VPS — automatic SSH tunnel | `127.0.0.1` (the remote address Postgres listens on inside the VPS) |
+
+#### SSH tunnel (local development)
+
+When running in **beta mode** (automatically active on non-Linux systems) with `SSH_TUNNEL_HOST` set in `.env`, Percy opens an in-process SSH tunnel via `sshtunnel` before connecting the asyncpg pool. This lets you develop against the production database without exposing Postgres to the public internet.
+
+The tunnel binds a random local port and rewrites the connection parameters transparently — no manual `ssh -L` needed.
+
+```env
+SSH_TUNNEL_HOST=your-vps.example.com
+SSH_TUNNEL_USER=deploy
+SSH_TUNNEL_KEY_PATH=C:/Users/you/.ssh/id_ed25519
+DATABASE_HOST=127.0.0.1
+DATABASE_PASSWORD=your_password
+```
+
+`DATABASE_HOST` should be the address Postgres listens on *inside the VPS* (typically `127.0.0.1`). The tunnel forwards `localhost:<random-port>` on your machine to `DATABASE_HOST:5432` on the VPS.
+
+> The tunnel is only opened in beta mode. In production (`beta=False`), the SSH env vars are ignored and the pool connects directly.
+
+#### Docker host networking
+
+The `docker-compose.yml` defaults `DATABASE_HOST` to `host.docker.internal` with the `host-gateway` extra host, which works on both Linux and Docker Desktop (Windows/macOS). If your Postgres listens on a different host or you use a separate database container, override `DATABASE_HOST` in your `.env`.
+
 ---
 
 ## Running the bot
@@ -373,13 +369,20 @@ This lets you develop against a separate beta bot without touching production.
 
 ## Docker
 
-A `docker-compose.yml` is included with a **Snekbox** service for the Python evaluation sandbox:
+A `Dockerfile` and `docker-compose.yml` are included to run Percy in a container:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-The bot itself is not containerised by default — run it directly with Poetry against the Docker-hosted services (Snekbox, and optionally your own Lavalink/PostgreSQL).
+The compose file passes all required environment variables from your `.env` and defaults `DATABASE_HOST` to `host.docker.internal` so the container can reach Postgres running on the bare host (both Linux and Docker Desktop). If Postgres is elsewhere, override `DATABASE_HOST` in your `.env`.
+
+Key points:
+- **Postgres on the same host (not in Docker):** Works out of the box — `host.docker.internal` resolves to the host via the `extra_hosts` / `host-gateway` mapping.
+- **Postgres in its own container:** Add a `db` service to the compose file and set `DATABASE_HOST=db`.
+- **Internal API:** Exposed on the configured `INTERNAL_API_PORT` (default 8090) so the klappstuhl.me BFF can reach it.
+
+> The SSH tunnel is only active in beta mode (non-Linux) and is **not** used in the Docker image (which runs on Linux).
 
 ---
 

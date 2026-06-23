@@ -1002,6 +1002,8 @@ class Bot(commands.Bot):
         """Closes this bot and it's aiohttp ClientSession."""
         if hasattr(self, 'session'):
             await self.session.close()
+        if hasattr(self, 'db'):
+            await self.db.close()
 
         await super().close()
 

@@ -39,6 +39,8 @@ pilmoji = {git = "https://github.com/jay3332/pilmoji", branch = "2.0"}
 fonttools = "^4.50.0"
 discord-py = {extras = ["voice"], version = "^2.7.1"}
 parsedatetime = "^2.6"
+sshtunnel = "^0.4.0"
+paramiko = ">=2.7.2,<4"
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"
