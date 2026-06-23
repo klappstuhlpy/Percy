@@ -630,7 +630,6 @@ def _resolve_command_kwargs(
     aliases: Iterable[str] = MISSING,
     usage: str = MISSING,
     brief: str = MISSING,
-    description: str = MISSING,
     help: str = MISSING,
 ) -> dict[str, Any]:
     """Assemble the keyword arguments for :func:`commands.command` / :func:`commands.group`.
@@ -662,9 +661,6 @@ def _resolve_command_kwargs(
     if help is not MISSING:
         kwargs["help"] = help
 
-    if description is not MISSING:
-        kwargs["help"] = description
-
     return kwargs
 
 
@@ -689,7 +685,6 @@ def command(
     usage: str = MISSING,
     brief: str = MISSING,
     help: str = MISSING,
-    description: str = MISSING,
     examples: list[str] = MISSING,
     hybrid: bool = False,
     guild_only: bool = False,
@@ -707,7 +702,7 @@ def command(
         The command name. Defaults to the function name.
     alias / aliases: str | Iterable[str]
         A single alias or a collection of aliases. The two are mutually exclusive.
-    usage / brief / help / description: str
+    usage / brief / help: str
         Standard discord.py help-text overrides.
     examples: list[str]
         Usage examples, stored under ``extras["examples"]`` for the help command.
@@ -725,7 +720,6 @@ def command(
         aliases=aliases,
         brief=brief,
         help=help,
-        description=description,
         usage=usage,
     )
 
