@@ -266,7 +266,7 @@ class Admin(Cog):
         entries: dict[str, list[str]] = {}
 
         for cog_name, cog in sorted(self.bot.cogs.items()):
-            cog_is_owner_only = getattr(cog, '__hidden__', False) and hasattr(cog, 'cog_check')
+            cog_is_owner_only = getattr(cog, '__hidden__', False) or cog.qualified_name == "Jishaku"
             owner_cmds: list[str] = []
             for cmd in cog.walk_commands():
                 if cog_is_owner_only or self._has_owner_check(cmd):
