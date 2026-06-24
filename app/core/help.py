@@ -596,6 +596,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         cog: :class:`.Cog`
             The cog to send the help for.
         """
+        if getattr(cog, "__hidden__", False) or cog.qualified_name == "Jishaku":
+            raise commands.CommandNotFound(f"No command called `{cog.qualified_name}` found.")
+
         entries = await self.filter_commands(cog.walk_commands(), sort=True)
         if not entries:
             return await self.context.send(self.command_not_found(cog.qualified_name), silent=True)
