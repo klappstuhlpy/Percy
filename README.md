@@ -17,7 +17,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 </div>
 
-> **Prefer not to self-host?** Just [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) and skip straight to the [Configuration](#configuration) section.
+> **The recommended way to use Percy is to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
 
 ---
 
@@ -33,15 +33,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
   - [Utility & Productivity](#utility--productivity)
   - [Developer & Information](#developer--information)
 - [Commands](#commands)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-  - [Environment variables (`.env`)](#environment-variables-env)
-  - [Static configuration (`config.py`)](#static-configuration-configpy)
-  - [Per-guild configuration](#per-guild-configuration)
-- [Database management](#database-management)
-- [Running the bot](#running-the-bot)
-- [Docker](#docker)
+- [Self-hosting](#self-hosting)
 - [Development](#development)
 - [License](#license)
 
@@ -182,232 +174,27 @@ A few representative command groups:
 
 ---
 
-## Prerequisites
+## Self-hosting
 
-- **Python** ≥ 3.12 — [Download](https://www.python.org/downloads/)
-- **PostgreSQL** ≥ 14 — [Download](https://www.postgresql.org/download/) (the `pg_trgm` extension is required)
-- **Poetry** — [Install](https://python-poetry.org/docs/)
-- **Lavalink** server — required for music ([Releases](https://github.com/lavalink-devs/Lavalink/releases))
-- **Docker** (optional) — for the Snekbox Python sandbox (see [Docker](#docker))
+> **Self-host at your own risk.** Percy is designed to run as a single hosted instance. The setup involves multiple services, custom emoji IDs, and environment-specific configuration. I'd strongly prefer you just [invite Percy](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) rather than self-hosting. No support is provided for self-hosted instances.
 
----
+If you still want to run your own instance, here's the short version:
 
-## Installation
-
-### 1. Clone the repository
+**Requirements:** Python 3.12+, PostgreSQL 14+ (with `pg_trgm`), Poetry, a Lavalink server (for music).
 
 ```bash
-git clone https://github.com/klappstuhlpy/Percy-v2.git
-cd Percy-v2
-```
-
-### 2. Install dependencies
-
-```bash
+git clone https://github.com/klappstuhlpy/Percy-v2.git && cd Percy-v2
 poetry install
-```
-
-### 3. Set up PostgreSQL
-
-Launch the PostgreSQL CLI (`psql`) and run:
-
-```sql
-CREATE ROLE percy WITH LOGIN PASSWORD 'your_password';
-CREATE DATABASE percy OWNER percy;
-CREATE EXTENSION pg_trgm;
-```
-
-> The database name (`percy`), user (`percy`) and port (`5432`) are defined in `config.py` under `DatabaseConfig`. Only the **password** and **host** come from the environment (see below). Change `DatabaseConfig` if you use different values.
-
-### 4. Configure your environment
-
-Create a `.env` file in the project root (see the [full template below](#environment-variables-env)) and an entry in `config.py` for your own IDs (see [Static configuration](#static-configuration-configpy)).
-
-### 5. Initialize the database
-
-```bash
+cp .env.example .env          # fill in your tokens and DB credentials
 poetry run python main.py db init
-```
-
-### 6. Run the bot
-
-```bash
 poetry run python main.py
 ```
 
----
+You'll need to configure `config.py` (owner IDs, guild IDs, Lavalink nodes, custom emoji IDs) and your `.env` (Discord token, database password/host, and any optional API keys). See [`.env.example`](.env.example) for the full variable list.
 
-## Configuration
+A `Dockerfile` and `docker-compose.yml` are included if you prefer containers (`docker compose up -d --build`).
 
-Percy is configured in three layers: **secrets** in `.env`, **deployment constants** in `config.py`, and **runtime, per-guild settings** via the `/config` command.
-
-### Environment variables (`.env`)
-
-Copy the template and fill in your values:
-
-```bash
-cp .env.example .env
-```
-
-**Never commit `.env`** (it is git-ignored). See [`.env.example`](.env.example) for the full list of variables with descriptions.
-
-### Internal API (Web Dashboard)
-
-When `INTERNAL_API_TOKEN` is set, Percy starts an internal [FastAPI](https://fastapi.tiangolo.com/) server (default `127.0.0.1:8090`) exposing guild data to the klappstuhl.me web dashboard. The dashboard proxies user actions through this API so all mutations go through Percy's repository layer and cache invalidation.
-
-> **Endpoints:** Visit `/docs` on the running API for the full interactive documentation powered by [Scalar](https://scalar.com/), or fetch the raw OpenAPI spec at `/openapi.json`.
-
-All endpoints under `/api/v1/` require `Authorization: Bearer <INTERNAL_API_TOKEN>`. Webhook endpoints under `/api/webhooks/` validate their own per-service secret instead. The API is disabled when the token is unset.
-
-The `InternalAPI` class lives in the `app/internal_api/` package:
-
-| File              | Role                                                                                                               |
-|-------------------|--------------------------------------------------------------------------------------------------------------------|
-| `server.py`       | FastAPI app factory, uvicorn lifecycle, Scalar docs page, version header middleware                                |
-| `dependencies.py` | Dependency injection — `verify_token`, `get_bot`, `resolve_guild` + type aliases (`BotDep`, `GuildDep`, `AuthDep`) |
-| `helpers.py`      | Shared Discord entity resolution helpers (`resolve_channel`, `resolve_role`, `resolve_entity`)                     |
-| `routers/`        | One `APIRouter` per domain (see below)                                                                             |
-
-#### Routers (by domain)
-
-| Router          | Prefix                        | Scope                                                                                                                    |
-|-----------------|-------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `guild.py`      | `/guilds/{guild_id}`          | Config, sentinel, roles, channels, audit-log flags, moderation ignore                                                    |
-| `members.py`    | `/guilds/{guild_id}`          | Member list, detail, self-profile, actions (kick/ban/unban), role edits, avatars                                         |
-| `leveling.py`   | `/guilds/{guild_id}/leveling` | Config, leaderboard, XP history, user edit, reward roles (+ presets), multipliers, blacklist                             |
-| `economy.py`    | `/guilds/{guild_id}/economy`  | Shop items, balances, lottery                                                                                            |
-| `music.py`      | `/guilds/{guild_id}/music`    | Player state, setup, EQ, filters, 24/7, DJ mode, player control, lyrics                                                  |
-| `content.py`    | `/guilds/{guild_id}`          | Polls, giveaways, tags, commands, autoresponders, comics, temp channels, status feed, lockdowns, highlights, emoji stats |
-| `moderation.py` | `/guilds/{guild_id}`          | Cases CRUD, bulk actions, member activity heatmap                                                                        |
-| `stats.py`      | (mixed)                       | Guild stats, bot stats, overview, metrics, changelog, public commands, feature flags                                     |
-| `profile.py`    | `/guilds/{guild_id}`          | Custom bot profile (get/patch/reset)                                                                                     |
-| `users.py`      | `/users/{discord_id}`         | Settings, guilds, avatar, history, data export, personal data deletion                                                   |
-| `webhooks.py`   | `/api/webhooks`               | top.gg and discordbotlist.com vote webhooks (no auth dependency)                                                         |
-
-All routers use Pydantic `BaseModel` for request body validation and FastAPI's dependency injection for authentication and guild resolution. The OpenAPI schema is generated automatically and served via the Scalar UI at `/docs`.
-
-> **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, and `DATABASE_HOST`. Everything else — including `ANILIST_CLIENT_ID` — gracefully disables the corresponding integration if left blank.
-
-### Static configuration (`config.py`)
-
-`config.py` holds non-secret deployment constants. If you self-host, review and change at least:
-
-| Setting                           | Meaning                                                                                                                                 |
-|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| `owners`                          | Your Discord user ID(s) — grants owner-only commands.                                                                                   |
-| `default_prefix`                  | The default text-command prefix (`?`).                                                                                                  |
-| `test_guild_id` / `main_guild_id` | Guilds used for fast slash-command syncing / owner tooling.                                                                             |
-| `lavalink_nodes`                  | Your Lavalink node URI(s); the password comes from `.env`.                                                                              |
-| `stats_webhook`                   | `(webhook_id, token)` for stats/error reporting.                                                                                        |
-| `DatabaseConfig`                  | DB name/user/port (password & host come from `.env`).                                                                                   |
-| `Emojis`                          | Custom emoji IDs — these reference emojis on the developer's servers; replace them with your own if self-hosting for correct rendering. |
-
-### Per-guild configuration
-
-Once the bot is in your server, use the `/config` slash command (or `?config`) — and the dedicated `automod`, audit-log and sentinel setup commands — to configure, per guild:
-
-- Custom command prefixes
-- Audit-log channel/webhook and which events to broadcast
-- Automod rules, raid protection and alert webhooks
-- The captcha **sentinel** (role, channel, bypass action, auto-trigger rate)
-- Poll channel, poll-reason channel and ping role
-- Music panel channel
-- Leveling (via `/level config …`)
-
-All of this is stored in PostgreSQL and cached in memory, with the cache invalidated automatically on every change.
-
----
-
-## Database management
-
-Percy uses **forward-only versioned SQL migrations** in `migrations/` (`V1__….sql`, `V2__….sql`, …). Applied state is tracked in the `schema_migrations` table in the database itself (version, description, checksum, applied_at) rather than a JSON file. All commands run against the database configured in `.env`/`config.py`.
-
-| Command                                 | Description                                                                            |
-|-----------------------------------------|----------------------------------------------------------------------------------------|
-| `python main.py db init`                | Create the tracking table (backfilling legacy state) + apply all pending.              |
-| `python main.py db upgrade`             | Apply any pending migrations.                                                          |
-| `python main.py db upgrade -t <N>`      | Apply pending migrations up to and including version N.                                |
-| `python main.py db upgrade --sql`       | Print the pending SQL instead of executing it (also `--dry-run`).                      |
-| `python main.py db migrate -r "reason"` | Create a new, blank migration file (next version) to edit.                             |
-| `python main.py db status`              | Show current version, pending migrations and any integrity problems.                   |
-| `python main.py db history`             | List applied migrations with apply times, then pending (`--reverse` for oldest-first). |
-| `python main.py db verify`              | Validate files and detect drift; exits non-zero on problems.                           |
-
-> Always create schema changes via a **new** `migrations/V<N>__name.sql` file (`db migrate`); never edit a migration that has already been applied — `db verify` flags such drift via checksums. The connection pool also applies any pending migrations automatically on startup. Each migration runs in its own transaction; add `-- migration: no-transaction` to a file's header to run it outside one (e.g. `CREATE INDEX CONCURRENTLY`).
-
-### Database connectivity
-
-Percy connects to PostgreSQL differently depending on the environment:
-
-| Environment                   | How it connects                                                                   | `DATABASE_HOST` value                                               |
-|-------------------------------|-----------------------------------------------------------------------------------|---------------------------------------------------------------------|
-| **Production (bare metal)**   | Percy and Postgres on the same server — direct connection                         | `localhost` or `127.0.0.1`                                          |
-| **Production (Docker)**       | Percy in Docker, Postgres on the bare host — routed through Docker's host gateway | `host.docker.internal` (compose default)                            |
-| **Local dev (Windows/macOS)** | Percy on your machine, Postgres on a remote VPS — automatic SSH tunnel            | `127.0.0.1` (the remote address Postgres listens on inside the VPS) |
-
-#### SSH tunnel (local development)
-
-When running in **beta mode** (automatically active on non-Linux systems) with `SSH_TUNNEL_HOST` set in `.env`, Percy opens an in-process SSH tunnel via `sshtunnel` before connecting the asyncpg pool. This lets you develop against the production database without exposing Postgres to the public internet.
-
-The tunnel binds a random local port and rewrites the connection parameters transparently — no manual `ssh -L` needed.
-
-```env
-SSH_TUNNEL_HOST=your-vps.example.com
-SSH_TUNNEL_USER=deploy
-SSH_TUNNEL_KEY_PATH=C:/Users/you/.ssh/id_ed25519
-DATABASE_HOST=127.0.0.1
-DATABASE_PASSWORD=your_password
-```
-
-`DATABASE_HOST` should be the address Postgres listens on *inside the VPS* (typically `127.0.0.1`). The tunnel forwards `localhost:<random-port>` on your machine to `DATABASE_HOST:5432` on the VPS.
-
-> The tunnel is only opened in beta mode. In production (`beta=False`), the SSH env vars are ignored and the pool connects directly.
-
-#### Docker host networking
-
-The `docker-compose.yml` defaults `DATABASE_HOST` to `host.docker.internal` with the `host-gateway` extra host, which works on both Linux and Docker Desktop (Windows/macOS). If your Postgres listens on a different host or you use a separate database container, override `DATABASE_HOST` in your `.env`.
-
----
-
-## Running the bot
-
-`main.py` is a [Click](https://click.palletsprojects.com/) CLI. Running it with no subcommand starts the bot; the `db` group manages migrations.
-
-```bash
-poetry run python main.py        # run the bot
-poetry run python main.py db ... # database management (see above)
-```
-
-Logs are written to `percy.log` (a rotating file handler, 32 MiB × 5 backups) and printed to the console with colour-coded levels.
-
-### Beta mode
-
-Percy automatically enters **beta mode** when running on a **non-Linux** system (e.g. local development on Windows/macOS). In beta mode it:
-
-- uses `DISCORD_BETA_TOKEN` instead of `DISCORD_TOKEN`,
-- forces the `b.` command prefix, and
-- skips the `web_utils` and `comic` cogs.
-
-This lets you develop against a separate beta bot without touching production.
-
----
-
-## Docker
-
-A `Dockerfile` and `docker-compose.yml` are included to run Percy in a container:
-
-```bash
-docker compose up -d --build
-```
-
-The compose file passes all required environment variables from your `.env` and defaults `DATABASE_HOST` to `host.docker.internal` so the container can reach Postgres running on the bare host (both Linux and Docker Desktop). If Postgres is elsewhere, override `DATABASE_HOST` in your `.env`.
-
-Key points:
-- **Postgres on the same host (not in Docker):** Works out of the box — `host.docker.internal` resolves to the host via the `extra_hosts` / `host-gateway` mapping.
-- **Postgres in its own container:** Add a `db` service to the compose file and set `DATABASE_HOST=db`.
-- **Internal API:** Exposed on the configured `INTERNAL_API_PORT` (default 8090) so the klappstuhl.me BFF can reach it.
-
-> The SSH tunnel is only active in beta mode (non-Linux) and is **not** used in the Docker image (which runs on Linux).
+Percy auto-enters **beta mode** on non-Linux systems: uses `DISCORD_BETA_TOKEN`, forces `b.` prefix, and skips some cogs — useful for local development.
 
 ---
 
