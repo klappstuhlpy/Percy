@@ -271,8 +271,9 @@ class Admin(Cog):
             for cmd in cog.walk_commands():
                 if cog_is_owner_only or self._has_owner_check(cmd):
                     sig = f"`{ctx.prefix}{cmd.qualified_name}`"
-                    if cmd.short_doc:
-                        sig += f" — {cmd.short_doc}"
+                    doc = cmd.short_doc or cmd.description or cmd.help
+                    if doc:
+                        sig += f" — {doc}"
                     owner_cmds.append(sig)
             if owner_cmds:
                 entries[cog_name] = owner_cmds
