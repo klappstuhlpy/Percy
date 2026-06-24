@@ -189,6 +189,8 @@ class Bot(commands.Bot):
         """Loads all command extensions, including Jishaku."""
         await self.load_extension('jishaku')
 
+        # avoid excessive api requests and reduce load for testing purposes
+        # can still be manually loaded after bot start using jishaku
         DoNotLoadOnBeta = (
             'app.cogs.web_utils',
             'app.cogs.comic',
