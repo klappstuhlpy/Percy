@@ -69,7 +69,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Mute role management** | Create, bind, sync and unbind a mute role; permission overwrites are applied across channels automatically (and kept in sync as channels are created).                          |
 | **Lockdowns**            | Lock down individual channels or the whole server (`lockdown` group), with automatic, timed un-locking via the timer system and lockout protection for the bot.                 |
 | **Auto-moderation**      | Configurable automod rules linked to Discord's native AutoMod, mention-spam detection, and **raid protection** that auto-bans spammers.                                         |
-| **Sentinel**           | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
+| **Sentinel**             | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
 | **Anti-spam**            | A global `SpamChecker` that throttles command abuse, flags mention spam, and detects rapid-join raids.                                                                          |
 | **Audit logging**        | Broadcast a configurable subset of server audit-log events to a channel/webhook.                                                                                                |
 
@@ -103,15 +103,15 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 ### Music
 
-| Feature              | What it does                                                                                                                                                  |
-|----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Lavalink player**  | High-quality audio playback backed by a [Lavalink](https://github.com/lavalink-devs/Lavalink) node ([wavelink](https://github.com/PythonistaGuild/Wavelink)). Sources: Spotify, Apple Music, SoundCloud (Amazon Music is unsupported). |
-| **Queue & controls** | Play, pause, skip, seek, loop, shuffle, an equalizer and a full queue.                                                                                        |
+| Feature              | What it does                                                                                                                                                                                                                                                                                                                                                                               |
+|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Lavalink player**  | High-quality audio playback backed by a [Lavalink](https://github.com/lavalink-devs/Lavalink) node ([wavelink](https://github.com/PythonistaGuild/Wavelink)). Sources: Spotify, Apple Music, SoundCloud (Amazon Music is unsupported).                                                                                                                                                     |
+| **Queue & controls** | Play, pause, skip, seek, loop, shuffle, an equalizer and a full queue.                                                                                                                                                                                                                                                                                                                     |
 | **24/7 always-on**   | `/music 247` keeps the bot permanently connected to a voice channel playing a radio/stream URL, a looping playlist (Spotify/Apple/SoundCloud links work directly), or endless autoplay. Ships curated radio presets (`/music radios`, e.g. `lofi`, `chill`, `antenne`) so no stream URL is needed. Sessions persist to PostgreSQL and auto-reconnect/resume after disconnects or restarts. |
-| **Resilience**       | Lavalink session resume + self-healing recovery: stuck/failed tracks are skipped instead of dropping the player, so playback doesn't cut off.                  |
-| **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                         |
-| **Playlists**        | Save, load and manage personal playlists (part of `Music` cog), persisted in PostgreSQL.                                                                          |
-| **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                              |
+| **Resilience**       | Lavalink session resume + self-healing recovery: stuck/failed tracks are skipped instead of dropping the player, so playback doesn't cut off.                                                                                                                                                                                                                                              |
+| **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                                                                                                                                                                                                                                                      |
+| **Playlists**        | Save, load and manage personal playlists (part of `Music` cog), persisted in PostgreSQL.                                                                                                                                                                                                                                                                                                   |
+| **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                                                                                                                                                                                                                                                           |
 
 ### Community & Engagement
 
@@ -139,16 +139,16 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 ### Developer & Information
 
-| Feature                  | What it does                                                                                                                                                                  |
-|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                                             |
-| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).                       |
-| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                     |
-| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via a self-hosted League of Comic Geeks API wrapper).                                                                          |
-| **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set. |
-| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                       |
-| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                 |
-| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg, top.gg and discordbotlist.com when those tokens are configured.                                                               |
+| Feature                  | What it does                                                                                                                                                                                                                  |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                                                                                             |
+| **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).                                                                       |
+| **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                                                                     |
+| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via a self-hosted League of Comic Geeks API wrapper).                                                                                                                          |
+| **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set.                                                 |
+| **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                                                                       |
+| **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                                                                 |
+| **Bot-list stats**       | Auto-posts the server count to discord.bots.gg, top.gg and discordbotlist.com when those tokens are configured.                                                                                                               |
 | **Vote rewards**         | Voting on top.gg or discordbotlist.com grants a renewable **+10% XP boost for 12 hours**, applied in every shared server. Webhooks land on `/api/webhooks/{topgg,discordbotlist}`; `?vote` shows links and live boost status. |
 
 ---
@@ -170,7 +170,7 @@ A few representative command groups:
 | Group         | Examples                                                                                                                                                |
 |---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                                      |
-| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, sentinel setup                                                                         |
+| Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, sentinel setup                                                                           |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                                 |
 | Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …` |
 | Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                                               |
@@ -253,13 +253,38 @@ cp .env.example .env
 
 ### Internal API (Web Dashboard)
 
-When `INTERNAL_API_TOKEN` is set, Percy starts an internal aiohttp server (default `127.0.0.1:8090`) exposing guild data to the klappstuhl.me web dashboard. The dashboard proxies user actions through this API so all mutations go through Percy's repository layer and cache invalidation.
+When `INTERNAL_API_TOKEN` is set, Percy starts an internal [FastAPI](https://fastapi.tiangolo.com/) server (default `127.0.0.1:8090`) exposing guild data to the klappstuhl.me web dashboard. The dashboard proxies user actions through this API so all mutations go through Percy's repository layer and cache invalidation.
 
-> **Endpoints:** For reference, look at /app/internal_api/base.py.
+> **Endpoints:** Visit `/docs` on the running API for the full interactive documentation powered by [Scalar](https://scalar.com/), or fetch the raw OpenAPI spec at `/openapi.json`.
 
-All requests require `Authorization: Bearer <INTERNAL_API_TOKEN>`. The API is disabled (cog is a no-op) when the token is unset.
+All endpoints under `/api/v1/` require `Authorization: Bearer <INTERNAL_API_TOKEN>`. Webhook endpoints under `/api/webhooks/` validate their own per-service secret instead. The API is disabled when the token is unset.
 
-The `InternalAPI` cog lives in the `app/internal_api/` package: `base.py` owns the aiohttp server lifecycle and the full route table, `auth.py` the bearer-token middleware, and the handlers are grouped into domain mixins (`guild.py`, `members.py`, `leveling.py`, `economy.py`, `content.py`, `stats.py`, `moderation.py`, `music.py`) that compose into the cog. The leveling config endpoint accepts the full set of fields (`enabled`, `voice_enabled`, `role_stack`, `delete_after_leave`, `factor`, `base`, `min_gain`, `max_gain`, `cooldown_per`, `level_up_channel`, `level_up_message`, `special_level_up_messages`), and the `leveling/roles/preset` endpoint creates 12 themed milestone roles (Newcomer → Immortal) with colors, idempotent by role name. The `xp-history` endpoint returns daily cumulative-XP snapshots for the trend chart, and the `members/{uid}/detail` endpoint aggregates identity, leveling rank, moderation cases, and notes into a single profile response. The per-user endpoints under `users/{discord_id}` cover personal bot settings (`/settings`), consent-tracked history for the member dashboard (`/history` — name/nickname/avatar changes plus 30 days of presence transitions), a full GDPR-style export (`/data-export`, mirroring the `settings request-data` command), and history erasure (`DELETE /personal-data`, mirroring `settings remove-personal-data`).
+The `InternalAPI` class lives in the `app/internal_api/` package:
+
+| File              | Role                                                                                                               |
+|-------------------|--------------------------------------------------------------------------------------------------------------------|
+| `server.py`       | FastAPI app factory, uvicorn lifecycle, Scalar docs page, version header middleware                                |
+| `dependencies.py` | Dependency injection — `verify_token`, `get_bot`, `resolve_guild` + type aliases (`BotDep`, `GuildDep`, `AuthDep`) |
+| `helpers.py`      | Shared Discord entity resolution helpers (`resolve_channel`, `resolve_role`, `resolve_entity`)                     |
+| `routers/`        | One `APIRouter` per domain (see below)                                                                             |
+
+#### Routers (by domain)
+
+| Router          | Prefix                        | Scope                                                                                                                    |
+|-----------------|-------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `guild.py`      | `/guilds/{guild_id}`          | Config, sentinel, roles, channels, audit-log flags, moderation ignore                                                    |
+| `members.py`    | `/guilds/{guild_id}`          | Member list, detail, self-profile, actions (kick/ban/unban), role edits, avatars                                         |
+| `leveling.py`   | `/guilds/{guild_id}/leveling` | Config, leaderboard, XP history, user edit, reward roles (+ presets), multipliers, blacklist                             |
+| `economy.py`    | `/guilds/{guild_id}/economy`  | Shop items, balances, lottery                                                                                            |
+| `music.py`      | `/guilds/{guild_id}/music`    | Player state, setup, EQ, filters, 24/7, DJ mode, player control, lyrics                                                  |
+| `content.py`    | `/guilds/{guild_id}`          | Polls, giveaways, tags, commands, autoresponders, comics, temp channels, status feed, lockdowns, highlights, emoji stats |
+| `moderation.py` | `/guilds/{guild_id}`          | Cases CRUD, bulk actions, member activity heatmap                                                                        |
+| `stats.py`      | (mixed)                       | Guild stats, bot stats, overview, metrics, changelog, public commands, feature flags                                     |
+| `profile.py`    | `/guilds/{guild_id}`          | Custom bot profile (get/patch/reset)                                                                                     |
+| `users.py`      | `/users/{discord_id}`         | Settings, guilds, avatar, history, data export, personal data deletion                                                   |
+| `webhooks.py`   | `/api/webhooks`               | top.gg and discordbotlist.com vote webhooks (no auth dependency)                                                         |
+
+All routers use Pydantic `BaseModel` for request body validation and FastAPI's dependency injection for authentication and guild resolution. The OpenAPI schema is generated automatically and served via the Scalar UI at `/docs`.
 
 > **Minimum to boot:** a Discord token (`DISCORD_BETA_TOKEN` on Windows/macOS, `DISCORD_TOKEN` on Linux), `DATABASE_PASSWORD`, and `DATABASE_HOST`. Everything else — including `ANILIST_CLIENT_ID` — gracefully disables the corresponding integration if left blank.
 
@@ -297,16 +322,16 @@ All of this is stored in PostgreSQL and cached in memory, with the cache invalid
 
 Percy uses **forward-only versioned SQL migrations** in `migrations/` (`V1__….sql`, `V2__….sql`, …). Applied state is tracked in the `schema_migrations` table in the database itself (version, description, checksum, applied_at) rather than a JSON file. All commands run against the database configured in `.env`/`config.py`.
 
-| Command                                 | Description                                                          |
-|-----------------------------------------|---------------------------------------------------------------------|
-| `python main.py db init`                | Create the tracking table (backfilling legacy state) + apply all pending. |
-| `python main.py db upgrade`             | Apply any pending migrations.                                       |
-| `python main.py db upgrade -t <N>`      | Apply pending migrations up to and including version N.             |
-| `python main.py db upgrade --sql`       | Print the pending SQL instead of executing it (also `--dry-run`).   |
-| `python main.py db migrate -r "reason"` | Create a new, blank migration file (next version) to edit.          |
-| `python main.py db status`              | Show current version, pending migrations and any integrity problems.|
+| Command                                 | Description                                                                            |
+|-----------------------------------------|----------------------------------------------------------------------------------------|
+| `python main.py db init`                | Create the tracking table (backfilling legacy state) + apply all pending.              |
+| `python main.py db upgrade`             | Apply any pending migrations.                                                          |
+| `python main.py db upgrade -t <N>`      | Apply pending migrations up to and including version N.                                |
+| `python main.py db upgrade --sql`       | Print the pending SQL instead of executing it (also `--dry-run`).                      |
+| `python main.py db migrate -r "reason"` | Create a new, blank migration file (next version) to edit.                             |
+| `python main.py db status`              | Show current version, pending migrations and any integrity problems.                   |
 | `python main.py db history`             | List applied migrations with apply times, then pending (`--reverse` for oldest-first). |
-| `python main.py db verify`              | Validate files and detect drift; exits non-zero on problems.        |
+| `python main.py db verify`              | Validate files and detect drift; exits non-zero on problems.                           |
 
 > Always create schema changes via a **new** `migrations/V<N>__name.sql` file (`db migrate`); never edit a migration that has already been applied — `db verify` flags such drift via checksums. The connection pool also applies any pending migrations automatically on startup. Each migration runs in its own transaction; add `-- migration: no-transaction` to a file's header to run it outside one (e.g. `CREATE INDEX CONCURRENTLY`).
 
@@ -314,11 +339,11 @@ Percy uses **forward-only versioned SQL migrations** in `migrations/` (`V1__….
 
 Percy connects to PostgreSQL differently depending on the environment:
 
-| Environment | How it connects | `DATABASE_HOST` value |
-|---|---|---|
-| **Production (bare metal)** | Percy and Postgres on the same server — direct connection | `localhost` or `127.0.0.1` |
-| **Production (Docker)** | Percy in Docker, Postgres on the bare host — routed through Docker's host gateway | `host.docker.internal` (compose default) |
-| **Local dev (Windows/macOS)** | Percy on your machine, Postgres on a remote VPS — automatic SSH tunnel | `127.0.0.1` (the remote address Postgres listens on inside the VPS) |
+| Environment                   | How it connects                                                                   | `DATABASE_HOST` value                                               |
+|-------------------------------|-----------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| **Production (bare metal)**   | Percy and Postgres on the same server — direct connection                         | `localhost` or `127.0.0.1`                                          |
+| **Production (Docker)**       | Percy in Docker, Postgres on the bare host — routed through Docker's host gateway | `host.docker.internal` (compose default)                            |
+| **Local dev (Windows/macOS)** | Percy on your machine, Postgres on a remote VPS — automatic SSH tunnel            | `127.0.0.1` (the remote address Postgres listens on inside the VPS) |
 
 #### SSH tunnel (local development)
 
