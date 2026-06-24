@@ -21,6 +21,7 @@ from discord import File, app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt
 
+import config
 from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
@@ -528,8 +529,7 @@ class MetaMixin:
     )
     async def dashboard(self, ctx: Context) -> None:
         """Shows the dashboard of the bot."""
-        url = "https://r.klappstuhl.me/db"
-        await ctx.send(f"You can find the dashboard here: <{url}>\n"
+        await ctx.send(f"You can find the dashboard here: <{config.website}>\n"
                        f"*Note: If you have no account, you can create one by linking your Discord account.*")
 
     @command(

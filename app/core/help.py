@@ -8,11 +8,12 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import Cog
 
+import config
 from app.core.command import Command, HybridCommand
 from app.core.components_v2 import NoticeView
 from app.core.flags import FlagMeta
 from app.core.views import LayoutView
-from app.utils import AnsiColor, AnsiStringBuilder, get_asset_url, helpers, humanize_duration, pluralize, truncate
+from app.utils import AnsiColor, AnsiStringBuilder, get_asset_url, humanize_duration, pluralize, truncate
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -49,16 +50,6 @@ def iter_help_notes(is_any_locked: bool, any_has_more_help: bool, prefix: str) -
     if any_has_more_help:
         yield f"{Emojis.Command.more_info} » This command has more detailed help available with `{prefix}help <command>`."
 
-
-def add_field_blocks(container: discord.ui.Container, fields: list[dict[str, str | bool]]) -> None:
-    """Render embed-style ``{name, value}`` field dicts as CV2 text displays."""
-    for field in fields:
-        name = str(field.get("name", ""))
-        value = str(field.get("value", ""))
-        if name and name != "​":
-            container.add_item(discord.ui.TextDisplay(f"**{name}**\n{value}"))
-        else:
-            container.add_item(discord.ui.TextDisplay(value))
 
 
 # -- Components V2 help view -----------------------------------------------
@@ -106,10 +97,7 @@ class HelpView(LayoutView):
     async def _current_container(self) -> discord.ui.Container:
         if self.group is None:
             return await self.helper.build_front_page_container()
-        return self.helper.build_group_container(
-            self.group, self.pages[self.index], index=self.index, total_pages=self.total_pages,
-            total_commands=len(self.entries),
-        )
+        return self.helper.build_group_container(self.group, self.pages[self.index], total_commands=len(self.entries))
 
     def _make_nav_row(self) -> discord.ui.ActionRow:
         row: discord.ui.ActionRow = discord.ui.ActionRow()
@@ -442,50 +430,41 @@ class PaginatedHelpCommand(commands.HelpCommand):
         command: AnyCommand,
         *,
         descripted: bool = False,
-    ) -> list[dict[str, str | bool]] | str:
+    ) -> str:
         """Takes an :class:`Command` and returns a POSIX-like signature useful for help command output.
-
-        This is a modified version of the original get_command_signature.
 
         Parameters
         ----------
         command: :class:`Command`
             The command to get the signature for.
         descripted: :class:`bool`
-            Whether to return the commands as formatted embed fields with description.
+            Whether to return a markdown-formatted block describing each flag.
 
         Returns
         -------
         :class:`str`
-            The command signature.
+            The flag signature (inline shorthand or descripted markdown block).
         """
         flags: FlagMeta | None = getattr(command, "custom_flags", None)
 
         if not flags:
-            return [] if descripted else ""
-
-        resolved: list[str] = []
+            return ""
 
         if descripted:
-            for flag in flags.walk_flags():
-                fmt = f"- `--{flag.name}`: {flag.description}"
-                resolved.append(fmt)
+            lines = [f"- `--{flag.name}`: {flag.description}" for flag in flags.walk_flags()]
+            if not lines:
+                return ""
+            return f"### Flags\n" + "\n".join(lines)
 
-            chunked = list(discord.utils.as_chunks(resolved, 15))
-            to_fields = []
-            for i, chunk in enumerate(chunked):
-                to_fields.append({"name": "Flags" if i == 0 else "​", "value": "\n".join(chunk), "inline": False})
-            return to_fields
-        else:
-            for flag in flags.walk_flags():
-                if flag.required:
-                    start, end = "<>"
-                else:
-                    start, end = "[]"
+        resolved: list[str] = []
+        for flag in flags.walk_flags():
+            if flag.required:
+                start, end = "<>"
+            else:
+                start, end = "[]"
+            resolved.append(start + f"--{flag.name}" + end)
 
-                resolved.append(start + f"--{flag.name}" + end)
-
-            return " ".join(resolved)
+        return " ".join(resolved)
 
     def get_command_signature(
         self,
@@ -494,17 +473,15 @@ class PaginatedHelpCommand(commands.HelpCommand):
         descripted: bool = False,
         no_signature: bool = False,
         args_only: bool = False,
-    ) -> list[dict[str, str | bool]] | str:
+    ) -> str:
         """Takes an :class:`Command` and returns a POSIX-like signature useful for help command output.
-
-        This is a modified version of the original get_command_signature.
 
         Parameters
         ----------
         command: :class:`Command`
             The command to get the signature for.
         descripted: :class:`bool`
-            Whether to return the commands as formatted embed fields with description.
+            Whether to return a markdown-formatted block describing each argument.
         no_signature: :class:`bool`
             Whether to return only the command name without signature.
         args_only: :class:`bool`
@@ -514,30 +491,25 @@ class PaginatedHelpCommand(commands.HelpCommand):
         Returns
         -------
         :class:`str`
-            The command signature.
+            The command signature (inline or descripted markdown block).
         """
         if descripted:
             params = command.clean_params
-            resolved: list[str] = []
+            lines: list[str] = []
 
             for param in params.values():
                 if isinstance(param.annotation, FlagMeta) and getattr(command, "custom_flags", None):
                     continue
 
-                # resolve arg description through app_commands.describe
-                # decorators or fallback to the default description if present
                 description = getattr(command.callback, "__discord_app_commands_param_description__", param.description)
                 if isinstance(description, dict):
                     description = description.get(param.name, "Argument undocumented.")
 
-                fmt = f"- `{param.name}`: {description}"
-                resolved.append(fmt)
+                lines.append(f"- `{param.name}`: {description}")
 
-            chunked = list(discord.utils.as_chunks(resolved, 15))
-            to_fields = []
-            for i, chunk in enumerate(chunked):
-                to_fields.append({"name": "Arguments" if i == 0 else "​", "value": "\n".join(chunk), "inline": False})
-            return to_fields
+            if not lines:
+                return ""
+            return f"### Arguments\n" + "\n".join(lines)
 
         prefix = self.context.clean_prefix
 
@@ -657,9 +629,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(
             f"### Links\n"
-            f"[Dashboard](https://r.klappstuhl.me/db) · "
-            f"[Privacy Policy](https://r.klappstuhl.me/pp) · "
-            f"[Terms of Service](https://r.klappstuhl.me/tos)\n"
+            f"[Dashboard]({config.website}) · "
+            f"[Privacy Policy]({config.privacy_policy}) · "
+            f"[Terms of Service]({config.terms_of_service})\n"
             f"`{prefix}settings` to manage your data"
         ))
         container.add_item(discord.ui.Separator())
@@ -675,8 +647,6 @@ class PaginatedHelpCommand(commands.HelpCommand):
         group: Cog,
         entries: list[AnyCommand],
         *,
-        index: int,
-        total_pages: int,
         total_commands: int,
     ) -> discord.ui.Container:
         """Build the Components V2 card listing one page of a category's commands."""
@@ -695,12 +665,9 @@ class PaginatedHelpCommand(commands.HelpCommand):
             # When help was run as a slash command, show the clickable mention followed by
             # just the argument signature; otherwise (and for commands without an app-command
             # counterpart) fall back to the full prefixed signature.
-            mention = getattr(cmd, "mention", None) if self._render_mentions else None
-            if mention:
-                args = self.get_command_signature(cmd, args_only=True)
-                label = f"{mention} **`{args}`**" if args else mention
-            else:
-                label = f"**`{self.get_command_signature(cmd)}`**"
+            label = getattr(cmd, "mention", None) if self._render_mentions else None
+            if not label:
+                label = f"**`{self.get_command_signature(cmd, no_signature=True)}`**"""
             description = cmd.description or "…"
             lines.append(f"{prefix}{label}\n-# {description}")
         container.add_item(discord.ui.TextDisplay("\n".join(lines)))
@@ -711,9 +678,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             container.add_item(discord.ui.TextDisplay("\n".join(notes)))
 
         container.add_item(discord.ui.Separator())
-        container.add_item(discord.ui.TextDisplay(
-            f"-# {pluralize(total_commands):command} • Page {index + 1}/{total_pages}"
-        ))
+        container.add_item(discord.ui.TextDisplay(f"-# {pluralize(total_commands):command} in this category"))
         return container
 
     def build_flag_help_container(self) -> discord.ui.Container:
@@ -786,14 +751,14 @@ class PaginatedHelpCommand(commands.HelpCommand):
             )
         )
 
-        sig_fields = self.get_command_signature(command, descripted=True)
-        if isinstance(sig_fields, list) and sig_fields:
+        sig_content = self.get_command_signature(command, descripted=True)
+        if sig_content:
             container.add_item(discord.ui.Separator())
-            add_field_blocks(container, sig_fields)
+            container.add_item(discord.ui.TextDisplay(sig_content))
 
-        flag_fields = self.get_command_flag_signature(command, descripted=True)
-        if isinstance(flag_fields, list) and flag_fields:
-            add_field_blocks(container, flag_fields)
+        flag_content = self.get_command_flag_signature(command, descripted=True)
+        if flag_content:
+            container.add_item(discord.ui.TextDisplay(flag_content))
 
         extra: list[str] = []
         if getattr(command, "aliases", None):
@@ -847,10 +812,19 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 container.add_item(discord.ui.TextDisplay(block))
                 container.add_item(discord.ui.Separator())
 
+        try:
+            can_run = await command.can_run(ctx)
+        except commands.CommandError:
+            can_run = False
+
         invoked: int = await ctx.bot.db.stats.get_command_invokation_count(command.qualified_name)
         footer = f"-# {command.qualified_name}"
         if invoked > 1:
             footer += f" • {invoked}x invoked"
+        if can_run:
+            footer += f" • {Emojis.success} You can run this command here"
+        else:
+            footer += f" • {Emojis.error} You cannot run this command here"
 
         container.add_item(discord.ui.TextDisplay(footer))
 
