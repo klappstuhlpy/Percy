@@ -423,29 +423,29 @@ class Command(commands.Command):
                 if annotation.__commands_flag_compress_usage__:
                     required = any(flag.required for flag in self.custom_flags.walk_flags())
                     start, end = "<>" if required else "[]"
-                    result.append(start, color=AnsiColor.gray, bold=True)
+                    result.append(start, color=AnsiColor.white, bold=True)
                     result.append(name + "...", color=AnsiColor.yellow if required else AnsiColor.blue)
-                    result.append(end + " ", color=AnsiColor.gray, bold=True)
+                    result.append(end + " ", color=AnsiColor.white, bold=True)
                     continue
 
                 for flag in self.custom_flags.walk_flags():
                     start, end = "<>" if flag.required else "[]"
                     base = "--" + flag.name
 
-                    result.append(start, bold=True, color=AnsiColor.gray)
+                    result.append(start, bold=True, color=AnsiColor.white)
                     result.append(base, color=AnsiColor.yellow if flag.required else AnsiColor.blue)
 
                     if not flag.store_true:
-                        result.append(" <", color=AnsiColor.gray, bold=True)
+                        result.append(" <", color=AnsiColor.white, bold=True)
                         result.append(flag.dest, color=AnsiColor.magenta)
 
                         if flag.default or flag.default is False:
-                            result.append("=", color=AnsiColor.gray)
+                            result.append("=", color=AnsiColor.white)
                             result.append(str(flag.default), color=AnsiColor.cyan)
 
-                        result.append(">", color=AnsiColor.gray, bold=True)
+                        result.append(">", color=AnsiColor.white, bold=True)
 
-                    result.append(end + " ", color=AnsiColor.gray, bold=True)
+                    result.append(end + " ", color=AnsiColor.white, bold=True)
 
                 continue
 
@@ -458,17 +458,17 @@ class Command(commands.Command):
                 # (``<you>``) and returns None for bare callables/None, so we fall back to
                 # ``[name]`` instead of an ugly repr like ``operator.attrgetter('author')``.
                 displayed = param.displayed_default
-                result.append("[", color=AnsiColor.gray, bold=True)
+                result.append("[", color=AnsiColor.white, bold=True)
                 result.append(name, color=AnsiColor.blue)
 
                 if displayed:
-                    result.append("=", color=AnsiColor.gray, bold=True)
+                    result.append("=", color=AnsiColor.white, bold=True)
                     result.append(str(displayed), color=AnsiColor.cyan)
                     extra = "..." if greedy else ""
                 else:
                     extra = ""
 
-                result.append("]" + extra + " ", color=AnsiColor.gray, bold=True)
+                result.append("]" + extra + " ", color=AnsiColor.white, bold=True)
                 continue
 
             elif param.kind == param.VAR_POSITIONAL:
@@ -488,9 +488,9 @@ class Command(commands.Command):
             else:
                 start, end = "<>"
 
-            result.append(start, color=AnsiColor.gray, bold=True)
+            result.append(start, color=AnsiColor.white, bold=True)
             result.append(name, color=AnsiColor.blue if start == "[" else AnsiColor.yellow)
-            result.append(end + " ", color=AnsiColor.gray, bold=True)
+            result.append(end + " ", color=AnsiColor.white, bold=True)
 
         return result
 
