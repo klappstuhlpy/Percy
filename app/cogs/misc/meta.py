@@ -1006,7 +1006,7 @@ class MetaMixin:
 
         container.add_item(
             discord.ui.TextDisplay(
-                "## Vote for Percy"
+                "## Vote for Percy\n"
                 "Voting grants a **+10% XP boost for 12 hours**, active in every server we share.\n"
                 "Vote again any time to refresh it — you can vote every 12 hours on each site!"
             )
@@ -1014,7 +1014,7 @@ class MetaMixin:
 
         container.add_item(
             discord.ui.TextDisplay(
-                "### Link"
+                "### Link\n"
                 f"- [top.gg](https://top.gg/bot/{bot_id}/vote)\n"
                 f"- [discordbotlist.com](https://discordbotlist.com/bots/{bot_id}/upvote)"
             )
