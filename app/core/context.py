@@ -12,9 +12,11 @@ from discord.utils import cached_property
 from app.core.flags import FlagNamespace, Flags
 from app.core.views import ConfirmationView, DisambiguatorView
 from app.utils.progress import ProgressTracker
+from app.utils.timetools import ensure_utc, format_user_time, to_user_tz
 from config import Emojis
 
 if TYPE_CHECKING:
+    import datetime as _dt
     from collections.abc import Callable
     from datetime import datetime
 
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     from app.core.command import Command, GroupCommand
     from app.core.models import Cog
     from app.database import Database
+    from app.database.base import UserConfig
     from app.utils import AsyncCallable
 
 T = TypeVar("T")
@@ -89,6 +92,25 @@ class Context[CogT: "Cog"](commands.Context):
     def utcnow() -> datetime:
         """A shortcut for :func:`discord.utils.utcnow`."""
         return discord.utils.utcnow()
+
+    async def get_user_config(self) -> UserConfig | None:
+        """Fetch the user config for the context author (cached)."""
+        return await self.bot.db.get_user_config(self.author.id)
+
+    async def user_time(self, dt: datetime, fmt: str = "%Y-%m-%d %H:%M") -> str:
+        """Format *dt* as plain text in the author's configured timezone.
+
+        Handles UTC normalization and timezone conversion automatically.
+        For Discord-native timestamps (``<t:...>``), prefer :func:`discord.utils.format_dt`
+        which already localizes in each user's Discord client.
+        """
+        config = await self.get_user_config()
+        return format_user_time(ensure_utc(dt), config, fmt)
+
+    async def to_user_tz(self, dt: datetime) -> _dt.datetime:
+        """Convert *dt* to the author's configured timezone (or UTC)."""
+        config = await self.get_user_config()
+        return to_user_tz(ensure_utc(dt), config)
 
     @property
     def clean_prefix(self) -> str:

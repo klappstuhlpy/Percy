@@ -90,7 +90,7 @@ class Table:
             container.add_item(discord.ui.TextDisplay("**And they're off!** \N{HORSE}\N{DASH SYMBOL}"))
         else:
             time_left = datetime.timedelta(seconds=BETTING_SECONDS - (time.time() - self.start_time))
-            closes = datetime.datetime.now() + time_left
+            closes = datetime.datetime.now(datetime.UTC) + time_left
             container.add_item(discord.ui.TextDisplay(
                 f"Place your bets with `horserace <amount> <horse 1-{NUM_HORSES}>`.\n"
                 f"*Gates close {discord.utils.format_dt(closes, style='R')}.*"

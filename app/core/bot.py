@@ -589,6 +589,8 @@ class Bot(commands.Bot):
             return
 
         if isinstance(error, commands.CommandOnCooldown):
+            if await self.is_owner(ctx.author):
+                return
             if not ctx.guild and ctx.bot_permissions.add_reactions:
                 await ctx.message.add_reaction('\U000023f3')
                 return
@@ -982,7 +984,7 @@ class Bot(commands.Bot):
             The duration to add the object for.
         """
         if duration is not None:
-            when = datetime.datetime.now() + datetime.timedelta(seconds=duration)
+            when = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=duration)
             await self.timers.create(when, 'blacklist', object_id=obj.id)
 
         await self.blacklist.put(obj.id, True)

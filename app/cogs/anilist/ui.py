@@ -916,7 +916,7 @@ def format_date(**kwargs: int | None) -> str:
         return ' '.join(parts) if parts else 'N/A'
     if date:
         days = (date - datetime.date.today()).days
-        timestamp = datetime.datetime.now() + datetime.timedelta(days=abs(days) if days > 0 else days)
+        timestamp = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=abs(days) if days > 0 else days)
         return discord.utils.format_dt(timestamp, style='D')
     else:
         return 'N/A'

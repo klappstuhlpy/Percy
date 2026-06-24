@@ -80,7 +80,7 @@ class Brand(NotCaseSensitiveEnum):
 
     @property
     def copyright(self) -> str:
-        year = datetime.datetime.now().year
+        year = datetime.datetime.now(datetime.UTC).year
         if self == self.DC:
             return f'Data provided by [League of Comic Geeks](https://leagueofcomicgeeks.com/). © {year} DC'
         elif self == self.MARVEL:

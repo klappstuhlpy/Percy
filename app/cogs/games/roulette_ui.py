@@ -177,7 +177,7 @@ class Table:
 
         if self.open:
             time_left = datetime.timedelta(seconds=60 - (time.time() - self.start_time))
-            description = f"*Bets are closing {discord.utils.format_dt(datetime.datetime.now() + time_left, style='R')}*"
+            description = f"*Bets are closing {discord.utils.format_dt(datetime.datetime.now(datetime.UTC) + time_left, style='R')}*"
         else:
             if Space.RED in winning_spaces:
                 colour = helpers.Colour.red()

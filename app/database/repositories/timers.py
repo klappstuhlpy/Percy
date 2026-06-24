@@ -4,6 +4,7 @@ import datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import asyncpg
@@ -45,7 +46,12 @@ class TimersRepository(BaseRepository):
             VALUES ($1, $2::jsonb, $3, $4, $5)
             RETURNING id;
         """
-        return await self.fetchval(query, event, metadata, expires, created, timezone)
+        return await self.fetchval(
+            query, event, metadata,
+            ensure_utc(expires).replace(tzinfo=None),
+            ensure_utc(created).replace(tzinfo=None),
+            timezone,
+        )
 
     async def fetch_by_kwargs(self, event: str, kwargs: dict[str, Any]) -> asyncpg.Record | None:
         """Fetches the first timer for an event matching all of the given metadata kwargs."""

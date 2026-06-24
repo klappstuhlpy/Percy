@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
@@ -286,7 +287,7 @@ class PlaylistsRepository(BaseRepository):
         """Creates a playlist for a user and returns its new id."""
         return await self.fetchval(
             "INSERT INTO playlist (user_id, name, created) VALUES ($1, $2, $3) RETURNING id;",
-            user_id, name, created)
+            user_id, name, ensure_utc(created))
 
     async def get_playlist_by_id(self, playlist_id: int) -> asyncpg.Record | None:
         """Fetches a playlist by its id."""
@@ -355,7 +356,7 @@ class AniListRepository(BaseRepository):
                ON CONFLICT (user_id) DO UPDATE
                SET access_token = EXCLUDED.access_token,
                    expires_at = EXCLUDED.expires_at''',
-            user_id, access_token, expires_at,
+            user_id, access_token, ensure_utc(expires_at),
         )
 
     async def delete_token(self, user_id: int) -> bool:

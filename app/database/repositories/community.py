@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from asyncpg import Record
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
@@ -57,7 +58,11 @@ class PollsRepository(BaseRepository):
             RETURNING id;
         """
         return await self.fetchval(
-            query, channel_id, message_id, guild_id, published, expires, metadata)
+            query, channel_id, message_id, guild_id,
+            ensure_utc(published).replace(tzinfo=None),
+            ensure_utc(expires).replace(tzinfo=None),
+            metadata,
+        )
 
     async def get(self, poll_id: int, guild_id: int) -> asyncpg.Record | None:
         """Fetches a single poll scoped to a guild."""

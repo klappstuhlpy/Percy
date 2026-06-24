@@ -273,7 +273,7 @@ class Comics(Cog):
 
             if comics:
                 if config.brand == Brand.MANGA:
-                    now = datetime.datetime.now()
+                    now = datetime.datetime.now(datetime.UTC)
                     formatted_date = now.strftime('%B, %Y')
                     lead_text = f'## {config.brand.value} • {formatted_date}'
                 else:

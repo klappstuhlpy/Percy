@@ -288,7 +288,7 @@ class Parser:
             url=element,
             page_count=page_count,
             price=float(price),
-            _copyright=f"© {datetime.datetime.now().year} VIZ Media, LLC. All rights reserved.",
+            _copyright=f"© {datetime.datetime.now(datetime.UTC).year} VIZ Media, LLC. All rights reserved.",
             date=utcparse(release_date),
             isbn=isbn,
             trim_size=trim_size,
@@ -299,7 +299,7 @@ class Parser:
 
     @classmethod
     async def bs4_viz(cls) -> list[GenericComic]:
-        ref = cls.VIZ_ENDPOINT.format(year=datetime.datetime.now().year, month=datetime.datetime.now().month)
+        ref = cls.VIZ_ENDPOINT.format(year=datetime.datetime.now(datetime.UTC).year, month=datetime.datetime.now(datetime.UTC).month)
 
         mangas = []
         async with aiohttp.ClientSession() as session:

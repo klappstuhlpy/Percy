@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
@@ -178,7 +179,7 @@ class EconomyRepository(BaseRepository):
             ON CONFLICT (user_id, guild_id)
                 DO UPDATE SET last_claim = EXCLUDED.last_claim, streak = EXCLUDED.streak;
         """
-        await self.execute(query, user_id, guild_id, last_claim, streak)
+        await self.execute(query, user_id, guild_id, ensure_utc(last_claim).replace(tzinfo=None), streak)
 
     # -- lottery ----------------------------------------------------------
 
@@ -196,7 +197,7 @@ class EconomyRepository(BaseRepository):
             ON CONFLICT (guild_id) DO NOTHING
             RETURNING *;
         """
-        return await self.fetchrow(query, guild_id, channel_id, ticket_price, jackpot, ends_at)
+        return await self.fetchrow(query, guild_id, channel_id, ticket_price, jackpot, ensure_utc(ends_at).replace(tzinfo=None))
 
     async def add_lottery_tickets(self, guild_id: int, user_id: int, tickets: int, cost: int) -> int:
         """Adds tickets for a member and grows the jackpot; returns the member's new ticket total."""

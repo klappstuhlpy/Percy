@@ -463,7 +463,7 @@ class AniList(Cog):
         """Displays the currently airing anime."""
         await ctx.defer(typing=True)
 
-        date = datetime.datetime.now()
+        date = datetime.datetime.now(datetime.UTC)
         season = month_to_season(date.month)
         year = date.year
 

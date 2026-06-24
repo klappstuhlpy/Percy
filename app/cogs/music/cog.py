@@ -1940,7 +1940,7 @@ class Music(Cog):
             return None
 
         record = await self.bot.db.playlists.create_playlist(
-            user.id, "Liked Songs", discord.utils.utcnow().replace(tzinfo=None)
+            user.id, "Liked Songs", discord.utils.utcnow()
         )
         self.get_playlists.invalidate(user.id)
         return record

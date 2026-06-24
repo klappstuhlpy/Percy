@@ -4,6 +4,7 @@ import datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import asyncpg
@@ -145,7 +146,7 @@ class ComicsRepository(BaseRepository):
         """Updates the scheduled next-pull time for a guild's brand feed."""
         await self.execute(
             "UPDATE comic_config SET next_pull = $1 WHERE guild_id = $2 AND brand = $3;",
-            next_pull, guild_id, brand)
+            ensure_utc(next_pull).replace(tzinfo=None), guild_id, brand)
 
     async def delete_config(self, guild_id: int, brand: str) -> None:
         """Removes a guild's feed configuration for a single brand."""

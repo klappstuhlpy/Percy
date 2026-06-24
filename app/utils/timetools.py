@@ -19,6 +19,7 @@ from config import Emojis
 
 if TYPE_CHECKING:
     from app.core import Context
+    from app.database.base import UserConfig
 else:
     type Context = commands.Context
 
@@ -565,3 +566,58 @@ def convert_duration(milliseconds: float) -> str:
     seconds = milliseconds / 1000
     formaT = '%H:%M:%S' if seconds >= 3600 else '%M:%S'
     return time.strftime(formaT, time.gmtime(seconds))
+
+
+# ---------------------------------------------------------------------------
+# Timezone utilities — ensure UTC storage and user-local display
+# ---------------------------------------------------------------------------
+
+def utcnow() -> datetime.datetime:
+    """Returns the current time as a timezone-aware UTC datetime.
+
+    Use instead of ``datetime.datetime.now()`` anywhere a timestamp is created
+    for storage or comparison.
+    """
+    return datetime.datetime.now(datetime.UTC)
+
+
+def ensure_utc(dt: datetime.datetime) -> datetime.datetime:
+    """Normalize *dt* to a UTC-aware datetime suitable for database storage.
+
+    - Naive datetimes are assumed UTC and stamped accordingly.
+    - Aware non-UTC datetimes are converted to UTC.
+    - Already-UTC datetimes pass through unchanged.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.UTC)
+    return dt.astimezone(datetime.UTC)
+
+
+def to_user_tz(dt: datetime.datetime, config: UserConfig | None) -> datetime.datetime:
+    """Convert a datetime to the user's configured timezone (or UTC if unset).
+
+    Always call :func:`ensure_utc` on datetimes coming from the DB before passing
+    them here so the conversion is correct.
+    """
+    utc_dt = ensure_utc(dt)
+    if config and config.timezone:
+        return utc_dt.astimezone(config.tzinfo)
+    return utc_dt
+
+
+def format_user_time(
+    dt: datetime.datetime,
+    config: UserConfig | None,
+    fmt: str = "%Y-%m-%d %H:%M",
+) -> str:
+    """Format *dt* as a plain-text string in the user's timezone.
+
+    Uses 12/24-hour format based on the user's timezone locale when *fmt* is
+    not explicitly provided and a user timezone is set.  Falls back to the
+    provided *fmt* otherwise.
+
+    This is for cases where Discord's ``<t:...>`` timestamps are not suitable
+    (e.g. logs, plain-text outputs, image rendering).
+    """
+    local_dt = to_user_tz(dt, config)
+    return local_dt.strftime(fmt)

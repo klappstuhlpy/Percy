@@ -19,11 +19,12 @@ import discord
 from dateutil.relativedelta import relativedelta
 from discord import File, app_commands
 from discord.ext import commands, tasks
+from discord.utils import format_dt
 
 from app.core import Bot, Cog, Context, Flags, flag
 from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
-from app.core.views import TrashView, View
+from app.core.views import LayoutView, TrashView, View
 from app.rendering import get_dominant_color
 from app.services import MAX_CHARACTERS, get_char_info
 from app.utils import (
@@ -1001,37 +1002,49 @@ class MetaMixin:
         hours on each site.
         """
         bot_id = ctx.bot.user.id
-        embed = discord.Embed(
-            title="Vote for Percy",
-            description=(
-                "Voting grants a **+10% XP boost for 12 hours**, active in every server we share. "
+        container = discord.ui.Container()
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                "## Vote for Percy"
+                "Voting grants a **+10% XP boost for 12 hours**, active in every server we share.\n"
                 "Vote again any time to refresh it — you can vote every 12 hours on each site!"
-            ),
-            colour=helpers.Colour.white(),
-        )
-        embed.add_field(
-            name="Vote links",
-            value=(
-                f"- [top.gg](https://top.gg/bot/{bot_id}/vote)\n"
-                f"- [discordbotlist.com](https://discordbotlist.com/bots/{bot_id}/upvote)"
-            ),
-            inline=False,
+            )
         )
 
+        container.add_item(
+            discord.ui.TextDisplay(
+                "### Link"
+                f"- [top.gg](https://top.gg/bot/{bot_id}/vote)\n"
+                f"- [discordbotlist.com](https://discordbotlist.com/bots/{bot_id}/upvote)"
+            )
+        )
+        container.add_item(discord.ui.Separator())
+
+        boost: str = "No active boost — vote now to start one!"
         status = await ctx.bot.db.votes.get_status(ctx.author.id)
         now = datetime.datetime.now(datetime.UTC)
         expires = status["expires_at"].replace(tzinfo=datetime.UTC) if status is not None else None
         if expires is not None and expires > now:
             percent = round((status["multiplier"] - 1.0) * 100)
-            embed.add_field(
-                name="Your boost",
-                value=f"**+{percent}% XP** active — expires {discord.utils.format_dt(expires, 'R')}.",
-                inline=False,
-            )
-        else:
-            embed.add_field(name="Your boost", value="No active boost — vote now to start one!", inline=False)
+            boost = f"**+{percent}% XP** active — expires {discord.utils.format_dt(expires, 'R')}."
 
-        await ctx.send(embed=embed)
+        container.add_item(discord.ui.TextDisplay(boost))
+        container.add_item(discord.ui.Separator())
+
+        container.add_item(
+            discord.ui.ActionRow(
+                discord.ui.Button(label="Top.gg", url=f"https://top.gg/bot/{bot_id}/vote", style=discord.ButtonStyle.link),
+                discord.ui.Button(label="DiscordBotList", url=f"https://discordbotlist.com/bots/{bot_id}/upvote", style=discord.ButtonStyle.link)
+            )
+        )
+
+        last_voted = f"**{format_dt(status['last_voted_at'])}**" if status.get('last_voted_at', None) is not None else "a while ago? :/"
+        container.add_item(discord.ui.TextDisplay(f"-# last voted • {last_voted}"))
+
+        view = LayoutView()
+        view.add_item(container)
+        await ctx.send(view=view)
 
     @staticmethod
     def _ping_metric(latency: float, bad: float, good: float) -> AnsiColor:

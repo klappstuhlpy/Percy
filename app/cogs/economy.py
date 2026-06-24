@@ -285,7 +285,7 @@ class Economy(Cog):
 
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=result.amount)
-        await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now.replace(tzinfo=None), result.streak)
+        await self.bot.db.economy.set_daily(ctx.author.id, ctx.guild.id, now, result.streak)
 
         await ctx.send_success(
             f"You claimed {Emojis.Economy.cash} **{fnumb(result.amount)}**! "
@@ -676,7 +676,7 @@ class Economy(Cog):
             return
 
         record = await self.bot.db.economy.create_lottery(
-            ctx.guild.id, ctx.channel.id, int(ticket_price), int(ticket_price), when.replace(tzinfo=None)
+            ctx.guild.id, ctx.channel.id, int(ticket_price), int(ticket_price), when
         )
         if record is None:
             await ctx.send_error("A lottery is already running. End it before starting another.")
