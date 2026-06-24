@@ -265,7 +265,7 @@ class PlayerPanel(LayoutView):
             container.add_item(discord.ui.ActionRow(self.on_stop, self.on_volume, self.on_like))
 
             container.add_item(discord.ui.Separator())
-            container.add_item(discord.ui.TextDisplay("-# last updated • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
+            container.add_item(discord.ui.TextDisplay(f"-# last updated • [Web Panel](https://percy.klappstuhl.me/dashboard/guild/{self.player.guild.id}/overview)"))
 
         return container
 
