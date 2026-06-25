@@ -19,6 +19,7 @@ from discord.ext import commands, tasks
 from discord.utils import MISSING
 from wavelink import Playable
 
+import config
 from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
@@ -119,12 +120,14 @@ class Music(Cog):
         self._restored: bool = False
         # Guards the rebuild that runs after Lavalink comes back without resuming.
         self._resyncing: bool = False
-        self.persist_sessions.start()
-        # The node is already connected by the time this cog loads (setup() checks
-        # Pool.get_node()), so on_wavelink_node_ready has already fired and won't
-        # re-fire. Kick off restore immediately.
-        self._restored = True
-        self.bot.loop.create_task(self._restore_sessions())
+        # dont persists sessions on beta
+        if not config.beta:
+            self.persist_sessions.start()
+            # The node is already connected by the time this cog loads (setup() checks
+            # Pool.get_node()), so on_wavelink_node_ready has already fired and won't
+            # re-fire. Kick off restore immediately.
+            self._restored = True
+            self.bot.loop.create_task(self._restore_sessions())
 
     async def cog_load(self) -> None:
         await self.bot.wait_until_ready()
@@ -282,7 +285,22 @@ class Music(Cog):
 
     @Cog.listener()
     async def on_wavelink_track_exception(self, payload: wavelink.TrackExceptionEventPayload) -> None:
-        await self._recover_player(payload, reason=f"track exception: {getattr(payload, 'exception', None)}")
+        exception = getattr(payload, 'exception', None) or {}
+        message = exception.get('message', '') if isinstance(exception, dict) else str(exception)
+        is_restricted = 'requires login' in message or 'Video player configuration error' in message
+
+        if is_restricted:
+            player: Player | None = cast("Player", payload.player)
+            if player and player.panel is not MISSING:
+                title = getattr(payload.track, 'title', 'Unknown track')
+                with suppress(discord.HTTPException):
+                    await player.panel.channel.send(
+                        f"{Emojis.warning} Skipped **{title}** — age-restricted content cannot be played.",
+                        delete_after=15,
+                    )
+
+        short_message = message.split('\n\n', 1)[0]
+        await self._recover_player(payload, reason=f"track exception: {short_message}", user_notified=is_restricted)
 
     @Cog.listener()
     async def on_wavelink_track_stuck(self, payload: wavelink.TrackStuckEventPayload) -> None:
@@ -297,6 +315,7 @@ class Music(Cog):
         payload: wavelink.TrackExceptionEventPayload | wavelink.TrackStuckEventPayload,
         *,
         reason: str,
+        user_notified: bool = False,
     ) -> None:
         """Recover from a track failure without dropping the whole session.
 
@@ -331,7 +350,7 @@ class Music(Cog):
                 await player.skip(force=True)
             elif player.always_on:
                 await player.refill_always_on()
-            elif player.autoplay != wavelink.AutoPlayMode.enabled and player.panel is not MISSING:
+            elif player.autoplay != wavelink.AutoPlayMode.enabled and not user_notified and player.panel is not MISSING:
                 with suppress(discord.HTTPException):
                     await player.panel.channel.send(
                         f"{Emojis.warning} That track failed to play and the queue is empty.", delete_after=15

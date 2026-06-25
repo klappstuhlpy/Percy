@@ -93,6 +93,7 @@ def setup_logging() -> Generator[None, Any, None]:
         logging.getLogger('discord.http').setLevel(logging.WARNING)
         logging.getLogger('discord.state').addFilter(RemoveNoise())
         logging.getLogger('charset_normalizer').setLevel(logging.ERROR)
+        logging.getLogger('TrackException').setLevel(logging.CRITICAL)
 
         root_log.setLevel(logging.INFO)
         handler = RotatingFileHandler(
