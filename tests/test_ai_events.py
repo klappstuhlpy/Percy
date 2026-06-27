@@ -49,10 +49,23 @@ def test_normalize_duration(value: Any, expected: str) -> None:
 
 
 def test_poll_from_payload_full() -> None:
-    req = PollRequest.from_payload({'question': 'Movie night?', 'options': ['Yes', 'No', 'Maybe'], 'duration': '2 days'})
+    req = PollRequest.from_payload(
+        {'question': 'Movie night?', 'options': ['Yes', 'No', 'Maybe'], 'duration': '2 days',
+         'thread_question': 'What should we watch?'}
+    )
     assert req.question == 'Movie night?'
     assert req.options == ['Yes', 'No', 'Maybe']
     assert req.duration == '2d'
+    assert req.thread_question == 'What should we watch?'
+
+
+def test_poll_thread_question_optional() -> None:
+    req = PollRequest.from_payload({'question': 'Q', 'options': ['a', 'b'], 'duration': '1d'})
+    assert req.thread_question is None
+    # blank thread question collapses to None
+    assert PollRequest.from_payload(
+        {'question': 'Q', 'options': ['a', 'b'], 'duration': '1d', 'thread_question': '  '}
+    ).thread_question is None
 
 
 def test_poll_filters_blank_options_and_caps_at_eight() -> None:

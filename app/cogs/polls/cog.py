@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -559,12 +560,23 @@ class Polls(Cog):
             await ctx.send_error(f"I couldn't understand the duration `{request.duration}`.")
             return
 
+        # Pull an image URL straight from the text (more reliable than a small model).
+        url_match = re.search(r"https?://\S+", description)
+        image_url = url_match.group(0).rstrip(">),.") if url_match else None
+
         poll = await self.create_poll_from_dashboard(
             ctx.guild, channel, author_id=ctx.author.id,
             question=request.question, options=request.options, expires=when.dt,
+            image_url=image_url, thread_question=request.thread_question,
         )
+        extras = []
+        if image_url:
+            extras.append("an image")
+        if request.thread_question:
+            extras.append("a discussion thread")
+        extra_note = f" (with {' and '.join(extras)})" if extras else ""
         await ctx.send_success(
-            f"Created poll **#{poll.index}** in {channel.mention} with {len(request.options)} options — "
+            f"Created poll [`{poll.id}`] in {channel.mention} with {len(request.options)} options{extra_note} — "
             f"ends {discord.utils.format_dt(when.dt, 'R')}."
         )
 
