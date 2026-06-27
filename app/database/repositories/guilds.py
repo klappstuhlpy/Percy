@@ -182,6 +182,45 @@ class GuildsRepository(BaseRepository):
             "DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND channel_id=$3;",
             guild_id, name, channel_id)
 
+    # -- AI config (ai_flags + per-channel overrides) --------------------
+
+    async def get_ai_overrides(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches every per-channel AI override row for a guild."""
+        return await self.fetch(
+            "SELECT channel_id, flags_mask, enabled_mask FROM guild_ai_channel_overrides WHERE guild_id=$1;",
+            guild_id)
+
+    async def set_ai_flags(self, guild_id: int, value: int) -> None:
+        """Sets the server-wide ``ai_flags`` bitfield, creating the config row if needed.
+
+        Invalidates both the guild-config cache (it carries ``ai_flags``) and the resolved
+        AI-config cache.
+        """
+        async with self.acquire() as con, con.transaction():
+            await con.execute("INSERT INTO guild_config (id) VALUES ($1) ON CONFLICT (id) DO NOTHING;", guild_id)
+            await con.execute("UPDATE guild_config SET ai_flags = $2 WHERE id = $1;", guild_id, value)
+        self.invalidate_cache("guild_config_changed", guild_id)
+        self.invalidate_cache("ai_config_changed", guild_id)
+
+    async def upsert_ai_override(self, guild_id: int, channel_id: int, flags_mask: int, enabled_mask: int) -> None:
+        """Inserts or replaces a per-channel AI override, then busts the AI-config cache."""
+        await self.execute(
+            """
+            INSERT INTO guild_ai_channel_overrides (guild_id, channel_id, flags_mask, enabled_mask)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, channel_id)
+                DO UPDATE SET flags_mask = EXCLUDED.flags_mask, enabled_mask = EXCLUDED.enabled_mask;
+            """,
+            guild_id, channel_id, flags_mask, enabled_mask)
+        self.invalidate_cache("ai_config_changed", guild_id)
+
+    async def delete_ai_override(self, guild_id: int, channel_id: int) -> None:
+        """Removes a per-channel AI override, then busts the AI-config cache."""
+        await self.execute(
+            "DELETE FROM guild_ai_channel_overrides WHERE guild_id=$1 AND channel_id=$2;",
+            guild_id, channel_id)
+        self.invalidate_cache("ai_config_changed", guild_id)
+
 
 # -- Admin (DB introspection) ---------------------------------------------
 

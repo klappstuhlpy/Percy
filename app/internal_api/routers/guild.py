@@ -37,6 +37,20 @@ class PatchGuildConfigBody(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class PatchAIFlagsBody(BaseModel):
+    flags: dict[str, bool]
+
+    model_config = {"extra": "ignore"}
+
+
+class PutAIOverrideBody(BaseModel):
+    # Which AI features this channel overrides, and their on/off value for those features.
+    controlled: dict[str, bool] = {}
+    enabled: dict[str, bool] = {}
+
+    model_config = {"extra": "ignore"}
+
+
 class BatchOperation(BaseModel):
     type: str
     data: dict = {}
@@ -88,6 +102,12 @@ _ALLOWED_CONFIG_FIELDS = {
 
 _FLAG_MAP = {"audit_log": 1, "raid": 2, "alerts": 4, "sentinel": 8, "mentions": 16}
 
+#: Bit values for the per-guild AI feature flags — must match GuildConfig.AIFlags.
+_AI_FLAG_MAP = {
+    "assistant": 1, "router": 2, "moderation": 4, "sentinel": 8, "music": 16,
+    "polls": 32, "giveaways": 64, "tags": 128, "reminders": 256,
+}
+
 
 def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
     """Extract valid config updates from a flat dict (shared by PATCH and batch)."""
@@ -114,10 +134,28 @@ def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
+def _serialize_ai_config(guild, ai_config) -> dict:
+    """Shape the resolved AI config (server flags + per-channel overrides) for the dashboard."""
+    return {
+        "flags": {name: bool(getattr(ai_config.flags, name)) for name in _AI_FLAG_MAP},
+        "overrides": [
+            {
+                "channel": resolve_channel(guild, channel_id),
+                "channel_id": str(channel_id),
+                "controlled": {name: bool(flags_mask & bit) for name, bit in _AI_FLAG_MAP.items()},
+                "enabled": {name: bool(enabled_mask & bit) for name, bit in _AI_FLAG_MAP.items()},
+            }
+            for channel_id, (flags_mask, enabled_mask) in ai_config.overrides.items()
+        ],
+    }
+
+
 @router.get("")
 async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
     guild_config = await bot.db.get_guild_config(guild.id)
+    ai_config = await bot.db.get_guild_ai_config(guild.id)
     return {
+        "ai": _serialize_ai_config(guild, ai_config),
         "id": guild_config.id,
         "name": guild.name,
         "icon_url": guild.icon.url if guild.icon else None,
@@ -161,6 +199,60 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
     await guild_config.update(**updates)
+    return {"ok": True}
+
+
+@router.get("/ai")
+async def get_ai_config(guild: GuildDep, bot: BotDep) -> dict:
+    ai_config = await bot.db.get_guild_ai_config(guild.id)
+    return _serialize_ai_config(guild, ai_config)
+
+
+@router.patch("/ai")
+async def patch_ai_flags(guild: GuildDep, bot: BotDep, body: PatchAIFlagsBody) -> dict:
+    """Toggle the server-wide AI feature flags (only known flag names are honoured)."""
+    guild_config = await bot.db.get_guild_config(guild.id)
+    new_value = guild_config.ai_flags.value
+    changed = False
+    for name, enabled in body.flags.items():
+        bit = _AI_FLAG_MAP.get(name)
+        if bit is None:
+            continue
+        changed = True
+        if enabled:
+            new_value |= bit
+        else:
+            new_value &= ~bit
+
+    if not changed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid AI flags to update")
+
+    await bot.db.guilds.set_ai_flags(guild.id, new_value)
+    return {"ok": True}
+
+
+@router.put("/ai/overrides/{channel_id}")
+async def put_ai_override(guild: GuildDep, bot: BotDep, channel_id: int, body: PutAIOverrideBody) -> dict:
+    """Set a per-channel AI override. An override that controls nothing is removed."""
+    flags_mask = 0
+    enabled_mask = 0
+    for name, bit in _AI_FLAG_MAP.items():
+        if body.controlled.get(name):
+            flags_mask |= bit
+            if body.enabled.get(name):
+                enabled_mask |= bit
+
+    if flags_mask == 0:
+        await bot.db.guilds.delete_ai_override(guild.id, channel_id)
+        return {"ok": True, "removed": True}
+
+    await bot.db.guilds.upsert_ai_override(guild.id, channel_id, flags_mask, enabled_mask)
+    return {"ok": True}
+
+
+@router.delete("/ai/overrides/{channel_id}")
+async def delete_ai_override(guild: GuildDep, bot: BotDep, channel_id: int) -> dict:
+    await bot.db.guilds.delete_ai_override(guild.id, channel_id)
     return {"ok": True}
 
 
