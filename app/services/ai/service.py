@@ -117,7 +117,7 @@ class AIService:
         client: OllamaClient,
         *,
         models: Mapping[ModelTier, str],
-        default_timeout: float = 8.0,
+        default_timeout: float = 30.0,
         cache_ttl: float = 300.0,
         cache_maxsize: int = 512,
         max_concurrency: int = 1,
@@ -242,28 +242,26 @@ class AIService:
         self._cache_misses += 1
 
         messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': user_prompt}]
-        result = await self._attempt_parse(messages, schema, model, temperature, timeout)
+        raw = await self._chat(messages, model=model, temperature=temperature, json_mode=True, timeout=timeout)
+        if raw is None:
+            # Transport error / timeout / disabled — do NOT retry (another call would just
+            # burn more of the timeout budget on a CPU-bound model). Degrade now.
+            return None
 
+        result = self._parse_raw(raw, schema)
         if result is None and retry_on_invalid and self.available:
-            # One stricter retry: remind the model to emit only a JSON object.
+            # The model answered but the output was unusable — one stricter retry.
             messages = [*messages, {'role': 'user', 'content': 'Return ONLY a valid JSON object, nothing else.'}]
-            result = await self._attempt_parse(messages, schema, model, temperature, timeout)
+            retry_raw = await self._chat(messages, model=model, temperature=temperature, json_mode=True, timeout=timeout)
+            if retry_raw is not None:
+                result = self._parse_raw(retry_raw, schema)
 
         if result is not None:
             self._remember(key, result)
         return result
 
-    async def _attempt_parse(
-        self,
-        messages: Sequence[dict[str, str]],
-        schema: type[T],
-        model: str,
-        temperature: float,
-        timeout: float | None,
-    ) -> T | None:
-        raw = await self._chat(messages, model=model, temperature=temperature, json_mode=True, timeout=timeout)
-        if raw is None:
-            return None
+    def _parse_raw(self, raw: str, schema: type[T]) -> T | None:
+        """Decode + validate one raw model response, or ``None`` if it is unusable."""
         try:
             payload = json.loads(raw)
             if not isinstance(payload, dict):

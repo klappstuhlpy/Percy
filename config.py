@@ -173,7 +173,9 @@ ollama = SimpleNamespace(
     fast_model=env('OLLAMA_FAST_MODEL') or 'qwen2.5:1.5b',
     balanced_model=env('OLLAMA_BALANCED_MODEL') or 'qwen2.5-coder:3b',
     smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
-    timeout=float(env('OLLAMA_TIMEOUT') or 8.0),
+    # Generous default: CPU inference (and the first call's model load) is slow; 8s was
+    # too tight and produced TimeoutErrors. Calls still degrade gracefully if exceeded.
+    timeout=float(env('OLLAMA_TIMEOUT') or 30.0),
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
     # SSH tunnel (beta/Windows testing only): when running off-Linux with the shared
     # SSH_TUNNEL_* credentials set, Percy forwards a local port to where Ollama listens on

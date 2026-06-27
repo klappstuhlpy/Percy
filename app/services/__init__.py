@@ -6,10 +6,13 @@ orchestration, math) to the pure, unit-testable helpers in this package.
 
 from app.services.ai import (
     ASSISTANT_SYSTEM,
+    MODERATION_CATEGORIES,
     AIHealthReport,
     AIService,
     CommandRouter,
     ModelTier,
+    ModerationAssessor,
+    ModerationVerdict,
     Parsable,
     RouteCommand,
     RouteDecision,
@@ -53,6 +56,7 @@ from app.services.spam_penalty import compute_spam_penalty
 __all__ = (
     'ASSISTANT_SYSTEM',
     'MAX_CHARACTERS',
+    'MODERATION_CATEGORIES',
     'PRESENCE_STATUSES',
     'AIHealthReport',
     'AIService',
@@ -68,6 +72,8 @@ __all__ = (
     'LyricLine',
     'LyricsResult',
     'ModelTier',
+    'ModerationAssessor',
+    'ModerationVerdict',
     'Parsable',
     'PresenceBreakdown',
     'PurgeMessage',

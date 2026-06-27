@@ -11,6 +11,7 @@ Public surface:
 Pure and Discord-free: testable with a fake client (see ``tests/test_ai_service.py``).
 """
 
+from app.services.ai.moderation import MODERATION_CATEGORIES, ModerationAssessor, ModerationVerdict
 from app.services.ai.prompts import ASSISTANT_SYSTEM, json_instruction
 from app.services.ai.router import CommandRouter, RouteCommand, RouteDecision, build_route_system_prompt
 from app.services.ai.schemas import (
@@ -25,10 +26,13 @@ from app.services.ai.service import AIHealthReport, AIService, ModelTier
 
 __all__ = (
     'ASSISTANT_SYSTEM',
+    'MODERATION_CATEGORIES',
     'AIHealthReport',
     'AIService',
     'CommandRouter',
     'ModelTier',
+    'ModerationAssessor',
+    'ModerationVerdict',
     'Parsable',
     'RouteCommand',
     'RouteDecision',

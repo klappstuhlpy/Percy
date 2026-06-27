@@ -19,7 +19,7 @@ from app.core.models import BadArgument, Cog, PermissionTemplate, command, coold
 from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
 from app.database.base import Sentinel, GuildConfig
-from app.services import build_purge_predicate
+from app.services import ModerationAssessor, build_purge_predicate
 from app.utils import (
     checks,
     fuzzy,
@@ -95,6 +95,13 @@ class Moderation(Cog):
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
 
+        # AI moderation (Phase 3): flags harmful messages for human review — never punishes.
+        self._ai_moderation: ModerationAssessor = ModerationAssessor(bot.ai)
+        self._ai_mod_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
+            1, 15.0, commands.BucketType.member
+        )
+        self._ai_mod_tasks: set[asyncio.Task[None]] = set()
+
         self._spam_check: defaultdict[int, SpamChecker] = defaultdict(SpamChecker)
 
         self._mute_data_batch: defaultdict[int, list[tuple[int, Any]]] = defaultdict(list)
@@ -159,6 +166,53 @@ class Moderation(Cog):
         await self.bot.db.moderation.bulk_update_muted_members(final_data)
         self._mute_data_batch.clear()
 
+    #: Skip AI moderation on very short messages (greetings/emotes rarely need a verdict).
+    AI_MOD_MIN_LENGTH = 16
+
+    def _schedule_ai_moderation(self, message: discord.Message, config: GuildConfig) -> None:
+        """Fire-and-forget the AI moderation check so it never blocks the listener."""
+        if not self.bot.ai.available:
+            return
+        task = asyncio.create_task(self._maybe_ai_moderate(message, config))
+        # Keep a reference until done so the task isn't garbage-collected mid-flight.
+        self._ai_mod_tasks.add(task)
+        task.add_done_callback(self._ai_mod_tasks.discard)
+
+    async def _maybe_ai_moderate(self, message: discord.Message, config: GuildConfig) -> None:
+        """Assess a message with AI and, if flagged, alert moderators for review.
+
+        Strictly a *signal*: it posts to the existing alert flow and never punishes. Gated
+        on the guild's ``AIFlags.moderation`` (+ per-channel override), a per-member cooldown,
+        and a minimum length. Fully exception-safe (it runs detached as a task).
+        """
+        if message.guild is None:
+            return
+        try:
+            ai_config = await self.bot.db.get_guild_ai_config(message.guild.id)
+            if not ai_config.is_enabled('moderation', message.channel.id):
+                return
+
+            content = message.content.strip()
+            if len(content) < self.AI_MOD_MIN_LENGTH:
+                return
+            if self._ai_mod_cooldown.update_rate_limit(message):
+                return
+
+            verdict = await self._ai_moderation.assess(content)
+            if verdict is None:
+                return
+
+            alert = (
+                f"\N{SHIELD} **AI moderation flag** — {message.author.mention} in "
+                f"{message.channel.mention} · category `{verdict.category}` · "
+                f"confidence {verdict.confidence:.0%}\n"
+                f"> {verdict.reason or 'flagged as potentially harmful'}\n"
+                f"[Jump to message]({message.jump_url}) — review and action manually if warranted."
+            )
+            await config.send_alert(alert)
+        except Exception:  # detached task: never let an error escape unlogged
+            log.warning("AI moderation check failed for message %s", message.id, exc_info=True)
+
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """|coro|
@@ -193,6 +247,10 @@ class Moderation(Cog):
             or any(i in config.safe_automod_entity_ids for i in author._roles)  # type: ignore[arg-type]
         ):
             return
+
+        # Phase 3: schedule AI moderation as a background task so it never blocks the
+        # raid/mention-spam checks below (and survives their early returns).
+        self._schedule_ai_moderation(message, config)
 
         await check_raid(self._spam_check[message.guild.id], config, message.guild, author, message)
 
