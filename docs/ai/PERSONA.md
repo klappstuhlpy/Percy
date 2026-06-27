@@ -20,6 +20,17 @@ and whether to send it every request or bake it into the model.
 The router (`router.py`) and moderation (`moderation.py`) use their own **focused** prompts,
 not this persona — they're structured classifiers, not the chat persona.
 
+### Name commands, don't simulate them
+
+The persona forbids the model from role-playing a feature (dealing blackjack cards, "playing"
+music, drawing a giveaway). Instead it must **name the command** in backticks with the prefix
+(e.g. `` `?blackjack` ``). The assistant cog then scans the answer for real, invokable
+commands and attaches an **"Invoke ‹command›" button** (`AssistantActionView`) under the
+reply — clicking it runs the command as the asking user, with that command's own checks,
+cooldowns, and interactive prompts. So the model hands off to the real feature rather than
+faking it. Extraction is in `_extract_commands`; only visible, enabled commands get a button,
+and only the user who asked can click.
+
 ## How it stays secure
 
 The model only ever knows **what we put in the prompt**. It has no filesystem, no `.env`,

@@ -24,6 +24,13 @@ def test_security_rules_present() -> None:
     assert 'untrusted' in lowered
 
 
+def test_forbids_simulating_features() -> None:
+    lowered = build_assistant_system().lower()
+    # The model must name the command (with a button), not role-play the feature.
+    assert 'simulate' in lowered
+    assert 'button' in lowered
+
+
 def test_prefix_is_injected() -> None:
     prompt = build_assistant_system(prefix='b.')
     assert '`b.`' in prompt

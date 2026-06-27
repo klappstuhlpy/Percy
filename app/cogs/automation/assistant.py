@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import contextlib
+import copy
+import re
 from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 
 from app.core import Cog, Context, command, cooldown, describe
+from app.core.views import View
 from app.services import ModelTier, build_assistant_system
 from app.utils import truncate
 from config import support_server, website
@@ -25,6 +28,53 @@ MAX_CONTEXT_TURNS = 30
 #: Soft cap on total characters of reconstructed history fed to the model (keeps the most
 #: recent turns when a thread grows long, so small models don't overflow their context).
 MAX_CONTEXT_CHARS = 6000
+#: Most "Invoke" buttons to attach under one answer (one Discord action row holds five).
+MAX_ACTION_BUTTONS = 4
+#: Backtick-wrapped snippets in an answer are the model's command suggestions.
+_BACKTICK_RE = re.compile(r'`([^`\n]{1,60})`')
+
+
+class AssistantActionView(View):
+    """Buttons that run the command(s) Percy named in its answer — for the asking user only.
+
+    The model is told to *name* a command rather than simulate a feature; we surface each
+    named, real command as a one-click "Invoke" button. Clicking it runs the command exactly
+    as if the user had typed it (same checks, cooldowns, and interactive follow-ups).
+    """
+
+    def __init__(
+        self,
+        bot: Bot,
+        *,
+        invoker: discord.abc.User,
+        source_message: discord.Message,
+        actions: list[str],
+    ) -> None:
+        super().__init__(timeout=180.0, members=invoker, clear_on_timeout=False)
+        self.bot = bot
+        self._source = source_message
+        for content in actions[:MAX_ACTION_BUTTONS]:
+            button = discord.ui.Button(style=discord.ButtonStyle.primary, label=truncate(f'Invoke {content}', 80))
+            button.callback = self._make_run(content)  # type: ignore[assignment]
+            self.add_item(button)
+
+    def _make_run(self, content: str):  # noqa: ANN202 - returns an interaction callback
+        async def run(interaction: discord.Interaction) -> None:
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.response.defer()
+            # Prevent double-runs: disable the buttons once one is used.
+            self.stop()
+            self.disable_all()
+            if self.message is not None:
+                with contextlib.suppress(discord.HTTPException):
+                    await self.message.edit(view=self)
+
+            message = copy.copy(self._source)
+            message.content = content
+            new_ctx = await self.bot.get_context(message)
+            await self.bot.invoke(new_ctx)
+
+        return run
 
 
 class AssistantMixin:
@@ -122,6 +172,47 @@ class AssistantMixin:
         turns.reverse()
         return turns
 
+    # -- command suggestions -------------------------------------------------
+
+    async def _extract_commands(self, answer: str, message: discord.Message) -> list[str]:
+        """Find real, invokable commands the answer names, as ``<prefix><qualified_name>``.
+
+        Looks at backtick-wrapped snippets (what the persona is told to use) and bare
+        prefixed tokens, strips any prefix, and keeps only tokens that resolve to a visible,
+        enabled command. De-duplicated and capped — the basis for the "Invoke" buttons.
+        """
+        prefixes: list[str] = []
+        with contextlib.suppress(Exception):
+            resolved = await self.bot.get_prefix(message)
+            prefixes = [resolved] if isinstance(resolved, str) else list(resolved)
+        usable_prefixes = sorted((p for p in prefixes if p and not p.startswith('<@')), key=len, reverse=True)
+        display_prefix = await self._display_prefix(message)
+
+        candidates: list[str] = [m.group(1) for m in _BACKTICK_RE.finditer(answer)]
+        for prefix in usable_prefixes:
+            candidates.extend(m.group(1) for m in re.finditer(re.escape(prefix) + r'([A-Za-z][\w-]*)', answer))
+
+        seen: set[str] = set()
+        actions: list[str] = []
+        for raw in candidates:
+            name = raw.strip().strip('`').strip()
+            for prefix in usable_prefixes:
+                if name.startswith(prefix):
+                    name = name[len(prefix):].strip()
+                    break
+            name = name.strip('.,!?:;()[]<>').strip()
+            if not name:
+                continue
+
+            cmd = self.bot.get_command(name) or self.bot.get_command(name.lower())
+            if cmd is None or cmd.hidden or not cmd.enabled or cmd.qualified_name in seen:
+                continue
+            seen.add(cmd.qualified_name)
+            actions.append(f'{display_prefix}{cmd.qualified_name}')
+            if len(actions) >= MAX_ACTION_BUTTONS:
+                break
+        return actions
+
     # -- generation ----------------------------------------------------------
 
     async def _reply_with_answer(self, message: discord.Message, prompt: str) -> None:
@@ -149,12 +240,26 @@ class AssistantMixin:
             await self._safe_reply(message, 'The AI assistant is currently unavailable. Please try again later.')
             return
 
-        resp = truncate(f'{ASSISTANT_MARKER}\n{answer}', MAX_REPLY_CHARS)
-        await self._safe_reply(message, resp)
+        # Offer one-click buttons for any real command the answer named (instead of the
+        # model role-playing the feature itself).
+        actions = await self._extract_commands(answer, message)
+        view = (
+            AssistantActionView(self.bot, invoker=message.author, source_message=message, actions=actions)
+            if actions
+            else None
+        )
 
-    async def _safe_reply(self, message: discord.Message, content: str) -> None:
+        resp = truncate(f'{ASSISTANT_MARKER}\n{answer}', MAX_REPLY_CHARS)
+        sent = await self._safe_reply(message, resp, view=view)
+        if view is not None and sent is not None:
+            view.message = sent
+
+    async def _safe_reply(
+        self, message: discord.Message, content: str, *, view: View | None = None
+    ) -> discord.Message | None:
         with contextlib.suppress(discord.HTTPException):
-            await message.reply(content, mention_author=False)
+            return await message.reply(content, mention_author=False, view=view)
+        return None
 
     # -- entry points --------------------------------------------------------
 

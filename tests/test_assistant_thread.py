@@ -42,18 +42,33 @@ class FakeMessage:
         self.reference = FakeRef(parent_id) if parent_id is not None else None
 
 
+class FakeCommand:
+    def __init__(self, qualified_name: str, *, hidden: bool = False, enabled: bool = True) -> None:
+        self.qualified_name = qualified_name
+        self.hidden = hidden
+        self.enabled = enabled
+
+
 class FakeBot:
-    def __init__(self) -> None:
+    def __init__(self, commands: dict[str, FakeCommand] | None = None) -> None:
         self.user = FakeUser(999, bot=True)
+        self._commands = commands or {}
 
     async def get_prefix(self, message: FakeMessage) -> list[str]:
         return ['?', '<@999>']
 
+    def get_command(self, name: str) -> FakeCommand | None:
+        return self._commands.get(name)
 
-def build_mixin() -> AssistantMixin:
+
+def build_mixin(commands: dict[str, FakeCommand] | None = None) -> AssistantMixin:
     mixin = AssistantMixin()
-    mixin.bot = FakeBot()  # type: ignore[assignment]
+    mixin.bot = FakeBot(commands)  # type: ignore[assignment]
     return mixin
+
+
+def lone_message(content: str = '') -> FakeMessage:
+    return FakeMessage(1, content, FakeUser(1), FakeChannel({}), None)
 
 
 def build_chain() -> tuple[AssistantMixin, FakeMessage]:
@@ -125,6 +140,39 @@ def test_is_assistant_message_requires_marker_and_bot_author() -> None:
     assert mixin._is_assistant_message(ours) is True
     assert mixin._is_assistant_message(other_bot) is False
     assert mixin._is_assistant_message(human) is False
+
+
+async def test_extract_commands_from_backticks() -> None:
+    mixin = build_mixin({'blackjack': FakeCommand('blackjack')})
+    answer = 'Sure! Run `?blackjack` to start a round.'
+    assert await mixin._extract_commands(answer, lone_message()) == ['?blackjack']
+
+
+async def test_extract_commands_from_bare_token() -> None:
+    mixin = build_mixin({'blackjack': FakeCommand('blackjack')})
+    answer = 'Just type ?blackjack and follow the prompts.'
+    assert await mixin._extract_commands(answer, lone_message()) == ['?blackjack']
+
+
+async def test_extract_commands_ignores_unknown_and_hidden() -> None:
+    mixin = build_mixin({'secret': FakeCommand('secret', hidden=True)})
+    answer = 'Try `?frobnicate` or `?secret`.'  # one unknown, one hidden
+    assert await mixin._extract_commands(answer, lone_message()) == []
+
+
+async def test_extract_commands_deduplicates() -> None:
+    mixin = build_mixin({'blackjack': FakeCommand('blackjack')})
+    answer = 'Use `?blackjack`. Yes, `?blackjack` is the one!'
+    assert await mixin._extract_commands(answer, lone_message()) == ['?blackjack']
+
+
+async def test_extract_commands_handles_multiword_and_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(assistant_mod, 'MAX_ACTION_BUTTONS', 2)
+    cmds = {name: FakeCommand(name) for name in ('tag create', 'poll', 'giveaway', 'remind')}
+    mixin = build_mixin(cmds)
+    answer = 'Options: `?tag create`, `?poll`, `?giveaway`, `?remind`.'
+    actions = await mixin._extract_commands(answer, lone_message())
+    assert actions == ['?tag create', '?poll']  # multiword resolved, capped at 2
 
 
 async def test_history_respects_char_budget(monkeypatch: pytest.MonkeyPatch) -> None:
