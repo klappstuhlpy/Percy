@@ -326,3 +326,24 @@ async def test_health_reports_proxy_block_error() -> None:
     assert report.error is not None
     assert '403' in report.error
     assert 'x-ollama-auth' in report.error
+
+
+# -- Ollama SSH tunnel gating -----------------------------------------------------
+#
+# The tunnel is beta/Windows-only and reuses the DB's SSH creds; only its gating is
+# unit-testable (the live SSH path needs infra, like the DB tunnel it mirrors).
+
+
+async def test_ollama_tunnel_skipped_when_not_beta(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import bot as botmod
+
+    monkeypatch.setattr(botmod, 'beta', False)
+    assert await botmod.Bot._open_ollama_tunnel(object()) is None  # type: ignore[arg-type]
+
+
+async def test_ollama_tunnel_skipped_without_ssh_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import bot as botmod
+
+    monkeypatch.setattr(botmod, 'beta', True)
+    monkeypatch.setattr(botmod.DatabaseConfig, 'ssh_host', None)
+    assert await botmod.Bot._open_ollama_tunnel(object()) is None  # type: ignore[arg-type]

@@ -178,6 +178,12 @@ ollama = SimpleNamespace(
     # Ollama has no native auth; a Cloudflare Tunnel WAF rule gates the host on this
     # secret, sent as the ``x-ollama-auth`` header on every request when set.
     auth_key=env('OLLAMA_AUTH_KEY'),
+    # SSH tunnel (beta/Windows testing only): when running off-Linux with the shared
+    # SSH_TUNNEL_* credentials set, Percy forwards a local port to where Ollama listens on
+    # the remote host (default 127.0.0.1:11434) and talks to it over the tunnel — mirroring
+    # the database tunnel. On Linux it connects to ``host`` directly.
+    tunnel_remote_host=env('OLLAMA_TUNNEL_REMOTE_HOST') or '127.0.0.1',
+    tunnel_remote_port=int(env('OLLAMA_TUNNEL_REMOTE_PORT') or 11434),
 )
 
 dbots_key: str | None = env('DBOTS_TOKEN')
