@@ -267,7 +267,9 @@ class Bot(commands.Bot):
             max_concurrency=ollama_config.max_concurrency,
             enabled=ollama_config.enabled,
         )
-        self.ai_router = CommandRouter(self.ai)
+        # Higher confidence floor than the router default: small models are over-confident,
+        # so demand a stronger signal before proposing a command (cuts weak mis-routes).
+        self.ai_router = CommandRouter(self.ai, min_confidence=0.7)
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 
@@ -459,11 +461,12 @@ class Bot(commands.Bot):
         if ctx.command is None:
             # No command matched. discord.py only raises CommandNotFound from invoke(),
             # which we skip here. When the user used the prefix (ctx.invoked_with is set),
-            # first try the AI natural-language router (if enabled for the guild); on a miss
-            # fall back to the fuzzy "did you mean?" typo suggestion.
-            if ctx.invoked_with:
-                if not await self._maybe_route_with_ai(ctx):
-                    await self._maybe_suggest_command(ctx)
+            # first try a deterministic typo correction (e.g. "aks" -> "ask"); only if the
+            # word is not a near-miss of a real command do we fall back to AI intent routing
+            # (if enabled). Typos must win over AI guessing, or "b.aks <question>" gets
+            # mis-routed as natural language.
+            if ctx.invoked_with and not await self._maybe_suggest_command(ctx):
+                await self._maybe_route_with_ai(ctx)
             return
 
         if await self.spam_control.is_spam(ctx, message):
@@ -566,6 +569,9 @@ class Bot(commands.Bot):
     #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
     #: matches while an unrelated word (``baldheu``) stays silent, as before.
     SUGGESTION_CUTOFF: Final[int] = 75
+    #: Max edit distance (transposition-aware) for the typo fallback when ``ratio`` misses —
+    #: catches single-edit/transposition typos like ``aks`` -> ``ask`` that score poorly.
+    TYPO_MAX_DISTANCE: Final[int] = 1
 
     def _build_command_catalogue(self) -> list[RouteCommand]:
         """Compact catalogue of visible top-level commands for the AI router prompt."""
@@ -618,16 +624,18 @@ class Bot(commands.Bot):
             view.message = await ctx.send(view=view, reference=ctx.message, delete_after=30)
         return True
 
-    async def _maybe_suggest_command(self, ctx: Context) -> None:
+    async def _maybe_suggest_command(self, ctx: Context) -> bool:
         """Reply with a single close command suggestion for a mistyped command.
 
-        Stays silent unless the attempted name is a *very* close fuzzy match for a
-        visible command, so unknown text behaves exactly as before (no reply).
+        Returns whether a suggestion was offered. Stays silent (and returns ``False``, so the
+        AI router gets a chance) unless the attempted name is a close fuzzy match *or* a
+        single-edit/transposition typo of a visible command — so genuine natural language
+        falls through to AI routing instead of being hijacked.
         """
         attempted = (ctx.invoked_with or '').lower()
         # Only handle clean top-level misses; ignore 1-2 char noise to avoid false hits.
         if ctx.command is not None or len(attempted) < 3:
-            return
+            return False
 
         # Map every visible command name/alias to its command, then take the best match.
         choices: dict[str, Command] = {}
@@ -637,11 +645,25 @@ class Bot(commands.Bot):
             for name in (cmd.name, *cmd.aliases):
                 choices.setdefault(name.lower(), cmd)  # type: ignore[arg-type]
 
+        command: Command | None = None
         match = fuzzy.extract_one(attempted, choices, scorer=fuzzy.ratio, score_cutoff=self.SUGGESTION_CUTOFF)
-        if match is None:
-            return
+        if match is not None:
+            _, _, command = match
+        else:
+            # Transposition / single-edit typos ("aks" -> "ask") score poorly on ratio; fall
+            # back to a strict edit-distance match so obvious typos still correct.
+            best = (self.TYPO_MAX_DISTANCE + 1, -1)  # (distance, ratio); lower distance wins
+            for name, cmd in choices.items():
+                distance = fuzzy.osa_distance(attempted, name)
+                if distance > self.TYPO_MAX_DISTANCE:
+                    continue
+                candidate = (distance, -fuzzy.ratio(attempted, name))
+                if candidate < best:
+                    best, command = candidate, cmd
 
-        _, _, command = match
+        if command is None:
+            return False
+
         suggestion = command.qualified_name
         prefix = ctx.prefix or ''
         rest = ctx.message.content[len(prefix) + len(ctx.invoked_with or ''):]
@@ -654,6 +676,7 @@ class Bot(commands.Bot):
                 reference=ctx.message,
                 delete_after=15,
             )
+        return True
 
     async def handle_interaction_error(self, interaction: discord.Interaction, error: Exception) -> None:
         """|coro|

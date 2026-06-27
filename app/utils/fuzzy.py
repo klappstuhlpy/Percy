@@ -44,6 +44,34 @@ def ratio(string1: str, string2: str) -> int:
     return checks.intr(100 * m.ratio())
 
 
+def osa_distance(a: str, b: str) -> int:
+    """Optimal String Alignment (restricted Damerau-Levenshtein) edit distance.
+
+    Counts one insertion, deletion, substitution, *or a transposition of two adjacent
+    characters* as a single edit — so ``"aks"`` → ``"ask"`` is distance ``1``, where
+    :func:`ratio` rates it only ``67``. Used to catch short command typos that the
+    substring-ratio scorers miss. Case-insensitive.
+    """
+    a, b = a.lower(), b.lower()
+    if a == b:
+        return 0
+    la, lb = len(a), len(b)
+    if not la or not lb:
+        return la or lb
+
+    prev2: list[int] = []
+    prev = list(range(lb + 1))
+    for i in range(1, la + 1):
+        curr = [i] + [0] * lb
+        for j in range(1, lb + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                curr[j] = min(curr[j], prev2[j - 2] + 1)  # adjacent transposition
+        prev2, prev = prev, curr
+    return prev[lb]
+
+
 @checks.check_for_none
 @checks.check_for_equivalence
 @checks.check_empty_string

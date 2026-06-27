@@ -7,12 +7,12 @@
 
 ## Where the code lives
 
-| Concern | File | What it does |
-|---|---|---|
-| Verdict logic (pure) | `app/services/ai/moderation.py` | `ModerationVerdict` schema + `ModerationAssessor`. Classifies text via `self.bot.ai`, returns only verdicts worth surfacing. No Discord imports. |
-| Integration | `app/cogs/moderation/cog.py` | `_schedule_ai_moderation()` and `_maybe_ai_moderate()`, invoked from the `on_message` listener. Owns gating, cooldown, and the alert. |
-| Gate flag | `app/database/base.py` | `GuildConfig.AIFlags.moderation` (+ per-channel overrides via `db.get_guild_ai_config`). |
-| Inference | `app/services/ai/service.py` → `app/clients/ollama.py` | Runs the model (BALANCED tier) with timeout + graceful `None` on any failure. |
+| Concern              | File                                                   | What it does                                                                                                                                     |
+|----------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| Verdict logic (pure) | `app/services/ai/moderation.py`                        | `ModerationVerdict` schema + `ModerationAssessor`. Classifies text via `self.bot.ai`, returns only verdicts worth surfacing. No Discord imports. |
+| Integration          | `app/cogs/moderation/cog.py`                           | `_schedule_ai_moderation()` and `_maybe_ai_moderate()`, invoked from the `on_message` listener. Owns gating, cooldown, and the alert.            |
+| Gate flag            | `app/database/base.py`                                 | `GuildConfig.AIFlags.moderation` (+ per-channel overrides via `db.get_guild_ai_config`).                                                         |
+| Inference            | `app/services/ai/service.py` → `app/clients/ollama.py` | Runs the model (BALANCED tier) with timeout + graceful `None` on any failure.                                                                    |
 
 ## What it does, step by step
 
@@ -37,16 +37,16 @@
 
 An alert is posted **only when every one of these holds**:
 
-| Gate | Condition | Where |
-|---|---|---|
-| Feature on | `AIFlags.moderation` enabled for the guild (and not disabled for the channel via overrides) | `is_enabled('moderation', channel_id)` |
-| Engine up | `self.bot.ai.available` (enabled, not circuit-broken) | `_schedule_ai_moderation` |
-| Real target | Not a bot, not the owner, not staff with `manage_messages`, not a system message | `on_message` pre-filters |
-| Not exempt | Channel / author / author roles are **not** in `safe_automod_entity_ids` | `on_message` pre-filters |
-| Substantial | Message content length ≥ `AI_MOD_MIN_LENGTH` (16 chars) | `_maybe_ai_moderate` |
-| Not spammy | Passes a per-**member** cooldown (1 alert / 15s) | `_ai_mod_cooldown` |
-| Harmful | Verdict `flagged == true` **and** `category != "none"` | `ModerationAssessor.assess` |
-| Confident | Verdict `confidence ≥ 0.7` (`DEFAULT_MIN_CONFIDENCE`) | `ModerationAssessor.assess` |
+| Gate        | Condition                                                                                   | Where                                  |
+|-------------|---------------------------------------------------------------------------------------------|----------------------------------------|
+| Feature on  | `AIFlags.moderation` enabled for the guild (and not disabled for the channel via overrides) | `is_enabled('moderation', channel_id)` |
+| Engine up   | `self.bot.ai.available` (enabled, not circuit-broken)                                       | `_schedule_ai_moderation`              |
+| Real target | Not a bot, not the owner, not staff with `manage_messages`, not a system message            | `on_message` pre-filters               |
+| Not exempt  | Channel / author / author roles are **not** in `safe_automod_entity_ids`                    | `on_message` pre-filters               |
+| Substantial | Message content length ≥ `AI_MOD_MIN_LENGTH` (16 chars)                                     | `_maybe_ai_moderate`                   |
+| Not spammy  | Passes a per-**member** cooldown (1 alert / 15s)                                            | `_ai_mod_cooldown`                     |
+| Harmful     | Verdict `flagged == true` **and** `category != "none"`                                      | `ModerationAssessor.assess`            |
+| Confident   | Verdict `confidence ≥ 0.7` (`DEFAULT_MIN_CONFIDENCE`)                                       | `ModerationAssessor.assess`            |
 
 **The only action ever taken is posting an alert for human review.** There is no code path
 from an AI verdict to a delete/mute/kick/ban. This is the hard guardrail from the rewrite
