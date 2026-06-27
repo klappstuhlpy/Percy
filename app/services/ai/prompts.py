@@ -15,8 +15,8 @@ below additionally tells the model to refuse any request to reveal its instructi
 internal data, as defence-in-depth against prompt-injection. Never interpolate secrets,
 config values, or raw internal objects into any prompt string here.
 
-See ``docs/ai/PERSONA.md`` for the "system prompt vs. Ollama Modelfile" decision and
-``docs/ai/MODERATION.md`` for the moderation-AI behaviour.
+See https://percy.klappstuhl.me/docs/ai/self-hosting for the persona/security model and
+https://percy.klappstuhl.me/docs/ai/moderation for the moderation-AI behaviour.
 """
 
 from __future__ import annotations

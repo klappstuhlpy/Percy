@@ -171,7 +171,7 @@ class Moderation(Cog):
         self._mute_data_batch.clear()
 
     # AI moderation (flag-for-review, never auto-punishes). Full behaviour + exact criteria:
-    # docs/ai/MODERATION.md. Verdict logic: app/services/ai/moderation.py.
+    # https://percy.klappstuhl.me/docs/ai/moderation. Verdict logic: app/services/ai/moderation.py.
     #: Skip AI moderation on very short messages (greetings/emotes rarely need a verdict).
     AI_MOD_MIN_LENGTH = 16
 

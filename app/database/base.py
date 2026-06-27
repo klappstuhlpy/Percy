@@ -936,7 +936,8 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         """Per-guild AI feature toggles (the AI-native rewrite). All default off.
 
         Stored in ``guild_config.ai_flags`` and overridable per channel via
-        :class:`GuildAIConfig`. Bit names mirror the AI feature domains in docs/ai/.
+        :class:`GuildAIConfig`. Bit names mirror the AI feature domains documented at
+        https://percy.klappstuhl.me/docs/ai/overview.
         """
 
         @flag_value

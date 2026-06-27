@@ -13,11 +13,21 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 [Add Percy to your server](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) ·
 [Website](https://percy.klappstuhl.me/dashboard/) ·
+[Documentation](https://percy.klappstuhl.me/docs/) ·
 [Support server](https://discord.gg/3jSYQ9VNbA)
 
 </div>
 
 > **The recommended way to use Percy is to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
+
+## Documentation
+
+Percy's documentation lives in a dedicated [Mintlify](https://mintlify.com) site:
+
+- **Read it:** https://percy.klappstuhl.me/docs/
+- **Edit it:** [`klappstuhlpy/percy-docs`](https://github.com/klappstuhlpy/percy-docs)
+
+It covers every feature, the optional AI layer, the public **Klappstuhl.me API**, and the internal dashboard API. When you ship a user-facing change — a new command, flag, or API endpoint — update `percy-docs` to match.
 
 ---
 

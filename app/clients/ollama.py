@@ -6,7 +6,8 @@ parsing on top of the shared resilience layer (429 handling, transport backoff, 
 breaker). It stays a thin transport wrapper: the :class:`~app.services.ai.AIService`
 owns prompt construction, model-tier selection, caching, timeouts and concurrency.
 
-See ``docs/ai/AI_INTEGRATION_BLUEPRINT.md`` for the wider design.
+See the "AI layer" section in ``.claude/CLAUDE.md`` for the design, and
+https://percy.klappstuhl.me/docs/ai/overview for the user-facing docs.
 """
 
 from __future__ import annotations

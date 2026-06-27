@@ -165,7 +165,7 @@ genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
 images_key: str | None = env('IMAGES_API_TOKEN')
 
-# Self-hosted Ollama inference (the AI-native rewrite — see docs/ai/). All AI features
+# Self-hosted Ollama inference (see https://percy.klappstuhl.me/docs/ai). All AI features
 # degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
 ollama = SimpleNamespace(
     enabled=(env('OLLAMA_ENABLED') or 'true').strip().lower() not in ('false', '0', 'no', 'off'),
