@@ -90,8 +90,18 @@ def test_poll_rejects_non_list_options() -> None:
 
 
 def test_giveaway_from_payload_full() -> None:
-    req = GiveawayRequest.from_payload({'prize': 'Nitro', 'winners': 3, 'duration': '6h'})
-    assert (req.prize, req.winners, req.duration) == ('Nitro', 3, '6h')
+    req = GiveawayRequest.from_payload(
+        {'prize': 'GTA IV', 'winners': 3, 'duration': '1 day', 'description': 'have fun!', 'channel': '#giveaways'}
+    )
+    assert (req.prize, req.winners, req.duration) == ('GTA IV', 3, '1d')
+    assert req.description == 'have fun!'
+    assert req.channel == 'giveaways'  # leading '#' stripped
+
+
+def test_giveaway_optional_fields_default_none() -> None:
+    req = GiveawayRequest.from_payload({'prize': 'Nitro', 'winners': 1, 'duration': '6h'})
+    assert req.description is None
+    assert req.channel is None
 
 
 def test_giveaway_winner_defaults_and_clamps() -> None:

@@ -498,8 +498,9 @@ class Giveaways(Cog):
             )
             return
 
-        await ctx.defer()
-        request = await self._event_ai.giveaway(description)
+        async with ctx.typing():
+            request = await self._event_ai.giveaway(description)
+
         if request is None:
             await ctx.send_error(
                 f"I couldn't turn that into a giveaway. Try `{ctx.clean_prefix}giveaway create` directly."
@@ -512,13 +513,15 @@ class Giveaways(Cog):
             await ctx.send_error(f"I couldn't understand the duration `{request.duration}`.")
             return
 
-        message = await ctx.channel.send(embed=discord.Embed(description="*Preparing Giveaway...*"))
+        channel = self._resolve_quick_channel(ctx, request.channel)
+
+        message = await channel.send(embed=discord.Embed(description="*Preparing Giveaway...*"))
         giveaway = await self.create_giveaway(
             message.channel.id,
             message.id,
             ctx.guild.id,
             ctx.author.id,
-            description=None,
+            description=request.description,
             prize=request.prize,
             winner_count=request.winners,
             created=discord.utils.utcnow().isoformat(),
@@ -536,10 +539,21 @@ class Giveaways(Cog):
 
         winners_label = f"{request.winners} winner{'s' if request.winners != 1 else ''}"
         await ctx.send_success(
-            f"Giveaway [`{giveaway.id}`] for **{request.prize}** ({winners_label}) created — "
-            f"ends {discord.utils.format_dt(when.dt, 'R')}. {message.jump_url}",
+            f"Giveaway [`{giveaway.id}`] for **{request.prize}** ({winners_label}) created in "
+            f"{channel.mention} — ends {discord.utils.format_dt(when.dt, 'R')}. {message.jump_url}",
             ephemeral=True,
         )
+
+    def _resolve_quick_channel(self, ctx: Context, name: str | None) -> discord.abc.Messageable:
+        """Resolve an AI-named channel to a postable text channel, or fall back to here."""
+        if name and ctx.guild is not None:
+            lowered = name.lower()
+            me = ctx.guild.me
+            match = discord.utils.find(lambda c: c.name.lower() == lowered, ctx.guild.text_channels) or \
+                discord.utils.find(lambda c: lowered in c.name.lower(), ctx.guild.text_channels)
+            if match is not None and match.permissions_for(me).send_messages:
+                return match
+        return ctx.channel
 
     @giveaway.command("end", description="End a giveaway.", guild_only=True, user_permissions=PermissionTemplate.mod)
     @app_commands.autocomplete(giveaway_id=giveaway_id_autocomplete)  # type: ignore

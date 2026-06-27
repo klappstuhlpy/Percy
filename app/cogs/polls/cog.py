@@ -546,8 +546,9 @@ class Polls(Cog):
             await ctx.send_error(f"Set a poll channel first with `{ctx.clean_prefix}polls config`.")
             return
 
-        await ctx.defer()
-        request = await self._event_ai.poll(description)
+        async with ctx.typing():
+            request = await self._event_ai.poll(description)
+
         if request is None:
             await ctx.send_error(
                 f"I couldn't turn that into a poll. Try `{ctx.clean_prefix}polls create` directly."
