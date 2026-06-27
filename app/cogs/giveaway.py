@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import random
+import re
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -18,8 +19,6 @@ from app.utils import checks, fuzzy, get_shortened_string, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
-    import re
-
     from app.core.timer import Timer
 
 
@@ -513,7 +512,7 @@ class Giveaways(Cog):
             await ctx.send_error(f"I couldn't understand the duration `{request.duration}`.")
             return
 
-        channel = self._resolve_quick_channel(ctx, request.channel)
+        channel = self._resolve_quick_channel(ctx, request.channel, description)
 
         message = await channel.send(embed=discord.Embed(description="*Preparing Giveaway...*"))
         giveaway = await self.create_giveaway(
@@ -544,15 +543,32 @@ class Giveaways(Cog):
             ephemeral=True,
         )
 
-    def _resolve_quick_channel(self, ctx: Context, name: str | None) -> discord.abc.Messageable:
-        """Resolve an AI-named channel to a postable text channel, or fall back to here."""
-        if name and ctx.guild is not None:
+    def _resolve_quick_channel(self, ctx: Context, name: str | None, raw: str) -> discord.abc.Messageable:
+        """Resolve the target channel for a quick giveaway, or fall back to the current one.
+
+        Prefers an actual ``#channel`` mention in the message (the reliable signal — a typed
+        ``#name`` becomes ``<#id>``), then an AI-named channel matched by name. Only returns a
+        channel the bot can post in.
+        """
+        if ctx.guild is None:
+            return ctx.channel
+        me = ctx.guild.me
+
+        # 1. A real channel mention (<#id>) anywhere in the request.
+        mention = re.search(r"<#(\d+)>", raw)
+        if mention is not None:
+            channel = ctx.guild.get_channel(int(mention.group(1)))
+            if isinstance(channel, discord.TextChannel) and channel.permissions_for(me).send_messages:
+                return channel
+
+        # 2. A plain channel name the model picked out.
+        if name:
             lowered = name.lower()
-            me = ctx.guild.me
             match = discord.utils.find(lambda c: c.name.lower() == lowered, ctx.guild.text_channels) or \
                 discord.utils.find(lambda c: lowered in c.name.lower(), ctx.guild.text_channels)
             if match is not None and match.permissions_for(me).send_messages:
                 return match
+
         return ctx.channel
 
     @giveaway.command("end", description="End a giveaway.", guild_only=True, user_permissions=PermissionTemplate.mod)
