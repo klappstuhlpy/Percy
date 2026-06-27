@@ -20,7 +20,7 @@ from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
 from app.database.base import Sentinel, GuildConfig
 from app.services import ModerationAssessor, build_purge_predicate
-from .ai_alert import AIModerationAlertView, build_ai_moderation_embed
+from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from app.utils import (
     checks,
     fuzzy,
@@ -30,7 +30,6 @@ from app.utils import (
     pluralize,
     resolve_entity_id,
     timetools,
-    truncate,
 )
 from app.utils.lock import lock
 from config import Emojis
@@ -103,6 +102,9 @@ class Moderation(Cog):
             1, 15.0, commands.BucketType.member
         )
         self._ai_mod_tasks: set[asyncio.Task[None]] = set()
+        # Register the persistent AI-moderation action buttons so they keep working across
+        # restarts (state is encoded in each button's custom_id).
+        bot.add_dynamic_items(AIModerationButton)
 
         self._spam_check: defaultdict[int, SpamChecker] = defaultdict(SpamChecker)
 
@@ -216,18 +218,12 @@ class Moderation(Cog):
                 )
                 return
 
-            reason = truncate(f"{verdict.category}: {verdict.reason}" if verdict.reason else verdict.category, 400)
             embed = build_ai_moderation_embed(message, verdict)
-            view = AIModerationAlertView(
-                self.bot,
-                guild_id=message.guild.id,
-                channel_id=message.channel.id,
-                message_id=message.id,
-                target_id=message.author.id,
-                reason=reason,
+            view = build_ai_moderation_view(
+                target_id=message.author.id, channel_id=message.channel.id, message_id=message.id
             )
             with suppress(discord.HTTPException):
-                view.message = await channel.send(embed=embed, view=view)
+                await channel.send(embed=embed, view=view)
         except Exception:  # detached task: never let an error escape unlogged
             log.warning("AI moderation check failed for message %s", message.id, exc_info=True)
 

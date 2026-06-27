@@ -7,7 +7,11 @@ context a moderator needs to act.
 
 from __future__ import annotations
 
-from app.cogs.moderation.ai_alert import build_ai_moderation_embed
+from app.cogs.moderation.ai_alert import (
+    AIModerationButton,
+    build_ai_moderation_embed,
+    build_ai_moderation_view,
+)
 from app.services.ai import ModerationVerdict
 
 
@@ -49,6 +53,24 @@ def test_embed_surfaces_verdict_and_context() -> None:
     assert '42' in fields['User']
     assert 'some rude and offensive text' in fields['Message']
     assert 'discord.com/channels/1/100/200' in (embed.description or '')
+
+
+def test_view_has_five_persistent_buttons() -> None:
+    view = build_ai_moderation_view(target_id=42, channel_id=100, message_id=200)
+    ids = [child.custom_id for child in view.children]
+    assert len(ids) == 5
+    assert 'aimod:delete:42:100:200' in ids
+    assert 'aimod:ban:42:100:200' in ids
+    assert 'aimod:dismiss:42:100:200' in ids
+    assert view.timeout is None  # persistent
+
+
+def test_button_custom_id_roundtrips_through_template() -> None:
+    button = AIModerationButton('ban', 42, 100, 200)
+    match = AIModerationButton.__discord_ui_compiled_template__.match(button.custom_id)
+    assert match is not None
+    assert match['action'] == 'ban'
+    assert (int(match['target']), int(match['channel']), int(match['message'])) == (42, 100, 200)
 
 
 def test_embed_handles_empty_content() -> None:
