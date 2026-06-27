@@ -166,6 +166,8 @@ class Moderation(Cog):
         await self.bot.db.moderation.bulk_update_muted_members(final_data)
         self._mute_data_batch.clear()
 
+    # AI moderation (flag-for-review, never auto-punishes). Full behaviour + exact criteria:
+    # docs/ai/MODERATION.md. Verdict logic: app/services/ai/moderation.py.
     #: Skip AI moderation on very short messages (greetings/emotes rarely need a verdict).
     AI_MOD_MIN_LENGTH = 16
 

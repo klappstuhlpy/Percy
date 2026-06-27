@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.core import Accent, Context, command, cooldown, describe, make_notice
-from app.services import ASSISTANT_SYSTEM, ModelTier
+from app.services import ModelTier, build_assistant_system
 from app.utils import truncate
+from config import support_server, website
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -51,25 +52,26 @@ class AssistantMixin:
             await ctx.send_error('The AI assistant is currently unavailable.')
             return
 
-        await ctx.defer()
+        async with ctx.typing():
+            system = build_assistant_system(
+                server_name=ctx.guild.name if ctx.guild else None,
+                prefix=ctx.clean_prefix,
+                website=website,
+                support_server=support_server,
+            )
+            messages: list[dict[str, str]] = [{'role': 'system', 'content': system}]
+            previous = await self._previous_turn(ctx)
+            if previous:
+                messages.append({'role': 'assistant', 'content': previous})
+            messages.append({'role': 'user', 'content': prompt})
 
-        messages: list[dict[str, str]] = [{'role': 'system', 'content': ASSISTANT_SYSTEM}]
-        previous = await self._previous_turn(ctx)
-        if previous:
-            messages.append({'role': 'assistant', 'content': previous})
-        messages.append({'role': 'user', 'content': prompt})
+            answer = await self.bot.ai.complete(messages, tier=ModelTier.SMART)
 
-        answer = await self.bot.ai.complete(messages, tier=ModelTier.SMART)
         if answer is None:
             # Graceful degradation: the model is down/disabled or timed out.
             await ctx.send_error('The AI assistant is currently unavailable. Please try again later.')
             return
 
-        view = make_notice(
-            'Assistant',
-            truncate(answer, MAX_REPLY_CHARS) or '*(no response)*',
-            accent=Accent.info,
-            thumbnail=self.bot.user.display_avatar.url if self.bot.user else None,
-            footer=f'Asked by {ctx.author.display_name} · powered by Ollama',
-        )
-        await ctx.send(view=view)
+        resp = "-# Assistant~\n" + (answer or "*no response*")
+        resp = truncate(resp, MAX_REPLY_CHARS)
+        await ctx.send(resp)

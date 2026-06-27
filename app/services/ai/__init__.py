@@ -12,7 +12,7 @@ Pure and Discord-free: testable with a fake client (see ``tests/test_ai_service.
 """
 
 from app.services.ai.moderation import MODERATION_CATEGORIES, ModerationAssessor, ModerationVerdict
-from app.services.ai.prompts import ASSISTANT_SYSTEM, json_instruction
+from app.services.ai.prompts import ASSISTANT_SYSTEM, PERCY_IDENTITY, build_assistant_system, json_instruction
 from app.services.ai.router import CommandRouter, RouteCommand, RouteDecision, build_route_system_prompt
 from app.services.ai.schemas import (
     Parsable,
@@ -27,6 +27,7 @@ from app.services.ai.service import AIHealthReport, AIService, ModelTier
 __all__ = (
     'ASSISTANT_SYSTEM',
     'MODERATION_CATEGORIES',
+    'PERCY_IDENTITY',
     'AIHealthReport',
     'AIService',
     'CommandRouter',
@@ -37,6 +38,7 @@ __all__ = (
     'RouteCommand',
     'RouteDecision',
     'SchemaError',
+    'build_assistant_system',
     'build_route_system_prompt',
     'json_instruction',
     'require_bool',
