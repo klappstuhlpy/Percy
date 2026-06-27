@@ -36,7 +36,7 @@ Phase 1  ✅ DONE   GuildConfig.AIFlags + per-channel overrides (V32) + internal
 Phase 2  ✅ DONE   NL command router: process_commands seam → services/ai/router.py, gated on AIFlags.router, confirm-to-run
 Phase 3  ✅ DONE   AI moderation verdict (services/ai/moderation.py) → flag-for-review via send_alert, gated on AIFlags.moderation; never auto-punishes
 Phase 4  ✅ DONE   Music intent: services/ai/music.py (NL → query + filter) + `vibe` command, gated on AIFlags.music
-Phase 5  Polls + giveaways    structured argument extraction
+Phase 5  ✅ DONE   Polls + giveaways: services/ai/events.py (NL → structured fields) + `polls ask` / `giveaway quick`, gated on AIFlags.polls/giveaways
 Phase 6  Tags + reminders     semantic retrieval / NL temporal extraction
 Phase 7  Assistant + polish   ask → Ollama, caching, semantic cache (optional), docs
 ```

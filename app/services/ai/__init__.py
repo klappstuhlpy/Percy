@@ -11,6 +11,7 @@ Public surface:
 Pure and Discord-free: testable with a fake client (see ``tests/test_ai_service.py``).
 """
 
+from app.services.ai.events import EventExtractor, GiveawayRequest, PollRequest
 from app.services.ai.moderation import MODERATION_CATEGORIES, ModerationAssessor, ModerationVerdict
 from app.services.ai.music import MUSIC_FILTERS, MusicIntent, MusicIntentParser
 from app.services.ai.prompts import ASSISTANT_SYSTEM, PERCY_IDENTITY, build_assistant_system, json_instruction
@@ -33,12 +34,15 @@ __all__ = (
     'AIHealthReport',
     'AIService',
     'CommandRouter',
+    'EventExtractor',
+    'GiveawayRequest',
     'ModelTier',
     'ModerationAssessor',
     'ModerationVerdict',
     'MusicIntent',
     'MusicIntentParser',
     'Parsable',
+    'PollRequest',
     'RouteCommand',
     'RouteDecision',
     'SchemaError',
