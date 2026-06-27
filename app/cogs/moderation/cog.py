@@ -211,9 +211,31 @@ class Moderation(Cog):
                 f"> {verdict.reason or 'flagged as potentially harmful'}\n"
                 f"[Jump to message]({message.jump_url}) — review and action manually if warranted."
             )
-            await config.send_alert(alert)
+            if not await self._deliver_mod_alert(config, alert):
+                log.warning(
+                    "AI moderation flagged a message in guild %s but no destination is "
+                    "configured — nothing was sent. Set an alert webhook (with the 'alerts' "
+                    "flag enabled) or an audit-log webhook to receive these flags.",
+                    message.guild.id,
+                )
         except Exception:  # detached task: never let an error escape unlogged
             log.warning("AI moderation check failed for message %s", message.id, exc_info=True)
+
+    async def _deliver_mod_alert(self, config: GuildConfig, content: str) -> bool:
+        """Deliver an AI moderation flag to the best available *private* destination.
+
+        Tries the alert webhook (when the ``alerts`` flag is on), then falls back to the
+        audit-log webhook. Returns whether it was delivered. It never posts to the public
+        system channel — a harmful-content flag must stay in a mod-only channel.
+        """
+        if await config.send_alert(content) is not None:
+            return True
+        webhook = config.audit_log_webhook
+        if webhook is not None:
+            with suppress(discord.HTTPException):
+                await webhook.send(content)
+                return True
+        return False
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:

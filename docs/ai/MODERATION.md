@@ -64,9 +64,13 @@ directives (§4): *AI produces signals/verdicts, not autonomous irreversible act
 - **Min length / cooldown:** `MgmtMixin.AI_MOD_MIN_LENGTH` and `_ai_mod_cooldown` in the cog.
 - **Model tier:** BALANCED. On a constrained CPU box, point all tiers at one model
   (see `docs/ai/PERSONA.md`) so it stays warm and the assessment lands quickly.
-- **Where alerts go:** the guild's configured alert webhook (or system channel) — the same
-  flow used by mention-spam alerts. If a guild hasn't set that up, the alert silently
-  no-ops; enabling AI moderation is only useful alongside a configured alert destination.
+- **Where alerts go** (`_deliver_mod_alert`): the **alert webhook** first (requires the
+  `alerts` flag + an alert webhook, same as mention-spam), then a fallback to the **audit-log
+  webhook** (moderation's own private log). It never posts to the public system channel — a
+  harmful-content flag must stay mod-only. If *neither* destination is configured, the flag is
+  not sent and a **warning is logged** (so it's never silently lost) telling the admin to set
+  up an alert or audit-log webhook. Enabling AI moderation is only useful alongside one of
+  those destinations.
 
 ## Privacy
 
