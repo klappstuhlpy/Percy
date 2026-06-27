@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from asyncpg import Record
-
 from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
@@ -264,7 +262,7 @@ class LevelingRepository(BaseRepository):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> Record | None:
+    ) -> asyncpg.Record | None:
         """Updates a guild's level_config row and returns the full updated record."""
         return await self.update_returning("level_config", ("id",), (guild_id,), values, connection=connection)
 

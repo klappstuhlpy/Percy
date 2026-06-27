@@ -38,7 +38,7 @@ Phase 3  ✅ DONE   AI moderation verdict (services/ai/moderation.py) → flag-f
 Phase 4  ✅ DONE   Music intent: services/ai/music.py (NL → query + filter) + `vibe` command, gated on AIFlags.music
 Phase 5  ✅ DONE   Polls + giveaways: services/ai/events.py (NL → structured fields) + `polls ask` / `giveaway quick`, gated on AIFlags.polls/giveaways
 Phase 6  ✅ DONE   Tags: services/ai/tags.py (semantic question → tag) + `tag find`, gated on AIFlags.tags. Reminders already do NL temporal extraction via UserFriendlyTime (no AI layer added)
-Phase 7  Assistant + polish   ask → Ollama, caching, semantic cache (optional), docs
+Phase 7  ✅ DONE   Assistant on Ollama (reply-threaded history + grounded command catalogue); exact-match caching on parse(); semantic cache deliberately skipped (optional; embeddings dependency not worth it over exact-match); docs (both CLAUDE.md + this file)
 ```
 
 A phase is **done** only when: behaviour works with the flag on, the feature is unchanged
@@ -105,10 +105,16 @@ This unblocks everything else and is the riskiest (it removes Groq).
 
 ## 6. Definition of done (whole rewrite)
 
-- [ ] Every feature in Blueprint §7 has an AI path **and** a verified fallback.
-- [ ] All AI behaviour is per-guild flag-gated, default off, dashboard-configurable.
-- [ ] Groq fully removed; Ollama is the sole inference path.
-- [ ] `pytest` / `ruff` / `pyright` green; new services/clients have tests mirroring the
-      nearest existing test module.
+- [x] Every in-scope feature (router, moderation, music, polls, giveaways, tags, assistant)
+      has an AI path **and** a verified fallback. *(Reminders intentionally excluded —
+      `UserFriendlyTime` already does NL temporal extraction.)*
+- [x] All AI behaviour is per-guild flag-gated, default off, dashboard-configurable
+      (`GuildConfig.AIFlags` + per-channel overrides + the dashboard "AI" tab).
+- [x] Groq fully removed; Ollama is the sole inference path.
+- [x] `pytest` / `ruff` / `pyright` green; new services/clients have tests mirroring the
+      nearest existing test module (`tests/test_ai_*.py`).
 - [ ] VPS runbook (Blueprint §6) applied: Ollama pinned, swap configured, health probe live.
-- [ ] Blueprint and both `CLAUDE.md` files updated to describe the shipped AI layer.
+      *(Ops task — left for the deploy step.)*
+- [x] Both `CLAUDE.md` files updated to describe the shipped AI layer; phase-by-phase
+      record kept in §1 above. *(Blueprint is the original design; this file is the
+      shipped record.)*
