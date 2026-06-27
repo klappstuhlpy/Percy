@@ -969,19 +969,29 @@ class Moderation(Cog):
         If not given then it defaults to 'all'.
         """
         if protection == "all":
-            updates = "flags = 0, mention_count = 0, broadcast_channel = NULL, audit_log_channel = NULL"
+            updates = (
+                "flags = 0, mention_count = 0, "
+                "alert_channel_id = NULL, alert_webhook_url = NULL, "
+                "audit_log_channel_id = NULL, audit_log_webhook_url = NULL, audit_log_flags = NULL"
+            )
             message = "Moderation has been disabled."
         elif protection == "raid":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.raid.flag}"
             message = "Raid protection has been disabled."
         elif protection == "alerts":
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.alerts.flag}, alert_channel = NULL"
+            updates = (
+                f"flags = guild_config.flags & ~{AutoModFlags.alerts.flag}, "
+                "alert_channel_id = NULL, alert_webhook_url = NULL"
+            )
             message = "Alert messages have been disabled."
         elif protection == "mentions":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.mentions.flag}, mention_count = NULL"
             message = "Mention spam protection has been disabled"
         elif protection == "auditlog":
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, audit_log_channel = NULL, audit_log_flags = NULL"
+            updates = (
+                f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, "
+                "audit_log_channel_id = NULL, audit_log_webhook_url = NULL, audit_log_flags = NULL"
+            )
             message = "Audit logging has been disabled."
         elif protection == "sentinel":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.sentinel.flag}"
@@ -994,11 +1004,13 @@ class Moderation(Cog):
         records = await self.bot.db.moderation.disable_protection(guild_id, updates)
         self._spam_check.pop(guild_id, None)
 
-        hooks = (
-            [[records.get("audit_log_webhook_url", None), "Audit Log"], [records.get("alert_webhook_url", None), "Alerts"]]
-            if protection in ("auditlog", "all")
-            else []
-        )
+        # Delete the freed Discord webhooks (urls captured pre-update by the repository).
+        hooks: list[list[str | None]] = []
+        if records is not None:
+            if protection in ("auditlog", "all"):
+                hooks.append([records.get("audit_log_webhook_url"), "Audit Log"])
+            if protection in ("alerts", "all"):
+                hooks.append([records.get("alert_webhook_url"), "Alerts"])
 
         warnings = []
 

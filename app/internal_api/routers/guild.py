@@ -1,6 +1,7 @@
 """Guild configuration, roles, channels, and sentinel endpoints."""
 from __future__ import annotations
 
+import contextlib
 import re
 
 import discord
@@ -109,6 +110,41 @@ _AI_FLAG_MAP = {
 }
 
 
+async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int | None, name: str) -> str | None:
+    """(Re)create the webhook backing a logging/alert channel set from the dashboard.
+
+    ``send_alert`` and audit logging need a *webhook*, not just a channel id — but the
+    dashboard can only send a channel id. Percy has ``manage_webhooks``, so we create the
+    webhook here (mirroring the in-bot setup command), deleting any previous one first.
+    Returns the new webhook url, or ``None`` when the channel is being cleared.
+    """
+    if old_url:
+        with contextlib.suppress(discord.HTTPException):
+            await discord.Webhook.from_url(old_url, session=bot.session).delete()
+
+    if channel_id is None:
+        return None
+
+    channel = guild.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"channel {channel_id} is not a text channel")
+
+    avatar = await bot.user.avatar.read() if bot.user and bot.user.avatar else None
+    try:
+        webhook = await channel.create_webhook(name=name, avatar=avatar)
+    except discord.Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"missing permission to create a webhook in #{channel.name}",
+        ) from None
+    except discord.HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="failed to create the webhook (the channel may be at its 10-webhook limit)",
+        ) from None
+    return webhook.url
+
+
 def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
     """Extract valid config updates from a flat dict (shared by PATCH and batch)."""
     updates: dict[str, object] = {}
@@ -188,7 +224,9 @@ async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
 
 @router.patch("")
 async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfigBody) -> dict:
-    data = body.model_dump(exclude_none=True)
+    # exclude_unset (not exclude_none): a client-sent ``null`` is a deliberate "clear", which
+    # we must honour (e.g. clearing an alert channel) — exclude_none would silently drop it.
+    data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
@@ -197,6 +235,22 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
+
+    # Alert / audit-log channels only work with a backing webhook (send_alert / audit logging
+    # use the webhook, not the channel id). The dashboard sends just a channel id, so create
+    # or delete the webhook here. Skip if the channel is unchanged and already has a webhook.
+    for channel_field, url_field, hook_name in (
+        ("alert_channel_id", "alert_webhook_url", "Moderation Alerts"),
+        ("audit_log_channel_id", "audit_log_webhook_url", "Audit Log"),
+    ):
+        if channel_field not in updates:
+            continue
+        new_channel_id = updates[channel_field]
+        if new_channel_id == getattr(guild_config, channel_field, None) and getattr(guild_config, url_field, None):
+            continue
+        updates[url_field] = await _rotate_log_webhook(
+            bot, guild, getattr(guild_config, url_field, None), new_channel_id, hook_name
+        )
 
     await guild_config.update(**updates)
     return {"ok": True}
