@@ -38,7 +38,7 @@ from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
-from app.services import AIService, ModelTier
+from app.services import AIService, CommandRouter, ModelTier, RouteCommand
 from app.utils.metrics import MetricsCollector
 from app.utils import (
     GUILD_FEATURES,
@@ -105,6 +105,7 @@ class Bot(commands.Bot):
     timers: TimerManager
     render: RenderingService
     ai: AIService
+    ai_router: CommandRouter
     spam_control: SpamControl
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -174,6 +175,10 @@ class Bot(commands.Bot):
         self._setup_finished: asyncio.Event = asyncio.Event()
         #: SSH tunnel to the remote Ollama, opened only in beta mode (see _open_ollama_tunnel).
         self._ollama_tunnel: SSHTunnelForwarder | None = None
+        #: Throttles AI command-routing so a stream of prefix-misses can't hammer the model.
+        self._ai_route_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
+            1, 8.0, commands.BucketType.user
+        )
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
@@ -262,6 +267,7 @@ class Bot(commands.Bot):
             max_concurrency=ollama_config.max_concurrency,
             enabled=ollama_config.enabled,
         )
+        self.ai_router = CommandRouter(self.ai)
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 
@@ -452,10 +458,12 @@ class Bot(commands.Bot):
 
         if ctx.command is None:
             # No command matched. discord.py only raises CommandNotFound from invoke(),
-            # which we skip here — so handle the "did you mean?" suggestion directly. Only
-            # act when the user actually used the prefix (ctx.invoked_with is set).
+            # which we skip here. When the user used the prefix (ctx.invoked_with is set),
+            # first try the AI natural-language router (if enabled for the guild); on a miss
+            # fall back to the fuzzy "did you mean?" typo suggestion.
             if ctx.invoked_with:
-                await self._maybe_suggest_command(ctx)
+                if not await self._maybe_route_with_ai(ctx):
+                    await self._maybe_suggest_command(ctx)
             return
 
         if await self.spam_control.is_spam(ctx, message):
@@ -558,6 +566,57 @@ class Bot(commands.Bot):
     #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
     #: matches while an unrelated word (``baldheu``) stays silent, as before.
     SUGGESTION_CUTOFF: Final[int] = 75
+
+    def _build_command_catalogue(self) -> list[RouteCommand]:
+        """Compact catalogue of visible top-level commands for the AI router prompt."""
+        catalogue: list[RouteCommand] = []
+        for cmd in self.commands:
+            if cmd.hidden:
+                continue
+            description = (cmd.short_doc or cmd.description or '').strip()
+            catalogue.append(RouteCommand(name=cmd.qualified_name, description=description))
+        return catalogue
+
+    async def _maybe_route_with_ai(self, ctx: Context) -> bool:
+        """Try to route a prefix-miss to a command via AI. Returns whether it handled it.
+
+        Gated on the guild's ``AIFlags.router`` toggle and a per-user cooldown. The model
+        only *proposes* a command; the user must click "Run" (the command then runs through
+        its normal converters/checks/permissions), so the AI never auto-executes anything.
+        """
+        if ctx.guild is None or not self.ai.available:
+            return False
+
+        ai_config = await self.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled('router', ctx.channel.id):
+            return False
+
+        # Throttle per user so a burst of prefix-misses can't hammer the model.
+        if self._ai_route_cooldown.update_rate_limit(ctx.message):
+            return False
+
+        prefix = ctx.prefix or ''
+        text = ctx.message.content[len(prefix):].strip()
+        if len(text) < 4:
+            return False
+
+        decision = await self.ai_router.route(text, self._build_command_catalogue())
+        if decision is None or decision.command is None:
+            return False
+
+        command = self.get_command(decision.command)
+        if command is None:
+            return False
+
+        suggestion = command.qualified_name
+        new_content = f'{prefix}{suggestion}' + (f' {decision.args}' if decision.args else '')
+        view = CommandSuggestionView(
+            ctx, suggestion, new_content,
+            prompt=f"It looks like you want `{ctx.clean_prefix}{suggestion}`. Run it?",
+        )
+        with suppress(discord.HTTPException):
+            view.message = await ctx.send(view=view, reference=ctx.message, delete_after=30)
+        return True
 
     async def _maybe_suggest_command(self, ctx: Context) -> None:
         """Reply with a single close command suggestion for a mistyped command.

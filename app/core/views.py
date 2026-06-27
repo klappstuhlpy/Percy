@@ -237,7 +237,7 @@ class TrashView(View):
 class CommandSuggestionView(LayoutView):
     """CV2 card offering a one-click "run the command you probably meant" after a typo."""
 
-    def __init__(self, ctx: Context, suggestion: str, new_content: str) -> None:
+    def __init__(self, ctx: Context, suggestion: str, new_content: str, *, prompt: str | None = None) -> None:
         super().__init__(timeout=30.0, members=ctx.author, delete_on_timeout=True)
         self.ctx = ctx
         self._new_content = new_content
@@ -247,10 +247,11 @@ class CommandSuggestionView(LayoutView):
         )
         button.callback = self._run  # type: ignore[assignment]
 
+        # Default wording suits a typo; the AI router passes its own intent-based prompt.
+        text = prompt or f"I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?"
+
         container = discord.ui.Container(accent_colour=helpers.Colour.warning_accent())
-        container.add_item(discord.ui.TextDisplay(
-            f"*I don't know `{ctx.invoked_with}`. Did you mean `{ctx.clean_prefix}{suggestion}`?*"
-        ))
+        container.add_item(discord.ui.TextDisplay(f"*{text}*"))
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.ActionRow(button))
         self.add_item(container)

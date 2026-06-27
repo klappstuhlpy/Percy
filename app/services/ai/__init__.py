@@ -12,6 +12,7 @@ Pure and Discord-free: testable with a fake client (see ``tests/test_ai_service.
 """
 
 from app.services.ai.prompts import ASSISTANT_SYSTEM, json_instruction
+from app.services.ai.router import CommandRouter, RouteCommand, RouteDecision, build_route_system_prompt
 from app.services.ai.schemas import (
     Parsable,
     SchemaError,
@@ -26,9 +27,13 @@ __all__ = (
     'ASSISTANT_SYSTEM',
     'AIHealthReport',
     'AIService',
+    'CommandRouter',
     'ModelTier',
     'Parsable',
+    'RouteCommand',
+    'RouteDecision',
     'SchemaError',
+    'build_route_system_prompt',
     'json_instruction',
     'require_bool',
     'require_float',
