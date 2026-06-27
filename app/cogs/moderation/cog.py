@@ -20,6 +20,7 @@ from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
 from app.database.base import Sentinel, GuildConfig
 from app.services import ModerationAssessor, build_purge_predicate
+from .ai_alert import AIModerationAlertView, build_ai_moderation_embed
 from app.utils import (
     checks,
     fuzzy,
@@ -29,6 +30,7 @@ from app.utils import (
     pluralize,
     resolve_entity_id,
     timetools,
+    truncate,
 )
 from app.utils.lock import lock
 from config import Emojis
@@ -204,38 +206,53 @@ class Moderation(Cog):
             if verdict is None:
                 return
 
-            alert = (
-                f"\N{SHIELD} **AI moderation flag** — {message.author.mention} in "
-                f"{message.channel.mention} · category `{verdict.category}` · "
-                f"confidence {verdict.confidence:.0%}\n"
-                f"> {verdict.reason or 'flagged as potentially harmful'}\n"
-                f"[Jump to message]({message.jump_url}) — review and action manually if warranted."
-            )
-            if not await self._deliver_mod_alert(config, alert):
+            channel = self._ai_alert_channel(config, message.guild)
+            if channel is None:
                 log.warning(
-                    "AI moderation flagged a message in guild %s but no destination is "
-                    "configured — nothing was sent. Set an alert webhook (with the 'alerts' "
-                    "flag enabled) or an audit-log webhook to receive these flags.",
+                    "AI moderation flagged a message in guild %s but no usable alert / audit-log "
+                    "/ mod-log channel is configured (or the bot can't post there) — nothing was "
+                    "sent. Configure one of those channels to receive AI moderation flags.",
                     message.guild.id,
                 )
+                return
+
+            reason = truncate(f"{verdict.category}: {verdict.reason}" if verdict.reason else verdict.category, 400)
+            embed = build_ai_moderation_embed(message, verdict)
+            view = AIModerationAlertView(
+                self.bot,
+                guild_id=message.guild.id,
+                channel_id=message.channel.id,
+                message_id=message.id,
+                target_id=message.author.id,
+                reason=reason,
+            )
+            with suppress(discord.HTTPException):
+                view.message = await channel.send(embed=embed, view=view)
         except Exception:  # detached task: never let an error escape unlogged
             log.warning("AI moderation check failed for message %s", message.id, exc_info=True)
 
-    async def _deliver_mod_alert(self, config: GuildConfig, content: str) -> bool:
-        """Deliver an AI moderation flag to the best available *private* destination.
+    def _ai_alert_channel(self, config: GuildConfig, guild: discord.Guild) -> discord.TextChannel | None:
+        """First mod destination the bot can post an interactive embed in, or ``None``.
 
-        Tries the alert webhook (when the ``alerts`` flag is on), then falls back to the
-        audit-log webhook. Returns whether it was delivered. It never posts to the public
-        system channel — a harmful-content flag must stay in a mod-only channel.
+        AI flags carry action buttons, so they must be a normal bot message (not a webhook
+        post). Prefers the alert channel, then the audit-log channel, then the mod-log
+        channel — and only one the bot can send embeds in. Never a public/system channel.
         """
-        if await config.send_alert(content) is not None:
-            return True
-        webhook = config.audit_log_webhook
-        if webhook is not None:
-            with suppress(discord.HTTPException):
-                await webhook.send(content)
-                return True
-        return False
+        me = guild.me
+        candidates = (
+            config.alert_channel_id,
+            getattr(config, "audit_log_channel_id", None),
+            getattr(config, "mod_log_channel_id", None),
+        )
+        for channel_id in candidates:
+            if not channel_id:
+                continue
+            channel = guild.get_channel(channel_id)
+            if isinstance(channel, discord.TextChannel):
+                perms = channel.permissions_for(me)
+                if perms.send_messages and perms.embed_links:
+                    return channel
+        return None
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:

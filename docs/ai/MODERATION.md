@@ -64,13 +64,29 @@ directives (§4): *AI produces signals/verdicts, not autonomous irreversible act
 - **Min length / cooldown:** `MgmtMixin.AI_MOD_MIN_LENGTH` and `_ai_mod_cooldown` in the cog.
 - **Model tier:** BALANCED. On a constrained CPU box, point all tiers at one model
   (see `docs/ai/PERSONA.md`) so it stays warm and the assessment lands quickly.
-- **Where alerts go** (`_deliver_mod_alert`): the **alert webhook** first (requires the
-  `alerts` flag + an alert webhook, same as mention-spam), then a fallback to the **audit-log
-  webhook** (moderation's own private log). It never posts to the public system channel — a
-  harmful-content flag must stay mod-only. If *neither* destination is configured, the flag is
-  not sent and a **warning is logged** (so it's never silently lost) telling the admin to set
-  up an alert or audit-log webhook. Enabling AI moderation is only useful alongside one of
-  those destinations.
+- **Where alerts go** (`_ai_alert_channel`): a normal **bot message** (so it can carry action
+  buttons) in the first usable mod channel — the **alert channel**, then the **audit-log
+  channel**, then the **mod-log channel** — that the bot can post embeds in. It never posts to
+  the public system channel. If none is configured/usable, the flag is not sent and a
+  **warning is logged** (so it's never silently lost). Enabling AI moderation is only useful
+  alongside one of those channels.
+
+## The alert message (`app/cogs/moderation/ai_alert.py`)
+
+The flag is a rich embed (user, channel, category, confidence, reason, message excerpt, jump
+link) with four moderator action buttons — **Delete · Warn · Kick · Ban** (`AIModerationAlertView`):
+
+- Any moderator may act; each button **re-checks the clicker's own permission** at click time
+  (Delete → Manage Messages, Warn/Kick → Kick Members, Ban → Ban Members) plus the self /
+  owner / role-hierarchy guards (matching the equivalent commands). Unauthorized clicks get an
+  ephemeral refusal and nothing happens.
+- The action runs as that moderator and is recorded as a **mod case** via the standard
+  `mod_action` dispatch (same path the `kick`/`ban`/`warn` commands use), so it shows up in the
+  case log identically. Ban works even if the user already left; Warn/Kick require them present.
+- Delete only removes the message (buttons stay); Warn/Kick/Ban resolve the flag — the embed
+  turns green with a "Resolved by @mod" note and the buttons disable.
+
+The buttons are a 3-day timed view (not persistent across a bot restart).
 
 ## Privacy
 
