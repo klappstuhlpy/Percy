@@ -13,11 +13,21 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 
 [Add Percy to your server](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) ·
 [Website](https://percy.klappstuhl.me/dashboard/) ·
+[Documentation](https://percy.klappstuhl.me/docs/) ·
 [Support server](https://discord.gg/3jSYQ9VNbA)
 
 </div>
 
 > **The recommended way to use Percy is to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
+
+## Documentation
+
+Percy's documentation lives in a dedicated [Mintlify](https://mintlify.com) site:
+
+- **Read it:** https://percy.klappstuhl.me/docs/
+- **Edit it:** [`klappstuhlpy/percy-docs`](https://github.com/klappstuhlpy/percy-docs)
+
+It covers every feature, the optional AI layer, and an interactive **API Reference** for the internal dashboard API (generated from the FastAPI OpenAPI schema). When you ship a user-facing change — a new command, flag, or API endpoint — update `percy-docs` to match.
 
 ---
 
@@ -137,7 +147,7 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 | **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Docker](#docker)).                                                                       |
 | **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                                                                     |
 | **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via a self-hosted League of Comic Geeks API wrapper).                                                                                                                          |
-| **AI assistant**         | `ask` the bot a question, answered by a fast open model via [Groq](https://groq.com/); supports follow-ups by replying to its answers. Disabled unless `GROQ_API_KEY` is set.                                                 |
+| **AI assistant**         | `ask` the bot a question, answered by a self-hosted open model via [Ollama](https://ollama.com/); supports follow-ups by replying to its answers. Degrades gracefully when the AI host is unreachable (set `OLLAMA_ENABLED=false` to hard-disable). |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                                                                       |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                                                                 |
 | **Bot-list stats**       | Auto-posts the server count to discord.bots.gg, top.gg and discordbotlist.com when those tokens are configured.                                                                                                               |

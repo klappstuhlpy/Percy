@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
 
@@ -172,17 +172,26 @@ class ModerationRepository(BaseRepository):
         await self.execute("UPDATE guild_config SET audit_log_flags = $2 WHERE id = $1;", guild_id, flags)
         self.invalidate_cache("guild_config_changed", guild_id)
 
-    async def disable_protection(self, guild_id: int, updates: str) -> asyncpg.Record:
-        """Applies a moderation-disable ``SET`` fragment and returns the freed webhook urls.
+    async def disable_protection(self, guild_id: int, updates: str) -> asyncpg.Record | None:
+        """Applies a moderation-disable ``SET`` fragment and returns the *previous* webhook urls.
 
-        ``updates`` is an internally-built ``SET`` clause (no user input); the query
-        returns ``audit_log_webhook_url`` and ``alert_webhook_url`` so the caller can
-        clean up the corresponding webhooks.
+        ``updates`` is an internally-built ``SET`` clause (no user input). The query returns
+        ``audit_log_webhook_url`` and ``alert_webhook_url`` *as they were before* the update
+        (captured in a CTE), so the caller can still delete those Discord webhooks even when
+        the fragment nulls the url columns. Returns ``None`` if the guild has no config row.
         """
-        query = f"UPDATE guild_config SET {updates} WHERE id=$1 RETURNING audit_log_webhook_url, alert_webhook_url;"
+        query = f"""
+            WITH old AS (
+                SELECT audit_log_webhook_url, alert_webhook_url FROM guild_config WHERE id = $1
+            )
+            UPDATE guild_config SET {updates} WHERE id = $1
+            RETURNING
+                (SELECT audit_log_webhook_url FROM old) AS audit_log_webhook_url,
+                (SELECT alert_webhook_url FROM old) AS alert_webhook_url;
+        """
         record = await self.fetchrow(query, guild_id)
         self.invalidate_cache("guild_config_changed", guild_id)
-        return cast('asyncpg.Record', record)
+        return record
 
     # -- Sentinel & raid/mention protection (guild_config) --------------
 

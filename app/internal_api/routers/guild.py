@@ -1,6 +1,7 @@
 """Guild configuration, roles, channels, and sentinel endpoints."""
 from __future__ import annotations
 
+import contextlib
 import re
 
 import discord
@@ -33,6 +34,20 @@ class PatchGuildConfigBody(BaseModel):
     voice_log_channel_id: int | None = None
     flags: dict[str, bool] | None = None
     prefixes: list[str] | None = None
+
+    model_config = {"extra": "ignore"}
+
+
+class PatchAIFlagsBody(BaseModel):
+    flags: dict[str, bool]
+
+    model_config = {"extra": "ignore"}
+
+
+class PutAIOverrideBody(BaseModel):
+    # Which AI features this channel overrides, and their on/off value for those features.
+    controlled: dict[str, bool] = {}
+    enabled: dict[str, bool] = {}
 
     model_config = {"extra": "ignore"}
 
@@ -88,6 +103,47 @@ _ALLOWED_CONFIG_FIELDS = {
 
 _FLAG_MAP = {"audit_log": 1, "raid": 2, "alerts": 4, "sentinel": 8, "mentions": 16}
 
+#: Bit values for the per-guild AI feature flags — must match GuildConfig.AIFlags.
+_AI_FLAG_MAP = {
+    "assistant": 1, "router": 2, "moderation": 4, "sentinel": 8, "music": 16,
+    "polls": 32, "giveaways": 64, "tags": 128, "reminders": 256,
+}
+
+
+async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int | None, name: str) -> str | None:
+    """(Re)create the webhook backing a logging/alert channel set from the dashboard.
+
+    ``send_alert`` and audit logging need a *webhook*, not just a channel id — but the
+    dashboard can only send a channel id. Percy has ``manage_webhooks``, so we create the
+    webhook here (mirroring the in-bot setup command), deleting any previous one first.
+    Returns the new webhook url, or ``None`` when the channel is being cleared.
+    """
+    if old_url:
+        with contextlib.suppress(discord.HTTPException):
+            await discord.Webhook.from_url(old_url, session=bot.session).delete()
+
+    if channel_id is None:
+        return None
+
+    channel = guild.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"channel {channel_id} is not a text channel")
+
+    avatar = await bot.user.avatar.read() if bot.user and bot.user.avatar else None
+    try:
+        webhook = await channel.create_webhook(name=name, avatar=avatar)
+    except discord.Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"missing permission to create a webhook in #{channel.name}",
+        ) from None
+    except discord.HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="failed to create the webhook (the channel may be at its 10-webhook limit)",
+        ) from None
+    return webhook.url
+
 
 def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
     """Extract valid config updates from a flat dict (shared by PATCH and batch)."""
@@ -114,10 +170,28 @@ def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
+def _serialize_ai_config(guild, ai_config) -> dict:
+    """Shape the resolved AI config (server flags + per-channel overrides) for the dashboard."""
+    return {
+        "flags": {name: bool(getattr(ai_config.flags, name)) for name in _AI_FLAG_MAP},
+        "overrides": [
+            {
+                "channel": resolve_channel(guild, channel_id),
+                "channel_id": str(channel_id),
+                "controlled": {name: bool(flags_mask & bit) for name, bit in _AI_FLAG_MAP.items()},
+                "enabled": {name: bool(enabled_mask & bit) for name, bit in _AI_FLAG_MAP.items()},
+            }
+            for channel_id, (flags_mask, enabled_mask) in ai_config.overrides.items()
+        ],
+    }
+
+
 @router.get("")
 async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
     guild_config = await bot.db.get_guild_config(guild.id)
+    ai_config = await bot.db.get_guild_ai_config(guild.id)
     return {
+        "ai": _serialize_ai_config(guild, ai_config),
         "id": guild_config.id,
         "name": guild.name,
         "icon_url": guild.icon.url if guild.icon else None,
@@ -150,7 +224,9 @@ async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
 
 @router.patch("")
 async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfigBody) -> dict:
-    data = body.model_dump(exclude_none=True)
+    # exclude_unset (not exclude_none): a client-sent ``null`` is a deliberate "clear", which
+    # we must honour (e.g. clearing an alert channel) — exclude_none would silently drop it.
+    data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
@@ -160,7 +236,77 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
+    # Alert / audit-log channels only work with a backing webhook (send_alert / audit logging
+    # use the webhook, not the channel id). The dashboard sends just a channel id, so create
+    # or delete the webhook here. Skip if the channel is unchanged and already has a webhook.
+    for channel_field, url_field, hook_name in (
+        ("alert_channel_id", "alert_webhook_url", "Moderation Alerts"),
+        ("audit_log_channel_id", "audit_log_webhook_url", "Audit Log"),
+    ):
+        if channel_field not in updates:
+            continue
+        new_channel_id = updates[channel_field]
+        if new_channel_id == getattr(guild_config, channel_field, None) and getattr(guild_config, url_field, None):
+            continue
+        updates[url_field] = await _rotate_log_webhook(
+            bot, guild, getattr(guild_config, url_field, None), new_channel_id, hook_name
+        )
+
     await guild_config.update(**updates)
+    return {"ok": True}
+
+
+@router.get("/ai")
+async def get_ai_config(guild: GuildDep, bot: BotDep) -> dict:
+    ai_config = await bot.db.get_guild_ai_config(guild.id)
+    return _serialize_ai_config(guild, ai_config)
+
+
+@router.patch("/ai")
+async def patch_ai_flags(guild: GuildDep, bot: BotDep, body: PatchAIFlagsBody) -> dict:
+    """Toggle the server-wide AI feature flags (only known flag names are honoured)."""
+    guild_config = await bot.db.get_guild_config(guild.id)
+    new_value = guild_config.ai_flags.value
+    changed = False
+    for name, enabled in body.flags.items():
+        bit = _AI_FLAG_MAP.get(name)
+        if bit is None:
+            continue
+        changed = True
+        if enabled:
+            new_value |= bit
+        else:
+            new_value &= ~bit
+
+    if not changed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid AI flags to update")
+
+    await bot.db.guilds.set_ai_flags(guild.id, new_value)
+    return {"ok": True}
+
+
+@router.put("/ai/overrides/{channel_id}")
+async def put_ai_override(guild: GuildDep, bot: BotDep, channel_id: int, body: PutAIOverrideBody) -> dict:
+    """Set a per-channel AI override. An override that controls nothing is removed."""
+    flags_mask = 0
+    enabled_mask = 0
+    for name, bit in _AI_FLAG_MAP.items():
+        if body.controlled.get(name):
+            flags_mask |= bit
+            if body.enabled.get(name):
+                enabled_mask |= bit
+
+    if flags_mask == 0:
+        await bot.db.guilds.delete_ai_override(guild.id, channel_id)
+        return {"ok": True, "removed": True}
+
+    await bot.db.guilds.upsert_ai_override(guild.id, channel_id, flags_mask, enabled_mask)
+    return {"ok": True}
+
+
+@router.delete("/ai/overrides/{channel_id}")
+async def delete_ai_override(guild: GuildDep, bot: BotDep, channel_id: int) -> dict:
+    await bot.db.guilds.delete_ai_override(guild.id, channel_id)
     return {"ok": True}
 
 

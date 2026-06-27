@@ -23,7 +23,7 @@ import config
 from app.clients import LRCLibClient
 from app.core import Bot, Cog, Context, Flags, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
-from app.services import LyricsResult, SyncedLyrics, clean_track_title, parse_lrc
+from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc
 from app.utils import (
     ProgressBar,
     WrapList,
@@ -116,6 +116,8 @@ class Music(Cog):
         super().__init__(bot)
         # Free, key-less synced-lyrics provider (Genius scrape stays a plain fallback).
         self.lyrics_client: LRCLibClient = LRCLibClient(self.bot.session)
+        # Phase 4: natural-language "vibe" → search query + filter (gated on AIFlags.music).
+        self._music_intent: MusicIntentParser = MusicIntentParser(self.bot.ai)
         # Guards the one-shot session restore (node-ready can fire multiple times).
         self._restored: bool = False
         # Guards the rebuild that runs after Lavalink comes back without resuming.
@@ -661,6 +663,59 @@ class Music(Cog):
         """Adds a track/playlist to the queue by choosing from a variety of examples."""
         setattr(flags, "__with_search__", True)
         await ctx.invoke(self.play, query=query, flags=flags)  # type: ignore
+
+    @command(description="Play music from a natural-language vibe (AI).", guild_only=True, hybrid=True,
+             bot_permissions=["connect", "speak"])
+    @describe(description="Describe the music you want, e.g. 'chill lofi beats for studying'.")
+    @checks.is_author_connected()
+    @checks.is_listen_together()
+    async def vibe(self, ctx: Context, *, description: str, flags: PlayFlags) -> None:
+        """Describe a vibe in plain language and let the AI pick what to play (and a filter).
+
+        The AI turns your description into a concrete search and, when you imply it, an audio
+        filter (bassboost / nightcore / 8d / lowpass). Falls back to `play` if unavailable.
+        """
+        assert ctx.guild is not None
+        if not self.bot.ai.available:
+            await ctx.send_error(f"The AI music assistant is unavailable — use `{ctx.clean_prefix}play` instead.")
+            return
+
+        ai_config = await self.bot.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled("music", ctx.channel.id):
+            await ctx.send_error(
+                f"AI music isn't enabled in this channel. A moderator can enable it on the "
+                f"dashboard, or use `{ctx.clean_prefix}play <query>`."
+            )
+            return
+
+        await ctx.defer()
+        intent = await self._music_intent.interpret(description)
+        if intent is None:
+            await ctx.send_error(
+                f"I couldn't turn that into a search. Try `{ctx.clean_prefix}play <query>` instead."
+            )
+            return
+
+        suffix = f" with the `{intent.filter}` filter" if intent.filter != "none" else ""
+        await ctx.send_info(f"\N{MUSICAL NOTE} Searching for **{intent.query}**{suffix}…", delete_after=8)
+
+        await ctx.invoke(self.play, query=intent.query, flags=flags)  # type: ignore
+        if intent.filter != "none":
+            # Best-effort: never let a filter hiccup undo a successful play.
+            with suppress(Exception):
+                await self._apply_ai_filter(ctx, intent.filter)
+
+    async def _apply_ai_filter(self, ctx: Context, name: str) -> None:
+        """Apply an AI-chosen filter by invoking the matching ``filter`` subcommand."""
+        toggles = {
+            "bassboost": self.filter_bassboost,
+            "nightcore": self.filter_nightcore,
+            "8d": self.filter_8d,
+        }
+        if name in toggles:
+            await ctx.invoke(toggles[name])  # type: ignore[arg-type]
+        elif name == "lowpass":
+            await ctx.invoke(self.filter_lowpass, smoothing=20.0)  # type: ignore[arg-type]
 
     @group(
         "listen-together",

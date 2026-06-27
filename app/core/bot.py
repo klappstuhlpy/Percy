@@ -20,6 +20,7 @@ from discord.http import Route
 from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
+from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand
 from app.core.context import Context
@@ -37,6 +38,7 @@ from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
+from app.services import AIService, CommandRouter, ModelTier, RouteCommand
 from app.utils.metrics import MetricsCollector
 from app.utils import (
     GUILD_FEATURES,
@@ -52,6 +54,7 @@ from app.utils import (
 from app.utils.lock import LockedResourceError
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
+    DatabaseConfig,
     Emojis,
     allowed_mentions,
     beta,
@@ -59,11 +62,11 @@ from config import (
     description,
     get_full_version,
     lavalink_nodes,
+    ollama as ollama_config,
     owners,
     resolved_token,
     stats_webhook,
     test_guild_id,
-    version,
 )
 from config import (
     name as bot_name,
@@ -71,6 +74,8 @@ from config import (
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Generator, Iterable
+
+    from sshtunnel import SSHTunnelForwarder
 
 GuildFeatureT = TypeVar('GuildFeatureT', bound=list[tuple[str, str]] | Any)
 
@@ -99,6 +104,8 @@ class Bot(commands.Bot):
     context: type[Context]
     timers: TimerManager
     render: RenderingService
+    ai: AIService
+    ai_router: CommandRouter
     spam_control: SpamControl
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -166,6 +173,12 @@ class Bot(commands.Bot):
 
         self.initial_extensions: list[str] = EXTENSIONS
         self._setup_finished: asyncio.Event = asyncio.Event()
+        #: SSH tunnel to the remote Ollama, opened only in beta mode (see _open_ollama_tunnel).
+        self._ollama_tunnel: SSHTunnelForwarder | None = None
+        #: Throttles AI command-routing so a stream of prefix-misses can't hammer the model.
+        self._ai_route_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
+            1, 8.0, commands.BucketType.user
+        )
 
     async def resolve_command_prefix(self, message: discord.Message) -> list[str]:
         """Resolves the command prefix for a message, respecting per-guild configuration."""
@@ -237,6 +250,26 @@ class Bot(commands.Bot):
         self.session = ClientSession()
         self.timers = TimerManager(self)
         self.render = RenderingService()
+        # Beta/Windows testing tunnels to the remote Ollama over SSH; Linux uses host directly.
+        ollama_host = await self._open_ollama_tunnel() or ollama_config.host
+        self.ai = AIService(
+            OllamaClient(
+                self.session,
+                host=ollama_host,
+                default_model=ollama_config.balanced_model,
+            ),
+            models={
+                ModelTier.FAST: ollama_config.fast_model,
+                ModelTier.BALANCED: ollama_config.balanced_model,
+                ModelTier.SMART: ollama_config.smart_model,
+            },
+            default_timeout=ollama_config.timeout,
+            max_concurrency=ollama_config.max_concurrency,
+            enabled=ollama_config.enabled,
+        )
+        # Higher confidence floor than the router default: small models are over-confident,
+        # so demand a stronger signal before proposing a command (cuts weak mis-routes).
+        self.ai_router = CommandRouter(self.ai, min_confidence=0.7)
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 
@@ -245,6 +278,66 @@ class Bot(commands.Bot):
         jishaku.Flags.HIDE = True
         jishaku.Flags.NO_UNDERSCORE = True
         jishaku.Flags.NO_DM_TRACEBACK = True
+
+    async def _open_ollama_tunnel(self) -> str | None:
+        """Open an SSH tunnel to the remote Ollama in beta mode and return the local URL.
+
+        Mirrors the database SSH tunnel: only active off-Linux (``beta``) with the shared
+        ``SSH_TUNNEL_*`` credentials set. Forwards a local port to where Ollama listens on
+        the SSH host (``OLLAMA_TUNNEL_REMOTE_*``, default ``127.0.0.1:11434``) so Windows
+        testing reaches it directly over SSH instead of through the public Cloudflare host.
+        Returns the ``http://127.0.0.1:<local_port>`` URL to use, or ``None`` to connect to
+        the configured ``host`` directly (Linux/production).
+        """
+        if not beta or not DatabaseConfig.ssh_host:
+            return None
+
+        from sshtunnel import SSHTunnelForwarder
+
+        tunnel = SSHTunnelForwarder(
+            (DatabaseConfig.ssh_host, DatabaseConfig.ssh_port),
+            ssh_username=DatabaseConfig.ssh_user,
+            ssh_pkey=DatabaseConfig.ssh_key_path,
+            ssh_private_key_password=DatabaseConfig.ssh_key_passphrase,
+            remote_bind_address=(ollama_config.tunnel_remote_host, ollama_config.tunnel_remote_port),
+        )
+        await asyncio.to_thread(tunnel.start)
+        self._ollama_tunnel = tunnel
+
+        local_url = f'http://127.0.0.1:{tunnel.local_bind_port}'
+        self.log.info(
+            'Ollama SSH tunnel open: %s -> %s:%d', local_url,
+            ollama_config.tunnel_remote_host, ollama_config.tunnel_remote_port,
+        )
+        return local_url
+
+    async def _check_ai_health(self) -> None:
+        """Probe the AI engine on startup and log whether it is reachable.
+
+        Best-effort and non-fatal: AI features degrade gracefully when the engine is
+        unavailable, so an unreachable engine is a warning, not a startup failure.
+        """
+        if not self.ai.enabled:
+            self.log.info('AI engine disabled (OLLAMA_ENABLED=false); AI features are off.')
+            return
+
+        try:
+            report = await self.ai.health()
+        except Exception as exc:  # defensive — health() already swallows known errors
+            self.log.warning('AI engine health probe errored at %s: %r', ollama_config.host, exc)
+            return
+
+        if report.reachable:
+            models = ', '.join(f'{tier}={tag}' for tier, tag in report.models.items())
+            self.log.info(
+                'AI engine reachable at %s (Ollama %s, %.0fms; models: %s).',
+                ollama_config.host, report.version or 'unknown', report.latency_ms or 0.0, models,
+            )
+        else:
+            self.log.warning(
+                'AI engine UNREACHABLE at %s (%s) — AI features will degrade gracefully until it recovers.',
+                ollama_config.host, report.error or 'no further detail',
+            )
 
     async def _setup_hook_task(self) -> None:
         try:
@@ -274,6 +367,8 @@ class Bot(commands.Bot):
             await self.internal_api.start()
         except Exception as exc:
             self.log.error('Failed to start internal API:', exc_info=exc)
+
+        await self._check_ai_health()
 
         await self._load_extensions()
 
@@ -365,10 +460,13 @@ class Bot(commands.Bot):
 
         if ctx.command is None:
             # No command matched. discord.py only raises CommandNotFound from invoke(),
-            # which we skip here — so handle the "did you mean?" suggestion directly. Only
-            # act when the user actually used the prefix (ctx.invoked_with is set).
-            if ctx.invoked_with:
-                await self._maybe_suggest_command(ctx)
+            # which we skip here. When the user used the prefix (ctx.invoked_with is set),
+            # first try a deterministic typo correction (e.g. "aks" -> "ask"); only if the
+            # word is not a near-miss of a real command do we fall back to AI intent routing
+            # (if enabled). Typos must win over AI guessing, or "b.aks <question>" gets
+            # mis-routed as natural language.
+            if ctx.invoked_with and not await self._maybe_suggest_command(ctx):
+                await self._maybe_route_with_ai(ctx)
             return
 
         if await self.spam_control.is_spam(ctx, message):
@@ -471,17 +569,73 @@ class Bot(commands.Bot):
     #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
     #: matches while an unrelated word (``baldheu``) stays silent, as before.
     SUGGESTION_CUTOFF: Final[int] = 75
+    #: Max edit distance (transposition-aware) for the typo fallback when ``ratio`` misses —
+    #: catches single-edit/transposition typos like ``aks`` -> ``ask`` that score poorly.
+    TYPO_MAX_DISTANCE: Final[int] = 1
 
-    async def _maybe_suggest_command(self, ctx: Context) -> None:
+    def _build_command_catalogue(self) -> list[RouteCommand]:
+        """Compact catalogue of visible top-level commands for the AI router prompt."""
+        catalogue: list[RouteCommand] = []
+        for cmd in self.commands:
+            if cmd.hidden:
+                continue
+            description = (cmd.short_doc or cmd.description or '').strip()
+            catalogue.append(RouteCommand(name=cmd.qualified_name, description=description))
+        return catalogue
+
+    async def _maybe_route_with_ai(self, ctx: Context) -> bool:
+        """Try to route a prefix-miss to a command via AI. Returns whether it handled it.
+
+        Gated on the guild's ``AIFlags.router`` toggle and a per-user cooldown. The model
+        only *proposes* a command; the user must click "Run" (the command then runs through
+        its normal converters/checks/permissions), so the AI never auto-executes anything.
+        """
+        if ctx.guild is None or not self.ai.available:
+            return False
+
+        ai_config = await self.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled('router', ctx.channel.id):
+            return False
+
+        # Throttle per user so a burst of prefix-misses can't hammer the model.
+        if self._ai_route_cooldown.update_rate_limit(ctx.message):
+            return False
+
+        prefix = ctx.prefix or ''
+        text = ctx.message.content[len(prefix):].strip()
+        if len(text) < 4:
+            return False
+
+        decision = await self.ai_router.route(text, self._build_command_catalogue())
+        if decision is None or decision.command is None:
+            return False
+
+        command = self.get_command(decision.command)
+        if command is None:
+            return False
+
+        suggestion = command.qualified_name
+        new_content = f'{prefix}{suggestion}' + (f' {decision.args}' if decision.args else '')
+        view = CommandSuggestionView(
+            ctx, suggestion, new_content,
+            prompt=f"It looks like you want `{ctx.clean_prefix}{suggestion}`. Run it?",
+        )
+        with suppress(discord.HTTPException):
+            view.message = await ctx.send(view=view, reference=ctx.message, delete_after=30)
+        return True
+
+    async def _maybe_suggest_command(self, ctx: Context) -> bool:
         """Reply with a single close command suggestion for a mistyped command.
 
-        Stays silent unless the attempted name is a *very* close fuzzy match for a
-        visible command, so unknown text behaves exactly as before (no reply).
+        Returns whether a suggestion was offered. Stays silent (and returns ``False``, so the
+        AI router gets a chance) unless the attempted name is a close fuzzy match *or* a
+        single-edit/transposition typo of a visible command — so genuine natural language
+        falls through to AI routing instead of being hijacked.
         """
         attempted = (ctx.invoked_with or '').lower()
         # Only handle clean top-level misses; ignore 1-2 char noise to avoid false hits.
         if ctx.command is not None or len(attempted) < 3:
-            return
+            return False
 
         # Map every visible command name/alias to its command, then take the best match.
         choices: dict[str, Command] = {}
@@ -491,11 +645,25 @@ class Bot(commands.Bot):
             for name in (cmd.name, *cmd.aliases):
                 choices.setdefault(name.lower(), cmd)  # type: ignore[arg-type]
 
+        command: Command | None = None
         match = fuzzy.extract_one(attempted, choices, scorer=fuzzy.ratio, score_cutoff=self.SUGGESTION_CUTOFF)
-        if match is None:
-            return
+        if match is not None:
+            _, _, command = match
+        else:
+            # Transposition / single-edit typos ("aks" -> "ask") score poorly on ratio; fall
+            # back to a strict edit-distance match so obvious typos still correct.
+            best = (self.TYPO_MAX_DISTANCE + 1, -1)  # (distance, ratio); lower distance wins
+            for name, cmd in choices.items():
+                distance = fuzzy.osa_distance(attempted, name)
+                if distance > self.TYPO_MAX_DISTANCE:
+                    continue
+                candidate = (distance, -fuzzy.ratio(attempted, name))
+                if candidate < best:
+                    best, command = candidate, cmd
 
-        _, _, command = match
+        if command is None:
+            return False
+
         suggestion = command.qualified_name
         prefix = ctx.prefix or ''
         rest = ctx.message.content[len(prefix) + len(ctx.invoked_with or ''):]
@@ -508,6 +676,7 @@ class Bot(commands.Bot):
                 reference=ctx.message,
                 delete_after=15,
             )
+        return True
 
     async def handle_interaction_error(self, interaction: discord.Interaction, error: Exception) -> None:
         """|coro|
@@ -1007,6 +1176,9 @@ class Bot(commands.Bot):
             await self.session.close()
         if hasattr(self, 'db'):
             await self.db.close()
+        if self._ollama_tunnel is not None:
+            self._ollama_tunnel.stop()
+            self._ollama_tunnel = None
 
         await super().close()
 

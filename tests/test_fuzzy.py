@@ -8,6 +8,31 @@ rather than exact numeric scores.
 from app.utils import fuzzy
 
 
+class TestOsaDistance:
+    def test_identical_is_zero(self) -> None:
+        assert fuzzy.osa_distance('ask', 'ask') == 0
+
+    def test_case_insensitive(self) -> None:
+        assert fuzzy.osa_distance('ASK', 'ask') == 0
+
+    def test_adjacent_transposition_is_one(self) -> None:
+        # The motivating case: "aks" -> "ask" is a single transposition (ratio rates it ~67).
+        assert fuzzy.osa_distance('aks', 'ask') == 1
+
+    def test_single_substitution_insertion_deletion(self) -> None:
+        assert fuzzy.osa_distance('can', 'ban') == 1  # substitution
+        assert fuzzy.osa_distance('bann', 'ban') == 1  # deletion
+        assert fuzzy.osa_distance('bn', 'ban') == 1  # insertion
+
+    def test_empty_strings(self) -> None:
+        assert fuzzy.osa_distance('', 'ask') == 3
+        assert fuzzy.osa_distance('ask', '') == 3
+        assert fuzzy.osa_distance('', '') == 0
+
+    def test_unrelated_words_exceed_one(self) -> None:
+        assert fuzzy.osa_distance('aks', 'userinfo') > 1
+
+
 class TestRatio:
     def test_identical_is_100(self) -> None:
         assert fuzzy.ratio('hello', 'hello') == 100

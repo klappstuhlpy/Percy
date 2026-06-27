@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import random
+import re
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -13,12 +14,11 @@ from discord.utils import MISSING
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, PermissionTemplate, describe, group
 from app.database import BaseRecord
+from app.services import EventExtractor
 from app.utils import checks, fuzzy, get_shortened_string, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
-    import re
-
     from app.core.timer import Timer
 
 
@@ -295,6 +295,8 @@ class Giveaways(Cog):
 
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
+        # Phase 5: natural-language → structured giveaway fields (gated on AIFlags.giveaways).
+        self._event_ai: EventExtractor = EventExtractor(bot.ai)
 
         bot.add_dynamic_items(GiveawayEnterButton, GiveawayRerollButton)
 
@@ -472,6 +474,102 @@ class Giveaways(Cog):
         await message.edit(embed=giveaway.to_embed(), view=view)
 
         await ctx.send_success(f"Giveaway [`{giveaway.id}`] successfully created. {message.jump_url}", ephemeral=True)
+
+    @giveaway.command("quick", description="Create a giveaway from a plain-language description (AI).",
+                      guild_only=True, user_permissions=PermissionTemplate.mod)
+    @checks.requires_timer()
+    @describe(description="Describe the giveaway: the prize, how many winners, and how long it runs.")
+    async def giveaway_quick(self, ctx: Context, *, description: str) -> None:
+        """Create a giveaway by describing it in plain language — the AI fills in the details.
+
+        e.g. "give away a Nitro classic to 2 winners for 1 day". Falls back to
+        `giveaway create` when AI is unavailable.
+        """
+        assert ctx.guild is not None
+        if not self.bot.ai.available:
+            await ctx.send_error(f"The AI assistant is unavailable — use `{ctx.clean_prefix}giveaway create` instead.")
+            return
+        ai_config = await self.bot.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled("giveaways", ctx.channel.id):
+            await ctx.send_error(
+                f"AI giveaways aren't enabled in this channel. A moderator can enable them on the "
+                f"dashboard, or use `{ctx.clean_prefix}giveaway create`."
+            )
+            return
+
+        async with ctx.typing():
+            request = await self._event_ai.giveaway(description)
+
+        if request is None:
+            await ctx.send_error(
+                f"I couldn't turn that into a giveaway. Try `{ctx.clean_prefix}giveaway create` directly."
+            )
+            return
+
+        try:
+            when = await timetools.FutureTime.convert(ctx, request.duration)
+        except commands.BadArgument:
+            await ctx.send_error(f"I couldn't understand the duration `{request.duration}`.")
+            return
+
+        channel = self._resolve_quick_channel(ctx, request.channel, description)
+
+        message = await channel.send(embed=discord.Embed(description="*Preparing Giveaway...*"))
+        giveaway = await self.create_giveaway(
+            message.channel.id,
+            message.id,
+            ctx.guild.id,
+            ctx.author.id,
+            description=request.description,
+            prize=request.prize,
+            winner_count=request.winners,
+            created=discord.utils.utcnow().isoformat(),
+            expires=when.dt.isoformat(),
+        )
+
+        zone = await self.bot.db.get_user_timezone(ctx.author.id)
+        await self.bot.timers.create(
+            when.dt, "giveaway", giveaway_id=giveaway.id, created=discord.utils.utcnow(), timezone=zone or "UTC"
+        )
+
+        view = discord.ui.View(timeout=None)
+        view.add_item(GiveawayEnterButton(giveaway))
+        await message.edit(embed=giveaway.to_embed(), view=view)
+
+        winners_label = f"{request.winners} winner{'s' if request.winners != 1 else ''}"
+        await ctx.send_success(
+            f"Giveaway [`{giveaway.id}`] for **{request.prize}** ({winners_label}) created in "
+            f"{channel.mention} — ends {discord.utils.format_dt(when.dt, 'R')}. {message.jump_url}",
+            ephemeral=True,
+        )
+
+    def _resolve_quick_channel(self, ctx: Context, name: str | None, raw: str) -> discord.abc.Messageable:
+        """Resolve the target channel for a quick giveaway, or fall back to the current one.
+
+        Prefers an actual ``#channel`` mention in the message (the reliable signal — a typed
+        ``#name`` becomes ``<#id>``), then an AI-named channel matched by name. Only returns a
+        channel the bot can post in.
+        """
+        if ctx.guild is None:
+            return ctx.channel
+        me = ctx.guild.me
+
+        # 1. A real channel mention (<#id>) anywhere in the request.
+        mention = re.search(r"<#(\d+)>", raw)
+        if mention is not None:
+            channel = ctx.guild.get_channel(int(mention.group(1)))
+            if isinstance(channel, discord.TextChannel) and channel.permissions_for(me).send_messages:
+                return channel
+
+        # 2. A plain channel name the model picked out.
+        if name:
+            lowered = name.lower()
+            match = discord.utils.find(lambda c: c.name.lower() == lowered, ctx.guild.text_channels) or \
+                discord.utils.find(lambda c: lowered in c.name.lower(), ctx.guild.text_channels)
+            if match is not None and match.permissions_for(me).send_messages:
+                return match
+
+        return ctx.channel
 
     @giveaway.command("end", description="End a giveaway.", guild_only=True, user_permissions=PermissionTemplate.mod)
     @app_commands.autocomplete(giveaway_id=giveaway_id_autocomplete)  # type: ignore

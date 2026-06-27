@@ -262,7 +262,7 @@ class LevelingRepository(BaseRepository):
             values: dict[str, Any],
             *,
             connection: asyncpg.Connection | None = None,
-    ) -> asyncpg.Record:
+    ) -> asyncpg.Record | None:
         """Updates a guild's level_config row and returns the full updated record."""
         return await self.update_returning("level_config", ("id",), (guild_id,), values, connection=connection)
 

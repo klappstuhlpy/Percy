@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -31,6 +32,7 @@ from app.core.models import (
     group,
 )
 from app.core.pagination import BasePaginator, LinePaginator
+from app.services import EventExtractor
 from app.utils import cache, fuzzy, get_asset_url, get_shortened_string, helpers, pluralize, timetools
 
 if TYPE_CHECKING:
@@ -111,6 +113,8 @@ class Polls(Cog):
         super().__init__(bot)
 
         self._message_cache: dict[int, discord.Message] = {}
+        # Phase 5: natural-language → structured poll fields (gated on AIFlags.polls).
+        self._event_ai: EventExtractor = EventExtractor(bot.ai)
         self.cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
             2, 5, lambda interaction: interaction.user
         )
@@ -506,6 +510,76 @@ class Polls(Cog):
                 content=None,
                 allowed_mentions=discord.AllowedMentions(roles=True),
             )
+
+    @polls.command(
+        "ask",
+        description="Create a poll from a plain-language description (AI).",
+        guild_only=True,
+        user_permissions=PermissionTemplate.mod,
+        bot_permissions=["manage_threads", "manage_messages"],
+    )
+    @describe(description="Describe the poll: the question, the options, and how long it runs.")
+    async def polls_ask(self, ctx: Context, *, description: str) -> None:
+        """Create a poll by describing it in plain language — the AI fills in the details.
+
+        e.g. "ask whether we should host a movie night, options yes / no / maybe, for 2 days".
+        Falls back to `polls create` when AI is unavailable.
+        """
+        assert ctx.guild is not None
+        if not self.bot.ai.available:
+            await ctx.send_error(f"The AI assistant is unavailable — use `{ctx.clean_prefix}polls create` instead.")
+            return
+        ai_config = await self.bot.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled("polls", ctx.channel.id):
+            await ctx.send_error(
+                f"AI polls aren't enabled in this channel. A moderator can enable them on the "
+                f"dashboard, or use `{ctx.clean_prefix}polls create`."
+            )
+            return
+        if self.bot.timers is None:
+            await ctx.send_error("The timers system is not available at the moment.")
+            return
+
+        config = await self.bot.db.get_guild_config(guild_id=ctx.guild.id)  # type: ignore[misc]
+        channel = config.poll_channel
+        if channel is None:
+            await ctx.send_error(f"Set a poll channel first with `{ctx.clean_prefix}polls config`.")
+            return
+
+        async with ctx.typing():
+            request = await self._event_ai.poll(description)
+
+        if request is None:
+            await ctx.send_error(
+                f"I couldn't turn that into a poll. Try `{ctx.clean_prefix}polls create` directly."
+            )
+            return
+
+        try:
+            when = await timetools.FutureTime.convert(ctx, request.duration)
+        except commands.BadArgument:
+            await ctx.send_error(f"I couldn't understand the duration `{request.duration}`.")
+            return
+
+        # Pull an image URL straight from the text (more reliable than a small model).
+        url_match = re.search(r"https?://\S+", description)
+        image_url = url_match.group(0).rstrip(">),.") if url_match else None
+
+        poll = await self.create_poll_from_dashboard(
+            ctx.guild, channel, author_id=ctx.author.id,
+            question=request.question, options=request.options, expires=when.dt,
+            image_url=image_url, thread_question=request.thread_question,
+        )
+        extras = []
+        if image_url:
+            extras.append("an image")
+        if request.thread_question:
+            extras.append("a discussion thread")
+        extra_note = f" (with {' and '.join(extras)})" if extras else ""
+        await ctx.send_success(
+            f"Created poll [`{poll.id}`] in {channel.mention} with {len(request.options)} options{extra_note} — "
+            f"ends {discord.utils.format_dt(when.dt, 'R')}."
+        )
 
     @polls.command(
         "end",

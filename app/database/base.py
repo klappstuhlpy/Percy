@@ -358,6 +358,7 @@ class Database(_Database):
         s.register("guild_config_changed").connect(self.get_guild_config, None)
         s.register("user_config_changed").connect(self.get_user_config, None)
         s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
+        s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -377,6 +378,19 @@ class Database(_Database):
         """
         record = await self.guilds.get_config_record(guild_id)
         return GuildConfig(bot=self.bot, record=record)
+
+    @cache.cache()
+    async def get_guild_ai_config(self, guild_id: int) -> GuildAIConfig:
+        """|coro| @cached
+
+        Resolve a guild's AI configuration: the server-wide ``ai_flags`` bitfield plus any
+        per-channel overrides, as a :class:`GuildAIConfig`. Reuses the cached guild config
+        for the flags, so this only adds the (small) override lookup.
+        """
+        config = await self.get_guild_config(guild_id)
+        override_records = await self.guilds.get_ai_overrides(guild_id)
+        overrides = {r["channel_id"]: (r["flags_mask"], r["enabled_mask"]) for r in override_records}
+        return GuildAIConfig(guild_id=guild_id, flags=config.ai_flags, overrides=overrides)
 
     @cache.cache(action=lambda g: g.cancel_task())
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:
@@ -918,9 +932,63 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
             """Whether the server has mention spam protection enabled."""
             return 16
 
+    class AIFlags(BaseFlags):
+        """Per-guild AI feature toggles (the AI-native rewrite). All default off.
+
+        Stored in ``guild_config.ai_flags`` and overridable per channel via
+        :class:`GuildAIConfig`. Bit names mirror the AI feature domains documented at
+        https://percy.klappstuhl.me/docs/ai/overview.
+        """
+
+        @flag_value
+        def assistant(self) -> int:
+            """The conversational ``?ask`` assistant."""
+            return 1
+
+        @flag_value
+        def router(self) -> int:
+            """Natural-language command routing for unmatched messages."""
+            return 2
+
+        @flag_value
+        def moderation(self) -> int:
+            """AI-assisted spam/abuse verdicts feeding the existing penalty flow."""
+            return 4
+
+        @flag_value
+        def sentinel(self) -> int:
+            """AI screening signal for the captcha/verify gatekeeper."""
+            return 8
+
+        @flag_value
+        def music(self) -> int:
+            """Natural-language music intent (query/filters/presets)."""
+            return 16
+
+        @flag_value
+        def polls(self) -> int:
+            """Structured poll extraction from a sentence."""
+            return 32
+
+        @flag_value
+        def giveaways(self) -> int:
+            """Structured giveaway argument extraction."""
+            return 64
+
+        @flag_value
+        def tags(self) -> int:
+            """Semantic tag retrieval and drafting."""
+            return 128
+
+        @flag_value
+        def reminders(self) -> int:
+            """Natural-language temporal extraction for reminders."""
+            return 256
+
     bot: Bot
     id: int
     flags: AutoModFlags
+    ai_flags: AIFlags
 
     audit_log_channel_id: int | None
     audit_log_flags: dict[str, bool]
@@ -955,6 +1023,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     __slots__ = (
         "_cs_alert_webhook",
         "_cs_audit_log_webhook",
+        "ai_flags",
         "alert_channel_id",
         "alert_webhook_url",
         "audit_log_channel_id",
@@ -983,6 +1052,9 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
 
     def _coerce(self) -> None:
         self.flags = self.AutoModFlags(self.flags or 0)  # type: ignore
+        # ``ai_flags`` is added by the V32 migration; tolerate its absence (getattr) so a
+        # record loaded before the migration applies still coerces cleanly to 0.
+        self.ai_flags = self.AIFlags(getattr(self, "ai_flags", 0) or 0)  # type: ignore
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])
         self.muted_members = set(self.muted_members or [])
         self.prefixes = set(self.prefixes or [])
@@ -1122,6 +1194,34 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
             return await self.alert_webhook.send(content, **kwargs)
         except discord.HTTPException:
             return None
+
+
+@dataclass(slots=True)
+class GuildAIConfig:
+    """Resolved AI configuration for a guild: server-wide flags + per-channel overrides.
+
+    Built by the cached :meth:`Database.get_guild_ai_config`. Cogs ask it whether a given
+    AI feature is enabled (optionally in a specific channel); a per-channel override wins
+    over the server default, otherwise the channel inherits it.
+    """
+
+    guild_id: int
+    flags: GuildConfig.AIFlags
+    #: channel_id -> (flags_mask, enabled_mask). ``flags_mask`` marks which bits the
+    #: channel overrides; ``enabled_mask`` holds their on/off value.
+    overrides: dict[int, tuple[int, int]]
+
+    def effective(self, channel_id: int | None = None) -> GuildConfig.AIFlags:
+        """Return the effective flags, applying any override for ``channel_id``."""
+        value = self.flags.value
+        if channel_id is not None and channel_id in self.overrides:
+            mask, enabled = self.overrides[channel_id]
+            value = (value & ~mask) | (enabled & mask)
+        return GuildConfig.AIFlags(value)
+
+    def is_enabled(self, feature: str, channel_id: int | None = None) -> bool:
+        """Whether an AI ``feature`` (an :class:`GuildConfig.AIFlags` name) is on here."""
+        return bool(getattr(self.effective(channel_id), feature))
 
 
 class UserConfig(BaseRecord, table="user_settings", pk="id", changed_signal="user_config_changed"):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -116,8 +117,13 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
 
 @router.get("/bot/stats")
 async def get_bot_stats(bot: BotDep) -> dict:
-    """Global bot statistics: guilds, users, latency, uptime."""
+    """Global bot statistics: guilds, users, latency, uptime, AI engine health."""
     total_commands = await bot.db.stats.count_all_commands()
+
+    # AI engine snapshot (probe is cached internally, so this stays cheap). Guarded in
+    # case stats are requested before the AI service is wired during startup.
+    ai_service = getattr(bot, 'ai', None)
+    ai_health = asdict(await ai_service.health()) if ai_service is not None else None
 
     return {
         'version': get_full_version(),
@@ -129,6 +135,7 @@ async def get_bot_stats(bot: BotDep) -> dict:
         'command_count': sum(1 for _ in bot.walk_commands()),
         'latency_ms': round(bot.latency * 1000, 1),
         'uptime_seconds': (bot.uptime.total_seconds() if hasattr(bot, 'uptime') else 0),
+        'ai': ai_health,
     }
 
 

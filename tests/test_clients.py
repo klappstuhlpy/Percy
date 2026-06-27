@@ -13,6 +13,7 @@ import aiohttp
 import pytest
 
 from app.clients import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError
+from app.clients.ollama import OllamaClient, OllamaResponseError
 
 
 class FakeResponse:
@@ -232,3 +233,44 @@ async def test_should_retry_hook_can_back_off_on_custom_signal() -> None:
 
     assert result == {'fresh': True}
     assert len(session.calls) == 2
+
+
+# -- OllamaClient ----------------------------------------------------------------
+
+
+async def test_ollama_chat_returns_message_content() -> None:
+    session = FakeSession([FakeResponse(json_data={'message': {'content': '  hi there  '}})])
+    client = OllamaClient(session, host='https://ai.example')  # type: ignore[arg-type]
+
+    result = await client.chat([{'role': 'user', 'content': 'x'}])
+
+    assert result == 'hi there'  # stripped
+    _method, url, _kwargs = session.calls[0]
+    assert url == 'https://ai.example/api/chat'
+
+
+async def test_ollama_chat_json_mode_sets_format() -> None:
+    session = FakeSession([FakeResponse(json_data={'message': {'content': '{}'}})])
+    client = OllamaClient(session)  # type: ignore[arg-type]
+
+    await client.chat([{'role': 'user', 'content': 'x'}], json_mode=True)
+
+    _method, _url, kwargs = session.calls[0]
+    assert kwargs['json']['format'] == 'json'
+
+
+async def test_ollama_chat_raises_on_missing_content() -> None:
+    session = FakeSession([FakeResponse(json_data={'unexpected': True})])
+    client = OllamaClient(session)  # type: ignore[arg-type]
+
+    with pytest.raises(OllamaResponseError):
+        await client.chat([{'role': 'user', 'content': 'x'}])
+
+
+async def test_ollama_version_probe_hits_version_endpoint() -> None:
+    session = FakeSession([FakeResponse(json_data={'version': '0.3.0'})])
+    client = OllamaClient(session)  # type: ignore[arg-type]
+
+    assert await client.version() == '0.3.0'
+    _method, url, _kwargs = session.calls[0]
+    assert url.endswith('/api/version')

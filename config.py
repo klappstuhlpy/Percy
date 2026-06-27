@@ -163,8 +163,27 @@ internal_api_host: str = env('INTERNAL_API_HOST') or '127.0.0.1'
 
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
-groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or 'llama-3.3-70b-versatile')
 images_key: str | None = env('IMAGES_API_TOKEN')
+
+# Self-hosted Ollama inference (see https://percy.klappstuhl.me/docs/ai). All AI features
+# degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
+ollama = SimpleNamespace(
+    enabled=(env('OLLAMA_ENABLED') or 'true').strip().lower() not in ('false', '0', 'no', 'off'),
+    host=env('OLLAMA_HOST') or 'http://127.0.0.1:11434',
+    fast_model=env('OLLAMA_FAST_MODEL') or 'qwen2.5:1.5b',
+    balanced_model=env('OLLAMA_BALANCED_MODEL') or 'qwen2.5-coder:3b',
+    smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
+    # Generous default: CPU inference (and the first call's model load) is slow; 8s was
+    # too tight and produced TimeoutErrors. Calls still degrade gracefully if exceeded.
+    timeout=float(env('OLLAMA_TIMEOUT') or 30.0),
+    max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
+    # SSH tunnel (beta/Windows testing only): when running off-Linux with the shared
+    # SSH_TUNNEL_* credentials set, Percy forwards a local port to where Ollama listens on
+    # the remote host (default 127.0.0.1:11434) and talks to it over the tunnel — mirroring
+    # the database tunnel. On Linux it connects to ``host`` directly.
+    tunnel_remote_host=env('OLLAMA_TUNNEL_REMOTE_HOST') or '127.0.0.1',
+    tunnel_remote_port=int(env('OLLAMA_TUNNEL_REMOTE_PORT') or 11434),
+)
 
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')

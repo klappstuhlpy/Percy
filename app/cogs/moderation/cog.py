@@ -19,7 +19,8 @@ from app.core.models import BadArgument, Cog, PermissionTemplate, command, coold
 from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
 from app.database.base import Sentinel, GuildConfig
-from app.services import build_purge_predicate
+from app.services import ModerationAssessor, build_purge_predicate
+from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from app.utils import (
     checks,
     fuzzy,
@@ -95,6 +96,16 @@ class Moderation(Cog):
     def __init__(self, bot: Bot) -> None:
         super().__init__(bot)
 
+        # AI moderation (Phase 3): flags harmful messages for human review — never punishes.
+        self._ai_moderation: ModerationAssessor = ModerationAssessor(bot.ai)
+        self._ai_mod_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
+            1, 15.0, commands.BucketType.member
+        )
+        self._ai_mod_tasks: set[asyncio.Task[None]] = set()
+        # Register the persistent AI-moderation action buttons so they keep working across
+        # restarts (state is encoded in each button's custom_id).
+        bot.add_dynamic_items(AIModerationButton)
+
         self._spam_check: defaultdict[int, SpamChecker] = defaultdict(SpamChecker)
 
         self._mute_data_batch: defaultdict[int, list[tuple[int, Any]]] = defaultdict(list)
@@ -159,6 +170,86 @@ class Moderation(Cog):
         await self.bot.db.moderation.bulk_update_muted_members(final_data)
         self._mute_data_batch.clear()
 
+    # AI moderation (flag-for-review, never auto-punishes). Full behaviour + exact criteria:
+    # https://percy.klappstuhl.me/docs/ai/moderation. Verdict logic: app/services/ai/moderation.py.
+    #: Skip AI moderation on very short messages (greetings/emotes rarely need a verdict).
+    AI_MOD_MIN_LENGTH = 16
+
+    def _schedule_ai_moderation(self, message: discord.Message, config: GuildConfig) -> None:
+        """Fire-and-forget the AI moderation check so it never blocks the listener."""
+        if not self.bot.ai.available:
+            return
+        task = asyncio.create_task(self._maybe_ai_moderate(message, config))
+        # Keep a reference until done so the task isn't garbage-collected mid-flight.
+        self._ai_mod_tasks.add(task)
+        task.add_done_callback(self._ai_mod_tasks.discard)
+
+    async def _maybe_ai_moderate(self, message: discord.Message, config: GuildConfig) -> None:
+        """Assess a message with AI and, if flagged, alert moderators for review.
+
+        Strictly a *signal*: it posts to the existing alert flow and never punishes. Gated
+        on the guild's ``AIFlags.moderation`` (+ per-channel override), a per-member cooldown,
+        and a minimum length. Fully exception-safe (it runs detached as a task).
+        """
+        if message.guild is None:
+            return
+        try:
+            ai_config = await self.bot.db.get_guild_ai_config(message.guild.id)
+            if not ai_config.is_enabled('moderation', message.channel.id):
+                return
+
+            content = message.content.strip()
+            if len(content) < self.AI_MOD_MIN_LENGTH:
+                return
+            if self._ai_mod_cooldown.update_rate_limit(message):
+                return
+
+            verdict = await self._ai_moderation.assess(content)
+            if verdict is None:
+                return
+
+            channel = self._ai_alert_channel(config, message.guild)
+            if channel is None:
+                log.warning(
+                    "AI moderation flagged a message in guild %s but no usable alert / audit-log "
+                    "/ mod-log channel is configured (or the bot can't post there) — nothing was "
+                    "sent. Configure one of those channels to receive AI moderation flags.",
+                    message.guild.id,
+                )
+                return
+
+            embed = build_ai_moderation_embed(message, verdict)
+            view = build_ai_moderation_view(
+                target_id=message.author.id, channel_id=message.channel.id, message_id=message.id
+            )
+            with suppress(discord.HTTPException):
+                await channel.send(embed=embed, view=view)
+        except Exception:  # detached task: never let an error escape unlogged
+            log.warning("AI moderation check failed for message %s", message.id, exc_info=True)
+
+    def _ai_alert_channel(self, config: GuildConfig, guild: discord.Guild) -> discord.TextChannel | None:
+        """First mod destination the bot can post an interactive embed in, or ``None``.
+
+        AI flags carry action buttons, so they must be a normal bot message (not a webhook
+        post). Prefers the alert channel, then the audit-log channel, then the mod-log
+        channel — and only one the bot can send embeds in. Never a public/system channel.
+        """
+        me = guild.me
+        candidates = (
+            config.alert_channel_id,
+            getattr(config, "audit_log_channel_id", None),
+            getattr(config, "mod_log_channel_id", None),
+        )
+        for channel_id in candidates:
+            if not channel_id:
+                continue
+            channel = guild.get_channel(channel_id)
+            if isinstance(channel, discord.TextChannel):
+                perms = channel.permissions_for(me)
+                if perms.send_messages and perms.embed_links:
+                    return channel
+        return None
+
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """|coro|
@@ -193,6 +284,10 @@ class Moderation(Cog):
             or any(i in config.safe_automod_entity_ids for i in author._roles)  # type: ignore[arg-type]
         ):
             return
+
+        # Phase 3: schedule AI moderation as a background task so it never blocks the
+        # raid/mention-spam checks below (and survives their early returns).
+        self._schedule_ai_moderation(message, config)
 
         await check_raid(self._spam_check[message.guild.id], config, message.guild, author, message)
 
@@ -887,19 +982,29 @@ class Moderation(Cog):
         If not given then it defaults to 'all'.
         """
         if protection == "all":
-            updates = "flags = 0, mention_count = 0, broadcast_channel = NULL, audit_log_channel = NULL"
+            updates = (
+                "flags = 0, mention_count = 0, "
+                "alert_channel_id = NULL, alert_webhook_url = NULL, "
+                "audit_log_channel_id = NULL, audit_log_webhook_url = NULL, audit_log_flags = NULL"
+            )
             message = "Moderation has been disabled."
         elif protection == "raid":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.raid.flag}"
             message = "Raid protection has been disabled."
         elif protection == "alerts":
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.alerts.flag}, alert_channel = NULL"
+            updates = (
+                f"flags = guild_config.flags & ~{AutoModFlags.alerts.flag}, "
+                "alert_channel_id = NULL, alert_webhook_url = NULL"
+            )
             message = "Alert messages have been disabled."
         elif protection == "mentions":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.mentions.flag}, mention_count = NULL"
             message = "Mention spam protection has been disabled"
         elif protection == "auditlog":
-            updates = f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, audit_log_channel = NULL, audit_log_flags = NULL"
+            updates = (
+                f"flags = guild_config.flags & ~{AutoModFlags.audit_log.flag}, "
+                "audit_log_channel_id = NULL, audit_log_webhook_url = NULL, audit_log_flags = NULL"
+            )
             message = "Audit logging has been disabled."
         elif protection == "sentinel":
             updates = f"flags = guild_config.flags & ~{AutoModFlags.sentinel.flag}"
@@ -912,11 +1017,13 @@ class Moderation(Cog):
         records = await self.bot.db.moderation.disable_protection(guild_id, updates)
         self._spam_check.pop(guild_id, None)
 
-        hooks = (
-            [[records.get("audit_log_webhook_url", None), "Audit Log"], [records.get("alert_webhook_url", None), "Alerts"]]
-            if protection in ("auditlog", "all")
-            else []
-        )
+        # Delete the freed Discord webhooks (urls captured pre-update by the repository).
+        hooks: list[list[str | None]] = []
+        if records is not None:
+            if protection in ("auditlog", "all"):
+                hooks.append([records.get("audit_log_webhook_url"), "Audit Log"])
+            if protection in ("alerts", "all"):
+                hooks.append([records.get("alert_webhook_url"), "Alerts"])
 
         warnings = []
 
