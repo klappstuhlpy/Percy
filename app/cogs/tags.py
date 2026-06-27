@@ -15,6 +15,7 @@ from discord.ext import commands
 from app.core import Bot, Cog, Context, Flags, LayoutView, flag, store_true, ConfirmationView
 from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
 from app.database import BaseRecord
+from app.services import TagFinder
 from app.utils import (
     TabularData,
     fuzzy,
@@ -859,6 +860,8 @@ class Tags(Cog):
         bot.add_dynamic_items(TagTransferConfirmButton, TagTransferDeclineButton)
 
         self._temporary_reserved_tags: dict[int, set[str]] = {}
+        # Phase 6: free-text question → best-matching tag name (gated on AIFlags.tags).
+        self._tag_finder: TagFinder = TagFinder(bot.ai)
 
     @contextlib.contextmanager
     def reserve_tag(self, guild_id: int, name: str, /) -> Generator[None, None, None]:
@@ -1432,6 +1435,40 @@ class Tags(Cog):
         )
         msg = await ctx.send(view=view)
         view.message = msg
+
+    @tag.command("find", description="Find the most relevant tag for a question (AI).", guild_only=True)
+    @describe(query="Describe what you're looking for in plain language.")
+    async def tag_find(self, ctx: Context, *, query: str) -> None:
+        """Find the tag that best answers a plain-language question — even if you don't know its name.
+
+        Unlike `tag search` (which matches the name), this matches the *intent* of your question
+        to a tag. Falls back to `tag search` when AI is unavailable.
+        """
+        assert ctx.guild is not None
+        if not self.bot.ai.available:
+            await ctx.send_error(f"The AI assistant is unavailable — try `{ctx.clean_prefix}tag search {query}`.")
+            return
+        ai_config = await self.bot.db.get_guild_ai_config(ctx.guild.id)
+        if not ai_config.is_enabled("tags", ctx.channel.id):
+            await ctx.send_error(
+                f"AI tag search isn't enabled in this channel. A moderator can enable it on the "
+                f"dashboard, or use `{ctx.clean_prefix}tag search`."
+            )
+            return
+
+        await ctx.defer()
+        records = await self.bot.db.tags.get_guild_tags(ctx.guild.id)
+        if not records:
+            await ctx.send_error("This server has no tags yet.")
+            return
+
+        names = [record["name"] for record in reversed(records)]  # most-used first
+        match = await self._tag_finder.find(query, names)
+        if match is None:
+            await ctx.send_error(f"I couldn't find a tag matching that. Try `{ctx.clean_prefix}tag search {query}`.")
+            return
+
+        await self.send_tag(ctx, match)
 
     @tag.command(
         "purge",

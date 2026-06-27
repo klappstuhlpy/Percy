@@ -25,6 +25,7 @@ from app.services.ai.schemas import (
     require_str,
 )
 from app.services.ai.service import AIHealthReport, AIService, ModelTier
+from app.services.ai.tags import TagFinder, TagMatch, build_tag_find_prompt
 
 __all__ = (
     'ASSISTANT_SYSTEM',
@@ -46,8 +47,11 @@ __all__ = (
     'RouteCommand',
     'RouteDecision',
     'SchemaError',
+    'TagFinder',
+    'TagMatch',
     'build_assistant_system',
     'build_route_system_prompt',
+    'build_tag_find_prompt',
     'json_instruction',
     'require_bool',
     'require_float',
