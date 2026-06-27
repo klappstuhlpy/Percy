@@ -21,6 +21,7 @@ from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
 from app.cogs import EXTENSIONS
+from app.clients import OllamaClient
 from app.core.command import Command, GroupCommand
 from app.core.context import Context
 from app.core.flags import FlagMeta
@@ -37,6 +38,7 @@ from app.core.views import CommandSuggestionView
 from app.database.base import Database
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
+from app.services import AIService, ModelTier
 from app.utils.metrics import MetricsCollector
 from app.utils import (
     GUILD_FEATURES,
@@ -59,6 +61,7 @@ from config import (
     description,
     get_full_version,
     lavalink_nodes,
+    ollama as ollama_config,
     owners,
     resolved_token,
     stats_webhook,
@@ -99,6 +102,7 @@ class Bot(commands.Bot):
     context: type[Context]
     timers: TimerManager
     render: RenderingService
+    ai: AIService
     spam_control: SpamControl
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -237,6 +241,17 @@ class Bot(commands.Bot):
         self.session = ClientSession()
         self.timers = TimerManager(self)
         self.render = RenderingService()
+        self.ai = AIService(
+            OllamaClient(self.session, host=ollama_config.host, default_model=ollama_config.balanced_model),
+            models={
+                ModelTier.FAST: ollama_config.fast_model,
+                ModelTier.BALANCED: ollama_config.balanced_model,
+                ModelTier.SMART: ollama_config.smart_model,
+            },
+            default_timeout=ollama_config.timeout,
+            max_concurrency=ollama_config.max_concurrency,
+            enabled=ollama_config.enabled,
+        )
 
         self._setup_task = asyncio.ensure_future(self._setup_hook_task())
 

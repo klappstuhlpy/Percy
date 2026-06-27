@@ -4,6 +4,15 @@ Cogs act as controllers and delegate non-trivial logic (counting, multi-step
 orchestration, math) to the pure, unit-testable helpers in this package.
 """
 
+from app.services.ai import (
+    ASSISTANT_SYSTEM,
+    AIHealthReport,
+    AIService,
+    ModelTier,
+    Parsable,
+    SchemaError,
+    json_instruction,
+)
 from app.services.bot_health import (
     BotHealthReport,
     ConnectionState,
@@ -38,8 +47,11 @@ from app.services.recurrence import (
 from app.services.spam_penalty import compute_spam_penalty
 
 __all__ = (
+    'ASSISTANT_SYSTEM',
     'MAX_CHARACTERS',
     'PRESENCE_STATUSES',
+    'AIHealthReport',
+    'AIService',
     'BotHealthReport',
     'CharInfo',
     'CodeStats',
@@ -50,10 +62,13 @@ __all__ = (
     'LavalinkMetrics',
     'LyricLine',
     'LyricsResult',
+    'ModelTier',
+    'Parsable',
     'PresenceBreakdown',
     'PurgeMessage',
     'PurgePlan',
     'RecurrenceResult',
+    'SchemaError',
     'SyncedLyrics',
     'advance_recurrence',
     'assess_bot_health',
@@ -67,6 +82,7 @@ __all__ = (
     'describe_interval',
     'get_char_info',
     'interval_too_short',
+    'json_instruction',
     'next_occurrence',
     'normalize_interval',
     'parse_lavalink_metrics',

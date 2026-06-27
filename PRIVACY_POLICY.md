@@ -68,7 +68,6 @@ Percy is hosted on secured private servers. To provide certain features, some da
 | Service                                              | What is sent                                                                              | When                                   |
 |------------------------------------------------------|-------------------------------------------------------------------------------------------|----------------------------------------|
 | **Discord**                                          | All bot activity (Discord is the platform)                                                | Always                                 |
-| **Groq** (`api.groq.com`)                            | The text of a message you send to the AI assistant                                        | When you use the AI assistant          |
 | **Google Translate** (`translate.googleapis.com`)    | The text you ask to translate (including a message you select via the "Translate" action) | When you use translation               |
 | **AniList** (`anilist.co`)                           | OAuth authorization to link your AniList account                                          | When you link AniList                  |
 | **Lavalink** (self-hosted, `lavalink.klappstuhl.me`) | Music search queries and track URLs                                                       | When you use music                     |
@@ -88,7 +87,7 @@ Percy is not directed at children. In line with Discord's Terms of Service, you 
 
 Stored data is held on access-controlled servers, and access is limited to what is needed to operate the Bot. No method of transmission or storage is completely secure, so we cannot guarantee absolute security.
 
-Some processors listed in [Section 4](#4-who-we-share-it-with) (for example Groq, a US-based provider) may process data outside your country, including outside the EEA. Where that happens, the transfer is limited to the data the feature requires.
+Some processors listed in [Section 4](#4-who-we-share-it-with) may process data outside your country, including outside the EEA. Where that happens, the transfer is limited to the data the feature requires. The AI assistant runs on a self-hosted model on Percy's own servers, so the text you send it is **not** shared with any third-party AI provider.
 
 ---
 

@@ -5,36 +5,21 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from app.clients import GroqClient, GroqResponseError
-from app.clients.base import HTTPClientError
 from app.core import Accent, Context, command, cooldown, describe, make_notice
-from app.core.errors import ServiceUnavailableError
+from app.services import ASSISTANT_SYSTEM, ModelTier
 from app.utils import truncate
-from config import groq
 
 if TYPE_CHECKING:
     from app.core import Bot
-
-#: Steers the model toward short, Discord-appropriate replies.
-SYSTEM_PROMPT = (
-    'You are Percy, a helpful and friendly Discord assistant. '
-    'Answer concisely — a few short paragraphs at most, since replies are shown in a chat. '
-    'Use Discord-flavoured markdown when helpful, and never claim to be able to take actions '
-    'in the server (moderation, roles, etc.); you only chat.'
-)
 
 #: Hard ceiling on a single rendered reply (Components V2 text budget).
 MAX_REPLY_CHARS = 3900
 
 
 class AssistantMixin:
-    """A conversational AI assistant backed by Groq's fast open models."""
+    """A conversational AI assistant backed by Percy's self-hosted Ollama instance."""
 
-    def __init__(self, bot: Bot) -> None:
-        super().__init__(bot)
-        self.client: GroqClient | None = (
-            GroqClient(bot.session, api_key=groq.api_key, model=groq.model) if groq.api_key else None
-        )
+    bot: Bot
 
     async def _previous_turn(self, ctx: Context) -> str | None:
         """If the user replied to one of the bot's answers, return that text for context."""
@@ -62,28 +47,29 @@ class AssistantMixin:
 
         Reply to one of the assistant's previous answers to give it that context.
         """
-        if self.client is None:
-            await ctx.send_error('The AI assistant is not configured on this instance.')
+        if not self.bot.ai.available:
+            await ctx.send_error('The AI assistant is currently unavailable.')
             return
 
         await ctx.defer()
 
-        messages: list[dict[str, str]] = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+        messages: list[dict[str, str]] = [{'role': 'system', 'content': ASSISTANT_SYSTEM}]
         previous = await self._previous_turn(ctx)
         if previous:
             messages.append({'role': 'assistant', 'content': previous})
         messages.append({'role': 'user', 'content': prompt})
 
-        try:
-            answer = await self.client.chat(messages)
-        except (HTTPClientError, GroqResponseError) as exc:
-            raise ServiceUnavailableError("Groq AI") from exc
+        answer = await self.bot.ai.complete(messages, tier=ModelTier.SMART)
+        if answer is None:
+            # Graceful degradation: the model is down/disabled or timed out.
+            await ctx.send_error('The AI assistant is currently unavailable. Please try again later.')
+            return
 
         view = make_notice(
             'Assistant',
             truncate(answer, MAX_REPLY_CHARS) or '*(no response)*',
             accent=Accent.info,
             thumbnail=self.bot.user.display_avatar.url if self.bot.user else None,
-            footer=f'Asked by {ctx.author.display_name} · powered by Groq',
+            footer=f'Asked by {ctx.author.display_name} · powered by Ollama',
         )
         await ctx.send(view=view)

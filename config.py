@@ -163,8 +163,19 @@ internal_api_host: str = env('INTERNAL_API_HOST') or '127.0.0.1'
 
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
-groq = SimpleNamespace(api_key=env('GROQ_API_KEY'), model=env('GROQ_MODEL') or 'llama-3.3-70b-versatile')
 images_key: str | None = env('IMAGES_API_TOKEN')
+
+# Self-hosted Ollama inference (the AI-native rewrite — see docs/ai/). All AI features
+# degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
+ollama = SimpleNamespace(
+    enabled=(env('OLLAMA_ENABLED') or 'true').strip().lower() not in ('false', '0', 'no', 'off'),
+    host=env('OLLAMA_HOST') or 'http://127.0.0.1:11434',
+    fast_model=env('OLLAMA_FAST_MODEL') or 'qwen2.5:1.5b',
+    balanced_model=env('OLLAMA_BALANCED_MODEL') or 'qwen2.5-coder:3b',
+    smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
+    timeout=float(env('OLLAMA_TIMEOUT') or 8.0),
+    max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
+)
 
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
