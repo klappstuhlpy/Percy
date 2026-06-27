@@ -31,8 +31,8 @@ Build one AI core, then convert features one at a time. Each phase is independen
 reviewable and (once the core lands) independently mergeable to `main`. Order:
 
 ```text
-Phase 0  Provider migration   Groq → Ollama; remove Groq; AIService + OllamaClient + health probe
-Phase 1  Config + flags       GuildConfig.AIFlags, per-channel overrides, dashboard "AI" tab
+Phase 0  ✅ DONE   Groq → Ollama; remove Groq; AIService + OllamaClient + health probe + x-ollama-auth
+Phase 1  ✅ DONE   GuildConfig.AIFlags + per-channel overrides (V32) + internal API + dashboard "AI" tab
 Phase 2  NL command router    bot.process_commands seam → services/ai/router.py (gated)
 Phase 3  Sentinel + moderation AI verdict signal feeding existing penalty/mod-log flow
 Phase 4  Music                intent → search/filters/EQ presets
