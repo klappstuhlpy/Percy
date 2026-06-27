@@ -208,3 +208,75 @@ def test_require_helpers_reject_bad_types() -> None:
 
 def test_ollama_response_error_is_runtime_error() -> None:
     assert issubclass(OllamaResponseError, RuntimeError)
+
+
+# -- startup health-check logging -------------------------------------------------
+#
+# Bot._check_ai_health is a thin logging wrapper over AIService.health; exercise it with a
+# stub carrying just .ai and .log so we don't need a live bot.
+
+
+class _StubAI:
+    def __init__(self, *, enabled: bool, report: Any) -> None:
+        self.enabled = enabled
+        self._report = report
+
+    async def health(self) -> Any:
+        return self._report
+
+
+def _make_report(*, reachable: bool) -> Any:
+    from app.services.ai import AIHealthReport
+
+    return AIHealthReport(
+        enabled=True,
+        reachable=reachable,
+        degraded=not reachable,
+        latency_ms=12.0 if reachable else None,
+        version='0.3.0' if reachable else None,
+        models={'balanced': 'qwen2.5-coder:3b'},
+        calls=0,
+        failures=0,
+        cache_hits=0,
+        cache_misses=0,
+    )
+
+
+async def test_check_ai_health_warns_when_unreachable(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    from types import SimpleNamespace
+
+    from app.core.bot import Bot
+
+    stub = SimpleNamespace(ai=_StubAI(enabled=True, report=_make_report(reachable=False)), log=logging.getLogger('test.ai'))
+    with caplog.at_level(logging.WARNING, logger='test.ai'):
+        await Bot._check_ai_health(stub)  # type: ignore[arg-type]
+
+    assert any(r.levelno == logging.WARNING and 'UNREACHABLE' in r.getMessage() for r in caplog.records)
+
+
+async def test_check_ai_health_info_when_reachable(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    from types import SimpleNamespace
+
+    from app.core.bot import Bot
+
+    stub = SimpleNamespace(ai=_StubAI(enabled=True, report=_make_report(reachable=True)), log=logging.getLogger('test.ai'))
+    with caplog.at_level(logging.INFO, logger='test.ai'):
+        await Bot._check_ai_health(stub)  # type: ignore[arg-type]
+
+    assert any(r.levelno == logging.INFO and 'reachable' in r.getMessage() for r in caplog.records)
+    assert not any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+async def test_check_ai_health_notes_disabled(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    from types import SimpleNamespace
+
+    from app.core.bot import Bot
+
+    stub = SimpleNamespace(ai=_StubAI(enabled=False, report=None), log=logging.getLogger('test.ai'))
+    with caplog.at_level(logging.INFO, logger='test.ai'):
+        await Bot._check_ai_health(stub)  # type: ignore[arg-type]
+
+    assert any('disabled' in r.getMessage() for r in caplog.records)

@@ -266,6 +266,34 @@ class Bot(commands.Bot):
         jishaku.Flags.NO_UNDERSCORE = True
         jishaku.Flags.NO_DM_TRACEBACK = True
 
+    async def _check_ai_health(self) -> None:
+        """Probe the AI engine on startup and log whether it is reachable.
+
+        Best-effort and non-fatal: AI features degrade gracefully when the engine is
+        unavailable, so an unreachable engine is a warning, not a startup failure.
+        """
+        if not self.ai.enabled:
+            self.log.info('AI engine disabled (OLLAMA_ENABLED=false); AI features are off.')
+            return
+
+        try:
+            report = await self.ai.health()
+        except Exception as exc:  # defensive — health() already swallows known errors
+            self.log.warning('AI engine health probe errored at %s: %r', ollama_config.host, exc)
+            return
+
+        if report.reachable:
+            models = ', '.join(f'{tier}={tag}' for tier, tag in report.models.items())
+            self.log.info(
+                'AI engine reachable at %s (Ollama %s, %.0fms; models: %s).',
+                ollama_config.host, report.version or 'unknown', report.latency_ms or 0.0, models,
+            )
+        else:
+            self.log.warning(
+                'AI engine UNREACHABLE at %s — AI features will degrade gracefully until it recovers.',
+                ollama_config.host,
+            )
+
     async def _setup_hook_task(self) -> None:
         try:
             await wavelink.Pool.connect(
@@ -294,6 +322,8 @@ class Bot(commands.Bot):
             await self.internal_api.start()
         except Exception as exc:
             self.log.error('Failed to start internal API:', exc_info=exc)
+
+        await self._check_ai_health()
 
         await self._load_extensions()
 
