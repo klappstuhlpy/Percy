@@ -55,6 +55,27 @@ T = TypeVar('T', bound='Parsable')
 DEGRADED_LATENCY_MS = 2500.0
 
 
+def _describe_probe_error(exc: Exception) -> str:
+    """Turn a health-probe failure into a short, actionable reason string.
+
+    Distinguishes a proxy/WAF rejection (401/403 — the host is up but something in front of
+    Ollama blocked us) from a genuinely unreachable engine, since Ollama itself has no auth
+    and never returns those statuses.
+    """
+    status = getattr(exc, 'status', None)
+    if status in (401, 403):
+        return (
+            f'HTTP {status} — reached the host but was rejected by an auth/proxy layer in front '
+            f'of Ollama (e.g. a Cloudflare WAF rule), not the engine being down. Ensure the rule '
+            f'allowing the "x-ollama-auth" header is active and OLLAMA_AUTH_KEY matches it.'
+        )
+    if status is not None:
+        return f'HTTP {status} from the Ollama host.'
+    if isinstance(exc, TimeoutError):
+        return 'timed out — the host did not respond within the probe timeout.'
+    return f'{type(exc).__name__}: {exc}'
+
+
 class ModelTier(Enum):
     """Which model class a call wants. The caller's domain picks the tier.
 
@@ -82,6 +103,9 @@ class AIHealthReport:
     failures: int
     cache_hits: int
     cache_misses: int
+    #: When unreachable, a short human-readable reason (HTTP status / transport error),
+    #: with a hint when the failure looks like a proxy/WAF block rather than a dead engine.
+    error: str | None = None
 
 
 class AIService:
@@ -277,6 +301,7 @@ class AIService:
         reachable = False
         latency_ms: float | None = None
         version: str | None = None
+        error: str | None = None
 
         if self._enabled:
             start = time.perf_counter()
@@ -286,7 +311,8 @@ class AIService:
                 latency_ms = (time.perf_counter() - start) * 1000
                 reachable = True
             except (HTTPClientError, OllamaResponseError, TimeoutError) as exc:
-                log.warning('AI health probe failed: %r', exc)
+                error = _describe_probe_error(exc)
+                log.warning('AI health probe failed: %s', error)
 
         self._degraded = self._enabled and (not reachable or (latency_ms is not None and latency_ms > DEGRADED_LATENCY_MS))
 
@@ -301,6 +327,7 @@ class AIService:
             failures=self._failures,
             cache_hits=self._cache_hits,
             cache_misses=self._cache_misses,
+            error=error,
         )
         self._last_health = report
         self._last_health_at = now

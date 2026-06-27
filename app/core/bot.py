@@ -66,7 +66,6 @@ from config import (
     resolved_token,
     stats_webhook,
     test_guild_id,
-    version,
 )
 from config import (
     name as bot_name,
@@ -290,8 +289,8 @@ class Bot(commands.Bot):
             )
         else:
             self.log.warning(
-                'AI engine UNREACHABLE at %s — AI features will degrade gracefully until it recovers.',
-                ollama_config.host,
+                'AI engine UNREACHABLE at %s (%s) — AI features will degrade gracefully until it recovers.',
+                ollama_config.host, report.error or 'no further detail',
             )
 
     async def _setup_hook_task(self) -> None:

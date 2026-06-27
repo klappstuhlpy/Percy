@@ -23,9 +23,12 @@ if TYPE_CHECKING:
 class FakeOllama:
     """Stand-in for :class:`OllamaClient`: returns queued replies / raises queued errors."""
 
-    def __init__(self, replies: list[Any] | None = None, *, version: str = '0.1.0') -> None:
+    def __init__(
+        self, replies: list[Any] | None = None, *, version: str = '0.1.0', version_error: BaseException | None = None
+    ) -> None:
         self._replies = list(replies or [])
         self._version = version
+        self._version_error = version_error
         self.calls: list[dict[str, Any]] = []
         self.breaker_open = False
 
@@ -37,6 +40,8 @@ class FakeOllama:
         return reply
 
     async def version(self) -> str:
+        if self._version_error is not None:
+            raise self._version_error
         if self.breaker_open:
             raise CircuitBreakerOpen('Ollama', 5.0)
         return self._version
@@ -280,3 +285,44 @@ async def test_check_ai_health_notes_disabled(caplog: pytest.LogCaptureFixture) 
         await Bot._check_ai_health(stub)  # type: ignore[arg-type]
 
     assert any('disabled' in r.getMessage() for r in caplog.records)
+
+
+# -- probe error diagnostics ------------------------------------------------------
+
+
+def test_describe_probe_error_flags_proxy_block() -> None:
+    from app.services.ai.service import _describe_probe_error
+
+    err = type('E', (Exception,), {'status': 403})()
+    msg = _describe_probe_error(err)
+    assert '403' in msg
+    assert 'x-ollama-auth' in msg  # actionable hint about the WAF/proxy layer
+
+
+def test_describe_probe_error_generic_status() -> None:
+    from app.services.ai.service import _describe_probe_error
+
+    err = type('E', (Exception,), {'status': 502})()
+    assert '502' in _describe_probe_error(err)
+
+
+def test_describe_probe_error_timeout() -> None:
+    from app.services.ai.service import _describe_probe_error
+
+    assert 'timed out' in _describe_probe_error(TimeoutError())
+
+
+async def test_health_reports_proxy_block_error() -> None:
+    # A 403 from Cloudflare-in-front-of-Ollama surfaces as an actionable error, not just "down".
+    from types import SimpleNamespace
+
+    response = SimpleNamespace(status=403, reason='Forbidden')
+    client = FakeOllama(version_error=HTTPClientError(response, 'blocked'))  # type: ignore[arg-type]
+    service = AIService(client, models=MODELS)  # type: ignore[arg-type]
+
+    report = await service.health()
+
+    assert report.reachable is False
+    assert report.error is not None
+    assert '403' in report.error
+    assert 'x-ollama-auth' in report.error
