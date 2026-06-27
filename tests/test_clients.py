@@ -249,26 +249,6 @@ async def test_ollama_chat_returns_message_content() -> None:
     assert url == 'https://ai.example/api/chat'
 
 
-async def test_ollama_chat_sends_auth_header_when_key_set() -> None:
-    session = FakeSession([FakeResponse(json_data={'message': {'content': 'ok'}})])
-    client = OllamaClient(session, auth_key='s3cret')  # type: ignore[arg-type]
-
-    await client.chat([{'role': 'user', 'content': 'x'}])
-
-    _method, _url, kwargs = session.calls[0]
-    assert kwargs['headers'] == {'x-ollama-auth': 's3cret'}
-
-
-async def test_ollama_chat_omits_auth_header_when_unset() -> None:
-    session = FakeSession([FakeResponse(json_data={'message': {'content': 'ok'}})])
-    client = OllamaClient(session)  # type: ignore[arg-type]
-
-    await client.chat([{'role': 'user', 'content': 'x'}])
-
-    _method, _url, kwargs = session.calls[0]
-    assert kwargs['headers'] is None
-
-
 async def test_ollama_chat_json_mode_sets_format() -> None:
     session = FakeSession([FakeResponse(json_data={'message': {'content': '{}'}})])
     client = OllamaClient(session)  # type: ignore[arg-type]
@@ -287,11 +267,10 @@ async def test_ollama_chat_raises_on_missing_content() -> None:
         await client.chat([{'role': 'user', 'content': 'x'}])
 
 
-async def test_ollama_version_probe_sends_auth_header() -> None:
+async def test_ollama_version_probe_hits_version_endpoint() -> None:
     session = FakeSession([FakeResponse(json_data={'version': '0.3.0'})])
-    client = OllamaClient(session, auth_key='s3cret')  # type: ignore[arg-type]
+    client = OllamaClient(session)  # type: ignore[arg-type]
 
     assert await client.version() == '0.3.0'
-    _method, url, kwargs = session.calls[0]
+    _method, url, _kwargs = session.calls[0]
     assert url.endswith('/api/version')
-    assert kwargs['headers'] == {'x-ollama-auth': 's3cret'}

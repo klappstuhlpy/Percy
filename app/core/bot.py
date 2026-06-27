@@ -252,7 +252,6 @@ class Bot(commands.Bot):
                 self.session,
                 host=ollama_host,
                 default_model=ollama_config.balanced_model,
-                auth_key=ollama_config.auth_key,
             ),
             models={
                 ModelTier.FAST: ollama_config.fast_model,

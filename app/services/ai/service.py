@@ -66,8 +66,9 @@ def _describe_probe_error(exc: Exception) -> str:
     if status in (401, 403):
         return (
             f'HTTP {status} — reached the host but was rejected by an auth/proxy layer in front '
-            f'of Ollama (e.g. a Cloudflare WAF rule), not the engine being down. Ensure the rule '
-            f'allowing the "x-ollama-auth" header is active and OLLAMA_AUTH_KEY matches it.'
+            f'of Ollama (e.g. a reverse proxy or WAF), not the engine being down: Ollama has no '
+            f'auth and never returns this. Point OLLAMA_HOST at the instance directly (or use the '
+            f'SSH tunnel for local testing) instead of a gated public host.'
         )
     if status is not None:
         return f'HTTP {status} from the Ollama host.'

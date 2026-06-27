@@ -296,7 +296,7 @@ def test_describe_probe_error_flags_proxy_block() -> None:
     err = type('E', (Exception,), {'status': 403})()
     msg = _describe_probe_error(err)
     assert '403' in msg
-    assert 'x-ollama-auth' in msg  # actionable hint about the WAF/proxy layer
+    assert 'proxy' in msg.lower()  # actionable hint that it's a proxy/WAF, not the engine
 
 
 def test_describe_probe_error_generic_status() -> None:
@@ -325,7 +325,7 @@ async def test_health_reports_proxy_block_error() -> None:
     assert report.reachable is False
     assert report.error is not None
     assert '403' in report.error
-    assert 'x-ollama-auth' in report.error
+    assert 'proxy' in report.error.lower()
 
 
 # -- Ollama SSH tunnel gating -----------------------------------------------------
