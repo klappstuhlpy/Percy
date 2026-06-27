@@ -44,26 +44,32 @@ Phase 7  Assistant + polish   ask → Ollama, caching, semantic cache (optional)
 A phase is **done** only when: behaviour works with the flag on, the feature is unchanged
 with the flag off, tests cover both paths, and the three checks in §0.6 pass.
 
-## 2. Phase 0 contract (do this first)
+## 2. Phase 0 contract — ✅ DONE (commit `[ai-phase-0]`)
 
 This unblocks everything else and is the riskiest (it removes Groq).
 
-- [ ] `app/clients/ollama.py` — `OllamaClient(BaseHTTPClient)`. JSON chat via the
-      OpenAI-compatible route; `response_format='json'`; override `_should_retry`/`_build_error`
-      as needed. Export from `app/clients/__init__.py`.
-- [ ] `app/services/ai/` — `AIService` (reached as `self.bot.ai`), `ModelTier` enum,
-      `schemas.py`, `prompts.py`, exact-match caching via `app/utils/cache.py`, per-call
-      timeout, `asyncio.Semaphore` concurrency cap, auto-downgrade hook. Export from
-      `app/services/__init__.py`. Wire `self.ai = AIService(...)` in `Bot` next to `self.render`.
-- [ ] **Remove Groq:** delete `app/clients/groq.py`, drop `GroqClient`/`GroqResponseError`
-      from `app/clients/__init__.py`, remove the `groq` namespace from `config.py` and
-      `GROQ_*` from `.env.example`/README/PRIVACY_POLICY, and re-point
-      `app/cogs/automation/assistant.py` to `self.bot.ai` (Ollama `llama3.2:3b`).
-- [ ] Config: add `OLLAMA_HOST`/`OLLAMA_*` env to `config.py` + `.env.example`.
-- [ ] Health: Ollama reachability/latency probe in `app/services/bot_health.py`, surfaced
-      via `/api/internal/bot/stats`.
-- [ ] Tests: `tests/test_ai_service.py` (fake client) covering parse-success,
-      invalid-JSON→`None`, schema-invalid→`None`, timeout→`None`, cache hit.
+- [x] `app/clients/ollama.py` — `OllamaClient(BaseHTTPClient)`. Talks to Ollama's native
+      `/api/chat` (non-streaming) with `format='json'` for structured calls + a `version()`
+      reachability probe; inherits the 429/backoff/breaker resilience. Exported from
+      `app/clients/__init__.py`. *(Used the native endpoint rather than the OpenAI-compat
+      route — cleaner `format`/`options` handling.)*
+- [x] `app/services/ai/` — `AIService` (reached as `self.bot.ai`), `ModelTier` enum,
+      `schemas.py` (Parsable + `require_*`), `prompts.py`, exact-match caching
+      (`ExpiringCache`), per-call `asyncio.timeout`, `asyncio.Semaphore` concurrency cap,
+      BALANCED→FAST auto-downgrade. Exported from `app/services/__init__.py`. Wired
+      `self.ai = AIService(...)` in `Bot.setup_hook` next to `self.render`.
+- [x] **Remove Groq:** deleted `app/clients/groq.py`, dropped it from
+      `app/clients/__init__.py`, removed the `groq` namespace from `config.py` and the
+      `GROQ_*` entries from `.env.example`/README/PRIVACY_POLICY/SELF_HOSTING_GUIDE, and
+      re-pointed `app/cogs/automation/assistant.py` to `self.bot.ai` (Ollama smart tier).
+- [x] Config: `ollama` namespace in `config.py` (`OLLAMA_ENABLED`/`OLLAMA_HOST`/
+      `OLLAMA_*_MODEL`/`OLLAMA_TIMEOUT`/`OLLAMA_MAX_CONCURRENCY`) + `.env.example`.
+- [x] Health: `AIService.health()` probe (cached ≤30 s) surfaced in the `ai` block of
+      `/api/internal/bot/stats`. *(Probe lives on the service, which owns the client and
+      counters — a network probe doesn't belong in the pure `bot_health.py`.)*
+- [x] Tests: `tests/test_ai_service.py` — 20 tests over a fake client (parse-success,
+      invalid-JSON→`None`, schema-invalid→`None`, non-object→`None`, timeout/transport→`None`,
+      cache hit, auto-downgrade, health states). Full `pytest` green; `ruff`/`pyright` clean.
 
 ## 3. Config & schema rules
 
