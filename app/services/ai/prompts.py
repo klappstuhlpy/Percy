@@ -21,6 +21,11 @@ See ``docs/ai/PERSONA.md`` for the "system prompt vs. Ollama Modelfile" decision
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 __all__ = ('ASSISTANT_SYSTEM', 'PERCY_IDENTITY', 'build_assistant_system', 'json_instruction')
 
 #: Default public website (mirrors ``config.website``; duplicated as a literal so this module
@@ -65,10 +70,12 @@ _ASSISTANT_RULES = (
     'prefix, e.g. `{prefix}blackjack`. Percy automatically adds a button under your reply that '
     'runs that command for the user — so just name it; do not ask for arguments (bet size, '
     'deck count, etc.) that the command itself will collect.\n'
-    '• If a user asks about a specific command or how to do something, point them to the help '
-    'command (e.g. `{prefix}help <command>`) and/or the dashboard, and name the relevant '
-    'command in backticks with the prefix. Do NOT invent command names, flags, or arguments '
-    'you are not sure of — command options change over time.\n'
+    '• Only recommend commands that appear in the command list below (when one is provided). '
+    'Use the EXACT name shown. If you are not certain a command exists, do NOT name it — tell '
+    'the user to run `{prefix}help` to browse instead. Never invent command names or flags.\n'
+    '• Percy needs NO account, login, sign-up, or confirmation step. Never tell users to '
+    '"create an account", "log in", "say yes", or grant permission before using a command — '
+    'they just run the command. Do not invent setup steps.\n'
     '• If you do not know something, or it is outside what Percy does, say so briefly and '
     'point to the help command, the dashboard, or the support server.\n'
     '\n'
@@ -89,11 +96,17 @@ def build_assistant_system(
     prefix: str = '?',
     website: str = DEFAULT_WEBSITE,
     support_server: str | None = None,
+    command_catalogue: Sequence[tuple[str, str]] | None = None,
 ) -> str:
     """Compose the conversational assistant system prompt with light, safe guild context.
 
     Only non-sensitive, display-level context is injected (server name, the command prefix,
-    public URLs). Never pass secrets or raw internal objects here — see the module docstring.
+    public URLs, and the public command list). Never pass secrets or raw internal objects
+    here — see the module docstring.
+
+    ``command_catalogue`` is a sequence of ``(command_name, short_description)`` pairs. When
+    given, it is injected so the (small) model recommends *real* commands instead of inventing
+    them — the single biggest lever against hallucinated commands like ``play`` for blackjack.
     """
     parts = [PERCY_IDENTITY, '']
 
@@ -105,6 +118,17 @@ def build_assistant_system(
         context_lines.append(f'The support server is {support_server}.')
     parts.append(' '.join(context_lines))
     parts.append('')
+
+    if command_catalogue:
+        listing = '\n'.join(
+            f'• `{prefix}{name}` — {desc}' if desc else f'• `{prefix}{name}`' for name, desc in command_catalogue
+        )
+        parts.append(
+            'These are Percy\'s real commands — the ONLY commands you may recommend. Use the '
+            'exact name shown, in backticks, with the prefix. If none fit the request, tell the '
+            f'user to run `{prefix}help` instead of guessing:\n{listing}'
+        )
+        parts.append('')
 
     parts.append(_ASSISTANT_RULES.format(prefix=prefix))
     return '\n'.join(parts)

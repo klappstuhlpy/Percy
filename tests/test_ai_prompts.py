@@ -31,10 +31,28 @@ def test_forbids_simulating_features() -> None:
     assert 'button' in lowered
 
 
+def test_command_catalogue_rendered_when_given() -> None:
+    prompt = build_assistant_system(
+        prefix='?', command_catalogue=[('blackjack', 'Play blackjack'), ('poll', 'Create a poll')]
+    )
+    assert 'real commands' in prompt
+    assert '`?blackjack` — Play blackjack' in prompt
+    assert '`?poll` — Create a poll' in prompt
+
+
+def test_no_catalogue_section_without_commands() -> None:
+    assert 'real commands' not in build_assistant_system()
+
+
+def test_forbids_inventing_accounts_and_setup() -> None:
+    lowered = build_assistant_system().lower()
+    assert 'account' in lowered  # must tell the model Percy needs no account/login/confirmation
+
+
 def test_prefix_is_injected() -> None:
     prompt = build_assistant_system(prefix='b.')
     assert '`b.`' in prompt
-    assert '`b.help <command>`' in prompt
+    assert '`b.help`' in prompt
 
 
 def test_server_name_injected_when_present() -> None:

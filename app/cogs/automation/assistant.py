@@ -174,6 +174,23 @@ class AssistantMixin:
 
     # -- command suggestions -------------------------------------------------
 
+    def _command_catalogue(self) -> list[tuple[str, str]]:
+        """Visible top-level commands as ``(qualified_name, short_description)`` pairs.
+
+        Injected into the system prompt so the model recommends real commands instead of
+        inventing them. Top-level only (groups like ``tag`` cover their subcommands via help).
+        """
+        seen: set[str] = set()
+        catalogue: list[tuple[str, str]] = []
+        for cmd in self.bot.commands:
+            if cmd.hidden or not cmd.enabled or cmd.qualified_name in seen:
+                continue
+            seen.add(cmd.qualified_name)
+            desc = (cmd.description or cmd.short_doc or '').strip().split('\n', 1)[0]
+            catalogue.append((cmd.qualified_name, truncate(desc, 70)))
+        catalogue.sort(key=lambda pair: pair[0])
+        return catalogue
+
     async def _extract_commands(self, answer: str, message: discord.Message) -> list[str]:
         """Find real, invokable commands the answer names, as ``<prefix><qualified_name>``.
 
@@ -228,12 +245,15 @@ class AssistantMixin:
                 prefix=await self._display_prefix(message),
                 website=website,
                 support_server=support_server,
+                command_catalogue=self._command_catalogue(),
             )
             convo: list[dict[str, str]] = [{'role': 'system', 'content': system}]
             convo.extend(history)
             convo.append({'role': 'user', 'content': prompt})
 
-            answer = await self.bot.ai.complete(convo, tier=ModelTier.SMART)
+            # Lower temperature than the default: keep the assistant grounded (fewer invented
+            # commands / flows) while still conversational.
+            answer = await self.bot.ai.complete(convo, tier=ModelTier.SMART, temperature=0.4)
 
         if answer is None:
             # Graceful degradation: model down/disabled or timed out.

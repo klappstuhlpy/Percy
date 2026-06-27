@@ -43,16 +43,24 @@ class FakeMessage:
 
 
 class FakeCommand:
-    def __init__(self, qualified_name: str, *, hidden: bool = False, enabled: bool = True) -> None:
+    def __init__(
+        self, qualified_name: str, *, hidden: bool = False, enabled: bool = True, description: str = ''
+    ) -> None:
         self.qualified_name = qualified_name
         self.hidden = hidden
         self.enabled = enabled
+        self.description = description
+        self.short_doc = description
 
 
 class FakeBot:
     def __init__(self, commands: dict[str, FakeCommand] | None = None) -> None:
         self.user = FakeUser(999, bot=True)
         self._commands = commands or {}
+
+    @property
+    def commands(self) -> list[FakeCommand]:
+        return list(self._commands.values())
 
     async def get_prefix(self, message: FakeMessage) -> list[str]:
         return ['?', '<@999>']
@@ -173,6 +181,17 @@ async def test_extract_commands_handles_multiword_and_caps(monkeypatch: pytest.M
     answer = 'Options: `?tag create`, `?poll`, `?giveaway`, `?remind`.'
     actions = await mixin._extract_commands(answer, lone_message())
     assert actions == ['?tag create', '?poll']  # multiword resolved, capped at 2
+
+
+def test_command_catalogue_lists_only_visible_commands() -> None:
+    cmds = {
+        'blackjack': FakeCommand('blackjack', description='Play blackjack'),
+        'secret': FakeCommand('secret', hidden=True, description='hidden'),
+        'off': FakeCommand('off', enabled=False, description='disabled'),
+    }
+    catalogue = build_mixin(cmds)._command_catalogue()
+    assert ('blackjack', 'Play blackjack') in catalogue
+    assert all(name not in ('secret', 'off') for name, _ in catalogue)
 
 
 async def test_history_respects_char_budget(monkeypatch: pytest.MonkeyPatch) -> None:
