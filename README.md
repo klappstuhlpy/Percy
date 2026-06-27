@@ -27,7 +27,7 @@ Percy's documentation lives in a dedicated [Mintlify](https://mintlify.com) site
 - **Read it:** https://percy.klappstuhl.me/docs/
 - **Edit it:** [`klappstuhlpy/percy-docs`](https://github.com/klappstuhlpy/percy-docs)
 
-It covers every feature, the optional AI layer, the public **Klappstuhl.me API**, and the internal dashboard API. When you ship a user-facing change — a new command, flag, or API endpoint — update `percy-docs` to match.
+It covers every feature, the optional AI layer, and an interactive **API Reference** for the internal dashboard API (generated from the FastAPI OpenAPI schema). When you ship a user-facing change — a new command, flag, or API endpoint — update `percy-docs` to match.
 
 ---
 
