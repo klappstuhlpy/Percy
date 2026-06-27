@@ -175,6 +175,9 @@ ollama = SimpleNamespace(
     smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
     timeout=float(env('OLLAMA_TIMEOUT') or 8.0),
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
+    # Ollama has no native auth; a Cloudflare Tunnel WAF rule gates the host on this
+    # secret, sent as the ``x-ollama-auth`` header on every request when set.
+    auth_key=env('OLLAMA_AUTH_KEY'),
 )
 
 dbots_key: str | None = env('DBOTS_TOKEN')

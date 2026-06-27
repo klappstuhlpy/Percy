@@ -20,8 +20,8 @@ from discord.http import Route
 from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
-from app.cogs import EXTENSIONS
 from app.clients import OllamaClient
+from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand
 from app.core.context import Context
 from app.core.flags import FlagMeta
@@ -242,7 +242,12 @@ class Bot(commands.Bot):
         self.timers = TimerManager(self)
         self.render = RenderingService()
         self.ai = AIService(
-            OllamaClient(self.session, host=ollama_config.host, default_model=ollama_config.balanced_model),
+            OllamaClient(
+                self.session,
+                host=ollama_config.host,
+                default_model=ollama_config.balanced_model,
+                auth_key=ollama_config.auth_key,
+            ),
             models={
                 ModelTier.FAST: ollama_config.fast_model,
                 ModelTier.BALANCED: ollama_config.balanced_model,

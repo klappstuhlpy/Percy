@@ -33,18 +33,24 @@ class OllamaClient(BaseHTTPClient):
     #: Default host; overridden per-instance from config in :meth:`__init__`.
     BASE_URL: ClassVar[str] = 'http://127.0.0.1:11434/'
 
+    #: Header carrying the Cloudflare WAF secret (Ollama has no native auth).
+    AUTH_HEADER: ClassVar[str] = 'x-ollama-auth'
+
     def __init__(
         self,
         session: aiohttp.ClientSession,
         *,
         host: str | None = None,
         default_model: str = 'qwen2.5-coder:3b',
+        auth_key: str | None = None,
     ) -> None:
         super().__init__(session, name='Ollama')
         # Instance attribute shadows the class BASE_URL so a deployment can point at a
         # remote/alternate Ollama host. yarl joins need a trailing slash to keep the path.
         self.BASE_URL = (host or type(self).BASE_URL).rstrip('/') + '/'
         self.default_model: str = default_model
+        # Sent on every request so a Cloudflare-tunnelled host's WAF lets the call through.
+        self._auth_headers: dict[str, str] = {self.AUTH_HEADER: auth_key} if auth_key else {}
 
     async def chat(
         self,
@@ -92,7 +98,7 @@ class OllamaClient(BaseHTTPClient):
         if request_timeout is not None:
             kwargs['timeout'] = aiohttp.ClientTimeout(total=request_timeout)
 
-        data = await self.fetch('POST', 'api/chat', json=payload, **kwargs)
+        data = await self.fetch('POST', 'api/chat', json=payload, headers=self._auth_headers or None, **kwargs)
 
         try:
             return data['message']['content'].strip()
@@ -104,7 +110,7 @@ class OllamaClient(BaseHTTPClient):
 
         Raises the usual transport/HTTP errors if the instance is unreachable.
         """
-        data = await self.fetch('GET', 'api/version')
+        data = await self.fetch('GET', 'api/version', headers=self._auth_headers or None)
         if isinstance(data, dict):
             return str(data.get('version', ''))
         return ''
