@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="/assets/percy_banner_short.png" height="300" alt="Percy banner" style="margin-top: 1rem; border-radius: 0.25rem;">
+
 # Percy v2
 
 **A feature-rich, multipurpose Discord bot built with Python 3.12+ and [discord.py](https://github.com/Rapptz/discord.py).**
@@ -12,9 +14,9 @@ Moderation · Auto-moderation · Economy · Casino games · Leveling · Music ·
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://docs.astral.sh/ruff/)
 
 [Add Percy to your server](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands) ·
-[Website](https://percy.klappstuhl.me/dashboard/) ·
+[Website](https://percy.klappstuhl.me/) ·
 [Documentation](https://percy.klappstuhl.me/docs/) ·
-[Support server](https://discord.gg/3jSYQ9VNbA)
+[Support server](https://percy.klappstuhl.me/support/)
 
 </div>
 
