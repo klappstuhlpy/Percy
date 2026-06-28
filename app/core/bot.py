@@ -257,6 +257,7 @@ class Bot(commands.Bot):
                 self.session,
                 host=ollama_host,
                 default_model=ollama_config.balanced_model,
+                keep_alive=ollama_config.keep_alive,
             ),
             models={
                 ModelTier.FAST: ollama_config.fast_model,

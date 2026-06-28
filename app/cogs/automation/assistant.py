@@ -12,7 +12,7 @@ from app.core import Cog, Context, command, cooldown, describe
 from app.core.views import View
 from app.services import ModelTier, build_assistant_system
 from app.utils import truncate
-from config import support_server, website
+from config import ollama, support_server, website
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -252,8 +252,16 @@ class AssistantMixin:
             convo.append({'role': 'user', 'content': prompt})
 
             # Lower temperature than the default: keep the assistant grounded (fewer invented
-            # commands / flows) while still conversational.
-            answer = await self.bot.ai.complete(convo, tier=ModelTier.SMART, temperature=0.4)
+            # commands / flows) while still conversational. Free-form replies generate far more
+            # tokens than a structured call, so give them a larger timeout budget and cap the
+            # output length — otherwise CPU-bound inference reliably times out mid-generation.
+            answer = await self.bot.ai.complete(
+                convo,
+                tier=ModelTier.SMART,
+                temperature=0.4,
+                timeout=ollama.chat_timeout,
+                max_tokens=ollama.chat_num_predict,
+            )
 
         if answer is None:
             # Graceful degradation: model down/disabled or timed out.

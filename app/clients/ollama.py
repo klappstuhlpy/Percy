@@ -40,12 +40,16 @@ class OllamaClient(BaseHTTPClient):
         *,
         host: str | None = None,
         default_model: str = 'qwen2.5-coder:3b',
+        keep_alive: str | None = None,
     ) -> None:
         super().__init__(session, name='Ollama')
         # Instance attribute shadows the class BASE_URL so a deployment can point at a
         # remote/alternate Ollama host. yarl joins need a trailing slash to keep the path.
         self.BASE_URL = (host or type(self).BASE_URL).rstrip('/') + '/'
         self.default_model: str = default_model
+        # Sent on every chat call (when set) so the model stays resident between requests and
+        # sparse usage doesn't pay a cold reload each time. Ollama duration string, e.g. '30m'.
+        self.keep_alive: str | None = keep_alive
 
     async def chat(
         self,
@@ -54,6 +58,7 @@ class OllamaClient(BaseHTTPClient):
         model: str | None = None,
         temperature: float = 0.0,
         json_mode: bool = False,
+        num_predict: int | None = None,
         request_timeout: float | None = None,
     ) -> str:
         """Run a chat completion and return the assistant's reply text.
@@ -69,6 +74,9 @@ class OllamaClient(BaseHTTPClient):
         json_mode:
             When ``True``, asks Ollama to constrain output to a JSON object
             (``"format": "json"``) — used for schema-enforced structured calls.
+        num_predict:
+            Optional cap on generated tokens (``options.num_predict``). Bounds worst-case
+            generation latency on CPU; ``None`` leaves it to the model default.
         request_timeout:
             Optional per-request transport timeout (seconds). The service also applies a
             hard ``asyncio`` ceiling on top of this.
@@ -80,14 +88,20 @@ class OllamaClient(BaseHTTPClient):
         HTTPClientError / CircuitBreakerOpen
             On transport/HTTP failure (handled by the resilience layer).
         """
+        options: dict[str, Any] = {'temperature': temperature}
+        if num_predict is not None:
+            options['num_predict'] = num_predict
+
         payload: dict[str, Any] = {
             'model': model or self.default_model,
             'messages': list(messages),
             'stream': False,
-            'options': {'temperature': temperature},
+            'options': options,
         }
         if json_mode:
             payload['format'] = 'json'
+        if self.keep_alive is not None:
+            payload['keep_alive'] = self.keep_alive
 
         kwargs: dict[str, Any] = {}
         if request_timeout is not None:

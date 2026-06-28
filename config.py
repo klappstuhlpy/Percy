@@ -175,7 +175,19 @@ ollama = SimpleNamespace(
     smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
     # Generous default: CPU inference (and the first call's model load) is slow; 8s was
     # too tight and produced TimeoutErrors. Calls still degrade gracefully if exceeded.
+    # This budget fits the short, structured FAST/BALANCED calls (routing, extraction).
     timeout=float(env('OLLAMA_TIMEOUT') or 30.0),
+    # Free-form conversational replies (the SMART-tier `?ask` assistant) generate many more
+    # tokens than a structured call, so on CPU they need a much larger ceiling than the
+    # structured `timeout` above — otherwise they reliably time out mid-generation.
+    chat_timeout=float(env('OLLAMA_CHAT_TIMEOUT') or 120.0),
+    # Cap on tokens a conversational reply may generate. The dominant cost of CPU inference is
+    # per-token, so bounding output bounds worst-case latency (and keeps replies within the
+    # Components V2 text budget). ~400 tokens ≈ a few short paragraphs.
+    chat_num_predict=int(env('OLLAMA_CHAT_NUM_PREDICT') or 400),
+    # Keep the model resident between calls so sparse usage doesn't pay a cold reload each
+    # time (Ollama's default is 5m). Accepts an Ollama duration string ('30m', '1h', '-1' = forever).
+    keep_alive=env('OLLAMA_KEEP_ALIVE') or '30m',
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
     # SSH tunnel (beta/Windows testing only): when running off-Linux with the shared
     # SSH_TUNNEL_* credentials set, Percy forwards a local port to where Ollama listens on

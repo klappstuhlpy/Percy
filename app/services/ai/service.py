@@ -170,6 +170,7 @@ class AIService:
         temperature: float,
         json_mode: bool,
         timeout: float | None,
+        max_tokens: int | None = None,
     ) -> str | None:
         """Single guarded call: concurrency cap + hard timeout + None-on-failure."""
         if not self._enabled:
@@ -185,6 +186,7 @@ class AIService:
                         model=model,
                         temperature=temperature,
                         json_mode=json_mode,
+                        num_predict=max_tokens,
                         request_timeout=limit,
                     )
         except (HTTPClientError, OllamaResponseError, TimeoutError) as exc:
@@ -200,10 +202,13 @@ class AIService:
         temperature: float = 0.7,
         json_mode: bool = False,
         timeout: float | None = None,
+        max_tokens: int | None = None,
     ) -> str | None:
         """Run a free-form chat completion. Returns the reply text, or ``None`` on failure.
 
         Used by the conversational assistant. Not cached (conversational, non-deterministic).
+        ``max_tokens`` caps generated tokens to bound CPU latency; ``timeout`` overrides the
+        service default (free-form replies need a larger budget than structured calls).
         """
         return await self._chat(
             messages,
@@ -211,6 +216,7 @@ class AIService:
             temperature=temperature,
             json_mode=json_mode,
             timeout=timeout,
+            max_tokens=max_tokens,
         )
 
     async def parse(
