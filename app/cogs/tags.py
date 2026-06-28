@@ -1456,14 +1456,15 @@ class Tags(Cog):
             )
             return
 
-        await ctx.defer()
         records = await self.bot.db.tags.get_guild_tags(ctx.guild.id)
         if not records:
             await ctx.send_error("This server has no tags yet.")
             return
 
-        names = [record["name"] for record in reversed(records)]  # most-used first
-        match = await self._tag_finder.find(query, names)
+        async with ctx.typing():
+            names = [record["name"] for record in reversed(records)]  # most-used first
+            match = await self._tag_finder.find(query, names)
+
         if match is None:
             await ctx.send_error(f"I couldn't find a tag matching that. Try `{ctx.clean_prefix}tag search {query}`.")
             return
