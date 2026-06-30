@@ -8,6 +8,10 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+import config
+from app.services import ModelTier, build_dashboard_assistant_system
+from app.utils import truncate
+
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_entity, resolve_role
 
@@ -48,6 +52,13 @@ class PutAIOverrideBody(BaseModel):
     # Which AI features this channel overrides, and their on/off value for those features.
     controlled: dict[str, bool] = {}
     enabled: dict[str, bool] = {}
+
+    model_config = {"extra": "ignore"}
+
+
+class AIAskBody(BaseModel):
+    # A free-form natural-language question from the dashboard command palette.
+    question: str
 
     model_config = {"extra": "ignore"}
 
@@ -308,6 +319,122 @@ async def put_ai_override(guild: GuildDep, bot: BotDep, channel_id: int, body: P
 async def delete_ai_override(guild: GuildDep, bot: BotDep, channel_id: int) -> dict:
     await bot.db.guilds.delete_ai_override(guild.id, channel_id)
     return {"ok": True}
+
+
+#: Backtick-wrapped snippets in an answer are the model's command suggestions (mirrors the
+#: in-Discord assistant). The dashboard turns each resolved command into an informational chip.
+_BACKTICK_RE = re.compile(r"`([^`\n]{1,60})`")
+#: How many top-level commands to feed the model and how many suggestions to surface.
+_MAX_CATALOGUE = 80
+_MAX_SUGGESTIONS = 5
+#: Free-form replies generate many tokens; bound them so CPU-bound inference falls back
+#: instead of hanging the request (mirrors the assistant cog's budget).
+_ASK_MAX_TOKENS = 400
+
+
+def _command_catalogue(bot) -> list[tuple[str, str]]:
+    """Visible top-level commands as ``(qualified_name, short_description)`` pairs.
+
+    Injected into the system prompt so the model recommends real commands instead of inventing
+    them. Mirrors the in-Discord assistant's catalogue (top-level only; groups cover subcommands).
+    """
+    seen: set[str] = set()
+    catalogue: list[tuple[str, str]] = []
+    for cmd in bot.commands:
+        if cmd.hidden or not cmd.enabled or cmd.qualified_name in seen:
+            continue
+        seen.add(cmd.qualified_name)
+        desc = (cmd.description or cmd.short_doc or "").strip().split("\n", 1)[0]
+        catalogue.append((cmd.qualified_name, truncate(desc, 70)))
+    catalogue.sort(key=lambda pair: pair[0])
+    return catalogue[:_MAX_CATALOGUE]
+
+
+def _extract_suggestions(bot, answer: str, prefix: str) -> list[dict]:
+    """Resolve backtick-wrapped command names in ``answer`` to real, invokable commands.
+
+    Returns ``[{"label": "<prefix><name>", "command": "<name>"}]`` for each distinct visible
+    command the answer names, capped at :data:`_MAX_SUGGESTIONS`. Tokens that do not resolve to
+    a real command are ignored, so the model can never surface an invented command.
+    """
+    seen: set[str] = set()
+    suggestions: list[dict] = []
+    for match in _BACKTICK_RE.finditer(answer):
+        name = match.group(1).strip()
+        if name.startswith(prefix):
+            name = name[len(prefix):].strip()
+        # Keep the bare command path: drop any trailing arguments the model wrote.
+        name = name.strip(".,!?:;()[]<>").strip()
+        if not name:
+            continue
+        cmd = bot.get_command(name) or bot.get_command(name.lower())
+        if cmd is None or cmd.hidden or not cmd.enabled or cmd.qualified_name in seen:
+            continue
+        seen.add(cmd.qualified_name)
+        suggestions.append({"label": f"{prefix}{cmd.qualified_name}", "command": cmd.qualified_name})
+        if len(suggestions) >= _MAX_SUGGESTIONS:
+            break
+    return suggestions
+
+
+@router.post("/ai/ask")
+async def ai_ask(guild: GuildDep, bot: BotDep, body: AIAskBody) -> dict:
+    """Answer a dashboard command-palette question with Percy's AI assistant.
+
+    Gated like every other AI behaviour: the guild must have the ``assistant`` AI feature
+    enabled *and* the engine must be reachable. When either is false this returns
+    ``{"available": false, ...}`` (never an error) so the palette degrades gracefully to its
+    navigation/action results. The answer is grounded in the real command catalogue, and any
+    command it names is resolved and returned as a suggestion (invented commands are dropped).
+    """
+    question = body.question.strip()
+    if not question:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="question must not be empty")
+
+    ai_config = await bot.db.get_guild_ai_config(guild.id)
+    if not bot.ai.available or not ai_config.is_enabled("assistant"):
+        reason = (
+            "The AI assistant is not enabled for this server."
+            if bot.ai.available
+            else "The AI assistant is currently unavailable."
+        )
+        return {"available": False, "reason": reason, "answer": None, "suggestions": []}
+
+    guild_config = await bot.db.get_guild_config(guild.id)
+    prefix = next(iter(guild_config.prefixes), None) or _default_prefix()
+
+    system = build_dashboard_assistant_system(
+        server_name=guild.name,
+        prefix=prefix,
+        website=config.website,
+        command_catalogue=_command_catalogue(bot),
+    )
+    # User text is untrusted data, never an instruction (see prompts.py security model).
+    convo = [{"role": "system", "content": system}, {"role": "user", "content": truncate(question, 1000)}]
+
+    answer = await bot.ai.complete(
+        convo,
+        tier=ModelTier.SMART,
+        temperature=0.4,
+        timeout=config.ollama.chat_timeout,
+        max_tokens=_ASK_MAX_TOKENS,
+    )
+    if answer is None:
+        return {"available": False, "reason": "The AI assistant timed out. Please try again.", "answer": None, "suggestions": []}
+
+    return {
+        "available": True,
+        "answer": answer.strip(),
+        "suggestions": _extract_suggestions(bot, answer, prefix),
+    }
+
+
+def _default_prefix() -> str:
+    """The first configured global prefix, or ``?`` — used when a guild has no custom prefix."""
+    default = config.default_prefix
+    if isinstance(default, str):
+        return default
+    return next(iter(default), "?")
 
 
 @router.post("/batch")

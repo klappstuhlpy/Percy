@@ -6,7 +6,13 @@ The persona is curated, secret-free knowledge. These tests pin the security cont
 
 from __future__ import annotations
 
-from app.services.ai import ASSISTANT_SYSTEM, PERCY_IDENTITY, build_assistant_system
+from app.services.ai import (
+    ASSISTANT_SYSTEM,
+    DASHBOARD_SECTIONS,
+    PERCY_IDENTITY,
+    build_assistant_system,
+    build_dashboard_assistant_system,
+)
 
 
 def test_identity_is_embedded() -> None:
@@ -72,3 +78,44 @@ def test_urls_injected() -> None:
 def test_default_assistant_system_is_built() -> None:
     assert build_assistant_system() == ASSISTANT_SYSTEM
     assert isinstance(ASSISTANT_SYSTEM, str) and ASSISTANT_SYSTEM
+
+
+# -- dashboard command-palette assistant ------------------------------------------------
+
+
+def test_dashboard_prompt_embeds_identity_and_security() -> None:
+    prompt = build_dashboard_assistant_system()
+    assert PERCY_IDENTITY in prompt
+    lowered = prompt.lower()
+    # Same secret-free / injection contract as the in-Discord persona.
+    assert 'environment variables' in lowered
+    assert 'untrusted' in lowered
+    assert 'system prompt' in lowered
+
+
+def test_dashboard_prompt_lists_sections_by_label() -> None:
+    prompt = build_dashboard_assistant_system()
+    # Every section label is offered to the model so it can name a jump-to target.
+    for _slug, label, _desc in DASHBOARD_SECTIONS:
+        assert f'**{label}**' in prompt
+
+
+def test_dashboard_prompt_is_web_oriented_not_discord() -> None:
+    lowered = build_dashboard_assistant_system().lower()
+    assert 'dashboard' in lowered
+    # The in-Discord persona promises an auto-added "button"; the web prompt must not.
+    assert 'button' not in lowered
+
+
+def test_dashboard_prompt_renders_command_catalogue() -> None:
+    prompt = build_dashboard_assistant_system(
+        prefix='?', command_catalogue=[('play', 'Play a track'), ('level', 'Show your rank')]
+    )
+    assert '`?play` — Play a track' in prompt
+    assert '`?level` — Show your rank' in prompt
+
+
+def test_dashboard_prompt_server_name_and_prefix_injected() -> None:
+    prompt = build_dashboard_assistant_system(server_name='Cool Guild', prefix='b.')
+    assert 'Cool Guild' in prompt
+    assert '`b.`' in prompt

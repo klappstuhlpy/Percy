@@ -6,6 +6,7 @@ orchestration, math) to the pure, unit-testable helpers in this package.
 
 from app.services.ai import (
     ASSISTANT_SYSTEM,
+    DASHBOARD_SECTIONS,
     MODERATION_CATEGORIES,
     MUSIC_FILTERS,
     PERCY_IDENTITY,
@@ -27,6 +28,7 @@ from app.services.ai import (
     TagFinder,
     TagMatch,
     build_assistant_system,
+    build_dashboard_assistant_system,
     build_route_system_prompt,
     build_tag_find_prompt,
     json_instruction,
@@ -66,6 +68,7 @@ from app.services.spam_penalty import compute_spam_penalty
 
 __all__ = (
     'ASSISTANT_SYSTEM',
+    'DASHBOARD_SECTIONS',
     'MAX_CHARACTERS',
     'MODERATION_CATEGORIES',
     'MUSIC_FILTERS',
@@ -107,6 +110,7 @@ __all__ = (
     'assess_bot_health',
     'boost_multiplier',
     'build_assistant_system',
+    'build_dashboard_assistant_system',
     'build_purge_predicate',
     'build_route_system_prompt',
     'build_tag_find_prompt',

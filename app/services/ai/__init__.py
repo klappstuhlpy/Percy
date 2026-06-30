@@ -14,7 +14,14 @@ Pure and Discord-free: testable with a fake client (see ``tests/test_ai_service.
 from app.services.ai.events import EventExtractor, GiveawayRequest, PollRequest
 from app.services.ai.moderation import MODERATION_CATEGORIES, ModerationAssessor, ModerationVerdict
 from app.services.ai.music import MUSIC_FILTERS, MusicIntent, MusicIntentParser
-from app.services.ai.prompts import ASSISTANT_SYSTEM, PERCY_IDENTITY, build_assistant_system, json_instruction
+from app.services.ai.prompts import (
+    ASSISTANT_SYSTEM,
+    DASHBOARD_SECTIONS,
+    PERCY_IDENTITY,
+    build_assistant_system,
+    build_dashboard_assistant_system,
+    json_instruction,
+)
 from app.services.ai.router import CommandRouter, RouteCommand, RouteDecision, build_route_system_prompt
 from app.services.ai.schemas import (
     Parsable,
@@ -29,6 +36,7 @@ from app.services.ai.tags import TagFinder, TagMatch, build_tag_find_prompt
 
 __all__ = (
     'ASSISTANT_SYSTEM',
+    'DASHBOARD_SECTIONS',
     'MODERATION_CATEGORIES',
     'MUSIC_FILTERS',
     'PERCY_IDENTITY',
@@ -50,6 +58,7 @@ __all__ = (
     'TagFinder',
     'TagMatch',
     'build_assistant_system',
+    'build_dashboard_assistant_system',
     'build_route_system_prompt',
     'build_tag_find_prompt',
     'json_instruction',
