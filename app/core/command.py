@@ -6,7 +6,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeVar, Union
 
 import discord
-from discord import app_commands
+from discord import AppCommandOptionType, app_commands
 from discord.ext import commands
 from discord.ext.commands import Parameter, run_converters
 from discord.utils import MISSING
@@ -33,6 +33,7 @@ __all__ = (
     "GroupCommand",
     "HybridCommand",
     "HybridGroupCommand",
+    "NumberRange",
     "ParamInfo",
     "command",
     "cooldown",
@@ -42,6 +43,65 @@ __all__ = (
     "guilds",
     "user_max_concurrency",
 )
+
+#: Maps a slash :class:`~discord.AppCommandOptionType` back to the Python type that
+#: :class:`commands.Range` expects, so an :data:`app_commands.Range` annotation can be
+#: converted by the prefix command path (which discord.py cannot do on its own).
+_RANGE_OPTION_TYPES: dict[AppCommandOptionType, type] = {
+    AppCommandOptionType.integer: int,
+    AppCommandOptionType.number: float,
+    AppCommandOptionType.string: str,
+}
+
+
+class NumberRange(commands.Range):
+    """A :class:`commands.Range` that also powers :data:`app_commands.Range` in text commands.
+
+    Two prefix-command shortcomings are papered over here:
+
+    1. **``app_commands.Range`` support.** That annotation resolves to a ``RangeTransformer`` instance,
+       which discord.py's prefix converter cannot call (it is neither a :class:`commands.Converter` nor
+       callable with an argument), so it always raised ``BadArgument``. Slash invocations were unaffected
+       because Discord delivers a native number. :meth:`Command.transform` rewrites such parameters into
+       this converter so both invocation paths behave identically.
+    2. **Decimal comma.** Users who write ``7,5`` instead of ``7.5`` would otherwise trip ``float()``.
+       For ``float`` ranges a lone comma is normalised to a dot before conversion.
+
+    Range bounds and error types (:class:`commands.RangeError`) are inherited unchanged.
+    """
+
+    async def convert(self, ctx: Context, value: str) -> int | float:  # type: ignore[override]
+        if self.annotation is float:
+            value = self._normalize_decimal(value)
+        return await super().convert(ctx, value)
+
+    @staticmethod
+    def _normalize_decimal(value: str) -> str:
+        """Accept ``,`` as a decimal separator (``7,5`` -> ``7.5``).
+
+        Only a single comma with no dot is rewritten, so locale thousands separators (``1,000.5``)
+        and malformed input are left untouched and fail through the normal conversion error.
+        """
+        if "." not in value and value.count(",") == 1:
+            return value.replace(",", ".")
+        return value
+
+    @classmethod
+    def from_converter(cls, converter: Any) -> NumberRange | None:
+        """Build a :class:`NumberRange` from a ``commands.Range`` or ``app_commands.Range`` converter.
+
+        Returns ``None`` if ``converter`` is neither, so callers can leave other annotations alone.
+        """
+        if isinstance(converter, commands.Range):
+            return cls(annotation=converter.annotation, min=converter.min, max=converter.max)
+
+        if isinstance(converter, app_commands.transformers.RangeTransformer):
+            annotation = _RANGE_OPTION_TYPES.get(converter.type)
+            if annotation is None:
+                return None
+            return cls(annotation=annotation, min=converter.min_value, max=converter.max_value)
+
+        return None
 
 
 async def _dummy_context(ctx: Context) -> None:
@@ -190,7 +250,30 @@ class Command(commands.Command):
             view.previous = previous
             return await run_converters(ctx, param.converter, argument, param)
 
+        param = self._normalize_range_param(param)
         return await super().transform(ctx, param, attachments)
+
+    @staticmethod
+    def _normalize_range_param(param: Parameter) -> Parameter:
+        """Rewrite ``Range`` annotations so the prefix converter can handle them.
+
+        Replaces ``commands.Range`` / ``app_commands.Range`` converters (including those wrapped in an
+        ``Optional``) with :class:`NumberRange`, which adds ``app_commands.Range`` support and decimal-comma
+        parsing for text commands. Parameters without a range annotation are returned unchanged.
+        """
+        converter = param.converter
+
+        if getattr(converter, "__origin__", None) is Union:
+            args = converter.__args__
+            new_args = tuple(NumberRange.from_converter(arg) or arg for arg in args)
+            if new_args == args:
+                return param
+            return param.replace(annotation=Union[new_args])  # noqa: UP007 -- dynamic tuple, no PEP 604 form
+
+        replacement = NumberRange.from_converter(converter)
+        if replacement is None:
+            return param
+        return param.replace(annotation=replacement)
 
     async def can_run(self, ctx: Context, /) -> bool:
         """Checks if the command can be run in the given context.

@@ -6,6 +6,7 @@ from .command import (
     GroupCommand,
     HybridCommand,
     HybridGroupCommand,
+    NumberRange,
     ParamInfo,
     command,
     cooldown,
