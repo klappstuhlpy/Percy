@@ -454,7 +454,7 @@ class Stats(Cog):
         try:
             avatar: bytes = await member.display_avatar.read()
         except discord.HTTPException as exc:
-            if exc.status in (403, 404):
+            if exc.status in (403, 404, 415):
                 return None
             if exc.status >= 500:
                 await asyncio.sleep(15.0)
