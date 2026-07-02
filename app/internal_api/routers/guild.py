@@ -234,6 +234,7 @@ async def get_guild_config(guild: GuildDep, bot: BotDep) -> dict:
 
 
 @router.patch("")
+@router.patch("/config", include_in_schema=False)  # legacy alias; the BFF's patch_guild_config still targets it
 async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfigBody) -> dict:
     # exclude_unset (not exclude_none): a client-sent ``null`` is a deliberate "clear", which
     # we must honour (e.g. clearing an alert channel) — exclude_none would silently drop it.
