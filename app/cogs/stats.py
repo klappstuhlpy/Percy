@@ -28,7 +28,7 @@ from app.cogs.games.models import Game
 from app.core import Bot, Cog, Context
 from app.core.models import command, cooldown, describe, group
 from app.core.pagination import FilePaginator
-from app.core.views import UserInfoView, LayoutView
+from app.core.views import LayoutView, UserInfoView
 from app.rendering import resize_to_limit
 from app.services import (
     ConnectionState,
@@ -957,7 +957,7 @@ class Stats(Cog):
             container.add_item(discord.ui.TextDisplay(f"### {game.icon} {game.label}\n" + value))
             container.add_item(discord.ui.Separator())
 
-        container.add_item(discord.ui.TextDisplay(f"-# want to play? checkout ?help Games for further info"))
+        container.add_item(discord.ui.TextDisplay("-# want to play? checkout ?help Games for further info"))
 
         view = LayoutView()
         view.add_item(container)

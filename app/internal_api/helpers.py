@@ -1,7 +1,10 @@
 """Shared helpers for resolving Discord entities into API-friendly dicts."""
 from __future__ import annotations
 
-import discord
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import discord
 
 
 def resolve_channel(guild: discord.Guild, channel_id: int | None) -> dict | None:

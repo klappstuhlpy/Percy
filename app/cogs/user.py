@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, ClassVar, NamedTuple
 import dateutil.tz
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 from discord.ext import commands
 from lxml import etree
 
@@ -21,6 +20,8 @@ from config import Emojis
 
 if TYPE_CHECKING:
     import datetime
+
+    from discord.app_commands import Choice
 
     from app.core import Bot, Context
     from app.database.base import UserConfig

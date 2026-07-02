@@ -250,9 +250,11 @@ class Economy(Cog):
         assert ctx.guild is not None
         balances = await ctx.db.get_guild_balances(ctx.guild.id)
         total = sum(balance.total for balance in balances)
+        # The underlying query returns rows in arbitrary order, so rank richest-first here.
+        balances = sorted(balances, key=lambda balance: balance.total, reverse=True)
 
         users = [
-            f"**{index}.** {self.bot.get_user(balance.user_id).mention} • {Emojis.Economy.cash} **{fnumb(balance.total)}**"  # type: ignore[union-attr]
+            f"**{index}.** <@{balance.user_id}> • {Emojis.Economy.cash} **{fnumb(balance.total)}**"
             for index, balance in enumerate(balances, 1)
         ]
 

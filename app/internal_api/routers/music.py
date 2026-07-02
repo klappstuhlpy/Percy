@@ -75,7 +75,7 @@ class ControlBody(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    def model_post_init(self, _context: Any) -> None:  # noqa: ANN401
+    def model_post_init(self, _context: Any) -> None:
         """Pydantic v2 doesn't accept 'from' as a field name directly."""
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from app.cogs.automation.engine import is_valid_regex, matches
 
-
 # -- contains --------------------------------------------------------------
 
 

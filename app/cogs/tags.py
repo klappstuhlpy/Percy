@@ -9,10 +9,9 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 import asyncpg
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 from discord.ext import commands
 
-from app.core import Bot, Cog, Context, Flags, LayoutView, flag, store_true, ConfirmationView
+from app.core import Bot, Cog, ConfirmationView, Context, Flags, LayoutView, flag, store_true
 from app.core.models import AppBadArgument, BadArgument, PermissionTemplate, cooldown, describe, group
 from app.database import BaseRecord
 from app.services import TagFinder
@@ -31,6 +30,8 @@ from config import Emojis
 if TYPE_CHECKING:
     import re
     from collections.abc import Callable, Generator
+
+    from discord.app_commands import Choice
 
 
 # region Converters & Flags

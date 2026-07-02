@@ -15,7 +15,6 @@ import asyncpg
 import dateutil.tz
 import discord
 from discord.utils import MISSING
-
 from sshtunnel import SSHTunnelForwarder
 
 from app.database.repositories import (
@@ -319,6 +318,7 @@ class Database(_Database):
     rolemenu: RoleMenusRepository
     autoresponders: AutoRespondersRepository
     stat_counters: StatCountersRepository
+    anilist: AniListRepository
     votes: VotesRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:

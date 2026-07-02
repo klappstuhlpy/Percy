@@ -870,9 +870,12 @@ class _ModBypassCooldownMapping(commands.CooldownMapping):
     """A cooldown mapping that bypasses cooldowns for users with manage_guild permission."""
 
     def _bucket_key(self, message: discord.Message) -> Any:
-        if message.guild and isinstance(message.author, discord.Member):
-            if message.author.guild_permissions.manage_guild:
-                return None
+        if (
+            message.guild
+            and isinstance(message.author, discord.Member)
+            and message.author.guild_permissions.manage_guild
+        ):
+            return None
         return super()._bucket_key(message)
 
     def get_bucket(self, message: discord.Message, current: float | None = None) -> commands.Cooldown | None:

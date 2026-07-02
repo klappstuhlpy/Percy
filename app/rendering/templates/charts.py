@@ -259,8 +259,10 @@ def draw_avatar_collage(avatars: list[bytes]) -> BytesIO:
         x, y = 0, 0
         for avy in avatars:
             if avy:
-                im = Image.open(BytesIO(avy)).resize((size, size), resample=Image.Resampling.BICUBIC)
+                with Image.open(BytesIO(avy)) as opened:
+                    im = opened.resize((size, size), resample=Image.Resampling.BICUBIC)
                 base.paste(im, box=(x * size, y * size))
+                im.close()
             if x < xbound - 1:
                 x += 1
             else:

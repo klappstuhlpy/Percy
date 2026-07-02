@@ -10,7 +10,7 @@ import discord
 from discord import DiscordException, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
-from discord.ext.commands import Range
+from discord.ext.commands import Range  # noqa: TC002 -- flag/command param annotations are evaluated at runtime
 
 from app.core import Bot, Cog, Context, Flags, LayoutView, describe, flag, group
 from app.core.pagination import EmbedPaginator

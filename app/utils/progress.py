@@ -28,7 +28,7 @@ class ProgressTracker:
     the bot shows typing and edits a status message.
     """
 
-    __slots__ = ("_ctx", "_message", "_status", "_ephemeral", "_done")
+    __slots__ = ("_ctx", "_done", "_ephemeral", "_message", "_status")
 
     def __init__(self, ctx: Context, initial_status: str, *, ephemeral: bool = False) -> None:
         self._ctx = ctx

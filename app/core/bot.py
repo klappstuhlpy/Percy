@@ -24,22 +24,21 @@ from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand
 from app.core.context import Context
+from app.core.feature_flags import FeatureFlags
 from app.core.flags import FlagMeta
 from app.core.help import PaginatedHelpCommand
 from app.core.models import AppBadArgument
 from app.core.pagination import TextSource
 from app.core.permissions import PermissionSpec
-from app.core.feature_flags import FeatureFlags
 from app.core.spam import SpamControl
-from app.i18n import I18n
 from app.core.timer import Timer, TimerManager
 from app.core.tree import CommandTree
 from app.core.views import CommandSuggestionView
 from app.database.base import Database
+from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand
-from app.utils.metrics import MetricsCollector
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,
@@ -52,6 +51,7 @@ from app.utils import (
     humanize_duration,
 )
 from app.utils.lock import LockedResourceError
+from app.utils.metrics import MetricsCollector
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
     DatabaseConfig,
@@ -62,7 +62,6 @@ from config import (
     description,
     get_full_version,
     lavalink_nodes,
-    ollama as ollama_config,
     owners,
     resolved_token,
     stats_webhook,
@@ -70,6 +69,9 @@ from config import (
 )
 from config import (
     name as bot_name,
+)
+from config import (
+    ollama as ollama_config,
 )
 
 if TYPE_CHECKING:

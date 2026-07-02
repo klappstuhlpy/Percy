@@ -291,8 +291,11 @@ class Highlights(Cog):
             return
 
         highlight = await self.get_highlight_config(ctx.guild.id, ctx.author.id)  # type: ignore[union-attr]
+        # Count the newly-added triggers *before* the update — ``update`` re-hydrates
+        # ``highlight.lookup`` from the merged row, after which the difference is always empty.
+        imported = other.lookup - highlight.lookup  # type: ignore[union-attr]
         await highlight.update(lookup=highlight.lookup | other.lookup)  # type: ignore[union-attr]
-        await ctx.send_success(f"Imported {len(other.lookup.difference(highlight.lookup))} highlights.", ephemeral=True)  # type: ignore[union-attr]
+        await ctx.send_success(f"Imported {len(imported)} highlights.", ephemeral=True)
 
     @highlight_import.autocomplete("guild")  # type: ignore[attr-defined]
     async def highlight_import_guild_autocomplete(

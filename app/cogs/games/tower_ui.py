@@ -81,7 +81,7 @@ class Tower(LayoutView):
 
     def build_container(self, failed: bool = False) -> discord.ui.Container:
         container = discord.ui.Container(accent_colour=helpers.Colour.white())
-        container.add_item(discord.ui.TextDisplay(f"## \N{BUILDING CONSTRUCTION} Tower"))
+        container.add_item(discord.ui.TextDisplay("## \N{BUILDING CONSTRUCTION} Tower"))
 
         container.add_item(discord.ui.Separator())
         container.add_item(discord.ui.TextDisplay(self.build(failed=failed)))

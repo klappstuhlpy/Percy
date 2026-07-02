@@ -69,7 +69,7 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
     """Composite endpoint: guild config + guild stats + bot stats in one round-trip."""
     guild_config = await bot.db.get_guild_config(guild.id)
     command_summary = await bot.db.stats.get_command_summary(guild.id)
-    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
+    since = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=7)
     recent_cases = len(await bot.db.moderation.get_recent_cases(guild.id, since=since))
 
     online = sum(1 for m in guild.members if m.status.name != 'offline')
@@ -171,10 +171,7 @@ async def get_changelog(limit: int = Query(default=20, le=50)) -> dict:
         if tag_commits:
             # Group commits between consecutive tags
             for i, (tag_name, tag_commit) in enumerate(tag_commits[:limit]):
-                if i + 1 < len(tag_commits):
-                    parent_oid = tag_commits[i + 1][1].id
-                else:
-                    parent_oid = None
+                parent_oid = tag_commits[i + 1][1].id if i + 1 < len(tag_commits) else None
 
                 changes: list[str] = []
                 walker = repo.walk(tag_commit.id, pygit2.GIT_SORT_TOPOLOGICAL)
@@ -185,7 +182,7 @@ async def get_changelog(limit: int = Query(default=20, le=50)) -> dict:
                     if msg:
                         changes.append(msg)
 
-                dt = datetime.datetime.fromtimestamp(tag_commit.commit_time, tz=datetime.timezone.utc)
+                dt = datetime.datetime.fromtimestamp(tag_commit.commit_time, tz=datetime.UTC)
                 entries.append({
                     'version': tag_name.removeprefix('v'),
                     'date': dt.strftime('%Y-%m-%d'),
@@ -201,7 +198,7 @@ async def get_changelog(limit: int = Query(default=20, le=50)) -> dict:
             for commit in walker:
                 if count >= limit * 5:
                     break
-                dt = datetime.datetime.fromtimestamp(commit.commit_time, tz=datetime.timezone.utc)
+                dt = datetime.datetime.fromtimestamp(commit.commit_time, tz=datetime.UTC)
                 date_str = dt.strftime('%Y-%m-%d')
                 msg = commit.message.split('\n', 1)[0].strip()
                 if not msg:

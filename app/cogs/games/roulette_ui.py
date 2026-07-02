@@ -124,7 +124,7 @@ class Table:
     """Discord-facing roulette table: owns the message, view and placed bets, delegating
     the wheel rules to :mod:`app.cogs.games.engine.roulette`."""
 
-    __slots__ = ("ctx", "start_time", "message", "bets", "view", "open")
+    __slots__ = ("bets", "ctx", "message", "open", "start_time", "view")
 
     def __init__(self, ctx: Context) -> None:
         self.ctx: Context = ctx

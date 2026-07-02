@@ -110,7 +110,7 @@ class BaseCard:
     def __repr__(self) -> str:
         return f"Card(name={self.name}, value={self.value}, suit={self.suit})"
 
-    def __gt__(self, other: CardT):
+    def __gt__(self, other: object) -> bool:
         if not isinstance(other, BaseCard):
             return NotImplemented
         return self.value > other.value

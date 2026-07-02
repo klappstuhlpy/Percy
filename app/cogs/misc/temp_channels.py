@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 
 from app.core import Cog
 from app.core.models import Context, PermissionTemplate, describe, group
@@ -15,6 +14,8 @@ from app.utils import fuzzy, helpers, pluralize
 from config import Emojis
 
 if TYPE_CHECKING:
+    from discord.app_commands import Choice
+
     from app.core import Bot
     from app.database.base import GuildConfig
 

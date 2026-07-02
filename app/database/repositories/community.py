@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from asyncpg import Record
-
 from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
@@ -12,6 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     import asyncpg
+    from asyncpg import Record
 
 __all__ = (
     'GiveawaysRepository',
@@ -104,7 +103,7 @@ class PollsRepository(BaseRepository):
         falling back to sorting by ``id`` for unknown values.
         """
         sort_clause = self._SORT_CLAUSES.get(sort or 'id', 'id')
-        running = "AND metadata #>> ARRAY['kwargs', 'running'] = true" if active else ''
+        running = "AND metadata #>> ARRAY['kwargs', 'running'] = 'true'" if active else ''
         query = f"SELECT * FROM polls WHERE guild_id = $1 {running} ORDER BY {sort_clause};"
         return await self.fetch(query, guild_id)
 

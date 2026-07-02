@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 from discord.ext import commands
 from expiringdict import ExpiringDict
 
@@ -30,10 +29,10 @@ from app.cogs.games import (
     trivia_ui,
     wordle_ui,
 )
-from app.cogs.games.engine.cards import MinimumBet, Payouts
 from app.cogs.games.engine import dice as dice_engine
 from app.cogs.games.engine import horserace as horserace_engine
 from app.cogs.games.engine import roulette as roulette_engine
+from app.cogs.games.engine.cards import MinimumBet, Payouts
 from app.cogs.games.engine.trivia import RawQuestion, build_round
 from app.cogs.games.engine.wordle import WORD_LENGTH, daily_index
 from app.cogs.games.models import Game, GameResult
@@ -55,6 +54,8 @@ from config import Emojis, path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from discord.app_commands import Choice
 
     from app.core.timer import Timer
     from app.database.base import Balance

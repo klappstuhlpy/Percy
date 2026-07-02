@@ -454,7 +454,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             lines = [f"- `--{flag.name}`: {flag.description}" for flag in flags.walk_flags()]
             if not lines:
                 return ""
-            return f"### Flags\n" + "\n".join(lines)
+            return "### Flags\n" + "\n".join(lines)
 
         resolved: list[str] = []
         for flag in flags.walk_flags():
@@ -509,7 +509,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
             if not lines:
                 return ""
-            return f"### Arguments\n" + "\n".join(lines)
+            return "### Arguments\n" + "\n".join(lines)
 
         prefix = self.context.clean_prefix
 
@@ -667,7 +667,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
             # counterpart) fall back to the full prefixed signature.
             label = getattr(cmd, "mention", None) if self._render_mentions else None
             if not label:
-                label = f"**`{self.get_command_signature(cmd, no_signature=True)}`**"""
+                label = f"**`{self.get_command_signature(cmd, no_signature=True)}`**"
             description = cmd.description or "…"
             lines.append(f"{prefix}{label}\n-# {description}")
         container.add_item(discord.ui.TextDisplay("\n".join(lines)))
@@ -763,7 +763,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         extra: list[str] = []
         if getattr(command, "aliases", None):
             extra.append(
-                f"### Aliases\n" + " ".join(f"`{alias}`" for alias in command.aliases)
+                "### Aliases\n" + " ".join(f"`{alias}`" for alias in command.aliases)
             )
 
         if cooldown := command._buckets._cooldown:
@@ -779,7 +779,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 if not cmd.hidden
             ]
             if resolved_sub_commands:
-                extra.append(f"### Subcommands\n" + "\n".join(resolved_sub_commands))
+                extra.append("### Subcommands\n" + "\n".join(resolved_sub_commands))
 
         if isinstance(command, (Command, HybridCommand)):
             spec = command.permissions
@@ -794,7 +794,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
         if examples := command.extras.get("examples"):
             command_signature = self.get_command_signature(command, no_signature=True)
             extra.append(
-                f"### Examples\n"
+                "### Examples\n"
                 + "\n".join(f"* `{command_signature} {example}`" for example in examples)
             )
 
@@ -804,7 +804,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
                 (self._render_mentions and getattr(cmd, "mention", None)) or f"`{self.get_command_signature(cmd, no_signature=True)}`"
                 for cmd in related[:5]
             ]
-            extra.append(f"### Related Commands\n" + " • ".join(related_lines))
+            extra.append("### Related Commands\n" + " • ".join(related_lines))
 
         if extra:
             container.add_item(discord.ui.Separator())

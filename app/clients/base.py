@@ -52,7 +52,7 @@ class StaleResult:
     disclaimer to the user. The actual payload is in ``.data``.
     """
 
-    __slots__ = ("data", "age_seconds")
+    __slots__ = ("age_seconds", "data")
 
     def __init__(self, data: Any, age_seconds: float) -> None:
         self.data = data
@@ -218,7 +218,10 @@ class BaseHTTPClient:
 
                     if 200 <= response.status < 300:
                         self._record_success()
-                        if method.upper() == 'GET':
+                        # Only retain a copy when this client actually serves stale
+                        # responses; otherwise the cache is dead weight (never read) and
+                        # would grow unbounded for the lifetime of the client.
+                        if self.SERVE_STALE and method.upper() == 'GET':
                             self._response_cache[cache_key] = (payload, self._now())
                         return payload
 

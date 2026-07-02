@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Any, override, Iterable
+from typing import TYPE_CHECKING, Any, override
 
 import discord
 

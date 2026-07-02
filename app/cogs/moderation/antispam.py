@@ -16,7 +16,7 @@ from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSeq
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, MutableMapping
 
-    from app.database.base import Sentinel, GuildConfig
+    from app.database.base import GuildConfig, Sentinel
 
 log = logging.getLogger(__name__)
 

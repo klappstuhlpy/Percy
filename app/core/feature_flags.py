@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 __all__ = ("FeatureFlags",)
 
@@ -57,9 +53,7 @@ class FeatureFlags:
         """Check if a command is disabled either directly or via its cog."""
         if qualified_name in self._disabled_commands:
             return True
-        if cog_name and cog_name in self._disabled_cogs:
-            return True
-        return False
+        return bool(cog_name and cog_name in self._disabled_cogs)
 
     @property
     def disabled_commands(self) -> set[str]:

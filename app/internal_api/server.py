@@ -6,12 +6,14 @@ import logging
 from typing import TYPE_CHECKING
 
 import uvicorn
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 
 import config
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from app.core import Bot
 
 log = logging.getLogger(__name__)
@@ -52,8 +54,8 @@ def _create_app(bot: Bot) -> FastAPI:
         return HTMLResponse(SCALAR_HTML)
 
     @app.middleware('http')
-    async def add_api_version_header(request, call_next):
-        response: Response = await call_next(request)
+    async def add_api_version_header(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        response = await call_next(request)
         response.headers['X-API-Version'] = API_VERSION
         return response
 

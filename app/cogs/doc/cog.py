@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 import aiohttp
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 from discord.ext import commands
 
 from app.cogs.doc import client, engine
@@ -27,6 +26,8 @@ from app.utils.tasks import Scheduler, executor
 from config import Emojis
 
 if TYPE_CHECKING:
+    from discord.app_commands import Choice
+
     from app.cogs.doc.client import InventoryDict
 
 log = logging.getLogger(__name__)

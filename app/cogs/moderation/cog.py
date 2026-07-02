@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 import asyncpg
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 from discord.ext import commands, tasks
 
 from app.core import Bot, Context, Flags, NoticeView, flag, store_true
@@ -18,9 +17,8 @@ from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, Ign
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator, TextSource
 from app.core.views import View
-from app.database.base import Sentinel, GuildConfig
+from app.database.base import GuildConfig, Sentinel
 from app.services import ModerationAssessor, build_purge_predicate
-from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from app.utils import (
     checks,
     fuzzy,
@@ -34,13 +32,8 @@ from app.utils import (
 from app.utils.lock import lock
 from config import Emojis
 
+from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from .antispam import SpamChecker, check_raid, mention_spam_ban
-from .sentinel import (
-    SentinelAlertMassbanButton,
-    SentinelAlertResolveButton,
-    SentinelSetUpView,
-    SentinelVerifyButton,
-)
 from .infractions import check_member_hierarchy, default_reason, safe_reason_append, update_role_permissions
 from .lockdown import (
     build_lockdown_error_embed,
@@ -49,9 +42,17 @@ from .lockdown import (
     is_potential_lockout,
     start_lockdown,
 )
+from .sentinel import (
+    SentinelAlertMassbanButton,
+    SentinelAlertResolveButton,
+    SentinelSetUpView,
+    SentinelVerifyButton,
+)
 from .ui import MuteRoleSetUpView
 
 if TYPE_CHECKING:
+    from discord.app_commands import Choice
+
     from app.core.timer import Timer
 
     class ModGuildContext(Context):
@@ -2017,7 +2018,7 @@ class Moderation(Cog):
             await ctx.send_error('You are already muted.')
             return
 
-        if ctx.guild.me.top_role < discord.Object(id=role_id):
+        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
             await ctx.send_error('I cannot mute you with a role equal to or higher than the mute role.')
             return
 

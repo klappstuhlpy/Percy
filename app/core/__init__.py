@@ -1,5 +1,4 @@
 from .bot import Bot
-from .errors import ErrorCategory, ServiceUnavailableError, categorize_error
 from .command import (
     Command,
     CommandInstance,
@@ -20,6 +19,7 @@ from .components_v2 import Accent, NoticeView, make_notice
 from .context import Context, HybridContext, HybridContextProtocol
 from .converter import *
 from .embeds import EmbedBuilder
+from .errors import ErrorCategory, ServiceUnavailableError, categorize_error
 from .flags import *
 from .models import AppBadArgument, BadArgument, Cog, CogT
 from .permissions import PermissionSpec, PermissionTemplate

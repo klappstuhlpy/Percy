@@ -222,10 +222,9 @@ async def patch_poll(guild: GuildDep, bot: BotDep, poll_id: int, body: PatchPoll
     if not kwargs.get('running', False):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='cannot edit a poll that has ended')
 
-    # Apply edits to kwargs
-    if body.question is not None:
-        if body.question:
-            kwargs['content'] = body.question
+    # Apply edits to kwargs (an empty question is ignored rather than clearing the field)
+    if body.question:
+        kwargs['content'] = body.question
 
     if body.description is not None:
         kwargs['description'] = body.description if body.description else None

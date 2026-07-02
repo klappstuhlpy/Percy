@@ -45,9 +45,8 @@ async def get_guild_members(
     if search_lower:
         all_members = [m for m in all_members if search_lower in m.name.lower() or search_lower in m.display_name.lower()]
 
-    members = []
-    for member in all_members[:limit]:
-        members.append({
+    members = [
+        {
             'id': str(member.id),
             'name': member.name,
             'display_name': member.display_name,
@@ -55,7 +54,9 @@ async def get_guild_members(
             'joined_at': member.joined_at.isoformat() if member.joined_at else None,
             'roles': [str(r.id) for r in member.roles if r != guild.default_role],
             'bot': member.bot,
-        })
+        }
+        for member in all_members[:limit]
+    ]
 
     return {'members': members, 'total': len(all_members)}
 

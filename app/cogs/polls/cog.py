@@ -497,8 +497,8 @@ class Polls(Cog):
             container.add_item(discord.ui.Separator())
             container.add_item(
                 discord.ui.TextDisplay(
-                    f"-# You wanna tell us your opinion?\n"
-                    f"-# To be notified when new polls are posted, click below!"
+                    "-# You wanna tell us your opinion?\n"
+                    "-# To be notified when new polls are posted, click below!"
                 )
             )
             container.add_item(discord.ui.ActionRow(PollRolePingButton(config.poll_ping_role_id)))

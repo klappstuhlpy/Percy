@@ -33,6 +33,10 @@ class OllamaClient(BaseHTTPClient):
 
     #: Default host; overridden per-instance from config in :meth:`__init__`.
     BASE_URL: ClassVar[str] = 'http://127.0.0.1:11434/'
+    # A stale cached ``/api/version`` string is meaningless (and would make the health
+    # probe report the engine reachable while the breaker is open), and chat completions
+    # are never replayable across prompts — so this client never serves stale responses.
+    SERVE_STALE: ClassVar[bool] = False
 
     def __init__(
         self,

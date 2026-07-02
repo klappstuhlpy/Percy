@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, Required, TypedDict
 
 import discord
@@ -12,7 +11,6 @@ from discord import (
     AutoModTrigger,
     Interaction,
 )
-from discord.automod import AutoModRule
 from discord.ext import commands
 from discord.utils import MISSING
 
@@ -21,6 +19,10 @@ from app.utils import TimeDelta, format_fields, get_asset_url, helpers, letter_e
 from config import Emojis
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from discord.automod import AutoModRule
+
     from app.database import GuildConfig
 
 

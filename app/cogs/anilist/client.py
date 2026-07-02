@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
-import aiohttp
+from typing import TYPE_CHECKING, Any
 
 from app.clients import BaseHTTPClient, HTTPClientError
+
+if TYPE_CHECKING:
+    import aiohttp
 
 API_ENDPOINT = 'https://graphql.anilist.co'
 
@@ -113,10 +114,7 @@ class AniListClient(BaseHTTPClient):
         self, *, media_id: int, media_type: str, headers: dict[str, str],
     ) -> bool:
         """Toggle a media entry as favourite. Returns True if the mutation succeeded."""
-        if media_type == 'ANIME':
-            variables = {'animeId': media_id}
-        else:
-            variables = {'mangaId': media_id}
+        variables = {'animeId': media_id} if media_type == 'ANIME' else {'mangaId': media_id}
         data = await self._request(query=self._toggle_favourite_mutation, headers=headers, **variables)
         return data is not None
 

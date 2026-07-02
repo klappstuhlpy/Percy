@@ -171,9 +171,7 @@ async def patch_leveling_user(guild: GuildDep, bot: BotDep, user_id: int, body: 
 
 @router.patch("/leveling/config")
 async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelingConfigBody) -> dict:
-    updates: dict[str, object] = {}
-    for key, value in body.model_dump(exclude_none=True).items():
-        updates[key] = value
+    updates: dict[str, object] = body.model_dump(exclude_none=True)
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no valid fields to update')

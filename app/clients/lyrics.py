@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from app.clients.base import BaseHTTPClient, HTTPClientError
+from app.clients.base import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError, StaleResult
 
 if TYPE_CHECKING:
     import aiohttp
@@ -28,6 +28,9 @@ class LRCLibClient(BaseHTTPClient):
     BASE_URL: ClassVar[str] = "https://lrclib.net/"
     # LRCLIB asks clients to identify themselves via User-Agent.
     HEADERS: ClassVar[dict[str, str]] = {"User-Agent": "Percy-Bot (https://klappstuhl.me)"}
+    # Lyrics are keyed per song, so a cached response served for a *different* query would
+    # be wrong (and the shared cache key ignores query params). Never serve stale here.
+    SERVE_STALE: ClassVar[bool] = False
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
         super().__init__(session, name="LRCLib")

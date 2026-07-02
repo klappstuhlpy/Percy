@@ -3,22 +3,23 @@ from __future__ import annotations
 import io
 from contextlib import suppress
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal, cast, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import asyncpg
 import discord
+from discord.ui.media_gallery import MediaGalleryItem
 
-from app.core import Bot
 from app.core.models import AppBadArgument
 from app.core.views import ConfirmationView, LayoutView
-from app.database.base import Sentinel, GuildConfig
 from app.utils import checks, get_asset_url, merge_perms, pluralize
 from config import Emojis
-from discord.ui.media_gallery import MediaGalleryItem
 
 from .infractions import sync_permissions_with_progress
 
 if TYPE_CHECKING:
+    from app.core import Bot
+    from app.database.base import GuildConfig, Sentinel
+
     from .cog import Moderation
 
 # Shared palette from klappstuhl.me dashboard

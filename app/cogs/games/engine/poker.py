@@ -15,18 +15,22 @@ from __future__ import annotations
 import enum
 import multiprocessing
 import random
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import chain, combinations
-from typing import Any, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
-import discord
 import numpy as np
 from joblib import Parallel, delayed
 from scipy.special import comb
 
 from app.cogs.games.engine.cards import NAMED_HAND, SUITS, UNAMED, BaseCard, BaseHand, Deck
 from app.utils import RevDict, fnumb
+
+if TYPE_CHECKING:
+    # Annotation-only: ``Player.member`` is an opaque identity token; the engine
+    # stays importable (and testable) without discord installed at runtime.
+    import discord
 
 __all__ = (
     "Card",
@@ -675,15 +679,9 @@ class TexasHoldem:
     @property
     def current_street(self) -> int:
         """Returns the current street (0=pre-flop, 1=flop, 2=turn, 3=river)."""
-        community_len = len(self.community_arr)
-        if community_len == 0:
-            return 0  # Pre-flop
-        elif community_len == 3:
-            return 1  # Flop
-        elif community_len == 4:
-            return 2  # Turn
-        else:
-            return 3  # River
+        # 0 cards = pre-flop, 3 = flop, 4 = turn, 5 = river
+        streets = {0: 0, 3: 1, 4: 2}
+        return streets.get(len(self.community_arr), 3)
 
     @property
     def showdown_order(self) -> list[Player]:
@@ -1117,9 +1115,8 @@ class TexasHoldem:
             return False
         if not any(p.all_in for p in self.playing_players):
             return False
-        if len(self.community_arr) >= 5:
-            return False  # Board is complete
-        return True
+        # Board must not be complete yet
+        return len(self.community_arr) < 5
 
     def offer_run_it_twice(self) -> bool:
         """Offers run it twice to players.
@@ -1189,12 +1186,8 @@ class TexasHoldem:
         if player is None or player.mucked:
             return False
 
-        # Check if player is a winner - winners must show
-        for winners, _ in self.winners:
-            if player in winners:
-                return False
-
-        return True
+        # Winners must show their hand, so they can never muck
+        return all(player not in winners for winners, _ in self.winners)
 
     def muck_hand(self, member: discord.Member) -> bool:
         """Mucks a player's hand (hides it from view).
@@ -1253,7 +1246,7 @@ class TexasHoldem:
 
         entry = HandHistoryEntry(
             hand_number=self.hand_number,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             players=[self._get_player_name(p) for p in self.players],
             hole_cards=hole_cards,
             community_cards=community,
@@ -1435,15 +1428,10 @@ class TexasHoldem:
             player.checked = False
             player.bet = 0  # Reset bets for the new street
 
-        # Post-flop action starts left of dealer (SB in 3+ players, BB in heads-up)
-        # In heads-up, BB acts first post-flop (dealer/SB acts last)
+        # Post-flop action starts left of the dealer: the SB with 3+ players,
+        # the BB (non-dealer) heads-up — the same seat either way.
         num_players = len(self.players)
-        if num_players == 2:
-            # Heads-up: BB (non-dealer) acts first post-flop
-            start_index = (self.dealer_index + 1) % num_players
-        else:
-            # 3+ players: SB acts first (left of dealer)
-            start_index = (self.dealer_index + 1) % num_players
+        start_index = (self.dealer_index + 1) % num_players
 
         self.player_index = start_index
         # Skip to first non-folded, non-all-in player

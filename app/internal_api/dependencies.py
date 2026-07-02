@@ -1,14 +1,18 @@
 """FastAPI dependencies: authentication, guild resolution, bot access."""
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
-import discord
 from fastapi import Depends, Header, HTTPException, Path, Request, status
 
 import config
 
-from app.core import Bot
+if TYPE_CHECKING:
+    # Only used in return annotations, which FastAPI never evaluates —
+    # the dependency aliases below are deliberately ``Annotated[Any, ...]``.
+    import discord
+
+    from app.core import Bot
 
 
 def get_bot(request: Request) -> Bot:

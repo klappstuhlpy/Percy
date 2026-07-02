@@ -12,6 +12,7 @@ from ..dependencies import BotDep, GuildDep, verify_token
 if TYPE_CHECKING:
     import discord
 
+    from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import ModerationCase
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Moderation"], dependencies=[Depends(verify_token)])
@@ -135,7 +136,6 @@ async def create_case(
     body: CreateCaseBody,
 ) -> dict:
     """Manually open a moderation case (records only, does not perform the action)."""
-    from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import CaseType, ModerationCase
 
     if CaseType.from_action(body.action) is None:
@@ -170,7 +170,6 @@ async def patch_case(
     body: PatchCaseBody,
 ) -> dict:
     """Update a case's reason (and its modlog channel post)."""
-    from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import ModerationCase
 
     reason = body.reason.strip()
@@ -196,7 +195,6 @@ async def delete_case(
     guild: GuildDep,
 ) -> dict:
     """Close (delete) a case and remove its modlog channel post."""
-    from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import ModerationCase
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 __all__ = ('RANKS', 'GuessOdds', 'HigherLower')
 
-from app.cogs.games.engine.cards import BaseHand, BaseCard, Deck
+from app.cogs.games.engine.cards import BaseCard, BaseHand, Deck
 
 #: Card ranks, Ace high (2..14). Suits are irrelevant to the odds, so the engine
 #: draws ranks with replacement (an "infinite deck"); a tie counts as a loss and

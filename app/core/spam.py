@@ -63,7 +63,7 @@ class SpamControl:
         embed = discord.Embed(title="Auto-Blocked Member", colour=helpers.Colour.di_sierra())
         embed.add_field(name="Member", value=f"{message.author} (ID: {message.author.id})", inline=False)
         embed.add_field(name="Guild Info", value=f"{guild_name} (ID: {guild_id})", inline=False)
-        embed.add_field(name="Channel Info", value=f"{message.channel} (ID: {message.channel.id}", inline=False)
+        embed.add_field(name="Channel Info", value=f"{message.channel} (ID: {message.channel.id})", inline=False)
         embed.timestamp = discord.utils.utcnow()
         await self.bot.stats_webhook.send(embed=embed, username="Bot Spam Control")
 

@@ -204,7 +204,7 @@ def cache(
         # Compute once at decoration time rather than on every call.
         _signature = inspect.signature(func)
         _all_params: list[inspect.Parameter] = list(
-            filter(lambda x: x._kind != inspect.Parameter.KEYWORD_ONLY, _signature.parameters.values())
+            filter(lambda x: x.kind != inspect.Parameter.KEYWORD_ONLY, _signature.parameters.values())
         )
         _skip_first_param: bool = any(p.name in ("self", "cls") for p in _all_params)
         _is_coroutine: bool = inspect.iscoroutinefunction(func)

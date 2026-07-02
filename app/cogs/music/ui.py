@@ -4,7 +4,7 @@ import asyncio
 import datetime
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from discord.ext import commands
@@ -781,13 +781,13 @@ class MusicSetupView(LayoutView):
     Consolidates setup, panel toggle, and reset into one CV2 card.
     """
 
-    _DJ_MODE_LABELS: dict[DJMode, str] = {
+    _DJ_MODE_LABELS: ClassVar[dict[DJMode, str]] = {
         DJMode.everyone: "DJ Mode: Everyone",
         DJMode.dj_only: "DJ Mode: DJ Only",
         DJMode.hybrid: "DJ Mode: Hybrid",
     }
 
-    _DJ_MODE_STYLES: dict[DJMode, discord.ButtonStyle] = {
+    _DJ_MODE_STYLES: ClassVar[dict[DJMode, discord.ButtonStyle]] = {
         DJMode.everyone: discord.ButtonStyle.grey,
         DJMode.dj_only: discord.ButtonStyle.red,
         DJMode.hybrid: discord.ButtonStyle.blurple,

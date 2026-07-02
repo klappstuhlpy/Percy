@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from discord.ext import commands
 
-from app.core import Context
+if TYPE_CHECKING:
+    from app.core import Context
 
 
 class PlaylistNameOrID(commands.clean_content):

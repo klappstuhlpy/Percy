@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import Interaction, app_commands
-from discord.app_commands import Choice
 from discord.ext import commands
 from discord.utils import MISSING
 
@@ -19,6 +18,8 @@ from app.utils import checks, fuzzy, get_shortened_string, helpers, timetools
 from config import Emojis
 
 if TYPE_CHECKING:
+    from discord.app_commands import Choice
+
     from app.core.timer import Timer
 
 

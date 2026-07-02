@@ -4,8 +4,7 @@ import asyncio
 import enum
 import inspect
 import random
-from collections.abc import AsyncGenerator
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import discord
 import numpy as np
@@ -15,6 +14,9 @@ from app.cogs.games.models import Game, GameResult
 from app.core.views import LayoutView
 from app.utils import find_word, fnumb, helpers
 from config import Emojis
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 class Fruits(enum.Enum):
