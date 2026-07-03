@@ -14,7 +14,7 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING
 
-from app.core import Context, View, command
+from app.core import Context, PermissionTemplate, View, command
 from app.utils import TimeDelta, format_fields, get_asset_url, helpers, letter_emoji
 from config import Emojis
 
@@ -557,8 +557,8 @@ class AutoModMixin:
         "automod",
         description="Modify/Create and view Percys' AutoMod preset rules.",
         guild_only=True,
-        user_permissions=["manage_guild"],
-        bot_permissions=["manage_guild"],
+        user_permissions=PermissionTemplate.manager,
+        bot_permissions=[discord.Permissions.manage_guild],
     )
     async def automod(self, ctx: Context) -> None:
         """Show the automod presets."""

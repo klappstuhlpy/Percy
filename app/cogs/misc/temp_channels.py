@@ -129,8 +129,12 @@ class TempChannelsMixin:
     @temp.command(
         "set",
         description="Transforms a voice channel into a temporary channel.",
-        bot_permissions=["manage_channels", "manage_roles", "move_members"],
-        user_permissions=["manage_channels"],
+        bot_permissions=[
+            discord.Permissions.manage_channels,
+            discord.Permissions.manage_roles,
+            discord.Permissions.move_members,
+        ],
+        user_permissions=PermissionTemplate.channels,
     )
     @app_commands.rename(_format="format")
     @describe(channel="The voice channel to set.", _format='The format of the voice channel. (Default: "⏳ | %name")')
@@ -155,8 +159,12 @@ class TempChannelsMixin:
     @temp.command(
         "remove",
         description="Remove an existing temp channel.",
-        bot_permissions=["manage_channels", "manage_roles", "move_members"],
-        user_permissions=["manage_channels"],
+        bot_permissions=[
+            discord.Permissions.manage_channels,
+            discord.Permissions.manage_roles,
+            discord.Permissions.move_members,
+        ],
+        user_permissions=PermissionTemplate.channels,
     )
     @describe(channel_id="The voice channel to remove")
     @app_commands.autocomplete(channel_id=temp_channel_id_autocomplete)  # type: ignore

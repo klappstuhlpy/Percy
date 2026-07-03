@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from app.core import Bot, Cog, Context
-from app.core.models import command, cooldown, describe, group
+from app.core.models import PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import TextSource
 from app.rendering import get_dominant_color
 from app.utils import helpers, usage_per_day
@@ -190,8 +190,8 @@ class Emoji(Cog):
         aliases=["add"],
         usage="<name> [file] [emoji]",
         guild_only=True,
-        user_permissions=["manage_emojis"],
-        bot_permissions=["manage_emojis"],
+        user_permissions=PermissionTemplate.emojis,
+        bot_permissions=[discord.Permissions.manage_emojis],
     )
     @app_commands.rename(emoji="emoji-or-url")
     @describe(

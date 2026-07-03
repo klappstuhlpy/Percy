@@ -700,8 +700,8 @@ class Moderation(Cog):
         description="Applies slowmode to this channel.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_channels"],
-        user_permissions=["manage_channels"],
+        bot_permissions=[discord.Permissions.manage_channels],
+        user_permissions=PermissionTemplate.channels,
     )
     @describe(duration="The slowmode duration or 0s to disable")
     async def slowmode(self, ctx: ModGuildContext, *, duration: timetools.ShortTime) -> None:
@@ -816,7 +816,7 @@ class Moderation(Cog):
         "alerts",
         description="Toggles alert message logging on the server.",
         guild_only=True,
-        bot_permissions=["manage_webhooks"],
+        bot_permissions=[discord.Permissions.manage_webhooks],
         user_permissions=PermissionTemplate.mod,
     )
     @describe(channel="The channel to send alert messages to. The bot must be able to create webhooks in it.")
@@ -864,7 +864,7 @@ class Moderation(Cog):
         "auditlog",
         fallback="set",
         description="Toggles audit text log on the server.",
-        bot_permissions=["manage_webhooks"],
+        bot_permissions=[discord.Permissions.manage_webhooks],
         user_permissions=PermissionTemplate.mod,
     )
     @describe(channel="The channel to broadcast audit log messages to.")
@@ -1060,7 +1060,11 @@ class Moderation(Cog):
         guild_only=True,
         # Creates/assigns the unverified role and edits channel overwrites (manage_roles),
         # and removes bypassers via the configurable ban/kick action.
-        bot_permissions=["manage_roles", "ban_members", "kick_members"],
+        bot_permissions=[
+            discord.Permissions.manage_roles,
+            discord.Permissions.ban_members,
+            discord.Permissions.kick_members,
+        ],
         user_permissions=PermissionTemplate.mod,
     )
     async def moderation_sentinel(self, ctx: ModGuildContext) -> None:
@@ -1100,7 +1104,7 @@ class Moderation(Cog):
         "raid",
         description="Toggles raid protection on the server.",
         guild_only=True,
-        bot_permissions=["ban_members"],
+        bot_permissions=[discord.Permissions.ban_members],
         user_permissions=PermissionTemplate.mod,
     )
     @describe(enabled="Whether raid protection should be enabled or not, toggles if not given.")
@@ -1117,7 +1121,7 @@ class Moderation(Cog):
         "mentions",
         description="Enables auto-banning accounts that spam more than 'count' mentions.",
         guild_only=True,
-        bot_permissions=["ban_members"],  # the protection auto-bans mention spammers
+        bot_permissions=[discord.Permissions.ban_members],  # the protection auto-bans mention spammers
         user_permissions=PermissionTemplate.mod,
     )
     @describe(count="The maximum amount of mentions before banning.")
@@ -1203,8 +1207,8 @@ class Moderation(Cog):
         aliases=["clear"],
         guild_only=True,
         hybrid=True,
-        user_permissions=["manage_messages"],
-        bot_permissions=["manage_messages"],
+        user_permissions=PermissionTemplate.messages,
+        bot_permissions=[discord.Permissions.manage_messages],
     )
     @describe(search="How many messages to search for")
     async def purge(
@@ -1292,7 +1296,7 @@ class Moderation(Cog):
         description="Locks down specific channels.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
         user_permissions=PermissionTemplate.mod,
     )
     @cooldown(1, 30.0, commands.BucketType.guild)
@@ -1330,7 +1334,7 @@ class Moderation(Cog):
     @lockdown.command(
         "for",
         description="Locks down specific channels for a specified amount of time.",
-        bot_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
         user_permissions=PermissionTemplate.mod,
     )
     @checks.requires_timer()
@@ -1390,7 +1394,7 @@ class Moderation(Cog):
     @lockdown.command(
         "end",
         description="Ends all lockdowns set.",
-        bot_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
         user_permissions=PermissionTemplate.mod,
     )
     async def lockdown_end(self, ctx: ModGuildContext) -> None:
@@ -1450,8 +1454,8 @@ class Moderation(Cog):
         description="Kicks a member from the server.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["kick_members"],
-        user_permissions=["kick_members"],
+        bot_permissions=[discord.Permissions.kick_members],
+        user_permissions=PermissionTemplate.kick,
     )
     @describe(member="The member to ban. You can also pass in an ID to ban.", reason="The reason for banning the member.")
     async def kick(
@@ -1478,8 +1482,8 @@ class Moderation(Cog):
         "ban",
         description="Bans a member from the server.",
         guild_only=True,
-        bot_permissions=["ban_members"],
-        user_permissions=["ban_members"],
+        bot_permissions=[discord.Permissions.ban_members],
+        user_permissions=PermissionTemplate.ban,
     )
     @describe(
         member="The member to ban. You can also pass in an ID to ban regardless of whether they're in the server or not.",
@@ -1512,8 +1516,8 @@ class Moderation(Cog):
         "multiban",
         description="Bans multiple members by ID from the server.",
         guild_only=True,
-        bot_permissions=["ban_members"],
-        user_permissions=["ban_members", "kick_members"],
+        bot_permissions=[discord.Permissions.ban_members],
+        user_permissions=PermissionTemplate.ban | PermissionTemplate.kick,
     )
     @describe(
         members="The members to ban. You can also pass in IDs to ban regardless of whether they're in the server or not.",
@@ -1558,8 +1562,8 @@ class Moderation(Cog):
         description="Soft bans a member from the server.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["ban_members"],
-        user_permissions=["kick_members"],
+        bot_permissions=[discord.Permissions.ban_members],
+        user_permissions=PermissionTemplate.kick,
     )
     @app_commands.describe(member="The member to softban.", reason="The reason for softbanning the member.")
     async def softban(
@@ -1593,8 +1597,8 @@ class Moderation(Cog):
         description="Unbans a member from the server.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["ban_members"],
-        user_permissions=["ban_members"],
+        bot_permissions=[discord.Permissions.ban_members],
+        user_permissions=PermissionTemplate.ban,
     )
     @describe(member="The member to unban.", reason="The reason for unbanning the member.")
     async def unban(
@@ -1626,8 +1630,8 @@ class Moderation(Cog):
         description="Temporarily bans a member for the specified duration.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["ban_members"],
-        user_permissions=["ban_members"],
+        bot_permissions=[discord.Permissions.ban_members],
+        user_permissions=PermissionTemplate.ban,
     )
     @checks.requires_timer()
     @describe(
@@ -1728,8 +1732,8 @@ class Moderation(Cog):
         description="Mutes members indefinitely using the configured mute role.",
         hybrid=True,
         guild_only=True,
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
+        user_permissions=PermissionTemplate.roles,
     )
     @checks.can_mute()
     @describe(members="The members to mute.", reason="The reason for muting the members.")
@@ -1792,8 +1796,8 @@ class Moderation(Cog):
         description="Unmutes members using the configured mute role.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
+        user_permissions=PermissionTemplate.roles,
     )
     @checks.can_mute()
     @describe(members="The members to unmute.", reason="The reason for unmuting the members.")
@@ -1995,7 +1999,7 @@ class Moderation(Cog):
         description="Temporarily mutes yourself for the specified duration.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
     )
     @checks.requires_timer()
     @describe(duration="The duration to mute yourself for. Must be in a short time form e.g., 4h.")

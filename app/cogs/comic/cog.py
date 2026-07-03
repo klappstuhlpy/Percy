@@ -12,7 +12,20 @@ from discord import app_commands
 from discord.ext import commands
 from discord.utils import utcnow
 
-from app.core import Bot, Cog, Context, Flags, NoticeView, cooldown, describe, flag, group, make_notice, store_true
+from app.core import (
+    Bot,
+    Cog,
+    Context,
+    Flags,
+    NoticeView,
+    PermissionTemplate,
+    cooldown,
+    describe,
+    flag,
+    group,
+    make_notice,
+    store_true,
+)
 from app.utils import cache, truncate
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
@@ -420,7 +433,7 @@ class Comics(Cog):
     @_comics.command(
         'push',
         description='Pushes the latest comic feed to a channel.',
-        user_permissions=['manage_channels']
+        user_permissions=PermissionTemplate.channels
     )
     @cooldown(3, 30.0, commands.BucketType.guild)
     @describe(brand='The comic brand to receive a feed from.')
@@ -443,7 +456,7 @@ class Comics(Cog):
     @_comics.command(
         'subscribe',
         description='Subscribes to a comic brand feed.',
-        user_permissions=['manage_channels']
+        user_permissions=PermissionTemplate.channels
     )
     @app_commands.rename(_format='format')
     @describe(
@@ -497,7 +510,7 @@ class Comics(Cog):
     @_comics.command(
         'config',
         description='Show/Edit the current configuration for comic feeds.',
-        user_permissions=['manage_channels']
+        user_permissions=PermissionTemplate.channels
     )
     @describe(brand='The comic brand to receive the feed from.')
     async def comic_config(

@@ -22,7 +22,7 @@ from expiringdict import ExpiringDict
 
 from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
-from app.core.command import Command, GroupCommand
+from app.core.command import Command, GroupCommand, assign_native_permissions
 from app.core.context import Context
 from app.core.feature_flags import FeatureFlags
 from app.core.flags import FlagMeta
@@ -375,6 +375,9 @@ class Bot(commands.Bot):
 
         await self._load_extensions()
 
+        gated = self.apply_native_permissions()
+        self.log.info('Applied native slash-command permissions to %d command(s).', gated)
+
         if test_guild_id is not None:
             self.tree.copy_global_to(guild=discord.Object(id=test_guild_id))
 
@@ -425,6 +428,14 @@ class Bot(commands.Bot):
 
             payloads.append(payload)
         return payloads
+
+    def apply_native_permissions(self) -> int:
+        """Apply :func:`assign_native_permissions` across every registered command.
+
+        Must run after extensions are loaded (so ``permissions`` is populated) and before the
+        tree is synced/copied so the payload carries the field.
+        """
+        return assign_native_permissions(self.walk_commands())
 
     async def resolve_app_command_ids(self, *, guild: discord.abc.Snowflake | None = None) -> None:
         """Tag command objects with their synced app-command ID so ``Command.mention`` works.

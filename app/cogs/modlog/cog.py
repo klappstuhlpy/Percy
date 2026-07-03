@@ -8,7 +8,7 @@ import discord
 from app.cogs.modlog.models import CaseType, ModerationCase, summarize_case_counts
 from app.cogs.modlog.ui import build_case_embed
 from app.core import Bot, Cog
-from app.core.models import Context, command, describe, group
+from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.core.pagination import LinePaginator
 from app.utils import get_asset_url, helpers
 from config import Emojis
@@ -114,7 +114,7 @@ class ModLog(Cog):
         description='Warn a member and record it in their moderation history.',
         guild_only=True,
         hybrid=True,
-        user_permissions=['kick_members'],
+        user_permissions=PermissionTemplate.kick,
     )
     @describe(member='The member to warn.', reason='Why they are being warned.')
     async def warn(self, ctx: Context, member: discord.Member, *, reason: str | None = None) -> None:
@@ -140,7 +140,7 @@ class ModLog(Cog):
         aliases=['warnings', 'history', 'modlogs'],
         description="Show a member's moderation history.",
         guild_only=True,
-        user_permissions=['manage_messages'],
+        user_permissions=PermissionTemplate.messages,
     )
     @describe(user='The member to look up.')
     async def cases(self, ctx: Context, user: discord.User) -> None:
@@ -176,7 +176,7 @@ class ModLog(Cog):
         'case',
         description='Show a single moderation case.',
         guild_only=True,
-        user_permissions=['manage_messages'],
+        user_permissions=PermissionTemplate.messages,
     )
     @describe(index='The case number to show.')
     async def case(self, ctx: Context, index: int) -> None:
@@ -192,7 +192,7 @@ class ModLog(Cog):
         'reason',
         description='Update the reason of an existing case.',
         guild_only=True,
-        user_permissions=['manage_messages'],
+        user_permissions=PermissionTemplate.messages,
     )
     @describe(index='The case number to edit.', reason='The new reason.')
     async def reason(self, ctx: Context, index: int, *, reason: str) -> None:
@@ -209,7 +209,7 @@ class ModLog(Cog):
         aliases=['deletecase'],
         description='Delete a moderation case.',
         guild_only=True,
-        user_permissions=['ban_members'],
+        user_permissions=PermissionTemplate.ban,
     )
     @describe(index='The case number to delete.')
     async def delcase(self, ctx: Context, index: int) -> None:
@@ -239,7 +239,7 @@ class ModLog(Cog):
     @modlog.command(
         'set',
         description='Set the channel where moderation cases are logged.',
-        user_permissions=['manage_guild'],
+        user_permissions=PermissionTemplate.manager,
     )
     @describe(channel='The channel to log cases in.')
     async def modlog_set(self, ctx: Context, channel: discord.TextChannel) -> None:
@@ -251,7 +251,7 @@ class ModLog(Cog):
     @modlog.command(
         'disable',
         description='Stop logging moderation cases to a channel.',
-        user_permissions=['manage_guild'],
+        user_permissions=PermissionTemplate.manager,
     )
     async def modlog_disable(self, ctx: Context) -> None:
         """Disable modlog channel posting."""

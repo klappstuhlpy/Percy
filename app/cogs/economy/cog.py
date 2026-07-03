@@ -711,7 +711,7 @@ class Economy(Cog):
         embed.set_thumbnail(url=get_asset_url(user))
         await LinePaginator.start(ctx, entries=entries, embed=embed, location="description")
 
-    @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True, bot_permissions=["manage_roles"])
+    @command("use", description="Use an item from your inventory.", guild_only=True, hybrid=True, bot_permissions=[discord.Permissions.manage_roles])
     @describe(name="The item to use.")
     @app_commands.autocomplete(name=owned_item_autocomplete)  # type: ignore
     async def use(self, ctx: Context, *, name: str) -> None:

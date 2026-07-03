@@ -35,6 +35,7 @@ __all__ = (
     "HybridGroupCommand",
     "NumberRange",
     "ParamInfo",
+    "assign_native_permissions",
     "command",
     "cooldown",
     "describe",
@@ -703,6 +704,47 @@ class HybridGroupCommand(GroupCommand, commands.HybridGroup):
 
 
 CommandInstance = Command | HybridCommand | HybridGroupCommand | GroupCommand
+
+
+def assign_native_permissions(command_iter: Iterable[Any]) -> int:
+    """Mirror each command's required *user* permissions onto its slash command.
+
+    Sets ``app_command.default_permissions`` (serialized by Discord as
+    ``default_member_permissions``) from :attr:`Command.permissions`, so users who lack the
+    permission never see the command in the picker and server admins can re-map it in Discord's
+    *Integrations* UI. The runtime :meth:`PermissionSpec.check` stays the source of truth — this
+    is a visibility layer, not a replacement.
+
+    Only **top-level, non-group** commands are touched: Discord applies
+    ``default_member_permissions`` at the top-level command only (subcommands inherit it), and
+    our groups carry differing per-subcommand gates that can't be expressed natively, so a group
+    is left open and enforced purely at runtime. Prefix-only commands have no ``app_command`` and
+    are skipped. Returns the number of commands gated (for logging/tests).
+
+    This only *sets an attribute* on the command objects; it is not transmitted to Discord until
+    the tree is synced. It never touches per-guild admin overrides (those live in Discord's
+    separate application-command-permissions store and take precedence), so it is safe to re-run
+    before every sync.
+    """
+    gated = 0
+    for cmd in command_iter:
+        # Subcommands (parent set) inherit the top-level default; groups can't express
+        # per-subcommand gates natively — skip both.
+        if cmd.parent is not None or isinstance(cmd, GroupCommand):
+            continue
+
+        app_cmd = getattr(cmd, "app_command", None)
+        if app_cmd is None:  # prefix-only command: nothing to gate in Discord's UI
+            continue
+
+        spec = getattr(cmd, "permissions", None)
+        if spec is None or not spec.user:
+            continue
+
+        app_cmd.default_permissions = discord.Permissions(**dict.fromkeys(spec.user, True))
+        gated += 1
+
+    return gated
 
 
 def _resolve_command_kwargs(

@@ -21,7 +21,7 @@ from wavelink import Playable
 
 import config
 from app.clients import LRCLibClient
-from app.core import Bot, Cog, Context, Flags, command, describe, flag, group, store_true
+from app.core import Bot, Cog, Context, Flags, PermissionTemplate, command, describe, flag, group, store_true
 from app.core.pagination import BasePaginator
 from app.services import LyricsResult, MusicIntentParser, SyncedLyrics, clean_track_title, parse_lrc
 from app.utils import (
@@ -573,7 +573,7 @@ class Music(Cog):
             await player.panel.channel.send("The host has stopped listening to Spotify.")
             await player.disconnect()
 
-    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, bot_permissions=["connect", "speak"])
+    @command(description="Adds a track/playlist to the queue.", guild_only=True, hybrid=True, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
         source=[
@@ -646,7 +646,7 @@ class Music(Cog):
 
     @command(
         description="Adds a track/playlist to the queue by choosing from a set of examples.",
-        guild_only=True, hybrid=True, bot_permissions=["connect", "speak"],
+        guild_only=True, hybrid=True, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak],
     )
     @describe(query="The track/playlist to add to the queue. Can be a URL or a search query.")
     @app_commands.choices(
@@ -665,7 +665,7 @@ class Music(Cog):
         await ctx.invoke(self.play, query=query, flags=flags)  # type: ignore
 
     @command(description="Play music from a natural-language vibe (AI).", guild_only=True, hybrid=True,
-             bot_permissions=["connect", "speak"])
+             bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
     @describe(description="Describe the music you want, e.g. 'chill lofi beats for studying'.")
     @checks.is_author_connected()
     @checks.is_listen_together()
@@ -723,7 +723,7 @@ class Music(Cog):
         description="Start a listen-together activity with a user.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["connect", "speak"],
+        bot_permissions=[discord.Permissions.connect, discord.Permissions.speak],
     )
     @describe(member="The user you want to start a listen-together activity with.")
     @checks.is_author_connected()
@@ -803,7 +803,7 @@ class Music(Cog):
         await player.disconnect()
         await ctx.send_success(f"{Emojis.success} Stopped the current listen-together activity.", delete_after=10)
 
-    @command("connect", description="Connect me to a voice-channel.", hybrid=True, guild_only=True, bot_permissions=["connect", "speak"])
+    @command("connect", description="Connect me to a voice-channel.", hybrid=True, guild_only=True, bot_permissions=[discord.Permissions.connect, discord.Permissions.speak])
     @describe(channel="The Voice/Stage-Channel you want to connect to.")
     async def connect(self, ctx: Context, channel: discord.VoiceChannel | discord.StageChannel | None = None) -> None:
         """Connect me to a voice-channel."""
@@ -1640,8 +1640,8 @@ class Music(Cog):
     @_dj.command(
         "add",
         description="Adds the DJ Role with which you have extended control rights to a member.",
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
+        user_permissions=PermissionTemplate.roles,
     )
     @describe(member="The member you want to add the DJ Role to.")
     async def dj_add(self, ctx: Context, member: discord.Member) -> None:
@@ -1677,8 +1677,8 @@ class Music(Cog):
     @_dj.command(
         "remove",
         description="Removes the DJ Role with which you have extended control rights from a member.",
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles"],
+        bot_permissions=[discord.Permissions.manage_roles],
+        user_permissions=PermissionTemplate.roles,
     )
     @describe(member="The member you want to remove the DJ Role from.")
     async def dj_remove(self, ctx: Context, member: discord.Member) -> None:
@@ -1714,8 +1714,8 @@ class Music(Cog):
         guild_only=True,
         hybrid=True,
         fallback="setup",
-        bot_permissions=["manage_channels", "manage_messages"],
-        user_permissions=["manage_channels"],
+        bot_permissions=[discord.Permissions.manage_channels, discord.Permissions.manage_messages],
+        user_permissions=PermissionTemplate.channels,
     )
     async def _music(self, ctx: Context) -> None:
         """Opens the music configuration dashboard."""
@@ -1830,6 +1830,7 @@ class Music(Cog):
     @_music.command(
         "247",
         description="Set up a 24/7 always-on player that keeps playing a stream, playlist, or autoplay.",
+        user_permissions=PermissionTemplate.channels,
     )
     @describe(
         mode="The kind of endless source to keep playing (or 'off' to disable).",

@@ -397,7 +397,7 @@ class Polls(Cog):
         description="Creates a new poll with customizable settings.",
         guild_only=True,
         user_permissions=PermissionTemplate.mod,
-        bot_permissions=["manage_threads", "manage_messages"],
+        bot_permissions=[discord.Permissions.manage_threads, discord.Permissions.manage_messages],
     )
     @describe(when="When the poll should end.", question="The question to ask.")
     async def polls_create(self, ctx: Context, when: timetools.FutureTime, *, question: str, flags: PollCreateFlags) -> None:
@@ -516,7 +516,7 @@ class Polls(Cog):
         description="Create a poll from a plain-language description (AI).",
         guild_only=True,
         user_permissions=PermissionTemplate.mod,
-        bot_permissions=["manage_threads", "manage_messages"],
+        bot_permissions=[discord.Permissions.manage_threads, discord.Permissions.manage_messages],
     )
     @describe(description="Describe the poll: the question, the options, and how long it runs.")
     async def polls_ask(self, ctx: Context, *, description: str) -> None:
@@ -586,7 +586,7 @@ class Polls(Cog):
         description="Ends the voting for a running question.",
         guild_only=True,
         user_permissions=PermissionTemplate.mod,
-        bot_permissions=["manage_threads"],
+        bot_permissions=[discord.Permissions.manage_threads],
     )
     @describe(poll_id="5-digit ID of the poll to end.")
     @app_commands.autocomplete(poll_id=poll_id_autocomplete)  # type: ignore

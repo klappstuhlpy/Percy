@@ -135,7 +135,7 @@ class StatCountersMixin:
         description='Create a voice channel that displays a live statistic.',
         guild_only=True,
         user_permissions=PermissionTemplate.admin,
-        bot_permissions=['manage_channels'],
+        bot_permissions=[discord.Permissions.manage_channels],
     )
     @describe(
         kind='Which statistic to display.',
@@ -174,7 +174,7 @@ class StatCountersMixin:
         description='Remove a stat counter (and its channel).',
         guild_only=True,
         user_permissions=PermissionTemplate.admin,
-        bot_permissions=["manage_channels"],
+        bot_permissions=[discord.Permissions.manage_channels],
     )
     @describe(channel='The stat-counter voice channel to remove.')
     async def statcounter_remove(self, ctx: Context, channel: discord.VoiceChannel) -> None:

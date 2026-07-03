@@ -23,7 +23,7 @@ from discord.utils import format_dt
 
 import config
 from app.core import Bot, Cog, Context, Flags, flag
-from app.core.models import PermissionSpec, command, cooldown, describe, group, guilds
+from app.core.models import PermissionSpec, PermissionTemplate, command, cooldown, describe, group, guilds
 from app.core.pagination import LinePaginator, TextSource, TextSourcePaginator
 from app.core.views import LayoutView, TrashView, View
 from app.rendering import get_dominant_color
@@ -537,7 +537,7 @@ class MetaMixin:
         description="Marks a thread as solved.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_threads"],
+        bot_permissions=[discord.Permissions.manage_threads],
     )
     @guilds(main_guild_id, test_guild_id)
     @cooldown(1, 5, commands.BucketType.member)
@@ -778,7 +778,7 @@ class MetaMixin:
         embed.set_image(url=avatar)
         await ctx.send(embed=embed)
 
-    @command(name="quote", alias="q", description="Quotes a message by a user.", bot_permissions=["attach_files"])
+    @command(name="quote", alias="q", description="Quotes a message by a user.", bot_permissions=[discord.Permissions.attach_files])
     @describe(user="The user to quote.", message="The message to quote.")
     async def quote(
         self, ctx: Context, user: discord.Member | discord.User | None = None, *, message: str | None = None
@@ -917,7 +917,7 @@ class MetaMixin:
         ignore_extra=False,
         guild_only=True,
         aliases=["append", "create", "+", "update", "new"],
-        user_permissions=["manage_guild"],
+        user_permissions=PermissionTemplate.manager,
     )
     @describe(prefixes="The prefixes to add.")
     async def prefix_add(self, ctx: Context, *prefixes: str) -> None:
@@ -951,7 +951,7 @@ class MetaMixin:
         aliases=["delete", "del", "rm", "-"],
         ignore_extra=False,
         guild_only=True,
-        user_permissions=["manage_guild"],
+        user_permissions=PermissionTemplate.manager,
     )
     @describe(prefixes="The prefixes to remove.")
     async def prefix_remove(self, ctx: Context, *prefixes: str) -> None:
@@ -982,7 +982,7 @@ class MetaMixin:
         ignore_extra=False,
         guild_only=True,
         aliases=["clear", "wipe", "purge"],
-        user_permissions=["manage_guild"],
+        user_permissions=PermissionTemplate.manager,
     )
     async def prefix_reset(self, ctx: Context) -> None:
         """Removes all custom prefixes.
