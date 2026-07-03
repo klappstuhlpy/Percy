@@ -7,6 +7,7 @@ from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
+    from collections.abc import Sequence
 
     import asyncpg
 
@@ -138,6 +139,19 @@ class EconomyRepository(BaseRepository):
         """
         return await self.fetchval(query, user_id, guild_id, kind, multiplier, duration_minutes)
 
+    async def has_active_boost(self, user_id: int, guild_id: int, kind: str) -> bool:
+        """Whether the member currently has a running boost of ``kind`` (e.g. a rob shield)."""
+        value = await self.fetchval(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM economy_boosts
+                WHERE user_id = $1 AND guild_id = $2 AND kind = $3 AND expires_at > (now() at time zone 'utc')
+            );
+            """,
+            user_id, guild_id, kind,
+        )
+        return bool(value)
+
     async def get_boost_multiplier(self, user_id: int, guild_id: int, kind: str) -> float:
         """The member's active multiplier for ``kind`` (``1.0`` when no boost is running)."""
         value = await self.fetchval(
@@ -163,9 +177,12 @@ class EconomyRepository(BaseRepository):
     # -- daily rewards ----------------------------------------------------
 
     async def get_daily(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
-        """Fetches a member's daily-claim row (last_claim, streak), or ``None``."""
+        """Fetches a member's claim row (last_claim, streak, last_weekly, last_monthly), or ``None``."""
         return await self.fetchrow(
-            'SELECT last_claim, streak FROM economy_dailies WHERE user_id = $1 AND guild_id = $2;',
+            """
+            SELECT last_claim, streak, last_weekly, last_monthly
+            FROM economy_dailies WHERE user_id = $1 AND guild_id = $2;
+            """,
             user_id, guild_id,
         )
 
@@ -180,6 +197,234 @@ class EconomyRepository(BaseRepository):
                 DO UPDATE SET last_claim = EXCLUDED.last_claim, streak = EXCLUDED.streak;
         """
         await self.execute(query, user_id, guild_id, ensure_utc(last_claim).replace(tzinfo=None), streak)
+
+    async def set_weekly(self, user_id: int, guild_id: int, when: datetime.datetime) -> None:
+        """Records a member's latest weekly claim."""
+        query = """
+            INSERT INTO economy_dailies (user_id, guild_id, last_claim, streak, last_weekly)
+            VALUES ($1, $2, NULL, 0, $3)
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET last_weekly = EXCLUDED.last_weekly;
+        """
+        await self.execute(query, user_id, guild_id, ensure_utc(when).replace(tzinfo=None))
+
+    async def set_monthly(self, user_id: int, guild_id: int, when: datetime.datetime) -> None:
+        """Records a member's latest monthly claim."""
+        query = """
+            INSERT INTO economy_dailies (user_id, guild_id, last_claim, streak, last_monthly)
+            VALUES ($1, $2, NULL, 0, $3)
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET last_monthly = EXCLUDED.last_monthly;
+        """
+        await self.execute(query, user_id, guild_id, ensure_utc(when).replace(tzinfo=None))
+
+    # -- guild settings ----------------------------------------------------
+
+    async def get_settings(self, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a guild's economy settings row, or ``None`` when everything is default."""
+        return await self.fetchrow('SELECT * FROM economy_settings WHERE guild_id = $1;', guild_id)
+
+    async def update_settings(self, guild_id: int, values: dict[str, Any]) -> asyncpg.Record:
+        """Upserts the given settings fields for a guild and returns the full row.
+
+        ``values`` keys must be column names of ``economy_settings`` (the caller
+        whitelists them); unspecified fields keep their current/default values.
+        """
+        columns = list(values)
+        placeholders = ', '.join(f'${i + 2}' for i in range(len(columns)))
+        updates = ', '.join(f'{column} = EXCLUDED.{column}' for column in columns)
+        query = f"""
+            INSERT INTO economy_settings (guild_id, {', '.join(columns)})
+            VALUES ($1, {placeholders})
+            ON CONFLICT (guild_id) DO UPDATE SET {updates}
+            RETURNING *;
+        """
+        return await self.fetchrow(query, guild_id, *values.values())
+
+    # -- jobs ---------------------------------------------------------------
+
+    async def get_job(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a member's job row (job_id, shifts, hired_at), or ``None`` if never employed."""
+        return await self.fetchrow(
+            'SELECT job_id, shifts, hired_at FROM economy_jobs WHERE user_id = $1 AND guild_id = $2;',
+            user_id, guild_id,
+        )
+
+    async def set_job(self, user_id: int, guild_id: int, job_id: str) -> None:
+        """Hires a member into ``job_id``, keeping their lifetime shift count."""
+        query = """
+            INSERT INTO economy_jobs (user_id, guild_id, job_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, guild_id)
+                DO UPDATE SET job_id = EXCLUDED.job_id, hired_at = (now() at time zone 'utc');
+        """
+        await self.execute(query, user_id, guild_id, job_id)
+
+    async def add_shift(self, user_id: int, guild_id: int, default_job_id: str) -> int:
+        """Counts one worked shift (hiring into ``default_job_id`` if needed); returns lifetime shifts."""
+        query = """
+            INSERT INTO economy_jobs (user_id, guild_id, job_id, shifts)
+            VALUES ($1, $2, $3, 1)
+            ON CONFLICT (user_id, guild_id)
+                DO UPDATE SET shifts = economy_jobs.shifts + 1
+            RETURNING shifts;
+        """
+        return await self.fetchval(query, user_id, guild_id, default_job_id)
+
+    # -- prestige -----------------------------------------------------------
+
+    async def get_prestige(self, user_id: int, guild_id: int) -> int:
+        """The member's prestige level (0 if they never prestiged)."""
+        value = await self.fetchval(
+            'SELECT level FROM economy_prestige WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+        return value or 0
+
+    async def increment_prestige(self, user_id: int, guild_id: int) -> int:
+        """Advances a member one prestige level, returning the new level."""
+        query = """
+            INSERT INTO economy_prestige (user_id, guild_id, level, last_prestige)
+            VALUES ($1, $2, 1, (now() at time zone 'utc'))
+            ON CONFLICT (user_id, guild_id)
+                DO UPDATE SET level = economy_prestige.level + 1,
+                              last_prestige = (now() at time zone 'utc')
+            RETURNING level;
+        """
+        return await self.fetchval(query, user_id, guild_id)
+
+    # -- achievements ---------------------------------------------------------
+
+    async def get_achievements(self, user_id: int, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches a member's earned achievements as ``(achievement, earned_at)`` rows."""
+        return await self.fetch(
+            """
+            SELECT achievement, earned_at FROM economy_achievements
+            WHERE user_id = $1 AND guild_id = $2 ORDER BY earned_at;
+            """,
+            user_id, guild_id,
+        )
+
+    async def award_achievements(self, user_id: int, guild_id: int, achievement_ids: Sequence[str]) -> list[str]:
+        """Awards the given achievements (skipping already-earned ones); returns the new ids."""
+        if not achievement_ids:
+            return []
+        query = """
+            INSERT INTO economy_achievements (user_id, guild_id, achievement)
+            SELECT $1, $2, unnest($3::text[])
+            ON CONFLICT DO NOTHING
+            RETURNING achievement;
+        """
+        rows = await self.fetch(query, user_id, guild_id, list(achievement_ids))
+        return [row['achievement'] for row in rows]
+
+    # -- pets -----------------------------------------------------------------
+
+    async def get_pet(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a member's pet row, or ``None`` if they have none."""
+        return await self.fetchrow(
+            'SELECT * FROM economy_pets WHERE user_id = $1 AND guild_id = $2;', user_id, guild_id)
+
+    async def create_pet(self, user_id: int, guild_id: int, species: str, name: str) -> asyncpg.Record | None:
+        """Adopts a pet for a member, returning the row (or ``None`` if they already own one)."""
+        query = """
+            INSERT INTO economy_pets (user_id, guild_id, species, name)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
+            RETURNING *;
+        """
+        return await self.fetchrow(query, user_id, guild_id, species, name)
+
+    async def update_pet(self, user_id: int, guild_id: int, values: dict[str, Any]) -> asyncpg.Record | None:
+        """Updates a pet's fields (name / last_fed / last_claim) and returns the row."""
+        return await self.update_returning('economy_pets', ('user_id', 'guild_id'), (user_id, guild_id), values)
+
+    async def delete_pet(self, user_id: int, guild_id: int) -> None:
+        """Removes a member's pet."""
+        await self.delete_where('economy_pets', ('user_id', 'guild_id'), (user_id, guild_id))
+
+    # -- daily quests ----------------------------------------------------------
+
+    async def get_quests(self, user_id: int, guild_id: int, day: datetime.date) -> list[asyncpg.Record]:
+        """Fetches a member's quest rows for ``day`` (empty until first ensured)."""
+        return await self.fetch(
+            """
+            SELECT quest, kind, goal, progress, reward, completed
+            FROM economy_quests
+            WHERE user_id = $1 AND guild_id = $2 AND day = $3
+            ORDER BY quest;
+            """,
+            user_id, guild_id, day,
+        )
+
+    async def create_quests(
+        self, user_id: int, guild_id: int, day: datetime.date,
+        quests: Sequence[tuple[str, str, int, int]],
+    ) -> None:
+        """Inserts a day's quest board as ``(key, kind, goal, reward)`` tuples (idempotent)."""
+        query = """
+            INSERT INTO economy_quests (user_id, guild_id, day, quest, kind, goal, reward)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT DO NOTHING;
+        """
+        async with self.acquire() as conn:
+            await conn.executemany(
+                query, [(user_id, guild_id, day, key, kind, goal, reward) for key, kind, goal, reward in quests])
+
+    async def advance_quests(
+        self, user_id: int, guild_id: int, day: datetime.date, kind: str, amount: int = 1
+    ) -> list[asyncpg.Record]:
+        """Advances every open quest of ``kind`` by ``amount``; returns the rows that just completed."""
+        query = """
+            UPDATE economy_quests
+            SET progress = LEAST(progress + $5, goal),
+                completed = (progress + $5 >= goal)
+            WHERE user_id = $1 AND guild_id = $2 AND day = $3 AND kind = $4 AND NOT completed
+            RETURNING quest, goal, reward, completed;
+        """
+        rows = await self.fetch(query, user_id, guild_id, day, kind, amount)
+        return [row for row in rows if row['completed']]
+
+    async def count_completed_quests(self, user_id: int, guild_id: int) -> int:
+        """How many daily quests a member has completed, lifetime."""
+        value = await self.fetchval(
+            'SELECT COUNT(*) FROM economy_quests WHERE user_id = $1 AND guild_id = $2 AND completed;',
+            user_id, guild_id,
+        )
+        return value or 0
+
+    # -- inventory transfers ---------------------------------------------------
+
+    async def transfer_item(
+        self, from_user_id: int, to_user_id: int, guild_id: int, item_id: int, quantity: int
+    ) -> bool:
+        """Atomically moves ``quantity`` of an item between members; ``False`` if the giver lacks them."""
+        async with self.acquire() as conn, conn.transaction():
+            removed = await conn.fetchval(
+                """
+                UPDATE economy_inventory
+                SET quantity = quantity - $4
+                WHERE user_id = $1 AND guild_id = $2 AND item_id = $3 AND quantity >= $4
+                RETURNING quantity;
+                """,
+                from_user_id, guild_id, item_id, quantity,
+            )
+            if removed is None:
+                return False
+            await conn.execute(
+                """
+                INSERT INTO economy_inventory (user_id, guild_id, item_id, quantity)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, guild_id, item_id)
+                    DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity;
+                """,
+                to_user_id, guild_id, item_id, quantity,
+            )
+            return True
+
+    async def count_items(self, user_id: int, guild_id: int) -> int:
+        """The total number of items (summed quantities) a member owns."""
+        value = await self.fetchval(
+            'SELECT COALESCE(SUM(quantity), 0) FROM economy_inventory WHERE user_id = $1 AND guild_id = $2;',
+            user_id, guild_id,
+        )
+        return int(value or 0)
 
     # -- lottery ----------------------------------------------------------
 

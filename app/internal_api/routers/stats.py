@@ -110,6 +110,52 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
     }
 
 
+@router.get("/guilds/{guild_id}/games")
+async def get_guild_games(bot: BotDep, guild: GuildDep) -> dict:
+    """Guild-wide game statistics: per-game totals and the top players by wins."""
+    # Deferred import: pulling a cog module in at import time would drag discord
+    # extension setup into the API module graph; the enum itself is pure.
+    from app.cogs.games.models import Game
+
+    overview_rows = await bot.db.game_stats.get_guild_overview(guild.id)
+    top_rows = await bot.db.game_stats.get_leaderboard(guild.id, metric='won', limit=10)
+
+    games = []
+    for row in overview_rows:
+        try:
+            game = Game(row['game'])
+        except ValueError:  # a game removed from the catalogue; keep the raw key
+            label, icon = row['game'].title(), None
+        else:
+            label = game.label
+            # Custom Discord emojis (`<:name:id>`) don't render on the web.
+            icon = game.icon if not game.icon.startswith('<') else None
+        games.append({
+            'game': row['game'],
+            'label': label,
+            'icon': icon,
+            'played': row['played'],
+            'won': row['won'],
+            'players': row['players'],
+            'profit': row['profit'],
+        })
+
+    top_players = []
+    for row in top_rows:
+        member = guild.get_member(row['user_id'])
+        top_players.append({
+            'user_id': str(row['user_id']),
+            'username': member.display_name if member else str(row['user_id']),
+            'avatar_url': member.display_avatar.url if member else None,
+            'played': row['played'],
+            'won': row['won'],
+            'winrate': round(row['winrate'] or 0.0, 3),
+            'profit': row['profit'],
+        })
+
+    return {'games': games, 'top_players': top_players}
+
+
 # ---------------------------------------------------------------------------
 # Global endpoints (no guild context)
 # ---------------------------------------------------------------------------

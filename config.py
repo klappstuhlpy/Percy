@@ -110,7 +110,10 @@ lavalink_nodes: Collection[SimpleNamespace] = [
 class DatabaseConfig:
     """Represents the configuration for the database."""
 
-    database: str = 'percy'
+    # Beta mode (Windows/macOS local dev) points at a separate ``percy_beta`` database so
+    # local testing never touches production data — the SSH tunnel still reaches the same
+    # Postgres host, only the database name differs. Override either with ``DATABASE_NAME``.
+    database: str = env('DATABASE_NAME') or ('percy_beta' if beta else 'percy')
     user: str = 'percy'
     password: str = env('DATABASE_PASSWORD')
     host: str = env('DATABASE_HOST')

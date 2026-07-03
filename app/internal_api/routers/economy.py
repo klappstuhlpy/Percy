@@ -7,7 +7,7 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.services.economy import validate_item_effect
+from app.services.economy import GuildEconomySettings, validate_item_effect
 from app.utils import fnumb, get_asset_url
 from config import Emojis
 
@@ -41,6 +41,24 @@ class CreateLotteryBody(BaseModel):
     channel_id: int
 
 
+class PatchSettingsBody(BaseModel):
+    """Partial update; omitted fields keep their value. ``max_bet=0`` clears the cap."""
+
+    payout_multiplier: float | None = None
+    rob_enabled: bool | None = None
+    daily_base: int | None = None
+    max_bet: int | None = None
+
+
+def _settings_payload(settings: GuildEconomySettings) -> dict:
+    return {
+        'payout_multiplier': settings.payout_multiplier,
+        'rob_enabled': settings.rob_enabled,
+        'daily_base': settings.daily_base,
+        'max_bet': settings.max_bet,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -50,6 +68,7 @@ class CreateLotteryBody(BaseModel):
 async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
     items = await bot.db.economy.get_items(guild.id)
     lottery = await bot.db.economy.get_lottery(guild.id)
+    settings = GuildEconomySettings.from_record(await bot.db.economy.get_settings(guild.id))
 
     shop = [
         {
@@ -72,7 +91,43 @@ async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
             'ends_at': lottery['ends_at'].isoformat() if lottery.get('ends_at') else None,
         }
 
-    return {'items': shop, 'lottery': lottery_data}
+    return {'items': shop, 'lottery': lottery_data, 'settings': _settings_payload(settings)}
+
+
+@router.patch("/economy/settings")
+async def patch_economy_settings(guild: GuildDep, bot: BotDep, body: PatchSettingsBody) -> dict:
+    updates: dict[str, object] = {}
+
+    if body.payout_multiplier is not None:
+        if not 0.1 <= body.payout_multiplier <= 10.0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail='payout_multiplier must be between 0.1 and 10'
+            )
+        updates['payout_multiplier'] = body.payout_multiplier
+
+    if body.rob_enabled is not None:
+        updates['rob_enabled'] = body.rob_enabled
+
+    if body.daily_base is not None:
+        if not 10 <= body.daily_base <= 100_000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail='daily_base must be between 10 and 100000'
+            )
+        updates['daily_base'] = body.daily_base
+
+    if body.max_bet is not None:
+        if not 0 <= body.max_bet <= 100_000_000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail='max_bet must be between 0 and 100000000'
+            )
+        # 0 clears the cap, mirroring the `economy-config max-bet` command.
+        updates['max_bet'] = body.max_bet or None
+
+    if not updates:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no fields to update')
+
+    row = await bot.db.economy.update_settings(guild.id, updates)
+    return {'ok': True, 'settings': _settings_payload(GuildEconomySettings.from_record(row))}
 
 
 @router.post("/economy/items")

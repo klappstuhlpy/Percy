@@ -6,7 +6,7 @@ import json
 import random
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import discord
 from discord import app_commands
@@ -15,11 +15,13 @@ from expiringdict import ExpiringDict
 
 from app.cogs.games import (
     blackjack_bridge,
+    coinflip_ui,
     hangman_ui,
     higherlower_ui,
     horserace_ui,
     mines_ui,
     minesweeper_ui,
+    overview_ui,
     poker_bridge,
     roulette_ui,
     russianroulette_ui,
@@ -39,12 +41,12 @@ from app.cogs.games.models import Game, GameResult
 from app.cogs.games.roulette_ui import Payout, Space
 from app.core import Bot, Cog, Flags, flag
 from app.core.models import Context, command, cooldown, describe
+from app.services.economy import GuildEconomySettings
 from app.utils import (
     FAILED_CRIME_RESPONSES,
     FAILED_SLUT_RESPONSES,
     SUCCESSFULL_CRIME_RESPONSES,
     SUCCESSFULL_SLUT_RESPONSES,
-    WORKING_RESPONSES,
     fnumb,
     fuzzy,
     helpers,
@@ -112,6 +114,21 @@ class Games(Cog):
             ]
         return self._wordle_words
 
+    async def _check_max_bet(self, ctx: Context, bet: int) -> bool:
+        """Enforces the guild's configured bet cap (``economy-config max-bet``).
+
+        Sends the error itself and returns ``False`` when the bet exceeds the cap;
+        a guild without settings (or with the cap unset) allows any amount.
+        """
+        assert ctx.guild is not None
+        settings = GuildEconomySettings.from_record(await self.bot.db.economy.get_settings(ctx.guild.id))
+        if settings.max_bet is not None and bet > settings.max_bet:
+            await ctx.send_error(
+                f"Bets in this server are capped at {Emojis.Economy.cash} **{fnumb(settings.max_bet)}**."
+            )
+            return False
+        return True
+
     async def _take_bet(self, ctx: Context, bet: int, *, minimum: int = 1) -> bool:
         """Validates a positive, affordable bet and debits it. Returns success.
 
@@ -123,6 +140,8 @@ class Games(Cog):
         if bet < minimum:
             await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(minimum)}**.")
             return False
+        if not await self._check_max_bet(ctx, bet):
+            return False
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         assert balance is not None
         if bet > balance.cash:
@@ -133,6 +152,17 @@ class Games(Cog):
             return False
         await balance.remove(cash=bet)
         return True
+
+    @command(
+        "games", aliases=["arcade"], description="Browse every game and your personal records.",
+        guild_only=True, hybrid=True,
+    )
+    async def games(self, ctx: Context) -> None:
+        """An interactive catalogue of every game — pick one for its rules and your stats."""
+        assert ctx.guild is not None
+        hub = overview_ui.GamesHub(self, ctx)
+        await hub.prepare()
+        hub.message = await ctx.send(view=hub)
 
     @command(
         "tictactoe", description="Play a TicTacToe party with another user.", aliases=["ttt"], guild_only=True, hybrid=True
@@ -261,6 +291,9 @@ class Games(Cog):
             await ctx.send_error("You cannot bet negative coins.")
             return
 
+        if not await self._check_max_bet(ctx, bet):
+            return
+
         assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         assert balance is not None
@@ -289,6 +322,9 @@ class Games(Cog):
             await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
             return
 
+        if not await self._check_max_bet(ctx, bet):
+            return
+
         assert ctx.guild is not None
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         assert balance is not None
@@ -314,6 +350,9 @@ class Games(Cog):
 
         if bet < MinimumBet.BLACKJACK.value:
             await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.BLACKJACK.value)}**.")
+            return
+
+        if not await self._check_max_bet(ctx, bet):
             return
 
         assert ctx.guild is not None
@@ -357,22 +396,83 @@ class Games(Cog):
         if not await blackjack.view.check_for_winner(ctx):
             await message.edit(view=blackjack.view.render())
 
-    @command("work", description="Work for money.", guild_only=True, hybrid=True)
-    @cooldown(1, Payouts.WORK_COODLWON.value, commands.BucketType.member)
-    async def work(self, ctx: Context) -> None:
-        """Work for money.
-
-        Fail Rate: `0%`
-        Minimum Payout: `20`
-        Maximum Payout: `250`
-        Cooldown: `2 hours`
-        """
+    @command(
+        "coinflip", aliases=["cf"], description="Flip a coin — double or nothing, or duel another member.",
+        guild_only=True, hybrid=True,
+    )
+    @describe(
+        bet="The amount of coins to bet.",
+        side="The side you call (default heads).",
+        opponent="Challenge a member to a duel instead of playing the bot.",
+    )
+    async def coinflip(
+        self,
+        ctx: Context,
+        bet: int,
+        side: Literal["heads", "tails"] = "heads",
+        opponent: discord.Member | None = None,
+    ) -> None:
+        """Call heads or tails. Against the bot it's double-or-nothing; against a member both ante the bet and the winner takes the pot."""
         assert ctx.guild is not None
-        balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
-        assert balance is not None
-        amount = round(random.randint(Payouts.WORK_PAYOUT_MIN.value, Payouts.WORK_PAYOUT_MAX.value))
-        await balance.add(cash=amount)
-        await ctx.send_success(random.choice(WORKING_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**"))
+
+        if opponent is not None:
+            if opponent.bot:
+                await ctx.send_error("You cannot duel a bot.")
+                return
+            if opponent == ctx.author:
+                await ctx.send_error("You cannot duel yourself.")
+                return
+            if bet < 10:
+                await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(10)}**.")
+                return
+            if not await self._check_max_bet(ctx, bet):
+                return
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            assert balance is not None
+            if bet > balance.cash:
+                await ctx.send_error(
+                    f"You do not have enough money to bet that amount.\n"
+                    f"You currently have {Emojis.Economy.cash} **{fnumb(balance.cash)}** in **cash**."
+                )
+                return
+
+            # Nobody is debited yet; the prompt re-validates and takes both stakes on accept.
+            prompt = coinflip_ui.DuelPrompt(self, ctx, opponent, bet, side)
+            prompt.message = await ctx.send(view=prompt)
+            return
+
+        if not await self._take_bet(ctx, bet, minimum=10):
+            return
+
+        message = await ctx.send(f"{Emojis.loading} The coin is in the air...")
+        await asyncio.sleep(1.5)
+
+        result = random.choice(coinflip_ui.SIDES)
+        won = result == side
+        if won:
+            balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+            assert balance is not None
+            await balance.add(cash=bet * 2)
+            embed = discord.Embed(
+                title=f"{coinflip_ui.COIN} Coinflip",
+                colour=helpers.Colour.lime_green(),
+                description=f"The coin lands on **{result}** — you called it!\n"
+                f"Won {Emojis.Economy.cash} **{fnumb(bet)}**.",
+            )
+            game_result, profit = GameResult.WIN, bet
+        else:
+            embed = discord.Embed(
+                title=f"{coinflip_ui.COIN} Coinflip",
+                colour=helpers.Colour.light_red(),
+                description=f"The coin lands on **{result}** — you called **{side}**.\n"
+                f"Lost {Emojis.Economy.cash} **{fnumb(bet)}**.",
+            )
+            game_result, profit = GameResult.LOSS, -bet
+
+        await message.edit(content=None, embed=embed)
+        await self.bot.db.game_stats.record_result(
+            ctx.guild.id, ctx.author.id, Game.COINFLIP, game_result, wagered=bet, profit=profit
+        )
 
     @command("crime", description="Commit a crime for money. Higher risk, higher reward.", guild_only=True, hybrid=True)
     @cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
@@ -457,6 +557,20 @@ class Games(Cog):
             return
 
         assert ctx.guild is not None
+        settings = GuildEconomySettings.from_record(await self.bot.db.economy.get_settings(ctx.guild.id))
+        if not settings.rob_enabled:
+            if ctx.command is not None:
+                ctx.command.reset_cooldown(ctx)
+            await ctx.send_error("Robbing is disabled in this server.")
+            return
+
+        if await self.bot.db.economy.has_active_boost(user.id, ctx.guild.id, "shield"):
+            # A shield blocks the attempt but doesn't refund the cooldown — the robber still tried.
+            await ctx.send_error(
+                f"\N{SHIELD} **{user.display_name}** is protected by a rob shield. Better luck next time."
+            )
+            return
+
         robber_balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         robbed_balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)
         assert robber_balance is not None
@@ -501,6 +615,9 @@ class Games(Cog):
 
         if bet < MinimumBet.ROULETTE.value:
             await ctx.send_error(f"You must bet at least {Emojis.Economy.cash} **{fnumb(MinimumBet.ROULETTE.value)}**.")
+            return
+
+        if not await self._check_max_bet(ctx, bet):
             return
 
         assert ctx.guild is not None
@@ -551,6 +668,9 @@ class Games(Cog):
         """Play a game of Texas Hold'em Poker."""
         if stack < 0:
             await ctx.send_error("You cannot bet negative coins.")
+            return
+
+        if not await self._check_max_bet(ctx, stack):
             return
 
         assert ctx.guild is not None

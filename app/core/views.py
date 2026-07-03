@@ -188,11 +188,13 @@ class LayoutView(discord.ui.LayoutView):
         timeout: float | None = 180.0,
         members: discord.abc.Snowflake | Iterable[discord.abc.Snowflake] | None = None,
         delete_on_timeout: bool = False,
+        disable_on_timeout: bool = False,
     ) -> None:
         super().__init__(timeout=timeout)
         self.members = members
         self.message: discord.Message | None = None
         self._delete_on_timeout = delete_on_timeout
+        self._disable_on_timeout = disable_on_timeout
 
     async def interaction_check(self, interaction: Interaction, /) -> bool:
         """Member-gating check, identical to :meth:`View.interaction_check`."""
@@ -213,6 +215,16 @@ class LayoutView(discord.ui.LayoutView):
         if self._delete_on_timeout and self.message:
             with suppress(discord.HTTPException):
                 await self.message.delete()
+
+        if self._disable_on_timeout and self.message:
+            with suppress(discord.HTTPException):
+                for child in self.walk_children():
+                    if isinstance(child, discord.ui.Select):
+                        child.disabled = True
+                try:
+                    await self.message.edit(view=self)
+                except discord.HTTPException:
+                    pass
 
     async def on_error(self, interaction: Interaction, error: Exception, item: discord.ui.Item, /) -> None:
         await interaction.client.handle_interaction_error(interaction, error)  # type: ignore[attr-defined]

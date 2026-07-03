@@ -10,10 +10,10 @@ from __future__ import annotations
 import datetime
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 __all__ = (
     'BOOST_MAX_DURATION_MINUTES',
@@ -29,14 +29,26 @@ __all__ = (
     'HUNTING_TABLE',
     'ITEM_EFFECTS',
     'LOOTBOX_BANDS',
+    'MONTHLY_AMOUNT',
+    'MONTHLY_COOLDOWN',
+    'PRESTIGE_BASE_REQUIREMENT',
+    'PRESTIGE_MAX_LEVEL',
+    'PRESTIGE_STEP',
     'SELL_RATE',
+    'WEEKLY_AMOUNT',
+    'WEEKLY_COOLDOWN',
     'Catch',
     'DailyResult',
+    'GuildEconomySettings',
     'LootEntry',
+    'PeriodicResult',
     'boost_multiplier',
     'compute_daily',
+    'compute_periodic',
     'describe_effect',
     'pick_weighted_winner',
+    'prestige_multiplier',
+    'prestige_requirement',
     'roll_loot',
     'roll_lootbox',
     'sell_price',
@@ -117,6 +129,88 @@ def sell_price(price: int, *, rate: float = SELL_RATE) -> int:
     return max(int(price * rate), 0)
 
 
+# -- guild settings ------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class GuildEconomySettings:
+    """Per-guild economy tuning; the defaults apply when no row exists.
+
+    ``payout_multiplier`` scales every earning activity (work, fish, hunt, beg,
+    dig, search, daily/weekly/monthly); ``max_bet`` caps casino stakes when set.
+    """
+
+    payout_multiplier: float = 1.0
+    rob_enabled: bool = True
+    daily_base: int = DAILY_BASE
+    max_bet: int | None = None
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any] | None) -> GuildEconomySettings:
+        """Build settings from an ``economy_settings`` row (``None`` → all defaults)."""
+        if record is None:
+            return cls()
+        return cls(
+            payout_multiplier=record['payout_multiplier'],
+            rob_enabled=record['rob_enabled'],
+            daily_base=record['daily_base'],
+            max_bet=record['max_bet'],
+        )
+
+
+# -- weekly / monthly claims -------------------------------------------------
+
+#: Payout of the weekly claim (before payout scaling).
+WEEKLY_AMOUNT = 1_500
+#: Payout of the monthly claim (before payout scaling).
+MONTHLY_AMOUNT = 7_000
+#: Minimum time between weekly claims.
+WEEKLY_COOLDOWN = datetime.timedelta(days=7)
+#: Minimum time between monthly claims.
+MONTHLY_COOLDOWN = datetime.timedelta(days=30)
+
+
+@dataclass(frozen=True, slots=True)
+class PeriodicResult:
+    """The outcome of a weekly/monthly claim attempt (no streaks involved)."""
+
+    claimed: bool
+    #: When the reward is next claimable. ``None`` once a claim succeeds.
+    next_available: datetime.datetime | None
+
+
+def compute_periodic(
+    last_claim: datetime.datetime | None,
+    *,
+    now: datetime.datetime,
+    cooldown: datetime.timedelta,
+) -> PeriodicResult:
+    """Resolve a fixed-interval (weekly/monthly) claim: allowed once per ``cooldown``."""
+    if last_claim is not None and now - last_claim < cooldown:
+        return PeriodicResult(False, last_claim + cooldown)
+    return PeriodicResult(True, None)
+
+
+# -- prestige ----------------------------------------------------------------
+
+#: Net worth needed for the first prestige; each further level costs one more multiple.
+PRESTIGE_BASE_REQUIREMENT = 250_000
+#: Permanent payout bonus granted per prestige level (+10% each).
+PRESTIGE_STEP = 0.10
+#: Levels past this grant no further bonus (the requirement keeps growing anyway).
+PRESTIGE_MAX_LEVEL = 10
+
+
+def prestige_requirement(level: int) -> int:
+    """The net worth required to advance *from* ``level`` to ``level + 1``."""
+    return PRESTIGE_BASE_REQUIREMENT * (level + 1)
+
+
+def prestige_multiplier(level: int) -> float:
+    """The permanent payout multiplier a prestige ``level`` grants (``1.0`` at level 0)."""
+    return 1.0 + PRESTIGE_STEP * min(max(level, 0), PRESTIGE_MAX_LEVEL)
+
+
 # -- earning activities (fishing / hunting) -------------------------------
 
 #: Minimum seconds between ``fish`` claims.
@@ -177,7 +271,7 @@ def roll_loot(table: Sequence[LootEntry], *, rng: random.Random | None = None) -
 # -- item effects ----------------------------------------------------------
 
 #: Every effect a shop item can carry; ``none`` items are plain collectibles.
-ITEM_EFFECTS: tuple[str, ...] = ('none', 'cash', 'lootbox', 'role', 'xp_boost', 'loot_boost')
+ITEM_EFFECTS: tuple[str, ...] = ('none', 'cash', 'lootbox', 'role', 'xp_boost', 'loot_boost', 'rob_shield')
 
 #: Highest bonus percent a boost item may grant (+500% = x6).
 BOOST_MAX_PERCENT = 500
@@ -222,6 +316,10 @@ def validate_item_effect(effect: str, value: int | None, duration_minutes: int |
             return f'Boost items need a **value** between 1 and {BOOST_MAX_PERCENT} (the bonus in percent).'
         if duration_minutes is None or not 1 <= duration_minutes <= BOOST_MAX_DURATION_MINUTES:
             return f'Boost items need a **duration** between 1 and {BOOST_MAX_DURATION_MINUTES} minutes.'
+    if effect == 'rob_shield' and (
+        duration_minutes is None or not 1 <= duration_minutes <= BOOST_MAX_DURATION_MINUTES
+    ):
+        return f'Shield items need a **duration** between 1 and {BOOST_MAX_DURATION_MINUTES} minutes.'
     if effect == 'role' and value is None:
         return 'Role items need a **role** to grant.'
     return None
@@ -243,6 +341,8 @@ def describe_effect(effect: str, value: int | None, duration_minutes: int | None
         return f'Boost: +{value}% leveling XP for {duration_minutes} minutes.'
     if effect == 'loot_boost':
         return f'Boost: +{value}% fishing & hunting payouts for {duration_minutes} minutes.'
+    if effect == 'rob_shield':
+        return f'Shield: blocks rob attempts against you for {duration_minutes} minutes.'
     return None
 
 

@@ -319,5 +319,66 @@ async def _verify_db(runner: MigrationRunner, conn: asyncpg.Connection) -> list[
     return await runner.check_integrity(conn)
 
 
+@db.command()
+@click.argument('version', type=int, required=False)
+@click.option('--all', 'reseal_all', is_flag=True, help='Reseal every drifted applied migration.')
+@click.option('--dry-run', is_flag=True, help='Show what would change without writing.')
+def reseal(version: int | None, reseal_all: bool, dry_run: bool) -> None:
+    """Re-sync an applied migration's stored checksum to its file WITHOUT re-running it.
+
+    Use after a deliberate, safe edit to an already-applied migration whose change only affects
+    how a *fresh* database is built (e.g. a corrected idempotency guard). The live schema already
+    matches the intended result, so re-running is unnecessary — this just updates the recorded
+    checksum so ``db verify`` stops reporting drift. It never executes migration SQL and preserves
+    each migration's original apply time. Pass a VERSION (e.g. ``10``) or ``--all``.
+    """
+    if version is None and not reseal_all:
+        click.secho('Provide a migration VERSION (e.g. `db reseal 10`) or use --all.', fg='red')
+        raise SystemExit(2)
+    if version is not None and reseal_all:
+        click.secho('Use either a VERSION or --all, not both.', fg='red')
+        raise SystemExit(2)
+
+    runner = MigrationRunner()
+
+    async def _action(conn: asyncpg.Connection) -> list[tuple[int, str, str]]:
+        await runner.bootstrap(conn)
+        targets = [m.version for m in await runner.drifted(conn)] if reseal_all else [version]  # type: ignore[list-item]
+        results: list[tuple[int, str, str]] = []
+        for target in targets:
+            old, new = await runner.reseal(conn, target, dry_run=dry_run)
+            results.append((target, old, new))
+        return results
+
+    try:
+        results = asyncio.run(_with_connection(_action))
+    except MigrationError as exc:
+        click.secho(str(exc), fg='red')
+        raise SystemExit(1) from None
+    except (asyncpg.PostgresError, OSError):
+        _fail('Failed to reseal migration(s). Check your database connection.')
+        raise SystemExit(1) from None
+
+    if not results:
+        click.secho('No drifted applied migrations — nothing to reseal.', fg='green')
+        return
+
+    changed = 0
+    for target, old, new in results:
+        label = f'V{target:03d}'
+        if old == new:
+            click.echo(f'{click.style(label, fg="cyan")} already in sync ({old[:12]}).')
+        else:
+            changed += 1
+            verb = 'Would reseal' if dry_run else 'Resealed'
+            arrow = f'{click.style(old[:12], fg="red")} → {click.style(new[:12], fg="green")}'
+            click.echo(f'{click.style(label, fg="green")} {verb}: {arrow}')
+
+    if dry_run:
+        click.secho(f'Dry run — {changed} migration(s) would be resealed. Re-run without --dry-run to apply.', fg='yellow')
+    else:
+        click.secho(f'Resealed {changed} migration(s). `db verify` should now be clean.', fg='green', bold=True)
+
+
 if __name__ == '__main__':
     main()

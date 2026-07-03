@@ -84,12 +84,14 @@ It covers every feature, the optional AI layer, and an interactive **API Referen
 | Feature                     | What it does                                                                                                                                                                                             |
 |-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Wallet & banking**        | Each member has a `cash`/`bank` wallet scoped to the guild: `balance`, `deposit`, `withdraw`, `transfer`, and a per-guild `leaderboard`.                                                                 |
-| **Earning & stealing**      | Risk/reward income commands — `work`, `crime`, `slut` — and `rob` to steal from other members.                                                                                                           |
+| **Earning & stealing**      | Risk/reward income commands — `work` (job-aware shifts), `crime`, `slut`, `beg`, `dig`, interactive `search` — and `rob` to steal from other members (blockable with a rob-shield item, admin-toggleable). |
 | **Texas Hold'em Poker**     | Full multi-player (2–4) poker tables with blinds, side-pots, all-in handling, an interactive button UI, an autoplay timer for AFK players, and Monte-Carlo **win-odds analysis** rendered as bar charts. |
 | **Blackjack**               | Play against the dealer with the standard hit/stand/double flow.                                                                                                                                         |
 | **Roulette, Slots & Tower** | Classic casino gambling games with rendered results.                                                                                                                                                     |
-| **Mini-games**              | Tic-Tac-Toe, Minesweeper and Hangman.                                                                                                                                                                    |
-| **Earning activities**      | `daily` (with streak bonus), plus `fish` and `hunt` — cooldown-gated, weighted risk/reward loot tables from junk to rare jackpots.                                                                       |
+| **Mini-games**              | Tic-Tac-Toe, Minesweeper, Hangman, Wordle, Trivia and Coinflip duels — plus an interactive `games` catalogue with per-member records.                                                                    |
+| **Earning activities**      | `daily` (with streak bonus), `weekly`/`monthly` claims, plus `fish` and `hunt` — cooldown-gated, weighted risk/reward loot tables from junk to rare jackpots.                                            |
+| **Progression**             | An 8-rung job ladder (`job`), passive-earning pets (`pet`), a deterministic daily quest board (`quests`), 13 achievement badges, and `prestige` for permanent payout bonuses — bundled in an interactive `economy` hub. |
+| **Guild tuning**            | `economy-config` (and the dashboard) set a payout multiplier, daily base, casino max-bet cap, and a rob on/off toggle per guild.                                                                         |
 | **Shop & items**            | Admins stock a per-guild shop (`shop add/remove`); members `buy`, `sell` and browse their `inventory`. Items can carry a **use-effect**: cash vouchers, lootboxes, role grants, or timed XP/loot boosts. |
 | **Item effects**            | `use` consumes an item and applies its effect — boosts run on a timer (extendable by re-using) and multiply leveling XP (message + voice) or `fish`/`hunt` payouts. Item commands autocomplete.          |
 | **Server lottery**          | Admins start a timed `lottery`; members buy weighted tickets, the pot grows, and a winner is drawn automatically via the persistent timer system (announced with a Components V2 card).                  |
@@ -176,8 +178,8 @@ A few representative command groups:
 | Moderation    | `kick`, `ban`, `multiban`, `softban`, `mute`, `tempban`, `purge`, `slowmode`, `lockdown start/end`, `moderation …`                                      |
 | Configuration | `config …` (per-guild settings), `automod …`, audit-log setup, sentinel setup                                                                           |
 | Leveling      | `level` (rank card), `level leaderboard`, `level set`, `level config …`                                                                                 |
-| Economy       | `balance`, `deposit`, `withdraw`, `transfer`, `leaderboard`, `daily`, `fish`, `hunt`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …` |
-| Games         | `poker`, `blackjack`, `roulette`, `slots`, `tower`, `tictactoe`, `minesweeper`, `hangman`                                                               |
+| Economy       | `economy`, `balance`, `deposit`, `withdraw`, `transfer`, `gift`, `daily`, `weekly`, `monthly`, `work`, `job …`, `fish`, `hunt`, `beg`, `dig`, `search`, `pet …`, `quests`, `achievements`, `prestige`, `shop …`, `buy`, `sell`, `inventory`, `use`, `perks`, `lottery …`, `economy-config …` |
+| Games         | `games`, `poker`, `blackjack`, `roulette`, `slots`, `tower`, `coinflip`, `dice`, `mines`, `higherlower`, `horserace`, `russianroulette`, `tictactoe`, `minesweeper`, `hangman`, `trivia`, `wordle` |
 | Polls         | `polls create/end/edit/delete/search/history/config`                                                                                                    |
 | Music         | `play`, `pause`, `skip`, `queue`, `loop`, `lyrics`, playlist tools                                                                                      |
 | Utility       | `remind`, `notes …`, `tag …`, `highlight …`, `tempchannels …`, `emoji …`, `timezone …`, `translate`, `statcounter …`, `autoresponder …`                 |
@@ -206,7 +208,7 @@ You'll need to configure `config.py` (owner IDs, guild IDs, Lavalink nodes, cust
 
 A `Dockerfile` and `docker-compose.yml` are included if you prefer containers (`docker compose up -d --build`).
 
-Percy auto-enters **beta mode** on non-Linux systems: uses `DISCORD_BETA_TOKEN`, forces `b.` prefix, and skips some cogs — useful for local development.
+Percy auto-enters **beta mode** on non-Linux systems: uses `DISCORD_BETA_TOKEN`, forces `b.` prefix, skips some cogs, and connects to a separate `percy_beta` database (override with `DATABASE_NAME`) so local testing never touches production data — useful for local development. Run `python main.py db upgrade` on your dev machine once to migrate `percy_beta`.
 
 ---
 
