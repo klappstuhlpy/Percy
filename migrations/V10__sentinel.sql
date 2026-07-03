@@ -27,7 +27,7 @@ $$
     BEGIN
         IF NOT EXISTS (SELECT 1
                        FROM pg_type
-                       WHERE typname = 'poll_entry') THEN
+                       WHERE typname = 'sentinel_role_state') THEN
             CREATE TYPE sentinel_role_state AS ENUM ('added', 'pending_add', 'pending_remove');
         END IF;
     EXCEPTION
