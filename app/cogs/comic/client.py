@@ -48,7 +48,7 @@ class LOCGClient:
                 if resp.status != 200:
                     text = await resp.text()
                     log.error("locg-api returned status %s for %s: %s", resp.status, publisher, text[:500])
-                    raise RuntimeError(f"locg-api returned {resp.status}: {text}")
+                    # raise RuntimeError(f"locg-api returned {resp.status}: {text}")
                 data = await resp.json()
         except aiohttp.ClientConnectionError as exc:
             log.error("Failed to connect to locg-api at %s for %s: %s", self.base_url, publisher, exc)
