@@ -61,6 +61,10 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _make_presence_key(member: discord.Member) -> str:
+    return f"status:{member.id}:{member.status}"
+
+
 class CommandBatchEntry(TypedDict):
     guild: int | None
     channel: int
@@ -415,28 +419,26 @@ class Stats(Cog):
             The member after the update.
         """
         if before.bot:
-            return None
+            return
 
         if self.bot.feature_flags.is_cog_disabled("Stats"):
-            return None
+            return
 
         if not (await self.bot.db.get_user_config(after.id)).track_presence:  # type: ignore[misc]
-            return None
+            return
 
-        def _make_key(member: discord.Member) -> str:
-            return f"status:{member.id}:{member.status}"
+        if before.status == after.status:
+            return
 
-        if before.status != after.status:
-            if self._presence_cache.get(_make_key(after)):
-                return None
+        if self._presence_cache.get(_make_presence_key(after)):
+            return
+        self._presence_cache[_make_presence_key(after)] = True
 
-            self._presence_cache[_make_key(after)] = True
-
-            await self.bot.db.stats.insert_presence(
-                after.id,
-                self._presence_map.get(after.status),
-                self._presence_map.get(before.status),
-            )
+        await self.bot.db.stats.insert_presence(
+            after.id,
+            self._presence_map.get(after.status),
+            self._presence_map.get(before.status),
+        )
 
     async def _read_avatar(self, member: discord.Member | discord.User) -> bytes | None:
         """Reads the avatar of a member.
