@@ -249,6 +249,52 @@ class MigrationRunner:
                 problems.append(f"{migration.label} ({migration.title}) was modified after it was applied.")
         return problems
 
+    async def drifted(self, conn: asyncpg.Connection) -> list[Migration]:
+        """Applied migrations whose file has since been edited (checksum mismatch).
+
+        The subset of :meth:`check_integrity` that :meth:`reseal` can safely act on — it
+        excludes applied migrations whose file is missing (those can't be resealed).
+        """
+        files = self.by_version()
+        out = [
+            migration
+            for version, record in (await self.fetch_applied(conn)).items()
+            if (migration := files.get(version)) is not None and migration.checksum != record.checksum
+        ]
+        return sorted(out, key=lambda m: m.version)
+
+    async def reseal(self, conn: asyncpg.Connection, version: int, *, dry_run: bool = False) -> tuple[str, str]:
+        """Re-sync one **already-applied** migration's stored checksum to its current file.
+
+        This never executes migration SQL — it only rewrites the ``schema_migrations`` checksum
+        (and description) so a deliberate, safe edit to a historical migration file stops being
+        reported as drift by :meth:`check_integrity`. Use it when a fix to an applied migration
+        changes only how a *fresh* database is built (e.g. a corrected idempotency guard) and the
+        live schema already matches the intended result, so re-running would be a no-op.
+
+        ``applied_at`` is preserved (the migration really did run when it originally ran).
+        Returns ``(old_checksum, new_checksum)``; they are equal when already in sync. Raises
+        :class:`MigrationError` if the version isn't applied (apply it instead) or its file is
+        missing. With ``dry_run`` the row is left untouched.
+        """
+        await self.ensure_table(conn)
+        record = (await self.fetch_applied(conn)).get(version)
+        if record is None:
+            raise MigrationError(f"V{version:03d} is not applied — nothing to reseal (run `db upgrade` to apply it).")
+        migration = self.by_version().get(version)
+        if migration is None:
+            raise MigrationError(f"V{version:03d} is applied but its file is missing — cannot reseal.")
+
+        old, new = record.checksum, migration.checksum
+        if old != new and not dry_run:
+            await conn.execute(
+                f"UPDATE {MIGRATIONS_TABLE} SET checksum = $2, description = $3 WHERE version = $1;",
+                version,
+                new,
+                migration.description,
+            )
+        return old, new
+
     async def upgrade(self, conn: asyncpg.Connection, *, target: int | None = None) -> list[Migration]:
         """Applies all pending migrations (up to ``target``) and records each.
 

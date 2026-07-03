@@ -165,7 +165,14 @@ class _Database:
             await self.bot.close()
         else:
             pool = self._internal_pool
-            log.info("PostgreSQL pool ready (min=%d, max=%d).", pool.get_min_size(), pool.get_max_size())
+            log.info(
+                "Connected to PostgreSQL database %r at %s:%d (pool min=%d, max=%d).",
+                DatabaseConfig.database,
+                DatabaseConfig.host,
+                DatabaseConfig.port,
+                pool.get_min_size(),
+                pool.get_max_size(),
+            )
         finally:
             # Always release waiters: on failure ``pool`` stays ``None`` and query helpers
             # raise a clear error rather than hanging on ``_ready``.

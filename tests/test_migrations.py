@@ -62,6 +62,10 @@ class FakeConnection:
                 "checksum": checksum,
                 "applied_at": datetime.datetime.now(datetime.UTC),
             }
+        elif q.startswith(f"UPDATE {MIGRATIONS_TABLE} SET checksum"):
+            version, checksum, description = args  # applied_at intentionally left untouched
+            self.rows[version]["checksum"] = checksum
+            self.rows[version]["description"] = description
         else:
             self.ran_sql.append(q)  # an actual migration body
         return "OK"
@@ -209,3 +213,64 @@ async def test_upgrade_is_idempotent(tmp_path: Path) -> None:
 
     assert len(await runner.upgrade(conn)) == 1
     assert await runner.upgrade(conn) == []  # second run applies nothing
+
+
+async def test_reseal_syncs_checksum_without_running_sql(tmp_path: Path) -> None:
+    path = write_migration(tmp_path, 1, "first")
+    runner = MigrationRunner(directory=tmp_path)
+    conn = FakeConnection()
+    await runner.upgrade(conn)  # records V1 with the current checksum
+    applied_at = conn.rows[1]["applied_at"]
+
+    # Deliberately edit the already-applied file (a "fresh-DB-only" fix).
+    path.write_text("-- Reason: first\nSELECT 42;\n", encoding="utf-8", newline="\n")
+    runner = MigrationRunner(directory=tmp_path)  # re-discover the edited file
+    assert await runner.check_integrity(conn)  # drift is now reported
+    assert [m.version for m in await runner.drifted(conn)] == [1]
+    sql_before = list(conn.ran_sql)
+
+    old, new = await runner.reseal(conn, 1)
+
+    assert old != new
+    assert conn.rows[1]["checksum"] == new == runner.by_version()[1].checksum
+    assert conn.rows[1]["applied_at"] == applied_at  # apply time preserved
+    assert conn.ran_sql == sql_before  # reseal ran no additional migration SQL
+    assert await runner.check_integrity(conn) == []  # drift resolved
+
+
+async def test_reseal_dry_run_leaves_row_untouched(tmp_path: Path) -> None:
+    path = write_migration(tmp_path, 1, "first")
+    runner = MigrationRunner(directory=tmp_path)
+    conn = FakeConnection()
+    await runner.upgrade(conn)
+    recorded = conn.rows[1]["checksum"]
+
+    path.write_text("-- Reason: first\nSELECT 42;\n", encoding="utf-8", newline="\n")
+    runner = MigrationRunner(directory=tmp_path)
+
+    old, new = await runner.reseal(conn, 1, dry_run=True)
+
+    assert old != new  # reports what *would* change
+    assert conn.rows[1]["checksum"] == recorded  # but the row is untouched
+    assert await runner.check_integrity(conn)  # still drifted
+
+
+async def test_reseal_is_noop_when_in_sync(tmp_path: Path) -> None:
+    write_migration(tmp_path, 1, "first")
+    runner = MigrationRunner(directory=tmp_path)
+    conn = FakeConnection()
+    await runner.upgrade(conn)
+
+    old, new = await runner.reseal(conn, 1)
+
+    assert old == new  # nothing drifted
+    assert await runner.drifted(conn) == []
+
+
+async def test_reseal_rejects_unapplied_version(tmp_path: Path) -> None:
+    write_migration(tmp_path, 1, "first")
+    runner = MigrationRunner(directory=tmp_path)
+    conn = FakeConnection()  # nothing applied yet
+
+    with pytest.raises(MigrationError, match="not applied"):
+        await runner.reseal(conn, 1)
