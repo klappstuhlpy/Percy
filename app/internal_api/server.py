@@ -38,6 +38,25 @@ SCALAR_HTML = f"""<!doctype html>
 </html>
 """
 
+# Shared error responses documented on every guild-scoped route. FastAPI cannot
+# infer these from a handler's `raise HTTPException(...)` calls, so we declare
+# them once here and merge them into every router via `include_router(responses=)`.
+# All error responses use the FastAPI/Starlette `{"detail": "..."}` envelope.
+ERROR_RESPONSES: dict[int | str, dict[str, object]] = {
+    400: {
+        'description': 'Bad request — a field failed validation or no fields were supplied.',
+        'content': {'application/json': {'example': {'detail': 'max_bet must be between 0 and 100000000'}}},
+    },
+    401: {
+        'description': 'Missing or invalid bearer token.',
+        'content': {'application/json': {'example': {'detail': 'Not authenticated'}}},
+    },
+    404: {
+        'description': 'The guild or target resource does not exist.',
+        'content': {'application/json': {'example': {'detail': 'item not found'}}},
+    },
+}
+
 
 def _create_app(bot: Bot) -> FastAPI:
     app = FastAPI(
@@ -64,9 +83,11 @@ def _create_app(bot: Bot) -> FastAPI:
     prefix = '/api/v1'
     for router in ALL_ROUTERS:
         if router.prefix and router.prefix.startswith('/api/webhooks'):
+            # Vote webhooks are unauthenticated and validate their own per-service
+            # secret, so the shared 401/404 error envelope does not apply to them.
             app.include_router(router)
         else:
-            app.include_router(router, prefix=prefix)
+            app.include_router(router, prefix=prefix, responses=ERROR_RESPONSES)
 
     return app
 
