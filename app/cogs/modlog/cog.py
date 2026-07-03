@@ -140,7 +140,6 @@ class ModLog(Cog):
         aliases=['warnings', 'history', 'modlogs'],
         description="Show a member's moderation history.",
         guild_only=True,
-        hybrid=True,
         user_permissions=['manage_messages'],
     )
     @describe(user='The member to look up.')
@@ -177,7 +176,6 @@ class ModLog(Cog):
         'case',
         description='Show a single moderation case.',
         guild_only=True,
-        hybrid=True,
         user_permissions=['manage_messages'],
     )
     @describe(index='The case number to show.')
@@ -194,7 +192,6 @@ class ModLog(Cog):
         'reason',
         description='Update the reason of an existing case.',
         guild_only=True,
-        hybrid=True,
         user_permissions=['manage_messages'],
     )
     @describe(index='The case number to edit.', reason='The new reason.')
@@ -212,7 +209,6 @@ class ModLog(Cog):
         aliases=['deletecase'],
         description='Delete a moderation case.',
         guild_only=True,
-        hybrid=True,
         user_permissions=['ban_members'],
     )
     @describe(index='The case number to delete.')
@@ -230,7 +226,6 @@ class ModLog(Cog):
         fallback='show',
         description='Show or configure the moderation log channel.',
         guild_only=True,
-        hybrid=True,
     )
     async def modlog(self, ctx: Context) -> None:
         """Show the current modlog channel."""

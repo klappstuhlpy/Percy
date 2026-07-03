@@ -1080,7 +1080,7 @@ class Stats(Cog):
         """
         return await self.bot.db.stats.get_avatar_history(member.id)
 
-    @command("names", alias="ns", description="Shows the username history of a user.", hybrid=True, guild_only=True)
+    @command("names", alias="ns", description="Shows the username history of a user.", guild_only=True)
     @describe(member="The member to show the username history for.")
     async def names(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
@@ -1102,7 +1102,7 @@ class Stats(Cog):
             """
         )
 
-    @command("lastseen", alias="ls", description="Shows when a user was last seen.", hybrid=True, guild_only=True)
+    @command("lastseen", alias="ls", description="Shows when a user was last seen.", guild_only=True)
     @describe(member="The member to show the last seen for.")
     async def last_seen(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
@@ -1117,7 +1117,7 @@ class Stats(Cog):
         subject = "You were" if user == ctx.author else f"{user} was"
         await ctx.send(f"{subject} last seen *{discord.utils.format_dt(last_seen, 'R')}*")
 
-    @command("avatarhistory", description="Shows the avatar history of a user.", alias="avyh", hybrid=True, guild_only=True)
+    @command("avatarhistory", description="Shows the avatar history of a user.", alias="avhy", guild_only=True)
     @describe(member="The member to show the avatar history for.")
     async def avatar_history(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         """Shows the avatar history of a user."""
@@ -1154,7 +1154,7 @@ class Stats(Cog):
         embed.set_footer(text="Last updated")
         await ctx.send(embed=embed, file=file)
 
-    @command("presence", alias="ps", description="Shows the presence history of a user.", hybrid=True, guild_only=True)
+    @command("presence", alias="ps", description="Shows the presence history of a user.", guild_only=True)
     @describe(member="The member to show the presence history for.")
     async def presence(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         user: discord.Member | discord.User = member or ctx.author
@@ -1205,7 +1205,7 @@ class Stats(Cog):
         embed.set_footer(text="Watching since")
         await ctx.send(embed=embed, file=canvas)
 
-    @command(name="userinfo", alias="ui", description="Shows information about a user.", hybrid=True, guild_only=True)
+    @command(name="userinfo", alias="ui", description="Shows information about a user.", guild_only=True)
     @describe(member="The member to show information for.")
     async def userinfo(self, ctx: Context, *, member: discord.Member | None = None) -> None:
         assert isinstance(ctx.author, discord.Member)

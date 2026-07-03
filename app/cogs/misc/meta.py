@@ -654,7 +654,7 @@ class MetaMixin:
         embed.set_footer(text=f"{pluralize(len(features)):feature|features}")
         await LinePaginator.start(ctx, entries=features, per_page=12, embed=embed, location="description")
 
-    @command("serverinfo", alias="si", description="Shows info about a server.", hybrid=True, guild_only=True)
+    @command("serverinfo", alias="si", description="Shows info about a server.", guild_only=True)
     @describe(guild_id="The ID of the server to show info about. (Default: Current server)")
     async def serverinfo(self, ctx: Context, guild_id: str | None = None) -> None:
         """Shows info about the current or a specified server."""

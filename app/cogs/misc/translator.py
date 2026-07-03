@@ -34,7 +34,6 @@ class TranslatorMixin:
         'translate',
         aliases=['tr'],
         description='Translate text into another language.',
-        hybrid=True,
     )
     @describe(
         language='Target language — an ISO code (en, de, fr) or a name (german, spanish).',

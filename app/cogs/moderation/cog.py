@@ -1865,8 +1865,8 @@ class Moderation(Cog):
         description="Temporarily mutes a member for the specified duration.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=["manage_roles"],
-        user_permissions=["manage_roles"],
+        bot_permissions=PermissionTemplate.sup,
+        user_permissions=PermissionTemplate.sup,
     )
     @checks.requires_timer()
     @checks.can_mute()
@@ -1976,9 +1976,8 @@ class Moderation(Cog):
         "muterole",
         description="Opens the mute role configuration menu.",
         guild_only=True,
-        hybrid=True,
-        bot_permissions=["manage_roles", "manage_channels"],
-        user_permissions=["manage_roles", "manage_channels"],
+        bot_permissions=PermissionTemplate.setup,
+        user_permissions=PermissionTemplate.setup,
     )
     async def mute_role(self, ctx: ModGuildContext) -> None:
         """Opens the mute role configuration menu.

@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import asyncpg
 import discord
-from discord import app_commands, utils
+from discord import utils
 from discord.ext import tasks
 
-from app.core import Bot, Cog, Context, HybridContext, describe, group
+from app.core import Bot, Cog, Context, describe, group
 from app.core.pagination import LinePaginator
 from app.database import BaseRecord
-from app.utils import fuzzy, helpers, validate_snowflakes
+from app.utils import helpers
 from app.utils.lock import lock
 
 if TYPE_CHECKING:
@@ -186,7 +186,7 @@ class Highlights(Cog):
             ):
                 yield MessagedHighlight(highlight, message, match)
 
-    @group("highlight", description="Manage highlight related commands.", hybrid=True, guild_only=True)
+    @group("highlight", description="Manage highlight related commands.", guild_only=True)
     async def highlight(self, ctx: Context) -> None:
         """Manage highlight related commands.
 
@@ -221,7 +221,7 @@ class Highlights(Cog):
         await highlight.prune(lookup=trigger.casefold())  # type: ignore[union-attr]
         await ctx.send_success("Removed highlight.", ephemeral=True)
 
-    @highlight.command("block", description="Block an entity from triggering your highlights.", with_app_command=False)
+    @highlight.command("block", description="Block an entity from triggering your highlights.")
     @describe(entities="The entities to block.")
     async def highlight_block(self, ctx: Context, *entities: discord.TextChannel | discord.Member) -> None:
         """Block an entity from triggering your highlights."""
@@ -235,12 +235,7 @@ class Highlights(Cog):
         await highlight.update(blocked=blocked)  # type: ignore[union-attr]
         await ctx.send_success("Blocked entities from triggering highlights.", ephemeral=True)
 
-    @highlight_block.define_app_command()  # type: ignore[attr-defined]
-    @describe(entity="The entity to block.")
-    async def highlight_block_app_command(self, ctx: HybridContext, entity: str) -> None:
-        await ctx.full_invoke(*validate_snowflakes(entity, guild=ctx.guild, to_obj=True))  # type: ignore[arg-type, misc]
-
-    @highlight.command("unblock", description="Unblock an entity from triggering your highlights.", with_app_command=False)
+    @highlight.command("unblock", description="Unblock an entity from triggering your highlights.")
     @describe(entities="The entities to unblock.")
     async def highlight_unblock(self, ctx: Context, *entities: discord.TextChannel | discord.Member) -> None:
         """Unblock an entity from triggering your highlights."""
@@ -253,11 +248,6 @@ class Highlights(Cog):
         blocked.difference_update(entity.id for entity in entities)
         await highlight.update(blocked=blocked)  # type: ignore[union-attr]
         await ctx.send_success("Unblocked entities from triggering highlights.", ephemeral=True)
-
-    @highlight_unblock.define_app_command()  # type: ignore[attr-defined]
-    @describe(entity="The entity to unblock.")
-    async def highlight_unblock_app_command(self, ctx: HybridContext, entity: str) -> None:
-        await ctx.full_invoke(*validate_snowflakes(entity, guild=ctx.guild, to_obj=True))  # type: ignore[arg-type, misc]
 
     @highlight.command("list", aliases=["ls"], description="List all your highlights.")
     async def highlight_list(self, ctx: Context) -> None:
@@ -296,18 +286,6 @@ class Highlights(Cog):
         imported = other.lookup - highlight.lookup  # type: ignore[union-attr]
         await highlight.update(lookup=highlight.lookup | other.lookup)  # type: ignore[union-attr]
         await ctx.send_success(f"Imported {len(imported)} highlights.", ephemeral=True)
-
-    @highlight_import.autocomplete("guild")  # type: ignore[attr-defined]
-    async def highlight_import_guild_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        records = await self.bot.db.highlights.get_import_locations(interaction.user.id, interaction.guild.id)  # type: ignore[union-attr]
-        if not records:
-            return []
-
-        guilds = [interaction.client.get_guild(record["location_id"]) for record in records]
-        results = fuzzy.finder(current, guilds, key=lambda x: x.name)  # type: ignore[union-attr]
-        return [app_commands.Choice(name=guild.name, value=str(guild.id)) for guild in results if guild]  # type: ignore[union-attr]
 
     @Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
