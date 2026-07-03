@@ -25,6 +25,8 @@ class PermissionTemplate:
 
     bot: ClassVar[set[str]] = {"read_message_history", "view_channel", "send_messages", "embed_links", "use_external_emojis"}
     mod: ClassVar[set[str]] = {"ban_members", "manage_messages"}
+    sup: ClassVar[set[str]] = {"kick_members", "manage_roles", "manage_messages"}
+    setup: ClassVar[set[str]] = {"manage_roles", "manage_channels", "manage_messages"}
     admin: ClassVar[set[str]] = {"administrator"}
     manager: ClassVar[set[str]] = {"manage_guild"}
 
@@ -65,7 +67,7 @@ class PermissionSpec(NamedTuple):
 
     def update(
         self,
-        permissions: Iterable[str],
+        permissions: Iterable[str | discord.Permissions],
         destination: Literal["user", "bot"],
     ) -> None:
         """Updates the permissions of the given destination."""
@@ -74,7 +76,9 @@ class PermissionSpec(NamedTuple):
             raise ValueError(f"Invalid permission(s): {', '.join(false)}")
 
         if destination == "user":
-            return self.user.update(permissions)
+            self.user.update(permissions)
+            return
+
         self.bot.update(permissions)
 
     @staticmethod
