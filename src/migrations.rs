@@ -27,6 +27,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::const_is_empty)] // guard against the const set ever being emptied
     fn embedded_migrations_are_contiguous() {
         for (index, migration) in EMBEDDED_MIGRATIONS.iter().enumerate() {
             assert_eq!(migration.version as usize, index, "migration {index} out of sequence");
