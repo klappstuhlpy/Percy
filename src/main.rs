@@ -35,6 +35,7 @@ mod db;
 mod forms;
 mod guilds;
 mod migrations;
+mod moderation;
 mod mutations;
 mod pages;
 mod session;
@@ -293,6 +294,49 @@ fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/music/dj-mode",
             patch(actions::guild_music_dj_mode),
+        )
+        // Moderation audit log + cases, bulk actions, activity/avatars, exports.
+        .route("/dashboard/guild/:guild_id/audit-log", get(moderation::guild_audit_log))
+        .route(
+            "/dashboard/guild/:guild_id/audit-log.json",
+            get(moderation::guild_audit_log_json),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/audit-log/recent",
+            get(moderation::guild_cases_recent),
+        )
+        .route("/dashboard/guild/:guild_id/cases", post(moderation::guild_case_create))
+        .route(
+            "/dashboard/guild/:guild_id/cases/:case_index",
+            patch(moderation::guild_case_update).delete(moderation::guild_case_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/members/bulk-action",
+            post(moderation::guild_bulk_action),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id/activity",
+            get(moderation::guild_member_activity),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id/avatars",
+            get(moderation::guild_member_avatars),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/export/leaderboard.csv",
+            get(moderation::guild_export_leaderboard),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/export/cases.csv",
+            get(moderation::guild_export_cases),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/custom-bot",
+            patch(moderation::guild_custom_bot_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/custom-bot/reset",
+            post(moderation::guild_custom_bot_reset),
         )
         // Config + AI + sentinel mutations (form/JSON POST).
         .route(
