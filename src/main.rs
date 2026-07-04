@@ -1,41 +1,39 @@
-//! Percy dashboard — standalone binary (skeleton).
+//! Percy dashboard — standalone web binary.
 //!
-//! This is the first tangible proof of the decoupling goal (see
-//! DASHBOARD_DECOUPLING_PLAN.md): a web server that boots **independently out of
-//! the box**, linking only the shared crates —
+//! A configuration dashboard for [Percy](https://percy.klappstuhl.me) that runs
+//! **independently out of the box**, linking only the shared crates —
+//! [`kls_web_core`] (SQLite + crypto + migrations kernel), [`kls_ui`] (the design
+//! system, served at `/kls/*`), and [`percy_client`] (Percy's internal API) — with
+//! no dependency on the `klappstuhl_me` app crate.
 //!
-//! * [`kls_web_core`] — the SQLite + crypto + migrations kernel,
-//! * [`kls_ui`] — the shared design system (served at `/kls/*`),
-//! * [`percy_client`] — the typed client for Percy's internal API,
-//!
-//! and **not** the `klappstuhl_me` app crate. Its only hard runtime dependency is
-//! Percy's internal API, and even that is optional at boot: with no
-//! `PERCY_API_URL` configured the dashboard still serves.
-//!
-//! It deliberately does almost nothing yet — a landing page on the shared
-//! stylesheet, a `/health` probe backed by a live in-memory kernel database, and
-//! a `/api-info` route that reports whether the Percy client is wired. Real
-//! dashboard routes arrive when this graduates into its own repo (Phase 5+).
+//! Structure (ported incrementally from the klappstuhl_me monolith):
+//! - [`config`] — `config.json` (Discord OAuth, Percy API, signing key),
+//! - [`db`] — typed access to the dashboard-owned tables in `dashboard.db`,
+//! - [`migrations`] — the embedded schema, applied via the shared runner,
+//! - the routes below render through the shared design system via Askama.
 
 use std::{
-    net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use axum::{extract::State, response::Html, routing::get, Json, Router};
+use askama::Template;
+use axum::{extract::State, routing::get, Json, Router};
 use kls_web_core::Database;
 
+use crate::config::Config;
+
+mod auth;
+mod config;
 mod db;
 mod migrations;
 
-/// Shared application state. Kept intentionally tiny; it grows its own config,
-/// session store, and Percy wiring as the dashboard fills in — the point here is
-/// only that the shared kernel types compose into a normal axum state.
+/// Shared application state, threaded through every handler.
 #[derive(Clone)]
 struct AppState {
+    config: Arc<Config>,
     db: Arc<Database>,
-    /// The Percy API client, present only when `PERCY_API_URL` is configured.
+    /// The Percy API client, present only when Percy is configured.
     percy: Option<Arc<percy_client::PercyClient>>,
 }
 
@@ -43,16 +41,13 @@ struct AppState {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_target(false).init();
 
-    let state = build_state().await?;
+    let config = Config::load()?;
+    let addr = config.bind;
+    let state = build_state(config).await?;
     let app = build_router(state);
 
-    let port = std::env::var("DASHBOARD_PORT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(8091);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("dashboard skeleton listening on http://{addr}");
+    tracing::info!("percy-dashboard listening on http://{addr}");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -77,14 +72,14 @@ fn database_path() -> anyhow::Result<PathBuf> {
 }
 
 /// Builds application state against the dashboard's own on-disk database.
-async fn build_state() -> anyhow::Result<AppState> {
-    build_state_with(&database_path()?).await
+async fn build_state(config: Config) -> anyhow::Result<AppState> {
+    build_state_with(config, &database_path()?).await
 }
 
 /// Opens `dashboard.db` at `path`, applying the embedded migrations on every
 /// connection via the shared runner, and wires an optional Percy client from the
-/// environment. Split out so tests can drive a hermetic `:memory:` database.
-async fn build_state_with(path: &Path) -> anyhow::Result<AppState> {
+/// config. Split out so tests can drive a hermetic `:memory:` database.
+async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppState> {
     // A small pool suits the dashboard's light, read-mostly workload. The shared
     // kernel (v0.1.1+) pre-initialises WAL before spawning the pool, so opening
     // several connections on a brand-new file no longer races. `with_init`
@@ -95,19 +90,16 @@ async fn build_state_with(path: &Path) -> anyhow::Result<AppState> {
         .open()
         .await?;
 
-    let percy = match std::env::var("PERCY_API_URL").ok().filter(|s| !s.is_empty()) {
-        Some(url) => {
-            let token = std::env::var("PERCY_API_TOKEN").unwrap_or_default();
-            Some(Arc::new(percy_client::PercyClient::new(
-                reqwest::Client::new(),
-                url,
-                token,
-            )))
-        }
-        None => None,
-    };
+    let percy = config.percy_api_url().map(|url| {
+        Arc::new(percy_client::PercyClient::new(
+            reqwest::Client::new(),
+            url,
+            config.percy_api_token(),
+        ))
+    });
 
     Ok(AppState {
+        config: Arc::new(config),
         db: Arc::new(db),
         percy,
     })
@@ -118,27 +110,26 @@ async fn build_state_with(path: &Path) -> anyhow::Result<AppState> {
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
+        .route("/login", get(auth::login))
         .route("/health", get(health))
         .route("/api-info", get(api_info))
         .nest("/kls", kls_ui::routes())
         .with_state(state)
 }
 
-/// Landing page, styled with the shared design system to prove `kls-ui` loads.
-async fn index() -> Html<&'static str> {
-    Html(concat!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-        "<title>Percy Dashboard</title>",
-        "<link rel=\"stylesheet\" href=\"/kls/base.css\">",
-        "</head><body><main style=\"max-width:40rem;margin:4rem auto;padding:0 1.5rem\">",
-        "<h1>Percy Dashboard</h1>",
-        "<p>Standalone skeleton. Linked against the shared klappstuhl.me kernel ",
-        "(<code>kls-web-core</code>, <code>kls-ui</code>, <code>percy-client</code>) ",
-        "with no dependency on the main site binary.</p>",
-        "<p><a href=\"/health\">/health</a> &middot; <a href=\"/api-info\">/api-info</a></p>",
-        "</main><script src=\"/kls/base.js\"></script></body></html>",
-    ))
+/// The dashboard landing page, rendered through the shared design system.
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate {
+    discord_login_enabled: bool,
+    percy_configured: bool,
+}
+
+async fn index(State(state): State<AppState>) -> IndexTemplate {
+    IndexTemplate {
+        discord_login_enabled: state.config.discord_login_enabled(),
+        percy_configured: state.percy.is_some(),
+    }
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
@@ -166,9 +157,11 @@ mod tests {
     use super::*;
 
     /// A hermetic in-memory state for tests — never touches the real
-    /// `dashboard.db` on disk.
+    /// `dashboard.db` on disk or the operator's `config.json`.
     async fn test_state() -> AppState {
-        build_state_with(Path::new(":memory:")).await.expect("build state")
+        build_state_with(Config::test_default(), Path::new(":memory:"))
+            .await
+            .expect("build state")
     }
 
     /// The router must compose without panicking (route/state conflicts).
@@ -191,6 +184,26 @@ mod tests {
                 .is_ok(),
             "migrated schema not present"
         );
-        assert!(state.percy.is_none(), "no Percy client without PERCY_API_URL");
+        assert!(state.percy.is_none(), "no Percy client without a configured URL");
+    }
+
+    /// The landing page renders (template compiles + fills) in both states.
+    #[test]
+    fn index_template_renders() {
+        let enabled = IndexTemplate {
+            discord_login_enabled: true,
+            percy_configured: true,
+        }
+        .render()
+        .expect("render");
+        assert!(enabled.contains("Log in with Discord"));
+
+        let disabled = IndexTemplate {
+            discord_login_enabled: false,
+            percy_configured: false,
+        }
+        .render()
+        .expect("render");
+        assert!(disabled.contains("isn't configured"));
     }
 }

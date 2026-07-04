@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>{% block title %}Percy Dashboard{% endblock %}</title>
+
+    <meta name="theme-color" content="#09090b">
+    <meta name="color-scheme" content="dark">
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem("theme");
+                var theme = stored
+                    || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+                document.documentElement.dataset.theme = theme;
+                var tc = document.querySelector('meta[name="theme-color"]');
+                if (tc) tc.setAttribute("content", theme === "light" ? "#f7f6f3" : "#09090b");
+            } catch (e) {
+                document.documentElement.dataset.theme = "dark";
+            }
+        })();
+    </script>
+
+    <!-- Shared design system from the kls-ui crate, served at /kls/*. -->
+    <link rel="stylesheet" href="/kls/base.css" type="text/css"/>
+    {% block css %}{% endblock %}
+</head>
+<body>
+<div class="dash-shell">
+    <header class="dash-topbar">
+        <nav class="dash-nav">
+            <a class="dash-brand" href="/">Percy <span class="dash-brand-sub">Dashboard</span></a>
+            <div class="dash-nav-right">
+                <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle colour theme"
+                        title="Toggle light / dark theme">
+                    <span class="theme-toggle-track" aria-hidden="true">
+                        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" focusable="false">
+                            <circle cx="12" cy="12" r="4.5"></circle>
+                            <line x1="12" y1="1.5" x2="12" y2="4"></line>
+                            <line x1="12" y1="20" x2="12" y2="22.5"></line>
+                            <line x1="1.5" y1="12" x2="4" y2="12"></line>
+                            <line x1="20" y1="12" x2="22.5" y2="12"></line>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" focusable="false">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="dash-main">
+        {% block body %}{% endblock %}
+    </main>
+
+    <footer class="dash-footer">
+        <span>&copy; 2026 Klappstuhl65</span>
+        <a href="https://percy.klappstuhl.me/docs/">Docs</a>
+    </footer>
+</div>
+<script src="/kls/timestamps.js"></script>
+<script src="/kls/base.js"></script>
+{% block body_end %}{% endblock %}
+</body>
+</html>
