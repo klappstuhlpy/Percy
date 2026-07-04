@@ -84,14 +84,12 @@ async fn build_state() -> anyhow::Result<AppState> {
 /// connection via the shared runner, and wires an optional Percy client from the
 /// environment. Split out so tests can drive a hermetic `:memory:` database.
 async fn build_state_with(path: &Path) -> anyhow::Result<AppState> {
-    // A single connection: the dashboard's data footprint is light, and it
-    // sidesteps a cold-start race in the shared pool — opening N>1 connections
-    // concurrently on a brand-new file has them all race to switch the journal to
-    // WAL, and the losers fail with "database is locked" (busy_timeout doesn't
-    // cover a journal-mode change). One connection has no such race. `with_init`
-    // applies the migration set before the connection is handed out.
+    // A small pool suits the dashboard's light, read-mostly workload. The shared
+    // kernel (v0.1.1+) pre-initialises WAL before spawning the pool, so opening
+    // several connections on a brand-new file no longer races. `with_init`
+    // applies the migration set on each connection before it is handed out.
     let db = Database::file(path)
-        .connections(1)
+        .connections(4)
         .with_init(migrations::migrate)
         .open()
         .await?;
