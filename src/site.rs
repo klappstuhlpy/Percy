@@ -36,6 +36,11 @@ const TERMS_OF_SERVICE_URL: &str = "https://raw.githubusercontent.com/klappstuhl
 /// when the canonical GitHub repo does).
 const LEGAL_DOC_TTL: Duration = Duration::from_secs(3600);
 
+/// A time-stamped, rendered legal doc keyed by its source URL.
+type LegalDocCache = Mutex<HashMap<&'static str, (Instant, Arc<String>)>>;
+/// Rendered local markdown files keyed by path, cached for the process lifetime.
+type MdFileCache = Mutex<HashMap<String, Arc<String>>>;
+
 /// Optional viewer chrome for the site layout — `None` when logged out.
 fn viewer(session: &Option<Session>) -> Option<Viewer> {
     session.as_ref().map(Viewer::from_session)
@@ -76,8 +81,8 @@ async fn render_legal_doc(
 }
 
 /// `raw GitHub url -> (fetched_at, rendered HTML)`.
-fn legal_doc_cache() -> &'static Mutex<HashMap<&'static str, (Instant, Arc<String>)>> {
-    static CACHE: OnceLock<Mutex<HashMap<&'static str, (Instant, Arc<String>)>>> = OnceLock::new();
+fn legal_doc_cache() -> &'static LegalDocCache {
+    static CACHE: OnceLock<LegalDocCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -124,8 +129,8 @@ fn render_markdown(markdown: &str) -> String {
 }
 
 /// Local markdown files are read once and cached for the process lifetime.
-fn md_files_cache() -> &'static Mutex<HashMap<String, Arc<String>>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Arc<String>>>> = OnceLock::new();
+fn md_files_cache() -> &'static MdFileCache {
+    static CACHE: OnceLock<MdFileCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
