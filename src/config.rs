@@ -54,6 +54,10 @@ pub struct PercyConfig {
     pub api_url: Option<String>,
     #[serde(default)]
     pub api_token: Option<String>,
+    /// Percy's bot application id, used to build "add Percy to your server" invite
+    /// links. Falls back to the OAuth `client_id` when unset (usually the same app).
+    #[serde(default)]
+    pub bot_client_id: Option<String>,
 }
 
 fn default_bind() -> SocketAddr {
@@ -143,6 +147,16 @@ impl Config {
     /// Whether Discord OAuth login is configured (credentials present).
     pub fn discord_login_enabled(&self) -> bool {
         !self.discord.client_id.is_empty() && !self.discord.client_secret.is_empty()
+    }
+
+    /// The application id used in bot-invite links: the configured `bot_client_id`,
+    /// else the OAuth `client_id` (they're usually the same Discord app).
+    pub fn invite_client_id(&self) -> String {
+        self.percy
+            .bot_client_id
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.discord.client_id.clone())
     }
 }
 

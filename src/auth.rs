@@ -114,7 +114,7 @@ pub async fn callback(State(app): State<AppState>, headers: HeaderMap, Query(que
                 .path("/")
                 .expires(cookie::time::OffsetDateTime::UNIX_EPOCH)
                 .build();
-            let mut resp = Redirect::to("/").into_response();
+            let mut resp = Redirect::to("/dashboard").into_response();
             let h = resp.headers_mut();
             append_cookie(h, &session.to_cookie(&app.config.secret_key).to_string());
             append_cookie(h, &clear_state.to_string());

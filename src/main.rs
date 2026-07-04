@@ -26,6 +26,7 @@ use crate::config::Config;
 mod auth;
 mod config;
 mod db;
+mod guilds;
 mod migrations;
 mod session;
 
@@ -111,6 +112,7 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
+        .route("/dashboard", get(guilds::dashboard))
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
@@ -128,11 +130,19 @@ struct IndexTemplate {
     percy_configured: bool,
 }
 
-async fn index(State(state): State<AppState>) -> IndexTemplate {
+async fn index(State(state): State<AppState>, session: Option<session::Session>) -> axum::response::Response {
+    use axum::response::{IntoResponse, Redirect};
+    // Signed-in visitors go straight to their servers; everyone else sees the
+    // landing page. `Option<Session>` yields `None` when the cookie is absent or
+    // invalid (the extractor's redirect rejection is swallowed by `Option`).
+    if session.is_some() {
+        return Redirect::to("/dashboard").into_response();
+    }
     IndexTemplate {
         discord_login_enabled: state.config.discord_login_enabled(),
         percy_configured: state.percy.is_some(),
     }
+    .into_response()
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
