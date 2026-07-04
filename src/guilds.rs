@@ -188,6 +188,16 @@ pub(crate) async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: 
         .any(|g| g.manageable && g.id == guild_id.to_string())
 }
 
+/// Whether the user merely *shares* a guild with Percy (is a member), regardless
+/// of manage permissions — the weaker gate for the read-only overview and the
+/// user's own self/history/data pages. Fails closed.
+pub(crate) async fn user_is_member(app: &AppState, discord_id: &str, guild_id: u64) -> bool {
+    fetch_mutual_guilds(app, discord_id)
+        .await
+        .iter()
+        .any(|g| g.id == guild_id.to_string())
+}
+
 /// Builds a bot-invite URL, optionally pre-selecting a guild.
 pub(crate) fn build_invite_url(client_id: &str, guild_id: Option<&str>) -> String {
     let base = format!(

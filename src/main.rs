@@ -40,6 +40,7 @@ mod mutations;
 mod pages;
 mod session;
 mod templates;
+mod userpages;
 mod view;
 
 /// Shared application state, threaded through every handler.
@@ -337,6 +338,43 @@ fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/custom-bot/reset",
             post(moderation::guild_custom_bot_reset),
+        )
+        // The signed-in member's own self / history / data pages.
+        .route("/dashboard/guild/:guild_id/me", get(userpages::guild_user_self))
+        .route(
+            "/dashboard/guild/:guild_id/me/settings",
+            post(userpages::guild_user_settings_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/me/history",
+            get(userpages::guild_user_history),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/me/data-export",
+            get(userpages::guild_user_data_export),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/me/delete-data",
+            post(userpages::guild_user_data_delete),
+        )
+        // The read-only public overview + its shared live-player endpoints.
+        .route("/dashboard/guild/:guild_id/overview", get(userpages::guild_overview))
+        .route(
+            "/dashboard/guild/:guild_id/overview/music",
+            get(userpages::guild_overview_music_status),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/overview/music/control",
+            post(userpages::guild_overview_music_control),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/overview/music/lyrics",
+            get(userpages::guild_overview_music_lyrics),
+        )
+        // A moderator's read of a single member (bare :user_id under /members).
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id",
+            get(userpages::guild_user_lookup),
         )
         // Config + AI + sentinel mutations (form/JSON POST).
         .route(
