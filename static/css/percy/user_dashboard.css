@@ -1,0 +1,464 @@
+/* Personal user dashboard — member's own profile view. */
+
+.user-dash-container {
+    max-width: 860px;
+}
+
+/* "← All servers" back link (overview.css isn't loaded on this page). */
+.user-dash-container .overview-back {
+    display: inline-block;
+    margin-bottom: 2rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+.user-dash-container .overview-back:hover {
+    color: var(--branding);
+}
+
+/* ── Profile header ──────────────────────────────────────────────────── */
+.user-dash-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 10px;
+}
+
+.user-dash-avatar {
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid var(--box-border);
+}
+
+.user-dash-info h1 {
+    font-size: 1.4rem;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.user-dash-username {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.user-dash-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.user-dash-boost {
+    color: #f47fff;
+}
+
+/* ── Settings form ───────────────────────────────────────────────────── */
+.user-dash-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.setting-info label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--foreground);
+}
+
+.setting-hint {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.setting-input {
+    width: 220px;
+    padding: 0.4rem 0.6rem;
+    font: inherit;
+    font-size: 0.84rem;
+    font-family: var(--font-mono);
+    background: var(--background);
+    border: 1px solid var(--box-border);
+    border-radius: 5px;
+    color: var(--foreground);
+    transition: border-color 0.15s;
+}
+
+.setting-input:focus {
+    outline: none;
+    border-color: var(--branding);
+}
+
+.setting-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* Toggle switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--box-border);
+    border-radius: 11px;
+    transition: background 0.2s;
+}
+
+.toggle-track::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 16px;
+    height: 16px;
+    background: var(--foreground);
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-track {
+    background: var(--branding);
+}
+
+.toggle-switch input:checked + .toggle-track::before {
+    transform: translateX(18px);
+}
+
+.toggle-switch input:focus-visible + .toggle-track {
+    box-shadow: 0 0 0 2px var(--branding-dim);
+}
+
+/* Actions row */
+.setting-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.setting-status {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.setting-status.is-success {
+    color: var(--success, #4ade80);
+}
+
+.setting-status.is-error {
+    color: var(--error, #f87171);
+}
+
+/* ── Roles ───────────────────────────────────────────────────────────── */
+.user-dash-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* ── Stats grid ──────────────────────────────────────────────────────── */
+.user-dash-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+/* ── Top commands list ───────────────────────────────────────────────── */
+.user-dash-top-commands {
+    margin-top: 1rem;
+}
+
+.user-dash-top-commands h3 {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.top-commands-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.35rem 1rem;
+}
+
+.top-commands-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0.6rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 4px;
+    font-size: 0.82rem;
+}
+
+.cmd-name {
+    font-family: var(--font-mono);
+    color: var(--branding);
+}
+
+.cmd-uses {
+    color: var(--text-muted);
+}
+
+/* ── Presence timeline ───────────────────────────────────────────────── */
+.presence-chart {
+    width: 100%;
+}
+
+.presence-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Legend: colored status swatches with their share of tracked time. */
+.pt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+}
+.pt-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.pt-legend-item strong {
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+}
+.pt-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* Rows: one day each. Date label column + 24h track column. */
+.pt-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+.pt-day,
+.pt-axis {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.pt-date {
+    flex: 0 0 88px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+}
+.pt-track {
+    position: relative;
+    flex: 1;
+    height: 18px;
+    border-radius: 4px;
+    background: var(--background);
+    border: 1px solid var(--box-border);
+    overflow: hidden;
+    /* Faint 6-hour gridlines behind the segments. */
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(25% - 1px),
+        rgba(127, 127, 127, 0.16) calc(25% - 1px),
+        rgba(127, 127, 127, 0.16) 25%
+    );
+}
+.pt-seg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 1px;
+    opacity: 0.9;
+    transition: opacity 0.12s;
+}
+.pt-seg:hover { opacity: 1; }
+
+/* Hour axis under the rows, aligned to the track column. */
+.pt-axis {
+    padding-top: 0.15rem;
+}
+.pt-hours {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+    .pt-date { flex-basis: 64px; font-size: 0.68rem; }
+    .pt-day, .pt-axis { gap: 0.5rem; }
+}
+
+.chart-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ── Name / nickname history ─────────────────────────────────────────── */
+.history-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.history-column h3 {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.history-list li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 4px;
+    font-size: 0.82rem;
+}
+
+.history-value {
+    font-family: var(--font-mono);
+    word-break: break-word;
+}
+
+.history-when {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.history-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ── Avatar history gallery ──────────────────────────────────────────── */
+.avatar-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.75rem;
+}
+
+.avatar-snap {
+    margin: 0;
+    text-align: center;
+}
+
+.avatar-snap img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--box-border);
+    background: var(--box-shade);
+}
+
+.avatar-snap figcaption {
+    margin-top: 0.3rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ── Data download / delete ──────────────────────────────────────────── */
+.data-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .user-dash-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    .user-dash-meta {
+        justify-content: center;
+    }
+    .user-dash-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .setting-input {
+        width: 100%;
+    }
+}

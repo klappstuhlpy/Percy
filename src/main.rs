@@ -120,6 +120,9 @@ fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/api-info", get(api_info))
         .nest("/kls", kls_ui::routes())
+        // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a
+        // `static/` dir next to the binary. The shared design system lives at /kls.
+        .nest_service("/static", tower_http::services::ServeDir::new("static"))
         .with_state(state)
 }
 

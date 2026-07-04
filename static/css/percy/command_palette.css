@@ -1,0 +1,210 @@
+/* Percy Dashboard — command palette (Ctrl/Cmd+K) and its sidebar launcher.
+   Driven by static/js/percy/percy_command_palette.js. Uses the shared design tokens
+   from base.css so it tracks the light/dark theme automatically. */
+
+/* -- Sidebar launcher ------------------------------------------------------ */
+.cmdk-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.7rem;
+    background: var(--form-input-background);
+    border: 1px solid var(--box-border);
+    border-radius: 0.6rem;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.cmdk-trigger:hover {
+    border-color: var(--branding);
+    color: var(--foreground);
+}
+.cmdk-trigger-glyph { font-size: 1rem; line-height: 1; }
+.cmdk-trigger-text { flex: 1; text-align: left; }
+.cmdk-trigger-kbd {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid var(--box-border);
+    border-radius: 0.35rem;
+    background: var(--box);
+    color: var(--text-muted);
+}
+
+/* -- Overlay --------------------------------------------------------------- */
+.cmdk-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 12vh 1rem 1rem;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    animation: cmdk-fade 0.12s ease;
+}
+.cmdk-overlay[hidden] { display: none; }
+body.cmdk-open { overflow: hidden; }
+
+@keyframes cmdk-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.cmdk-panel {
+    width: 100%;
+    max-width: 38rem;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 0.9rem;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    animation: cmdk-rise 0.14s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes cmdk-rise { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* -- Input ----------------------------------------------------------------- */
+.cmdk-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--box-border);
+}
+.cmdk-input-glyph { font-size: 1.1rem; color: var(--text-muted); }
+.cmdk-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 1rem;
+}
+.cmdk-input::placeholder { color: var(--text-muted); }
+.cmdk-esc {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--box-border);
+    border-radius: 0.35rem;
+    color: var(--text-muted);
+}
+
+/* -- Results --------------------------------------------------------------- */
+.cmdk-results { overflow-y: auto; padding: 0.4rem; }
+.cmdk-group {
+    padding: 0.5rem 0.7rem 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.55rem;
+    cursor: pointer;
+    color: var(--foreground);
+}
+.cmdk-item.selected { background: var(--branding-dim); }
+.cmdk-item-icon {
+    flex: 0 0 1.4rem;
+    height: 1.4rem;
+    display: grid;
+    place-items: center;
+    border-radius: 0.4rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.cmdk-item.selected .cmdk-item-icon { color: var(--branding); border-color: var(--branding); }
+.cmdk-item-label { flex: 1; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-item-sub { font-size: 0.72rem; color: var(--text-muted); flex: 0 0 auto; }
+.cmdk-empty { padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+
+/* -- Status bar ------------------------------------------------------------ */
+.cmdk-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.9rem;
+    border-top: 1px solid var(--box-border);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.cmdk-status kbd {
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--box-border);
+    border-radius: 0.3rem;
+    margin: 0 0.1rem;
+}
+.cmdk-brand { font-weight: 600; color: var(--branding); }
+
+/* -- AI answer ------------------------------------------------------------- */
+.cmdk-answer { padding: 0.5rem 0.7rem 0.9rem; }
+.cmdk-answer-q {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--foreground);
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.6rem;
+    border-bottom: 1px solid var(--box-border);
+}
+.cmdk-answer-body { font-size: 0.92rem; line-height: 1.55; color: var(--foreground); }
+.cmdk-answer-body p { margin: 0 0 0.6rem; }
+.cmdk-answer-body p:last-child { margin-bottom: 0; }
+.cmdk-answer-body code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.85em;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.3rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    color: var(--branding-bright);
+}
+.cmdk-answer-link { color: var(--link-text); text-decoration: none; font-weight: 600; }
+.cmdk-answer-link:hover { color: var(--link-hover-text); text-decoration: underline; }
+
+.cmdk-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+.cmdk-chip {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 0.45rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    color: var(--foreground);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.cmdk-chip:hover { border-color: var(--branding); color: var(--branding-bright); }
+
+/* Thinking spinner */
+.cmdk-spinner {
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid var(--box-border);
+    border-top-color: var(--branding);
+    border-radius: 50%;
+    vertical-align: -0.1rem;
+    margin-right: 0.35rem;
+    animation: cmdk-spin 0.7s linear infinite;
+}
+@keyframes cmdk-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+    .cmdk-overlay { padding-top: 6vh; }
+    .cmdk-item-sub { display: none; }
+}

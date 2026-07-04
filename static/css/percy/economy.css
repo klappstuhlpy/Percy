@@ -1,0 +1,52 @@
+/* Economy page — settings grid tuning, inline input adornments, rob toggle.
+   Reuses the shared config-* primitives from dashboard.css. */
+
+/* Wider min column so the three tuning fields breathe and the number inputs
+   don't collide with their suffix. */
+.eco-settings-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    margin-bottom: 1rem;
+}
+.eco-settings-grid .config-field {
+    margin-bottom: 0;
+}
+
+/* Input + trailing unit adornment (e.g. the "×" on the multiplier). */
+.eco-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.eco-input-wrap .config-input {
+    padding-right: 2rem;
+}
+.eco-input-suffix {
+    position: absolute;
+    right: 0.7rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+/* Rob toggle sits below the numeric grid as a full-width switch row, with the
+   label promoted to foreground (config-label is muted by default). */
+.eco-rob-toggle {
+    margin-bottom: 0;
+    cursor: pointer;
+}
+.eco-rob-toggle .config-label {
+    font-size: 0.88rem;
+    color: var(--foreground);
+    font-weight: 600;
+}
+.eco-rob-toggle .config-label code,
+.eco-settings-grid code,
+.config-description code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    color: var(--branding);
+}

@@ -1,0 +1,122 @@
+/* Music page — equalizer canvas, presets, filter toggles, now-playing.
+   The `spin` and `pulse` keyframes live in dashboard.css (shared). */
+
+/* ── Equalizer ──────────────────────────────────────────────────────── */
+.eq-container { position: relative; width: 100%; max-width: 900px; }
+.eq-canvas { width: 100%; height: 320px; border: 1px solid var(--box-border); border-radius: 8px; background: var(--box); cursor: pointer; touch-action: none; }
+.eq-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.eq-presets { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.eq-status { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted, #888); transition: color 0.2s; }
+.eq-status.applying { color: var(--branding, #d97757); }
+.eq-status.applied { color: #4caf50; }
+.eq-status .eq-spinner { width: 12px; height: 12px; border: 2px solid transparent; border-top-color: var(--branding, #d97757); border-radius: 50%; animation: spin 0.6s linear infinite; display: none; }
+.eq-status.applying .eq-spinner { display: inline-block; }
+.eq-preset-label { font-size: 0.82rem; color: var(--text-muted, #888); margin-left: auto; }
+.eq-preset-label strong { color: var(--foreground, #eee); }
+
+/* ── Filters ────────────────────────────────────────────────────────── */
+.filter-toggles { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
+.filter-toggle {
+    padding: 0.45rem 0.95rem;
+    border-radius: 999px;
+    border: 1px solid var(--box-border);
+    background: var(--box-shade);
+    color: var(--text-muted, #888);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.filter-toggle:hover { border-color: var(--branding, #d97757); color: var(--foreground); }
+.filter-toggle.active {
+    background: var(--branding, #d97757);
+    color: #fff;
+    border-color: var(--branding, #d97757);
+}
+/* Lowpass: pill wrapper keeping the toggle + its numeric value together. */
+.filter-lowpass {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.35rem 0.25rem 0;
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    background: var(--box-shade);
+}
+.filter-lowpass .filter-toggle { border: none; background: transparent; }
+.filter-lowpass .filter-toggle.active { background: var(--branding, #d97757); }
+.lowpass-input { width: 68px; margin: 0; padding: 0.3rem 0.5rem; text-align: center; }
+
+/* ── Now-playing pill / 24-7 listener status ────────────────────────── */
+.now-playing { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: var(--box); border: 1px solid var(--box-border); }
+.now-playing .np-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--branding, #d97757); animation: pulse 1.5s infinite; }
+
+.listener-status {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+.listener-status .ls-indicator { width: 9px; height: 9px; border-radius: 50%; background: #555; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, #555 25%, transparent); }
+.listener-status .ls-indicator.active { background: #4caf50; box-shadow: 0 0 0 3px color-mix(in srgb, #4caf50 30%, transparent); }
+.listener-status strong { color: var(--branding, #d97757); }
+
+/* ── Music Panel: settings cards (toggle + dedicated-channel row) ─────── */
+.panel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: 680px;
+}
+/* Each row is a self-contained card. Overrides .config-toggle's compact
+   padding (music.css loads after dashboard.css, so these win on tie). */
+.panel-item {
+    margin: 0;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border-radius: 0.55rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    transition: border-color 0.15s ease;
+}
+.panel-item:hover {
+    border-color: color-mix(in srgb, var(--branding) 35%, var(--box-border));
+}
+.panel-item > div { min-width: 0; }
+.panel-item .config-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--foreground, #eee);
+    margin-bottom: 0.15rem;
+}
+.panel-item .config-description {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-top: 0;
+    line-height: 1.45;
+}
+.panel-item .config-description strong { color: var(--branding, #d97757); }
+.panel-item-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.panel-channel-select { min-width: 150px; max-width: 200px; }
+
+@media (max-width: 560px) {
+    .panel-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .panel-item-action { justify-content: stretch; }
+    .panel-channel-select { flex: 1; max-width: none; }
+}

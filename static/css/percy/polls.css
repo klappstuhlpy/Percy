@@ -1,0 +1,33 @@
+/* Polls page — list toolbar and create/edit modal layout.
+   Generic spacing/width helpers (mb-sm, modal-card.w-xl, …) live in dashboard.css. */
+
+/* List toolbar: extends .section-header with a gap and custom vertical rhythm. */
+.polls-toolbar {
+    gap: 1rem;
+    margin: 1.5rem 0 0.75rem;
+}
+
+.poll-desc { font-size: 0.75rem; }
+
+/* Modal intro paragraph. */
+.modal-intro { margin-bottom: 1rem; }
+
+/* Stacked option inputs inside the create/edit modals. */
+.option-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+
+/* Duration amount + unit row. */
+.duration-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+.duration-amount { max-width: 120px; }
+.duration-unit { max-width: 160px; }
+
+/* Image source toggle spacing. */
+.segmented-row { margin: 0.4rem 0; }

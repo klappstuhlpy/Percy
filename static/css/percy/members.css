@@ -1,0 +1,119 @@
+/* Members page — bulk-action toolbar, selection checkboxes, and the
+   responsive card layout the wide table collapses into on mobile. */
+
+.bulk-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+    background: var(--box-shade);
+    border: 1px solid var(--branding);
+    border-radius: 0.5rem;
+}
+.bulk-toolbar .bulk-count { font-size: 0.82rem; color: var(--foreground); }
+.bulk-toolbar .bulk-count { margin-right: auto; }
+.col-check { width: 2rem; }
+.bulk-check,
+#bulk-select-all {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--branding);
+    cursor: pointer;
+}
+
+/* ── Mobile: collapse the wide table into stacked cards ──────────────────
+   The desktop table forces a min-width and scrolls horizontally, which is
+   miserable on a phone. Below 768px each row becomes a self-contained card:
+   the checkbox + member sit on the top line, and joined / roles / actions
+   stack underneath, each labelled. */
+@media (max-width: 768px) {
+    .members-toolbar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .members-toolbar .search-input { flex: 1 1 100%; max-width: none; }
+    .members-count { margin-left: 0; }
+
+    .bulk-toolbar .button { flex: 1 1 auto; }
+
+    .members-table-wrap {
+        overflow-x: visible;
+        border: none;
+        background: transparent;
+        border-radius: 0;
+    }
+    .members-table {
+        display: block;
+        min-width: 0;
+        width: 100%;
+    }
+    .members-table thead { display: none; }
+    .members-table tbody {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+    .members-table tbody tr {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 0.55rem 0.75rem;
+        padding: 0.85rem 0.9rem;
+        border: 1px solid var(--box-border);
+        border-radius: 0.625rem;
+        background: var(--box);
+    }
+    .members-table tbody tr:hover { background: var(--box); }
+    .members-table tbody td {
+        display: block;
+        padding: 0;
+        border: none;
+    }
+
+    /* Checkbox + member on the first line; everything else spans full width. */
+    .members-table tbody td:first-child {
+        grid-row: 1;
+        grid-column: 1;
+        align-self: center;
+    }
+    .members-table tbody td:nth-child(2) {
+        grid-row: 1;
+        grid-column: 2;
+        min-width: 0;
+    }
+    .members-table tbody td:nth-child(3),
+    .members-table tbody td:nth-child(4),
+    .members-table tbody td:nth-child(5) {
+        grid-column: 1 / -1;
+    }
+
+    /* Bigger tap target for selection. */
+    .members-table .bulk-check {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+
+    /* Label the joined timestamp now that the column header is gone. */
+    .members-table td.member-joined {
+        white-space: normal;
+    }
+    .members-table td.member-joined::before {
+        content: "Joined ";
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 0.66rem;
+        font-weight: 600;
+    }
+
+    .members-table .member-roles { max-height: none; }
+    .members-table .member-actions { justify-content: flex-start; }
+    .members-table .member-actions .button { flex: 1 1 auto; }
+
+    /* Hide empty roles / actions cells so bots and role-less members don't
+       leave blank gaps in the card. */
+    .members-table tbody td:nth-child(4):not(:has(.role-chip)) { display: none; }
+    .members-table tbody td:nth-child(5):not(:has(.button)) { display: none; }
+}

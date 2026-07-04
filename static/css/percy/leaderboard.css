@@ -1,0 +1,161 @@
+/* Public leaderboard page — accessible without login. */
+
+.lb-container { max-width: 920px; }
+
+/* ── Hero ────────────────────────────────────────────────────────── */
+.lb-hero {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    margin-bottom: 1.4rem;
+}
+.lb-hero-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 1rem;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--box-border);
+}
+.lb-hero-icon-ph {
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    font-weight: 700;
+    background: var(--branding-dim);
+    color: var(--branding);
+}
+.lb-hero-text h1 { margin: 0.15rem 0; font-size: 1.6rem; }
+.lb-hero-text p { margin: 0; color: var(--text-muted); }
+.lb-hero-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--branding-bright);
+    background: var(--branding-dim);
+    border: 1px solid color-mix(in srgb, var(--branding) 35%, transparent);
+    border-radius: 0.4rem;
+    padding: 0.1rem 0.45rem;
+}
+.lb-vanity-display {
+    font-size: 0.82rem;
+    color: var(--branding);
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ── Intro ───────────────────────────────────────────────────────── */
+.lb-intro {
+    margin-bottom: 1.2rem;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+.lb-intro p { margin: 0; }
+
+/* ── Vanity section ──────────────────────────────────────────────── */
+.lb-vanity-section { padding: 1rem 1.2rem; }
+.lb-vanity-section h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.lb-vanity-hint { font-size: 0.8rem; margin: 0 0 0.7rem; }
+.lb-vanity-form { margin: 0; }
+.lb-vanity-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.lb-vanity-prefix {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+.lb-vanity-input-row input {
+    flex: 1;
+    min-width: 120px;
+    max-width: 220px;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+.lb-section { margin-top: 1.2rem; }
+.lb-section-desc {
+    margin: 0 0 0.8rem;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+}
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.lb-table-wrap { overflow-x: auto; }
+.lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+}
+.lb-table th {
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--box-border);
+}
+.lb-table td {
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--box-border);
+}
+.lb-table tbody tr:last-child td { border-bottom: none; }
+.lb-table tbody tr:hover { background: var(--box-shade); }
+
+.lb-col-rank { width: 3rem; text-align: center; }
+.lb-col-rank { color: var(--text-muted); font-weight: 700; }
+.lb-col-level, .lb-col-xp, .lb-col-total, .lb-col-cash, .lb-col-bank {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Top 3 rank highlights */
+.lb-top-1 .lb-col-rank { color: #ffd700; }
+.lb-top-2 .lb-col-rank { color: #c0c0c0; }
+.lb-top-3 .lb-col-rank { color: #cd7f32; }
+
+.lb-user-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.lb-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+.lb-avatar-ph {
+    display: inline-block;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+}
+.lb-username {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.lb-total-hint {
+    margin: 0.7rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .lb-hero { gap: 0.7rem; }
+    .lb-hero-icon { width: 56px; height: 56px; }
+    .lb-hero-text h1 { font-size: 1.2rem; }
+    .lb-vanity-input-row { flex-direction: column; align-items: stretch; }
+    .lb-vanity-input-row input { max-width: none; }
+    .lb-username { max-width: 120px; }
+}
