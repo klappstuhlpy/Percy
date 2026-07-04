@@ -9,58 +9,18 @@
 
 use std::collections::HashSet;
 
-use askama::Template;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Redirect, Response},
 };
-use percy_client::{
-    Channel, CustomBotProfile, GuildInfo, LockdownsResponse, Member, PercyError, Role, SentinelInfo, StatusFeedInfo,
-    UserGuild,
+use percy_client::{GuildInfo, LockdownsResponse, PercyError, StatusFeedInfo, UserGuild};
+
+use crate::{
+    session::Session,
+    templates::{AddPercyGuild, GuildNotFoundTemplate, GuildTemplate, GuildsTemplate, MembersTemplate},
+    view::Viewer,
+    AppState,
 };
-
-use crate::{session::Session, view::Viewer, AppState};
-
-/// A greyed "Add Percy" card — a server the user administrates but Percy isn't in.
-/// Field names match the monolith's `AddPercyGuild` (the template is verbatim).
-pub struct AddPercyGuild {
-    pub name: String,
-    pub icon_url: Option<String>,
-    pub owner: bool,
-    /// Bot-invite URL with this guild pre-selected.
-    pub invite_url: String,
-}
-
-#[derive(Template)]
-#[template(path = "guilds.html")]
-struct GuildsTemplate {
-    account: Option<Viewer>,
-    managed: Vec<UserGuild>,
-    public: Vec<UserGuild>,
-    add_percy: Vec<AddPercyGuild>,
-    invite_url: String,
-}
-
-#[derive(Template)]
-#[template(path = "guild.html")]
-struct GuildTemplate {
-    account: Option<Viewer>,
-    guild: GuildInfo,
-    channels: Vec<Channel>,
-    roles: Vec<Role>,
-    sentinel: Option<SentinelInfo>,
-    lockdowns: LockdownsResponse,
-    status_feed: StatusFeedInfo,
-    bot_profile: CustomBotProfile,
-    degraded: bool,
-}
-
-#[derive(Template)]
-#[template(path = "guild_not_found.html")]
-struct GuildNotFoundTemplate {
-    account: Option<Viewer>,
-    invite_url: String,
-}
 
 /// `GET /dashboard` — the guild list. The [`Session`] extractor redirects to
 /// `/login` when the visitor isn't signed in.
@@ -132,6 +92,7 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
         Err(PercyError::NotFound) => {
             return GuildNotFoundTemplate {
                 account: Some(Viewer::from_session(&session)),
+                guild_id,
                 invite_url: build_invite_url(&app.config.invite_client_id(), Some(&guild_id.to_string())),
             }
             .into_response();
@@ -163,18 +124,6 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
     .into_response()
 }
 
-#[derive(Template)]
-#[template(path = "members.html")]
-struct MembersTemplate {
-    account: Option<Viewer>,
-    guild_id: u64,
-    guild_name: String,
-    nav_active: &'static str,
-    page_title: &'static str,
-    members: Vec<Member>,
-    roles: Vec<Role>,
-}
-
 /// `GET /dashboard/guild/{id}/members` — the members tab (initial page; live
 /// search/pagination is driven client-side against the JSON endpoint).
 pub async fn guild_members(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
@@ -203,8 +152,12 @@ pub async fn guild_members(State(app): State<AppState>, session: Session, Path(g
 
 /// Shared prelude for the per-guild feature pages: requires a session, checks the
 /// user manages the guild, and loads its config. Returns a redirect [`Response`]
-/// (to `/dashboard`) on any failure so callers can `?`-style early-return.
-async fn gate_and_load_guild(app: &AppState, session: &Session, guild_id: u64) -> Result<GuildInfo, Response> {
+/// (to `/dashboard`) on any failure so callers can early-return.
+pub(crate) async fn gate_and_load_guild(
+    app: &AppState,
+    session: &Session,
+    guild_id: u64,
+) -> Result<GuildInfo, Response> {
     let Some(percy) = &app.percy else {
         return Err(Redirect::to("/dashboard").into_response());
     };
@@ -228,7 +181,7 @@ async fn fetch_mutual_guilds(app: &AppState, discord_id: &str) -> Vec<UserGuild>
 
 /// Whether the user manages (Manage Server / Administrator) a guild Percy shares
 /// with them — the gate for the management pages. Fails closed.
-async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: u64) -> bool {
+pub(crate) async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: u64) -> bool {
     fetch_mutual_guilds(app, discord_id)
         .await
         .iter()
@@ -236,7 +189,7 @@ async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: u64) -> boo
 }
 
 /// Builds a bot-invite URL, optionally pre-selecting a guild.
-fn build_invite_url(client_id: &str, guild_id: Option<&str>) -> String {
+pub(crate) fn build_invite_url(client_id: &str, guild_id: Option<&str>) -> String {
     let base = format!(
         "https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot+applications.commands&permissions=8"
     );
@@ -249,6 +202,8 @@ fn build_invite_url(client_id: &str, guild_id: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use askama::Template;
+    use percy_client::UserGuild;
 
     #[test]
     fn invite_url_optionally_pins_a_guild() {

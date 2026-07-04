@@ -29,6 +29,7 @@ mod db;
 mod guilds;
 mod migrations;
 mod session;
+mod templates;
 mod view;
 
 /// Shared application state, threaded through every handler.
