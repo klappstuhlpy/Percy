@@ -34,6 +34,7 @@ mod crud;
 mod db;
 mod forms;
 mod guilds;
+mod leaderboard;
 mod migrations;
 mod moderation;
 mod mutations;
@@ -421,6 +422,12 @@ fn build_router(state: AppState) -> Router {
         .route(
             "/dashboard/guild/:guild_id/audit-log-flags",
             patch(mutations::guild_audit_log_flags),
+        )
+        // Public leaderboard (no login) + vanity slug management.
+        .route("/lb/:target", get(leaderboard::public_leaderboard))
+        .route(
+            "/lb/:guild_id/vanity",
+            post(leaderboard::public_leaderboard_vanity_claim).delete(leaderboard::public_leaderboard_vanity_delete),
         )
         // Public marketing / site pages.
         .route("/commands", get(site::percy_commands))

@@ -145,6 +145,46 @@ pub async fn claim_vanity(db: &Database, slug: &str, guild_id: &str, claimed_by:
     Ok(affected > 0)
 }
 
+/// Sets (claims or updates) a guild's vanity slug. A guild may change its own
+/// slug freely; taking a slug another guild already holds is rejected with
+/// `Err(msg)`. Mirrors the monolith's upsert-on-`guild_id` semantics.
+pub async fn set_vanity(
+    db: &Database,
+    slug: &str,
+    guild_id: &str,
+    claimed_by: &str,
+) -> rusqlite::Result<Result<(), &'static str>> {
+    let (slug, gid, claimed_by) = (slug.to_owned(), guild_id.to_owned(), claimed_by.to_owned());
+    db.call(move |conn| -> rusqlite::Result<Result<(), &'static str>> {
+        let existing: Option<String> = conn
+            .prepare_cached("SELECT guild_id FROM percy_leaderboard_vanity WHERE slug = ?")
+            .and_then(|mut stmt| stmt.query_row([&slug], |row| row.get(0)))
+            .ok();
+        if let Some(ref owner_guild) = existing {
+            if owner_guild != &gid {
+                return Ok(Err("This vanity URL is already taken"));
+            }
+        }
+        conn.execute(
+            "INSERT INTO percy_leaderboard_vanity (slug, guild_id, claimed_by) VALUES (?, ?, ?) \
+             ON CONFLICT(guild_id) DO UPDATE SET slug = excluded.slug",
+            rusqlite::params![slug, gid, claimed_by],
+        )?;
+        Ok(Ok(()))
+    })
+    .await
+}
+
+/// Removes a guild's vanity slug (no-op if it has none).
+pub async fn delete_vanity(db: &Database, guild_id: &str) -> rusqlite::Result<()> {
+    db.execute(
+        "DELETE FROM percy_leaderboard_vanity WHERE guild_id = ?",
+        boxed_params!(guild_id.to_owned()),
+    )
+    .await
+    .map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
