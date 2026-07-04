@@ -1,0 +1,114 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ name }} | Percy Dashboard{% endblock %}
+
+{% block css %}
+<style>
+    .g-back { display: inline-block; margin-bottom: 1rem; color: var(--link-text, #8ab4f8); text-decoration: none; font-size: .9rem; }
+    .g-back:hover { text-decoration: underline; }
+    .g-head { display: flex; align-items: center; gap: 1rem; margin-bottom: .35rem; }
+    .g-icon { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
+    .g-icon-ph { display: grid; place-items: center; font-weight: 700; font-size: 1.6rem;
+        background: var(--background, #0d0d10); border: 1px solid var(--box-border, #2a2a30); color: var(--text-muted, #9aa0a6); }
+    .g-head h1 { margin: 0; font-size: 1.5rem; }
+    .g-sub { color: var(--text-muted, #9aa0a6); font-size: .9rem; }
+    .g-note { margin: .75rem 0 1.75rem; padding: .6rem .85rem; border-radius: 8px; font-size: .85rem;
+        color: var(--text-muted, #9aa0a6); background: var(--box, #17171b); border: 1px solid var(--box-border, #2a2a30); }
+
+    .g-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .g-panel { background: var(--box, #17171b); border: 1px solid var(--box-border, #2a2a30); border-radius: 12px; padding: 1.1rem 1.2rem; }
+    .g-panel h2 { margin: 0 0 .85rem; font-size: 1rem; }
+    .g-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .35rem 0;
+        border-top: 1px solid var(--box-border, #2a2a30); }
+    .g-row:first-of-type { border-top: none; }
+    .g-row .k { color: var(--text-muted, #9aa0a6); font-size: .9rem; }
+    .g-row .v { font-weight: 600; font-size: .9rem; text-align: right; }
+    .g-row .v.unset { color: var(--text-muted, #9aa0a6); font-weight: 400; }
+    .g-badge { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 6px; }
+    .g-badge.on { background: var(--branding, #5865f2); color: #fff; }
+    .g-badge.off { background: var(--background, #0d0d10); color: var(--text-muted, #9aa0a6); border: 1px solid var(--box-border, #2a2a30); }
+    .g-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .g-chip { font-family: monospace; font-size: .85rem; padding: .15rem .5rem; border-radius: 6px;
+        background: var(--background, #0d0d10); border: 1px solid var(--box-border, #2a2a30); }
+</style>
+{% endblock %}
+
+{% block body %}
+<a class="g-back" href="/dashboard">← All servers</a>
+
+<div class="g-head">
+    {% match icon_url %}
+    {% when Some with (url) %}
+    <img class="g-icon" src="{{ url }}?size=128" alt="" width="64" height="64">
+    {% when None %}
+    <div class="g-icon g-icon-ph">{{ name.chars().next().unwrap_or('?') }}</div>
+    {% endmatch %}
+    <div>
+        <h1>{{ name }}</h1>
+        <div class="g-sub">
+            {% match member_count %}{% when Some with (c) %}{{ c }} members · {% when None %}{% endmatch %}ID {{ guild_id }}
+        </div>
+    </div>
+</div>
+
+<p class="g-note">Read-only overview. Editing configuration from the dashboard is coming — for now, changes still happen via Percy's commands.</p>
+
+<div class="g-grid">
+    <div class="g-panel">
+        <h2>Prefixes</h2>
+        {% if prefixes.is_empty() %}
+        <p class="g-sub">No custom prefixes.</p>
+        {% else %}
+        <div class="g-chips">
+            {% for p in prefixes %}<span class="g-chip">{{ p }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="g-panel">
+        <h2>Features</h2>
+        {% for f in flags %}
+        <div class="g-row">
+            <span class="k">{{ f.label }}</span>
+            <span class="g-badge {% if f.on %}on{% else %}off{% endif %}">{% if f.on %}On{% else %}Off{% endif %}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="g-panel">
+        <h2>Channels</h2>
+        {% for c in channels %}
+        <div class="g-row">
+            <span class="k">{{ c.label }}</span>
+            {% match c.value %}
+            {% when Some with (name) %}<span class="v">#{{ name }}</span>
+            {% when None %}<span class="v unset">Not set</span>
+            {% endmatch %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="g-panel">
+        <h2>Roles</h2>
+        {% for r in roles %}
+        <div class="g-row">
+            <span class="k">{{ r.label }}</span>
+            {% match r.value %}
+            {% when Some with (name) %}<span class="v">@{{ name }}</span>
+            {% when None %}<span class="v unset">Not set</span>
+            {% endmatch %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="g-panel">
+        <h2>AI features</h2>
+        {% for f in ai_flags %}
+        <div class="g-row">
+            <span class="k">{{ f.label }}</span>
+            <span class="g-badge {% if f.on %}on{% else %}off{% endif %}">{% if f.on %}On{% else %}Off{% endif %}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

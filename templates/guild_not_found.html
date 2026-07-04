@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+
+{% block title %}Percy isn't here yet | Percy Dashboard{% endblock %}
+
+{% block css %}
+<style>
+    .gnf { text-align: center; padding: 3rem 1rem; background: var(--box, #17171b);
+        border: 1px solid var(--box-border, #2a2a30); border-radius: 14px; max-width: 520px; margin: 2rem auto; }
+    .gnf h1 { margin: 0 0 .5rem; font-size: 1.4rem; }
+    .gnf p { color: var(--text-muted, #9aa0a6); margin: 0 0 1.5rem; }
+    .gnf-btn { display: inline-flex; align-items: center; gap: .4rem; padding: .55rem 1rem; border-radius: 8px;
+        background: var(--branding, #5865f2); color: #fff; text-decoration: none; font-weight: 600; }
+    .gnf-btn:hover { filter: brightness(1.08); }
+    .gnf-back { display: block; margin-top: 1rem; color: var(--link-text, #8ab4f8); text-decoration: none; font-size: .9rem; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="gnf">
+    <h1>Percy isn't in this server yet</h1>
+    <p>You manage this server, but Percy hasn't been added. Invite Percy to start configuring it here.</p>
+    <a class="gnf-btn" href="{{ invite_url }}" target="_blank" rel="noopener">+ Invite Percy</a>
+    <a class="gnf-back" href="/dashboard">← Back to your servers</a>
+</div>
+{% endblock %}
