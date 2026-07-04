@@ -18,7 +18,11 @@ use std::{
 };
 
 use askama::Template;
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    routing::{get, patch, post},
+    Json, Router,
+};
 use kls_web_core::Database;
 
 use crate::config::Config;
@@ -26,8 +30,10 @@ use crate::config::Config;
 mod auth;
 mod config;
 mod db;
+mod forms;
 mod guilds;
 mod migrations;
+mod mutations;
 mod pages;
 mod session;
 mod templates;
@@ -137,6 +143,51 @@ fn build_router(state: AppState) -> Router {
         .route("/dashboard/guild/:guild_id/tags", get(pages::guild_tags))
         .route("/dashboard/guild/:guild_id/highlights", get(pages::guild_highlights))
         .route("/dashboard/guild/:guild_id/emoji-stats", get(pages::guild_emoji_stats))
+        // Config + AI + sentinel mutations (form/JSON POST).
+        .route(
+            "/dashboard/guild/:guild_id/config",
+            post(mutations::guild_config_update),
+        )
+        .route("/dashboard/guild/:guild_id/ai", post(mutations::guild_ai_flags_update))
+        .route("/dashboard/guild/:guild_id/ai/ask", post(mutations::guild_ai_ask))
+        .route(
+            "/dashboard/guild/:guild_id/ai/override",
+            post(mutations::guild_ai_override_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/ai/override/:channel_id/delete",
+            post(mutations::guild_ai_override_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/sentinel",
+            post(mutations::guild_sentinel_update),
+        )
+        // Commands / moderation / lockdown mutations (JSON POST/PATCH).
+        .route(
+            "/dashboard/guild/:guild_id/commands/toggle",
+            post(mutations::guild_command_toggle),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/commands/permissions",
+            post(mutations::guild_command_permissions),
+        )
+        .route("/dashboard/guild/:guild_id/plonks", post(mutations::guild_plonk_manage))
+        .route(
+            "/dashboard/guild/:guild_id/lockdowns/lock",
+            post(mutations::guild_lockdown_lock),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/lockdowns/unlock",
+            post(mutations::guild_lockdown_unlock),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/moderation/ignore",
+            post(mutations::guild_moderation_ignore),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/audit-log-flags",
+            patch(mutations::guild_audit_log_flags),
+        )
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
