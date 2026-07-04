@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import traceback
 from contextlib import suppress
+from typing import Any
 
 import discord
 from discord import app_commands
@@ -21,19 +22,27 @@ log = logging.getLogger(__name__)
 class CommandTree(app_commands.CommandTree):
     """A custom command tree that implements a custom error handler."""
 
-    async def sync(self, *, guild: discord.abc.Snowflake | None = None) -> list[app_commands.AppCommand]:
-        """Re-derive native command permissions, then sync.
+    def _get_all_commands(
+        self, *, guild: discord.abc.Snowflake | None = None
+    ) -> list[app_commands.Command[Any, ..., Any] | app_commands.Group | app_commands.ContextMenu]:
+        """Re-derive native command permissions whenever the sync payload is built.
 
-        Runs :func:`assign_native_permissions` over the bot's commands immediately before every
-        sync — no matter what triggered it (``jishaku sync``, an owner command, or a manual call)
-        — so ``default_member_permissions`` always reflects the current gates, even after a cog
-        reload rebuilt the app-command objects. This is a visibility default only: Discord keeps
-        per-guild admin overrides in a separate store that this never writes to, so an admin's
-        customisation is preserved across syncs.
+        Runs :func:`assign_native_permissions` over the bot's commands at the exact choke point
+        every sync path funnels through — ``CommandTree._get_all_commands`` is what both
+        discord.py's :meth:`sync` *and* ``jishaku``'s ``jsk sync`` (which calls
+        ``bot.http.bulk_upsert_*`` directly and never touches :meth:`sync`) use to gather the
+        commands before serialising them to ``to_dict``. Hooking here — rather than overriding
+        :meth:`sync` — guarantees ``default_member_permissions`` reflects the current gates no
+        matter what triggered the sync, even after a cog reload rebuilt the app-command objects.
+
+        This is a visibility default only: Discord keeps per-guild admin overrides in a separate
+        store that this never writes to, so an admin's customisation is preserved across syncs.
+        Applying the permissions is a pure, idempotent attribute-set, so re-running it on every
+        payload build is safe.
         """
         gated = assign_native_permissions(self.client.walk_commands())
         log.info("Applied native slash-command permissions to %d command(s) before sync.", gated)
-        return await super().sync(guild=guild)
+        return super()._get_all_commands(guild=guild)
 
     async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         error = getattr(error, "original", error)
