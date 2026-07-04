@@ -26,6 +26,7 @@ use std::{
 use axum::{extract::State, response::Html, routing::get, Json, Router};
 use kls_web_core::Database;
 
+mod db;
 mod migrations;
 
 /// Shared application state. Kept intentionally tiny; it grows its own config,
