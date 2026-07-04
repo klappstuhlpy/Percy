@@ -245,11 +245,7 @@ pub async fn guild_export_cases(State(app): State<AppState>, session: Session, P
             case.action,
             case.target_name.replace(',', " "),
             case.moderator_name.as_deref().unwrap_or("Unknown").replace(',', " "),
-            case.reason
-                .as_deref()
-                .unwrap_or("")
-                .replace(',', " ")
-                .replace('\n', " "),
+            case.reason.as_deref().unwrap_or("").replace([',', '\n'], " "),
             case.created_at.as_deref().unwrap_or(""),
         ));
     }
