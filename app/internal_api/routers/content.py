@@ -583,6 +583,29 @@ async def delete_tag(guild: GuildDep, bot: BotDep, tag_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _has_owner_check(cmd: Any) -> bool:
+    """Whether a command or any of its parents has an ``is_owner()`` check."""
+    current = cmd
+    while current is not None:
+        for check in current.checks:
+            if getattr(check, '__qualname__', '').startswith('is_owner'):
+                return True
+        current = current.parent
+    return False
+
+
+def _is_manageable_command(cmd: Any) -> bool:
+    """Filter out commands that should never appear in the dashboard's command manager:
+    hidden commands and anything that is owner-only (Jishaku, cogs flagged ``__hidden__``,
+    or commands guarded by an ``is_owner()`` check)."""
+    if getattr(cmd, 'hidden', False):
+        return False
+    cog = cmd.cog
+    if cog is not None and (getattr(cog, '__hidden__', False) or cog.qualified_name == 'Jishaku'):
+        return False
+    return not _has_owner_check(cmd)
+
+
 @router.get("/commands")
 async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
     command_config = await bot.db.guilds.get_command_config(guild.id)
@@ -607,6 +630,8 @@ async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
 
     all_commands = []
     for cmd in bot.walk_commands():
+        if not _is_manageable_command(cmd):
+            continue
         qualified = cmd.qualified_name
         cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
         spec = getattr(cmd, 'permissions', None)
