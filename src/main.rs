@@ -27,6 +27,7 @@ use kls_web_core::Database;
 
 use crate::config::Config;
 
+mod actions;
 mod auth;
 mod config;
 mod crud;
@@ -132,7 +133,7 @@ fn build_router(state: AppState) -> Router {
         .route("/dashboard/guild/:guild_id/music", get(pages::guild_music))
         .route(
             "/dashboard/guild/:guild_id/autoresponders",
-            get(pages::guild_autoresponders),
+            get(pages::guild_autoresponders).post(actions::guild_autoresponders_action),
         )
         .route(
             "/dashboard/guild/:guild_id/comics",
@@ -186,11 +187,113 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/highlights/:user_id",
             delete(crud::guild_highlight_delete),
         )
-        .route("/dashboard/guild/:guild_id/polls", get(pages::guild_polls))
-        .route("/dashboard/guild/:guild_id/giveaways", get(pages::guild_giveaways))
+        .route(
+            "/dashboard/guild/:guild_id/polls",
+            get(pages::guild_polls).post(actions::guild_poll_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/polls/:poll_id",
+            post(actions::guild_poll_edit),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/polls/:poll_id/end",
+            post(actions::guild_poll_end),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/giveaways",
+            get(pages::guild_giveaways).post(actions::guild_giveaway_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/giveaways/:giveaway_id/end",
+            post(actions::guild_giveaway_end),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/giveaways/:giveaway_id",
+            delete(actions::guild_giveaway_delete),
+        )
         .route("/dashboard/guild/:guild_id/tags", get(pages::guild_tags))
+        .route(
+            "/dashboard/guild/:guild_id/tags/export.csv",
+            get(actions::guild_tags_export),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/tags/:tag_id",
+            get(actions::guild_tag_detail).delete(actions::guild_tag_delete),
+        )
         .route("/dashboard/guild/:guild_id/highlights", get(pages::guild_highlights))
         .route("/dashboard/guild/:guild_id/emoji-stats", get(pages::guild_emoji_stats))
+        // Members JSON feed + actions.
+        .route(
+            "/dashboard/guild/:guild_id/members.json",
+            get(actions::guild_members_json),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id/action",
+            post(actions::guild_member_action),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id/roles",
+            patch(actions::guild_member_roles),
+        )
+        // Leveling mutations.
+        .route(
+            "/dashboard/guild/:guild_id/leveling/users/:user_id",
+            post(actions::guild_leveling_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/leveling/config",
+            post(actions::guild_leveling_config_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/leveling/roles",
+            post(actions::guild_leveling_roles),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/leveling/roles/preset",
+            post(actions::guild_leveling_roles_preset),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/leveling/multipliers",
+            post(actions::guild_leveling_multipliers),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/leveling/blacklist",
+            post(actions::guild_leveling_blacklist),
+        )
+        // Music controls + live-player JSON.
+        .route(
+            "/dashboard/guild/:guild_id/music/status",
+            get(actions::guild_music_status),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/control",
+            post(actions::guild_music_control),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/lyrics",
+            get(actions::guild_music_lyrics),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/setup",
+            post(actions::guild_music_setup),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/reset",
+            post(actions::guild_music_reset),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/equalizer",
+            post(actions::guild_music_equalizer),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/music/filters",
+            post(actions::guild_music_filters),
+        )
+        .route("/dashboard/guild/:guild_id/music/247", post(actions::guild_music_247))
+        .route(
+            "/dashboard/guild/:guild_id/music/dj-mode",
+            patch(actions::guild_music_dj_mode),
+        )
         // Config + AI + sentinel mutations (form/JSON POST).
         .route(
             "/dashboard/guild/:guild_id/config",
