@@ -1222,6 +1222,37 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         except discord.HTTPException:
             return None
 
+    async def alert_missing_permission(
+        self,
+        feature: str,
+        *,
+        channel: discord.abc.GuildChannel | discord.Thread | None = None,
+    ) -> None:
+        """|coro|
+
+        Surface a permission failure from an automated task to the guild's admins.
+
+        Background jobs (timers, feeds, scheduled endings) have no invoking user to reply to,
+        so a :class:`discord.Forbidden` would otherwise vanish. This routes a human-readable
+        notice to the alert webhook, falling back to the system channel (``force=True``) so the
+        warning still lands when alerts are not configured. It never raises — :meth:`send_alert`
+        swallows its own HTTP errors.
+
+        Parameters
+        ----------
+        feature:
+            The action that could not be completed, phrased as a verb clause
+            (e.g. ``"close a finished poll"``, ``"announce giveaway winners"``).
+        channel:
+            The channel the action targeted; mentioned in the alert when provided.
+        """
+        where = f" in {channel.mention}" if channel is not None else ""
+        await self.send_alert(
+            f"{Emojis.warning} I don't have permission to **{feature}**{where}. "
+            f"Please check my channel permissions and try again.",
+            force=True,
+        )
+
 
 @dataclass(slots=True)
 class GuildAIConfig:

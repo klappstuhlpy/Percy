@@ -766,22 +766,28 @@ class Bot(commands.Bot):
         self.metrics.record_error(type(error).__name__)
 
         # CommandNotFound is handled earlier in process_commands (an unmatched command never
-        # reaches invoke(), so it is never raised here); CheckFailure/Forbidden stay silent.
-        if isinstance(error, (commands.CommandNotFound, commands.CheckFailure, discord.Forbidden)):
+        # reaches invoke(), so it is never raised here); CheckFailure stays silent.
+        if isinstance(error, (commands.CommandNotFound, commands.CheckFailure)):
             return
 
-        if isinstance(error, commands.CommandOnCooldown):
-            if await self.is_owner(ctx.author):
-                return
-            if not ctx.guild and ctx.bot_permissions.add_reactions:
-                await ctx.message.add_reaction('\U000023f3')
-                return
-
+        # Both the classic (ext.commands) and application-command cooldown errors land here — the
+        # latter is a distinct, unrelated class routed in via tree.py, so it must be matched too or
+        # slash-command cooldowns get silently swallowed.
+        if isinstance(error, (commands.CommandOnCooldown, discord.app_commands.CommandOnCooldown)):
             retry_str = humanize_duration(error.retry_after)
             cooldown = error.cooldown
             msg = f'Slow down, you\'re on cooldown. Retry again in **{retry_str}**.'
-            if cooldown.rate > 1:
+            if cooldown is not None and cooldown.rate > 1:
                 msg += f'\n-# This command allows {cooldown.rate} uses per {humanize_duration(cooldown.per)}.'
+
+            # For classic prefix invocations in DMs a reaction is the least intrusive nudge. This
+            # path only exists for real messages — slash interactions have no ``ctx.message`` to
+            # react to (it is ``None``), so they always fall through to a proper ephemeral warning.
+            if ctx.interaction is None and not ctx.guild and ctx.bot_permissions.add_reactions:
+                with suppress(discord.HTTPException):
+                    await ctx.message.add_reaction('\U000023f3')
+                return
+
             await ctx.send_warning(msg)
             return
         if isinstance(error, commands.NSFWChannelRequired):
@@ -812,6 +818,19 @@ class Bot(commands.Bot):
 
             with suppress(discord.HTTPException):
                 await ctx.author.send(message)
+            return
+
+        # A raw Forbidden reaching here means the command passed its declared permission gate
+        # but hit a permission wall *while acting* — an action needing a permission the command
+        # never declared (so BotMissingPermissions couldn't pre-empt it). Tell the user instead
+        # of swallowing it silently. Forbidden from expected spots (e.g. DMing a user with closed
+        # DMs) is caught locally with ``suppress`` and never arrives here.
+        if isinstance(error, discord.Forbidden):
+            with suppress(discord.HTTPException):
+                await ctx.send_warning(
+                    'I couldn\'t complete that action — I\'m missing a permission for it in this '
+                    'channel or server. Please check my role\'s permissions and try again.'
+                )
             return
 
         # Service outage errors get a distinct, gentler tone.

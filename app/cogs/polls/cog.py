@@ -370,16 +370,21 @@ class Polls(Cog):
             await poll.fetch_message()
 
         if poll.message:
-            open_thread: bool = bool(poll.kwargs.get("thread") and poll.message.thread)
-            if open_thread and poll.channel and poll.message.thread:
-                await poll.message.thread.edit(archived=True, locked=True)
-
             try:
+                open_thread: bool = bool(poll.kwargs.get("thread") and poll.message.thread)
+                if open_thread and poll.channel and poll.message.thread:
+                    await poll.message.thread.edit(archived=True, locked=True)
+
                 # ``poll`` is already running=False, so the rebuilt CV2 card shows
                 # "Poll finished" and drops the voting controls.
                 await poll.message.edit(view=create_view(poll))
                 if poll.ping_message:
                     await poll.ping_message.delete()
+            except discord.Forbidden:
+                # No invoking user here (may be a scheduled ending) — surface it to admins.
+                guild_config = await self.bot.db.get_guild_config(poll.guild_id)
+                if guild_config is not None:
+                    await guild_config.alert_missing_permission("close a finished poll", channel=poll.channel)
             except discord.HTTPException:
                 pass
 

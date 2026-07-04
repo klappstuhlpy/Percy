@@ -131,6 +131,12 @@ class Starboard(Cog):
             embed, view = ui.build_starboard_embed(message, star_count=star_count, threshold=config.threshold)
             try:
                 posted = await starboard.send(content, embed=embed, view=view)
+            except discord.Forbidden:
+                # Reaction-driven, so there is no invoking user — tell admins the board is unreachable.
+                guild_config = await self.bot.db.get_guild_config(config.guild_id)
+                if guild_config is not None:
+                    await guild_config.alert_missing_permission("post to the starboard", channel=starboard)
+                return
             except discord.HTTPException:
                 return
             await self.bot.db.starboard.create_entry(

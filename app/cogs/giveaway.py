@@ -614,22 +614,29 @@ class Giveaways(Cog):
         await self.bot.db.giveaways.delete_giveaway(giveaway.id)
 
         winners = await giveaway.get_winners()
-        await giveaway.message.edit(embed=giveaway.to_embed(winners), view=None)
+        try:
+            await giveaway.message.edit(embed=giveaway.to_embed(winners), view=None)
 
-        if len(winners) > 0:
-            view = None
-            if len(giveaway.entries) > 0:
-                view = discord.ui.View(timeout=None)
-                view.add_item(GiveawayRerollButton(giveaway))
+            if len(winners) > 0:
+                view = None
+                if len(giveaway.entries) > 0:
+                    view = discord.ui.View(timeout=None)
+                    view.add_item(GiveawayRerollButton(giveaway))
 
-            winners_text = ', '.join(x.mention for x in winners)
-            content = (
-                f'{Emojis.giveaway} Congratulations **{winners_text}**! '
-                f'You won the giveaway for *{giveaway.prize}*!'
-            )
-            await giveaway.message.reply(content, view=view)  # type: ignore
-        else:
-            await giveaway.message.reply(f'{Emojis.error} No winners were determined for *{giveaway.prize}*.')
+                winners_text = ', '.join(x.mention for x in winners)
+                content = (
+                    f'{Emojis.giveaway} Congratulations **{winners_text}**! '
+                    f'You won the giveaway for *{giveaway.prize}*!'
+                )
+                await giveaway.message.reply(content, view=view)  # type: ignore
+            else:
+                await giveaway.message.reply(f'{Emojis.error} No winners were determined for *{giveaway.prize}*.')
+        except discord.Forbidden:
+            # The timer fires with no invoking user — route the permission failure to admins.
+            guild_config = await self.bot.db.get_guild_config(giveaway.guild_id)
+            if guild_config is not None:
+                channel = giveaway.message.channel if giveaway.message else None
+                await guild_config.alert_missing_permission('announce giveaway winners', channel=channel)
 
 
 async def setup(bot: Bot) -> None:
