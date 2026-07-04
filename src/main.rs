@@ -115,6 +115,7 @@ fn build_router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/dashboard", get(guilds::dashboard))
         .route("/dashboard/guild/:guild_id", get(guilds::guild_detail))
+        .route("/dashboard/guild/:guild_id/members", get(guilds::guild_members))
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))

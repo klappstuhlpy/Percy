@@ -15,7 +15,8 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use percy_client::{
-    Channel, CustomBotProfile, GuildInfo, LockdownsResponse, PercyError, Role, SentinelInfo, StatusFeedInfo, UserGuild,
+    Channel, CustomBotProfile, GuildInfo, LockdownsResponse, Member, PercyError, Role, SentinelInfo, StatusFeedInfo,
+    UserGuild,
 };
 
 use crate::{session::Session, view::Viewer, AppState};
@@ -160,6 +161,60 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
         degraded,
     }
     .into_response()
+}
+
+#[derive(Template)]
+#[template(path = "members.html")]
+struct MembersTemplate {
+    account: Option<Viewer>,
+    guild_id: u64,
+    guild_name: String,
+    nav_active: &'static str,
+    page_title: &'static str,
+    members: Vec<Member>,
+    roles: Vec<Role>,
+}
+
+/// `GET /dashboard/guild/{id}/members` — the members tab (initial page; live
+/// search/pagination is driven client-side against the JSON endpoint).
+pub async fn guild_members(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    let (members, roles) = tokio::join!(
+        percy.get_guild_members(guild_id, 100, 0, None),
+        percy.get_guild_roles(guild_id),
+    );
+
+    MembersTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "members",
+        page_title: "Members",
+        members: members.map(|r| r.members).unwrap_or_default(),
+        roles: roles.unwrap_or_default(),
+    }
+    .into_response()
+}
+
+/// Shared prelude for the per-guild feature pages: requires a session, checks the
+/// user manages the guild, and loads its config. Returns a redirect [`Response`]
+/// (to `/dashboard`) on any failure so callers can `?`-style early-return.
+async fn gate_and_load_guild(app: &AppState, session: &Session, guild_id: u64) -> Result<GuildInfo, Response> {
+    let Some(percy) = &app.percy else {
+        return Err(Redirect::to("/dashboard").into_response());
+    };
+    if !user_can_manage(app, &session.discord_user_id, guild_id).await {
+        return Err(Redirect::to("/dashboard").into_response());
+    }
+    percy
+        .get_guild(guild_id)
+        .await
+        .map_err(|_| Redirect::to("/dashboard").into_response())
 }
 
 /// Percy's view of the guilds it shares with the user. Returns an empty list when
