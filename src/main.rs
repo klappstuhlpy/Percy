@@ -28,6 +28,7 @@ mod config;
 mod db;
 mod guilds;
 mod migrations;
+mod pages;
 mod session;
 mod templates;
 mod view;
@@ -117,6 +118,24 @@ fn build_router(state: AppState) -> Router {
         .route("/dashboard", get(guilds::dashboard))
         .route("/dashboard/guild/:guild_id", get(guilds::guild_detail))
         .route("/dashboard/guild/:guild_id/members", get(guilds::guild_members))
+        .route("/dashboard/guild/:guild_id/stats", get(pages::guild_stats))
+        .route("/dashboard/guild/:guild_id/commands", get(pages::guild_commands))
+        .route("/dashboard/guild/:guild_id/economy", get(pages::guild_economy))
+        .route("/dashboard/guild/:guild_id/music", get(pages::guild_music))
+        .route(
+            "/dashboard/guild/:guild_id/autoresponders",
+            get(pages::guild_autoresponders),
+        )
+        .route("/dashboard/guild/:guild_id/comics", get(pages::guild_comics))
+        .route(
+            "/dashboard/guild/:guild_id/temp-channels",
+            get(pages::guild_temp_channels),
+        )
+        .route("/dashboard/guild/:guild_id/polls", get(pages::guild_polls))
+        .route("/dashboard/guild/:guild_id/giveaways", get(pages::guild_giveaways))
+        .route("/dashboard/guild/:guild_id/tags", get(pages::guild_tags))
+        .route("/dashboard/guild/:guild_id/highlights", get(pages::guild_highlights))
+        .route("/dashboard/guild/:guild_id/emoji-stats", get(pages::guild_emoji_stats))
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
