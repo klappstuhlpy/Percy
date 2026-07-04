@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+
+{% block nav_home_active %} active{% endblock %}
+
+{% block title %}Percy — Discord Bot{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/home.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="percy-home">
+    <section class="ph-hero">
+        <div class="ph-hero-inner">
+            <span class="ph-hero-eyebrow"><span class="spark" aria-hidden="true">✻</span> All-in-one Discord Bot</span>
+            <h1 class="ph-hero-title">Meet <span class="branding">Percy</span></h1>
+            <p class="ph-hero-lead">
+                Leveling, economy, moderation, music, autoresponders, temporary voice channels,
+                and more — all configurable from a powerful web dashboard.
+            </p>
+            <div class="ph-hero-cta">
+                {% match account %}
+                {% when Some with (_a) %}
+                <a href="/dashboard" class="ph-btn ph-btn-primary">Open Dashboard</a>
+                {% when None %}
+                <a href="/login?next=/dashboard" class="ph-btn ph-btn-primary">Log in to Dashboard</a>
+                {% endmatch %}
+                <a href="/commands" class="ph-btn ph-btn-secondary">View Commands</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="ph-features">
+        <h2 class="ph-section-title">Everything your server needs</h2>
+        <div class="ph-feature-grid">
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">⬆</span>
+                <h3>Leveling</h3>
+                <p>XP curves, reward roles, multipliers, blacklists, and a real-time leaderboard with XP-over-time charts.</p>
+            </div>
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">🛡</span>
+                <h3>Moderation</h3>
+                <p>Kick, ban, mute, warn, and manage cases. Auto-moderation with raid detection, mention spam, and channel lockdowns.</p>
+            </div>
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">🎵</span>
+                <h3>Music</h3>
+                <p>High-quality playback with equalizer, filters, 24/7 mode, DJ controls, time-synced lyrics, and a persistent panel.</p>
+            </div>
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">💰</span>
+                <h3>Economy</h3>
+                <p>Cash and bank system, configurable shop with item effects, lottery events, and balance management.</p>
+            </div>
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">⚡</span>
+                <h3>Automation</h3>
+                <p>Autoresponders with regex, comic feed subscriptions, status feeds, and temporary voice channel creation.</p>
+            </div>
+            <div class="ph-feature-card">
+                <span class="ph-feature-icon" aria-hidden="true">📊</span>
+                <h3>Insights</h3>
+                <p>Live server stats, emoji usage tracking, polls, giveaways, tags, highlights, and command analytics.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="ph-dashboard-preview">
+        <div class="ph-preview-text">
+            <h2>Web Dashboard</h2>
+            <p>
+                Configure every aspect of Percy without touching a single command.
+                Manage members, tune the economy, browse polls and giveaways,
+                and watch live server statistics — all from your browser.
+            </p>
+            <ul class="ph-preview-list">
+                <li>Full guild configuration with tabbed interface</li>
+                <li>Member management with per-user detail pages</li>
+                <li>Live WebSocket stats that update in real-time</li>
+                <li>Moderation case browser with activity heatmaps</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="ph-cta-bottom">
+        <h2>Ready to get started?</h2>
+        <p>Add Percy to your server and configure it through the dashboard.</p>
+        <div class="ph-hero-cta">
+            {% match account %}
+            {% when Some with (_a) %}
+            <a href="/dashboard" class="ph-btn ph-btn-primary">Open Dashboard</a>
+            {% when None %}
+            <a href="/login?next=/dashboard" class="ph-btn ph-btn-primary">Log in</a>
+            <a href="/signup?next=/dashboard" class="ph-btn ph-btn-secondary">Create Account</a>
+            {% endmatch %}
+        </div>
+    </section>
+</div>
+{% endblock %}

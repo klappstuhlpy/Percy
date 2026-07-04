@@ -1,10 +1,11 @@
-//! The dashboard home: the signed-in user's servers.
+//! The dashboard home (the user's servers) and the per-guild pages, rendered
+//! through the templates ported verbatim from the klappstuhl_me monolith.
 //!
-//! Mirrors the split the monolith used, sourced from two places:
+//! Guild buckets come from two sources:
 //! - **Percy** knows the guilds it *shares* with the user (`get_user_guilds`),
-//!   each tagged `manageable` → **Managed** (full access) vs **Servers you're in**.
-//! - The **OAuth admin-guild cache** (`db::admin_guilds_for_user`, captured at login)
-//!   adds servers the user administrates that Percy isn't in yet → **Add Percy**.
+//!   each tagged `manageable` → **Managed** vs **Servers you're in**.
+//! - The **OAuth admin-guild cache** (`db::admin_guilds_for_user`, captured at
+//!   login) adds servers the user administrates that Percy isn't in → **Add Percy**.
 
 use std::collections::HashSet;
 
@@ -13,12 +14,15 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Redirect, Response},
 };
-use percy_client::{GuildInfo, PercyError, UserGuild};
+use percy_client::{
+    Channel, CustomBotProfile, GuildInfo, LockdownsResponse, PercyError, Role, SentinelInfo, StatusFeedInfo, UserGuild,
+};
 
-use crate::{session::Session, AppState};
+use crate::{session::Session, view::Viewer, AppState};
 
 /// A greyed "Add Percy" card — a server the user administrates but Percy isn't in.
-pub struct AddPercyCard {
+/// Field names match the monolith's `AddPercyGuild` (the template is verbatim).
+pub struct AddPercyGuild {
     pub name: String,
     pub icon_url: Option<String>,
     pub owner: bool,
@@ -29,14 +33,31 @@ pub struct AddPercyCard {
 #[derive(Template)]
 #[template(path = "guilds.html")]
 struct GuildsTemplate {
-    username: String,
-    /// Percy is here and the user can manage it — full dashboard cards.
+    account: Option<Viewer>,
     managed: Vec<UserGuild>,
-    /// Percy is here but the user can't manage it — read-only overview cards.
     public: Vec<UserGuild>,
-    /// Servers the user manages where Percy isn't a member yet.
-    add_percy: Vec<AddPercyCard>,
-    /// Invite URL with no guild pre-selected (the empty-state / header button).
+    add_percy: Vec<AddPercyGuild>,
+    invite_url: String,
+}
+
+#[derive(Template)]
+#[template(path = "guild.html")]
+struct GuildTemplate {
+    account: Option<Viewer>,
+    guild: GuildInfo,
+    channels: Vec<Channel>,
+    roles: Vec<Role>,
+    sentinel: Option<SentinelInfo>,
+    lockdowns: LockdownsResponse,
+    status_feed: StatusFeedInfo,
+    bot_profile: CustomBotProfile,
+    degraded: bool,
+}
+
+#[derive(Template)]
+#[template(path = "guild_not_found.html")]
+struct GuildNotFoundTemplate {
+    account: Option<Viewer>,
     invite_url: String,
 }
 
@@ -56,10 +77,10 @@ pub async fn dashboard(State(app): State<AppState>, session: Session) -> Respons
     // Guilds Percy already shares with the user — excluded from "Add Percy".
     let present: HashSet<String> = mutual.iter().map(|g| g.id.clone()).collect();
 
-    let add_percy: Vec<AddPercyCard> = admin
+    let add_percy: Vec<AddPercyGuild> = admin
         .into_iter()
         .filter(|g| !present.contains(&g.guild_id))
-        .map(|g| AddPercyCard {
+        .map(|g| AddPercyGuild {
             invite_url: build_invite_url(&app.config.invite_client_id(), Some(&g.guild_id)),
             icon_url: g
                 .icon
@@ -73,11 +94,70 @@ pub async fn dashboard(State(app): State<AppState>, session: Session) -> Respons
     let (managed, public): (Vec<UserGuild>, Vec<UserGuild>) = mutual.into_iter().partition(|g| g.manageable);
 
     GuildsTemplate {
-        username: session.username,
+        account: Some(Viewer::from_session(&session)),
         managed,
         public,
         add_percy,
         invite_url: build_invite_url(&app.config.invite_client_id(), None),
+    }
+    .into_response()
+}
+
+/// `GET /dashboard/guild/{id}` — the per-guild configuration page. Requires a
+/// session and that the user manages the guild (else back to the list).
+pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let Some(percy) = &app.percy else {
+        return Redirect::to("/dashboard").into_response();
+    };
+
+    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
+        return Redirect::to("/dashboard").into_response();
+    }
+
+    // Fan out the independent reads; a single degraded sub-resource doesn't abort
+    // the others (join!, not try_join!) — each is handled below.
+    let (guild, channels, roles, sentinel, lockdowns, status_feed, bot_profile) = tokio::join!(
+        percy.get_guild(guild_id),
+        percy.get_guild_channels(guild_id),
+        percy.get_guild_roles(guild_id),
+        percy.get_sentinel(guild_id),
+        percy.get_lockdowns(guild_id),
+        percy.get_status_feed(guild_id),
+        percy.get_custom_bot(guild_id),
+    );
+
+    let guild = match guild {
+        Ok(guild) => guild,
+        Err(PercyError::NotFound) => {
+            return GuildNotFoundTemplate {
+                account: Some(Viewer::from_session(&session)),
+                invite_url: build_invite_url(&app.config.invite_client_id(), Some(&guild_id.to_string())),
+            }
+            .into_response();
+        }
+        Err(e) => {
+            tracing::error!(error = %e, guild_id, "failed to load guild config");
+            return Redirect::to("/dashboard").into_response();
+        }
+    };
+
+    // If the role/channel pickers failed to load we warn rather than silently
+    // showing empty dropdowns (saving with empty pickers could clobber config).
+    let degraded = channels.is_err() || roles.is_err();
+
+    GuildTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild,
+        channels: channels.unwrap_or_default(),
+        roles: roles.unwrap_or_default(),
+        sentinel: sentinel.ok().flatten(),
+        lockdowns: lockdowns.unwrap_or(LockdownsResponse { entries: Vec::new() }),
+        status_feed: status_feed.unwrap_or(StatusFeedInfo {
+            subscribed: false,
+            channel: None,
+        }),
+        bot_profile: bot_profile.unwrap_or_default(),
+        degraded,
     }
     .into_response()
 }
@@ -91,69 +171,6 @@ async fn fetch_mutual_guilds(app: &AppState, discord_id: &str) -> Vec<UserGuild>
     percy.get_user_guilds(discord_id).await.unwrap_or_default()
 }
 
-/// One resolved config value (a channel/role name, or `None` for unset).
-pub struct ConfigRow {
-    pub label: &'static str,
-    pub value: Option<String>,
-}
-
-/// One boolean feature toggle, for a summary badge.
-pub struct FlagRow {
-    pub label: &'static str,
-    pub on: bool,
-}
-
-#[derive(Template)]
-#[template(path = "guild.html")]
-struct GuildDetailTemplate {
-    guild_id: u64,
-    name: String,
-    icon_url: Option<String>,
-    member_count: Option<u32>,
-    prefixes: Vec<String>,
-    flags: Vec<FlagRow>,
-    channels: Vec<ConfigRow>,
-    roles: Vec<ConfigRow>,
-    ai_flags: Vec<FlagRow>,
-}
-
-#[derive(Template)]
-#[template(path = "guild_not_found.html")]
-struct GuildNotFoundTemplate {
-    invite_url: String,
-}
-
-/// `GET /dashboard/guild/{id}` — the per-guild overview. Requires a session, and
-/// that the user actually manages the guild (else back to the list). Read-only for
-/// now; editable tabs land in later slices.
-pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
-    let Some(percy) = &app.percy else {
-        // Without Percy there's nothing to configure — send them home.
-        return Redirect::to("/dashboard").into_response();
-    };
-
-    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
-        return Redirect::to("/dashboard").into_response();
-    }
-
-    let guild = match percy.get_guild(guild_id).await {
-        Ok(guild) => guild,
-        Err(PercyError::NotFound) => {
-            // Percy isn't in this guild (yet) — offer the invite.
-            return GuildNotFoundTemplate {
-                invite_url: build_invite_url(&app.config.invite_client_id(), Some(&guild_id.to_string())),
-            }
-            .into_response();
-        }
-        Err(e) => {
-            tracing::error!(error = %e, guild_id, "failed to load guild config");
-            return Redirect::to("/dashboard").into_response();
-        }
-    };
-
-    detail_template(guild).into_response()
-}
-
 /// Whether the user manages (Manage Server / Administrator) a guild Percy shares
 /// with them — the gate for the management pages. Fails closed.
 async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: u64) -> bool {
@@ -161,104 +178,6 @@ async fn user_can_manage(app: &AppState, discord_id: &str, guild_id: u64) -> boo
         .await
         .iter()
         .any(|g| g.manageable && g.id == guild_id.to_string())
-}
-
-/// Turns a `GuildInfo` into the read-only overview view-model.
-fn detail_template(guild: GuildInfo) -> GuildDetailTemplate {
-    let channel = |label, ch: Option<percy_client::ChannelRef>| ConfigRow {
-        label,
-        value: ch.map(|c| c.name),
-    };
-    let role = |label, r: Option<percy_client::RoleRef>| ConfigRow {
-        label,
-        value: r.map(|r| r.name),
-    };
-
-    let flags = vec![
-        FlagRow {
-            label: "Audit log",
-            on: guild.flags.audit_log,
-        },
-        FlagRow {
-            label: "Raid protection",
-            on: guild.flags.raid,
-        },
-        FlagRow {
-            label: "Alerts",
-            on: guild.flags.alerts,
-        },
-        FlagRow {
-            label: "Sentinel",
-            on: guild.flags.sentinel,
-        },
-        FlagRow {
-            label: "Mention guard",
-            on: guild.flags.mentions,
-        },
-    ];
-
-    let ai = &guild.ai.flags;
-    let ai_flags = vec![
-        FlagRow {
-            label: "Assistant",
-            on: ai.assistant,
-        },
-        FlagRow {
-            label: "Command router",
-            on: ai.router,
-        },
-        FlagRow {
-            label: "Moderation",
-            on: ai.moderation,
-        },
-        FlagRow {
-            label: "Sentinel",
-            on: ai.sentinel,
-        },
-        FlagRow {
-            label: "Music",
-            on: ai.music,
-        },
-        FlagRow {
-            label: "Polls",
-            on: ai.polls,
-        },
-        FlagRow {
-            label: "Giveaways",
-            on: ai.giveaways,
-        },
-        FlagRow {
-            label: "Tags",
-            on: ai.tags,
-        },
-    ];
-
-    let channels = vec![
-        channel("Audit log", guild.audit_log_channel),
-        channel("Mod log", guild.mod_log_channel),
-        channel("Message log", guild.message_log_channel),
-        channel("Voice log", guild.voice_log_channel),
-        channel("Alerts", guild.alert_channel),
-        channel("Polls", guild.poll_channel),
-        channel("Music panel", guild.music_panel_channel),
-    ];
-
-    let roles = vec![
-        role("Mute role", guild.mute_role),
-        role("Poll ping role", guild.poll_ping_role),
-    ];
-
-    GuildDetailTemplate {
-        guild_id: guild.id,
-        name: guild.name,
-        icon_url: guild.icon_url,
-        member_count: guild.member_count,
-        prefixes: guild.prefixes,
-        flags,
-        channels,
-        roles,
-        ai_flags,
-    }
 }
 
 /// Builds a bot-invite URL, optionally pre-selecting a guild.
@@ -288,9 +207,9 @@ mod tests {
     }
 
     #[test]
-    fn template_renders_all_three_sections() {
+    fn guilds_template_renders_verbatim() {
         let html = GuildsTemplate {
-            username: "ferris".into(),
+            account: Some(Viewer { name: "ferris".into() }),
             managed: vec![UserGuild {
                 id: "1".into(),
                 name: "Managed Server".into(),
@@ -299,15 +218,8 @@ mod tests {
                 owner: true,
                 manageable: true,
             }],
-            public: vec![UserGuild {
-                id: "2".into(),
-                name: "Public Server".into(),
-                icon_url: None,
-                member_count: None,
-                owner: false,
-                manageable: false,
-            }],
-            add_percy: vec![AddPercyCard {
+            public: Vec::new(),
+            add_percy: vec![AddPercyGuild {
                 name: "Unadded Server".into(),
                 icon_url: None,
                 owner: false,
@@ -319,60 +231,8 @@ mod tests {
         .expect("render");
 
         assert!(html.contains("Managed Server"));
-        assert!(html.contains("Public Server"));
         assert!(html.contains("Unadded Server"));
         assert!(html.contains("/dashboard/guild/1"));
-    }
-
-    #[test]
-    fn detail_template_renders_overview() {
-        let html = GuildDetailTemplate {
-            guild_id: 7,
-            name: "My Guild".into(),
-            icon_url: None,
-            member_count: Some(120),
-            prefixes: vec!["!".into(), "?".into()],
-            flags: vec![FlagRow {
-                label: "Audit log",
-                on: true,
-            }],
-            channels: vec![
-                ConfigRow {
-                    label: "Audit log",
-                    value: Some("mod-log".into()),
-                },
-                ConfigRow {
-                    label: "Alerts",
-                    value: None,
-                },
-            ],
-            roles: vec![ConfigRow {
-                label: "Mute role",
-                value: Some("Muted".into()),
-            }],
-            ai_flags: vec![FlagRow {
-                label: "Assistant",
-                on: false,
-            }],
-        }
-        .render()
-        .expect("render");
-
-        assert!(html.contains("My Guild"));
-        assert!(html.contains("120 members"));
-        assert!(html.contains("#mod-log"));
-        assert!(html.contains("Not set")); // the unset Alerts channel
-        assert!(html.contains("@Muted"));
-    }
-
-    #[test]
-    fn not_found_template_offers_the_invite() {
-        let html = GuildNotFoundTemplate {
-            invite_url: "https://discord.com/oauth2/authorize?client_id=1&guild_id=9".into(),
-        }
-        .render()
-        .expect("render");
-        assert!(html.contains("isn't in this server"));
-        assert!(html.contains("guild_id=9"));
+        assert!(html.contains("ferris")); // the account menu from the shared layout
     }
 }

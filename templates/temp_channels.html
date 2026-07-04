@@ -1,0 +1,107 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_header %}
+<div class="dashboard-header dash-rise">
+    <div>
+        <h1><span class="spark dash-h1-glyph" aria-hidden="true">✻</span> {{ page_title }}</h1>
+        <p>Manage temporary voice channel creators.</p>
+    </div>
+    <button class="button primary small" id="add-hub-btn">Add Hub</button>
+</div>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>A <strong>hub</strong> is a "join-to-create" voice channel: when a member joins it, Percy spins up a personal voice channel for them and deletes it automatically once it's empty.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>The name format controls what spawned channels are called</li>
+                <li>Placeholders like the member's name personalise each channel</li>
+            </ul>
+        </div>
+    </div>
+
+    {% if data.entries.is_empty() %}
+    <section class="config-section">
+        <p class="text-muted">No temp channel hubs configured. Click "Add Hub" to create one.</p>
+    </section>
+    {% else %}
+    <section class="config-section">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Format</th>
+                    <th>In Use</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in data.entries %}
+                <tr>
+                    <td data-label="Channel"><strong>{{ entry.channel_name }}</strong> <code class="text-muted">{{ entry.channel_id }}</code></td>
+                    <td data-label="Format"><code>{{ entry.format }}</code></td>
+                    <td class="nowrap" data-label="In Use">
+                        {% if entry.active_channels.is_empty() %}
+                        <span class="text-muted">—</span>
+                        {% else %}
+                        <span class="pill active dot">{{ entry.active_channels.len() }} live</span>
+                        <span class="text-muted fs-xs">{{ entry.total_users }} user{% if entry.total_users != 1 %}s{% endif %}</span>
+                        {% endif %}
+                    </td>
+                    <td class="nowrap">
+                        <button class="button small edit-hub-btn inline-block" data-channel-id="{{ entry.channel_id }}" data-format="{{ entry.format }}">Edit</button>
+                        <button class="button small danger delete-hub-btn inline-block" data-channel-id="{{ entry.channel_id }}">Delete</button>
+                    </td>
+                </tr>
+                {% if !entry.active_channels.is_empty() %}
+                <tr class="temp-active-row">
+                    <td colspan="4">
+                        <div class="temp-active-list">
+                            {% for ch in entry.active_channels %}
+                            <span class="temp-active-chip">
+                                <span class="temp-active-icon" aria-hidden="true">🔊</span>
+                                <span class="temp-active-name">{{ ch.channel_name }}</span>
+                                <span class="temp-active-count">{{ ch.user_count }}</span>
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+<!-- Add/Edit Hub Modal -->
+<div class="modal-overlay" id="hub-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3 id="hub-modal-title">Add Hub Channel</h3>
+        <div class="modal-form">
+            <label class="config-label" for="hub_channel">Channel</label>
+            <select id="hub_channel" class="config-select">
+                {% for ch in channels %}
+                <option value="{{ ch.id }}">{{ ch.name }}</option>
+                {% endfor %}
+            </select>
+            <label class="config-label" for="hub_format">Name Format</label>
+            <input type="text" id="hub_format" class="config-input" placeholder="%display_name's Channel">
+            <p class="text-muted fs-xs mb-0">Placeholders: <code>%name</code>, <code>%display_name</code>, <code>%guild</code>, <code>%channel</code></p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="hub-modal-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="hub-modal-confirm">Create</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/temp_channels.js"></script>
+{% endblock %}

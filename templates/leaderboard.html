@@ -1,0 +1,149 @@
+{% extends "layout.html" %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}{{ guild_name }} — Leaderboard | Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/leaderboard.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container lb-container">
+    <div class="lb-hero dash-rise">
+        {% match guild_icon %}
+        {% when Some with (url) %}
+        <img class="lb-hero-icon" src="{{ url }}?size=160" alt="" width="80" height="80">
+        {% when None %}
+        <div class="lb-hero-icon lb-hero-icon-ph">{{ guild_name.chars().next().unwrap_or('?') }}</div>
+        {% endmatch %}
+        <div class="lb-hero-text">
+            <span class="lb-hero-tag">Public Leaderboard</span>
+            <h1>{{ guild_name }}</h1>
+            {% match vanity %}
+            {% when Some with (slug) %}
+            <p class="lb-vanity-display">percy.klappstuhl.me/lb/{{ slug }}</p>
+            {% when None %}
+            {% endmatch %}
+        </div>
+    </div>
+
+    {# ─── Info text ───────────────────────────────────────────────── #}
+    <div class="lb-intro dash-rise">
+        <p>This is the public leaderboard for <strong>{{ guild_name }}</strong>. Members earn XP by chatting and participating in the server, climbing the ranks over time. The economy leaderboard tracks each member's total wealth across cash and bank.</p>
+    </div>
+
+    {# ─── Vanity URL management (admins only) ────────────────────── #}
+    {% if can_manage %}
+    <section class="config-section lb-vanity-section dash-rise">
+        <h3>Custom URL</h3>
+        <p class="text-muted lb-vanity-hint">Claim a vanity URL for your server's leaderboard. First-come-first-serve. Vanity URLs can be transferred on request.</p>
+        <form class="lb-vanity-form" id="vanity-form" method="post" action="/lb/{{ guild_id }}/vanity">
+            <div class="lb-vanity-input-row">
+                <span class="lb-vanity-prefix">percy.klappstuhl.me/lb/</span>
+                <input type="text" name="slug" id="vanity-slug" placeholder="my-server" maxlength="32"
+                       pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens and underscores only"
+                       {% match vanity %}{% when Some with (slug) %}value="{{ slug }}"{% when None %}{% endmatch %}>
+                <button type="submit" class="button small">{% if vanity.is_some() %}Update{% else %}Claim{% endif %}</button>
+                {% if vanity.is_some() %}
+                <button type="button" class="button small danger" id="vanity-delete-btn">Remove</button>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {# ─── Leveling Leaderboard ────────────────────────────────────── #}
+    <section class="config-section lb-section dash-rise">
+        <h2>Leveling</h2>
+        <p class="lb-section-desc">Members ranked by total XP earned through messages and voice activity.</p>
+        {% if leaderboard.entries.is_empty() %}
+        <p class="text-muted">No leveling data yet.</p>
+        {% else %}
+        <div class="lb-table-wrap">
+            <table class="lb-table">
+                <thead>
+                    <tr>
+                        <th class="lb-col-rank">#</th>
+                        <th class="lb-col-user">User</th>
+                        <th class="lb-col-level">Level</th>
+                        <th class="lb-col-xp">XP</th>
+                        <th class="lb-col-total">Total XP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in leaderboard.entries %}
+                    <tr{% if loop.index <= 3 %} class="lb-top-{{ loop.index }}"{% endif %}>
+                        <td class="lb-col-rank">{{ loop.index }}</td>
+                        <td class="lb-col-user">
+                            <div class="lb-user-cell">
+                                {% match entry.avatar_url %}
+                                {% when Some with (url) %}<img class="lb-avatar" src="{{ url }}" alt="" width="28" height="28">
+                                {% when None %}<span class="lb-avatar lb-avatar-ph"></span>{% endmatch %}
+                                <span class="lb-username">{{ entry.username }}</span>
+                            </div>
+                        </td>
+                        <td class="lb-col-level">{{ entry.level }}</td>
+                        <td class="lb-col-xp">{{ entry.xp }}</td>
+                        <td class="lb-col-total">{{ entry.total_xp }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if leaderboard.total > 100 %}
+        <p class="lb-total-hint">Showing top 100 of {{ leaderboard.total }} members</p>
+        {% endif %}
+        {% endif %}
+    </section>
+
+    {# ─── Economy Leaderboard ─────────────────────────────────────── #}
+    <section class="config-section lb-section dash-rise">
+        <h2>Economy</h2>
+        <p class="lb-section-desc">Members ranked by total wealth (cash + bank balance).</p>
+        {% if balances.entries.is_empty() %}
+        <p class="text-muted">No economy data yet.</p>
+        {% else %}
+        <div class="lb-table-wrap">
+            <table class="lb-table">
+                <thead>
+                    <tr>
+                        <th class="lb-col-rank">#</th>
+                        <th class="lb-col-user">User</th>
+                        <th class="lb-col-cash">Cash</th>
+                        <th class="lb-col-bank">Bank</th>
+                        <th class="lb-col-total">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in balances.entries %}
+                    <tr{% if loop.index <= 3 %} class="lb-top-{{ loop.index }}"{% endif %}>
+                        <td class="lb-col-rank">{{ loop.index }}</td>
+                        <td class="lb-col-user">
+                            <div class="lb-user-cell">
+                                {% match entry.avatar_url %}
+                                {% when Some with (url) %}<img class="lb-avatar" src="{{ url }}" alt="" width="28" height="28">
+                                {% when None %}<span class="lb-avatar lb-avatar-ph"></span>{% endmatch %}
+                                <span class="lb-username">{{ entry.username }}</span>
+                            </div>
+                        </td>
+                        <td class="lb-col-cash">{{ entry.cash }}</td>
+                        <td class="lb-col-bank">{{ entry.bank }}</td>
+                        <td class="lb-col-total">{{ entry.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block body_end %}
+<script>
+const GUILD_ID = '{{ guild_id }}';
+</script>
+<script src="/static/js/leaderboard.js"></script>
+{% endblock %}

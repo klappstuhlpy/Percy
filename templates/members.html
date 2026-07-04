@@ -1,0 +1,109 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>View and manage server members, roles, and moderation.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/members.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Browse the server's <strong>members</strong>, manage their roles, and take moderation actions. Every kick, ban and role change is proxied through Percy and recorded as a modlog case.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Click a member to open their full profile and history</li>
+                <li>Select rows to apply a bulk action to many members at once</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="members-toolbar">
+        <input type="text" id="member-search" class="config-input search-input" placeholder="Search members...">
+        <span class="members-count" id="member-count">{{ members.len() }} loaded</span>
+    </div>
+
+    {# ─── Bulk Action Toolbar ─────────────────────────────────────── #}
+    <div class="bulk-toolbar" id="bulk-toolbar" hidden>
+        <span class="bulk-count"><strong id="bulk-selected-count">0</strong> selected</span>
+        <button class="button small" id="bulk-kick">Kick Selected</button>
+        <button class="button small danger" id="bulk-ban">Ban Selected</button>
+        <button class="button small" id="bulk-deselect">Deselect All</button>
+    </div>
+
+    <div class="members-table-wrap">
+        <table class="members-table sortable" id="members-table">
+            <thead>
+                <tr>
+                    <th class="col-check"><input type="checkbox" id="bulk-select-all" title="Select all"></th>
+                    <th data-sort="text">Member</th>
+                    <th data-sort="date">Joined</th>
+                    <th>Roles</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="members-tbody">
+                {% for member in members %}
+                <tr data-user-id="{{ member.id }}" data-name="{{ member.display_name|lower }}" data-bot="{{ member.bot }}">
+                    <td><input type="checkbox" class="bulk-check" data-user-id="{{ member.id }}" {% if member.bot %}disabled{% endif %}></td>
+                    <td>
+                        <a class="member-cell" href="/dashboard/guild/{{ guild_id }}/members/{{ member.id }}">
+                            <img class="member-avatar" src="{{ member.avatar_url }}?size=64" alt="" width="36" height="36">
+                            <div class="member-info">
+                                <span class="member-name">{{ member.display_name }}</span>
+                                <span class="member-username">{{ member.name }}{% if member.bot %} <span class="badge">BOT</span>{% endif %}</span>
+                            </div>
+                        </a>
+                    </td>
+                    <td class="member-joined"><time class="js-ts">{{ member.joined_at.as_deref().unwrap_or("—") }}</time></td>
+                    <td>
+                        <div class="member-roles">
+                            {% for role_id in member.roles %}
+                            <span class="role-chip" data-role-id="{{ role_id }}">{{ role_id }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="member-actions">
+                            {% if !member.bot %}
+                            <button class="button small" data-action="kick" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}">Kick</button>
+                            <button class="button small danger" data-action="ban" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}">Ban</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="members-pagination">
+        <button id="load-more" class="button small">Load more</button>
+    </div>
+
+    {# -- Action confirmation modal -- #}
+    <div class="modal-overlay" id="action-modal" hidden>
+        <div class="modal-card">
+            <h3 id="modal-title">Confirm Action</h3>
+            <p id="modal-description"></p>
+            <div class="config-field mt-md mb-md">
+                <label class="config-label" for="modal-reason">Reason (optional)</label>
+                <input type="text" id="modal-reason" class="config-input" placeholder="Moderation reason...">
+            </div>
+            <div class="modal-actions">
+                <button class="button small" id="modal-cancel">Cancel</button>
+                <button class="button small danger" id="modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+const GUILD_ID = '{{ guild_id }}';
+const ROLES = [{% for role in roles %}{ id: '{{ role.id }}', name: '{{ role.name }}', color: {{ role.color }} },{% endfor %}];
+</script>
+<script src="/static/js/members.js"></script>
+{% endblock %}

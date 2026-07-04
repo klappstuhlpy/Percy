@@ -1,0 +1,291 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>View and manage running and completed polls.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="/static/css/polls.css" type="text/css"/>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Browse, create, edit and end <strong>polls</strong> for this server. Polls support up to 8 options with animated vote bars, optional vote reasons, a discussion thread, scheduling and live odds.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Ending a poll archives its thread and freezes the results</li>
+                <li>Editing is only possible while a poll is still running</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Summary Tiles ────────────────────────────────────────────── #}
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Total Polls</span>
+            <span class="tile-value">{{ polls.polls.len() }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Active</span>
+            <span class="tile-value">{{ active_count }}</span>
+            <span class="tile-sub">Currently running</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Ended</span>
+            <span class="tile-value">{{ ended_count }}</span>
+            <span class="tile-sub">Completed polls</span>
+        </div>
+    </div>
+
+    {# ─── Poll Settings ────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Poll Settings</h2>
+        <p class="config-section-description">Configure where polls are posted and who gets notified.</p>
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/config" id="poll-config-form">
+            <input type="hidden" name="_section" value="polls">
+            <div class="config-grid">
+                <div class="config-field">
+                    <label class="config-label" for="poll_channel">Poll Channel</label>
+                    <span class="config-description">Channel where new polls are posted</span>
+                    <select name="poll_channel_id" id="poll_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.poll_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="poll_reason_channel">Reason Channel</label>
+                    <span class="config-description">Channel for vote reason submissions</span>
+                    <select name="poll_reason_channel_id" id="poll_reason_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.poll_reason_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="poll_ping_role">Ping Role</label>
+                    <span class="config-description">Role pinged when a new poll starts</span>
+                    <select name="poll_ping_role_id" id="poll_ping_role" class="config-select">
+                        <option value="">Not set</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% match guild.poll_ping_role %}{% when Some with (ref) %}{% if ref.id == role.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            @{{ role.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="config-actions">
+                <button type="button" class="button small" id="poll-config-cancel">Cancel</button>
+                <button type="submit" class="button primary small">Save Changes</button>
+            </div>
+        </form>
+    </section>
+
+    {# ─── Polls Table ─────────────────────────────────────────────── #}
+    <div class="section-header polls-toolbar">
+        <h2>Polls</h2>
+        <button type="button" class="button primary small" onclick="openCreatePoll()">+ New Poll</button>
+    </div>
+    {% if polls.polls.is_empty() %}
+    <div class="empty-state">
+        <h3>No polls yet</h3>
+        <p>Polls created with the /polls command will appear here.</p>
+    </div>
+    {% else %}
+    <div class="data-table-wrap">
+        <table class="data-table sortable">
+            <thead>
+                <tr>
+                    <th data-sort="text">Question</th>
+                    <th data-sort="text">Status</th>
+                    <th class="numeric" data-sort="number">Votes</th>
+                    <th data-sort="number">Options</th>
+                    <th data-sort="date">Published</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for poll in polls.polls %}
+                <tr>
+                    <td data-label="Question">
+                        <strong>{{ poll.question }}</strong>
+                        {% if !poll.description.is_empty() %}
+                        <br><span class="text-muted poll-desc">{{ poll.description }}</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Status">
+                        {% if poll.ended %}
+                        <span class="pill ended dot">Ended</span>
+                        {% else %}
+                        <span class="pill active dot">Active</span>
+                        {% endif %}
+                    </td>
+                    <td class="numeric" data-label="Votes">{{ poll.total_votes }}</td>
+                    <td data-label="Options">{{ poll.options.len() }} options</td>
+                    <td class="member-joined" data-label="Published"><time class="js-ts">{{ poll.published.as_deref().unwrap_or("—") }}</time></td>
+                    <td class="col-actions">
+                        {% if !poll.ended %}
+                        <button class="button small" onclick='openEditPoll({{ poll.id }}, this)'>Edit</button>
+                        <button class="button small danger" onclick='endPoll({{ poll.id }}, this)'>End</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {# ─── Edit Poll Modal ─────────────────────────────────────────── #}
+    <div class="modal-overlay" id="poll-edit-modal" hidden>
+        <div class="modal-card w-xl">
+            <h3>Edit Poll</h3>
+            <p class="text-muted modal-intro">Edit the question, description, options, and appearance of this poll.</p>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="edit-poll-question">Question</label>
+                <span class="config-description">The main poll question displayed to voters</span>
+                <input type="text" id="edit-poll-question" class="config-input" placeholder="What should we...">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="edit-poll-description">Description</label>
+                <span class="config-description">Optional context shown below the question</span>
+                <input type="text" id="edit-poll-description" class="config-input" placeholder="Optional description...">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="edit-poll-image">Image URL</label>
+                <span class="config-description">Image displayed alongside the poll embed</span>
+                <input type="url" id="edit-poll-image" class="config-input" placeholder="https://...">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="edit-poll-color">Color</label>
+                <span class="config-description">
+                    Hex color for the embed sidebar (e.g. #ff5733)
+                </span>
+                <input
+                        type="text"
+                        id="edit-poll-color"
+                        class="config-input"
+                        placeholder="#d97757"
+                        pattern="^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+                        title="Please enter a valid hex color (e.g. #ff5733)"
+                        required
+                >
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label">Options</label>
+                <span class="config-description">Poll choices (minimum 2). Leave blank to keep unchanged, clear all text to remove.</span>
+                <div id="edit-poll-options" class="option-list"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="button small" onclick="closeEditPoll()">Cancel</button>
+                <button class="button primary small" id="poll-save-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    {# ─── Create Poll Modal ───────────────────────────────────────────── #}
+    <div class="modal-overlay" id="poll-create-modal" hidden>
+        <div class="modal-card w-xl">
+            <h3>Create Poll</h3>
+            <p class="text-muted modal-intro">Post a new poll to your server. It will run for the chosen duration and then close automatically.</p>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-question">Question</label>
+                <span class="config-description">The main poll question displayed to voters</span>
+                <input type="text" id="create-poll-question" class="config-input" placeholder="What should we...">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-description">Description</label>
+                <span class="config-description">Optional context shown below the question</span>
+                <input type="text" id="create-poll-description" class="config-input" placeholder="Optional description...">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-channel">Channel</label>
+                <span class="config-description">Where to post the poll. Defaults to the configured poll channel.</span>
+                <select id="create-poll-channel" class="config-select">
+                    <option value="">Configured poll channel</option>
+                    {% for ch in channels %}
+                    <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label">Duration</label>
+                <span class="config-description">How long the poll stays open before it closes automatically</span>
+                <div class="duration-row">
+                    <input type="number" id="create-poll-duration-amount" class="config-input duration-amount" value="1" min="1">
+                    <select id="create-poll-duration-unit" class="config-select duration-unit">
+                        <option value="60">Minutes</option>
+                        <option value="3600">Hours</option>
+                        <option value="86400" selected>Days</option>
+                        <option value="604800">Weeks</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-thread">Discussion Thread</label>
+                <span class="config-description">Optional. If set, a thread is opened on the poll with this starter question.</span>
+                <input type="text" id="create-poll-thread" class="config-input" placeholder="What are your thoughts?">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label">Banner Image</label>
+                <span class="config-description">Optional banner shown in the poll. Use a URL or upload a file — not both.</span>
+                <div class="segmented segmented-row">
+                    <input type="radio" id="create-poll-image-url" name="create-poll-image-source" value="url" checked>
+                    <label for="create-poll-image-url">Link</label>
+                    <input type="radio" id="create-poll-image-file-src" name="create-poll-image-source" value="file">
+                    <label for="create-poll-image-file-src">Upload</label>
+                </div>
+                <input type="url" id="create-poll-image" class="config-input" placeholder="https://...">
+                <input type="file" id="create-poll-image-file" class="config-input" accept="image/*" hidden>
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label" for="create-poll-color">Color</label>
+                <span class="config-description">Hex color for the embed sidebar (e.g. #ff5733)</span>
+                <input type="text" id="create-poll-color" class="config-input" placeholder="#d97757"
+                       pattern="^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+                       title="Please enter a valid hex color (e.g. #ff5733)">
+            </div>
+
+            <div class="config-field mb-sm">
+                <label class="config-label">Options</label>
+                <span class="config-description">Poll choices (2-8 required)</span>
+                <div id="create-poll-options" class="option-list"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="button small" onclick="closeCreatePoll()">Cancel</button>
+                <button class="button primary small" id="poll-create-btn">Create Poll</button>
+            </div>
+        </div>
+    </div>
+
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+const GUILD_ID = '{{ guild_id }}';
+const POLLS_DATA = {{ polls.polls|json|safe }};
+</script>
+<script src="/static/js/polls.js"></script>
+{% endblock %}

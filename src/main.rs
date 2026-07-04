@@ -29,6 +29,7 @@ mod db;
 mod guilds;
 mod migrations;
 mod session;
+mod view;
 
 /// Shared application state, threaded through every handler.
 #[derive(Clone)]
@@ -126,15 +127,15 @@ fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// The dashboard landing page, rendered through the shared design system.
+/// The public landing page (ported verbatim from the monolith), shown to
+/// logged-out visitors.
 #[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate {
-    discord_login_enabled: bool,
-    percy_configured: bool,
+#[template(path = "landing.html")]
+struct LandingTemplate {
+    account: Option<view::Viewer>,
 }
 
-async fn index(State(state): State<AppState>, session: Option<session::Session>) -> axum::response::Response {
+async fn index(session: Option<session::Session>) -> axum::response::Response {
     use axum::response::{IntoResponse, Redirect};
     // Signed-in visitors go straight to their servers; everyone else sees the
     // landing page. `Option<Session>` yields `None` when the cookie is absent or
@@ -142,11 +143,7 @@ async fn index(State(state): State<AppState>, session: Option<session::Session>)
     if session.is_some() {
         return Redirect::to("/dashboard").into_response();
     }
-    IndexTemplate {
-        discord_login_enabled: state.config.discord_login_enabled(),
-        percy_configured: state.percy.is_some(),
-    }
-    .into_response()
+    LandingTemplate { account: None }.into_response()
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
@@ -204,23 +201,10 @@ mod tests {
         assert!(state.percy.is_none(), "no Percy client without a configured URL");
     }
 
-    /// The landing page renders (template compiles + fills) in both states.
+    /// The verbatim landing page compiles and renders for a logged-out visitor.
     #[test]
-    fn index_template_renders() {
-        let enabled = IndexTemplate {
-            discord_login_enabled: true,
-            percy_configured: true,
-        }
-        .render()
-        .expect("render");
-        assert!(enabled.contains("Log in with Discord"));
-
-        let disabled = IndexTemplate {
-            discord_login_enabled: false,
-            percy_configured: false,
-        }
-        .render()
-        .expect("render");
-        assert!(disabled.contains("isn't configured"));
+    fn landing_template_renders() {
+        let html = LandingTemplate { account: None }.render().expect("render");
+        assert!(html.contains("Percy"));
     }
 }

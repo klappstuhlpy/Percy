@@ -12,7 +12,7 @@ description = "Percy dashboard — standalone web binary (skeleton) built on the
 [dependencies]
 anyhow = "1.0.80"
 async-trait = "0.1.77"
-askama = { version = "0.12.1", features = ["with-axum"] }
+askama = { version = "0.12.1", features = ["with-axum", "serde-json"] }
 askama_axum = "0.4.0"
 axum = "0.7.4"
 cookie = { version = "0.18.0", features = ["percent-encode"] }
