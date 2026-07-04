@@ -12,10 +12,20 @@ These lock in the two behaviours that are easy to regress:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any
+
 import discord
 import pytest
+from discord.ext import commands as dpy_commands
 
-from app.core.permissions import PermissionSpec, PermissionTemplate
+from app.core.command import command as make_command
+from app.core.permissions import (
+    CommandOverride,
+    PermissionSpec,
+    PermissionTemplate,
+    command_permission_check,
+)
 
 
 def test_template_defaults_and_composition() -> None:
@@ -83,6 +93,87 @@ def test_invalid_permission_name_is_rejected() -> None:
 def test_template_is_immutable() -> None:
     with pytest.raises(AttributeError):
         PermissionTemplate.mod.permissions = frozenset()  # type: ignore[misc]
+
+
+# --------------------------------------------------------------------------- #
+# Per-guild command permission overrides
+# --------------------------------------------------------------------------- #
+
+
+def test_override_required_permissions() -> None:
+    default = {"ban_members"}
+    # No explicit permissions -> keep the command's default requirement.
+    assert CommandOverride("ban").required_user_permissions(default) == default
+    # Explicit bitmask -> replace it.
+    ov = CommandOverride("ban", permissions=discord.Permissions(manage_messages=True).value)
+    assert ov.required_user_permissions(default) == {"manage_messages"}
+
+
+def test_override_allows_roles() -> None:
+    ov = CommandOverride("ban", allowed_roles=frozenset({10, 20}))
+    member = SimpleNamespace(roles=[SimpleNamespace(id=5), SimpleNamespace(id=20)])
+    assert ov.allows_roles(member) is True  # type: ignore[arg-type]
+    stranger = SimpleNamespace(roles=[SimpleNamespace(id=5)])
+    assert ov.allows_roles(stranger) is False  # type: ignore[arg-type]
+    assert CommandOverride("ban").allows_roles(member) is False  # type: ignore[arg-type]  # empty allow-list
+
+
+def _make_command(**perm_kwargs: object) -> Any:
+    async def _cb(ctx: object) -> None: ...
+
+    return make_command("ban", **perm_kwargs)(_cb)  # type: ignore[arg-type]
+
+
+def _make_ctx(
+    cmd: Any, *, user_perms: discord.Permissions, overrides: object = None, author_id: int = 5, owner_id: int = 999
+) -> SimpleNamespace:
+    class _DB:
+        async def get_command_overrides(self, _guild_id: int) -> dict:
+            return overrides or {}
+
+    bot = SimpleNamespace(bypass_checks=False, owner_id=owner_id, owner_ids=None, db=_DB())
+    return SimpleNamespace(
+        command=cmd,
+        bot=bot,
+        guild=SimpleNamespace(id=1),
+        author=SimpleNamespace(id=author_id),
+        permissions=user_perms,
+        bot_permissions=discord.Permissions.all(),
+    )
+
+
+async def test_check_passes_and_fails_against_default_gate() -> None:
+    cmd = _make_command(user_permissions=PermissionTemplate.ban)
+
+    ok = _make_ctx(cmd, user_perms=discord.Permissions(ban_members=True))
+    assert await command_permission_check(ok) is True  # type: ignore[arg-type]
+
+    lacking = _make_ctx(cmd, user_perms=discord.Permissions(send_messages=True))
+    with pytest.raises(dpy_commands.MissingPermissions):
+        await command_permission_check(lacking)  # type: ignore[arg-type]
+
+
+async def test_override_can_loosen_the_requirement() -> None:
+    # Command defaults to needing ban_members; guild override drops it to send_messages.
+    cmd = _make_command(user_permissions=PermissionTemplate.ban)
+    overrides = {"ban": CommandOverride("ban", permissions=discord.Permissions(send_messages=True).value)}
+    ctx = _make_ctx(cmd, user_perms=discord.Permissions(send_messages=True), overrides=overrides)
+    assert await command_permission_check(ctx) is True  # type: ignore[arg-type]
+
+
+async def test_override_can_tighten_the_requirement() -> None:
+    cmd = _make_command(user_permissions=PermissionTemplate.messages)  # default: manage_messages
+    overrides = {"ban": CommandOverride("ban", permissions=discord.Permissions(administrator=True).value)}
+    # Member has manage_messages (enough for the default) but not administrator (the override).
+    ctx = _make_ctx(cmd, user_perms=discord.Permissions(manage_messages=True), overrides=overrides)
+    with pytest.raises(dpy_commands.MissingPermissions):
+        await command_permission_check(ctx)  # type: ignore[arg-type]
+
+
+async def test_owner_bypasses_everything() -> None:
+    cmd = _make_command(user_permissions=PermissionTemplate.ban)
+    ctx = _make_ctx(cmd, user_perms=discord.Permissions.none(), author_id=999, owner_id=999)
+    assert await command_permission_check(ctx) is True  # type: ignore[arg-type]
 
 
 async def test_native_permissions_only_gate_top_level_hybrids() -> None:

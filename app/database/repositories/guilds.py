@@ -182,6 +182,37 @@ class GuildsRepository(BaseRepository):
             "DELETE FROM command_config WHERE guild_id=$1 AND name=$2 AND channel_id=$3;",
             guild_id, name, channel_id)
 
+    # -- command permission overrides (per-command "who may run this") ----
+
+    async def get_command_permission_overrides(self, guild_id: int) -> list[asyncpg.Record]:
+        """Fetches every command permission override for a guild."""
+        return await self.fetch(
+            "SELECT command, permissions, allowed_roles FROM command_permission_overrides WHERE guild_id=$1;",
+            guild_id,
+        )
+
+    async def upsert_command_permission_override(
+        self, guild_id: int, command: str, permissions: int | None, allowed_roles: list[int]
+    ) -> None:
+        """Create or replace the override for a command, then bust the cached lookup."""
+        await self.execute(
+            "INSERT INTO command_permission_overrides (guild_id, command, permissions, allowed_roles) "
+            "VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (guild_id, command) DO UPDATE "
+            "SET permissions = EXCLUDED.permissions, allowed_roles = EXCLUDED.allowed_roles;",
+            guild_id, command, permissions, allowed_roles,
+        )
+        self.invalidate_cache("command_overrides_changed", guild_id)
+
+    async def delete_command_permission_override(self, guild_id: int, command: str) -> str:
+        """Remove the override for a command (returns the asyncpg status), then bust the cache."""
+        status = await self.execute(
+            "DELETE FROM command_permission_overrides WHERE guild_id=$1 AND command=$2;",
+            guild_id, command,
+        )
+        self.invalidate_cache("command_overrides_changed", guild_id)
+        return status
+
     # -- AI config (ai_flags + per-channel overrides) --------------------
 
     async def get_ai_overrides(self, guild_id: int) -> list[asyncpg.Record]:

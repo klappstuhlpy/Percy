@@ -17,6 +17,7 @@ import discord
 from discord.utils import MISSING
 from sshtunnel import SSHTunnelForwarder
 
+from app.core.permissions import CommandOverride
 from app.database.repositories import (
     AdminRepository,
     AniListRepository,
@@ -366,6 +367,7 @@ class Database(_Database):
         s.register("user_config_changed").connect(self.get_user_config, None)
         s.register("sentinel_changed").connect(self.get_guild_sentinel, None)
         s.register("ai_config_changed").connect(self.get_guild_ai_config, None)
+        s.register("command_overrides_changed").connect(self.get_command_overrides, None)
 
     @cache.cache()
     async def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -398,6 +400,24 @@ class Database(_Database):
         override_records = await self.guilds.get_ai_overrides(guild_id)
         overrides = {r["channel_id"]: (r["flags_mask"], r["enabled_mask"]) for r in override_records}
         return GuildAIConfig(guild_id=guild_id, flags=config.ai_flags, overrides=overrides)
+
+    @cache.cache()
+    async def get_command_overrides(self, guild_id: int) -> dict[str, CommandOverride]:
+        """|coro| @cached
+
+        Resolve a guild's per-command permission overrides, keyed by command qualified name.
+        Consulted by :func:`app.core.permissions.command_permission_check` on every command
+        invocation, so it is memoized and busted via the ``command_overrides_changed`` signal.
+        """
+        records = await self.guilds.get_command_permission_overrides(guild_id)
+        return {
+            record["command"]: CommandOverride(
+                command=record["command"],
+                permissions=record["permissions"],
+                allowed_roles=frozenset(record["allowed_roles"] or ()),
+            )
+            for record in records
+        }
 
     @cache.cache(action=lambda g: g.cancel_task())
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:

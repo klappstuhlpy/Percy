@@ -10,14 +10,44 @@ import discord
 from discord.ext import commands
 
 from app.core import Cog, Context
-from app.core.models import PermissionTemplate, cooldown, describe, group
+from app.core.models import PermissionSpec, PermissionTemplate, cooldown, describe, group
 from app.core.pagination import LinePaginator
 from app.utils import cache, get_asset_url, helpers
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterable
 
+    from app.core.permissions import CommandOverride
     from app.database import Database
+
+
+#: Tokens that clear a command's custom permission requirement (fall back to its default gate).
+_CLEAR_TOKENS = frozenset({"none", "default", "clear", "reset", "off"})
+
+
+def parse_permission_names(raw: str) -> tuple[int | None, list[str]]:
+    """Parse a space/comma-separated list of permission names into a bitmask.
+
+    Returns ``(value, invalid)`` where ``value`` is the combined :class:`discord.Permissions`
+    value (or ``None`` to clear the requirement — an empty list or a lone clear-token like
+    ``"default"``) and ``invalid`` lists any unrecognised names.
+    """
+    tokens = [t for t in re.split(r"[,\s]+", raw.strip()) if t]
+    if not tokens or (len(tokens) == 1 and tokens[0].lower() in _CLEAR_TOKENS):
+        return None, []
+
+    kwargs: dict[str, bool] = {}
+    invalid: list[str] = []
+    for token in tokens:
+        key = token.lower().replace(" ", "_").replace("-", "_")
+        if key in discord.Permissions.VALID_FLAGS:
+            kwargs[key] = True
+        else:
+            invalid.append(token)
+
+    if invalid:
+        return None, invalid
+    return (discord.Permissions(**kwargs).value if kwargs else None), []
 
 
 class CommandName(commands.Converter[str]):
@@ -561,6 +591,155 @@ class Config(Cog):
         assert guild is not None
         embed.set_thumbnail(url=get_asset_url(guild))
         await LinePaginator.start(ctx, entries=disabled, per_page=15, embed=embed, location="description", numerate=True)
+
+    # -- command permission overrides ------------------------------------
+
+    async def _get_override(self, guild_id: int, command: str) -> CommandOverride | None:
+        """Return the current :class:`CommandOverride` for a command, or ``None``."""
+        overrides = await self.bot.db.get_command_overrides(guild_id)
+        return overrides.get(command)
+
+    @staticmethod
+    def _describe_override(command: str, permissions: int | None, allowed_roles: Iterable[int]) -> str:
+        """Human-readable one-liner for an override, for the list/confirmation messages."""
+        parts: list[str] = []
+        if permissions is not None:
+            names = [PermissionSpec.permission_as_str(p) for p, on in discord.Permissions(permissions) if on]
+            parts.append("requires " + (", ".join(names) if names else "no permissions"))
+        roles = list(allowed_roles)
+        if roles:
+            parts.append("allowed roles: " + ", ".join(f"<@&{r}>" for r in roles))
+        return f"**{command}** — {'; '.join(parts) if parts else 'default permissions'}"
+
+    @config.group(
+        "perms",
+        aliases=["permissions"],
+        description="Customize which permissions a command requires in this server.",
+        invoke_without_command=True,
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    async def perms(self, ctx: Context) -> None:
+        """Show every command permission override configured for this server.
+
+        Overrides change *who may run a command* — for both prefix and slash invocations.
+        The bot's own required permissions are always still enforced, and owner-only commands
+        cannot be overridden.
+        """
+        overrides = await ctx.db.get_command_overrides(ctx.guild.id)
+        if not overrides:
+            await ctx.send_info(
+                "No command permission overrides are set. Add one with "
+                f"`{ctx.clean_prefix}config perms set <command> <permissions>`."
+            )
+            return
+
+        entries = [
+            self._describe_override(name, ov.permissions, ov.allowed_roles)
+            for name, ov in sorted(overrides.items())
+        ]
+        embed = discord.Embed(
+            title="Command Permission Overrides", timestamp=discord.utils.utcnow(), color=helpers.Colour.white()
+        )
+        embed.set_thumbnail(url=get_asset_url(ctx.guild))
+        await LinePaginator.start(ctx, entries=entries, per_page=15, embed=embed, location="description", numerate=True)
+
+    @perms.command(
+        "set",
+        description="Set the permission(s) a command requires (or 'default' to clear).",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(
+        command="The command to override.",
+        permissions="Space/comma separated permission names (e.g. `manage_messages`), or `default` to clear.",
+    )
+    async def perms_set(
+        self, ctx: Context, command: Annotated[str, CommandName], *, permissions: str
+    ) -> None:
+        """Replace the permission(s) required to run a command in this server."""
+        value, invalid = parse_permission_names(permissions)
+        if invalid:
+            await ctx.send_error(
+                f"Unknown permission(s): {', '.join(f'`{name}`' for name in invalid)}. "
+                "Use Discord permission names like `manage_messages` or `ban_members`."
+            )
+            return
+
+        existing = await self._get_override(ctx.guild.id, command)
+        roles = list(existing.allowed_roles) if existing else []
+
+        if value is None and not roles:
+            # Nothing left to store — drop the override so the command uses its own default.
+            await ctx.db.guilds.delete_command_permission_override(ctx.guild.id, command)
+            await ctx.send_success(f"**{command}** now uses its default permissions.")
+            return
+
+        await ctx.db.guilds.upsert_command_permission_override(ctx.guild.id, command, value, roles)
+        await ctx.send_success("Updated: " + self._describe_override(command, value, roles))
+
+    @perms.command(
+        "allow",
+        description="Let a role always use a command, regardless of permissions.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(command="The command to override.", role="The role to always allow.")
+    async def perms_allow(self, ctx: Context, command: Annotated[str, CommandName], role: discord.Role) -> None:
+        """Add a role to a command's allow-list (they bypass the permission requirement)."""
+        existing = await self._get_override(ctx.guild.id, command)
+        roles = set(existing.allowed_roles) if existing else set()
+        permissions = existing.permissions if existing else None
+
+        if role.id in roles:
+            await ctx.send_error(f"{role.mention} is already allowed to use **{command}**.")
+            return
+
+        roles.add(role.id)
+        await ctx.db.guilds.upsert_command_permission_override(ctx.guild.id, command, permissions, list(roles))
+        await ctx.send_success(f"{role.mention} may now use **{command}** regardless of permissions.")
+
+    @perms.command(
+        "unallow",
+        aliases=["disallow", "deny"],
+        description="Remove a role from a command's allow-list.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(command="The command to override.", role="The role to remove from the allow-list.")
+    async def perms_unallow(self, ctx: Context, command: Annotated[str, CommandName], role: discord.Role) -> None:
+        """Remove a role from a command's allow-list."""
+        existing = await self._get_override(ctx.guild.id, command)
+        if existing is None or role.id not in existing.allowed_roles:
+            await ctx.send_error(f"{role.mention} is not on the allow-list for **{command}**.")
+            return
+
+        roles = set(existing.allowed_roles)
+        roles.discard(role.id)
+
+        if not roles and existing.permissions is None:
+            await ctx.db.guilds.delete_command_permission_override(ctx.guild.id, command)
+        else:
+            await ctx.db.guilds.upsert_command_permission_override(
+                ctx.guild.id, command, existing.permissions, list(roles)
+            )
+        await ctx.send_success(f"{role.mention} can no longer bypass permissions for **{command}**.")
+
+    @perms.command(
+        "reset",
+        aliases=["clear", "remove"],
+        description="Remove a command's permission override entirely.",
+        guild_only=True,
+        user_permissions=PermissionTemplate.manager,
+    )
+    @describe(command="The command whose override to remove.")
+    async def perms_reset(self, ctx: Context, *, command: Annotated[str, CommandName]) -> None:
+        """Delete a command's override so it reverts to its built-in permission gate."""
+        status = await ctx.db.guilds.delete_command_permission_override(ctx.guild.id, command)
+        if status.endswith("0"):
+            await ctx.send_error(f"**{command}** has no permission override.")
+            return
+        await ctx.send_success(f"Removed the permission override for **{command}**; it now uses its default gate.")
 
     @config.group("global", description="Handles global bot configuration.", hidden=True)
     @commands.is_owner()

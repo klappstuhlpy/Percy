@@ -12,7 +12,7 @@ from discord.ext.commands import Parameter, run_converters
 from discord.utils import MISSING
 
 from app.core.flags import ConsumeUntilFlag, FlagMeta, Flags
-from app.core.permissions import PermissionSpec
+from app.core.permissions import PermissionSpec, command_permission_check
 from app.utils import AnsiColor, AnsiStringBuilder, TemporaryAttribute, truncate
 
 if TYPE_CHECKING:
@@ -183,7 +183,10 @@ class Command(commands.Command):
         self._app_command_id: int | None = None
 
         super().__init__(func, **kwargs)
-        self.add_check(self._permissions.check)
+        # A module-level check (reads the spec off ``ctx.command``) rather than a bound method, so
+        # it survives command copying and can consult per-guild overrides. See
+        # :func:`command_permission_check`.
+        self.add_check(command_permission_check)
         self._resolve_param_descriptions()
 
     def _resolve_param_descriptions(self) -> None:

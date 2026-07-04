@@ -58,6 +58,15 @@ class ManagePlonkBody(BaseModel):
     entity_id: int | str
 
 
+class SetCommandPermissionsBody(BaseModel):
+    command: str
+    #: Discord permission bitmask that replaces the command's default *user* requirement.
+    #: ``None`` keeps the command's built-in gate.
+    permissions: int | None = None
+    #: Role IDs allowed to run the command regardless of permissions.
+    allowed_roles: list[int | str] = []
+
+
 class CreateAutoresponderBody(BaseModel):
     trigger: str
     response: str
@@ -594,16 +603,27 @@ async def get_commands(guild: GuildDep, bot: BotDep) -> dict:
         else:
             disabled_commands.setdefault(name, []).append(str(channel_id))
 
+    overrides = await bot.db.get_command_overrides(guild.id)
+
     all_commands = []
     for cmd in bot.walk_commands():
         qualified = cmd.qualified_name
         cog_name = cmd.cog.qualified_name if cmd.cog else 'Uncategorized'
+        spec = getattr(cmd, 'permissions', None)
+        override = overrides.get(qualified)
         all_commands.append({
             'name': qualified,
             'category': cog_name,
             'description': cmd.short_doc or '',
             'disabled_in': disabled_commands.get(qualified, []),
             'globally_disabled': qualified in globally_disabled,
+            # Default user permissions the command requires out of the box.
+            'default_permissions': sorted(spec.user) if spec is not None else [],
+            # The current per-guild override, if any.
+            'permission_override': None if override is None else {
+                'permissions': override.permissions,
+                'allowed_roles': [str(r) for r in override.allowed_roles],
+            },
         })
 
     plonk_list = []
@@ -663,6 +683,55 @@ async def manage_plonk(guild: GuildDep, bot: BotDep, body: ManagePlonkBody) -> d
     if config_cog is not None:
         config_cog.is_plonked.invalidate_containing(f"{guild.id!r}:")
 
+    return {'ok': True}
+
+
+@router.get("/commands/permissions")
+async def get_command_permissions(guild: GuildDep, bot: BotDep) -> dict:
+    """Return every per-command permission override configured for the guild."""
+    overrides = await bot.db.get_command_overrides(guild.id)
+    return {
+        'overrides': [
+            {
+                'command': name,
+                'permissions': override.permissions,
+                'allowed_roles': [str(role_id) for role_id in override.allowed_roles],
+            }
+            for name, override in sorted(overrides.items())
+        ]
+    }
+
+
+@router.post("/commands/permissions")
+async def set_command_permissions(guild: GuildDep, bot: BotDep, body: SetCommandPermissionsBody) -> dict:
+    """Create or replace a command's permission override.
+
+    ``permissions`` is a Discord permission bitmask replacing the command's default *user*
+    requirement (``null`` keeps the default); ``allowed_roles`` may always run it. Storing an
+    override with no permissions and no roles removes it. Owner-only commands (guarded by
+    ``is_owner``, not a permission spec) cannot be overridden — the write is accepted but has no
+    effect on them.
+    """
+    command = bot.get_command(body.command)
+    if command is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='unknown command')
+
+    allowed_roles = [int(role_id) for role_id in body.allowed_roles]
+
+    if body.permissions is None and not allowed_roles:
+        await bot.db.guilds.delete_command_permission_override(guild.id, body.command)
+    else:
+        await bot.db.guilds.upsert_command_permission_override(
+            guild.id, body.command, body.permissions, allowed_roles
+        )
+
+    return {'ok': True}
+
+
+@router.delete("/commands/permissions/{command:path}")
+async def delete_command_permissions(guild: GuildDep, bot: BotDep, command: str) -> dict:
+    """Remove a command's permission override; it reverts to its built-in gate."""
+    await bot.db.guilds.delete_command_permission_override(guild.id, command)
     return {'ok': True}
 
 

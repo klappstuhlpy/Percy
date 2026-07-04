@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Literal, NamedTuple, Union
 
 import discord
@@ -14,9 +15,11 @@ if TYPE_CHECKING:
     from app.core.context import Context
 
 __all__ = (
+    "CommandOverride",
     "PermissionInput",
     "PermissionSpec",
     "PermissionTemplate",
+    "command_permission_check",
 )
 
 VALID_FLAGS: dict[str, int] = discord.Permissions.VALID_FLAGS
@@ -251,21 +254,111 @@ class PermissionSpec(NamedTuple):
 
         return False
 
-    def check(self, ctx: Context) -> bool:
-        """Checks if the given context meets the required permissions."""
-        if ctx.bot.bypass_checks or self._is_owner(ctx.bot, ctx.author):
-            return True
+    def check_user(self, ctx: Context, required: set[str]) -> None:
+        """Raise :class:`commands.MissingPermissions` if the author lacks ``required``.
 
+        ``required`` is passed explicitly (rather than read from :attr:`user`) so a per-guild
+        :class:`CommandOverride` can substitute a different requirement. Administrators are
+        never blocked.
+        """
         user = ctx.permissions
-        missing = [perm for perm, value in user if perm in self.user and not value]
+        missing = [perm for perm, value in user if perm in required and not value]
 
         if missing and not user.administrator:
             raise commands.MissingPermissions(missing)
 
+    def check_bot(self, ctx: Context) -> None:
+        """Raise :class:`commands.BotMissingPermissions` if the bot lacks its required permissions.
+
+        The bot's functional requirements are never overridable — only *user* gating is.
+        """
         bot = ctx.bot_permissions
         missing = [perm for perm, value in bot if perm in self.bot and not value]
 
         if missing and not bot.administrator:
             raise commands.BotMissingPermissions(missing)
 
+    def check(self, ctx: Context) -> bool:
+        """Checks if the given context meets the required permissions (no override applied)."""
+        if ctx.bot.bypass_checks or self._is_owner(ctx.bot, ctx.author):
+            return True
+
+        self.check_user(ctx, self.user)
+        self.check_bot(ctx)
         return True
+
+
+@dataclass(frozen=True)
+class CommandOverride:
+    """A per-guild override of who may run a command.
+
+    Stored per ``(guild_id, command)``; consulted by :func:`command_permission_check` before the
+    command's default gate. It changes only the *user* requirement — the bot's own functional
+    permissions are always still enforced.
+
+    Attributes
+    ----------
+    command:
+        The command's :attr:`~discord.ext.commands.Command.qualified_name`.
+    permissions:
+        A Discord permission bitmask that replaces the command's default user requirement.
+        ``None`` keeps the command's own default gate.
+    allowed_roles:
+        Role IDs that may always run the command, regardless of permissions (an allow-list).
+    """
+
+    command: str
+    permissions: int | None = None
+    allowed_roles: frozenset[int] = field(default_factory=frozenset)
+
+    def required_user_permissions(self, default: set[str]) -> set[str]:
+        """The user permissions this override demands, falling back to ``default``."""
+        if self.permissions is None:
+            return default
+        return {flag for flag, enabled in discord.Permissions(self.permissions) if enabled}
+
+    def allows_roles(self, member: discord.Member) -> bool:
+        """Whether ``member`` holds one of the allow-listed roles."""
+        if not self.allowed_roles:
+            return False
+        return any(role.id in self.allowed_roles for role in member.roles)
+
+
+async def command_permission_check(ctx: Context) -> bool:
+    """Command check enforcing the command's :class:`PermissionSpec`, honoring guild overrides.
+
+    Added to every :class:`~app.core.command.Command`. It reads the gate off ``ctx.command`` (so
+    it is robust to command copying) and, in a guild, consults the cached per-guild
+    :class:`CommandOverride` map. When an override exists it replaces the *user* requirement
+    (an allow-listed role bypasses it entirely); the bot's own permissions are always enforced.
+    With no override it falls back to the command's default check. Owner/``bypass_checks`` short
+    circuit as before, and owner-only commands (guarded by ``is_owner``, not a spec) are untouched.
+    """
+    command = ctx.command
+    spec: PermissionSpec | None = getattr(command, "permissions", None)
+    if spec is None:  # not one of our commands (e.g. the built-in help) — nothing to enforce
+        return True
+
+    if ctx.bot.bypass_checks or PermissionSpec._is_owner(ctx.bot, ctx.author):
+        return True
+
+    override: CommandOverride | None = None
+    guild = ctx.guild
+    if guild is not None:
+        db = getattr(ctx.bot, "db", None)
+        if db is not None:
+            try:
+                overrides = await db.get_command_overrides(guild.id)
+            except Exception:
+                # A cache/DB hiccup must never harden into a lockout — fall back to the default gate.
+                overrides = {}
+            override = overrides.get(command.qualified_name)
+
+    if override is not None:
+        member = ctx.author
+        if not (isinstance(member, discord.Member) and override.allows_roles(member)):
+            spec.check_user(ctx, override.required_user_permissions(spec.user))
+        spec.check_bot(ctx)
+        return True
+
+    return spec.check(ctx)
