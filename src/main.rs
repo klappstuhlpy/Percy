@@ -27,6 +27,7 @@ mod auth;
 mod config;
 mod db;
 mod migrations;
+mod session;
 
 /// Shared application state, threaded through every handler.
 #[derive(Clone)]
@@ -111,6 +112,8 @@ fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/login", get(auth::login))
+        .route("/logout", get(auth::logout))
+        .route("/auth/discord/callback", get(auth::callback))
         .route("/health", get(health))
         .route("/api-info", get(api_info))
         .nest("/kls", kls_ui::routes())

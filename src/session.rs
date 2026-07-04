@@ -1,0 +1,139 @@
+//! The dashboard's own stateless session.
+//!
+//! Unlike klappstuhl.me (whose session is an `account.id` row + DB-backed token),
+//! the dashboard is keyed by the Discord user id and keeps **no** session table:
+//! the session is a small struct signed with the config [`SecretKey`] and stored
+//! in a cookie. Verifying it is a pure HMAC check — no database round-trip. This
+//! is why the shared `Token` type (built around an i64 account id) isn't reused.
+
+use axum::{
+    extract::FromRequestParts,
+    http::{header::COOKIE, request::Parts},
+    response::Redirect,
+};
+use cookie::Cookie;
+use kls_web_core::key::SecretKey;
+use serde::{Deserialize, Serialize};
+
+use crate::AppState;
+
+/// Name of the signed session cookie.
+pub const SESSION_COOKIE: &str = "session";
+/// How long a session stays valid.
+const SESSION_TTL_SECS: i64 = 60 * 60 * 24 * 30;
+
+/// A signed-in Discord user. Serialised compactly (it rides in a cookie) and
+/// signed with the config key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Session {
+    #[serde(rename = "u")]
+    pub discord_user_id: String,
+    #[serde(rename = "n")]
+    pub username: String,
+    /// Unix-seconds expiry.
+    #[serde(rename = "e")]
+    pub expires: i64,
+}
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+impl Session {
+    /// A fresh session for the given Discord identity, expiring in [`SESSION_TTL_SECS`].
+    pub fn new(discord_user_id: impl Into<String>, username: impl Into<String>) -> Self {
+        Self {
+            discord_user_id: discord_user_id.into(),
+            username: username.into(),
+            expires: now_unix() + SESSION_TTL_SECS,
+        }
+    }
+
+    /// Whether the session is still within its lifetime.
+    pub fn is_valid(&self) -> bool {
+        self.expires > now_unix()
+    }
+
+    /// The signed `Set-Cookie` value carrying this session.
+    pub fn to_cookie(&self, key: &SecretKey) -> Cookie<'static> {
+        let signed = key.sign(self).expect("session serialises");
+        Cookie::build((SESSION_COOKIE, signed))
+            .path("/")
+            .http_only(true)
+            .same_site(cookie::SameSite::Lax)
+            .max_age(cookie::time::Duration::seconds(SESSION_TTL_SECS))
+            .build()
+    }
+
+    /// A `Set-Cookie` that clears the session (for logout).
+    pub fn clearing_cookie() -> Cookie<'static> {
+        Cookie::build((SESSION_COOKIE, ""))
+            .path("/")
+            .http_only(true)
+            .same_site(cookie::SameSite::Lax)
+            .expires(cookie::time::OffsetDateTime::UNIX_EPOCH)
+            .build()
+    }
+}
+
+/// Reads a named cookie's value from the request's `Cookie` header.
+pub fn read_cookie(parts: &Parts, name: &str) -> Option<String> {
+    let header = parts.headers.get(COOKIE)?.to_str().ok()?;
+    Cookie::split_parse(header.to_owned())
+        .filter_map(Result::ok)
+        .find(|c| c.name() == name)
+        .map(|c| c.value().to_owned())
+}
+
+/// Extractor for a valid session. Rejects (redirect to `/login`) when the cookie
+/// is missing, tampered, or expired.
+#[async_trait::async_trait]
+impl FromRequestParts<AppState> for Session {
+    type Rejection = Redirect;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let raw = read_cookie(parts, SESSION_COOKIE).ok_or_else(|| Redirect::to("/login"))?;
+        let session: Session = state
+            .config
+            .secret_key
+            .verify(&raw)
+            .filter(Session::is_valid)
+            .ok_or_else(|| Redirect::to("/login"))?;
+        Ok(session)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sign_verify_round_trip() {
+        let key = SecretKey::random().unwrap();
+        let session = Session::new("42", "ferris");
+        let cookie = session.to_cookie(&key);
+        assert_eq!(cookie.name(), SESSION_COOKIE);
+
+        // A correctly-signed value verifies back to the same session.
+        let back: Session = key.verify(cookie.value()).expect("verify");
+        assert_eq!(back, session);
+        assert!(back.is_valid());
+
+        // A different key rejects it (tamper/forgery protection).
+        let other = SecretKey::random().unwrap();
+        assert!(other.verify::<Session>(cookie.value()).is_none());
+    }
+
+    #[test]
+    fn expired_session_is_invalid() {
+        let session = Session {
+            discord_user_id: "1".into(),
+            username: "x".into(),
+            expires: now_unix() - 1,
+        };
+        assert!(!session.is_valid());
+    }
+}
