@@ -17,10 +17,16 @@
 //! a `/api-info` route that reports whether the Percy client is wired. Real
 //! dashboard routes arrive when this graduates into its own repo (Phase 5+).
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use axum::{extract::State, response::Html, routing::get, Json, Router};
 use kls_web_core::Database;
+
+mod migrations;
 
 /// Shared application state. Kept intentionally tiny; it grows its own config,
 /// session store, and Percy wiring as the dashboard fills in — the point here is
@@ -53,16 +59,41 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Opens the kernel database and wires an optional Percy client from the
-/// environment. The dashboard will own its own `dashboard.db` (Phase 6); the
-/// skeleton uses an in-memory database purely to prove the kernel is usable.
+/// Returns (and creates) the path to the dashboard's own database,
+/// `<data>/percy-dashboard/dashboard.db`. Overridable with `DASHBOARD_DB` (set it
+/// to `:memory:` for an ephemeral database).
+fn database_path() -> anyhow::Result<PathBuf> {
+    use anyhow::Context;
+
+    if let Ok(explicit) = std::env::var("DASHBOARD_DB") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let mut path = dirs::data_dir().context("could not find a data directory for the current user")?;
+    path.push("percy-dashboard");
+    std::fs::create_dir_all(&path).context("could not create the dashboard data directory")?;
+    path.push("dashboard.db");
+    Ok(path)
+}
+
+/// Builds application state against the dashboard's own on-disk database.
 async fn build_state() -> anyhow::Result<AppState> {
-    // A single connection is plenty for the skeleton's in-memory health DB, and
-    // keeps the worker-thread footprint minimal (the default pool opens 10). The
-    // real dashboard will size its own pool when it owns a persistent file DB.
-    let db = Database::file(":memory:").connections(1).open().await?;
-    // Prove the kernel round-trips: a trivial schema + query.
-    db.execute_batch("CREATE TABLE health(checked_at TEXT NOT NULL DEFAULT (datetime('now')));")
+    build_state_with(&database_path()?).await
+}
+
+/// Opens `dashboard.db` at `path`, applying the embedded migrations on every
+/// connection via the shared runner, and wires an optional Percy client from the
+/// environment. Split out so tests can drive a hermetic `:memory:` database.
+async fn build_state_with(path: &Path) -> anyhow::Result<AppState> {
+    // A single connection: the dashboard's data footprint is light, and it
+    // sidesteps a cold-start race in the shared pool — opening N>1 connections
+    // concurrently on a brand-new file has them all race to switch the journal to
+    // WAL, and the losers fail with "database is locked" (busy_timeout doesn't
+    // cover a journal-mode change). One connection has no such race. `with_init`
+    // applies the migration set before the connection is handed out.
+    let db = Database::file(path)
+        .connections(1)
+        .with_init(migrations::migrate)
+        .open()
         .await?;
 
     let percy = match std::env::var("PERCY_API_URL").ok().filter(|s| !s.is_empty()) {
@@ -135,18 +166,32 @@ async fn shutdown_signal() {
 mod tests {
     use super::*;
 
+    /// A hermetic in-memory state for tests — never touches the real
+    /// `dashboard.db` on disk.
+    async fn test_state() -> AppState {
+        build_state_with(Path::new(":memory:")).await.expect("build state")
+    }
+
     /// The router must compose without panicking (route/state conflicts).
     #[tokio::test]
     async fn router_builds() {
-        let state = build_state().await.expect("build state");
-        let _ = build_router(state);
+        let _ = build_router(test_state().await);
     }
 
-    /// The kernel database is live and answering queries through shared state.
+    /// The database is live and its migrated schema is present through shared state.
     #[tokio::test]
     async fn health_state_is_live() {
-        let state = build_state().await.expect("build state");
+        let state = test_state().await;
         assert!(state.db.execute_batch("SELECT 1;").await.is_ok());
+        // The migration runner applied the dashboard-owned schema.
+        assert!(
+            state
+                .db
+                .execute_batch("SELECT slug FROM percy_leaderboard_vanity LIMIT 0;")
+                .await
+                .is_ok(),
+            "migrated schema not present"
+        );
         assert!(state.percy.is_none(), "no Percy client without PERCY_API_URL");
     }
 }

@@ -18,6 +18,7 @@ Its only hard runtime dependency is Percy's internal API, and even that is optio
 | Env var | Purpose |
 |---------|---------|
 | `DASHBOARD_PORT` | Listen port (default `8091`). |
+| `DASHBOARD_DB` | Path to the dashboard's SQLite database. Default `<data>/percy-dashboard/dashboard.db`; set to `:memory:` for an ephemeral database. Migrations from `sql/` are applied on startup. |
 | `PERCY_API_URL` | Base URL of Percy's internal API. Unset → the dashboard runs without a Percy connection. |
 | `PERCY_API_TOKEN` | Bearer token for Percy's internal API. |
 
