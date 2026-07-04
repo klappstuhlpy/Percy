@@ -120,6 +120,7 @@ fn build_router(state: AppState) -> Router {
         .route("/dashboard/guild/:guild_id/members", get(guilds::guild_members))
         .route("/dashboard/guild/:guild_id/stats", get(pages::guild_stats))
         .route("/dashboard/guild/:guild_id/commands", get(pages::guild_commands))
+        .route("/dashboard/guild/:guild_id/leveling", get(pages::guild_leveling))
         .route("/dashboard/guild/:guild_id/economy", get(pages::guild_economy))
         .route("/dashboard/guild/:guild_id/music", get(pages::guild_music))
         .route(

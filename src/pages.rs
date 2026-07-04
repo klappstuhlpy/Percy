@@ -15,13 +15,177 @@ use crate::{
     guilds::gate_and_load_guild,
     session::Session,
     templates::{
-        AutorespondersTemplate, ComicsTemplate, CommandsTemplate, EconomyTemplate, EmojiStatsTemplate,
-        GiveawaysTemplate, HighlightsTemplate, MusicTemplate, PollsTemplate, StatsTemplate, TagsTemplate,
-        TempChannelsTemplate,
+        AutorespondersTemplate, BlacklistRow, ComicsTemplate, CommandsTemplate, EconomyTemplate, EmojiStatsTemplate,
+        GiveawaysTemplate, HighlightsTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow, MusicTemplate,
+        PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate,
     },
     view::Viewer,
     AppState,
 };
+
+/// Discord role colour (`u32`) to a CSS hex string; the uncoloured default maps
+/// to Discord's neutral grey. Copied from the monolith.
+fn color_hex(color: u32) -> String {
+    if color == 0 {
+        "#99aab5".to_string()
+    } else {
+        format!("#{color:06x}")
+    }
+}
+
+/// `GET /dashboard/guild/{id}/leveling`
+pub async fn guild_leveling(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    // Fan out the five remaining independent reads concurrently.
+    let (config, leaderboard, xp_history, roles, channels) = tokio::join!(
+        percy.get_leveling_config(guild_id),
+        percy.get_leveling_leaderboard(guild_id, 25),
+        percy.get_leveling_xp_history(guild_id, 30),
+        percy.get_guild_roles(guild_id),
+        percy.get_guild_channels(guild_id),
+    );
+
+    let config = config.unwrap_or_default();
+    let leaderboard = leaderboard.unwrap_or(LeaderboardResponse {
+        entries: Vec::new(),
+        total: 0,
+    });
+
+    // Daily cumulative-XP snapshots for the chart; serialize for the inline uPlot script.
+    let xp_history = xp_history.unwrap_or_default();
+    let xp_history_json = serde_json::to_string(&xp_history.points).unwrap_or_else(|_| "[]".to_string());
+
+    let roles = roles.unwrap_or_default();
+    let channels = channels.unwrap_or_default();
+
+    // Resolve Discord IDs to display names from the fetched role/channel lists.
+    let role_name = |id: &str| -> String {
+        roles
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.name.clone())
+            .unwrap_or_else(|| format!("Role {id}"))
+    };
+    let channel_name = |id: &str| -> String {
+        channels
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| format!("Channel {id}"))
+    };
+
+    // Level-reward roles, sorted by their level threshold (resolve color too).
+    let mut level_roles: Vec<LevelRoleRow> = config
+        .level_roles
+        .iter()
+        .map(|(rid, lvl)| {
+            let role = roles.iter().find(|r| &r.id == rid);
+            LevelRoleRow {
+                role_id: rid.clone(),
+                role_name: role.map(|r| r.name.clone()).unwrap_or_else(|| format!("Role {rid}")),
+                color_hex: role
+                    .map(|r| color_hex(r.color))
+                    .unwrap_or_else(|| "#99aab5".to_string()),
+                level: *lvl,
+            }
+        })
+        .collect();
+    level_roles.sort_by_key(|r| r.level);
+
+    // XP multipliers for roles and channels, sorted by display name.
+    let mut multiplier_roles: Vec<MultiplierRow> = config
+        .multiplier_roles
+        .iter()
+        .map(|(rid, m)| MultiplierRow {
+            id: rid.clone(),
+            name: role_name(rid),
+            multiplier: *m,
+        })
+        .collect();
+    multiplier_roles.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut multiplier_channels: Vec<MultiplierRow> = config
+        .multiplier_channels
+        .iter()
+        .map(|(cid, m)| MultiplierRow {
+            id: cid.clone(),
+            name: channel_name(cid),
+            multiplier: *m,
+        })
+        .collect();
+    multiplier_channels.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Blacklists (roles/channels resolve to names; users only have an ID here).
+    let blacklisted_roles: Vec<BlacklistRow> = config
+        .blacklisted_roles
+        .iter()
+        .map(|id| BlacklistRow {
+            id: id.to_string(),
+            name: role_name(&id.to_string()),
+        })
+        .collect();
+    let blacklisted_channels: Vec<BlacklistRow> = config
+        .blacklisted_channels
+        .iter()
+        .map(|id| BlacklistRow {
+            id: id.to_string(),
+            name: channel_name(&id.to_string()),
+        })
+        .collect();
+    let blacklisted_users: Vec<BlacklistRow> = config
+        .blacklisted_users
+        .iter()
+        .map(|id| BlacklistRow {
+            id: id.to_string(),
+            name: format!("User {id}"),
+        })
+        .collect();
+
+    // Custom per-level messages, sorted by numeric level.
+    let mut special_messages: Vec<SpecialMsgRow> = config
+        .special_level_up_messages
+        .iter()
+        .map(|(lvl, msg)| SpecialMsgRow {
+            level: lvl.clone(),
+            message: msg.clone(),
+        })
+        .collect();
+    special_messages.sort_by_key(|r| r.level.parse::<i64>().unwrap_or(0));
+
+    // Text channels for the level-up message destination; all channels for multiplier/blacklist pickers.
+    let text_channels: Vec<Channel> = channels
+        .iter()
+        .filter(|c| c.channel_type == "text" || c.channel_type == "news")
+        .cloned()
+        .collect();
+    let all_channels = channels.clone();
+
+    LevelingTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "leveling",
+        page_title: "Leveling",
+        config,
+        leaderboard,
+        roles,
+        text_channels,
+        all_channels,
+        level_roles,
+        multiplier_roles,
+        multiplier_channels,
+        blacklisted_roles,
+        blacklisted_channels,
+        blacklisted_users,
+        special_messages,
+        xp_history_json,
+    }
+    .into_response()
+}
 
 /// `GET /dashboard/guild/{id}/stats`
 pub async fn guild_stats(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
