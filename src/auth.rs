@@ -6,6 +6,7 @@
 //! mints a signed [`Session`] cookie, `/logout` clears it. Admin guilds captured
 //! from the OAuth response are cached in `dashboard.db` for the guild list.
 
+use anyhow::Context;
 use axum::{
     extract::{Query, State},
     http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
@@ -13,7 +14,7 @@ use axum::{
 };
 use cookie::Cookie;
 use kls_web_core::key::SecretKey;
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
 use crate::{
     config::Config,
@@ -23,7 +24,10 @@ use crate::{
 };
 
 const DISCORD_AUTHORIZE: &str = "https://discord.com/oauth2/authorize";
-const DISCORD_API: &str = "https://discord.com/api";
+/// Pin the API version explicitly. Unversioned `/api` requests route to an old
+/// default version where `/users/@me/guilds` returns `permissions` as a *number*
+/// rather than the modern string, which breaks deserialization.
+const DISCORD_API: &str = "https://discord.com/api/v10";
 const OAUTH_SCOPES: &str = "identify guilds";
 /// Short-lived cookie holding the CSRF `state` value between `/login` and callback.
 const OAUTH_STATE_COOKIE: &str = "oauth_state";
@@ -127,13 +131,30 @@ pub async fn callback(State(app): State<AppState>, headers: HeaderMap, Query(que
     }
 }
 
+/// Reads a Discord API response, turning both HTTP errors and decode failures
+/// into descriptive errors (Discord's error bodies and serde's type-mismatch
+/// messages are far more useful than reqwest's opaque "error decoding response
+/// body"). The success body is never echoed, so the token is not logged.
+async fn read_json<T: DeserializeOwned>(resp: reqwest::Response, what: &str) -> anyhow::Result<T> {
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .with_context(|| format!("reading {what} response body"))?;
+    if !status.is_success() {
+        let snippet: String = body.chars().take(300).collect();
+        anyhow::bail!("{what} returned HTTP {status}: {snippet}");
+    }
+    serde_json::from_str(&body).map_err(|e| anyhow::anyhow!("{what}: could not decode response ({e})"))
+}
+
 /// Runs the token exchange + profile/guild fetch and returns a fresh session.
 async fn complete_login(app: &AppState, code: &str) -> anyhow::Result<Session> {
     let http = reqwest::Client::new();
     let redirect = app.config.discord_redirect_uri();
 
     // 1. Exchange the authorization code for an access token.
-    let token: TokenResponse = http
+    let resp = http
         .post(format!("{DISCORD_API}/oauth2/token"))
         .form(&[
             ("client_id", app.config.discord.client_id.as_str()),
@@ -143,29 +164,23 @@ async fn complete_login(app: &AppState, code: &str) -> anyhow::Result<Session> {
             ("redirect_uri", redirect.as_str()),
         ])
         .send()
-        .await?
-        .error_for_status()?
-        .json()
         .await?;
+    let token: TokenResponse = read_json(resp, "token exchange").await?;
 
     // 2. Identity + guilds.
-    let user: DiscordUser = http
+    let resp = http
         .get(format!("{DISCORD_API}/users/@me"))
         .bearer_auth(&token.access_token)
         .send()
-        .await?
-        .error_for_status()?
-        .json()
         .await?;
+    let user: DiscordUser = read_json(resp, "identity (/users/@me)").await?;
 
-    let guilds: Vec<DiscordGuild> = http
+    let resp = http
         .get(format!("{DISCORD_API}/users/@me/guilds"))
         .bearer_auth(&token.access_token)
         .send()
-        .await?
-        .error_for_status()?
-        .json()
         .await?;
+    let guilds: Vec<DiscordGuild> = read_json(resp, "guilds (/users/@me/guilds)").await?;
 
     // 3. Cache the guilds the user can administrate.
     let admin: Vec<AdminGuild> = guilds
@@ -203,15 +218,27 @@ struct DiscordGuild {
     icon: Option<String>,
     #[serde(default)]
     owner: bool,
-    /// Bitfield string, e.g. "2147483647".
-    #[serde(default)]
-    permissions: String,
+    /// The member's permission bitfield in the guild. Modern Discord API versions
+    /// return this as a string (`"2147483647"`); older ones as a number. Parsed
+    /// tolerantly so either shape works.
+    #[serde(default, deserialize_with = "de_permissions")]
+    permissions: u64,
 }
 
 impl DiscordGuild {
     fn is_admin(&self) -> bool {
-        self.owner || (self.permissions.parse::<u64>().unwrap_or(0) & MANAGE_GUILD != 0)
+        self.owner || (self.permissions & MANAGE_GUILD != 0)
     }
+}
+
+/// Deserializes a Discord permission bitfield that may arrive as a string, a
+/// number, or be absent — any unexpected shape yields `0` (no permissions).
+fn de_permissions<'de, D: Deserializer<'de>>(de: D) -> Result<u64, D::Error> {
+    Ok(match serde_json::Value::deserialize(de)? {
+        serde_json::Value::String(s) => s.parse().unwrap_or(0),
+        serde_json::Value::Number(n) => n.as_u64().unwrap_or(0),
+        _ => 0,
+    })
 }
 
 fn bad(msg: &'static str) -> Response {
@@ -270,24 +297,39 @@ mod tests {
             name: "a".into(),
             icon: None,
             owner: true,
-            permissions: "0".into(),
+            permissions: 0,
         };
         let manager = DiscordGuild {
             id: "2".into(),
             name: "b".into(),
             icon: None,
             owner: false,
-            permissions: "32".into(), // MANAGE_GUILD
+            permissions: 32, // MANAGE_GUILD
         };
         let member = DiscordGuild {
             id: "3".into(),
             name: "c".into(),
             icon: None,
             owner: false,
-            permissions: "1024".into(), // some other bit
+            permissions: 1024, // some other bit
         };
         assert!(owner.is_admin());
         assert!(manager.is_admin());
         assert!(!member.is_admin());
+    }
+
+    #[test]
+    fn permissions_deserialize_from_string_or_number() {
+        // Modern API: string bitfield.
+        let g: DiscordGuild =
+            serde_json::from_str(r#"{"id":"1","name":"x","icon":null,"owner":false,"permissions":"32"}"#).unwrap();
+        assert!(g.is_admin());
+        // Older API: numeric bitfield.
+        let g: DiscordGuild =
+            serde_json::from_str(r#"{"id":"1","name":"x","icon":null,"owner":false,"permissions":32}"#).unwrap();
+        assert!(g.is_admin());
+        // Absent → no permissions.
+        let g: DiscordGuild = serde_json::from_str(r#"{"id":"1","name":"x","icon":null,"owner":false}"#).unwrap();
+        assert!(!g.is_admin());
     }
 }
