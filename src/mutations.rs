@@ -22,19 +22,27 @@ use crate::{
     AppState,
 };
 
+/// Maps a Percy `Result<(), _>` to the dashboard JS's `{ok}` / `{ok,error}` JSON.
+pub(crate) fn ok_or_err(result: Result<(), percy_client::PercyError>) -> Response {
+    match result {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+    }
+}
+
 /// Gate for the JSON API mutations: requires Percy configured + a manage-access
 /// session, returning the client or an early-return JSON error (matching the
-/// monolith's `{"error": …}` shape the dashboard JS expects).
-async fn gate_json<'a>(
+/// monolith's `{"ok": false, "error": …}` shape the dashboard JS expects).
+pub(crate) async fn gate_json<'a>(
     app: &'a AppState,
     session: &Session,
     guild_id: u64,
 ) -> Result<&'a percy_client::PercyClient, Response> {
     let Some(percy) = &app.percy else {
-        return Err(Json(serde_json::json!({"error": "not configured"})).into_response());
+        return Err(Json(serde_json::json!({"ok": false, "error": "not configured"})).into_response());
     };
     if !user_can_manage(app, &session.discord_user_id, guild_id).await {
-        return Err(Json(serde_json::json!({"error": "access denied"})).into_response());
+        return Err(Json(serde_json::json!({"ok": false, "error": "access denied"})).into_response());
     }
     Ok(percy)
 }

@@ -20,7 +20,7 @@ use std::{
 use askama::Template;
 use axum::{
     extract::State,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use kls_web_core::Database;
@@ -29,6 +29,7 @@ use crate::config::Config;
 
 mod auth;
 mod config;
+mod crud;
 mod db;
 mod forms;
 mod guilds;
@@ -133,10 +134,57 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/autoresponders",
             get(pages::guild_autoresponders),
         )
-        .route("/dashboard/guild/:guild_id/comics", get(pages::guild_comics))
+        .route(
+            "/dashboard/guild/:guild_id/comics",
+            get(pages::guild_comics).post(crud::guild_comic_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/comics/:brand",
+            patch(crud::guild_comic_patch).delete(crud::guild_comic_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/comics/:brand/push",
+            post(crud::guild_comics_push),
+        )
         .route(
             "/dashboard/guild/:guild_id/temp-channels",
-            get(pages::guild_temp_channels),
+            get(pages::guild_temp_channels).post(crud::guild_temp_channel_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/temp-channels/:channel_id",
+            patch(crud::guild_temp_channel_patch).delete(crud::guild_temp_channel_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/autoresponders/:trigger",
+            patch(crud::guild_autoresponder_patch).delete(crud::guild_autoresponder_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/economy/items",
+            post(crud::guild_economy_items_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/economy/items/:name",
+            delete(crud::guild_economy_item_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/economy/settings",
+            post(crud::guild_economy_settings_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/economy/lottery",
+            post(crud::guild_economy_lottery_create).delete(crud::guild_economy_lottery_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/economy/balances/:user_id",
+            patch(crud::guild_economy_balance_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/status-feed",
+            post(crud::guild_status_feed_subscribe).delete(crud::guild_status_feed_unsubscribe),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/highlights/:user_id",
+            delete(crud::guild_highlight_delete),
         )
         .route("/dashboard/guild/:guild_id/polls", get(pages::guild_polls))
         .route("/dashboard/guild/:guild_id/giveaways", get(pages::guild_giveaways))
