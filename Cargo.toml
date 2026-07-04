@@ -17,6 +17,9 @@ askama_axum = "0.4.0"
 axum = "0.7.4"
 cookie = { version = "0.18.0", features = ["percent-encode"] }
 dirs = "5.0.1"
+# Renders the public legal docs (fetched as CommonMark from the canonical GitHub
+# repo) and the local command-syntax guide to HTML.
+pulldown-cmark = "0.10"
 kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }
 kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }
 percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }

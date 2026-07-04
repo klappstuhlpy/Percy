@@ -39,6 +39,7 @@ mod moderation;
 mod mutations;
 mod pages;
 mod session;
+mod site;
 mod templates;
 mod userpages;
 mod view;
@@ -421,6 +422,13 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/audit-log-flags",
             patch(mutations::guild_audit_log_flags),
         )
+        // Public marketing / site pages.
+        .route("/commands", get(site::percy_commands))
+        .route("/changelog", get(site::percy_changelog))
+        .route("/support", get(site::percy_support_server))
+        .route("/privacy-policy", get(site::percy_privacy))
+        .route("/terms-of-service", get(site::percy_terms))
+        .route("/dashboard/bot-version", get(site::percy_bot_version))
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
