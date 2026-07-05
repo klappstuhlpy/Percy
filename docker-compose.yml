@@ -1,0 +1,36 @@
+services:
+  percy-dashboard:
+    container_name: percy-dashboard
+    build:
+      context: .
+      # Forward the host SSH agent into the build so cargo can fetch the private
+      # klappstuhl_me-shared git dependency over SSH. The invoking shell's agent
+      # must hold a key with read access to klappstuhlpy/klappstuhl_me-shared.
+      # Requires BuildKit (default on modern Docker). If you have no agent, pass
+      # the key file directly:  docker compose build --ssh default=$HOME/.ssh/id_ed25519
+      ssh:
+        - default
+    image: percy-dashboard:latest
+    restart: unless-stopped
+
+    # Host networking so the dashboard can reach Percy's internal API on the host
+    # at 127.0.0.1:8090, and binds 127.0.0.1:8091 on the host (front it with a
+    # reverse proxy for the percy.<domain> subdomain). If Percy runs elsewhere,
+    # switch to a bridge network + `ports: ["8091:8091"]` and set PERCY_API_URL
+    # to Percy's reachable address (and config.bind to 0.0.0.0:8091).
+    network_mode: host
+
+    environment:
+      # Percy's internal API (the dashboard's one hard runtime dependency).
+      # These override blank config.json fields; set them here or in config.json.
+      - PERCY_API_URL=http://127.0.0.1:8090
+      # - PERCY_API_TOKEN=<same as Percy's INTERNAL_API_TOKEN>
+      # Optional: klappstuhl.me API token (images:read) for upload virus scanning.
+      # - PERCY_SCAN_TOKEN=<token>
+
+    volumes:
+      # Persistent data: the auto-created config.json + dashboard.db (SQLite).
+      # On first run the app writes a default config with a generated signing key
+      # to ./data/config/percy-dashboard/config.json — fill in the Discord OAuth
+      # credentials (and, for SSO, the shared sso_secret) there, then restart.
+      - ./data:/data
