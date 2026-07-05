@@ -150,7 +150,10 @@ class BaseHTTPClient:
 
     def _build_error(self, response: aiohttp.ClientResponse, payload: Any) -> HTTPClientError:
         """Construct the exception raised for a non-2xx response."""
-        return HTTPClientError(response, payload)
+        try:
+            return HTTPClientError(response, payload)
+        except Exception:
+            return HTTPClientError(response, {"l": payload})
 
     # -- request plumbing -----------------------------------------------
 
