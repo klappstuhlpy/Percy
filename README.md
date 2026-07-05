@@ -166,14 +166,47 @@ cargo fmt && cargo clippy     # format (width 120) + lint (kept clean)
 ```
 
 - **Private dependency.** The `klappstuhl_me-shared` crates are pulled over SSH; you need an SSH key with read access to that repo. `.cargo/config.toml` sets `net.git-fetch-with-cli = true` so SSH auth is reliable (especially on Windows). CI/Docker must forward an SSH key (`--mount=type=ssh`).
-- **Pinned versions.** The shared crates are pinned by tag (currently `v0.1.2`); bump in lock-step with klappstuhl.me when cutting a new shared release. `Cargo.lock` is committed.
+- **Pinned versions.** The shared crates are pinned by tag (currently `v0.1.3`); bump in lock-step with klappstuhl.me when cutting a new shared release. `Cargo.lock` is committed.
 - **Data cutover.** Migrating the two owned tables from the old monolith DB is a separate, gated step — see `docs/DATA_IMPORT_RUNBOOK.md`.
+
+---
+
+## Docker
+
+The repo ships a multi-stage `Dockerfile` and a `docker-compose.yml` (host networking, so the container reaches Percy's internal API at `127.0.0.1:8090` and binds `127.0.0.1:8091`).
+
+```bash
+docker compose up --build -d        # build + start
+# config + dashboard.db persist under ./data; on first run it writes a default
+# config.json to ./data/config/percy-dashboard/ — fill in the Discord OAuth
+# creds (and, for SSO, the shared sso_secret), then `docker compose restart`.
+```
+
+#### Build prerequisite — SSH access to the private shared crate
+
+The image build fetches the private [`klappstuhl_me-shared`](https://github.com/klappstuhlpy/klappstuhl_me-shared) dependency over SSH, so the build needs an SSH key with **read access to that repo** forwarded in. BuildKit forwards an **ssh-agent socket** — a key sitting in `~/.ssh` is not enough on its own; without an agent you get `invalid empty ssh agent socket: make sure SSH_AUTH_SOCK is set`.
+
+```bash
+# Confirm your key can reach the private repo (uses your normal ~/.ssh key):
+git ls-remote git@github.com:klappstuhlpy/klappstuhl_me-shared.git >/dev/null && echo OK
+
+# Option A — load the key into an agent, then build in the SAME shell:
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519           # your key with read access to klappstuhl_me-shared
+docker compose up --build -d
+
+# Option B — no agent; hand BuildKit the key file directly:
+docker compose build --ssh default=$HOME/.ssh/id_ed25519
+docker compose up -d
+```
+
+Building with `sudo`? Use `sudo -E …` so `SSH_AUTH_SOCK` survives, or run as a `docker`-group user. A passphrase-protected key must use Option A. Front the dashboard with a reverse proxy for the `percy.<domain>` subdomain (klappstuhl.me's own Proxy admin page can map it to `127.0.0.1:8091`).
 
 ---
 
 ## Deployment notes
 
-- Ship `static/` and `templates/` alongside the binary (both are resolved relative to the working directory).
+- Ship `static/` alongside the binary (it's served relative to the working directory; Askama templates and the SQL migrations are compiled into the binary). The Docker image already copies it in.
 - Persist `dashboard.db` (or point `DASHBOARD_DB` at a persistent volume).
 - Keep `secret_key` stable across restarts, or every session is invalidated.
 - Reverse-proxy `percy.<your-domain>` → the dashboard's `bind` address; set `base_url` to the public URL.
