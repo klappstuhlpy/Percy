@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, io
 
 import discord
 from discord.utils import MISSING
@@ -261,6 +261,9 @@ class Poll(BaseRecord, table="polls", pk="id"):
         if image := self.kwargs.get("image"):
             container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(image)))
 
+        if image_bytes := self.kwargs.get("image_bytes"):
+            container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(discord.File(io.BytesIO(image_bytes), filename="attachment://image.png"))))
+
         container.add_item(discord.ui.Separator())
         extras = [f"Total Votes: **{self.votes}**"]
         if self.expires:
@@ -310,7 +313,8 @@ class Poll(BaseRecord, table="polls", pk="id"):
         question: str | None = MISSING,
         description: str | None = MISSING,
         thread: list[int | str] | None = MISSING,
-        image_url: str | None = MISSING,
+        image: str | None = MISSING,
+        image_bytes: io.BytesIO | None = MISSING,
         color: str | None = MISSING,
         options: list[VoteOption] | None = MISSING,
         running: bool | None = MISSING,
@@ -328,8 +332,10 @@ class Poll(BaseRecord, table="polls", pk="id"):
             The description to update the poll with.
         thread: List[int, str]
             The thread to update the poll with.
-        image_url: str | None
+        image: str | None
             The image URL to update the poll with.
+        io.BytesIO | None
+            The image bytes to update the poll with. Will be prioritized if "image" is also supplied!
         color: str | None
             The color to update the poll with.
         options: List[Tuple[Dict[str, Any] | None, EditType, int | None]]
@@ -352,8 +358,10 @@ class Poll(BaseRecord, table="polls", pk="id"):
             form["description"] = description
         if thread is not MISSING:
             form["thread"] = thread
-        if image_url is not MISSING:
-            form["image_url"] = image_url
+        if image is not MISSING and image_bytes is MISSING:
+            form["image"] = image
+        if image_bytes is not MISSING:
+            form["image_bytes"] = image_bytes
         if running is not MISSING:
             form["running"] = running
         if color is not MISSING:

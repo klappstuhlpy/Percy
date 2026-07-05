@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import io
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -32,6 +34,7 @@ from app.core.models import (
     group,
 )
 from app.core.pagination import BasePaginator, LinePaginator
+from app.rendering import resize_to_limit
 from app.services import EventExtractor
 from app.utils import cache, fuzzy, get_asset_url, get_shortened_string, helpers, pluralize, timetools
 
@@ -252,6 +255,7 @@ class Polls(Cog):
         description: str | None = None,
         color: str | None = None,
         image_url: str | None = None,
+        image_bytes: tuple[bytes, str] | None = None,
         thread_question: str | None = None,
     ) -> Poll:
         """Creates a poll initiated from the web dashboard.
@@ -266,6 +270,10 @@ class Polls(Cog):
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
 
         message = await channel.send(content="*Preparing Poll...*")
+
+        image_bytes_resolved: io.BytesIO | None = None
+        if image_bytes:
+            image_bytes_resolved: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(image_bytes[0]))
 
         if thread_question:
             # Discord caps thread names at 100 characters.
@@ -289,6 +297,7 @@ class Polls(Cog):
             thread=thread_question or None,
             with_reason=False,
             image=image_url,
+            image_bytes=image_bytes_resolved.getvalue() if image_bytes_resolved else None,
             color=color or str(helpers.Colour.white()),
             votes=0,
             index=new_index,
@@ -304,8 +313,12 @@ class Polls(Cog):
             timezone=zone or "UTC",
         )
 
+        edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
+        if image_bytes:
+            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes[0]), filename="attachment://image.png")]
+
         # Switch the placeholder message over to its Components V2 layout.
-        await message.edit(content=None, embed=None, view=create_view(poll))
+        await message.edit(**edit_kwargs)
         return poll
 
     async def get_guild_poll(self, guild_id: int, poll_id: int, /) -> Poll | None:
@@ -421,7 +434,6 @@ class Polls(Cog):
         else:
             channel = flags.channel or config.poll_channel
 
-        image_url = flags.image_url or (flags.image.proxy_url if flags.image else None)
         options = list(
             filter(
                 lambda x: x is not None,
@@ -434,6 +446,14 @@ class Polls(Cog):
             return
 
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
+
+        image_url = flags.image_url
+
+        image_bytes_resolved: io.BytesIO | None = None
+        if flags.image:
+            # if the user provided an image, we ignore the image_url and use the attachment instead
+            image_url = None
+            image_bytes_resolved: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(await flags.image.read()))
 
         message = await channel.send(content="*Preparing Poll...*")
         ping_message = None
@@ -468,6 +488,7 @@ class Polls(Cog):
             thread_question=flags.thread_question,
             with_reason=flags.with_reason,
             image=image_url,
+            image_bytes=image_bytes_resolved.getvalue() if image_bytes_resolved else None,
             color=str(flags.color),
             votes=0,
             index=new_index,
@@ -485,8 +506,12 @@ class Polls(Cog):
 
         await ctx.send_success(f"Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}")
 
+        edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
+        if image_bytes_resolved:
+            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes_resolved.getvalue()), filename="attachment://image.png")]
+
         # Switch the placeholder message over to its Components V2 layout.
-        await message.edit(content=None, embed=None, view=create_view(poll))
+        await message.edit(**edit_kwargs)
 
         if flags.ping:
             assert ctx.guild.me is not None
@@ -569,21 +594,36 @@ class Polls(Cog):
         # Pull an image URL straight from the text (more reliable than a small model).
         url_match = re.search(r"https?://\S+", description)
         image_url = url_match.group(0).rstrip(">),.") if url_match else None
-
-        poll = await self.create_poll_from_dashboard(
-            ctx.guild, channel, author_id=ctx.author.id,
-            question=request.question, options=request.options, expires=when.dt,
-            image_url=image_url, thread_question=request.thread_question,
-        )
-        extras = []
         if image_url:
+            image_url = await (ValidURL()).convert(ctx, image_url)
+
+        to_options: dict[str, str] = {f"opt_{i}": content for i, content in enumerate(request.options, start=1)}
+
+        await ctx.invoke(
+            self.polls_create,
+            when=when,
+            question=request.question,
+            flags=MockFlags(
+                description=request.description,
+                color=await (ColorTransformer()).convert(ctx, request.color),
+                channel=channel,
+                thread_question=request.thread_question,
+                ping=request.ping,
+                with_reason=request.with_reason,
+                image_url=image_url,
+                image=ctx.message.attachments[0] if ctx.message.attachments else None,
+                **to_options
+            )
+        )
+
+        extras = []
+        if image_url or ctx.message.attachments:
             extras.append("an image")
         if request.thread_question:
             extras.append("a discussion thread")
         extra_note = f" (with {' and '.join(extras)})" if extras else ""
         await ctx.send_success(
-            f"Created poll [`{poll.id}`] in {channel.mention} with {len(request.options)} options{extra_note} — "
-            f"ends {discord.utils.format_dt(when.dt, 'R')}."
+            f"... with {len(request.options)} options{extra_note} — ends {discord.utils.format_dt(when.dt, 'R')}."
         )
 
     @polls.command(
@@ -674,9 +714,12 @@ class Polls(Cog):
             else:
                 form["description"] = flags.description
 
-        if flags.image or flags.image_url:
-            image_url = flags.image_url or getattr(flags.image, "proxy_url", None)
-            form["image_url"] = image_url
+        if flags.image:
+            form["image_bytes"] = (await asyncio.to_thread(resize_to_limit, io.BytesIO(await flags.image.read()))).getvalue()
+
+        # file goes before url, only ever save one image to db to avoid confusion!
+        if flags.image_url and not flags.image:
+            form["image"] = flags.image_url
 
         if flags.color:
             form["color"] = str(flags.color)
@@ -717,7 +760,7 @@ class Polls(Cog):
 
         options: list[VoteOption] = poll.options.copy()
         for index, content in enumerate(
-            [flags.opt_1, flags.opt_2, flags.opt_3, flags.opt_4, flags.opt_5, flags.opt_6, flags.opt_7, flags.opt_8]
+                [flags.opt_1, flags.opt_2, flags.opt_3, flags.opt_4, flags.opt_5, flags.opt_6, flags.opt_7, flags.opt_8]
         ):
             if content:
                 is_option = index + 1 <= len(options)
@@ -733,7 +776,12 @@ class Polls(Cog):
         form["options"] = options
 
         poll = await poll.edit(**form)
-        await poll.message.edit(view=create_view(poll))
+
+        edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
+        if image_bytes := poll.kwargs.get("image_bytes"):
+            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes), filename="attachment://image.png")]
+
+        await poll.message.edit(**edit_kwargs)
         await ctx.send_success(f"Poll [`{poll.id}`] edited successfully.", ephemeral=True)
 
     @polls_edit.define_app_command()
