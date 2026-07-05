@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import io
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, TypedDict, io
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import discord
 from discord.utils import MISSING
@@ -334,7 +335,7 @@ class Poll(BaseRecord, table="polls", pk="id"):
             The thread to update the poll with.
         image: str | None
             The image URL to update the poll with.
-        io.BytesIO | None
+        image_bytes: io.BytesIO | None
             The image bytes to update the poll with. Will be prioritized if "image" is also supplied!
         color: str | None
             The color to update the poll with.
