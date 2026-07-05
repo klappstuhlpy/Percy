@@ -257,6 +257,38 @@ fn read_cookie_from(headers: &HeaderMap, name: &str) -> Option<String> {
         .map(|c| c.value().to_owned())
 }
 
+/// Query parameters on the SSO handoff endpoint.
+#[derive(Deserialize)]
+pub struct HandoffQuery {
+    t: Option<String>,
+}
+
+/// `GET /auth/handoff` — accept a short-lived signed handoff from the klappstuhl.me
+/// main site and exchange it for a native dashboard session, so a user already
+/// logged in there arrives here already signed in.
+///
+/// Requires the shared `sso_secret` to be configured (the same value on both
+/// apps). On a missing, tampered, or expired token — or when SSO isn't configured
+/// — it falls back to the dashboard's own Discord login. Note: unlike the OAuth
+/// callback this can't populate the "add Percy" admin-guild cache (that needs the
+/// Discord guild list), so those cards only appear after a full Discord login.
+pub async fn handoff(State(app): State<AppState>, Query(query): Query<HandoffQuery>) -> Response {
+    let Some(secret) = app.config.sso_secret.as_ref() else {
+        return Redirect::to("/login").into_response();
+    };
+    let Some(token) = query.t.filter(|t| !t.is_empty()) else {
+        return Redirect::to("/login").into_response();
+    };
+    let Some(vouch) = kls_web_core::sso::Handoff::verify(secret, &token) else {
+        return Redirect::to("/login").into_response();
+    };
+
+    let session = Session::new(vouch.discord_user_id, vouch.username);
+    let mut resp = Redirect::to("/dashboard").into_response();
+    append_cookie(resp.headers_mut(), &session.to_cookie(&app.config.secret_key).to_string());
+    resp
+}
+
 fn append_cookie(headers: &mut HeaderMap, cookie: &str) {
     if let Ok(value) = HeaderValue::from_str(cookie) {
         headers.append(SET_COOKIE, value);

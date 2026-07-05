@@ -457,6 +457,7 @@ fn build_router(state: AppState) -> Router {
         .route("/login", get(auth::login))
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
+        .route("/auth/handoff", get(auth::handoff))
         .route("/health", get(health))
         .route("/account/discord/avatar", get(auth::discord_avatar))
         .route("/api-info", get(api_info))

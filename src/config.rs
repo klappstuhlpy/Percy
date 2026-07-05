@@ -32,6 +32,12 @@ pub struct Config {
     /// Connection to Percy's internal API.
     #[serde(default)]
     pub percy: PercyConfig,
+    /// Optional shared key for the cross-app SSO handoff from the klappstuhl.me
+    /// main site. Set to the **same** value as the main site's `sso_secret` to let
+    /// a user already logged in there arrive here already signed in (via
+    /// `GET /auth/handoff`). Unset → only the dashboard's own Discord login works.
+    #[serde(default)]
+    pub sso_secret: Option<SecretKey>,
 }
 
 /// Discord OAuth2 application credentials (from the Discord developer portal).
@@ -107,6 +113,7 @@ impl Config {
             secret_key: SecretKey::random().context("could not generate a signing key")?,
             discord: DiscordConfig::default(),
             percy: PercyConfig::default(),
+            sso_secret: None,
         })
     }
 
@@ -186,6 +193,7 @@ impl Config {
                 scan_token: Some("test-scan-token".to_string()),
                 ..PercyConfig::default()
             },
+            sso_secret: None,
         }
     }
 }
