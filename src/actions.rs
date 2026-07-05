@@ -1,14 +1,14 @@
 //! Member, poll, giveaway, tag, leveling and music mutations / JSON endpoints —
 //! ported 1:1 from the monolith. Each gates on a manage-access session then
-//! forwards to Percy's internal API. Two monolith endpoints are intentionally not
-//! ported because they depend on klappstuhl.me-only infrastructure the standalone
-//! dashboard doesn't have: `guild_poll_image_upload` (the image gallery/host) and
-//! `guild_tags_import` (the ClamAV upload scanner).
+//! forwards to Percy's internal API. Poll banner upload was previously unported;
+//! it now hits Percy's `/polls/upload-image` endpoint which posts the image to
+//! Discord and returns the CDN URL. Tags import scans via the external klappstuhl.me
+//! scanner before forwarding parsed rows to Percy.
 
 use std::collections::HashMap;
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     Json,
@@ -20,6 +20,7 @@ use crate::{
     forms::json_or_redirect,
     guilds::user_can_manage,
     mutations::{gate_json, ok_or_err},
+    scan,
     session::Session,
     AppState,
 };
@@ -571,4 +572,154 @@ pub async fn guild_music_reset(State(app): State<AppState>, session: Session, Pa
         Err(response) => return response,
     };
     ok_or_err(percy.post_music_reset(guild_id).await)
+}
+
+// ── Poll image upload ───────────────────────────────────────────────────────
+
+/// `POST /dashboard/guild/:guild_id/polls/image` — accept a banner file from the
+/// dashboard user, scan it via the external klappstuhl.me API, then forward to Percy's
+/// internal API which posts the attachment to Discord and returns the CDN URL.
+///
+/// The frontend JS (`polls.js::uploadPollBanner`) sends a FormData with a single
+/// `file` field and expects `{ok: true, url: "https://cdn.discordapp.com/..."}` back.
+pub async fn guild_poll_image_upload(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    mut multipart: Multipart,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return Json(serde_json::json!({"ok": false, "error": "not configured"})).into_response();
+    };
+    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
+        return Json(serde_json::json!({"ok": false, "error": "access denied"})).into_response();
+    }
+
+    // Extract the file bytes from the first field with data.
+    let mut file_data: Option<Vec<u8>> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if let Ok(data) = field.bytes().await {
+            if !data.is_empty() {
+                file_data = Some(data.to_vec());
+                break;
+            }
+        }
+    }
+    let Some(data) = file_data else {
+        return Json(serde_json::json!({"ok": false, "error": "no file uploaded"})).into_response();
+    };
+
+    // 1. Scan via external endpoint (klappstuhl.me). Degrades to allow on failure.
+    if let Some(token) = app.config.percy_scan_token() {
+        match scan::scan_file(&data, &token, &app.scan_endpoint).await {
+            Ok(report) if report.verdict == "infected" => {
+                return Json(serde_json::json!({
+                    "ok": false,
+                    "error": "file rejected: malware detected"
+                }))
+                .into_response();
+            }
+            Ok(_) | Err(_) => {} // clean or scanner unavailable → proceed
+        }
+    }
+
+    // 2. Upload to Percy's internal API which posts to Discord and returns a CDN URL.
+    let mime_type = detect_mime(&data);
+    match percy.upload_poll_image(guild_id, &data, &mime_type).await {
+        Ok(url) => Json(serde_json::json!({"ok": true, "url": url})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+    }
+}
+
+// ── Tags import ─────────────────────────────────────────────────────────────
+
+/// `POST /dashboard/guild/:guild_id/tags/import` — accept a CSV upload from the
+/// dashboard user, scan it via the external klappstuhl.me API, parse into tag rows,
+/// and forward to Percy's `import_tags` endpoint.
+pub async fn guild_tags_import(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    mut multipart: Multipart,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return Json(serde_json::json!({"ok": false, "error": "not configured"})).into_response();
+    };
+    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
+        return Json(serde_json::json!({"ok": false, "error": "access denied"})).into_response();
+    }
+
+    // Extract the CSV text from the first field with data.
+    let mut csv_text: Option<String> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if let Ok(data) = field.bytes().await {
+            if data.is_empty() { continue; }
+            // Reject non-UTF-8 uploads outright (same as monolith).
+            match String::from_utf8(data.to_vec()) {
+                Ok(text) => { csv_text = Some(text); break; }
+                Err(_) => return Json(serde_json::json!({"ok": false, "error": "file is not valid UTF-8 text"})).into_response(),
+            }
+        }
+    }
+    let Some(csv_text) = csv_text else {
+        return Json(serde_json::json!({"ok": false, "error": "no file uploaded"})).into_response();
+    };
+
+    // Cap upload size (1 MiB is plenty for a tag CSV).
+    if csv_text.len() > 1024 * 1024 {
+        return Json(serde_json::json!({"ok": false, "error": "file too large (max 1 MB)"})).into_response();
+    }
+
+    // Scan via external endpoint. Degrades to allow on failure.
+    if let Some(token) = app.config.percy_scan_token() {
+        match scan::scan_file(csv_text.as_bytes(), &token, &app.scan_endpoint).await {
+            Ok(report) if report.verdict == "infected" => {
+                return Json(serde_json::json!({
+                    "ok": false,
+                    "error": "file rejected: malware detected"
+                }))
+                .into_response();
+            }
+            Ok(_) | Err(_) => {} // clean or scanner unavailable → proceed
+        }
+    }
+
+    // Parse CSV into TagExportRow items (RFC 4180 subset — no quoted-newline support needed).
+    let rows: Vec<percy_client::TagExportRow> = csv_text
+        .lines()
+        .skip(1) // skip header
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(2, ',').collect();
+            if parts.len() < 2 { return None; }
+            let name = parts[0].trim().to_string();
+            let content = parts[1].trim().to_string();
+            if name.is_empty() || content.is_empty() { return None; }
+            Some(percy_client::TagExportRow { name, content })
+        })
+        .collect();
+
+    if rows.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "no tags found in file"})).into_response();
+    }
+
+    // Forward to Percy's import_tags endpoint.
+    match percy.import_tags(guild_id, &rows, &session.discord_user_id).await {
+        Ok(result) => Json(serde_json::json!({
+            "ok": true,
+            "created": result.created,
+            "skipped": result.skipped,
+            "failed": result.failed,
+        }))
+        .into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+    }
+}
+
+/// Detect a safe MIME type from the first bytes of a file.
+fn detect_mime(data: &[u8]) -> String {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") { "image/png".to_string() }
+    else if data.starts_with(b"\xff\xd8\xff") { "image/jpeg".to_string() }
+    else if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") { "image/gif".to_string() }
+    else if data.starts_with(b"RIFF") && &data[8..12] == b"WEBP" { "image/webp".to_string() }
+    else { "image/png".to_string() } // default safe fallback
 }

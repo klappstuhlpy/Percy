@@ -7,7 +7,7 @@
 //! no dependency on the `klappstuhl_me` app crate.
 //!
 //! Structure (ported incrementally from the klappstuhl_me monolith):
-//! - [`config`] — `config.json` (Discord OAuth, Percy API, signing key),
+//! - [`config`] — `config.json` (Discord OAuth, Percy API, signing key, scan token),
 //! - [`db`] — typed access to the dashboard-owned tables in `dashboard.db`,
 //! - [`migrations`] — the embedded schema, applied via the shared runner,
 //! - the routes below render through the shared design system via Askama.
@@ -39,6 +39,7 @@ mod migrations;
 mod moderation;
 mod mutations;
 mod pages;
+mod scan;
 mod session;
 mod site;
 mod templates;
@@ -52,6 +53,8 @@ struct AppState {
     db: Arc<Database>,
     /// The Percy API client, present only when Percy is configured.
     percy: Option<Arc<percy_client::PercyClient>>,
+    /// Endpoint for the external malware scan service (klappstuhl.me).
+    scan_endpoint: String,
 }
 
 #[tokio::main]
@@ -115,10 +118,17 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
         ))
     });
 
+    // Default scan endpoint: klappstuhl.me's external API. Overridable via env.
+    let scan_endpoint = std::env::var("PERCY_SCAN_ENDPOINT")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "https://klappstuhl.me/api/scan".to_string());
+
     Ok(AppState {
         config: Arc::new(config),
         db: Arc::new(db),
         percy,
+        scan_endpoint,
     })
 }
 
@@ -196,6 +206,10 @@ fn build_router(state: AppState) -> Router {
             get(pages::guild_polls).post(actions::guild_poll_create),
         )
         .route(
+            "/dashboard/guild/:guild_id/polls/image",
+            post(actions::guild_poll_image_upload),
+        )
+        .route(
             "/dashboard/guild/:guild_id/polls/:poll_id",
             post(actions::guild_poll_edit),
         )
@@ -216,6 +230,10 @@ fn build_router(state: AppState) -> Router {
             delete(actions::guild_giveaway_delete),
         )
         .route("/dashboard/guild/:guild_id/tags", get(pages::guild_tags))
+        .route(
+            "/dashboard/guild/:guild_id/tags/import",
+            post(actions::guild_tags_import),
+        )
         .route(
             "/dashboard/guild/:guild_id/tags/export.csv",
             get(actions::guild_tags_export),
@@ -440,6 +458,7 @@ fn build_router(state: AppState) -> Router {
         .route("/logout", get(auth::logout))
         .route("/auth/discord/callback", get(auth::callback))
         .route("/health", get(health))
+        .route("/account/discord/avatar", get(auth::discord_avatar))
         .route("/api-info", get(api_info))
         .nest("/kls", kls_ui::routes())
         // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a

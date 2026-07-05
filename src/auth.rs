@@ -5,6 +5,9 @@
 //! `/login` redirects to Discord, `/auth/discord/callback` exchanges the code and
 //! mints a signed [`Session`] cookie, `/logout` clears it. Admin guilds captured
 //! from the OAuth response are cached in `dashboard.db` for the guild list.
+//!
+//! The `GET /account/discord/avatar` endpoint serves the logged-in user's current
+//! Discord avatar by forwarding to Percy's internal API (`/users/{id}/avatar`).
 
 use anyhow::Context;
 use axum::{
@@ -258,6 +261,43 @@ fn append_cookie(headers: &mut HeaderMap, cookie: &str) {
     if let Ok(value) = HeaderValue::from_str(cookie) {
         headers.append(SET_COOKIE, value);
     }
+}
+
+/// `GET /account/discord/avatar` — 302-redirects to the signed-in user's current
+/// Discord avatar, resolved live via Percy's internal API (`/users/{id}/avatar`) so
+/// it never goes stale. The shared layout points its header `<img>` here.
+///
+/// Falls back to a static placeholder when there is no session, Percy is not
+/// configured, or the live resolution fails.
+pub async fn discord_avatar(State(app): State<AppState>, session: Option<Session>) -> Response {
+    let Some(session) = session else {
+        return placeholder();
+    };
+    let Some(percy) = &app.percy else {
+        return placeholder();
+    };
+
+    match percy.get_user_avatar(&session.discord_user_id).await {
+        Ok(avatar) => {
+            let mut resp = Redirect::temporary(&avatar.avatar_url).into_response();
+            resp.headers_mut().insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("private, max-age=600"),
+            );
+            resp
+        }
+        Err(_) => placeholder(),
+    }
+}
+
+/// Serves the bundled placeholder avatar (SVG) as a fallback.
+fn placeholder() -> Response {
+    (
+        StatusCode::OK,
+        [("Content-Type", "image/svg+xml")],
+        include_str!("../static/img/avatar_placeholder.svg").as_bytes().to_vec(),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

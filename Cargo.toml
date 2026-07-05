@@ -14,19 +14,19 @@ anyhow = "1.0.80"
 async-trait = "0.1.77"
 askama = { version = "0.12.1", features = ["with-axum", "serde-json"] }
 askama_axum = "0.4.0"
-axum = "0.7.4"
+axum = { version = "0.7.4", features = ["multipart"] }
 cookie = { version = "0.18.0", features = ["percent-encode"] }
 dirs = "5.0.1"
 # Renders the public legal docs (fetched as CommonMark from the canonical GitHub
 # repo) and the local command-syntax guide to HTML.
 pulldown-cmark = "0.10"
-kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }
-kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }
-percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.1" }
+kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.2" }
+kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.2" }
+percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.2" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"

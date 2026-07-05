@@ -58,6 +58,10 @@ pub struct PercyConfig {
     /// links. Falls back to the OAuth `client_id` when unset (usually the same app).
     #[serde(default)]
     pub bot_client_id: Option<String>,
+    /// klappstuhl.me API token with `images:read` scope, used for the external
+    /// malware scan endpoint (`/api/scan`). Falls back to `PERCY_SCAN_TOKEN`.
+    #[serde(default)]
+    pub scan_token: Option<String>,
 }
 
 fn default_bind() -> SocketAddr {
@@ -144,6 +148,15 @@ impl Config {
         }
     }
 
+    /// The effective scan token: the config value, or `PERCY_SCAN_TOKEN`.
+    pub fn percy_scan_token(&self) -> Option<String> {
+        self.percy
+            .scan_token
+            .clone()
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::env::var("PERCY_SCAN_TOKEN").ok().filter(|s| !s.is_empty()))
+    }
+
     /// Whether Discord OAuth login is configured (credentials present).
     pub fn discord_login_enabled(&self) -> bool {
         !self.discord.client_id.is_empty() && !self.discord.client_secret.is_empty()
@@ -169,7 +182,10 @@ impl Config {
             base_url: "http://localhost".to_string(),
             secret_key: SecretKey::random().expect("generate test key"),
             discord: DiscordConfig::default(),
-            percy: PercyConfig::default(),
+            percy: PercyConfig {
+                scan_token: Some("test-scan-token".to_string()),
+                ..PercyConfig::default()
+            },
         }
     }
 }
