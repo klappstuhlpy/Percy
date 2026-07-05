@@ -16,7 +16,6 @@ from app.core.converter import CodeblockConverter
 from app.core.models import command, group
 from app.core.pagination import TextSourcePaginator
 from app.utils import TabularData, pluralize, tail
-from config import images_key
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -49,61 +48,6 @@ class Admin(Cog):
             await ctx.send_error(f"Could not send a DM to {user}.")
         else:
             await ctx.send_success("PM successfully sent.")
-
-    @group()
-    async def images(self, ctx: Context) -> None:
-        """Commands for image managing for https://klappstuhl.me."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @images.command(name="upload")
-    async def images_upload(self, ctx: Context, file: discord.Attachment) -> None:
-        """Uploads a file to https://klappstuhl.me."""
-        content_type = file.content_type
-        assert content_type is not None
-        if not content_type.startswith("image"):
-            await ctx.send_error("Only images are allowed.")
-            return
-
-        async with ctx.typing():
-            assert images_key is not None
-            headers = {"Content-Type": "multipart/form-data", "Authorization": images_key}
-            data = FormData()
-            data.add_field("file", await file.read())
-            async with self.bot.session.post("https://klappstuhl.me/api/images/upload", headers=headers, data=data) as resp:
-                if resp.status == 200:
-                    await ctx.send_success(f"Uploaded to <{(await resp.json())}>")
-                else:
-                    await ctx.send_error(f"Response: **{resp.status}**\n```json\n{await resp.json()}```")
-
-    @images.command(name="delete")
-    async def images_delete(self, ctx: Context, _id: str) -> None:
-        """Deletes a file from https://klappstuhl.me."""
-        async with ctx.typing():
-            assert images_key is not None
-            headers = {"Authorization": images_key}
-            async with self.bot.session.delete(
-                f"https://klappstuhl.me/api/images/{_id}",
-                headers=headers,
-            ) as resp:
-                if resp.status == 200:
-                    await ctx.send_success(f"Deleted [**{_id}**]")
-                else:
-                    await ctx.send_error(f"Failed to delete: **{resp.status}**\n```json\n{await resp.json()}```")
-
-    @images.command(name="get")
-    async def images_get(self, ctx: Context, _id: str) -> None:
-        """Gets a file from https://klappstuhl.me."""
-        async with ctx.typing():
-            headers = {
-                "Content-Type": "multipart/form-data",
-            }
-            async with self.bot.session.get(f"https://klappstuhl.me/gallery/raw/raw/{_id}", headers=headers) as resp:
-                if resp.status == 200:
-                    file = discord.File(fp=io.BytesIO(await resp.read()), filename=resp.url.name)
-                    await ctx.send_success(f"Image [**{resp.url.name}**]", file=file)
-                else:
-                    await ctx.send_error(f"Failed to get: **{resp.status}**\n```json\n{await resp.json()}```")
 
     @command(hidden=True, description="Lists current running tasks in the asyncio event loop.")
     @commands.is_owner()

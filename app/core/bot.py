@@ -20,6 +20,7 @@ from discord.http import Route
 from discord.utils import MISSING
 from expiringdict import ExpiringDict
 
+import config
 from app.clients import OllamaClient
 from app.cogs import EXTENSIONS
 from app.core.command import Command, GroupCommand, assign_native_permissions
@@ -39,6 +40,7 @@ from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand
+from app.services.klappstuhl_me import KlappstuhlMeClient
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,
@@ -106,6 +108,7 @@ class Bot(commands.Bot):
     context: type[Context]
     timers: TimerManager
     render: RenderingService
+    klappstuhlme_client: KlappstuhlMeClient
     ai: AIService
     ai_router: CommandRouter
     spam_control: SpamControl
@@ -209,6 +212,7 @@ class Bot(commands.Bot):
         DoNotLoadOnBeta = (
             'app.cogs.web_utils',
             'app.cogs.comic',
+            'app.cogs.anilist',
         )
         for extension in self.initial_extensions:
             if beta and extension in DoNotLoadOnBeta:
@@ -250,6 +254,9 @@ class Bot(commands.Bot):
         self.bypass_checks = False
         self.db = await Database(self, loop=self.loop).wait()
         self.session = ClientSession()
+
+        self.klappstuhlme_client = KlappstuhlMeClient(self.session, api_key=config.klappstuhl_me_api_token)
+
         self.timers = TimerManager(self)
         self.render = RenderingService()
         # Beta/Windows testing tunnels to the remote Ollama over SSH; Linux uses host directly.

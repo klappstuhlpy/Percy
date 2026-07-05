@@ -11,6 +11,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import MISSING
+from fastapi import HTTPException
+from starlette import status
 
 from app.cogs.polls.models import Poll, VoteOption
 from app.cogs.polls.ui import (
@@ -271,9 +273,10 @@ class Polls(Cog):
 
         message = await channel.send(content="*Preparing Poll...*")
 
-        image_bytes_resolved: io.BytesIO | None = None
         if image_bytes:
-            image_bytes_resolved: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(image_bytes[0]))
+            response = await self.bot.klappstuhlme_client.upload_images([tuple(reversed(image_bytes))])  # type: ignore
+            if response['errors'] == 0:
+                image_url = response['raw_links'][0]
 
         if thread_question:
             # Discord caps thread names at 100 characters.
@@ -297,7 +300,6 @@ class Polls(Cog):
             thread=thread_question or None,
             with_reason=False,
             image=image_url,
-            image_bytes=image_bytes_resolved.getvalue() if image_bytes_resolved else None,
             color=color or str(helpers.Colour.white()),
             votes=0,
             index=new_index,
@@ -314,9 +316,6 @@ class Polls(Cog):
         )
 
         edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
-        if image_bytes:
-            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes[0]), filename="attachment://image.png")]
-
         # Switch the placeholder message over to its Components V2 layout.
         await message.edit(**edit_kwargs)
         return poll
@@ -448,12 +447,12 @@ class Polls(Cog):
         to_options = [VoteOption(index=index, content=content, votes=0) for index, content in enumerate(options)]
 
         image_url = flags.image_url
-
-        image_bytes_resolved: io.BytesIO | None = None
         if flags.image:
-            # if the user provided an image, we ignore the image_url and use the attachment instead
-            image_url = None
-            image_bytes_resolved: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(await flags.image.read()))
+            response = await self.bot.klappstuhlme_client.upload_images([flags.image])
+            if response['errors'] != 0:
+                await ctx.send_error(f"Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
+            else:
+                image_url = response['raw_links'][0]
 
         message = await channel.send(content="*Preparing Poll...*")
         ping_message = None
@@ -488,7 +487,6 @@ class Polls(Cog):
             thread_question=flags.thread_question,
             with_reason=flags.with_reason,
             image=image_url,
-            image_bytes=image_bytes_resolved.getvalue() if image_bytes_resolved else None,
             color=str(flags.color),
             votes=0,
             index=new_index,
@@ -507,9 +505,6 @@ class Polls(Cog):
         await ctx.send_success(f"Poll #{new_index} [`{poll.id}`] successfully created. {message.jump_url}")
 
         edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
-        if image_bytes_resolved:
-            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes_resolved.getvalue()), filename="attachment://image.png")]
-
         # Switch the placeholder message over to its Components V2 layout.
         await message.edit(**edit_kwargs)
 
@@ -580,9 +575,7 @@ class Polls(Cog):
             request = await self._event_ai.poll(description)
 
         if request is None:
-            await ctx.send_error(
-                f"I couldn't turn that into a poll. Try `{ctx.clean_prefix}polls create` directly."
-            )
+            await ctx.send_error(f"I couldn't turn that into a poll. Try `{ctx.clean_prefix}polls create` directly.")
             return
 
         try:
@@ -596,6 +589,14 @@ class Polls(Cog):
         image_url = url_match.group(0).rstrip(">),.") if url_match else None
         if image_url:
             image_url = await (ValidURL()).convert(ctx, image_url)
+
+        if ctx.message.attachments:
+            image = ctx.message.attachments[0]
+            response = await self.bot.klappstuhlme_client.upload_images([image])
+            if response['errors'] != 0:
+                await ctx.send_error(f"Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
+            else:
+                image_url = response['raw_links'][0]
 
         to_options: dict[str, str] = {f"opt_{i}": content for i, content in enumerate(request.options, start=1)}
 
@@ -611,19 +612,8 @@ class Polls(Cog):
                 ping=request.ping,
                 with_reason=request.with_reason,
                 image_url=image_url,
-                image=ctx.message.attachments[0] if ctx.message.attachments else None,
                 **to_options
             )
-        )
-
-        extras = []
-        if image_url or ctx.message.attachments:
-            extras.append("an image")
-        if request.thread_question:
-            extras.append("a discussion thread")
-        extra_note = f" (with {' and '.join(extras)})" if extras else ""
-        await ctx.send_success(
-            f"... with {len(request.options)} options{extra_note} — ends {discord.utils.format_dt(when.dt, 'R')}."
         )
 
     @polls.command(

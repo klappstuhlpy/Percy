@@ -6,6 +6,7 @@ from contextlib import suppress
 from typing import Any
 
 import discord
+import fastapi
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -163,30 +164,52 @@ async def get_polls(
 
 
 @router.post("/polls")
-async def create_poll(guild: GuildDep, bot: BotDep, body: CreatePollBody) -> dict:
+async def create_poll(
+    guild: GuildDep,
+    bot: BotDep,
+    question: str = fastapi.Form(...),
+    options: str = fastapi.Form(...),
+    duration_seconds: int = fastapi.Form(...),
+    channel_id: str | None = fastapi.Form(None),
+    description: str | None = fastapi.Form(None),
+    color: str | None = fastapi.Form(None),
+    image_url: str | None = fastapi.Form(None),
+    thread_question: str | None = fastapi.Form(None),
+    file: fastapi.UploadFile | None = fastapi.File(None),
+) -> dict:
+    """Create a poll. Accepts JSON fields as form params; ``file`` uploads an image inline.
+
+    The dashboard sends a single multipart/form-data request with the poll data
+    and an optional image file — Percy forwards the attachment to Discord so it
+    becomes the poll's banner, exactly like the ``/polls create`` command.
+    """
     cog = bot.get_cog('Polls')
     if cog is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='polls cog not loaded')
 
-    question = body.question.strip()
+    question = question.strip()
     if not question:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='question is required')
 
-    options = [str(opt).strip() for opt in body.options if str(opt).strip()]
-    if len(options) < 2:
+    try:
+        parsed_options = [str(opt).strip() for opt in options.split('\x1e') if str(opt).strip()]
+    except (TypeError, ValueError):
+        parsed_options = []
+
+    if len(parsed_options) < 2:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='at least 2 options are required')
-    if len(options) > 8:
+    if len(parsed_options) > 8:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='a poll can have at most 8 options')
 
-    duration = body.duration_seconds
+    duration = duration_seconds
     if duration <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='duration must be a positive number of seconds')
 
     config = await bot.db.get_guild_config(guild_id=guild.id)
 
-    if body.channel_id:
+    if channel_id:
         try:
-            channel = guild.get_channel(int(body.channel_id))
+            channel = guild.get_channel(int(channel_id))
         except (TypeError, ValueError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='invalid channel')
     else:
@@ -203,17 +226,35 @@ async def create_poll(guild: GuildDep, bot: BotDep, body: CreatePollBody) -> dic
 
     expires = discord.utils.utcnow() + datetime.timedelta(seconds=duration)
 
+    # Resolve image from inline file upload or from the image_url field.
+    image_bytes = None
+    resolved_image_url = image_url.strip() if image_url else None
+    if file is not None and file.filename:
+        allowed = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
+        mime = (file.content_type or "").strip().lower()
+        if mime not in allowed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported image type")
+
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image too large (max 10 MB)")
+
+        ext = mime.split('/')[-1] if '/' in mime else 'png'
+        filename = f"poll-banner-{guild.id}.{ext}"
+        image_bytes = content, filename
+
     poll = await cog.create_poll_from_dashboard(
         guild,
         channel,
         author_id=bot.user.id,
         question=question,
-        options=options,
+        options=parsed_options,
         expires=expires,
-        description=body.description.strip() if body.description else None,
-        color=body.color.strip() if body.color else None,
-        image_url=body.image_url.strip() if body.image_url else None,
-        thread_question=body.thread_question.strip() if body.thread_question else None,
+        description=description.strip() if description else None,
+        color=color.strip() if color else None,
+        image_url=resolved_image_url,
+        image_bytes=image_bytes,
+        thread_question=thread_question.strip() if thread_question else None,
     )
 
     return {'ok': True, 'id': poll.id}

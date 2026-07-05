@@ -164,9 +164,11 @@ internal_api_token: str | None = env('INTERNAL_API_TOKEN')
 internal_api_port: int = int(env('INTERNAL_API_PORT') or '8090')
 internal_api_host: str = env('INTERNAL_API_HOST') or '127.0.0.1'
 
+# https://klappstuhl.me/api/docs
+klappstuhl_me_api_token: str | None = env('KLAPPSTUHL_ME_API_TOKEN')
+
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')
-images_key: str | None = env('IMAGES_API_TOKEN')
 
 # Self-hosted Ollama inference (see https://percy.klappstuhl.me/docs/ai). All AI features
 # degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
