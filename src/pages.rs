@@ -16,8 +16,8 @@ use crate::{
     session::Session,
     templates::{
         AutorespondersTemplate, BlacklistRow, ComicsTemplate, CommandsTemplate, EconomyTemplate, EmojiStatsTemplate,
-        GiveawaysTemplate, HighlightsTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow, MusicTemplate,
-        PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate,
+        GalleryTemplate, GiveawaysTemplate, HighlightsTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow,
+        MusicTemplate, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate,
     },
     view::Viewer,
     AppState,
@@ -468,6 +468,29 @@ pub async fn guild_polls(State(app): State<AppState>, session: Session, Path(gui
         polls,
         active_count,
         ended_count,
+    }
+    .into_response()
+}
+
+/// `GET /dashboard/guild/{id}/gallery`
+pub async fn guild_gallery(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    // Degrade to an empty gallery when the hoster is unreachable — the page still
+    // renders with the upload form so the owner can retry.
+    let gallery = percy.get_guild_gallery(guild_id).await.unwrap_or_default();
+
+    GalleryTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "gallery",
+        page_title: "Image Gallery",
+        gallery,
     }
     .into_response()
 }

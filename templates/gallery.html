@@ -1,0 +1,140 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Upload and manage this server's shared image gallery.</p>{% endblock %}
+
+{% block page_css %}
+<style>
+    .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .gallery-item {
+        margin: 0;
+        border: 1px solid var(--border, #2a2a35);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--surface-2, rgba(255, 255, 255, 0.02));
+        display: flex;
+        flex-direction: column;
+    }
+    .gallery-item a { display: block; line-height: 0; }
+    .gallery-item img {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        background: repeating-conic-gradient(#20202a 0% 25%, #26263200 0% 50%) 50% / 20px 20px;
+    }
+    .gallery-caption {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.5rem 0.6rem;
+    }
+    .gallery-name {
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .gallery-upload-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    #gallery-upload-status { font-size: 0.85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Images uploaded here live in this server's <strong>shared gallery</strong> on the klappstuhl.me image hoster. Percy also drops <strong>poll banners</strong> into this gallery automatically, so you can review and clean them up from one place.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Supported formats: PNG, JPG, GIF, WebP, AVIF &mdash; up to 10&nbsp;MB each</li>
+                <li>Deleting an image removes it from the hoster; existing poll messages that used it will show a broken image</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Images</span>
+            <span class="tile-value">{{ gallery.total }}</span>
+        </div>
+    </div>
+
+    <div class="config-section">
+        <div class="section-header">
+            <h2>Upload images</h2>
+        </div>
+        <p class="config-section-description">Select one or more images to add to this server's gallery.</p>
+        <form id="gallery-upload-form" class="gallery-upload-row">
+            <input type="file" id="gallery-files" name="files" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple>
+            <button type="submit" class="button primary small">Upload</button>
+            <span id="gallery-upload-status" class="text-muted"></span>
+        </form>
+    </div>
+
+    <div class="config-section">
+        <div class="section-header">
+            <h2>Gallery</h2>
+        </div>
+        {% if gallery.images.is_empty() %}
+            <p class="empty-state">No images yet. Upload one above, or create a poll with an image.</p>
+        {% else %}
+            <div class="gallery-grid">
+                {% for image in gallery.images %}
+                <figure class="gallery-item" data-id="{{ image.id }}">
+                    <a href="{{ image.url }}" target="_blank" rel="noopener">
+                        <img src="{{ image.raw_url }}" alt="{% match image.original_name %}{% when Some with (n) %}{{ n }}{% when None %}{{ image.id }}{% endmatch %}" loading="lazy">
+                    </a>
+                    <figcaption class="gallery-caption">
+                        <span class="gallery-name" title="{% match image.original_name %}{% when Some with (n) %}{{ n }}{% when None %}{{ image.id }}{% endmatch %}">{% match image.original_name %}{% when Some with (n) %}{{ n }}{% when None %}{{ image.id }}{% endmatch %}</span>
+                        <button type="button" class="button small danger gallery-delete" data-id="{{ image.id }}">Delete</button>
+                    </figcaption>
+                </figure>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        (function () {
+            const guildId = "{{ guild_id }}";
+            const form = document.getElementById('gallery-upload-form');
+            const status = document.getElementById('gallery-upload-status');
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const input = document.getElementById('gallery-files');
+                if (!input.files.length) { status.textContent = 'Choose a file first.'; return; }
+                const fd = new FormData();
+                for (const f of input.files) fd.append('files', f);
+                status.textContent = 'Uploading…';
+                try {
+                    const resp = await fetch(`/dashboard/guild/${guildId}/gallery/upload`, { method: 'POST', body: fd });
+                    const data = await resp.json();
+                    if (data.ok) { location.reload(); }
+                    else { status.textContent = data.error || 'Upload failed.'; }
+                } catch (err) { status.textContent = 'Upload failed.'; }
+            });
+
+            document.querySelectorAll('.gallery-delete').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    if (!confirm('Delete this image from the gallery?')) return;
+                    const id = btn.dataset.id;
+                    try {
+                        const resp = await fetch(`/dashboard/guild/${guildId}/gallery/${encodeURIComponent(id)}/delete`, { method: 'POST' });
+                        const data = await resp.json();
+                        if (data.ok) {
+                            const tile = document.querySelector(`.gallery-item[data-id="${CSS.escape(id)}"]`);
+                            if (tile) tile.remove();
+                        } else { alert(data.error || 'Delete failed.'); }
+                    } catch (err) { alert('Delete failed.'); }
+                });
+            });
+        })();
+    </script>
+
+{% endblock %}

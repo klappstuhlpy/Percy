@@ -218,6 +218,15 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/polls/:poll_id/end",
             post(actions::guild_poll_end),
         )
+        .route("/dashboard/guild/:guild_id/gallery", get(pages::guild_gallery))
+        .route(
+            "/dashboard/guild/:guild_id/gallery/upload",
+            post(actions::guild_gallery_upload),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/gallery/:image_id/delete",
+            post(actions::guild_gallery_delete),
+        )
         .route(
             "/dashboard/guild/:guild_id/giveaways",
             get(pages::guild_giveaways).post(actions::guild_giveaway_create),

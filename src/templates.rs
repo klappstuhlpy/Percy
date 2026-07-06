@@ -283,6 +283,18 @@ pub(crate) struct PollsTemplate {
 
 #[allow(dead_code)]
 #[derive(Template)]
+#[template(path = "gallery.html")]
+pub(crate) struct GalleryTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) gallery: GalleryResponse,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
 #[template(path = "giveaways.html")]
 pub(crate) struct GiveawaysTemplate {
     pub(crate) account: Option<Viewer>,
