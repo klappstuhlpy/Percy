@@ -119,7 +119,16 @@ def test_giveaway_rejects_empty_prize() -> None:
 
 
 async def test_extractor_poll_returns_request() -> None:
-    extractor = EventExtractor(FakeAI(PollRequest('Q', ['a', 'b'], '1d')))  # type: ignore[arg-type]
+    poll = PollRequest(
+        question='Q',
+        description=None,
+        color=None,
+        ping=False,
+        with_reason=False,
+        options=['a', 'b'],
+        duration='1d',
+    )
+    extractor = EventExtractor(FakeAI(poll))  # type: ignore[arg-type]
     assert (await extractor.poll('ask something')) is not None
 
 
