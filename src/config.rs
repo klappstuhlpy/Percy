@@ -8,6 +8,7 @@
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use anyhow::Context;
@@ -68,6 +69,22 @@ pub struct PercyConfig {
     /// malware scan endpoint (`/api/v1/scan`). Falls back to `PERCY_SCAN_TOKEN`.
     #[serde(default)]
     pub scan_token: Option<String>,
+}
+
+/// The public base URL (no trailing slash), published for templates that build
+/// absolute asset URLs — the link-preview `og:image` in `layout.html` needs an
+/// absolute HTTPS URL for Discord/Slack to fetch it. Set once at startup from the
+/// loaded config; falls back to the production URL when unset (e.g. in the
+/// render-only template tests that never build application state).
+pub static PUBLIC_BASE_URL: OnceLock<String> = OnceLock::new();
+
+/// Absolute base URL for use in templates, with a production fallback so a
+/// `.render()` before startup never panics.
+pub fn public_base_url() -> &'static str {
+    PUBLIC_BASE_URL
+        .get()
+        .map(String::as_str)
+        .unwrap_or("https://percy.klappstuhl.me")
 }
 
 fn default_bind() -> SocketAddr {

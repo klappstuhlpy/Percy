@@ -100,6 +100,11 @@ async fn build_state(config: Config) -> anyhow::Result<AppState> {
 /// connection via the shared runner, and wires an optional Percy client from the
 /// config. Split out so tests can drive a hermetic `:memory:` database.
 async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppState> {
+    // Publish the public base URL for templates that need absolute asset URLs
+    // (the link-preview `og:image`). `set` only takes the first value, so repeated
+    // state builds in tests are harmless.
+    let _ = crate::config::PUBLIC_BASE_URL.set(config.base_url.trim_end_matches('/').to_string());
+
     // A small pool suits the dashboard's light, read-mostly workload. The shared
     // kernel (v0.1.1+) pre-initialises WAL before spawning the pool, so opening
     // several connections on a brand-new file no longer races. `with_init`
