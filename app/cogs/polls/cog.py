@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
-import io
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -36,7 +34,6 @@ from app.core.models import (
     group,
 )
 from app.core.pagination import BasePaginator, LinePaginator
-from app.rendering import resize_to_limit
 from app.services import EventExtractor
 from app.utils import cache, fuzzy, get_asset_url, get_shortened_string, helpers, pluralize, timetools
 
@@ -274,8 +271,9 @@ class Polls(Cog):
         message = await channel.send(content="*Preparing Poll...*")
 
         if image_bytes:
-            response = await self.bot.klappstuhlme_client.upload_images([tuple(reversed(image_bytes))])  # type: ignore
-            if response['errors'] == 0:
+            # (content, filename) -> the client's (filename, data) tuple form.
+            response = await self.bot.klappstuhlme_client.upload_guild_images(guild.id, [tuple(reversed(image_bytes))])  # type: ignore
+            if response['errors'] == 0 and response['raw_links']:
                 image_url = response['raw_links'][0]
 
         if thread_question:
@@ -448,9 +446,9 @@ class Polls(Cog):
 
         image_url = flags.image_url
         if flags.image:
-            response = await self.bot.klappstuhlme_client.upload_images([flags.image])
-            if response['errors'] != 0:
-                await ctx.send_error(f"Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
+            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, [flags.image])
+            if response['errors'] != 0 or not response['raw_links']:
+                await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
             else:
                 image_url = response['raw_links'][0]
 
@@ -592,9 +590,9 @@ class Polls(Cog):
 
         if ctx.message.attachments:
             image = ctx.message.attachments[0]
-            response = await self.bot.klappstuhlme_client.upload_images([image])
-            if response['errors'] != 0:
-                await ctx.send_error(f"Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
+            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, [image])
+            if response['errors'] != 0 or not response['raw_links']:
+                await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
             else:
                 image_url = response['raw_links'][0]
 
@@ -704,11 +702,18 @@ class Polls(Cog):
             else:
                 form["description"] = flags.description
 
-        if flags.image:
-            form["image_bytes"] = (await asyncio.to_thread(resize_to_limit, io.BytesIO(await flags.image.read()))).getvalue()
-
-        # file goes before url, only ever save one image to db to avoid confusion!
-        if flags.image_url and not flags.image:
+        # File uploads go to the guild's gallery; we only ever store one image URL
+        # to avoid confusion, and the uploaded file takes precedence over a URL.
+        if isinstance(flags.image, discord.Attachment):
+            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, [flags.image])
+            if response['errors'] != 0 or not response['raw_links']:
+                await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
+                return
+            form["image"] = response['raw_links'][0]
+        elif flags.image:
+            # A plain URL string (e.g. from the edit modal's Image URL field).
+            form["image"] = flags.image
+        elif flags.image_url:
             form["image"] = flags.image_url
 
         if flags.color:
@@ -768,9 +773,6 @@ class Polls(Cog):
         poll = await poll.edit(**form)
 
         edit_kwargs: dict[str, Any] = {"content": None, "embed": None, "view": create_view(poll)}
-        if image_bytes := poll.kwargs.get("image_bytes"):
-            edit_kwargs["attachments"] = [discord.File(io.BytesIO(image_bytes), filename="attachment://image.png")]
-
         await poll.message.edit(**edit_kwargs)
         await ctx.send_success(f"Poll [`{poll.id}`] edited successfully.", ephemeral=True)
 

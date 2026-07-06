@@ -5,6 +5,7 @@ from .analytics import router as analytics_router
 from .backup import router as backup_router
 from .content import router as content_router
 from .economy import router as economy_router
+from .gallery import router as gallery_router
 from .guild import router as guild_router
 from .leveling import router as leveling_router
 from .members import router as members_router
@@ -31,4 +32,5 @@ ALL_ROUTERS = [
     analytics_router,
     backup_router,
     subscriptions_router,
+    gallery_router,
 ]

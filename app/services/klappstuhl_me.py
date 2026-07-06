@@ -147,6 +147,55 @@ class KlappstuhlMeClient:
         async with self._session.delete(f"{self.base_url}/images/{image_id}", headers=self.headers) as resp:
             return await self._handle_response(resp)
 
+    # ==========================================
+    # Guild galleries (require the ``images:guild`` scope)
+    # ==========================================
+
+    async def upload_guild_images(
+        self,
+        guild_id: int,
+        files: List[Union[FileType, Tuple[str, Union[bytes, io.BytesIO]]]],
+        expires_in: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Upload one or more images into a Discord guild's shared gallery.
+
+        Identical wire shape to :meth:`upload_images`, but the uploaded rows are
+        tagged with ``guild_id`` so they show up in the guild's dashboard gallery.
+        Returns the same ``UploadResult`` payload (``links`` / ``raw_links``).
+        """
+        self.check_api_key()
+        form = aiohttp.FormData()
+
+        for file_item in files:
+            if isinstance(file_item, tuple) and len(file_item) == 2:
+                fname, fdata = file_item
+                await self._add_file_to_form(form, "file", fdata, filename=fname)
+            else:
+                await self._add_file_to_form(form, "file", file_item)
+
+        params = {}
+        if expires_in is not None:
+            params["expires_in"] = str(expires_in)
+
+        async with self._session.post(
+            f"{self.base_url}/guilds/{guild_id}/images/upload", data=form, params=params, headers=self.headers
+        ) as resp:
+            return await self._handle_response(resp)
+
+    async def list_guild_images(self, guild_id: int) -> Dict[str, Any]:
+        """List the images in a guild's shared gallery (newest first, no expired)."""
+        self.check_api_key()
+        async with self._session.get(f"{self.base_url}/guilds/{guild_id}/images", headers=self.headers) as resp:
+            return await self._handle_response(resp)
+
+    async def delete_guild_image(self, guild_id: int, image_id: str) -> Dict[str, Any]:
+        """Delete an image from a guild's shared gallery (scoped by ``guild_id``)."""
+        self.check_api_key()
+        async with self._session.delete(
+            f"{self.base_url}/guilds/{guild_id}/images/{image_id}", headers=self.headers
+        ) as resp:
+            return await self._handle_response(resp)
+
     async def download_images(self, files: List[str]) -> bytes:
         """
         Bundle one or more images into a ZIP archive[cite: 1].
