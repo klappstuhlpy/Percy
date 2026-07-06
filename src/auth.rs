@@ -285,7 +285,10 @@ pub async fn handoff(State(app): State<AppState>, Query(query): Query<HandoffQue
 
     let session = Session::new(vouch.discord_user_id, vouch.username);
     let mut resp = Redirect::to("/dashboard").into_response();
-    append_cookie(resp.headers_mut(), &session.to_cookie(&app.config.secret_key).to_string());
+    append_cookie(
+        resp.headers_mut(),
+        &session.to_cookie(&app.config.secret_key).to_string(),
+    );
     resp
 }
 

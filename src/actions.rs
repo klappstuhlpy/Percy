@@ -666,7 +666,7 @@ pub async fn guild_gallery_upload(
         }
     }
     if files.is_empty() {
-        return Json(serde_json::json!({"ok": false, "error": "no files uploaded"})).into_response();
+        return Json(serde_json::json!({"ok": false, "error": "No image files were provided."})).into_response();
     }
 
     // Scan each file first (degrades to allow when the scanner is unavailable).
@@ -690,7 +690,40 @@ pub async fn guild_gallery_upload(
             "infected": result.infected,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => {
+            Json(serde_json::json!({"ok": false, "error": humanize_upload_error(&e.to_string())})).into_response()
+        }
+    }
+}
+
+/// Peel a nested Percy/klappstuhl error envelope down to its innermost human
+/// sentence so the dashboard flashes a readable message instead of raw JSON.
+///
+/// Percy surfaces upstream upload failures as
+/// `{"detail":"upload failed: HTTP 400: {\"error\":\"No valid files…\",\"code\":1}"}`;
+/// we recurse through the `detail` / `error` / `message` fields (and the JSON
+/// objects embedded in their string values) to reach `No valid files…`. Falls
+/// back to the raw string when it isn't a recognisable envelope.
+fn humanize_upload_error(raw: &str) -> String {
+    fn deepest(s: &str) -> Option<String> {
+        let start = s.find('{')?;
+        let end = s.rfind('}')?;
+        if end <= start {
+            return None;
+        }
+        let obj: serde_json::Value = serde_json::from_str(&s[start..=end]).ok()?;
+        for key in ["error", "detail", "message"] {
+            if let Some(v) = obj.get(key).and_then(serde_json::Value::as_str) {
+                return Some(deepest(v).unwrap_or_else(|| v.to_string()));
+            }
+        }
+        None
+    }
+    let msg = deepest(raw).unwrap_or_else(|| raw.trim().to_string());
+    if msg.is_empty() {
+        "Upload failed. Please try again.".to_string()
+    } else {
+        msg
     }
 }
 

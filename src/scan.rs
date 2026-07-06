@@ -10,7 +10,7 @@ use serde::Deserialize;
 #[allow(dead_code)] // fields are part of the API contract; not all consumed yet
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScanReport {
-    pub verdict: String,       // "clean", "infected", or "unknown"
+    pub verdict: String, // "clean", "infected", or "unknown"
     #[serde(default)]
     pub clamav_virus: Option<String>,
     #[serde(default)]
@@ -24,8 +24,7 @@ pub struct ScanReport {
 /// `token` is a klappstuhl.me API token with `images:read` scope.
 /// `endpoint` defaults to `https://klappstuhl.me/api/v1/scan`.
 pub async fn scan_file(data: &[u8], token: &str, endpoint: &str) -> Result<ScanReport, anyhow::Error> {
-    let form = reqwest::multipart::Form::new()
-        .part("file", reqwest::multipart::Part::bytes(data.to_vec()));
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(data.to_vec()));
 
     let resp = reqwest::Client::new()
         .post(endpoint)

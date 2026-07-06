@@ -4,6 +4,103 @@
 
 {% block page_css %}
 <style>
+    /* ── Upload dropzone ─────────────────────────────────────────── */
+    .gallery-dropzone {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        padding: 2.25rem 1.5rem;
+        border: 2px dashed var(--box-border);
+        border-radius: 12px;
+        background: var(--box-shade);
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    }
+    .gallery-dropzone:hover { border-color: var(--box-border-light); }
+    .gallery-dropzone:focus-visible { outline: 2px solid var(--branding); outline-offset: 2px; }
+    .gallery-dropzone.dragover {
+        border-color: var(--branding);
+        background: var(--branding-dim);
+        transform: scale(1.005);
+    }
+    .gallery-dropzone.busy { opacity: 0.65; pointer-events: none; }
+    .gallery-dropzone-icon {
+        color: var(--branding);
+        line-height: 0;
+        transition: transform 0.15s ease;
+    }
+    .gallery-dropzone.dragover .gallery-dropzone-icon { transform: translateY(-2px); }
+    .gallery-dropzone-title { font-weight: 600; }
+    .gallery-dropzone-title .gallery-browse { color: var(--branding); text-decoration: underline; text-underline-offset: 2px; }
+    .gallery-dropzone-hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+
+    /* ── Selected-file preview ───────────────────────────────────── */
+    .gallery-preview {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 0.6rem;
+        margin-top: 1rem;
+    }
+    .gallery-preview:empty { display: none; }
+    .gallery-preview-item {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem;
+        border: 1px solid var(--box-border);
+        border-radius: 8px;
+        background: var(--box);
+    }
+    .gallery-preview-thumb {
+        width: 42px;
+        height: 42px;
+        flex: none;
+        object-fit: cover;
+        border-radius: 6px;
+        background: var(--box-shade);
+    }
+    .gallery-preview-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .gallery-preview-name {
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .gallery-preview-size { font-size: 0.72rem; color: var(--text-muted); }
+    .gallery-preview-remove {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: var(--close-button-bg);
+        color: var(--close-button-text);
+        font-size: 0.75rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s ease;
+    }
+    .gallery-preview-remove:hover { background: var(--close-button-bg-hover); }
+
+    .gallery-upload-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+    }
+    .gallery-upload-actions[hidden] { display: none; }
+    #gallery-selected-count { font-size: 0.85rem; color: var(--text-muted); margin-left: auto; }
+
+    /* ── Gallery grid ────────────────────────────────────────────── */
     .gallery-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -12,10 +109,10 @@
     }
     .gallery-item {
         margin: 0;
-        border: 1px solid var(--border, #2a2a35);
+        border: 1px solid var(--box-border);
         border-radius: 10px;
         overflow: hidden;
-        background: var(--surface-2, rgba(255, 255, 255, 0.02));
+        background: var(--box-shade);
         display: flex;
         flex-direction: column;
     }
@@ -39,8 +136,6 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    .gallery-upload-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    #gallery-upload-status { font-size: 0.85rem; }
 </style>
 {% endblock %}
 
@@ -68,11 +163,27 @@
         <div class="section-header">
             <h2>Upload images</h2>
         </div>
-        <p class="config-section-description">Select one or more images to add to this server's gallery.</p>
-        <form id="gallery-upload-form" class="gallery-upload-row">
-            <input type="file" id="gallery-files" name="files" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple>
-            <button type="submit" class="button primary small">Upload</button>
-            <span id="gallery-upload-status" class="text-muted"></span>
+        <p class="config-section-description">Drag &amp; drop images anywhere on the box below, or click to browse. You can review your selection before uploading.</p>
+
+        <form id="gallery-upload-form">
+            <div id="gallery-dropzone" class="gallery-dropzone" role="button" tabindex="0" aria-label="Drag and drop images here, or click to browse">
+                <svg class="gallery-dropzone-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 16V4"></path>
+                    <path d="m7 9 5-5 5 5"></path>
+                    <path d="M20 16.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5"></path>
+                </svg>
+                <span class="gallery-dropzone-title">Drop images here or <span class="gallery-browse">browse</span></span>
+                <p class="gallery-dropzone-hint">PNG, JPG, GIF, WebP, AVIF &middot; up to 10&nbsp;MB each</p>
+            </div>
+            <input type="file" id="gallery-files" name="files" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,.apng,.png,.jpg,.jpeg,.gif,.avif,.webp" multiple hidden>
+
+            <div id="gallery-preview" class="gallery-preview"></div>
+
+            <div id="gallery-upload-actions" class="gallery-upload-actions" hidden>
+                <button type="submit" id="gallery-upload-btn" class="button primary small">Upload</button>
+                <button type="button" id="gallery-clear-btn" class="button small">Clear</button>
+                <span id="gallery-selected-count"></span>
+            </div>
         </form>
     </div>
 
@@ -99,42 +210,9 @@
         {% endif %}
     </div>
 
-    <script>
-        (function () {
-            const guildId = "{{ guild_id }}";
-            const form = document.getElementById('gallery-upload-form');
-            const status = document.getElementById('gallery-upload-status');
+{% endblock %}
 
-            form.addEventListener('submit', async function (e) {
-                e.preventDefault();
-                const input = document.getElementById('gallery-files');
-                if (!input.files.length) { status.textContent = 'Choose a file first.'; return; }
-                const fd = new FormData();
-                for (const f of input.files) fd.append('files', f);
-                status.textContent = 'Uploading…';
-                try {
-                    const resp = await fetch(`/dashboard/guild/${guildId}/gallery/upload`, { method: 'POST', body: fd });
-                    const data = await resp.json();
-                    if (data.ok) { location.reload(); }
-                    else { status.textContent = data.error || 'Upload failed.'; }
-                } catch (err) { status.textContent = 'Upload failed.'; }
-            });
-
-            document.querySelectorAll('.gallery-delete').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    if (!confirm('Delete this image from the gallery?')) return;
-                    const id = btn.dataset.id;
-                    try {
-                        const resp = await fetch(`/dashboard/guild/${guildId}/gallery/${encodeURIComponent(id)}/delete`, { method: 'POST' });
-                        const data = await resp.json();
-                        if (data.ok) {
-                            const tile = document.querySelector(`.gallery-item[data-id="${CSS.escape(id)}"]`);
-                            if (tile) tile.remove();
-                        } else { alert(data.error || 'Delete failed.'); }
-                    } catch (err) { alert('Delete failed.'); }
-                });
-            });
-        })();
-    </script>
-
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/gallery.js"></script>
 {% endblock %}
