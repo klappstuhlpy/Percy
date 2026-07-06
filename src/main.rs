@@ -207,10 +207,6 @@ fn build_router(state: AppState) -> Router {
             get(pages::guild_polls).post(actions::guild_poll_create),
         )
         .route(
-            "/dashboard/guild/:guild_id/polls/image",
-            post(actions::guild_poll_image_upload),
-        )
-        .route(
             "/dashboard/guild/:guild_id/polls/:poll_id",
             post(actions::guild_poll_edit),
         )

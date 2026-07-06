@@ -210,20 +210,6 @@ function closeCreatePoll() {
     document.getElementById('poll-create-modal').hidden = true;
 }
 
-// Uploads the chosen banner file to the image host and returns its public URL.
-async function uploadPollBanner(file) {
-    const fd = new FormData();
-    fd.append('file', file);
-    const resp = await fetch(`/dashboard/guild/${GUILD_ID}/polls/image`, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json' },
-        body: fd,
-    });
-    const data = await resp.json();
-    if (!data.ok || !data.url) throw new Error(data.error || 'Image upload failed.');
-    return data.url;
-}
-
 document.getElementById('poll-create-btn').addEventListener('click', async () => {
     const question = document.getElementById('create-poll-question').value.trim();
     const description = document.getElementById('create-poll-description').value.trim();
@@ -255,31 +241,28 @@ document.getElementById('poll-create-btn').addEventListener('click', async () =>
     const btn = document.getElementById('poll-create-btn');
     btn.disabled = true;
     try {
-        // Resolve the banner: either the uploaded file (turned into a hosted URL)
-        // or the pasted URL — never both.
-        let image_url = '';
+        // Single multipart request: poll fields plus the optional inline banner.
+        // Percy accepts the file directly and routes it into the guild gallery —
+        // the banner is either an uploaded file or a pasted URL, never both.
+        const fd = new FormData();
+        fd.append('question', question);
+        fd.append('duration_seconds', String(amount * unit));
+        options.forEach(o => fd.append('options', o));
+        if (description) fd.append('description', description);
+        if (color) fd.append('color', color);
+        if (channel_id) fd.append('channel_id', channel_id);
+        if (thread_question) fd.append('thread_question', thread_question);
         if (useFile && bannerFile) {
-            showToast('success', 'Uploading banner…');
-            image_url = await uploadPollBanner(bannerFile);
-        } else if (!useFile) {
-            image_url = urlValue;
+            fd.append('file', bannerFile);
+        } else if (!useFile && urlValue) {
+            fd.append('image_url', urlValue);
         }
 
-        const body = {
-            question,
-            description,
-            options,
-            image_url,
-            color,
-            duration_seconds: amount * unit,
-        };
-        if (channel_id) body.channel_id = channel_id;
-        if (thread_question) body.thread_question = thread_question;
-
+        // No Content-Type header — the browser sets the multipart boundary.
         const resp = await fetch(`/dashboard/guild/${GUILD_ID}/polls`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(body),
+            headers: { 'Accept': 'application/json' },
+            body: fd,
         });
         const data = await resp.json();
         if (data.ok) {

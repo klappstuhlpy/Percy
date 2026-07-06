@@ -1,8 +1,8 @@
 //! Member, poll, giveaway, tag, leveling and music mutations / JSON endpoints —
 //! ported 1:1 from the monolith. Each gates on a manage-access session then
-//! forwards to Percy's internal API. Poll banner upload was previously unported;
-//! it now hits Percy's `/polls/upload-image` endpoint which posts the image to
-//! Discord and returns the CDN URL. Tags import scans via the external klappstuhl.me
+//! forwards to Percy's internal API. Poll creation is a single multipart request
+//! (poll fields plus an optional inline banner file); Percy routes the image into
+//! the guild's shared gallery. Tags import scans via the external klappstuhl.me
 //! scanner before forwarding parsed rows to Percy.
 
 use std::collections::HashMap;
@@ -142,18 +142,93 @@ pub async fn guild_poll_end(
     ok_or_err(percy.end_poll(guild_id, poll_id).await)
 }
 
-/// `POST /dashboard/guild/:guild_id/polls`
+/// `POST /dashboard/guild/:guild_id/polls` — create a poll from a single
+/// multipart submission: text fields plus an optional inline banner file. When a
+/// file is present it is malware-scanned before being forwarded to Percy, which
+/// routes it into the guild's shared image gallery. The frontend JS
+/// (`polls.js`) sends the file under the `file` field and each poll option as a
+/// repeated `options` field.
 pub async fn guild_poll_create(
     State(app): State<AppState>,
     session: Session,
     Path(guild_id): Path<u64>,
-    Json(body): Json<serde_json::Value>,
+    mut multipart: Multipart,
 ) -> Response {
     let percy = match gate_json(&app, &session, guild_id).await {
         Ok(percy) => percy,
         Err(response) => return response,
     };
-    match percy.create_poll(guild_id, &body).await {
+
+    // Collect text fields and the optional banner file from the multipart body.
+    let mut question = String::new();
+    let mut description = String::new();
+    let mut channel_id = String::new();
+    let mut thread_question = String::new();
+    let mut color = String::new();
+    let mut image_url = String::new();
+    let mut duration_seconds: i64 = 0;
+    let mut options: Vec<String> = Vec::new();
+    let mut file_data: Option<Vec<u8>> = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" {
+            if let Ok(data) = field.bytes().await {
+                if !data.is_empty() {
+                    file_data = Some(data.to_vec());
+                }
+            }
+            continue;
+        }
+        let value = field.text().await.unwrap_or_default();
+        match name.as_str() {
+            "question" => question = value,
+            "description" => description = value,
+            "channel_id" => channel_id = value,
+            "thread_question" => thread_question = value,
+            "color" => color = value,
+            "image_url" => image_url = value,
+            "duration_seconds" => duration_seconds = value.trim().parse().unwrap_or(0),
+            "options" => {
+                let v = value.trim().to_string();
+                if !v.is_empty() {
+                    options.push(v);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Scan the banner first (degrades to allow when the scanner is unavailable).
+    if let Some(data) = &file_data {
+        if let Some(token) = app.config.percy_scan_token() {
+            if let Ok(report) = scan::scan_file(data, &token, &app.scan_endpoint).await {
+                if report.verdict == "infected" {
+                    return Json(serde_json::json!({"ok": false, "error": "file rejected: malware detected"}))
+                        .into_response();
+                }
+            }
+        }
+    }
+
+    let fields = serde_json::json!({
+        "question": question,
+        "options": options,
+        "duration_seconds": duration_seconds,
+        "channel_id": channel_id,
+        "description": description,
+        "color": color,
+        "image_url": image_url,
+        "thread_question": thread_question,
+    });
+
+    let mime = file_data.as_deref().map(detect_mime);
+    let image = match (&file_data, &mime) {
+        (Some(data), Some(m)) => Some((data.as_slice(), m.as_str())),
+        _ => None,
+    };
+
+    match percy.create_poll(guild_id, &fields, image).await {
         Ok(data) => Json(serde_json::json!({"ok": true, "id": data.get("id")})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
     }
@@ -572,63 +647,6 @@ pub async fn guild_music_reset(State(app): State<AppState>, session: Session, Pa
         Err(response) => return response,
     };
     ok_or_err(percy.post_music_reset(guild_id).await)
-}
-
-// ── Poll image upload ───────────────────────────────────────────────────────
-
-/// `POST /dashboard/guild/:guild_id/polls/image` — accept a banner file from the
-/// dashboard user, scan it via the external klappstuhl.me API, then forward to Percy's
-/// internal API which posts the attachment to Discord and returns the CDN URL.
-///
-/// The frontend JS (`polls.js::uploadPollBanner`) sends a FormData with a single
-/// `file` field and expects `{ok: true, url: "https://cdn.discordapp.com/..."}` back.
-pub async fn guild_poll_image_upload(
-    State(app): State<AppState>,
-    session: Session,
-    Path(guild_id): Path<u64>,
-    mut multipart: Multipart,
-) -> Response {
-    let Some(percy) = &app.percy else {
-        return Json(serde_json::json!({"ok": false, "error": "not configured"})).into_response();
-    };
-    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
-        return Json(serde_json::json!({"ok": false, "error": "access denied"})).into_response();
-    }
-
-    // Extract the file bytes from the first field with data.
-    let mut file_data: Option<Vec<u8>> = None;
-    while let Ok(Some(field)) = multipart.next_field().await {
-        if let Ok(data) = field.bytes().await {
-            if !data.is_empty() {
-                file_data = Some(data.to_vec());
-                break;
-            }
-        }
-    }
-    let Some(data) = file_data else {
-        return Json(serde_json::json!({"ok": false, "error": "no file uploaded"})).into_response();
-    };
-
-    // 1. Scan via external endpoint (klappstuhl.me). Degrades to allow on failure.
-    if let Some(token) = app.config.percy_scan_token() {
-        match scan::scan_file(&data, &token, &app.scan_endpoint).await {
-            Ok(report) if report.verdict == "infected" => {
-                return Json(serde_json::json!({
-                    "ok": false,
-                    "error": "file rejected: malware detected"
-                }))
-                .into_response();
-            }
-            Ok(_) | Err(_) => {} // clean or scanner unavailable → proceed
-        }
-    }
-
-    // 2. Upload to Percy's internal API which posts to Discord and returns a CDN URL.
-    let mime_type = detect_mime(&data);
-    match percy.upload_poll_image(guild_id, &data, &mime_type).await {
-        Ok(url) => Json(serde_json::json!({"ok": true, "url": url})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
-    }
 }
 
 // ── Guild image gallery ─────────────────────────────────────────────────────
