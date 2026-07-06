@@ -94,6 +94,13 @@ class StatsRepository(BaseRepository):
         query += f" GROUP BY {group_by} ORDER BY uses DESC LIMIT {limit};"
         return await self.fetch(query, *args)
 
+    async def get_command_total(self, guild_id: int, *, days: int) -> int:
+        """Total command invocations in a guild over the trailing ``days`` window."""
+        return await self.fetchval(
+            "SELECT COUNT(*) FROM commands WHERE guild_id = $1 AND used > (CURRENT_TIMESTAMP - $2::interval);",
+            guild_id, datetime.timedelta(days=days),
+        )
+
     async def get_command_invokation_count(self, command: str) -> int:
         """Returns the number of times a command has been invoked."""
         return await self.fetchval("SELECT COUNT(*) FROM commands WHERE command = $1;", command)
@@ -316,6 +323,33 @@ class StatsRepository(BaseRepository):
             ORDER BY day;
         """
         return await self.fetch(query, guild_id, user_id, datetime.timedelta(days=days))
+
+    async def get_command_series(
+        self,
+        guild_id: int,
+        *,
+        days: int,
+        granularity: Literal['hour', 'day', 'week'],
+        failures_only: bool = False,
+    ) -> list[asyncpg.Record]:
+        """Time-bucketed command counts for a guild, for the analytics API.
+
+        Buckets by ``date_trunc(granularity, used)`` over the trailing ``days`` window and
+        returns sparse ``(bucket, value)`` rows oldest-first (the caller zero-fills gaps).
+        ``granularity`` is caller-validated against a fixed set *and* passed as a bound
+        parameter, so it cannot inject SQL. ``failures_only`` restricts to failed invocations.
+        """
+        clause = "AND failed = TRUE" if failures_only else ""
+        query = f"""
+            SELECT date_trunc($3, used) AS bucket, COUNT(*) AS value
+            FROM commands
+            WHERE guild_id = $1
+              AND used > (CURRENT_TIMESTAMP - $2::interval)
+              {clause}
+            GROUP BY bucket
+            ORDER BY bucket;
+        """
+        return await self.fetch(query, guild_id, datetime.timedelta(days=days), granularity)
 
 
 # -- Emoji Stats -----------------------------------------------------------

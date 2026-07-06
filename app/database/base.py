@@ -26,9 +26,11 @@ from app.database.repositories import (
     ComicsRepository,
     EconomyRepository,
     EmojiStatsRepository,
+    EventWebhooksRepository,
     GameStatsRepository,
     GiveawaysRepository,
     GuildsRepository,
+    GuildTemplatesRepository,
     HighlightsRepository,
     IncidentsRepository,
     LevelingRepository,
@@ -328,6 +330,8 @@ class Database(_Database):
     stat_counters: StatCountersRepository
     anilist: AniListRepository
     votes: VotesRepository
+    event_webhooks: EventWebhooksRepository
+    templates: GuildTemplatesRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -357,6 +361,8 @@ class Database(_Database):
         self.stat_counters = StatCountersRepository(self)
         self.anilist = AniListRepository(self)
         self.votes = VotesRepository(self)
+        self.event_webhooks = EventWebhooksRepository(self)
+        self.templates = GuildTemplatesRepository(self)
 
         self._register_cache_signals()
 

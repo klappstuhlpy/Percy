@@ -80,7 +80,7 @@ def _create_app(bot: Bot) -> FastAPI:
 
     from .routers import ALL_ROUTERS
 
-    prefix = '/api/v1'
+    prefix = f'/api/v{API_VERSION}'
     for router in ALL_ROUTERS:
         if router.prefix and router.prefix.startswith('/api/webhooks'):
             # Vote webhooks are unauthenticated and validate their own per-service
