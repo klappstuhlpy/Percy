@@ -9,7 +9,7 @@ services:
       # Requires BuildKit (default on modern Docker). If you have no agent, pass
       # the key file directly:  docker compose build --ssh default=$HOME/.ssh/id_ed25519
       ssh:
-        - default
+        - default=$HOME/.ssh/id_ed25519
     image: percy-dashboard:latest
     restart: unless-stopped
 
