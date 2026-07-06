@@ -45,6 +45,25 @@ class CircuitBreakerOpen(HTTPClientError):
         )
 
 
+class TransportError(HTTPClientError, aiohttp.ClientError):
+    """Raised when a request exhausts its retries at the transport layer.
+
+    Covers the cases where the upstream is never reached — DNS failure, connection
+    refused/reset, TLS handshake error, socket timeout — after :attr:`MAX_RETRIES`
+    attempts. Subclasses **both** :class:`HTTPClientError` (so callers that catch that,
+    or ``discord.HTTPException``, treat an unreachable upstream like any other client
+    failure) **and** :class:`aiohttp.ClientError` (so existing ``except aiohttp.ClientError``
+    handlers around a :meth:`~BaseHTTPClient.fetch` call keep matching). The original
+    transport exception is preserved as ``__cause__``.
+    """
+
+    def __init__(self, client_name: str, cause: BaseException) -> None:
+        self.client_name = client_name
+        super(discord.HTTPException, self).__init__(
+            f'{client_name}: transport error after exhausted retries: {cause!r}'
+        )
+
+
 class StaleResult:
     """Wraps a cached response served when the upstream is unreachable.
 
@@ -185,8 +204,11 @@ class BaseHTTPClient:
         """Perform an HTTP request, returning the decoded JSON/text body.
 
         Applies rate-limit retries, transport-error backoff and the circuit breaker.
-        Raises :class:`CircuitBreakerOpen` if the breaker is open, or
-        :class:`HTTPClientError` (or a subclass) for a non-2xx response.
+        Raises :class:`CircuitBreakerOpen` if the breaker is open,
+        :class:`HTTPClientError` (or a subclass) for a non-2xx response, or
+        :class:`TransportError` when the upstream stays unreachable after all retries
+        (never a raw :class:`aiohttp.ClientError` — every failure mode is an
+        :class:`HTTPClientError`).
         """
         cache_key = f'{method}:{url}'
 
@@ -235,7 +257,7 @@ class BaseHTTPClient:
                 if attempt >= self.MAX_RETRIES:
                     self.log.warning('Transport error on %s %s, giving up: %r', method, full_url, exc)
                     self._record_failure()
-                    raise
+                    raise TransportError(self.name, exc) from exc
                 delay = self._backoff(attempt)
                 self.log.warning(
                     'Transport error on %s %s: %r; retry %d/%d in %.2fs',

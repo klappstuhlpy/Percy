@@ -12,7 +12,7 @@ from typing import Any
 import aiohttp
 import pytest
 
-from app.clients import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError
+from app.clients import BaseHTTPClient, CircuitBreakerOpen, HTTPClientError, TransportError
 from app.clients.ollama import OllamaClient, OllamaResponseError
 
 
@@ -169,13 +169,22 @@ async def test_transport_error_retried_then_succeeds() -> None:
 
 
 async def test_transport_error_exhausts_retries_and_raises() -> None:
+    boom = aiohttp.ClientError('boom')
     session = FakeSession([
-        FakeResponse(raise_on_enter=aiohttp.ClientError('boom')) for _ in range(Client.MAX_RETRIES)
+        FakeResponse(raise_on_enter=boom) for _ in range(Client.MAX_RETRIES)
     ])
     client = Client(session)  # type: ignore[arg-type]
 
-    with pytest.raises(aiohttp.ClientError):
+    # An exhausted transport failure is wrapped in TransportError, which is both an
+    # HTTPClientError (so callers that catch that degrade gracefully) and an
+    # aiohttp.ClientError (so existing transport-error handlers keep matching). The
+    # raw transport exception is never allowed to leak out of fetch().
+    with pytest.raises(TransportError) as exc_info:
         await client.fetch('GET', 'comics')
+
+    assert isinstance(exc_info.value, HTTPClientError)
+    assert isinstance(exc_info.value, aiohttp.ClientError)
+    assert exc_info.value.__cause__ is boom
 
 
 async def test_breaker_opens_after_threshold_and_fast_fails() -> None:
