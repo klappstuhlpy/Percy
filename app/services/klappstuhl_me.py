@@ -15,9 +15,16 @@ class KlappstuhlMeClient:
     with native support for discord.py files and attachments.
     """
 
-    def __init__(self, session: aiohttp.ClientSession, *, api_key: str | None, base_url: str = "https://klappstuhl.me/api"):
+    def __init__(
+        self, session: aiohttp.ClientSession, *, api_key: str | None, base_url: str = "https://klappstuhl.me/api/v1"
+    ):
         """
         Initializes the client with the required API key.
+
+        ``base_url`` targets the versioned API prefix (``/api/v1``). The bare
+        ``/api`` paths still work as a deprecated alias, but new integrations
+        should stay on the versioned prefix; to move to a future major version,
+        point ``base_url`` at ``.../api/v2`` — every method path is relative to it.
         """
         self._session: aiohttp.ClientSession = session
         self.base_url: str = base_url.rstrip("/")
