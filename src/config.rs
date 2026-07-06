@@ -65,7 +65,7 @@ pub struct PercyConfig {
     #[serde(default)]
     pub bot_client_id: Option<String>,
     /// klappstuhl.me API token with `images:read` scope, used for the external
-    /// malware scan endpoint (`/api/scan`). Falls back to `PERCY_SCAN_TOKEN`.
+    /// malware scan endpoint (`/api/v1/scan`). Falls back to `PERCY_SCAN_TOKEN`.
     #[serde(default)]
     pub scan_token: Option<String>,
 }

@@ -40,7 +40,7 @@ RUN --mount=type=ssh \
 #
 # Minimal Debian. ca-certificates is the only runtime dependency — it validates
 # the TLS chain for the dashboard's outbound HTTPS calls (Discord OAuth, and the
-# optional klappstuhl.me /api/scan). SQLite is compiled into the binary; Askama
+# optional klappstuhl.me /api/v1/scan). SQLite is compiled into the binary; Askama
 # templates and the SQL migrations are embedded at build time. Only the runtime
 # `static/` assets (served by tower_http's ServeDir) are copied in.
 # ─────────────────────────────────────────────────────────────────────────────

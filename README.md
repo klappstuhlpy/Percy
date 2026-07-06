@@ -88,7 +88,7 @@ Every deployment-sensitive value can be injected via env (handy for containers),
 | `DASHBOARD_DB` | Path to `dashboard.db` (default `<data-dir>/percy-dashboard/dashboard.db`; `:memory:` for ephemeral). |
 | `PERCY_API_URL` / `PERCY_API_TOKEN` | Percy connection. |
 | `PERCY_SCAN_TOKEN` | The `images:read` scan token. |
-| `PERCY_SCAN_ENDPOINT` | The scan endpoint (default `https://klappstuhl.me/api/scan`). |
+| `PERCY_SCAN_ENDPOINT` | The scan endpoint (default `https://klappstuhl.me/api/v1/scan`). |
 
 ### Discord app setup (one-time)
 
@@ -154,7 +154,7 @@ One click, no shared database, no shared live session store, and every URL comes
 - **`/health`, `/api-info`** — liveness + Percy-configured status.
 - **`/kls/*`, `/static/*`** — shared + own assets.
 
-Two flows require the optional scan token: **poll banner upload** and **tag CSV import** (they forward the file to klappstuhl.me's `/api/scan`; if no token is set, scanning is skipped and the upload proceeds).
+Two flows require the optional scan token: **poll banner upload** and **tag CSV import** (they forward the file to klappstuhl.me's `/api/v1/scan`; if no token is set, scanning is skipped and the upload proceeds).
 
 ---
 

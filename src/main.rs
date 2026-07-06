@@ -118,11 +118,12 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
         ))
     });
 
-    // Default scan endpoint: klappstuhl.me's external API. Overridable via env.
+    // Default scan endpoint: klappstuhl.me's external API (versioned /api/v1).
+    // Overridable via env.
     let scan_endpoint = std::env::var("PERCY_SCAN_ENDPOINT")
         .ok()
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "https://klappstuhl.me/api/scan".to_string());
+        .unwrap_or_else(|| "https://klappstuhl.me/api/v1/scan".to_string());
 
     Ok(AppState {
         config: Arc::new(config),
