@@ -2108,7 +2108,6 @@ th.th-sortable[aria-sort="descending"]::after {
     margin-bottom: 1rem;
 }
 .section-header h2 {
-    font-size: 1rem;
     font-weight: 600;
     margin: 0;
 }
