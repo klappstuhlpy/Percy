@@ -180,6 +180,9 @@ class Bot(commands.Bot):
         self._setup_finished: asyncio.Event = asyncio.Event()
         #: SSH tunnel to the remote Ollama, opened only in beta mode (see _open_ollama_tunnel).
         self._ollama_tunnel: SSHTunnelForwarder | None = None
+        #: The URL the AI client actually talks to (tunnel URL in beta, ``ollama_config.host``
+        #: on Linux). Set in setup_hook; used for accurate health logging.
+        self._ollama_host: str = ollama_config.host
         #: Throttles AI command-routing so a stream of prefix-misses can't hammer the model.
         self._ai_route_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
             1, 8.0, commands.BucketType.user
@@ -261,6 +264,7 @@ class Bot(commands.Bot):
         self.render = RenderingService()
         # Beta/Windows testing tunnels to the remote Ollama over SSH; Linux uses host directly.
         ollama_host = await self._open_ollama_tunnel() or ollama_config.host
+        self._ollama_host = ollama_host
         self.ai = AIService(
             OllamaClient(
                 self.session,
@@ -334,19 +338,19 @@ class Bot(commands.Bot):
         try:
             report = await self.ai.health()
         except Exception as exc:  # defensive — health() already swallows known errors
-            self.log.warning('AI engine health probe errored at %s: %r', ollama_config.host, exc)
+            self.log.warning('AI engine health probe errored at %s: %r', self._ollama_host, exc)
             return
 
         if report.reachable:
             models = ', '.join(f'{tier}={tag}' for tier, tag in report.models.items())
             self.log.info(
                 'AI engine reachable at %s (Ollama %s, %.0fms; models: %s).',
-                ollama_config.host, report.version or 'unknown', report.latency_ms or 0.0, models,
+                self._ollama_host, report.version or 'unknown', report.latency_ms or 0.0, models,
             )
         else:
             self.log.warning(
                 'AI engine UNREACHABLE at %s (%s) — AI features will degrade gracefully until it recovers.',
-                ollama_config.host, report.error or 'no further detail',
+                self._ollama_host, report.error or 'no further detail',
             )
 
     async def _setup_hook_task(self) -> None:
