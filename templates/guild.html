@@ -9,6 +9,8 @@
 {% endblock %}
 
 {% block content %}
+<div class="dashboard-header dash-rise" hidden="True"></div>
+
 <div class="guild-header dash-rise">
     {% match guild.icon_url %}
     {% when Some with (url) %}
