@@ -1479,7 +1479,7 @@ files = [
 
 [[package]]
 name = "klappstuhl"
-version = "0.3.0"
+version = "0.3.1"
 description = "A fast, fully-typed async Python wrapper for the klappstuhl.me API."
 optional = false
 python-versions = ">=3.9"
@@ -1497,8 +1497,8 @@ speed = ["aiohttp[speedups] (>=3.9,<4)"]
 [package.source]
 type = "git"
 url = "https://github.com/klappstuhlpy/klappstuhl.py"
-reference = "v0.3.0"
-resolved_reference = "652e944d94b10a8bd8192635a78a85e7ddb71ed0"
+reference = "HEAD"
+resolved_reference = "e3be08bbdcf46d0a2e0e7e48db766e3cc80775ab"
 
 [[package]]
 name = "levenshtein"
@@ -3512,4 +3512,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "ff996820a50cb7125f9e2fc5dd94dc67ce67a8971491a2ad3b15e7929fc5b0d9"
+content-hash = "6f37fa2662fa47fd034171aa0cc763fb0eb27a3cfcac03573d1b963759cb0877"
