@@ -1,16 +1,51 @@
-# percy-dashboard
+<div align="center">
 
-The web dashboard for configuring **[Percy](https://percy.klappstuhl.me)** — a standalone [Axum](https://github.com/tokio-rs/axum) binary that runs **on its own out of the box** and, optionally, connects to the [klappstuhl.me](https://github.com/klappstuhlpy/klappstuhl_me) main site for a shared login.
+# Percy Dashboard
 
-It is a **BFF** (backend-for-frontend): every configuration change is proxied to Percy's internal HTTP API, which owns the database and cache invalidation. The dashboard never touches Percy's PostgreSQL directly.
+**The web dashboard for configuring [Percy](https://percy.klappstuhl.me)** — a standalone
+[Axum](https://github.com/tokio-rs/axum) binary that runs on its own out of the box, and
+optionally connects to [klappstuhl.me](https://github.com/klappstuhlpy/klappstuhl_me) for a shared login.
 
-It shares its design system, signed-cookie crypto, and Percy API client with the main site through the [`klappstuhl_me-shared`](https://github.com/klappstuhlpy/klappstuhl_me-shared) crates (a tag-pinned git dependency), so the two apps stay visually and behaviourally consistent without a common monolith.
+[![Rust](https://img.shields.io/badge/Rust-2021-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Axum](https://img.shields.io/badge/Axum-web-000000?logo=rust&logoColor=white)](https://github.com/tokio-rs/axum)
+[![Pattern](https://img.shields.io/badge/pattern-BFF-6E56CF)](#overview)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+[Percy](https://percy.klappstuhl.me) · [Documentation](https://percy.klappstuhl.me/docs/) · [Main site](https://klappstuhl.me)
+
+</div>
 
 ```
 Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──▶ PostgreSQL
               │  Discord OAuth login                 │  cache.invalidate()
               └─ dashboard.db (its own SQLite)
 ```
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Quick start (standalone)](#quick-start-standalone)
+- [Configuration](#configuration)
+- [Hosting: standalone vs. together](#hosting-standalone-vs-together)
+- [Routes](#routes)
+- [Development](#development)
+- [Docker](#docker)
+- [Deployment notes](#deployment-notes)
+- [License](#license)
+
+---
+
+## Overview
+
+- **BFF (backend-for-frontend).** Every configuration change is proxied to Percy's internal
+  HTTP API, which owns the database and cache invalidation — the dashboard **never** touches
+  Percy's PostgreSQL directly.
+- **Shared foundation.** Its design system, signed-cookie crypto, and Percy API client come
+  from the tag-pinned [`klappstuhl_me-shared`](https://github.com/klappstuhlpy/klappstuhl_me-shared)
+  crates, so it stays visually and behaviourally consistent with the main site — without a common monolith.
 
 ---
 
@@ -98,44 +133,25 @@ In the [Discord developer portal](https://discord.com/developers/applications) �
 
 ## Hosting: standalone vs. together
 
-The dashboard is designed to run **independently by default, connected by choice.**
+**Independent by default, connected by choice.** Standalone, the dashboard only needs a reachable
+Percy internal API — point `percy.api_url`/`api_token` at your instance, set up the Discord app, and
+serve `base_url`. It doesn't need the klappstuhl.me main site; identity and guild access come from
+Discord + Percy.
 
-The only thing it truly needs is a reachable **Percy internal API**. Point `percy.api_url`/`api_token` at your Percy instance, set up the Discord app, and serve `base_url`. It does not need the klappstuhl.me main site at all. Login is Discord OAuth; identity and guild access come entirely from Discord + Percy.
+Run alongside klappstuhl.me on the same registrable domain and the two interoperate with **zero shared
+database and no shared session store**, each deriving the other's URL from its own config:
 
-### Together with klappstuhl.me (connected mode)
-
-When both apps run on the same registrable domain (`klappstuhl.me` + `percy.klappstuhl.me`) they interoperate with **zero shared database and no shared live session store**:
-
-- **Cross-navigation** — the main site links to the dashboard via its `/percy` redirect (URL from *its* config, not hardcoded here); the dashboard can link back using `base_url`.
-- **Shared look-and-feel** — both pull `kls-ui` at the same pinned tag, so a design change propagates to both on a version bump.
+- **Cross-navigation** — the main site links here via its `/percy` redirect; the dashboard links back via `base_url`.
+- **Shared look-and-feel** — both pull `kls-ui` at the same pinned tag.
 - **Optional single sign-on** — see below.
 
-Nothing about connected mode is hardcoded: each app derives the other's URL from its own config, and the only shared runtime secret (if you enable SSO) lives in config.
+### Single sign-on
 
-### Single sign-on: what's possible
-
-**Short answer:** a seamless "log in on klappstuhl.me → already logged in on percy.klappstuhl.me" is achievable with a small, dynamic **signed handoff** — *not* by literally sharing one cookie.
-
-Why not one shared cookie? The two apps have deliberately different identity models:
-
-|             | klappstuhl.me        | percy-dashboard       |
-|-------------|----------------------|-----------------------|
-| Cookie      | `token` (DB-backed)  | `session` (stateless) |
-| Keyed on    | `account.id` (i64)   | `discord_user_id`     |
-| Signed with | its own `secret_key` | its own `secret_key`  |
-
-A cookie set by one is meaningless to the other (different name, payload, and key), and the main site's account id doesn't identify a Discord user without a lookup. Setting a `Domain=.klappstuhl.me` cookie makes the *browser* send it to both hosts, but the receiving app still can't verify or interpret it. So a single transparent cookie is out of reach without collapsing the two identity models — not worth it.
-
-**The clean, dynamic mechanism** (this is **implemented**) is a one-bounce signed handoff, using the shared `kls_web_core::sso::Handoff` type — HMAC-signed with a key both apps hold:
-
-1. Both apps are configured with **one shared `sso_secret`** (a hex HMAC key) — the only shared secret, and the only extra config.
-2. On the main site, the **`/percy` link** — for a user who is logged in there *and* has a linked Discord — signs a short-lived `Handoff { discord_user_id, username, exp: now+60s }` and 302s to `<percy_url>/auth/handoff?t=…` (the percy URL comes from the main site's own config).
-3. The dashboard's **`GET /auth/handoff`** verifies the token against `sso_secret`, checks freshness, and mints its own `session` cookie, then lands on `/dashboard`.
-4. Any missing/tampered/expired token — or no `sso_secret` — falls straight back to the dashboard's own Discord login. Nothing breaks when SSO is off.
-
-One click, no shared database, no shared live session store, and every URL comes from config — nothing hardcoded. It bridges the two identity models explicitly (main-site account → its linked `discord_user_id`) instead of trying to make one cookie mean two things.
-
-> **Enabling it:** set the same `sso_secret` in both `config.json` files. **Note:** a user who signs in via the handoff (rather than a full Discord OAuth login) won't have the "add Percy to servers Percy isn't in yet" cards populated — those need the Discord guild list from a full login. The guild list itself (servers Percy shares with them) works either way.
+Implemented as a one-bounce **signed handoff** (the shared `kls_web_core::sso::Handoff` type), not a
+shared cookie. Set the same `sso_secret` (a hex HMAC key) in both apps: the main site's `/percy` link
+signs a short-lived `Handoff { discord_user_id, username, exp }` and 302s to the dashboard's
+`GET /auth/handoff`, which verifies it and mints its own `session` cookie. A missing/expired token — or
+no `sso_secret` — falls back to the dashboard's own Discord login.
 
 ---
 
@@ -144,7 +160,7 @@ One click, no shared database, no shared live session store, and every URL comes
 ~100 routes across focused modules, all gated behind a `Session` and forwarded to Percy's internal API:
 
 - **`/`, `/login`, `/logout`, `/auth/discord/callback`** — landing + Discord OAuth.
-- **`/auth/handoff`** — accepts a signed SSO handoff from the main site (see below).
+- **`/auth/handoff`** — accepts a signed SSO handoff from the main site (see [Single sign-on](#single-sign-on)).
 - **`/dashboard`** — guild list (managed / public / "add Percy" cards).
 - **`/dashboard/guild/:id/...`** — the full config surface: members, leveling, economy, autoresponders, comics, temp-channels, polls, giveaways, tags, commands, highlights, emoji-stats, audit log, music, AI, sentinel, moderation cases. Plus the JSON/mutation endpoints the page JS calls.
 - **Public** — `/dashboard/guild/:id/overview`, `/lb/:target` (public leaderboard by guild id or vanity slug), commands catalogue, changelog, privacy/terms.
@@ -164,7 +180,7 @@ cargo fmt && cargo clippy     # format (width 120) + lint (kept clean)
 ```
 
 - **Private dependency.** The `klappstuhl_me-shared` crates are pulled over SSH; you need an SSH key with read access to that repo. `.cargo/config.toml` sets `net.git-fetch-with-cli = true` so SSH auth is reliable (especially on Windows). CI/Docker must forward an SSH key (`--mount=type=ssh`).
-- **Pinned versions.** The shared crates are pinned by tag (currently `v0.1.3`); bump in lock-step with klappstuhl.me when cutting a new shared release. `Cargo.lock` is committed.
+- **Pinned versions.** The shared crates are pinned by tag (currently `v0.1.5`); bump in lock-step with klappstuhl.me when cutting a new shared release. `Cargo.lock` is committed.
 - **Data cutover.** Migrating the two owned tables from the old monolith DB is a separate, gated step — see `docs/DATA_IMPORT_RUNBOOK.md`.
 
 ---
@@ -187,3 +203,9 @@ docker compose up --build -d        # build + start
 - Persist `dashboard.db` (or point `DASHBOARD_DB` at a persistent volume).
 - Keep `secret_key` stable across restarts, or every session is invalidated.
 - Reverse-proxy `percy.<your-domain>` → the dashboard's `bind` address; set `base_url` to the public URL.
+
+---
+
+## License
+
+[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0) (per `Cargo.toml`).
