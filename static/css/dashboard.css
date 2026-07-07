@@ -90,8 +90,10 @@ main.percy-main:has(.dashboard-shell) {
 
 .dash-sidebar {
     position: sticky;
-    /* Sit just below the sticky top bar. */
-    top: calc(var(--dash-topbar-h) + 1.25rem);
+    /* Stick exactly at the sidebar's natural resting offset (top bar + the
+       shell's 3rem top padding) so it's already pinned at scroll 0 and never
+       drifts up the first time you scroll. */
+    top: calc(var(--dash-topbar-h) + 3rem);
     align-self: start;
     display: flex;
     flex-direction: column;
