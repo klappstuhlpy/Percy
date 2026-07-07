@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "percy-v2"
-version = "2.1.0"
+version = "2.2.0"
 description = "A multipurpose Discord Bot for moderation and more."
 authors = ["Klappstuhl"]
 license = "MPL-2.0"
@@ -44,6 +44,7 @@ paramiko = ">=2.7.2,<4"
 fastapi = "^0.138.0"
 uvicorn = "^0.49.0"
 python-multipart = "^0.0.32"
+klappstuhl = {git = "https://github.com/klappstuhlpy/klappstuhl.py", tag = "v0.2.0"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"

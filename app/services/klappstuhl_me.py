@@ -1,361 +1,176 @@
-import os
+"""Percy's klappstuhl.me client.
+
+This is a thin, Percy-only extension of the public :mod:`klappstuhl` wrapper
+(the ``klappstuhl.py`` package). The base :class:`klappstuhl.Client` already
+covers every general endpoint — uploads, guild galleries, media, render, scan —
+so Percy does **not** re-implement a bespoke HTTP client. It only adds the two
+things that are deliberately absent from the public library because they are
+internal to Percy's deployment:
+
+* **Per-guild key provisioning.** Percy never holds a personal API key. It
+  presents a shared ``provision_token`` to the host's internal
+  ``POST /guilds/{id}/provision-key`` endpoint, which mints (get-or-creates) a
+  narrow ``images:guild`` key for that guild. Those keys are cached in-process
+  and used for every subsequent gallery call; a legacy personal ``api_key`` is
+  only a fallback.
+* **Discord-native file coercion.** Gallery uploads accept ``discord.File`` /
+  ``discord.Attachment`` (and ``(filename, bytes)`` tuples) and convert them to
+  :class:`klappstuhl.File`, so cogs can hand Percy objects straight through.
+
+Everything else is inherited from :class:`klappstuhl.Client` unchanged.
+"""
+from __future__ import annotations
+
+import asyncio
 import io
-from typing import List, Union, Optional, Dict, Any, Tuple
-import aiohttp
+from typing import TYPE_CHECKING
+
 import discord
-from matplotlib.pyplot import stairs
+from klappstuhl import Client, File
+from klappstuhl.errors import Forbidden, Unauthorized
+from klappstuhl.file import resolve_file
+from klappstuhl.http import DEFAULT_BASE_URL
 
-# Type alias for supported file inputs
-FileType = Union[str, bytes, io.BytesIO, discord.File, discord.Attachment]
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    import aiohttp
+    from klappstuhl.models import DeleteResult, GuildImagesResult, UploadResult
+
+# A non-empty sentinel handed to the base client when the hoster is unconfigured
+# (the base client requires *some* token). It is never sent: every guild call
+# checks :attr:`KlappstuhlMeClient.available` first.
+_UNCONFIGURED = "unconfigured"
 
 
-class KlappstuhlMeClient:
-    """
-    An asynchronous client for the Klappstuhl.me API using aiohttp,
-    with native support for discord.py files and attachments.
-    """
+class KlappstuhlMeClient(Client):
+    """Percy's extension of :class:`klappstuhl.Client` (see the module docstring)."""
 
     def __init__(
-        self, session: aiohttp.ClientSession, *, api_key: str | None, base_url: str = "https://klappstuhl.me/api/v1"
-    ):
-        """
-        Initializes the client with the required API key.
-
-        ``base_url`` targets the versioned API prefix (``/api/v1``). The bare
-        ``/api`` paths still work as a deprecated alias, but new integrations
-        should stay on the versioned prefix; to move to a future major version,
-        point ``base_url`` at ``.../api/v2`` — every method path is relative to it.
-        """
-        self._session: aiohttp.ClientSession = session
-        self.base_url: str = base_url.rstrip("/")
+        self,
+        session: aiohttp.ClientSession,
+        *,
+        api_key: str | None = None,
+        provision_token: str | None = None,
+        base_url: str = DEFAULT_BASE_URL,
+    ) -> None:
+        # The base client's token is only ever used for the provisioning call
+        # (which needs the service token); guild galleries use per-guild keys.
+        super().__init__(provision_token or api_key or _UNCONFIGURED, session=session, base_url=base_url)
         self.api_key: str | None = api_key
+        self.provision_token: str | None = provision_token
+        self._session: aiohttp.ClientSession = session
+        self._base_url: str = base_url
+        # Per-guild clients, each bound to that guild's minted images:guild key
+        # and sharing the one aiohttp session. Built on demand, cached here.
+        self._guild_clients: dict[int, Client] = {}
+        self._guild_lock: asyncio.Lock = asyncio.Lock()
 
     def __repr__(self) -> str:
-        return f"<KlappstuhlMeClient base_url={self.base_url}>"
-
-    def check_api_key(self) -> None:
-        """Raises an exception if the API key is not set."""
-        if not self.api_key:
-            raise ValueError(
-                "API key is required to use the KlappstuhlMeClient. Please set the KLAPPSTUHL_ME_API_TOKEN parameter."
-            )
+        return f"<KlappstuhlMeClient base_url={self._base_url!r} available={self.available}>"
 
     @property
-    def headers(self) -> dict[str, str | None]:
-        """Returns a dictionary with the Authorization header set to the provided API key."""
-        return {"Authorization": self.api_key}
+    def available(self) -> bool:
+        """Whether the hoster is configured (a provision token or a personal key)."""
+        return bool(self.provision_token or self.api_key)
 
-    @staticmethod
-    async def _handle_response(response: aiohttp.ClientResponse, expect_json: bool = True, return_type: str = "json") -> Any:
-        """
-        Handles HTTP responses, rate limiting, and errors.
-        Rate limits return a 429 status code with x-ratelimit headers[cite: 1].
-        """
-        if not response.ok:
-            error_text = await response.text()
-            raise Exception(f"HTTP {response.status}: {error_text}")
+    # -- per-guild key provisioning ------------------------------------------
 
-        if return_type == "json":
-            return await response.json()
-        elif return_type == "bytes":
-            return await response.read()
-        elif return_type == "text":
-            return await response.text()
+    async def _provision_guild_key(self, guild_id: int) -> str:
+        """Get-or-create a guild's ``images:guild`` key from the host."""
+        # Uses the escape hatch with the base (service) token as the bearer.
+        data = await self.request("POST", f"/guilds/{guild_id}/provision-key")
+        token = data.get("token") if isinstance(data, dict) else None
+        if not token:
+            raise ValueError(f"provision endpoint returned no token for guild {guild_id}")
+        return token
 
-        return None
+    async def _guild_client(self, guild_id: int) -> Client:
+        """Return a cached per-guild :class:`Client`, provisioning its key if needed."""
+        client = self._guild_clients.get(guild_id)
+        if client is not None:
+            return client
 
-    @staticmethod
-    async def _add_file_to_form(
-        form: aiohttp.FormData, field_name: str, file_data: FileType, filename: Optional[str] = None
-    ) -> None:
-        """Helper to append various file types to an aiohttp FormData object asynchronously."""
-        if isinstance(file_data, str):
-            with open(file_data, "rb") as f:
-                form.add_field(field_name, f.read(), filename=filename or os.path.basename(file_data))
-        elif isinstance(file_data, io.BytesIO):
-            if not filename:
-                raise ValueError("A filename must be provided when passing io.BytesIO.")
-            form.add_field(field_name, file_data.getvalue(), filename=filename)
-        elif isinstance(file_data, bytes):
-            if not filename:
-                raise ValueError("A filename must be provided when passing bytes.")
-            form.add_field(field_name, file_data, filename=filename)
-        elif isinstance(file_data, discord.File):
-            # Read from the file pointer and reset the position in case it gets reused
-            file_data.fp.seek(0)
-            data = file_data.fp.read()
-            file_data.fp.seek(0)
-            form.add_field(field_name, data, filename=filename or file_data.filename)
-        elif isinstance(file_data, discord.Attachment):
-            # Asynchronously download the attachment bytes
-            file_bytes = await file_data.read()
-            form.add_field(field_name, file_bytes, filename=filename or file_data.filename)
-        else:
-            raise TypeError(
-                f"Unsupported file type: {type(file_data)}. Expected str, bytes, io.BytesIO, discord.File, or discord.Attachment."
-            )
+        async with self._guild_lock:
+            # Re-check under the lock: a concurrent caller may have just filled it.
+            client = self._guild_clients.get(guild_id)
+            if client is not None:
+                return client
 
-    @staticmethod
-    async def _prepare_file_or_url_form(
-        file: Optional[FileType] = None,
-        filename: Optional[str] = None,
-        url: Optional[str] = None,
-    ) -> aiohttp.FormData:
-        """Helper to create multipart payload for endpoints accepting file or URL."""
-        form = aiohttp.FormData()
-        if url:
-            form.add_field("url", url)
-        elif file is not None:
-            await KlappstuhlMeClient._add_file_to_form(form, "file", file, filename)
-        else:
-            raise ValueError("Must provide either a file or a URL.")
-        return form
-
-    # ==========================================
-    # Images Group
-    # ==========================================
-
-    async def upload_images(
-        self, files: List[Union[FileType, Tuple[str, Union[bytes, io.BytesIO]]]], expires_in: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Upload multiple image files (.apng, .png, .jpg, .jpeg, .gif, .avif)[cite: 1].
-        Pass expires_in for auto-deletion (capped at 365 days)[cite: 1].
-        """
-        self.check_api_key()
-        form = aiohttp.FormData()
-
-        for file_item in files:
-            if isinstance(file_item, tuple) and len(file_item) == 2:
-                fname, fdata = file_item
-                await self._add_file_to_form(form, "file", fdata, filename=fname)
+            if self.provision_token:
+                token = await self._provision_guild_key(guild_id)
+            elif self.api_key:
+                token = self.api_key  # legacy fallback: a personal images:guild key
             else:
-                await self._add_file_to_form(form, "file", file_item)
+                raise ValueError(
+                    "cannot authorise guild-gallery calls: set KLAPPSTUHL_ME_PROVISION_TOKEN "
+                    "(preferred) or the legacy KLAPPSTUHL_ME_API_TOKEN"
+                )
+            client = Client(token, session=self._session, base_url=self._base_url)
+            self._guild_clients[guild_id] = client
+            return client
 
-        params = {}
-        if expires_in is not None:
-            params["expires_in"] = str(expires_in)
+    def invalidate_guild_key(self, guild_id: int) -> None:
+        """Drop a cached guild client (e.g. after its key was revoked)."""
+        self._guild_clients.pop(guild_id, None)
 
-        async with self._session.post(
-            f"{self.base_url}/images/upload", data=form, params=params, headers=self.headers
-        ) as resp:
-            return await self._handle_response(resp)
+    async def _guild_call[T](self, guild_id: int, call: Callable[[Client], Awaitable[T]]) -> T:
+        """Run a per-guild gallery op, re-provisioning once if the key is rejected."""
+        for attempt in range(2):
+            client = await self._guild_client(guild_id)
+            try:
+                return await call(client)
+            except (Unauthorized, Forbidden):
+                # A cached key that got revoked/rotated → re-provision and retry once.
+                if attempt == 0 and self.provision_token:
+                    self.invalidate_guild_key(guild_id)
+                    continue
+                raise
+        raise AssertionError("unreachable")  # pragma: no cover
 
-    async def delete_image(self, image_id: str) -> Dict[str, Any]:
-        """Delete an image by its ID. You must be the uploader[cite: 1]."""
-        self.check_api_key()
-        async with self._session.delete(f"{self.base_url}/images/{image_id}", headers=self.headers) as resp:
-            return await self._handle_response(resp)
+    # -- discord-native file coercion ----------------------------------------
 
-    # ==========================================
-    # Guild galleries (require the ``images:guild`` scope)
-    # ==========================================
+    @staticmethod
+    async def _coerce(item: object) -> File:
+        """Coerce a Percy gallery input into a :class:`klappstuhl.File`."""
+        if isinstance(item, File):
+            return item
+        if isinstance(item, discord.Attachment):
+            return File(await item.read(), filename=item.filename)
+        if isinstance(item, discord.File):
+            item.fp.seek(0)
+            data = item.fp.read()
+            item.fp.seek(0)
+            return File(data, filename=item.filename or "image.png")
+        if isinstance(item, tuple) and len(item) == 2:
+            name, data = item
+            raw = data.getvalue() if isinstance(data, io.BytesIO) else data
+            return File(raw, filename=name)
+        return resolve_file(item)  # type: ignore[arg-type]  # path/bytes/stream
+
+    # -- guild galleries (per-guild key + discord coercion) ------------------
 
     async def upload_guild_images(
         self,
         guild_id: int,
-        files: List[Union[FileType, Tuple[str, Union[bytes, io.BytesIO]]]],
-        expires_in: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Upload one or more images into a Discord guild's shared gallery.
+        *files: object,
+        expires_in: int | None = None,
+    ) -> UploadResult:
+        """Upload one or more images into a guild's shared gallery.
 
-        Identical wire shape to :meth:`upload_images`, but the uploaded rows are
-        tagged with ``guild_id`` so they show up in the guild's dashboard gallery.
-        Returns the same ``UploadResult`` payload (``links`` / ``raw_links``).
+        Accepts Percy-native inputs (``discord.File`` / ``discord.Attachment`` /
+        ``(filename, bytes)`` tuples) in addition to everything the base client
+        takes, and routes through the guild's provisioned ``images:guild`` key.
         """
-        self.check_api_key()
-        form = aiohttp.FormData()
+        parts = [await self._coerce(f) for f in files]
+        return await self._guild_call(
+            guild_id, lambda c: c.upload_guild_images(guild_id, *parts, expires_in=expires_in)
+        )
 
-        for file_item in files:
-            if isinstance(file_item, tuple) and len(file_item) == 2:
-                fname, fdata = file_item
-                await self._add_file_to_form(form, "file", fdata, filename=fname)
-            else:
-                await self._add_file_to_form(form, "file", file_item)
+    async def list_guild_images(self, guild_id: int) -> GuildImagesResult:
+        """List a guild's shared gallery (newest first, expired omitted)."""
+        return await self._guild_call(guild_id, lambda c: c.list_guild_images(guild_id))
 
-        params = {}
-        if expires_in is not None:
-            params["expires_in"] = str(expires_in)
-
-        async with self._session.post(
-            f"{self.base_url}/guilds/{guild_id}/images/upload", data=form, params=params, headers=self.headers
-        ) as resp:
-            return await self._handle_response(resp)
-
-    async def list_guild_images(self, guild_id: int) -> Dict[str, Any]:
-        """List the images in a guild's shared gallery (newest first, no expired)."""
-        self.check_api_key()
-        async with self._session.get(f"{self.base_url}/guilds/{guild_id}/images", headers=self.headers) as resp:
-            return await self._handle_response(resp)
-
-    async def delete_guild_image(self, guild_id: int, image_id: str) -> Dict[str, Any]:
+    async def delete_guild_image(self, guild_id: int, image_id: str) -> DeleteResult:
         """Delete an image from a guild's shared gallery (scoped by ``guild_id``)."""
-        self.check_api_key()
-        async with self._session.delete(
-            f"{self.base_url}/guilds/{guild_id}/images/{image_id}", headers=self.headers
-        ) as resp:
-            return await self._handle_response(resp)
-
-    async def download_images(self, files: List[str]) -> bytes:
-        """
-        Bundle one or more images into a ZIP archive[cite: 1].
-        Pass an empty list to receive every image you own[cite: 1].
-        Returns the raw bytes of the ZIP file[cite: 1].
-        """
-        self.check_api_key()
-        payload = {"files": files}
-        async with self._session.post(f"{self.base_url}/images/download", json=payload, headers=self.headers) as resp:
-            return await self._handle_response(resp, return_type="bytes")
-
-    # ==========================================
-    # Media Group
-    # ==========================================
-
-    async def manipulate_image(
-        self,
-        op: str,
-        amount: Optional[float] = None,
-        share: Optional[bool] = None,
-        file: Optional[FileType] = None,
-        filename: Optional[str] = None,
-        url: Optional[str] = None,
-    ) -> Union[bytes, Dict[str, Any]]:
-        """
-        Apply a visual effect (blur, pixelate, deepfry, invert, grayscale)[cite: 1].
-        Returns PNG bytes, or JSON if share=True[cite: 1].
-        """
-        self.check_api_key()
-        form = await self._prepare_file_or_url_form(file=file, filename=filename, url=url)
-
-        params = {}
-        if amount is not None:
-            params["amount"] = str(amount)
-        if share is not None:
-            params["share"] = str(share).lower()
-
-        async with self._session.post(f"{self.base_url}/image/{op}", data=form, params=params, headers=self.headers) as resp:
-            return await self._handle_response(resp, return_type="json" if share else "bytes")
-
-    async def convert_image(
-        self,
-        to: str,
-        quality: Optional[int] = None,
-        share: Optional[bool] = None,
-        file: Optional[FileType] = None,
-        filename: Optional[str] = None,
-        url: Optional[str] = None,
-    ) -> Union[bytes, Dict[str, Any]]:
-        """
-        Transcode an image to a different raster format (png, jpeg, webp, gif, bmp, tiff)[cite: 1].
-        Returns image bytes, or JSON if share=True[cite: 1].
-        """
-        self.check_api_key()
-        form = await self._prepare_file_or_url_form(file=file, filename=filename, url=url)
-
-        params = {"to": to}
-        if quality is not None:
-            params["quality"] = str(quality)
-        if share is not None:
-            params["share"] = str(share).lower()
-
-        async with self._session.post(f"{self.base_url}/convert", data=form, params=params, headers=self.headers) as resp:
-            return await self._handle_response(resp, return_type="json" if share else "bytes")
-
-    async def get_metadata(
-        self, file: Optional[FileType] = None, filename: Optional[str] = None, url: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Inspect an image and return its dimensions, format, color type, and byte size[cite: 1]."""
-        self.check_api_key()
-        form = await self._prepare_file_or_url_form(file=file, filename=filename, url=url)
-
-        async with self._session.post(f"{self.base_url}/metadata", data=form, headers=self.headers) as resp:
-            return await self._handle_response(resp)
-
-    # ==========================================
-    # Render Group
-    # ==========================================
-
-    async def render_code(
-        self, code: str, language: Optional[str] = None, theme: Optional[str] = None
-    ) -> Union[str, Dict[str, Any]]:
-        """
-        Render a syntax-highlighted code screenshot.
-        Returns SVG string[cite: 1].
-        """
-        self.check_api_key()
-        payload = {"code": code}
-        if language:
-            payload["language"] = language
-        if theme:
-            payload["theme"] = theme
-
-        async with self._session.post(f"{self.base_url}/render/code", json=payload, headers=self.headers) as resp:
-            content_type = resp.headers.get("Content-Type", "")
-            if "application/json" in content_type:
-                return await self._handle_response(resp, return_type="json")
-            return await self._handle_response(resp, return_type="text")
-
-    async def render_screenshot(
-        self,
-        url: str,
-        dark_mode: bool = False,
-        full_page: bool = False,
-        mobile: bool = False,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-    ) -> bytes:
-        """Render a web page to a PNG[cite: 1]."""
-        self.check_api_key()
-        payload = {"url": url, "dark_mode": dark_mode, "full_page": full_page, "mobile": mobile}
-        if width is not None:
-            payload["width"] = width
-        if height is not None:
-            payload["height"] = height
-
-        async with self._session.post(f"{self.base_url}/render/screenshot", json=payload, headers=self.headers) as resp:
-            return await self._handle_response(resp, return_type="bytes")
-
-    async def render_markdown_pdf(self, markdown: str) -> bytes:
-        """Convert Markdown to a PDF document[cite: 1]."""
-        self.check_api_key()
-        payload = {"markdown": markdown}
-
-        async with self._session.post(f"{self.base_url}/render/markdown-pdf", json=payload, headers=self.headers) as resp:
-            return await self._handle_response(resp, return_type="bytes")
-
-    async def transcode_media(self, to: str, file: FileType, filename: Optional[str] = None) -> bytes:
-        """
-        Convert media that needs ffmpeg (e.g., to=mp4 or to=jpg)[cite: 1].
-        """
-        self.check_api_key()
-        form = aiohttp.FormData()
-        await self._add_file_to_form(form, "file", file, filename)
-
-        params = {"to": to}
-        async with self._session.post(
-            f"{self.base_url}/convert/transcode", data=form, params=params, headers=self.headers
-        ) as resp:
-            return await self._handle_response(resp, return_type="bytes")
-
-    # ==========================================
-    # Scan Group
-    # ==========================================
-
-    async def scan_file(self, file: FileType, filename: Optional[str] = None) -> Dict[str, Any]:
-        """Scan an uploaded file for malware via ClamAV and VirusTotal[cite: 1]."""
-        self.check_api_key()
-        form = aiohttp.FormData()
-        await self._add_file_to_form(form, "file", file, filename)
-
-        async with self._session.post(f"{self.base_url}/scan", data=form, headers=self.headers) as resp:
-            return await self._handle_response(resp)
-
-    # ==========================================
-    # Admin Group
-    # ==========================================
-
-    async def get_admin_updates(self) -> List[Dict[str, Any]]:
-        """List container image-update status. Requires `admin:read` scope[cite: 1]."""
-        self.check_api_key()
-        async with self._session.get(f"{self.base_url}/admin/updates", headers=self.headers) as resp:
-            return await self._handle_response(resp)
+        return await self._guild_call(guild_id, lambda c: c.delete_guild_image(guild_id, image_id))

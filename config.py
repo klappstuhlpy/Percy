@@ -81,7 +81,7 @@ for _directory in (data_path, logs_path):
     _directory.mkdir(exist_ok=True)
 
 name: str = 'Percy'
-version: VersionInfo = VersionInfo(major=2, minor=1, micro=0, release='beta' if beta else 'final')
+version: VersionInfo = VersionInfo(major=2, minor=2, micro=0, release='beta' if beta else 'final')
 description: str = 'A multipurpose bot for Discord'
 support_server: str = 'https://discord.com/invite/3jSYQ9VNbA'
 website: str = 'https://percy.klappstuhl.me'
@@ -165,7 +165,14 @@ internal_api_port: int = int(env('INTERNAL_API_PORT') or '8090')
 internal_api_host: str = env('INTERNAL_API_HOST') or '127.0.0.1'
 
 # https://klappstuhl.me/api/docs
+# Legacy/optional personal API key. Prefer KLAPPSTUHL_ME_PROVISION_TOKEN below:
+# with it set, Percy provisions a narrow per-guild `images:guild` key on demand
+# and never needs a personal key for guild galleries.
 klappstuhl_me_api_token: str | None = env('KLAPPSTUHL_ME_API_TOKEN')
+# Shared service token that lets Percy provision (get-or-create) a per-guild
+# gallery key from the image host — set to the same value as the host's
+# `gallery_provision_token`. This replaces handing Percy a personal API key.
+klappstuhl_me_provision_token: str | None = env('KLAPPSTUHL_ME_PROVISION_TOKEN')
 
 genius_key: str | None = env('GENIUS_TOKEN')
 github_key: str | None = env('GITHUB_TOKEN')

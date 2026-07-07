@@ -258,7 +258,11 @@ class Bot(commands.Bot):
         self.db = await Database(self, loop=self.loop).wait()
         self.session = ClientSession()
 
-        self.klappstuhlme_client = KlappstuhlMeClient(self.session, api_key=config.klappstuhl_me_api_token)
+        self.klappstuhlme_client = KlappstuhlMeClient(
+            self.session,
+            api_key=config.klappstuhl_me_api_token,
+            provision_token=config.klappstuhl_me_provision_token,
+        )
 
         self.timers = TimerManager(self)
         self.render = RenderingService()
