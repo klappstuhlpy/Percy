@@ -106,10 +106,15 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
     // If the role/channel pickers failed to load we warn rather than silently
     // showing empty dropdowns (saving with empty pickers could clobber config).
     let degraded = channels.is_err() || roles.is_err();
+    let guild_name = guild.name.clone();
 
     GuildTemplate {
         account: Some(Viewer::from_session(&session)),
+        guild_id,
         guild,
+        guild_name,
+        nav_active: "config",
+        page_title: "",
         channels: channels.unwrap_or_default(),
         roles: roles.unwrap_or_default(),
         sentinel: sentinel.ok().flatten(),

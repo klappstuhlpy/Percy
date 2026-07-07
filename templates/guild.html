@@ -1,14 +1,11 @@
 {% extends "dashboard_layout.html" %}
 
-{% block nav_dashboard_active %} active{% endblock %}
-
 {% block title %}{{ guild.name }} | Dashboard{% endblock %}
 
-{% block css %}
+{% block page_css %}
 <link rel="stylesheet" href="/static/css/dashboard.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/command_palette.css" type="text/css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css"
-      crossorigin="anonymous"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" crossorigin="anonymous"/>
 {% endblock %}
 
 {% block content %}
@@ -911,25 +908,10 @@
 
 {% endblock %}
 
-{% block body_end %}
+{% block page_js %}
 <script>const GUILD_ID = '{{ guild.id }}';</script>
-<script>window.PERCY_DASH = {guildId: '{{ guild.id }}', guildName: {
-{
-    guild.name | json | safe
-}
-}
-}
-;</script>
-<script>window.AI_OVERRIDES = {
-{
-    guild.ai.overrides_json() | safe
-}
-}
-;</script>
+<script>window.AI_OVERRIDES = {{ guild.ai.overrides_json()|safe }};</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" crossorigin="anonymous"></script>
-<script src="/static/js/common.js"></script>
-<script src="/static/js/dashboard.js"></script>
 <script src="/static/js/guild.js"></script>
 <script src="/static/js/ai.js"></script>
-<script src="/static/js/command_palette.js"></script>
 {% endblock %}

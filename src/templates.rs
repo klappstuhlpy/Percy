@@ -44,6 +44,10 @@ pub(crate) struct AddPercyGuild {
 pub(crate) struct GuildTemplate {
     pub(crate) account: Option<Viewer>,
     pub(crate) guild: GuildInfo,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
     pub(crate) channels: Vec<Channel>,
     pub(crate) roles: Vec<Role>,
     pub(crate) sentinel: Option<SentinelInfo>,
