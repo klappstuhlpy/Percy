@@ -1498,7 +1498,7 @@ speed = ["aiohttp[speedups] (>=3.9,<4)"]
 type = "git"
 url = "https://github.com/klappstuhlpy/klappstuhl.py"
 reference = "HEAD"
-resolved_reference = "e3be08bbdcf46d0a2e0e7e48db766e3cc80775ab"
+resolved_reference = "34177d2dff44f2e29ffebe5abb27b5aefd07fc83"
 
 [[package]]
 name = "levenshtein"

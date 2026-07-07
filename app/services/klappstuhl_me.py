@@ -31,8 +31,9 @@ from typing import TYPE_CHECKING
 
 import discord
 from klappstuhl import Client, File
+from klappstuhl.client import _bare_id
 from klappstuhl.errors import Forbidden, Unauthorized
-from klappstuhl.file import resolve_file
+from klappstuhl.file import resolve_file, FileInput
 from klappstuhl.http import DEFAULT_BASE_URL
 
 if TYPE_CHECKING:
@@ -47,41 +48,45 @@ if TYPE_CHECKING:
 _UNCONFIGURED = "unconfigured"
 
 
-class KlappstuhlMeClient(Client):
-    """Percy's extension of :class:`klappstuhl.Client` (see the module docstring)."""
+class KlappstuhlClient(Client):
+    """Percy's extension of :class:`klappstuhl.Client` for public api use (see the module docstring)."""
 
     def __init__(
         self,
-        session: aiohttp.ClientSession,
+        api_token: str | None = None,
         *,
-        api_key: str | None = None,
+        session: aiohttp.ClientSession | None = None,
+        base_url: str = DEFAULT_BASE_URL,
+    ) -> None:
+        # The base client's token is used for all normal api calls
+        super().__init__(api_token or _UNCONFIGURED, session=session, base_url=base_url)
+
+
+class KlappstuhlInternalClient(Client):
+    """Percy's extension of :class:`klappstuhl.Client` for internal api use (see the module docstring)."""
+
+    def __init__(
+        self,
         provision_token: str | None = None,
+        *,
+        session: aiohttp.ClientSession | None = None,
         base_url: str = DEFAULT_BASE_URL,
     ) -> None:
         # The base client's token is only ever used for the provisioning call
         # (which needs the service token); guild galleries use per-guild keys.
-        super().__init__(provision_token or api_key or _UNCONFIGURED, session=session, base_url=base_url)
-        self.api_key: str | None = api_key
-        self.provision_token: str | None = provision_token
-        self._session: aiohttp.ClientSession = session
-        self._base_url: str = base_url
+        super().__init__(provision_token or _UNCONFIGURED, session=session, base_url=base_url)
         # Per-guild clients, each bound to that guild's minted images:guild key
         # and sharing the one aiohttp session. Built on demand, cached here.
         self._guild_clients: dict[int, Client] = {}
         self._guild_lock: asyncio.Lock = asyncio.Lock()
-        # A base client bound to the *personal account* key, used for the
-        # account-scoped features (short links, pastes, QR, unfurl). These are
-        # not per-guild, so they cannot use a provisioned images:guild key — they
-        # need a real account key with the relevant scopes. Built on demand.
-        self._account_client: Client | None = None
 
     def __repr__(self) -> str:
-        return f"<KlappstuhlMeClient base_url={self._base_url!r} available={self.available}>"
+        return f"<KlappstuhlMeClient base_url={self._http.base_url!r} available={self.available}>"
 
     @property
     def available(self) -> bool:
         """Whether the hoster is configured (a provision token or a personal key)."""
-        return bool(self.provision_token or self.api_key)
+        return bool(self._http.token and self._http.token != _UNCONFIGURED)
 
     # -- per-guild key provisioning ------------------------------------------
 
@@ -115,7 +120,7 @@ class KlappstuhlMeClient(Client):
                     "cannot authorise guild-gallery calls: set KLAPPSTUHL_ME_PROVISION_TOKEN "
                     "(preferred) or the legacy KLAPPSTUHL_ME_API_TOKEN"
                 )
-            client = Client(token, session=self._session, base_url=self._base_url)
+            client = Client(token, session=self._http._session, base_url=self._http.base_url)
             self._guild_clients[guild_id] = client
             return client
 
@@ -131,7 +136,7 @@ class KlappstuhlMeClient(Client):
                 return await call(client)
             except (Unauthorized, Forbidden):
                 # A cached key that got revoked/rotated → re-provision and retry once.
-                if attempt == 0 and self.provision_token:
+                if attempt == 0 and self._http.token:
                     self.invalidate_guild_key(guild_id)
                     continue
                 raise
@@ -173,16 +178,47 @@ class KlappstuhlMeClient(Client):
         """
         parts = [await self._coerce(f) for f in files]
         return await self._guild_call(
-            guild_id, lambda c: c.upload_guild_images(guild_id, *parts, expires_in=expires_in)
+            guild_id, lambda c: c._upload_guild_images(guild_id, *parts, expires_in=expires_in)
         )
 
     async def list_guild_images(self, guild_id: int) -> GuildImagesResult:
         """List a guild's shared gallery (newest first, expired omitted)."""
-        return await self._guild_call(guild_id, lambda c: c.list_guild_images(guild_id))
+        return await self._guild_call(guild_id, lambda c: c._list_guild_images(guild_id))
 
     async def delete_guild_image(self, guild_id: int, image_id: str) -> DeleteResult:
         """Delete an image from a guild's shared gallery (scoped by ``guild_id``)."""
-        return await self._guild_call(guild_id, lambda c: c.delete_guild_image(guild_id, image_id))
+        return await self._guild_call(guild_id, lambda c: c._delete_guild_image(guild_id, image_id))
+
+    async def _upload_guild_images(
+        self,
+        guild_id: int | str,
+        *files: FileInput,
+        expires_in: int | None = None,
+    ) -> UploadResult:
+        """Upload images into a Discord guild's shared gallery.
+
+        Requires the ``images:guild`` scope. Identical to :meth:`upload` but
+        every row is tagged with ``guild_id`` so it appears in that guild's
+        gallery.
+        """
+        if not files:
+            raise ValueError("upload_guild_images() requires at least one file")
+        parts = [("file", await resolve_file(f)) for f in files]
+        params = {"expires_in": expires_in} if expires_in is not None else None
+        data = await self._http.request(
+            "POST", f"/guilds/{guild_id}/images/upload", params=params, files=parts
+        )
+        return UploadResult.from_dict(data)
+
+    async def _list_guild_images(self, guild_id: int | str) -> GuildImagesResult:
+        """List a guild's gallery, newest first. Requires ``images:guild``."""
+        data = await self._http.request("GET", f"/guilds/{guild_id}/images")
+        return GuildImagesResult.from_dict(data)
+
+    async def _delete_guild_image(self, guild_id: int | str, image_id: str) -> DeleteResult:
+        """Delete an image from a guild's gallery. Requires ``images:guild``."""
+        data = await self._http.request("DELETE", f"/guilds/{guild_id}/images/{_bare_id(image_id)}")
+        return DeleteResult.from_dict(data)
 
     # -- account-scoped features (short links, pastes, QR, unfurl) ------------
 
@@ -195,14 +231,3 @@ class KlappstuhlMeClient(Client):
         provisioned key — set ``KLAPPSTUHL_ME_API_TOKEN`` to enable them.
         """
         return bool(self.api_key)
-
-    @property
-    def _account(self) -> Client:
-        """A base :class:`klappstuhl.Client` bound to the personal account key."""
-        if self._account_client is None:
-            if not self.api_key:
-                raise ValueError(
-                    "account-scoped klappstuhl.me features need a personal key: set KLAPPSTUHL_ME_API_TOKEN"
-                )
-            self._account_client = Client(self.api_key, session=self._session, base_url=self._base_url)
-        return self._account_client

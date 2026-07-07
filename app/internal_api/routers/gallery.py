@@ -25,7 +25,7 @@ router = APIRouter(prefix="/guilds/{guild_id}", tags=["Gallery"], dependencies=[
 
 def _client_or_503(bot) -> KlappstuhlMeClient:
     """Return the configured klappstuhl.me client, or 503 when the hoster is off."""
-    client = getattr(bot, "klappstuhlme_client", None)
+    client = bot.klappstuhlme_internal_client
     if client is None or not client.available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

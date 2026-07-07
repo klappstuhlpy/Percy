@@ -272,7 +272,7 @@ class Polls(Cog):
 
         if image_bytes:
             # (content, filename) -> the client's (filename, data) tuple form.
-            response = await self.bot.klappstuhlme_client.upload_guild_images(guild.id, tuple(reversed(image_bytes)))
+            response = await self.bot.klappstuhlme_internal_client.upload_guild_images(guild.id, tuple(reversed(image_bytes)))
             if response.errors == 0 and response.raw_links:
                 image_url = response.raw_links[0]
 
@@ -446,7 +446,7 @@ class Polls(Cog):
 
         image_url = flags.image_url
         if flags.image:
-            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, flags.image)
+            response = await self.bot.klappstuhlme_internal_client.upload_guild_images(ctx.guild.id, flags.image)
             if response.errors != 0 or not response.raw_links:
                 await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
             else:
@@ -590,7 +590,7 @@ class Polls(Cog):
 
         if ctx.message.attachments:
             image = ctx.message.attachments[0]
-            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, image)
+            response = await self.bot.klappstuhlme_internal_client.upload_guild_images(ctx.guild.id, image)
             if response.errors != 0 or not response.raw_links:
                 await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
             else:
@@ -705,7 +705,7 @@ class Polls(Cog):
         # File uploads go to the guild's gallery; we only ever store one image URL
         # to avoid confusion, and the uploaded file takes precedence over a URL.
         if isinstance(flags.image, discord.Attachment):
-            response = await self.bot.klappstuhlme_client.upload_guild_images(ctx.guild.id, flags.image)
+            response = await self.bot.klappstuhlme_internal_client.upload_guild_images(ctx.guild.id, flags.image)
             if response.errors != 0 or not response.raw_links:
                 await ctx.send_error("Failed to upload image. *Note: Only images and gifs are supported with a maximum size of 10MB.*")
                 return

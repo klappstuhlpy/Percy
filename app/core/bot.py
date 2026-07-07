@@ -40,7 +40,7 @@ from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand
-from app.services.klappstuhl_me import KlappstuhlMeClient
+from app.services.klappstuhl_me import KlappstuhlInternalClient, KlappstuhlClient
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,
@@ -108,7 +108,8 @@ class Bot(commands.Bot):
     context: type[Context]
     timers: TimerManager
     render: RenderingService
-    klappstuhlme_client: KlappstuhlMeClient
+    klappstuhlme_internal_client: KlappstuhlInternalClient
+    klappstuhlme_client: KlappstuhlClient
     ai: AIService
     ai_router: CommandRouter
     spam_control: SpamControl
@@ -258,10 +259,13 @@ class Bot(commands.Bot):
         self.db = await Database(self, loop=self.loop).wait()
         self.session = ClientSession()
 
-        self.klappstuhlme_client = KlappstuhlMeClient(
-            self.session,
-            api_key=config.klappstuhl_me_api_token,
-            provision_token=config.klappstuhl_me_provision_token,
+        self.klappstuhlme_client = KlappstuhlClient(
+            config.klappstuhl_me_api_token,
+            session=self.session,
+        )
+        self.klappstuhlme_internal_client = KlappstuhlInternalClient(
+            config.klappstuhl_me_provision_token,
+            session=self.session
         )
 
         self.timers = TimerManager(self)
