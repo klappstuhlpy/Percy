@@ -253,7 +253,11 @@ async def test_check_ai_health_warns_when_unreachable(caplog: pytest.LogCaptureF
 
     from app.core.bot import Bot
 
-    stub = SimpleNamespace(ai=_StubAI(enabled=True, report=_make_report(reachable=False)), log=logging.getLogger('test.ai'))
+    stub = SimpleNamespace(
+        ai=_StubAI(enabled=True, report=_make_report(reachable=False)),
+        log=logging.getLogger('test.ai'),
+        _ollama_host='http://localhost:11434',
+    )
     with caplog.at_level(logging.WARNING, logger='test.ai'):
         await Bot._check_ai_health(stub)  # type: ignore[arg-type]
 
@@ -266,7 +270,11 @@ async def test_check_ai_health_info_when_reachable(caplog: pytest.LogCaptureFixt
 
     from app.core.bot import Bot
 
-    stub = SimpleNamespace(ai=_StubAI(enabled=True, report=_make_report(reachable=True)), log=logging.getLogger('test.ai'))
+    stub = SimpleNamespace(
+        ai=_StubAI(enabled=True, report=_make_report(reachable=True)),
+        log=logging.getLogger('test.ai'),
+        _ollama_host='http://localhost:11434',
+    )
     with caplog.at_level(logging.INFO, logger='test.ai'):
         await Bot._check_ai_health(stub)  # type: ignore[arg-type]
 
