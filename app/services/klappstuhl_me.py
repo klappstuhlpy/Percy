@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import asyncio
 import io
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Mapping, Any
 
 import discord
 from klappstuhl import Client, File
@@ -35,12 +36,12 @@ from klappstuhl.client import _bare_id
 from klappstuhl.errors import Forbidden, Unauthorized
 from klappstuhl.file import resolve_file, FileInput
 from klappstuhl.http import DEFAULT_BASE_URL
+from klappstuhl.models import DeleteResult, UploadResult
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     import aiohttp
-    from klappstuhl.models import DeleteResult, GuildImagesResult, UploadResult
 
 # A non-empty sentinel handed to the base client when the hoster is unconfigured
 # (the base client requires *some* token). It is never sent: every guild call
@@ -111,16 +112,14 @@ class KlappstuhlInternalClient(Client):
             if client is not None:
                 return client
 
-            if self.provision_token:
+            if self._http.token:
                 token = await self._provision_guild_key(guild_id)
-            elif self.api_key:
-                token = self.api_key  # legacy fallback: a personal images:guild key
             else:
                 raise ValueError(
                     "cannot authorise guild-gallery calls: set KLAPPSTUHL_ME_PROVISION_TOKEN "
                     "(preferred) or the legacy KLAPPSTUHL_ME_API_TOKEN"
                 )
-            client = Client(token, session=self._http._session, base_url=self._http.base_url)
+            client = KlappstuhlInternalClient(token, session=self._http._session, base_url=self._http.base_url)
             self._guild_clients[guild_id] = client
             return client
 
@@ -128,12 +127,12 @@ class KlappstuhlInternalClient(Client):
         """Drop a cached guild client (e.g. after its key was revoked)."""
         self._guild_clients.pop(guild_id, None)
 
-    async def _guild_call[T](self, guild_id: int, call: Callable[[Client], Awaitable[T]]) -> T:
+    async def _guild_call[T](self, guild_id: int, call: Callable[[KlappstuhlInternalClient], Awaitable[T]]) -> T:
         """Run a per-guild gallery op, re-provisioning once if the key is rejected."""
         for attempt in range(2):
             client = await self._guild_client(guild_id)
             try:
-                return await call(client)
+                return await call(client)  # type: ignore[return-value]
             except (Unauthorized, Forbidden):
                 # A cached key that got revoked/rotated → re-provision and retry once.
                 if attempt == 0 and self._http.token:
@@ -231,3 +230,43 @@ class KlappstuhlInternalClient(Client):
         provisioned key — set ``KLAPPSTUHL_ME_API_TOKEN`` to enable them.
         """
         return bool(self.api_key)
+
+
+@dataclass(frozen=True)
+class GuildImageInfo:
+    """A single image in a Discord guild's shared gallery."""
+
+    id: str
+    ext: str
+    mimetype: str
+    size: int
+    uploaded_at: str
+    url: str
+    raw_url: str
+    original_name: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> GuildImageInfo:
+        return cls(
+            id=str(data["id"]),
+            ext=str(data["ext"]),
+            mimetype=str(data["mimetype"]),
+            size=int(data["size"]),
+            uploaded_at=str(data["uploaded_at"]),
+            url=str(data["url"]),
+            raw_url=str(data["raw_url"]),
+            original_name=data.get("original_name"),
+        )
+
+
+@dataclass(frozen=True)
+class GuildImagesResult:
+    """A listing of a guild's gallery."""
+
+    images: list[GuildImageInfo]
+    total: int
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> GuildImagesResult:
+        images = [GuildImageInfo.from_dict(i) for i in data.get("images", []) or []]
+        return cls(images=images, total=int(data.get("total", len(images))))
