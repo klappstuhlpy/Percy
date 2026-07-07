@@ -1,5 +1,37 @@
 /* Percy Bot Dashboard — matches the admin/account design language. */
 
+:root {
+    /* Height reserved for the sticky global top bar (see layout.css
+       .percy-topbar); the sidebar sizes itself against this. */
+    --dash-topbar-h: 3.5rem;
+}
+
+/* ── Cross-document view transitions ──────────────────────────────────────
+   dashboard.css only loads on dashboard pages, so this scopes the transition
+   to dashboard-internal navigation. The chrome (top bar + sidebar) carries a
+   stable `view-transition-name`, so it stays put while only the content area
+   crossfades -- this removes the full sidebar repaint/flash on every load.
+   Browsers without cross-document view transitions ignore this and fall back
+   to a normal navigation (no regression). */
+@view-transition { navigation: auto; }
+
+.percy-topbar { view-transition-name: percy-topbar; }
+
+/* Freeze the persistent chrome: no fade/move, so it reads as continuous. */
+::view-transition-group(dash-sidebar),
+::view-transition-group(percy-topbar),
+::view-transition-old(dash-sidebar),
+::view-transition-new(dash-sidebar),
+::view-transition-old(percy-topbar),
+::view-transition-new(percy-topbar) {
+    animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) { animation: none; }
+}
+
 .dashboard-container {
     max-width: 1200px;
     margin: 2rem auto;
@@ -58,18 +90,29 @@ main.percy-main:has(.dashboard-shell) {
 
 .dash-sidebar {
     position: sticky;
-    top: 1.25rem;
+    /* Sit just below the sticky top bar. */
+    top: calc(var(--dash-topbar-h) + 1.25rem);
     align-self: start;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    max-height: calc(100vh - 2.5rem);
+    /* Lock the container to the viewport height (minus the top bar and the
+       shell's top padding) so the sidebar itself never grows with the page or
+       gets cropped on short/tall pages -- only its inner content scrolls. */
+    height: calc(100dvh - var(--dash-topbar-h) - 3rem - 1.25rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
+    /* Reserve the scrollbar gutter so showing/hiding it never shifts the
+       layout -- one source of the on-load flicker. */
+    scrollbar-gutter: stable;
     padding: 1rem;
     border-radius: 0.75rem;
     background: var(--box);
     border: 1px solid var(--box-border);
+    /* Keep the sidebar visually static across same-site dashboard
+       navigations (see the @view-transition block) instead of repainting it. */
+    view-transition-name: dash-sidebar;
 }
 
 .dash-sidebar-back {
@@ -241,6 +284,7 @@ main.percy-main:has(.dashboard-shell) {
 .dash-pageinfo-tips {
     display: flex;
     flex-wrap: wrap;
+    flex-direction: column;
     gap: 0.4rem 1.1rem;
     margin-top: 0.5rem;
     list-style: none;
@@ -2426,8 +2470,11 @@ th.th-sortable[aria-sort="descending"]::after {
     }
     .dash-sidebar {
         position: static;
+        height: auto;
         max-height: none;
         top: auto;
+        overflow-y: visible;
+        scrollbar-gutter: auto;
     }
     .dash-sidebar-toggle { display: flex; }
     /* Collapsed by default on mobile; the toggle adds .open to reveal it. */
