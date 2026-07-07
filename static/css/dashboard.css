@@ -96,10 +96,11 @@ main.percy-main:has(.dashboard-shell) {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    /* Lock the container to the viewport height (minus the top bar and the
-       shell's top padding) so the sidebar itself never grows with the page or
-       gets cropped on short/tall pages -- only its inner content scrolls. */
-    height: calc(100dvh - var(--dash-topbar-h) - 3rem - 1.25rem);
+    /* Only as tall as its content, but never taller than the visible area
+       (viewport minus the top bar and the shell's top padding) so it never
+       grows with the page or gets cropped -- when the nav does exceed that
+       cap, its inner content scrolls instead. */
+    max-height: calc(100dvh - var(--dash-topbar-h) - 3rem - 1.25rem);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
