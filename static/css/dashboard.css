@@ -116,6 +116,8 @@ main.percy-main:has(.dashboard-shell) {
     /* Keep the sidebar visually static across same-site dashboard
        navigations (see the @view-transition block) instead of repainting it. */
     view-transition-name: dash-sidebar;
+    /* keep a margin to the footer separator */
+    margin-bottom: 1rem;
 }
 
 .dash-sidebar-back {
