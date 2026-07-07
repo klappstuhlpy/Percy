@@ -7,794 +7,885 @@
 {% block css %}
 <link rel="stylesheet" href="/static/css/dashboard.css" type="text/css"/>
 <link rel="stylesheet" href="/static/css/command_palette.css" type="text/css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" crossorigin="anonymous"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css"
+      crossorigin="anonymous"/>
 {% endblock %}
 
-{% block body %}
-<div class="dashboard-shell">
-    {% let guild_id = guild.id %}
-    <aside class="dash-sidebar" id="dash-sidebar">
-        <div class="dash-sidebar-top">
-            <a href="/dashboard" class="dash-sidebar-back">&larr; All servers</a>
-            <div class="dash-sidebar-guild">
-                <span class="dash-sidebar-guild-mark" aria-hidden="true"><span class="spark">✻</span></span>
-                <div class="dash-sidebar-guild-text">
-                    <span class="dash-sidebar-guild-name" title="{{ guild.name }}">{{ guild.name }}</span>
-                    <span class="dash-sidebar-guild-sub">Server dashboard</span>
-                </div>
-            </div>
-        </div>
-        <button type="button" class="dash-sidebar-toggle" aria-expanded="false" aria-controls="dash-sidebar"><span>Menu</span></button>
-        <nav class="dash-nav" aria-label="Dashboard sections">
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Overview</span>
-                <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link active">Configuration</a>
-                <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link">Members</a>
-                <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link">Statistics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link">Commands</a>
-            </div>
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Features</span>
-                <a href="/dashboard/guild/{{ guild_id }}/leveling" class="dash-nav-link">Leveling</a>
-                <a href="/dashboard/guild/{{ guild_id }}/economy" class="dash-nav-link">Economy</a>
-                <a href="/dashboard/guild/{{ guild_id }}/music" class="dash-nav-link">Music</a>
-                <a href="/dashboard/guild/{{ guild_id }}/autoresponders" class="dash-nav-link">Autoresponders</a>
-                <a href="/dashboard/guild/{{ guild_id }}/comics" class="dash-nav-link">Comics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/temp-channels" class="dash-nav-link">Temp Channels</a>
-            </div>
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Community</span>
-                <a href="/dashboard/guild/{{ guild_id }}/polls" class="dash-nav-link">Polls</a>
-                <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link">Giveaways</a>
-                <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link">Tags</a>
-                <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link">Highlights</a>
-                <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link">Emoji Stats</a>
-            </div>
-            <div class="dash-nav-group">
-                <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me">My Profile</a>
-            </div>
-        </nav>
-    </aside>
-
-    <div class="dashboard-content">
-    <div class="guild-header dash-rise">
-        {% match guild.icon_url %}
-        {% when Some with (url) %}
-        <img class="guild-header-icon" src="{{ url }}?size=128" alt="" width="64" height="64">
+{% block content %}
+<div class="guild-header dash-rise">
+    {% match guild.icon_url %}
+    {% when Some with (url) %}
+    <img class="guild-header-icon" src="{{ url }}?size=128" alt="" width="64" height="64">
+    {% when None %}
+    <div class="guild-header-icon guild-icon-placeholder large">{{ guild.name.chars().next().unwrap_or('?') }}</div>
+    {% endmatch %}
+    <div class="guild-header-meta">
+        <h1 class="guild-header-name">{{ guild.name }}</h1>
+        {% match guild.member_count %}
+        {% when Some with (count) %}
+        <span class="guild-members">{{ count }} members</span>
         {% when None %}
-        <div class="guild-header-icon guild-icon-placeholder large">{{ guild.name.chars().next().unwrap_or('?') }}</div>
         {% endmatch %}
-        <div class="guild-header-meta">
-            <h1 class="guild-header-name">{{ guild.name }}</h1>
-            {% match guild.member_count %}
-            {% when Some with (count) %}
-            <span class="guild-members">{{ count }} members</span>
-            {% when None %}
-            {% endmatch %}
-        </div>
-        <a href="/dashboard/guild/{{ guild.id }}/overview" class="button small ml-auto guild-header-action">Public Overview</a>
-        <a href="/dashboard/guild/{{ guild.id }}/members" class="button small ml-auto guild-header-action">Manage Members</a>
     </div>
+    <a href="/dashboard/guild/{{ guild.id }}/overview" class="button small ml-auto guild-header-action">Public
+        Overview</a>
+    <a href="/dashboard/guild/{{ guild.id }}/members" class="button small ml-auto guild-header-action">Manage
+        Members</a>
+</div>
 
-    {% if guild.is_new_config %}
-    <div class="setup-banner">
-        <strong>Welcome!</strong> This server hasn't been configured yet. Set up the basics below to get started.
+{% if guild.is_new_config %}
+<div class="setup-banner">
+    <strong>Welcome!</strong> This server hasn't been configured yet. Set up the basics below to get started.
+</div>
+{% endif %}
+
+{% if degraded %}
+<div class="setup-banner warning">
+    <strong>Heads up —</strong> some data couldn't be loaded from the bot right now, so role and channel pickers may be
+    empty. Avoid saving changes until this clears to prevent overwriting your configuration.
+</div>
+{% endif %}
+
+{# ─── Tab Navigation (config sub-tabs) ─────────────────────────── #}
+<nav class="config-tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="general">General</button>
+    <button role="tab" data-tab="moderation">Moderation</button>
+    <button role="tab" data-tab="sentinel">Sentinel</button>
+    <button role="tab" data-tab="ai">AI</button>
+    <button role="tab" data-tab="custom-bot">Custom Bot</button>
+</nav>
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# TAB: General                                                    #}
+{# ═══════════════════════════════════════════════════════════════ #}
+<div class="config-tab-panel" id="tab-general" role="tabpanel">
+
+    {# ─── Feature Flags ──────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Feature Flags</h2>
+        <p class="config-section-description">Toggle core bot features on or off for this server.</p>
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
+            <input type="hidden" name="_section" value="flags">
+            <div class="config-grid">
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Audit Log</span>
+                        <span class="config-description">Log moderation events to a channel</span>
+                    </div>
+                    <input type="checkbox" name="audit_log" value="true" {% if guild.flags.audit_log %}checked{% endif
+                           %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Raid Protection</span>
+                        <span class="config-description">Auto-detect and mitigate join raids</span>
+                    </div>
+                    <input type="checkbox" name="raid" value="true" {% if guild.flags.raid %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Alerts</span>
+                        <span class="config-description">Send webhook alerts for important events</span>
+                    </div>
+                    <input type="checkbox" name="alerts" value="true" {% if guild.flags.alerts %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Sentinel</span>
+                        <span class="config-description">Require captcha verification for new joins</span>
+                    </div>
+                    <input type="checkbox" name="sentinel" value="true" {% if guild.flags.sentinel %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Mention Spam Protection</span>
+                        <span class="config-description">Auto-ban members exceeding the mention threshold</span>
+                    </div>
+                    <input type="checkbox" name="mentions" value="true" {% if guild.flags.mentions %}checked{% endif %}>
+                </label>
+                {% if guild.flags.sentinel %}{% match sentinel %}{% when Some with (gk) %}{% if gk.needs_setup %}
+                <input type="hidden" name="sentinel" value="true">
+                {% endif %}{% when None %}
+                <input type="hidden" name="sentinel" value="true">
+                {% endmatch %}{% endif %}
+            </div>
+            <div class="config-actions">
+                <button type="button" class="button small cancel-btn">Cancel</button>
+                <button type="submit" class="button primary small">Save Changes</button>
+            </div>
+        </form>
+    </section>
+
+    {% if guild.flags.sentinel %}
+    {% match sentinel %}
+    {% when Some with (gk) %}
+    {% if gk.needs_setup %}
+    <div class="gk-setup-callout">
+        <div class="gk-setup-callout-pulse"></div>
+        <div class="gk-setup-callout-content">
+            <span class="gk-setup-callout-title">&#9888; Sentinel needs setup</span>
+            <p>The flag is enabled but configuration is incomplete. Complete setup in the <a href="#sentinel"
+                                                                                             class="gk-setup-link">Sentinel
+                tab</a> or run <code>/moderation sentinel setup</code> in Discord.</p>
+            <span class="gk-setup-callout-hint">If you don't want to use sentinel, just uncheck the flag.</span>
+        </div>
+    </div>
+    {% endif %}
+    {% when None %}
+    <div class="gk-setup-callout">
+        <div class="gk-setup-callout-pulse"></div>
+        <div class="gk-setup-callout-content">
+            <span class="gk-setup-callout-title">&#9888; Sentinel needs setup</span>
+            <p>The flag is enabled but configuration is incomplete. Complete setup in the <a href="#sentinel"
+                                                                                             class="gk-setup-link">Sentinel
+                tab</a> or run <code>/moderation sentinel setup</code> in Discord.</p>
+            <span class="gk-setup-callout-hint">If you don't want to use sentinel, just uncheck the flag.</span>
+        </div>
+    </div>
+    {% endmatch %}
+    {% endif %}
+
+    {% if guild.flags.audit_log && guild.audit_log_channel.is_none() %}
+    <div class="gk-setup-callout">
+        <div class="gk-setup-callout-pulse"></div>
+        <div class="gk-setup-callout-content">
+            <span class="gk-setup-callout-title">&#9888; Audit Log needs setup</span>
+            <p>The Audit Log flag is enabled but no channel is configured. Set the <strong>Audit Log Channel</strong> in
+                the <a href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
+            <span class="gk-setup-callout-hint">If you don't want to use audit logging, just uncheck the flag.</span>
+        </div>
     </div>
     {% endif %}
 
-    {% if degraded %}
-    <div class="setup-banner warning">
-        <strong>Heads up —</strong> some data couldn't be loaded from the bot right now, so role and channel pickers may be empty. Avoid saving changes until this clears to prevent overwriting your configuration.
+    {% if guild.flags.alerts && guild.alert_channel.is_none() %}
+    <div class="gk-setup-callout">
+        <div class="gk-setup-callout-pulse"></div>
+        <div class="gk-setup-callout-content">
+            <span class="gk-setup-callout-title">&#9888; Alerts needs setup</span>
+            <p>The Alerts flag is enabled but no channel is configured. Set the <strong>Alert Channel</strong> in the <a
+                    href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
+            <span class="gk-setup-callout-hint">If you don't want to use alerts, just uncheck the flag.</span>
+        </div>
     </div>
     {% endif %}
 
-    {# ─── Tab Navigation (config sub-tabs) ─────────────────────────── #}
-    <nav class="config-tabs" role="tablist">
-        <button role="tab" aria-selected="true" data-tab="general">General</button>
-        <button role="tab" data-tab="moderation">Moderation</button>
-        <button role="tab" data-tab="sentinel">Sentinel</button>
-        <button role="tab" data-tab="ai">AI</button>
-        <button role="tab" data-tab="custom-bot">Custom Bot</button>
-    </nav>
-
-    {# ═══════════════════════════════════════════════════════════════ #}
-    {# TAB: General                                                    #}
-    {# ═══════════════════════════════════════════════════════════════ #}
-    <div class="config-tab-panel" id="tab-general" role="tabpanel">
-
-        {# ─── Feature Flags ──────────────────────────────────────────── #}
-        <section class="config-section">
-            <h2>Feature Flags</h2>
-            <p class="config-section-description">Toggle core bot features on or off for this server.</p>
-            <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
-                <input type="hidden" name="_section" value="flags">
-                <div class="config-grid">
-                    <label class="config-toggle">
-                        <div>
-                            <span class="config-label">Audit Log</span>
-                            <span class="config-description">Log moderation events to a channel</span>
-                        </div>
-                        <input type="checkbox" name="audit_log" value="true" {% if guild.flags.audit_log %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div>
-                            <span class="config-label">Raid Protection</span>
-                            <span class="config-description">Auto-detect and mitigate join raids</span>
-                        </div>
-                        <input type="checkbox" name="raid" value="true" {% if guild.flags.raid %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div>
-                            <span class="config-label">Alerts</span>
-                            <span class="config-description">Send webhook alerts for important events</span>
-                        </div>
-                        <input type="checkbox" name="alerts" value="true" {% if guild.flags.alerts %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div>
-                            <span class="config-label">Sentinel</span>
-                            <span class="config-description">Require captcha verification for new joins</span>
-                        </div>
-                        <input type="checkbox" name="sentinel" value="true" {% if guild.flags.sentinel %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div>
-                            <span class="config-label">Mention Spam Protection</span>
-                            <span class="config-description">Auto-ban members exceeding the mention threshold</span>
-                        </div>
-                        <input type="checkbox" name="mentions" value="true" {% if guild.flags.mentions %}checked{% endif %}>
-                    </label>
-                    {% if guild.flags.sentinel %}{% match sentinel %}{% when Some with (gk) %}{% if gk.needs_setup %}
-                    <input type="hidden" name="sentinel" value="true">
-                    {% endif %}{% when None %}
-                    <input type="hidden" name="sentinel" value="true">
-                    {% endmatch %}{% endif %}
-                </div>
-                <div class="config-actions">
-                    <button type="button" class="button small cancel-btn">Cancel</button>
-                    <button type="submit" class="button primary small">Save Changes</button>
-                </div>
-            </form>
-        </section>
-
-        {% if guild.flags.sentinel %}
-            {% match sentinel %}
-                {% when Some with (gk) %}
-                    {% if gk.needs_setup %}
-                        <div class="gk-setup-callout">
-                            <div class="gk-setup-callout-pulse"></div>
-                            <div class="gk-setup-callout-content">
-                                <span class="gk-setup-callout-title">&#9888; Sentinel needs setup</span>
-                                <p>The flag is enabled but configuration is incomplete. Complete setup in the <a href="#sentinel" class="gk-setup-link">Sentinel tab</a> or run <code>/moderation sentinel setup</code> in Discord.</p>
-                                <span class="gk-setup-callout-hint">If you don't want to use sentinel, just uncheck the flag.</span>
-                            </div>
-                        </div>
-                    {% endif %}
-                {% when None %}
-                    <div class="gk-setup-callout">
-                        <div class="gk-setup-callout-pulse"></div>
-                        <div class="gk-setup-callout-content">
-                            <span class="gk-setup-callout-title">&#9888; Sentinel needs setup</span>
-                            <p>The flag is enabled but configuration is incomplete. Complete setup in the <a href="#sentinel" class="gk-setup-link">Sentinel tab</a> or run <code>/moderation sentinel setup</code> in Discord.</p>
-                            <span class="gk-setup-callout-hint">If you don't want to use sentinel, just uncheck the flag.</span>
-                        </div>
-                    </div>
-            {% endmatch %}
-        {% endif %}
-
-        {% if guild.flags.audit_log && guild.audit_log_channel.is_none() %}
-        <div class="gk-setup-callout">
-            <div class="gk-setup-callout-pulse"></div>
-            <div class="gk-setup-callout-content">
-                <span class="gk-setup-callout-title">&#9888; Audit Log needs setup</span>
-                <p>The Audit Log flag is enabled but no channel is configured. Set the <strong>Audit Log Channel</strong> in the <a href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
-                <span class="gk-setup-callout-hint">If you don't want to use audit logging, just uncheck the flag.</span>
-            </div>
+    {% if guild.flags.mentions && guild.mention_count.is_none() %}
+    <div class="gk-setup-callout">
+        <div class="gk-setup-callout-pulse"></div>
+        <div class="gk-setup-callout-content">
+            <span class="gk-setup-callout-title">&#9888; Mention Spam Protection needs setup</span>
+            <p>The Mention Spam Protection flag is enabled but no mention threshold is set. Configure the <strong>Mention
+                Threshold</strong> in the <a href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
+            <span class="gk-setup-callout-hint">If you don't want to use mention spam protection, just uncheck the flag.</span>
         </div>
-        {% endif %}
+    </div>
+    {% endif %}
 
-        {% if guild.flags.alerts && guild.alert_channel.is_none() %}
-        <div class="gk-setup-callout">
-            <div class="gk-setup-callout-pulse"></div>
-            <div class="gk-setup-callout-content">
-                <span class="gk-setup-callout-title">&#9888; Alerts needs setup</span>
-                <p>The Alerts flag is enabled but no channel is configured. Set the <strong>Alert Channel</strong> in the <a href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
-                <span class="gk-setup-callout-hint">If you don't want to use alerts, just uncheck the flag.</span>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if guild.flags.mentions && guild.mention_count.is_none() %}
-        <div class="gk-setup-callout">
-            <div class="gk-setup-callout-pulse"></div>
-            <div class="gk-setup-callout-content">
-                <span class="gk-setup-callout-title">&#9888; Mention Spam Protection needs setup</span>
-                <p>The Mention Spam Protection flag is enabled but no mention threshold is set. Configure the <strong>Mention Threshold</strong> in the <a href="#moderation" class="mod-setup-link">Moderation tab</a>.</p>
-                <span class="gk-setup-callout-hint">If you don't want to use mention spam protection, just uncheck the flag.</span>
-            </div>
-        </div>
-        {% endif %}
-
-        {# ─── Prefixes ───────────────────────────────────────────────── #}
-        <section class="config-section">
-            <h2>Prefixes</h2>
-            <p class="config-section-description">Set custom command prefixes for this server. The bot always responds to mentions.</p>
-            <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
-                <input type="hidden" name="_section" value="prefixes">
-                <div class="config-grid grid-cols-1">
-                    <div class="config-field">
-                        <label class="config-label" for="prefixes">Command Prefixes (comma-separated)</label>
-                        <span class="config-description">e.g. "?, !" — members can use any of these before commands</span>
-                        <input type="text" name="prefixes" id="prefixes" class="config-input" placeholder="?, !" value="{{ guild.prefixes.join(", ") }}">
-                    </div>
-                </div>
-                <div class="config-actions">
-                    <button type="button" class="button small cancel-btn">Cancel</button>
-                    <button type="submit" class="button primary small">Save Changes</button>
-                </div>
-            </form>
-        </section>
-
-        <section class="config-section">
-            <h2>Bot Status Feed</h2>
-            <p class="config-section-description">Subscribe a channel to receive Percy's status announcements (deploys, restarts, incidents). One channel per server.</p>
+    {# ─── Prefixes ───────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Prefixes</h2>
+        <p class="config-section-description">Set custom command prefixes for this server. The bot always responds to
+            mentions.</p>
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
+            <input type="hidden" name="_section" value="prefixes">
             <div class="config-grid grid-cols-1">
                 <div class="config-field">
-                    <label class="config-label" for="status-feed-channel">Announcement Channel</label>
-                    <select id="status-feed-channel" class="config-select">
-                        <option value="">Select a channel…</option>
-                        {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
-                        <option value="{{ ch.id }}"{% if status_feed.channel.is_some() && status_feed.channel.as_ref().unwrap().id == ch.id %} selected{% endif %}>#{{ ch.name }}</option>
-                        {% endif %}{% endfor %}
-                    </select>
+                    <label class="config-label" for="prefixes">Command Prefixes (comma-separated)</label>
+                    <span class="config-description">e.g. "?, !" — members can use any of these before commands</span>
+                    <input type="text" name="prefixes" id="prefixes" class="config-input" placeholder="?, !"
+                           value="{{ guild.prefixes.join(" , ") }}">
                 </div>
             </div>
             <div class="config-actions">
-                <button type="button" class="button small danger" id="status-feed-unsub"{% if !status_feed.subscribed %} hidden{% endif %}>Unsubscribe</button>
-                <button type="button" class="button primary small" id="status-feed-sub">{% if status_feed.subscribed %}Move Channel{% else %}Subscribe{% endif %}</button>
+                <button type="button" class="button small cancel-btn">Cancel</button>
+                <button type="submit" class="button primary small">Save Changes</button>
             </div>
-        </section>
-    </div>
+        </form>
+    </section>
 
-    {# ═══════════════════════════════════════════════════════════════ #}
-    {# TAB: AI                                                         #}
-    {# ═══════════════════════════════════════════════════════════════ #}
-    <div class="config-tab-panel" id="tab-ai" role="tabpanel" hidden>
-
-        {# ─── Server-wide AI features ─────────────────────────────────── #}
-        <section class="config-section">
-            <h2>AI Features</h2>
-            <p class="config-section-description">Percy's AI runs on a self-hosted model. Choose which AI-assisted features are active for this server — all are off by default and opt-in. If the AI engine is unreachable, these features degrade gracefully to their non-AI behaviour.</p>
-            <form method="POST" action="/dashboard/guild/{{ guild.id }}/ai">
-                <div class="config-grid">
-                    <label class="config-toggle">
-                        <div><span class="config-label">Assistant</span><span class="config-description">The conversational <code>?ask</code> command</span></div>
-                        <input type="checkbox" name="assistant" value="true" {% if guild.ai.flags.assistant %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Command Router</span><span class="config-description">Route natural-language messages to the right command</span></div>
-                        <input type="checkbox" name="router" value="true" {% if guild.ai.flags.router %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Moderation</span><span class="config-description">AI-assisted spam/abuse signals for moderation</span></div>
-                        <input type="checkbox" name="moderation" value="true" {% if guild.ai.flags.moderation %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Sentinel Screening</span><span class="config-description">AI risk signal for the captcha gatekeeper</span></div>
-                        <input type="checkbox" name="sentinel" value="true" {% if guild.ai.flags.sentinel %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Music</span><span class="config-description">Natural-language music requests &amp; filters</span></div>
-                        <input type="checkbox" name="music" value="true" {% if guild.ai.flags.music %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Polls</span><span class="config-description">Build polls from a plain-language description</span></div>
-                        <input type="checkbox" name="polls" value="true" {% if guild.ai.flags.polls %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Giveaways</span><span class="config-description">Extract giveaway details from a sentence</span></div>
-                        <input type="checkbox" name="giveaways" value="true" {% if guild.ai.flags.giveaways %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Tags</span><span class="config-description">Semantic tag search and drafting</span></div>
-                        <input type="checkbox" name="tags" value="true" {% if guild.ai.flags.tags %}checked{% endif %}>
-                    </label>
-                    <label class="config-toggle">
-                        <div><span class="config-label">Reminders</span><span class="config-description">Natural-language time parsing for reminders</span></div>
-                        <input type="checkbox" name="reminders" value="true" {% if guild.ai.flags.reminders %}checked{% endif %}>
-                    </label>
-                </div>
-                <div class="config-actions">
-                    <button type="button" class="button small cancel-btn">Cancel</button>
-                    <button type="submit" class="button primary small">Save Changes</button>
-                </div>
-            </form>
-        </section>
-
-        {# ─── Per-channel overrides ───────────────────────────────────── #}
-        <section class="config-section">
-            <h2>Per-channel Overrides</h2>
-            <p class="config-section-description">Override the server-wide AI settings in specific channels. For each feature choose <strong>Inherit</strong> (use the server setting), <strong>On</strong>, or <strong>Off</strong>. Saving a channel that already has an override replaces it.</p>
-
-            <div class="config-grid-single">
-                <div class="config-field">
-                    <label class="config-label" for="ai-override-channel">Channel</label>
-                    <select id="ai-override-channel" class="config-select">
-                        <option value="">Select a channel…</option>
-                        {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
-                        <option value="{{ ch.id }}">#{{ ch.name }}</option>
-                        {% endif %}{% endfor %}
-                    </select>
-                </div>
-                <div id="ai-override-grid" class="config-grid"></div>
-                <div class="config-actions">
-                    <button type="button" class="button primary small" id="ai-override-save" disabled>Save Override</button>
-                </div>
+    <section class="config-section">
+        <h2>Bot Status Feed</h2>
+        <p class="config-section-description">Subscribe a channel to receive Percy's status announcements (deploys,
+            restarts, incidents). One channel per server.</p>
+        <div class="config-grid grid-cols-1">
+            <div class="config-field">
+                <label class="config-label" for="status-feed-channel">Announcement Channel</label>
+                <select id="status-feed-channel" class="config-select">
+                    <option value="">Select a channel…</option>
+                    {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
+                    <option value="{{ ch.id }}" {% if status_feed.channel.is_some() &&
+                            status_feed.channel.as_ref().unwrap().id== ch.id %} selected{% endif %}>#{{ ch.name }}
+                    </option>
+                    {% endif %}{% endfor %}
+                </select>
             </div>
+        </div>
+        <div class="config-actions">
+            <button type="button" class="button small danger" id="status-feed-unsub" {% if !status_feed.subscribed %}
+                    hidden{% endif %}>Unsubscribe
+            </button>
+            <button type="button" class="button primary small" id="status-feed-sub">{% if status_feed.subscribed %}Move
+                Channel{% else %}Subscribe{% endif %}
+            </button>
+        </div>
+    </section>
+</div>
 
-            <p class="text-muted" id="ai-override-empty" {% if !guild.ai.overrides.is_empty() %}hidden{% endif %}>No per-channel overrides configured.</p>
-            <div class="config-table-wrap" id="ai-override-table-wrap" {% if guild.ai.overrides.is_empty() %}hidden{% endif %}>
-                <table class="config-table">
-                    <thead><tr><th>Channel</th><th>Overrides</th><th></th></tr></thead>
-                    <tbody id="ai-override-tbody">
-                    {% for ov in guild.ai.overrides %}
-                        <tr data-channel-id="{{ ov.channel_id }}">
-                            <td>{% match ov.channel %}{% when Some with (c) %}#{{ c.name }}{% when None %}{{ ov.channel_id }}{% endmatch %}</td>
-                            <td>
-                                {% for f in ov.summary() %}<span class="ai-badge ai-badge-{% if f.on %}on{% else %}off{% endif %}">{{ f.label }}: {% if f.on %}On{% else %}Off{% endif %}</span> {% endfor %}
-                            </td>
-                            <td><button type="button" class="button small danger ai-override-remove" data-channel-id="{{ ov.channel_id }}">Remove</button></td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </div>
+{# ═══════════════════════════════════════════════════════════════ #}
+{# TAB: AI                                                         #}
+{# ═══════════════════════════════════════════════════════════════ #}
+<div class="config-tab-panel" id="tab-ai" role="tabpanel" hidden>
 
-    {# ═══════════════════════════════════════════════════════════════ #}
-    {# TAB: Moderation                                                 #}
-    {# ═══════════════════════════════════════════════════════════════ #}
-    <div class="config-tab-panel" id="tab-moderation" role="tabpanel" hidden>
-
-        <section class="config-section">
-            <h2>Moderation</h2>
-            <p class="config-section-description">Configure moderation channels, roles, and thresholds.</p>
-            <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
-                <input type="hidden" name="_section" value="moderation">
-                <div class="config-grid">
-                    <div class="config-field">
-                        <label class="config-label" for="audit_log_channel">
-                            Audit Log Channel
-                            {% if guild.flags.audit_log && guild.audit_log_channel.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">Where mod actions are logged</span>
-                        <select name="audit_log_channel_id" id="audit_log_channel" class="config-select">
-                            <option value="">Not set</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match guild.audit_log_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
+    {# ─── Server-wide AI features ─────────────────────────────────── #}
+    <section class="config-section">
+        <h2>AI Features</h2>
+        <p class="config-section-description">Percy's AI runs on a self-hosted model. Choose which AI-assisted features
+            are active for this server — all are off by default and opt-in. If the AI engine is unreachable, these
+            features degrade gracefully to their non-AI behaviour.</p>
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/ai">
+            <div class="config-grid">
+                <label class="config-toggle">
+                    <div><span class="config-label">Assistant</span><span class="config-description">The conversational <code>?ask</code> command</span>
                     </div>
-                    <div class="config-field">
-                        <label class="config-label" for="alert_channel">
-                            Alert Channel
-                            {% if guild.flags.alerts && guild.alert_channel.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">Channel for raid/automod alerts</span>
-                        <select name="alert_channel_id" id="alert_channel" class="config-select">
-                            <option value="">Not set</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match guild.alert_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="mute_role">Mute Role</label>
-                        <span class="config-description">Role applied to muted members</span>
-                        <select name="mute_role_id" id="mute_role" class="config-select">
-                            <option value="">Not set</option>
-                            {% for role in roles %}
-                            <option value="{{ role.id }}" {% match guild.mute_role %}{% when Some with (ref) %}{% if ref.id == role.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                @{{ role.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="mention_count">
-                            Mention Threshold
-                            {% if guild.flags.mentions && guild.mention_count.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">Auto-mute after this many mentions in one message</span>
-                        <input type="number" name="mention_count" id="mention_count" class="config-input" min="0" max="100" placeholder="Off" value="{% match guild.mention_count %}{% when Some with (n) %}{{ n }}{% when None %}{% endmatch %}">
-                    </div>
-                </div>
-                <h2 class="mt-lg">Logging Channels</h2>
-                <p class="config-section-description">Route different event types to dedicated channels.</p>
-                <div class="config-grid">
-                    <div class="config-field">
-                        <label class="config-label" for="mod_log_channel">Mod Log Channel</label>
-                        <span class="config-description">Kicks, bans, mutes and other actions</span>
-                        <select name="mod_log_channel_id" id="mod_log_channel" class="config-select">
-                            <option value="">Not set</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match guild.mod_log_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="message_log_channel">Message Log Channel</label>
-                        <span class="config-description">Deleted and edited messages</span>
-                        <select name="message_log_channel_id" id="message_log_channel" class="config-select">
-                            <option value="">Not set</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match guild.message_log_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="voice_log_channel">Voice Log Channel</label>
-                        <span class="config-description">Voice join/leave/move events</span>
-                        <select name="voice_log_channel_id" id="voice_log_channel" class="config-select">
-                            <option value="">Not set</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match guild.voice_log_channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="config-actions">
-                    <button type="button" class="button small cancel-btn">Cancel</button>
-                    <button type="submit" class="button primary small">Save Changes</button>
-                </div>
-            </form>
-        </section>
-
-        {# ─── Audit Log Events ──────────────────────────────────────── #}
-        {% if !guild.audit_log_flags.is_empty() %}
-        <section class="config-section">
-            <h2>Audit Log Events</h2>
-            <p class="config-section-description">Select which events are broadcast to the audit log channel. Changes are saved immediately.</p>
-            <div class="audit-flags-grid" id="audit-flags-grid">
-                {% for flag in guild.audit_log_flags %}
-                <label class="audit-flag-item">
-                    <input type="checkbox" data-flag="{{ flag.0 }}" {% if flag.1 %}checked{% endif %}>
-                    <span>{{ flag.0 }}</span>
+                    <input type="checkbox" name="assistant" value="true" {% if guild.ai.flags.assistant %}checked{%
+                           endif %}>
                 </label>
-                {% endfor %}
+                <label class="config-toggle">
+                    <div><span class="config-label">Command Router</span><span class="config-description">Route natural-language messages to the right command</span>
+                    </div>
+                    <input type="checkbox" name="router" value="true" {% if guild.ai.flags.router %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Moderation</span><span class="config-description">AI-assisted spam/abuse signals for moderation</span>
+                    </div>
+                    <input type="checkbox" name="moderation" value="true" {% if guild.ai.flags.moderation %}checked{%
+                           endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Sentinel Screening</span><span class="config-description">AI risk signal for the captcha gatekeeper</span>
+                    </div>
+                    <input type="checkbox" name="sentinel" value="true" {% if guild.ai.flags.sentinel %}checked{% endif
+                           %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Music</span><span class="config-description">Natural-language music requests &amp; filters</span>
+                    </div>
+                    <input type="checkbox" name="music" value="true" {% if guild.ai.flags.music %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Polls</span><span class="config-description">Build polls from a plain-language description</span>
+                    </div>
+                    <input type="checkbox" name="polls" value="true" {% if guild.ai.flags.polls %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Giveaways</span><span class="config-description">Extract giveaway details from a sentence</span>
+                    </div>
+                    <input type="checkbox" name="giveaways" value="true" {% if guild.ai.flags.giveaways %}checked{%
+                           endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Tags</span><span class="config-description">Semantic tag search and drafting</span>
+                    </div>
+                    <input type="checkbox" name="tags" value="true" {% if guild.ai.flags.tags %}checked{% endif %}>
+                </label>
+                <label class="config-toggle">
+                    <div><span class="config-label">Reminders</span><span class="config-description">Natural-language time parsing for reminders</span>
+                    </div>
+                    <input type="checkbox" name="reminders" value="true" {% if guild.ai.flags.reminders %}checked{%
+                           endif %}>
+                </label>
             </div>
             <div class="config-actions">
-                <button type="button" class="button small" id="audit-flags-all">Enable All</button>
-                <button type="button" class="button small danger" id="audit-flags-none">Disable All</button>
+                <button type="button" class="button small cancel-btn">Cancel</button>
+                <button type="submit" class="button primary small">Save Changes</button>
             </div>
-        </section>
-        {% endif %}
+        </form>
+    </section>
 
-        {# ─── Ignored Entities ───────────────────────────────────────── #}
-        <section class="config-section">
-            <h2>Ignored Entities</h2>
-            <p class="config-section-description">Roles, members, or channels that Moderation inspections (auto-bans, raid &amp; mention-spam) skip entirely. Members with Manage Server already bypass these.</p>
+    {# ─── Per-channel overrides ───────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Per-channel Overrides</h2>
+        <p class="config-section-description">Override the server-wide AI settings in specific channels. For each
+            feature choose <strong>Inherit</strong> (use the server setting), <strong>On</strong>, or
+            <strong>Off</strong>. Saving a channel that already has an override replaces it.</p>
 
-            <div class="mod-ignore-add">
-                <select id="ignore-select" class="config-select">
-                    <option value="">Select a channel or role…</option>
-                    <optgroup label="Channels">
-                        {% for ch in channels %}<option value="{{ ch.id }}">#{{ ch.name }}</option>{% endfor %}
-                    </optgroup>
-                    <optgroup label="Roles">
-                        {% for r in roles %}<option value="{{ r.id }}">@{{ r.name }}</option>{% endfor %}
-                    </optgroup>
-                </select>
-                <input type="text" id="ignore-id-input" class="config-input" placeholder="…or paste a user ID" inputmode="numeric" autocomplete="off">
-                <button type="button" class="button primary small" id="ignore-add-btn">Add</button>
-            </div>
-
-            <div class="data-table-wrap" id="ignore-table-wrap" {% if guild.ignored_entities.is_empty() %}hidden{% endif %}>
-                <table class="data-table">
-                    <thead><tr><th>Name</th><th>Type</th><th class="col-actions"></th></tr></thead>
-                    <tbody id="ignore-tbody">
-                        {% for ent in guild.ignored_entities %}
-                        <tr data-entity-id="{{ ent.id }}">
-                            <td data-label="Name"><strong>{{ ent.name }}</strong></td>
-                            <td data-label="Type"><span class="pill pending">{{ ent.entity_type }}</span></td>
-                            <td class="col-actions"><button type="button" class="button small danger ignore-remove-btn" data-entity-id="{{ ent.id }}">Remove</button></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <p class="text-muted" id="ignore-empty" {% if !guild.ignored_entities.is_empty() %}hidden{% endif %}>No ignored entities configured.</p>
-        </section>
-
-        {# ─── Channel Lockdown ───────────────────────────────────────── #}
-        <section class="config-section">
-            <h2>Channel Lockdown</h2>
-            <p class="config-section-description">Lock channels so <code>@everyone</code> can no longer send messages, react, or use threads. The original permissions are restored on unlock.</p>
-
-            <div class="mod-lockdown-add">
-                <select id="lockdown-select" class="config-select" multiple size="6">
-                    {% for ch in channels %}
-                    {% if ch.channel_type == "text" || ch.channel_type == "voice" || ch.channel_type == "news" %}
+        <div class="config-grid-single">
+            <div class="config-field">
+                <label class="config-label" for="ai-override-channel">Channel</label>
+                <select id="ai-override-channel" class="config-select">
+                    <option value="">Select a channel…</option>
+                    {% for ch in channels %}{% if ch.channel_type == "text" || ch.channel_type == "news" %}
                     <option value="{{ ch.id }}">#{{ ch.name }}</option>
-                    {% endif %}
-                    {% endfor %}
+                    {% endif %}{% endfor %}
                 </select>
-                <button type="button" class="button primary small danger" id="lockdown-lock-btn">Lock selected</button>
             </div>
+            <div id="ai-override-grid" class="config-grid"></div>
+            <div class="config-actions">
+                <button type="button" class="button primary small" id="ai-override-save" disabled>Save Override</button>
+            </div>
+        </div>
 
-            <div class="data-table-wrap" id="lockdown-table-wrap" {% if lockdowns.entries.is_empty() %}hidden{% endif %}>
-                <table class="data-table">
-                    <thead><tr><th>Locked Channel</th><th class="col-actions"></th></tr></thead>
-                    <tbody id="lockdown-tbody">
-                        {% for entry in lockdowns.entries %}
-                        <tr data-channel-id="{{ entry.channel_id }}">
-                            <td data-label="Channel"><strong>#{{ entry.channel_name }}</strong></td>
-                            <td class="col-actions"><button type="button" class="button small lockdown-unlock-btn" data-channel-id="{{ entry.channel_id }}">Unlock</button></td>
-                        </tr>
+        <p class="text-muted" id="ai-override-empty" {% if !guild.ai.overrides.is_empty() %}hidden{% endif %}>No
+            per-channel overrides configured.</p>
+        <div class="config-table-wrap" id="ai-override-table-wrap" {% if guild.ai.overrides.is_empty() %}hidden{% endif
+             %}>
+            <table class="config-table">
+                <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Overrides</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="ai-override-tbody">
+                {% for ov in guild.ai.overrides %}
+                <tr data-channel-id="{{ ov.channel_id }}">
+                    <td>{% match ov.channel %}{% when Some with (c) %}#{{ c.name }}{% when None %}{{ ov.channel_id }}{%
+                        endmatch %}
+                    </td>
+                    <td>
+                        {% for f in ov.summary() %}<span
+                            class="ai-badge ai-badge-{% if f.on %}on{% else %}off{% endif %}">{{ f.label }}: {% if f.on %}On{% else %}Off{% endif %}</span>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </td>
+                    <td>
+                        <button type="button" class="button small danger ai-override-remove"
+                                data-channel-id="{{ ov.channel_id }}">Remove
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# TAB: Moderation                                                 #}
+{# ═══════════════════════════════════════════════════════════════ #}
+<div class="config-tab-panel" id="tab-moderation" role="tabpanel" hidden>
+
+    <section class="config-section">
+        <h2>Moderation</h2>
+        <p class="config-section-description">Configure moderation channels, roles, and thresholds.</p>
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/config">
+            <input type="hidden" name="_section" value="moderation">
+            <div class="config-grid">
+                <div class="config-field">
+                    <label class="config-label" for="audit_log_channel">
+                        Audit Log Channel
+                        {% if guild.flags.audit_log && guild.audit_log_channel.is_none() %}<span
+                            class="gk-required-tag">REQUIRED</span>{% endif %}
+                    </label>
+                    <span class="config-description">Where mod actions are logged</span>
+                    <select name="audit_log_channel_id" id="audit_log_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.audit_log_channel %}{% when Some with (ref) %}{% if
+                                ref.id== ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="alert_channel">
+                        Alert Channel
+                        {% if guild.flags.alerts && guild.alert_channel.is_none() %}<span class="gk-required-tag">REQUIRED</span>{%
+                        endif %}
+                    </label>
+                    <span class="config-description">Channel for raid/automod alerts</span>
+                    <select name="alert_channel_id" id="alert_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.alert_channel %}{% when Some with (ref) %}{% if
+                                ref.id== ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="mute_role">Mute Role</label>
+                    <span class="config-description">Role applied to muted members</span>
+                    <select name="mute_role_id" id="mute_role" class="config-select">
+                        <option value="">Not set</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% match guild.mute_role %}{% when Some with (ref) %}{% if
+                                ref.id== role.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            @{{ role.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="mention_count">
+                        Mention Threshold
+                        {% if guild.flags.mentions && guild.mention_count.is_none() %}<span class="gk-required-tag">REQUIRED</span>{%
+                        endif %}
+                    </label>
+                    <span class="config-description">Auto-mute after this many mentions in one message</span>
+                    <input type="number" name="mention_count" id="mention_count" class="config-input" min="0" max="100"
+                           placeholder="Off"
+                           value="{% match guild.mention_count %}{% when Some with (n) %}{{ n }}{% when None %}{% endmatch %}">
+                </div>
             </div>
-            <p class="text-muted" id="lockdown-empty" {% if !lockdowns.entries.is_empty() %}hidden{% endif %}>No channels are currently locked down.</p>
-        </section>
-    </div>
-
-    {# ═══════════════════════════════════════════════════════════════ #}
-    {# TAB: Sentinel                                                 #}
-    {# ═══════════════════════════════════════════════════════════════ #}
-    <div class="config-tab-panel" id="tab-sentinel" role="tabpanel" hidden>
-
-        <section class="config-section">
-            <h2>Entrance Protection</h2>
-            <p class="config-section-description">Captcha-gated verification that holds new members until they prove they're human.</p>
-
-            <div class="gk-info">
-                <p class="gk-info-heading">How it works</p>
-                <p>When a member joins, they're immediately assigned a <strong>lockdown role</strong> that hides every channel except a designated <strong>verification channel</strong>. Inside that channel a captcha button awaits — solving it removes the role and grants full access.</p>
-
-                <p class="gk-info-heading">Prerequisites</p>
-                <ol>
-                    <li><strong>Verification Channel</strong> — visible only to held members.</li>
-                    <li><strong>Lockdown Role</strong> — strips channel access on assignment.</li>
-                    <li><strong>Captcha Message</strong> — the embed with the solve button, deployed to the channel.</li>
-                </ol>
-
-                <p class="gk-info-heading">Enforcement</p>
-                <p>If a held member attempts to speak or join voice before verifying, the configured <strong>bypass action</strong> (kick or ban) fires immediately. The <strong>auto-trigger</strong> threshold activates sentinel automatically when join velocity spikes — once engaged, only a moderator can stand it down.</p>
-
-                <p class="gk-info-discord"><span class="gk-info-icon">&#9432;</span> Captchas are 6-character alphanumeric images. Members type their answer directly in chat within 90 seconds.</p>
+            <h2 class="mt-lg">Logging Channels</h2>
+            <p class="config-section-description">Route different event types to dedicated channels.</p>
+            <div class="config-grid">
+                <div class="config-field">
+                    <label class="config-label" for="mod_log_channel">Mod Log Channel</label>
+                    <span class="config-description">Kicks, bans, mutes and other actions</span>
+                    <select name="mod_log_channel_id" id="mod_log_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.mod_log_channel %}{% when Some with (ref) %}{% if
+                                ref.id== ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="message_log_channel">Message Log Channel</label>
+                    <span class="config-description">Deleted and edited messages</span>
+                    <select name="message_log_channel_id" id="message_log_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.message_log_channel %}{% when Some with (ref) %}{% if
+                                ref.id== ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="voice_log_channel">Voice Log Channel</label>
+                    <span class="config-description">Voice join/leave/move events</span>
+                    <select name="voice_log_channel_id" id="voice_log_channel" class="config-select">
+                        <option value="">Not set</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match guild.voice_log_channel %}{% when Some with (ref) %}{% if
+                                ref.id== ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
+            <div class="config-actions">
+                <button type="button" class="button small cancel-btn">Cancel</button>
+                <button type="submit" class="button primary small">Save Changes</button>
+            </div>
+        </form>
+    </section>
 
-            {% match sentinel %}
-            {% when Some with (gk) %}
-            {% match gk.started_at %}
-            {% when Some with (ts) %}
-            <div class="sentinel-status active">
-                <span>Engaged since <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
-                <span class="badge">{{ gk.member_count }} held</span>
-            </div>
-            {% when None %}
-            <div class="sentinel-status inactive">
-                <span>Standing by</span>
-            </div>
-            {% endmatch %}
-            <form method="POST" action="/dashboard/guild/{{ guild.id }}/sentinel">
-                <input type="hidden" name="starter_title" id="gk_starter_title" value="">
-                <input type="hidden" name="starter_content" id="gk_starter_content" value="">
-                <div class="config-grid">
-                    <div class="config-field">
-                        <label class="config-label" for="gk_channel">
-                            Verification Channel
-                            {% if guild.flags.sentinel && gk.needs_setup && gk.channel.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">The isolated channel held members are funneled into. Changing this re-deploys the captcha message.</span>
-                        <select name="channel_id" id="gk_channel" class="config-select" data-initial="{% match gk.channel %}{% when Some with (ref) %}{{ ref.id }}{% when None %}{% endmatch %}">
-                            <option value="">Select channel...</option>
-                            {% for ch in channels %}
-                            <option value="{{ ch.id }}" {% match gk.channel %}{% when Some with (ref) %}{% if ref.id == ch.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                #{{ ch.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="gk_role">
-                            Lockdown Role
-                            {% if guild.flags.sentinel && gk.needs_setup && gk.role.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">Auto-assigned on join to strip channel visibility until captcha is solved.</span>
-                        <select name="role_id" id="gk_role" class="config-select">
-                            <option value="">Select role...</option>
-                            {% for role in roles %}
-                            <option value="{{ role.id }}" {% match gk.role %}{% when Some with (ref) %}{% if ref.id == role.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                @{{ role.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="gk_message_status">
-                            Captcha Message
-                            {% if guild.flags.sentinel && gk.needs_setup && gk.message.is_none() %}<span class="gk-required-tag">REQUIRED</span>{% endif %}
-                        </label>
-                        <span class="config-description">The verification embed posted in the channel with the solve button.</span>
-                        {% match gk.message %}
-                        {% when Some with (_msg_id) %}
-                        <span class="gk-message-status sent">Deployed</span>
-                        {% when None %}
-                        <span class="gk-message-status not-sent">Awaiting deployment — select a channel first</span>
-                        {% endmatch %}
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="gk_starter_role">Post-Verification Role</label>
-                        <span class="config-description">Optional role granted once a member successfully verifies.</span>
-                        <select name="starter_role_id" id="gk_starter_role" class="config-select">
-                            <option value="">None</option>
-                            {% for role in roles %}
-                            <option value="{{ role.id }}" {% match gk.starter_role %}{% when Some with (ref) %}{% if ref.id == role.id %}selected{% endif %}{% when None %}{% endmatch %}>
-                                @{{ role.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="gk_bypass">Bypass Action</label>
-                        <span class="config-description">What happens when an unverified member speaks or joins voice.</span>
-                        <select name="bypass_action" id="gk_bypass" class="config-select">
-                            <option value="ban" {% if gk.bypass_action == "ban" %}selected{% endif %}>Ban immediately</option>
-                            <option value="kick" {% if gk.bypass_action == "kick" %}selected{% endif %}>Kick immediately</option>
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label class="config-label" for="gk_rate">Auto-Trigger Threshold</label>
-                        <span class="config-description">
+    {# ─── Audit Log Events ──────────────────────────────────────── #}
+    {% if !guild.audit_log_flags.is_empty() %}
+    <section class="config-section">
+        <h2>Audit Log Events</h2>
+        <p class="config-section-description">Select which events are broadcast to the audit log channel. Changes are
+            saved immediately.</p>
+        <div class="audit-flags-grid" id="audit-flags-grid">
+            {% for flag in guild.audit_log_flags %}
+            <label class="audit-flag-item">
+                <input type="checkbox" data-flag="{{ flag.0 }}" {% if flag.1 %}checked{% endif %}>
+                <span>{{ flag.0 }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        <div class="config-actions">
+            <button type="button" class="button small" id="audit-flags-all">Enable All</button>
+            <button type="button" class="button small danger" id="audit-flags-none">Disable All</button>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─── Ignored Entities ───────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Ignored Entities</h2>
+        <p class="config-section-description">Roles, members, or channels that Moderation inspections (auto-bans, raid
+            &amp; mention-spam) skip entirely. Members with Manage Server already bypass these.</p>
+
+        <div class="mod-ignore-add">
+            <select id="ignore-select" class="config-select">
+                <option value="">Select a channel or role…</option>
+                <optgroup label="Channels">
+                    {% for ch in channels %}
+                    <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Roles">
+                    {% for r in roles %}
+                    <option value="{{ r.id }}">@{{ r.name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+            <input type="text" id="ignore-id-input" class="config-input" placeholder="…or paste a user ID"
+                   inputmode="numeric" autocomplete="off">
+            <button type="button" class="button primary small" id="ignore-add-btn">Add</button>
+        </div>
+
+        <div class="data-table-wrap" id="ignore-table-wrap" {% if guild.ignored_entities.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th class="col-actions"></th>
+                </tr>
+                </thead>
+                <tbody id="ignore-tbody">
+                {% for ent in guild.ignored_entities %}
+                <tr data-entity-id="{{ ent.id }}">
+                    <td data-label="Name"><strong>{{ ent.name }}</strong></td>
+                    <td data-label="Type"><span class="pill pending">{{ ent.entity_type }}</span></td>
+                    <td class="col-actions">
+                        <button type="button" class="button small danger ignore-remove-btn"
+                                data-entity-id="{{ ent.id }}">Remove
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted" id="ignore-empty" {% if !guild.ignored_entities.is_empty() %}hidden{% endif %}>No ignored
+            entities configured.</p>
+    </section>
+
+    {# ─── Channel Lockdown ───────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Channel Lockdown</h2>
+        <p class="config-section-description">Lock channels so <code>@everyone</code> can no longer send messages,
+            react, or use threads. The original permissions are restored on unlock.</p>
+
+        <div class="mod-lockdown-add">
+            <select id="lockdown-select" class="config-select" multiple size="6">
+                {% for ch in channels %}
+                {% if ch.channel_type == "text" || ch.channel_type == "voice" || ch.channel_type == "news" %}
+                <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            <button type="button" class="button primary small danger" id="lockdown-lock-btn">Lock selected</button>
+        </div>
+
+        <div class="data-table-wrap" id="lockdown-table-wrap" {% if lockdowns.entries.is_empty() %}hidden{% endif %}>
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>Locked Channel</th>
+                    <th class="col-actions"></th>
+                </tr>
+                </thead>
+                <tbody id="lockdown-tbody">
+                {% for entry in lockdowns.entries %}
+                <tr data-channel-id="{{ entry.channel_id }}">
+                    <td data-label="Channel"><strong>#{{ entry.channel_name }}</strong></td>
+                    <td class="col-actions">
+                        <button type="button" class="button small lockdown-unlock-btn"
+                                data-channel-id="{{ entry.channel_id }}">Unlock
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted" id="lockdown-empty" {% if !lockdowns.entries.is_empty() %}hidden{% endif %}>No channels
+            are currently locked down.</p>
+    </section>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# TAB: Sentinel                                                 #}
+{# ═══════════════════════════════════════════════════════════════ #}
+<div class="config-tab-panel" id="tab-sentinel" role="tabpanel" hidden>
+
+    <section class="config-section">
+        <h2>Entrance Protection</h2>
+        <p class="config-section-description">Captcha-gated verification that holds new members until they prove they're
+            human.</p>
+
+        <div class="gk-info">
+            <p class="gk-info-heading">How it works</p>
+            <p>When a member joins, they're immediately assigned a <strong>lockdown role</strong> that hides every
+                channel except a designated <strong>verification channel</strong>. Inside that channel a captcha button
+                awaits — solving it removes the role and grants full access.</p>
+
+            <p class="gk-info-heading">Prerequisites</p>
+            <ol>
+                <li><strong>Verification Channel</strong> — visible only to held members.</li>
+                <li><strong>Lockdown Role</strong> — strips channel access on assignment.</li>
+                <li><strong>Captcha Message</strong> — the embed with the solve button, deployed to the channel.</li>
+            </ol>
+
+            <p class="gk-info-heading">Enforcement</p>
+            <p>If a held member attempts to speak or join voice before verifying, the configured <strong>bypass
+                action</strong> (kick or ban) fires immediately. The <strong>auto-trigger</strong> threshold activates
+                sentinel automatically when join velocity spikes — once engaged, only a moderator can stand it down.</p>
+
+            <p class="gk-info-discord"><span class="gk-info-icon">&#9432;</span> Captchas are 6-character alphanumeric
+                images. Members type their answer directly in chat within 90 seconds.</p>
+        </div>
+
+        {% match sentinel %}
+        {% when Some with (gk) %}
+        {% match gk.started_at %}
+        {% when Some with (ts) %}
+        <div class="sentinel-status active">
+            <span>Engaged since <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+            <span class="badge">{{ gk.member_count }} held</span>
+        </div>
+        {% when None %}
+        <div class="sentinel-status inactive">
+            <span>Standing by</span>
+        </div>
+        {% endmatch %}
+        <form method="POST" action="/dashboard/guild/{{ guild.id }}/sentinel">
+            <input type="hidden" name="starter_title" id="gk_starter_title" value="">
+            <input type="hidden" name="starter_content" id="gk_starter_content" value="">
+            <div class="config-grid">
+                <div class="config-field">
+                    <label class="config-label" for="gk_channel">
+                        Verification Channel
+                        {% if guild.flags.sentinel && gk.needs_setup && gk.channel.is_none() %}<span
+                            class="gk-required-tag">REQUIRED</span>{% endif %}
+                    </label>
+                    <span class="config-description">The isolated channel held members are funneled into. Changing this re-deploys the captcha message.</span>
+                    <select name="channel_id" id="gk_channel" class="config-select"
+                            data-initial="{% match gk.channel %}{% when Some with (ref) %}{{ ref.id }}{% when None %}{% endmatch %}">
+                        <option value="">Select channel...</option>
+                        {% for ch in channels %}
+                        <option value="{{ ch.id }}" {% match gk.channel %}{% when Some with (ref) %}{% if ref.id== ch.id
+                                %}selected{% endif %}{% when None %}{% endmatch %}>
+                            #{{ ch.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="gk_role">
+                        Lockdown Role
+                        {% if guild.flags.sentinel && gk.needs_setup && gk.role.is_none() %}<span
+                            class="gk-required-tag">REQUIRED</span>{% endif %}
+                    </label>
+                    <span class="config-description">Auto-assigned on join to strip channel visibility until captcha is solved.</span>
+                    <select name="role_id" id="gk_role" class="config-select">
+                        <option value="">Select role...</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% match gk.role %}{% when Some with (ref) %}{% if ref.id==
+                                role.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            @{{ role.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="gk_message_status">
+                        Captcha Message
+                        {% if guild.flags.sentinel && gk.needs_setup && gk.message.is_none() %}<span
+                            class="gk-required-tag">REQUIRED</span>{% endif %}
+                    </label>
+                    <span class="config-description">The verification embed posted in the channel with the solve button.</span>
+                    {% match gk.message %}
+                    {% when Some with (_msg_id) %}
+                    <span class="gk-message-status sent">Deployed</span>
+                    {% when None %}
+                    <span class="gk-message-status not-sent">Awaiting deployment — select a channel first</span>
+                    {% endmatch %}
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="gk_starter_role">Post-Verification Role</label>
+                    <span class="config-description">Optional role granted once a member successfully verifies.</span>
+                    <select name="starter_role_id" id="gk_starter_role" class="config-select">
+                        <option value="">None</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% match gk.starter_role %}{% when Some with (ref) %}{% if
+                                ref.id== role.id %}selected{% endif %}{% when None %}{% endmatch %}>
+                            @{{ role.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="gk_bypass">Bypass Action</label>
+                    <span class="config-description">What happens when an unverified member speaks or joins voice.</span>
+                    <select name="bypass_action" id="gk_bypass" class="config-select">
+                        <option value="ban" {% if gk.bypass_action==
+                        "ban" %}selected{% endif %}>Ban immediately</option>
+                        <option value="kick" {% if gk.bypass_action==
+                        "kick" %}selected{% endif %}>Kick immediately</option>
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="config-label" for="gk_rate">Auto-Trigger Threshold</label>
+                    <span class="config-description">
                             Activate sentinel when join velocity exceeds this rate (format: joins/seconds).
                         </span>
-                        <input
-                                type="text"
-                                name="rate"
-                                id="gk_rate"
-                                class="config-input"
-                                placeholder="5/10"
-                                value="{{ gk.rate.as_deref().unwrap_or("") }}"
-                        pattern="^\d+\/\d+$"
-                        title="Format: number/number (e.g. 5/10 means 5 joins within 10 seconds)"
-                        required
-                        >
+                    <input
+                            type="text"
+                            name="rate"
+                            id="gk_rate"
+                            class="config-input"
+                            placeholder="5/10"
+                            value="{{ gk.rate.as_deref().unwrap_or("") }}"
+                    pattern="^\d+\/\d+$"
+                    title="Format: number/number (e.g. 5/10 means 5 joins within 10 seconds)"
+                    required
+                    >
+                </div>
+            </div>
+            <div class="config-actions">
+                <button type="button" class="button small cancel-btn">Discard</button>
+                <button type="submit" class="button primary small">Apply Changes</button>
+            </div>
+        </form>
+        {% when None %}
+        <p class="text-muted">Sentinel is not initialized for this server. Enable the flag in General Settings and run
+            <code>/moderation sentinel</code> in Discord to begin setup.</p>
+        {% endmatch %}
+    </section>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# TAB: Custom Bot                                                 #}
+{# ═══════════════════════════════════════════════════════════════ #}
+<div class="config-tab-panel" id="tab-custom-bot" role="tabpanel" hidden>
+    <section class="config-section">
+        <h2>Bot Profile</h2>
+        <p class="config-section-description">Customize how Percy appears in this server.</p>
+
+        <div class="cb-layout">
+            <div class="cb-card" id="cb-card">
+                <div class="cb-banner-area" id="cb-banner-area" {% match bot_profile.accent_color %}{% when Some with
+                     (c) %} style="--cb-accent: {{ c }}" {% when None %}{% endmatch %}>
+                    {% match bot_profile.banner_url %}
+                    {% when Some with (url) %}
+                    <img src="{{ url }}" alt="" class="cb-banner-img" id="cb-banner-img">
+                    {% when None %}
+                    <div class="cb-banner-placeholder" id="cb-banner-img"></div>
+                    {% endmatch %}
+                    <div class="cb-banner-btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                            <path d="m15 5 4 4"/>
+                        </svg>
                     </div>
+                    <input type="file" id="cb-banner-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
                 </div>
-                <div class="config-actions">
-                    <button type="button" class="button small cancel-btn">Discard</button>
-                    <button type="submit" class="button primary small">Apply Changes</button>
-                </div>
-            </form>
-            {% when None %}
-            <p class="text-muted">Sentinel is not initialized for this server. Enable the flag in General Settings and run <code>/moderation sentinel</code> in Discord to begin setup.</p>
-            {% endmatch %}
-        </section>
-    </div>
-
-    {# ═══════════════════════════════════════════════════════════════ #}
-    {# TAB: Custom Bot                                                 #}
-    {# ═══════════════════════════════════════════════════════════════ #}
-    <div class="config-tab-panel" id="tab-custom-bot" role="tabpanel" hidden>
-        <section class="config-section">
-            <h2>Bot Profile</h2>
-            <p class="config-section-description">Customize how Percy appears in this server.</p>
-
-            <div class="cb-layout">
-                <div class="cb-card" id="cb-card">
-                    <div class="cb-banner-area" id="cb-banner-area"{% match bot_profile.accent_color %}{% when Some with (c) %} style="--cb-accent: {{ c }}"{% when None %}{% endmatch %}>
-                        {% match bot_profile.banner_url %}
+                <div class="cb-body">
+                    <div class="cb-avatar-area" id="cb-avatar-area">
+                        {% match bot_profile.avatar_url %}
                         {% when Some with (url) %}
-                        <img src="{{ url }}" alt="" class="cb-banner-img" id="cb-banner-img">
+                        <img src="{{ url }}" alt="" class="cb-avatar-img" id="cb-avatar-img">
                         {% when None %}
-                        <div class="cb-banner-placeholder" id="cb-banner-img"></div>
+                        <div class="cb-avatar-fallback" id="cb-avatar-img">P</div>
                         {% endmatch %}
-                        <div class="cb-banner-btn">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        <div class="cb-avatar-overlay">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                            </svg>
                         </div>
-                        <input type="file" id="cb-banner-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                        <input type="file" id="cb-avatar-file" accept="image/png,image/jpeg,image/gif,image/webp"
+                               hidden>
                     </div>
-                    <div class="cb-body">
-                        <div class="cb-avatar-area" id="cb-avatar-area">
-                            {% match bot_profile.avatar_url %}
-                            {% when Some with (url) %}
-                            <img src="{{ url }}" alt="" class="cb-avatar-img" id="cb-avatar-img">
-                            {% when None %}
-                            <div class="cb-avatar-fallback" id="cb-avatar-img">P</div>
-                            {% endmatch %}
-                            <div class="cb-avatar-overlay">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                            </div>
-                            <input type="file" id="cb-avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                    <div class="cb-profile-info">
+                        <div class="cb-username-row">
+                            <input type="text" class="cb-username" id="cb-name-input" maxlength="32"
+                                   value="{{ bot_profile.name.as_deref().unwrap_or(" Percy") }}" placeholder="Percy">
+                            <span class="cb-bot-badge"><svg width="12" height="12" viewBox="0 0 16 16"
+                                                            fill="currentColor"><path
+                                    d="M10.6 2.7l.9-1.7h-2l-.5 1-.5-1h-2l.9 1.7A5 5 0 003 7.5V14a2 2 0 002 2h6a2 2 0 002-2V7.5a5 5 0 00-2.4-4.8zM6.5 12a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg> BOT</span>
                         </div>
-                        <div class="cb-profile-info">
-                            <div class="cb-username-row">
-                                <input type="text" class="cb-username" id="cb-name-input" maxlength="32"
-                                       value="{{ bot_profile.name.as_deref().unwrap_or("Percy") }}" placeholder="Percy">
-                                <span class="cb-bot-badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M10.6 2.7l.9-1.7h-2l-.5 1-.5-1h-2l.9 1.7A5 5 0 003 7.5V14a2 2 0 002 2h6a2 2 0 002-2V7.5a5 5 0 00-2.4-4.8zM6.5 12a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg> BOT</span>
-                            </div>
-                            <div class="cb-section-divider"></div>
-                            <div class="cb-about-section">
-                                <span class="cb-section-title">ABOUT ME</span>
-                                <textarea class="cb-about-textarea" id="cb-about-input" maxlength="190" rows="3"
-                                          placeholder="No bio set.">{{ bot_profile.about_me.as_deref().unwrap_or("") }}</textarea>
-                                <span class="cb-charcount" id="cb-charcount">{{ bot_profile.about_me.as_deref().unwrap_or("").len() }}/190</span>
-                            </div>
+                        <div class="cb-section-divider"></div>
+                        <div class="cb-about-section">
+                            <span class="cb-section-title">ABOUT ME</span>
+                            <textarea class="cb-about-textarea" id="cb-about-input" maxlength="190" rows="3"
+                                      placeholder="No bio set.">{{ bot_profile.about_me.as_deref().unwrap_or("") }}</textarea>
+                            <span class="cb-charcount" id="cb-charcount">{{ bot_profile.about_me.as_deref().unwrap_or("").len() }}/190</span>
                         </div>
-                    </div>
-                    <div class="cb-actions">
-                        <button type="button" class="cb-reset-btn" id="cb-reset-btn">Reset</button>
-                        <button type="button" class="cb-save-btn" id="cb-save-btn">Save Changes</button>
                     </div>
                 </div>
-
-                <aside class="cb-sidebar">
-                    <div class="cb-tip-card">
-                        <h4>How it works</h4>
-                        <ul>
-                            <li><strong>Banner &amp; Avatar</strong> — click to upload. A crop editor lets you position and zoom the image before applying.</li>
-                            <li><strong>Name</strong> — sets the bot's nickname in this server only.</li>
-                            <li><strong>About Me</strong> — the bio on the bot's Discord profile (max 190 chars).</li>
-                        </ul>
-                    </div>
-                    <div class="cb-tip-card">
-                        <h4>Limits</h4>
-                        <ul>
-                            <li>Avatar/banner changes are rate-limited by Discord (twice per 10 min).</li>
-                            <li>Recommended: avatar 512&times;512, banner 960&times;540.</li>
-                            <li>Reset clears nickname, avatar, banner, and bio.</li>
-                        </ul>
-                    </div>
-                </aside>
-            </div>
-        </section>
-    </div>
-
-    {# Image Crop Modal (Cropper.js — Discord-style) #}
-    <div class="cb-crop-modal" id="cb-crop-modal" hidden>
-        <div class="cb-crop-backdrop"></div>
-        <div class="cb-crop-dialog">
-            <header class="cb-crop-header">
-                <button type="button" class="cb-crop-text-btn" id="cb-crop-reselect">Change file</button>
-                <h1 class="cb-crop-title" id="cb-crop-title">Edit Image</h1>
-                <button type="button" class="cb-crop-close-btn" id="cb-crop-close" aria-label="Close">
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M19.3 20.7a1 1 0 0 0 1.4-1.4L13.42 12l7.3-7.3a1 1 0 0 0-1.42-1.4L12 10.58l-7.3-7.3a1 1 0 0 0-1.4 1.42L10.58 12l-7.3 7.3a1 1 0 1 0 1.42 1.4L12 13.42l7.3 7.3Z"/></svg>
-                </button>
-            </header>
-            <div class="cb-crop-content">
-                <div class="cb-crop-container" id="cb-crop-container">
-                    <img id="cb-crop-img" alt="">
-                    <div class="cb-crop-controls">
-                        <div class="cb-crop-zoom">
-                            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M15.62 17.03a9 9 0 1 1 1.41-1.41l4.68 4.67a1 1 0 0 1-1.42 1.42l-4.67-4.68ZM17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" clip-rule="evenodd"/><path fill="currentColor" d="M6 10a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z"/></svg>
-                            <input type="range" id="cb-crop-zoom" min="0" max="100" value="0">
-                            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M15.62 17.03a9 9 0 1 1 1.41-1.41l4.68 4.67a1 1 0 0 1-1.42 1.42l-4.67-4.68ZM17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" clip-rule="evenodd"/><path fill="currentColor" d="M11 7a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7Z"/></svg>
-                        </div>
-                    </div>
+                <div class="cb-actions">
+                    <button type="button" class="cb-reset-btn" id="cb-reset-btn">Reset</button>
+                    <button type="button" class="cb-save-btn" id="cb-save-btn">Save Changes</button>
                 </div>
             </div>
-            <footer class="cb-crop-footer">
-                <button type="button" class="cb-crop-text-btn" id="cb-crop-reset">Reset</button>
-                <div class="cb-crop-footer-right">
-                    <button type="button" class="cb-crop-btn-secondary" id="cb-crop-cancel">Cancel</button>
-                    <button type="button" class="cb-crop-btn-primary" id="cb-crop-apply">Apply</button>
+
+            <aside class="cb-sidebar">
+                <div class="cb-tip-card">
+                    <h4>How it works</h4>
+                    <ul>
+                        <li><strong>Banner &amp; Avatar</strong> — click to upload. A crop editor lets you position and
+                            zoom the image before applying.
+                        </li>
+                        <li><strong>Name</strong> — sets the bot's nickname in this server only.</li>
+                        <li><strong>About Me</strong> — the bio on the bot's Discord profile (max 190 chars).</li>
+                    </ul>
                 </div>
-            </footer>
+                <div class="cb-tip-card">
+                    <h4>Limits</h4>
+                    <ul>
+                        <li>Avatar/banner changes are rate-limited by Discord (twice per 10 min).</li>
+                        <li>Recommended: avatar 512&times;512, banner 960&times;540.</li>
+                        <li>Reset clears nickname, avatar, banner, and bio.</li>
+                    </ul>
+                </div>
+            </aside>
         </div>
-    </div>
+    </section>
+</div>
+
+{# Image Crop Modal (Cropper.js — Discord-style) #}
+<div class="cb-crop-modal" id="cb-crop-modal" hidden>
+    <div class="cb-crop-backdrop"></div>
+    <div class="cb-crop-dialog">
+        <header class="cb-crop-header">
+            <button type="button" class="cb-crop-text-btn" id="cb-crop-reselect">Change file</button>
+            <h1 class="cb-crop-title" id="cb-crop-title">Edit Image</h1>
+            <button type="button" class="cb-crop-close-btn" id="cb-crop-close" aria-label="Close">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                          d="M19.3 20.7a1 1 0 0 0 1.4-1.4L13.42 12l7.3-7.3a1 1 0 0 0-1.42-1.4L12 10.58l-7.3-7.3a1 1 0 0 0-1.4 1.42L10.58 12l-7.3 7.3a1 1 0 1 0 1.42 1.4L12 13.42l7.3 7.3Z"/>
+                </svg>
+            </button>
+        </header>
+        <div class="cb-crop-content">
+            <div class="cb-crop-container" id="cb-crop-container">
+                <img id="cb-crop-img" alt="">
+                <div class="cb-crop-controls">
+                    <div class="cb-crop-zoom">
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                            <path fill="currentColor" fill-rule="evenodd"
+                                  d="M15.62 17.03a9 9 0 1 1 1.41-1.41l4.68 4.67a1 1 0 0 1-1.42 1.42l-4.67-4.68ZM17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
+                                  clip-rule="evenodd"/>
+                            <path fill="currentColor" d="M6 10a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z"/>
+                        </svg>
+                        <input type="range" id="cb-crop-zoom" min="0" max="100" value="0">
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                            <path fill="currentColor" fill-rule="evenodd"
+                                  d="M15.62 17.03a9 9 0 1 1 1.41-1.41l4.68 4.67a1 1 0 0 1-1.42 1.42l-4.67-4.68ZM17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
+                                  clip-rule="evenodd"/>
+                            <path fill="currentColor"
+                                  d="M11 7a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7Z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer class="cb-crop-footer">
+            <button type="button" class="cb-crop-text-btn" id="cb-crop-reset">Reset</button>
+            <div class="cb-crop-footer-right">
+                <button type="button" class="cb-crop-btn-secondary" id="cb-crop-cancel">Cancel</button>
+                <button type="button" class="cb-crop-btn-primary" id="cb-crop-apply">Apply</button>
+            </div>
+        </footer>
     </div>
 </div>
 
@@ -802,7 +893,8 @@
 <div class="modal-overlay" id="gk-message-modal" hidden>
     <div class="modal-card">
         <h3>Deploy Captcha Message</h3>
-        <p>Customize the verification embed that will be posted in the verification channel. Members see this embed with a "Begin Verification" button.</p>
+        <p>Customize the verification embed that will be posted in the verification channel. Members see this embed with
+            a "Begin Verification" button.</p>
         <div class="modal-form">
             <label class="config-label" for="gk_modal_title">Embed Title</label>
             <input type="text" id="gk_modal_title" class="config-input" maxlength="256" value="Identity Verification">
@@ -821,8 +913,19 @@
 
 {% block body_end %}
 <script>const GUILD_ID = '{{ guild.id }}';</script>
-<script>window.PERCY_DASH = { guildId: '{{ guild.id }}', guildName: {{ guild.name|json|safe }} };</script>
-<script>window.AI_OVERRIDES = {{ guild.ai.overrides_json()|safe }};</script>
+<script>window.PERCY_DASH = {guildId: '{{ guild.id }}', guildName: {
+{
+    guild.name | json | safe
+}
+}
+}
+;</script>
+<script>window.AI_OVERRIDES = {
+{
+    guild.ai.overrides_json() | safe
+}
+}
+;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" crossorigin="anonymous"></script>
 <script src="/static/js/common.js"></script>
 <script src="/static/js/dashboard.js"></script>
