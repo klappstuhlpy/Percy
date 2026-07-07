@@ -2,20 +2,24 @@
 
 This is a thin, Percy-only extension of the public :mod:`klappstuhl` wrapper
 (the ``klappstuhl.py`` package). The base :class:`klappstuhl.Client` already
-covers every general endpoint — uploads, guild galleries, media, render, scan —
-so Percy does **not** re-implement a bespoke HTTP client. It only adds the two
-things that are deliberately absent from the public library because they are
-internal to Percy's deployment:
+covers every general endpoint — uploads, guild galleries, media, render, scan,
+short links, pastes, QR, unfurl — so Percy does **not** re-implement a bespoke
+HTTP client. It layers on three deployment-specific concerns:
 
-* **Per-guild key provisioning.** Percy never holds a personal API key. It
-  presents a shared ``provision_token`` to the host's internal
-  ``POST /guilds/{id}/provision-key`` endpoint, which mints (get-or-creates) a
-  narrow ``images:guild`` key for that guild. Those keys are cached in-process
-  and used for every subsequent gallery call; a legacy personal ``api_key`` is
-  only a fallback.
+* **Per-guild key provisioning.** Percy never holds a personal API key for
+  gallery calls. It presents a shared ``provision_token`` to the host's
+  internal ``POST /guilds/{id}/provision-key`` endpoint, which mints
+  (get-or-creates) a narrow ``images:guild`` key for that guild. Those keys are
+  cached in-process and used for every subsequent gallery call; a legacy
+  personal ``api_key`` is only a fallback.
 * **Discord-native file coercion.** Gallery uploads accept ``discord.File`` /
   ``discord.Attachment`` (and ``(filename, bytes)`` tuples) and convert them to
   :class:`klappstuhl.File`, so cogs can hand Percy objects straight through.
+* **Account-key routing for account-scoped features.** Short links, pastes, QR,
+  and unfurl are *not* per-guild, so they cannot use a provisioned
+  ``images:guild`` key. Percy routes them through a separate client bound to a
+  real personal ``api_key`` (carrying the ``links:*`` / ``pastes:*`` /
+  ``images:read`` scopes); :attr:`account_available` reports whether one is set.
 
 Everything else is inherited from :class:`klappstuhl.Client` unchanged.
 """
@@ -33,10 +37,9 @@ from klappstuhl.http import DEFAULT_BASE_URL
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-    from typing import Literal
 
     import aiohttp
-    from klappstuhl.models import DeleteResult, GuildImagesResult, Paste, ShortLink, Unfurl, UploadResult
+    from klappstuhl.models import DeleteResult, GuildImagesResult, UploadResult
 
 # A non-empty sentinel handed to the base client when the hoster is unconfigured
 # (the base client requires *some* token). It is never sent: every guild call
@@ -203,32 +206,3 @@ class KlappstuhlMeClient(Client):
                 )
             self._account_client = Client(self.api_key, session=self._session, base_url=self._base_url)
         return self._account_client
-
-    async def shorten(self, url: str, *, code: str | None = None) -> ShortLink:
-        """Create a short link (needs an account key with ``links:write``)."""
-        return await self._account.shorten(url, code=code)
-
-    async def delete_link(self, code: str) -> ShortLink:
-        """Delete one of the account's short links by code."""
-        return await self._account.delete_link(code)
-
-    async def create_paste(
-        self, content: str, *, language: str | None = None, expires_in: int | None = None
-    ) -> Paste:
-        """Create a hosted paste (needs an account key with ``pastes:write``)."""
-        return await self._account.create_paste(content, language=language, expires_in=expires_in)
-
-    async def render_qr(
-        self,
-        data: str,
-        *,
-        size: int | None = None,
-        format: Literal["svg", "png"] = "png",
-        ecc: Literal["low", "medium", "quartile", "high"] | None = None,
-    ) -> bytes:
-        """Render ``data`` as a QR code (needs ``images:read``). PNG by default."""
-        return await self._account.render_qr(data, size=size, format=format, ecc=ecc)
-
-    async def unfurl(self, url: str) -> Unfurl:
-        """Unfurl a URL into Open Graph / link-preview metadata (``images:read``)."""
-        return await self._account.unfurl(url)
