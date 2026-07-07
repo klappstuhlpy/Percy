@@ -16,13 +16,13 @@ Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──
 
 ## Architecture at a glance
 
-| Concern | How it works |
-|---|---|
-| **Auth** | Discord OAuth2 only. On callback the app mints a **stateless** session — an HMAC-signed cookie (`session`) carrying the Discord user id, verified with the config signing key. No session table, no password accounts. |
-| **Access control** | "Can this Discord user manage this guild?" — computed from Percy's `get_user_guilds` (Manage-Server ⇒ full config; shares-a-guild ⇒ read-only member views). Acting user/moderator ids always come from the session, never the request body. |
-| **Own database** | `dashboard.db` (SQLite via the shared `kls-web-core` kernel) holds only the two dashboard-owned tables: `user_discord_admin_guilds` (the "add Percy to your server" list) and `percy_leaderboard_vanity` (public-leaderboard vanity slugs). Migrations in `sql/` run on startup. |
-| **Percy API** | The one hard runtime dependency. All guild data + mutations flow through it (`percy-client`, paths under `/api/v1`). Optional at *boot* — the server still starts with no Percy configured; pages degrade gracefully. |
-| **Design** | `kls-ui` crate — `base.css`, theme bootstrap and relative-time JS, embedded and served at `/kls/*`. The dashboard's own page CSS/JS live in `static/` and are served at `/static/*`. |
+| Concern            | How it works                                                                                                                                                                                                                                                                     |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Auth**           | Discord OAuth2 only. On callback the app mints a **stateless** session — an HMAC-signed cookie (`session`) carrying the Discord user id, verified with the config signing key. No session table, no password accounts.                                                           |
+| **Access control** | "Can this Discord user manage this guild?" — computed from Percy's `get_user_guilds` (Manage-Server ⇒ full config; shares-a-guild ⇒ read-only member views). Acting user/moderator ids always come from the session, never the request body.                                     |
+| **Own database**   | `dashboard.db` (SQLite via the shared `kls-web-core` kernel) holds only the two dashboard-owned tables: `user_discord_admin_guilds` (the "add Percy to your server" list) and `percy_leaderboard_vanity` (public-leaderboard vanity slugs). Migrations in `sql/` run on startup. |
+| **Percy API**      | The one hard runtime dependency. All guild data + mutations flow through it (`percy-client`, paths under `/api/v1`). Optional at *boot* — the server still starts with no Percy configured; pages degrade gracefully.                                                            |
+| **Design**         | `kls-ui` crate — `base.css`, theme bootstrap and relative-time JS, embedded and served at `/kls/*`. The dashboard's own page CSS/JS live in `static/` and are served at `/static/*`.                                                                                             |
 
 ---
 
@@ -65,30 +65,30 @@ Config is `config.json`, resolved from **`$DASHBOARD_CONFIG`**, else `<user-conf
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `bind` | Listen address (default `127.0.0.1:8091`). |
-| `base_url` | Public URL the dashboard is served from. Used to derive the OAuth redirect when `redirect_uri` is blank. No trailing slash. |
-| `secret_key` | HMAC key for the session + flash cookies. **Auto-generated on first run** — keep it secret and stable (rotating it logs everyone out). |
-| `discord.client_id` / `client_secret` | Discord OAuth2 app credentials. Login is disabled until both are set. |
-| `discord.redirect_uri` | The OAuth2 redirect. Blank ⇒ derived as `{base_url}/auth/discord/callback`. Must **exactly match** a redirect registered on the Discord app. |
-| `percy.api_url` / `api_token` | Percy's internal API base URL + its `INTERNAL_API_TOKEN`. |
-| `percy.bot_client_id` | Bot application id for "add Percy" invite links. Falls back to `discord.client_id`. |
-| `percy.scan_token` | Optional klappstuhl.me API token (`images:read`) used to virus-scan uploaded poll banners / tag CSVs. Omit to skip scanning. |
-| `sso_secret` | Optional shared HMAC key (hex). Set to the **same** value as klappstuhl.me's `sso_secret` to enable single sign-on (see below). Unset ⇒ only the dashboard's own Discord login works. |
+| Field                                 | Meaning                                                                                                                                                                                |
+|---------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bind`                                | Listen address (default `127.0.0.1:8091`).                                                                                                                                             |
+| `base_url`                            | Public URL the dashboard is served from. Used to derive the OAuth redirect when `redirect_uri` is blank. No trailing slash.                                                            |
+| `secret_key`                          | HMAC key for the session + flash cookies. **Auto-generated on first run** — keep it secret and stable (rotating it logs everyone out).                                                 |
+| `discord.client_id` / `client_secret` | Discord OAuth2 app credentials. Login is disabled until both are set.                                                                                                                  |
+| `discord.redirect_uri`                | The OAuth2 redirect. Blank ⇒ derived as `{base_url}/auth/discord/callback`. Must **exactly match** a redirect registered on the Discord app.                                           |
+| `percy.api_url` / `api_token`         | Percy's internal API base URL + its `INTERNAL_API_TOKEN`.                                                                                                                              |
+| `percy.bot_client_id`                 | Bot application id for "add Percy" invite links. Falls back to `discord.client_id`.                                                                                                    |
+| `percy.scan_token`                    | Optional klappstuhl.me API token (`images:read`) used to virus-scan uploaded poll banners / tag CSVs. Omit to skip scanning.                                                           |
+| `sso_secret`                          | Optional shared HMAC key (hex). Set to the **same** value as klappstuhl.me's `sso_secret` to enable single sign-on (see below). Unset ⇒ only the dashboard's own Discord login works.  |
 
 ### Environment overrides
 
 Every deployment-sensitive value can be injected via env (handy for containers), taking precedence over blank config fields:
 
-| Env var | Overrides |
-|---|---|
-| `DASHBOARD_CONFIG` | Path to `config.json`. |
-| `DASHBOARD_PORT` | The `bind` port. |
-| `DASHBOARD_DB` | Path to `dashboard.db` (default `<data-dir>/percy-dashboard/dashboard.db`; `:memory:` for ephemeral). |
-| `PERCY_API_URL` / `PERCY_API_TOKEN` | Percy connection. |
-| `PERCY_SCAN_TOKEN` | The `images:read` scan token. |
-| `PERCY_SCAN_ENDPOINT` | The scan endpoint (default `https://klappstuhl.me/api/v1/scan`). |
+| Env var                             | Overrides                                                                                             |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `DASHBOARD_CONFIG`                  | Path to `config.json`.                                                                                |
+| `DASHBOARD_PORT`                    | The `bind` port.                                                                                      |
+| `DASHBOARD_DB`                      | Path to `dashboard.db` (default `<data-dir>/percy-dashboard/dashboard.db`; `:memory:` for ephemeral). |
+| `PERCY_API_URL` / `PERCY_API_TOKEN` | Percy connection.                                                                                     |
+| `PERCY_SCAN_TOKEN`                  | The `images:read` scan token.                                                                         |
+| `PERCY_SCAN_ENDPOINT`               | The scan endpoint (default `https://klappstuhl.me/api/v1/scan`).                                      |
 
 ### Discord app setup (one-time)
 
@@ -99,8 +99,6 @@ In the [Discord developer portal](https://discord.com/developers/applications) �
 ## Hosting: standalone vs. together
 
 The dashboard is designed to run **independently by default, connected by choice.**
-
-### Standalone
 
 The only thing it truly needs is a reachable **Percy internal API**. Point `percy.api_url`/`api_token` at your Percy instance, set up the Discord app, and serve `base_url`. It does not need the klappstuhl.me main site at all. Login is Discord OAuth; identity and guild access come entirely from Discord + Percy.
 
@@ -120,11 +118,11 @@ Nothing about connected mode is hardcoded: each app derives the other's URL from
 
 Why not one shared cookie? The two apps have deliberately different identity models:
 
-| | klappstuhl.me | percy-dashboard |
-|---|---|---|
-| Cookie | `token` (DB-backed) | `session` (stateless) |
-| Keyed on | `account.id` (i64) | `discord_user_id` |
-| Signed with | its own `secret_key` | its own `secret_key` |
+|             | klappstuhl.me        | percy-dashboard       |
+|-------------|----------------------|-----------------------|
+| Cookie      | `token` (DB-backed)  | `session` (stateless) |
+| Keyed on    | `account.id` (i64)   | `discord_user_id`     |
+| Signed with | its own `secret_key` | its own `secret_key`  |
 
 A cookie set by one is meaningless to the other (different name, payload, and key), and the main site's account id doesn't identify a Discord user without a lookup. Setting a `Domain=.klappstuhl.me` cookie makes the *browser* send it to both hosts, but the receiving app still can't verify or interpret it. So a single transparent cookie is out of reach without collapsing the two identity models — not worth it.
 
@@ -181,27 +179,6 @@ docker compose up --build -d        # build + start
 # config.json to ./data/config/percy-dashboard/ — fill in the Discord OAuth
 # creds (and, for SSO, the shared sso_secret), then `docker compose restart`.
 ```
-
-#### Build prerequisite — SSH access to the private shared crate
-
-The image build fetches the private [`klappstuhl_me-shared`](https://github.com/klappstuhlpy/klappstuhl_me-shared) dependency over SSH, so the build needs an SSH key with **read access to that repo** forwarded in. BuildKit forwards an **ssh-agent socket** — a key sitting in `~/.ssh` is not enough on its own; without an agent you get `invalid empty ssh agent socket: make sure SSH_AUTH_SOCK is set`.
-
-```bash
-# Confirm your key can reach the private repo (uses your normal ~/.ssh key):
-git ls-remote git@github.com:klappstuhlpy/klappstuhl_me-shared.git >/dev/null && echo OK
-
-# Option A — load the key into an agent, then build in the SAME shell:
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519           # your key with read access to klappstuhl_me-shared
-docker compose up --build -d
-
-# Option B — no agent; hand BuildKit the key file directly:
-docker compose build --ssh default=$HOME/.ssh/id_ed25519
-docker compose up -d
-```
-
-Building with `sudo`? Use `sudo -E …` so `SSH_AUTH_SOCK` survives, or run as a `docker`-group user. A passphrase-protected key must use Option A. Front the dashboard with a reverse proxy for the `percy.<domain>` subdomain (klappstuhl.me's own Proxy admin page can map it to `127.0.0.1:8091`).
-
 ---
 
 ## Deployment notes

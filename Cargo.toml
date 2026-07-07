@@ -1,9 +1,9 @@
 [package]
 name = "dashboard"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
 license = "AGPL-v3"
-description = "Percy dashboard — standalone web binary (skeleton) built on the shared klappstuhl.me kernel."
+description = "Percy dashboard — standalone web binary built on the shared klappstuhl.me kernel."
 
 # The three shared crates come from the klappstuhl_me-shared repo as a
 # tag-pinned git dependency (see DASHBOARD_DECOUPLING_PLAN.md, Phase 5) — the
