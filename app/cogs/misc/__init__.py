@@ -9,6 +9,7 @@ from .gimmicks import GimmicksMixin
 from .meta import MetaMixin
 from .stat_counters import StatCountersMixin
 from .temp_channels import TempChannelsMixin
+from .tools import KlappstuhlToolsMixin
 from .translator import TranslatorMixin
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ __all__ = ('Misc', 'setup')
 
 class Misc(
     GimmicksMixin,
+    KlappstuhlToolsMixin,
     TranslatorMixin,
     DiscordStatusMixin,
     StatCountersMixin,

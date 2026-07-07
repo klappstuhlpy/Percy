@@ -33,9 +33,10 @@ from klappstuhl.http import DEFAULT_BASE_URL
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import Literal
 
     import aiohttp
-    from klappstuhl.models import DeleteResult, GuildImagesResult, UploadResult
+    from klappstuhl.models import DeleteResult, GuildImagesResult, Paste, ShortLink, Unfurl, UploadResult
 
 # A non-empty sentinel handed to the base client when the hoster is unconfigured
 # (the base client requires *some* token). It is never sent: every guild call
@@ -65,6 +66,11 @@ class KlappstuhlMeClient(Client):
         # and sharing the one aiohttp session. Built on demand, cached here.
         self._guild_clients: dict[int, Client] = {}
         self._guild_lock: asyncio.Lock = asyncio.Lock()
+        # A base client bound to the *personal account* key, used for the
+        # account-scoped features (short links, pastes, QR, unfurl). These are
+        # not per-guild, so they cannot use a provisioned images:guild key — they
+        # need a real account key with the relevant scopes. Built on demand.
+        self._account_client: Client | None = None
 
     def __repr__(self) -> str:
         return f"<KlappstuhlMeClient base_url={self._base_url!r} available={self.available}>"
@@ -174,3 +180,55 @@ class KlappstuhlMeClient(Client):
     async def delete_guild_image(self, guild_id: int, image_id: str) -> DeleteResult:
         """Delete an image from a guild's shared gallery (scoped by ``guild_id``)."""
         return await self._guild_call(guild_id, lambda c: c.delete_guild_image(guild_id, image_id))
+
+    # -- account-scoped features (short links, pastes, QR, unfurl) ------------
+
+    @property
+    def account_available(self) -> bool:
+        """Whether a personal account key is configured for account-scoped calls.
+
+        Short links, pastes, QR, and unfurl need a real account key (with the
+        ``links:*`` / ``pastes:*`` / ``images:read`` scopes), not a per-guild
+        provisioned key — set ``KLAPPSTUHL_ME_API_TOKEN`` to enable them.
+        """
+        return bool(self.api_key)
+
+    @property
+    def _account(self) -> Client:
+        """A base :class:`klappstuhl.Client` bound to the personal account key."""
+        if self._account_client is None:
+            if not self.api_key:
+                raise ValueError(
+                    "account-scoped klappstuhl.me features need a personal key: set KLAPPSTUHL_ME_API_TOKEN"
+                )
+            self._account_client = Client(self.api_key, session=self._session, base_url=self._base_url)
+        return self._account_client
+
+    async def shorten(self, url: str, *, code: str | None = None) -> ShortLink:
+        """Create a short link (needs an account key with ``links:write``)."""
+        return await self._account.shorten(url, code=code)
+
+    async def delete_link(self, code: str) -> ShortLink:
+        """Delete one of the account's short links by code."""
+        return await self._account.delete_link(code)
+
+    async def create_paste(
+        self, content: str, *, language: str | None = None, expires_in: int | None = None
+    ) -> Paste:
+        """Create a hosted paste (needs an account key with ``pastes:write``)."""
+        return await self._account.create_paste(content, language=language, expires_in=expires_in)
+
+    async def render_qr(
+        self,
+        data: str,
+        *,
+        size: int | None = None,
+        format: Literal["svg", "png"] = "png",
+        ecc: Literal["low", "medium", "quartile", "high"] | None = None,
+    ) -> bytes:
+        """Render ``data`` as a QR code (needs ``images:read``). PNG by default."""
+        return await self._account.render_qr(data, size=size, format=format, ecc=ecc)
+
+    async def unfurl(self, url: str) -> Unfurl:
+        """Unfurl a URL into Open Graph / link-preview metadata (``images:read``)."""
+        return await self._account.unfurl(url)
