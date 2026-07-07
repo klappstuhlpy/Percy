@@ -15,9 +15,10 @@ use crate::{
     guilds::gate_and_load_guild,
     session::Session,
     templates::{
-        AutorespondersTemplate, BlacklistRow, ComicsTemplate, CommandsTemplate, EconomyTemplate, EmojiStatsTemplate,
-        GalleryTemplate, GiveawaysTemplate, HighlightsTemplate, LevelRoleRow, LevelingTemplate, MultiplierRow,
-        MusicTemplate, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate, TempChannelsTemplate,
+        AnalyticsTemplate, AutorespondersTemplate, BackupTemplate, BlacklistRow, ComicsTemplate, CommandsTemplate,
+        EconomyTemplate, EmojiStatsTemplate, GalleryTemplate, GiveawaysTemplate, HighlightsTemplate, LevelRoleRow,
+        LevelingTemplate, MultiplierRow, MusicTemplate, PollsTemplate, SpecialMsgRow, StatsTemplate, TagsTemplate,
+        TempChannelsTemplate, WebhooksTemplate,
     },
     view::Viewer,
     AppState,
@@ -598,6 +599,83 @@ pub async fn guild_commands(State(app): State<AppState>, session: Session, Path(
         disabled_count,
         partial_count,
         override_count,
+    }
+    .into_response()
+}
+
+/// `GET /dashboard/guild/{id}/analytics`
+pub async fn guild_analytics(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    // The page opens on the 30-day window: server-render the headline tiles and
+    // paint the initial commands series. Metric/range switches re-fetch via JSON.
+    let (summary, series) = tokio::join!(
+        percy.get_analytics_summary(guild_id, "30d"),
+        percy.get_analytics_series(guild_id, "commands", "30d", None),
+    );
+
+    let series = series.unwrap_or_default();
+    let initial_series_json = serde_json::to_string(&series.points).unwrap_or_else(|_| "[]".to_string());
+
+    AnalyticsTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "analytics",
+        page_title: "Analytics",
+        summary: summary.unwrap_or_default(),
+        range: "30d",
+        initial_series_json,
+    }
+    .into_response()
+}
+
+/// `GET /dashboard/guild/{id}/webhooks`
+pub async fn guild_webhooks(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    let (subs, events) = tokio::join!(percy.get_webhooks(guild_id), percy.get_webhook_events(guild_id));
+
+    WebhooksTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "webhooks",
+        page_title: "Webhooks",
+        subscriptions: subs.map(|r| r.subscriptions).unwrap_or_default(),
+        events: events.map(|r| r.events).unwrap_or_default(),
+    }
+    .into_response()
+}
+
+/// `GET /dashboard/guild/{id}/backup`
+pub async fn guild_backup(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+
+    // The template gallery degrades to empty when Percy is unreachable — the
+    // export/import controls still render.
+    let templates = percy.get_templates(guild_id).await.unwrap_or_default();
+
+    BackupTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "backup",
+        page_title: "Backup & Templates",
+        public_templates: templates.public,
+        own_templates: templates.own,
     }
     .into_response()
 }

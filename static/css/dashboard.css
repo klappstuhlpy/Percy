@@ -1656,6 +1656,11 @@ th.th-sortable[aria-sort="descending"]::after {
     letter-spacing: 0.03em;
     border: none;
 }
+/* Semantic badge tints (fall back to the branding base when unstyled). */
+.badge-muted { background: var(--box-shade); color: var(--text-muted); }
+.badge-info { background: rgba(88, 101, 242, 0.18); color: #8b93f8; }
+.badge-success { background: rgba(67, 181, 129, 0.18); color: #57d99a; }
+.badge-danger { background: rgba(240, 71, 71, 0.18); color: #f87171; }
 
 /* -- Comic feed cards -- */
 

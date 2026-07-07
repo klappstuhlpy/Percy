@@ -30,6 +30,7 @@
                 <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link{% if nav_active == "config" %} active{% endif %}">Configuration</a>
                 <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link{% if nav_active == "members" %} active{% endif %}">Members</a>
                 <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link{% if nav_active == "stats" %} active{% endif %}">Statistics</a>
+                <a href="/dashboard/guild/{{ guild_id }}/analytics" class="dash-nav-link{% if nav_active == "analytics" %} active{% endif %}">Analytics</a>
                 <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link{% if nav_active == "commands" %} active{% endif %}">Commands</a>
             </div>
             <div class="dash-nav-group">
@@ -49,6 +50,11 @@
                 <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link{% if nav_active == "tags" %} active{% endif %}">Tags</a>
                 <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link{% if nav_active == "highlights" %} active{% endif %}">Highlights</a>
                 <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link{% if nav_active == "emoji-stats" %} active{% endif %}">Emoji Stats</a>
+            </div>
+            <div class="dash-nav-group">
+                <span class="dash-nav-heading">Integrations</span>
+                <a href="/dashboard/guild/{{ guild_id }}/webhooks" class="dash-nav-link{% if nav_active == "webhooks" %} active{% endif %}">Webhooks</a>
+                <a href="/dashboard/guild/{{ guild_id }}/backup" class="dash-nav-link{% if nav_active == "backup" %} active{% endif %}">Backup &amp; Templates</a>
             </div>
             <div class="dash-nav-group">
                 <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me{% if nav_active == "me" %} active{% endif %}">My Profile</a>

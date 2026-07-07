@@ -446,6 +446,53 @@ pub(crate) struct EmojiStatsTemplate {
 
 #[allow(dead_code)]
 #[derive(Template)]
+#[template(path = "analytics.html")]
+pub(crate) struct AnalyticsTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    /// Headline numbers (server-rendered for the default 30d window).
+    pub(crate) summary: AnalyticsSummary,
+    /// The default range the page opens on (drives the initial chart + tiles).
+    pub(crate) range: &'static str,
+    /// Pre-serialized `[{bucket,value}]` for the initial `commands` chart, so it
+    /// paints before the JS re-fetch; later metric/range switches hit the JSON API.
+    pub(crate) initial_series_json: String,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "webhooks.html")]
+pub(crate) struct WebhooksTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) subscriptions: Vec<WebhookSubscription>,
+    /// The catalogue of events a subscription can listen for.
+    pub(crate) events: Vec<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "backup.html")]
+pub(crate) struct BackupTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    /// Public template gallery.
+    pub(crate) public_templates: Vec<TemplateEntry>,
+    /// Templates this guild has published.
+    pub(crate) own_templates: Vec<TemplateEntry>,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
 #[template(path = "audit_log.html")]
 pub(crate) struct AuditLogTemplate {
     pub(crate) account: Option<Viewer>,
@@ -458,4 +505,90 @@ pub(crate) struct AuditLogTemplate {
     pub(crate) filter_moderator: String,
     pub(crate) filter_after: String,
     pub(crate) filter_before: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The analytics page renders its headline tiles, chart container, and top-command rows.
+    #[test]
+    fn analytics_template_renders() {
+        let html = AnalyticsTemplate {
+            account: Some(Viewer { name: "ferris".into() }),
+            guild_id: 42,
+            guild_name: "Test".into(),
+            nav_active: "analytics",
+            page_title: "Analytics",
+            summary: AnalyticsSummary {
+                range: "30d".into(),
+                commands: AnalyticsMetric { value: 120, delta: 15 },
+                new_members: AnalyticsMetric { value: 8, delta: -2 },
+                member_count: Some(500),
+                top_commands: vec![AnalyticsTopCommand {
+                    command: "ping".into(),
+                    uses: 40,
+                }],
+            },
+            range: "30d",
+            initial_series_json: "[{\"bucket\":\"2026-07-01T00:00:00+00:00\",\"value\":3}]".into(),
+        }
+        .render()
+        .expect("render analytics");
+        assert!(html.contains("Top commands"));
+        assert!(html.contains("ping"));
+        assert!(html.contains("analytics/series") || html.contains("analytics.js"));
+    }
+
+    /// The webhooks page renders a subscription row + the event checkboxes.
+    #[test]
+    fn webhooks_template_renders() {
+        let html = WebhooksTemplate {
+            account: Some(Viewer { name: "ferris".into() }),
+            guild_id: 42,
+            guild_name: "Test".into(),
+            nav_active: "webhooks",
+            page_title: "Webhooks",
+            subscriptions: vec![WebhookSubscription {
+                id: 1,
+                url: "https://example.com/hook".into(),
+                events: vec!["member.join".into()],
+                label: Some("My hook".into()),
+                enabled: true,
+                failure_count: 0,
+                ..Default::default()
+            }],
+            events: vec!["member.join".into(), "level.up".into()],
+        }
+        .render()
+        .expect("render webhooks");
+        assert!(html.contains("https://example.com/hook"));
+        assert!(html.contains("member.join"));
+        assert!(html.contains("level.up")); // the event picker checkbox
+    }
+
+    /// The backup page renders the export/import controls and both template lists.
+    #[test]
+    fn backup_template_renders() {
+        let html = BackupTemplate {
+            account: Some(Viewer { name: "ferris".into() }),
+            guild_id: 42,
+            guild_name: "Test".into(),
+            nav_active: "backup",
+            page_title: "Backup & Templates",
+            public_templates: vec![TemplateEntry {
+                slug: "gaming-starter".into(),
+                name: "Gaming Starter".into(),
+                description: Some("A kit".into()),
+                downloads: 3,
+                ..Default::default()
+            }],
+            own_templates: Vec::new(),
+        }
+        .render()
+        .expect("render backup");
+        assert!(html.contains("Download backup"));
+        assert!(html.contains("gaming-starter"));
+        assert!(html.contains("Template gallery"));
+    }
 }

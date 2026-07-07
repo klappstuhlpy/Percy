@@ -1,0 +1,126 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Command volume, XP, and member growth over time.</p>{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
+<style>
+    .analytics-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-end;
+        margin-bottom: 1rem;
+    }
+    .analytics-controls .control-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .analytics-chart { width: 100%; min-height: 260px; }
+    .analytics-chart .chart-message {
+        display: grid;
+        place-items: center;
+        min-height: 240px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        text-align: center;
+        padding: 1rem;
+    }
+    .metric-delta { font-size: 0.78rem; font-weight: 600; }
+    .metric-delta.up { color: #4ade80; }
+    .metric-delta.down { color: #f87171; }
+    .metric-delta.flat { color: var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Analytics are sourced from Percy's <strong>command log</strong>, the daily <strong>XP snapshots</strong>, and the live member cache. Series are zero-filled, so a quiet day shows <code>0</code> rather than a gap.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Deltas compare the selected window against the one immediately before it</li>
+                <li>The XP metric is always daily (it is a cumulative snapshot); other metrics auto-pick an hour/day/week bucket</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Commands ({{ range }})</span>
+            <span class="tile-value">{{ summary.commands.value }}</span>
+            {% if summary.commands.delta > 0 %}<span class="metric-delta up">▲ {{ summary.commands.delta }}</span>
+            {% else if summary.commands.delta < 0 %}<span class="metric-delta down">▼ {{ summary.commands.delta }}</span>
+            {% else %}<span class="metric-delta flat">no change</span>{% endif %}
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">New members ({{ range }})</span>
+            <span class="tile-value">{{ summary.new_members.value }}</span>
+            {% if summary.new_members.delta > 0 %}<span class="metric-delta up">▲ {{ summary.new_members.delta }}</span>
+            {% else if summary.new_members.delta < 0 %}<span class="metric-delta down">▼ {{ summary.new_members.delta }}</span>
+            {% else %}<span class="metric-delta flat">no change</span>{% endif %}
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Members</span>
+            <span class="tile-value">{% match summary.member_count %}{% when Some with (n) %}{{ n }}{% when None %}—{% endmatch %}</span>
+        </div>
+    </div>
+
+    <section class="config-section">
+        <div class="section-header">
+            <h2>Trend</h2>
+        </div>
+        <div class="analytics-controls">
+            <div class="control-group">
+                <label class="config-label" for="metric-select">Metric</label>
+                <select id="metric-select" class="config-select">
+                    <option value="commands">Commands used</option>
+                    <option value="command_failures">Command failures</option>
+                    <option value="xp">XP earned</option>
+                    <option value="members">New members</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label class="config-label" for="range-select">Range</label>
+                <select id="range-select" class="config-select">
+                    <option value="24h">Last 24 hours</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d" selected>Last 30 days</option>
+                    <option value="90d">Last 90 days</option>
+                    <option value="1y">Last year</option>
+                </select>
+            </div>
+        </div>
+        <div id="analytics-chart" class="analytics-chart" data-points='{{ initial_series_json|safe }}'>
+            <div class="chart-message">Loading chart…</div>
+        </div>
+    </section>
+
+    <section class="config-section">
+        <div class="section-header">
+            <h2>Top commands ({{ range }})</h2>
+        </div>
+        {% if summary.top_commands.is_empty() %}
+        <p class="empty-state">No command usage recorded in this window yet.</p>
+        {% else %}
+        <table class="data-table">
+            <thead>
+                <tr><th>Command</th><th>Uses</th></tr>
+            </thead>
+            <tbody id="top-commands-body">
+                {% for row in summary.top_commands %}
+                <tr>
+                    <td data-label="Command"><code>{{ row.command }}</code></td>
+                    <td data-label="Uses">{{ row.uses }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </section>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
+<script src="/static/js/analytics.js"></script>
+{% endblock %}

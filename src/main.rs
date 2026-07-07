@@ -34,6 +34,7 @@ mod crud;
 mod db;
 mod forms;
 mod guilds;
+mod integrations;
 mod leaderboard;
 mod migrations;
 mod moderation;
@@ -255,6 +256,57 @@ fn build_router(state: AppState) -> Router {
         )
         .route("/dashboard/guild/:guild_id/highlights", get(pages::guild_highlights))
         .route("/dashboard/guild/:guild_id/emoji-stats", get(pages::guild_emoji_stats))
+        // Analytics: the page + its two JSON feeds (series for the chart, summary
+        // for the headline tiles) that the range/metric pickers re-fetch.
+        .route("/dashboard/guild/:guild_id/analytics", get(pages::guild_analytics))
+        .route(
+            "/dashboard/guild/:guild_id/analytics/series",
+            get(integrations::guild_analytics_series),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/analytics/summary",
+            get(integrations::guild_analytics_summary),
+        )
+        // Outbound webhooks (event subscriptions): page + CRUD/test/deliveries.
+        .route("/dashboard/guild/:guild_id/webhooks", get(pages::guild_webhooks))
+        .route(
+            "/dashboard/guild/:guild_id/webhooks/create",
+            post(integrations::guild_webhook_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/webhooks/:sub_id",
+            patch(integrations::guild_webhook_patch).delete(integrations::guild_webhook_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/webhooks/:sub_id/test",
+            post(integrations::guild_webhook_test),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/webhooks/:sub_id/deliveries",
+            get(integrations::guild_webhook_deliveries),
+        )
+        // Backup / restore + shareable templates.
+        .route("/dashboard/guild/:guild_id/backup", get(pages::guild_backup))
+        .route(
+            "/dashboard/guild/:guild_id/backup/export.json",
+            get(integrations::guild_backup_export),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/backup/import",
+            post(integrations::guild_backup_import),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/templates",
+            post(integrations::guild_template_publish),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/templates/:slug/apply",
+            post(integrations::guild_template_apply),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/templates/:slug",
+            delete(integrations::guild_template_delete),
+        )
         // Members JSON feed + actions.
         .route(
             "/dashboard/guild/:guild_id/members.json",
