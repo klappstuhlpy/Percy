@@ -9,8 +9,6 @@
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-header dash-rise" hidden="True"></div>
-
 <div class="guild-header dash-rise">
     {% match guild.icon_url %}
     {% when Some with (url) %}
@@ -913,6 +911,11 @@
 {% block page_js %}
 <script>const GUILD_ID = '{{ guild.id }}';</script>
 <script>window.AI_OVERRIDES = {{ guild.ai.overrides_json()|safe }};</script>
+<script>
+    /* disable: dashboard-header dash-rise that roots from dashboard_layout.html */
+    var dash_head = document.getElementsByClassName('dashboard-header dash-rise')[0];
+    dash_head.hidden = true;
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" crossorigin="anonymous"></script>
 <script src="/static/js/guild.js"></script>
 <script src="/static/js/ai.js"></script>
