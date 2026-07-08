@@ -40,7 +40,7 @@ class KlappstuhlToolsMixin:
     def _client(self) -> KlappstuhlClient | None:
         """Return the account-scoped client, or ``None`` when unconfigured."""
         client = self.bot.klappstuhlme_client
-        if client is None or not client.account_available:
+        if client is None or not client.available:
             return None
         return client
 

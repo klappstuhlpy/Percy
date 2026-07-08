@@ -62,6 +62,11 @@ class KlappstuhlClient(Client):
         # The base client's token is used for all normal api calls
         super().__init__(api_token or _UNCONFIGURED, session=session, base_url=base_url)
 
+    @property
+    def available(self) -> bool:
+        """Whether the hoster is configured (a provision token or a personal key)."""
+        return bool(self._http.token and self._http.token != _UNCONFIGURED)
+
 
 class KlappstuhlInternalClient(Client):
     """Percy's extension of :class:`klappstuhl.Client` for internal api use (see the module docstring)."""
