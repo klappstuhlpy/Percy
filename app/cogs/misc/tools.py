@@ -138,7 +138,7 @@ class KlappstuhlToolsMixin:
             return
 
         embed = discord.Embed(title='Short link created', colour=helpers.Colour.white())
-        embed.description = f'[`{link.short_url}`]({link.short_url})\n-# → {link.target_url}'
+        embed.description = f'[`{link.short_url.replace('https://', '')}`]({link.short_url})\n-# → {link.target_url}'
         await ctx.send(embed=embed)
 
     @command(description='Generate a QR code for text or a URL.')
