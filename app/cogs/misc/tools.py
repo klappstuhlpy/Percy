@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import io
+import re
 from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
-from klappstuhl import File
-from klappstuhl.enums import Effect, ImageFormat
+from klappstuhl import File, ShareResult
+from klappstuhl.enums import ChartKind, Effect, ImageFormat
 from klappstuhl.errors import HTTPError
 
 from app.core.models import command, cooldown, describe, group
@@ -26,11 +27,14 @@ class KlappstuhlToolsMixin:
     key configured via ``KLAPPSTUHL_ME_API_TOKEN``. When it is absent every command
     degrades to a friendly "not configured" message rather than erroring.
 
-    Two families live here:
+    Three families live here:
 
     * **Text tools** — :meth:`shorten`, :meth:`paste`, :meth:`qr`, :meth:`preview`.
     * **Image tools** — the :meth:`image` group (blur/pixelate/deepfry/invert/grayscale,
       convert, info, palette) plus :meth:`scan` and :meth:`screenshot`.
+    * **Render tools** — :meth:`codeimage`, :meth:`chart`, and :meth:`mdpdf`. The SVG
+      ones (code, chart) are hosted via ``share=True`` and returned as a link; the PDF
+      is attached directly.
     """
 
     bot: Bot
@@ -97,6 +101,26 @@ class KlappstuhlToolsMixin:
         embed.set_image(url=f'attachment://{filename}')
         embed.set_footer(text='via klappstuhl.me')
         await ctx.send(embed=embed, file=file)
+
+    async def _send_share(self, ctx: Context, result: ShareResult, *, title: str) -> None:
+        """Post a hosted, shareable render result as a link embed."""
+        embed = discord.Embed(title=title, colour=helpers.Colour.white())
+        embed.description = f'[Open render →]({result.url})'
+        embed.set_footer(text='via klappstuhl.me')
+        await ctx.send(embed=embed)
+
+    _CODEBLOCK_RE = re.compile(r'^\s*```(?P<lang>[\w+.#-]*)\n(?P<body>.*?)\n?```\s*$', re.DOTALL)
+
+    @classmethod
+    def _strip_codeblock(cls, content: str) -> tuple[str, str | None]:
+        """Split a fenced ```lang code block into ``(body, language)``.
+
+        Falls back to the raw text (and no language) when it isn't fenced.
+        """
+        match = cls._CODEBLOCK_RE.match(content)
+        if match is None:
+            return content.strip(), None
+        return match.group('body'), (match.group('lang') or None)
 
     async def _run_effect(
         self,
@@ -430,3 +454,118 @@ class KlappstuhlToolsMixin:
                 return
 
         await self._send_png(ctx, png, title='Screenshot', filename='screenshot.png')
+
+    # -- render (code / chart / markdown-pdf) --------------------------------
+
+    @command(aliases=['codeshot', 'rendercode'], description='Render syntax-highlighted code to an image.')
+    @describe(code='The code to render — wrap it in a ```lang fenced block to set the language.')
+    @cooldown(1, 10, commands.BucketType.user)
+    async def codeimage(self, ctx: Context, *, code: str) -> None:
+        """Render code to a syntax-highlighted image and share a link to it.
+
+        Wrap the code in a fenced ```` ```lang ```` block to pick the highlighter;
+        otherwise it renders as plain text.
+        """
+        client = self._client()
+        if client is None:
+            await ctx.send_error('Code rendering is not configured on this instance.')
+            return
+
+        body, language = self._strip_codeblock(code)
+        if not body.strip():
+            await ctx.send_error('Give me some code to render.')
+            return
+
+        async with ctx.typing():
+            try:
+                result = await client.render_code(body, language=language, share=True)
+            except HTTPError as exc:
+                await ctx.send_error(f'Could not render that code: {exc.message}')
+                return
+
+        await self._send_share(ctx, result, title='Code render')
+
+    @command(aliases=['renderchart'], description='Render a chart from label:value pairs.')
+    @describe(spec='Format: `<kind> [title] | label:value, label:value, ...` (kind: line/area/bar/scatter/pie/donut).')
+    @cooldown(1, 10, commands.BucketType.user)
+    async def chart(self, ctx: Context, *, spec: str) -> None:
+        """Render a single-series chart and share a link to it.
+
+        Example: ``?chart bar Quarterly Sales | Q1:120, Q2:180, Q3:90, Q4:210``
+        """
+        client = self._client()
+        if client is None:
+            await ctx.send_error('Chart rendering is not configured on this instance.')
+            return
+
+        head, sep, data = spec.partition('|')
+        if not sep:
+            await ctx.send_error('Use `<kind> [title] | label:value, label:value, ...`.')
+            return
+
+        head_parts = head.split()
+        if not head_parts:
+            await ctx.send_error('Missing chart kind. Choose one of: line, area, bar, scatter, pie, donut.')
+            return
+
+        kind = head_parts[0].lower()
+        valid_kinds = {k.value for k in ChartKind}
+        if kind not in valid_kinds:
+            await ctx.send_error(f'Unknown chart kind `{kind}`. Choose one of: {", ".join(sorted(valid_kinds))}.')
+            return
+        title = ' '.join(head_parts[1:]).strip() or None
+
+        labels: list[str] = []
+        values: list[float] = []
+        for pair in data.split(','):
+            pair = pair.strip()
+            if not pair:
+                continue
+            label, colon, raw = pair.rpartition(':')
+            if not colon:
+                await ctx.send_error(f'`{pair}` is not a `label:value` pair.')
+                return
+            try:
+                values.append(float(raw.strip()))
+            except ValueError:
+                await ctx.send_error(f'`{raw.strip()}` in `{pair}` is not a number.')
+                return
+            labels.append(label.strip())
+
+        if not values:
+            await ctx.send_error('Give me at least one `label:value` pair.')
+            return
+
+        async with ctx.typing():
+            try:
+                result = await client.render_chart(kind, {'values': values}, labels=labels, title=title, share=True)
+            except HTTPError as exc:
+                await ctx.send_error(f'Could not render that chart: {exc.message}')
+                return
+
+        await self._send_share(ctx, result, title=title or 'Chart')
+
+    @command(aliases=['markdownpdf', 'md2pdf'], description='Render Markdown to a PDF document.')
+    @describe(markdown='The Markdown to render (a fenced ``` block works too).')
+    @cooldown(1, 15, commands.BucketType.user)
+    async def mdpdf(self, ctx: Context, *, markdown: str) -> None:
+        """Render Markdown to a PDF and attach it."""
+        client = self._client()
+        if client is None:
+            await ctx.send_error('Markdown-to-PDF is not configured on this instance.')
+            return
+
+        body, _ = self._strip_codeblock(markdown)
+        if not body.strip():
+            await ctx.send_error('Give me some Markdown to render.')
+            return
+
+        async with ctx.typing():
+            try:
+                pdf = await client.markdown_pdf(body)
+            except HTTPError as exc:
+                await ctx.send_error(f'Could not render that Markdown: {exc.message}')
+                return
+
+        file = discord.File(io.BytesIO(pdf), filename='document.pdf')
+        await ctx.send(file=file)
