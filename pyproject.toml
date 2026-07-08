@@ -44,7 +44,7 @@ paramiko = ">=2.7.2,<4"
 fastapi = "^0.138.0"
 uvicorn = "^0.49.0"
 python-multipart = "^0.0.32"
-klappstuhl-py = {git = "https://github.com/klappstuhlpy/klappstuhl.py"}
+klappstuhl-py = {git = "https://github.com/klappstuhlpy/klappstuhl.py", tag = "v0.4.2"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"
