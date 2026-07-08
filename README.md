@@ -34,9 +34,13 @@ Percy's documentation lives in a dedicated [Mintlify](https://mintlify.com) site
 - **Read it:** https://percy.klappstuhl.me/docs/
 - **Edit it:** [`klappstuhlpy/percy-docs`](https://github.com/klappstuhlpy/percy-docs)
 
-It covers every feature, the optional AI layer, and an interactive **API Reference** for the internal dashboard API (
-generated from the FastAPI OpenAPI schema). When you ship a user-facing change — a new command, flag, or API endpoint —
+It covers every feature and the optional AI layer. When you ship a user-facing change — a new command or flag —
 update `percy-docs` to match.
+
+The **internal dashboard API** is not documented on the public site. Its always-current interactive reference is the
+self-hosted [Scalar](https://scalar.com/) page the bot serves at `http://127.0.0.1:8090/docs` when running with
+`INTERNAL_API_TOKEN` set. A **public API** (with its reference at `https://percy.klappstuhl.me/api/docs`) is planned —
+see `PUBLIC_API_PLAN.md` in the workspace root.
 
 ---
 
