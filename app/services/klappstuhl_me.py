@@ -219,8 +219,6 @@ class KlappstuhlInternalClient(Client):
         data = await self._http.request("DELETE", f"/guilds/{guild_id}/images/{_bare_id(image_id)}")
         return DeleteResult.from_dict(data)
 
-    # -- account-scoped features (short links, pastes, QR, unfurl) ------------
-
     @property
     def account_available(self) -> bool:
         """Whether a personal account key is configured for account-scoped calls.
@@ -229,7 +227,7 @@ class KlappstuhlInternalClient(Client):
         ``links:*`` / ``pastes:*`` / ``images:read`` scopes), not a per-guild
         provisioned key — set ``KLAPPSTUHL_ME_API_TOKEN`` to enable them.
         """
-        return bool(self.api_key)
+        return bool(self._http.token and self._http.token != _UNCONFIGURED)
 
 
 @dataclass(frozen=True)
