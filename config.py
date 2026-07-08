@@ -81,7 +81,7 @@ for _directory in (data_path, logs_path):
     _directory.mkdir(exist_ok=True)
 
 name: str = 'Percy'
-version: VersionInfo = VersionInfo(major=2, minor=3, micro=0, release='beta' if beta else 'final')
+version: VersionInfo = VersionInfo(major=2, minor=4, micro=0, release='beta' if beta else 'final')
 description: str = 'A multipurpose bot for Discord'
 support_server: str = 'https://discord.com/invite/3jSYQ9VNbA'
 website: str = 'https://percy.klappstuhl.me'
