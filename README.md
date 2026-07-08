@@ -39,8 +39,8 @@ update `percy-docs` to match.
 
 The **internal dashboard API** is not documented on the public site. Its always-current interactive reference is the
 self-hosted [Scalar](https://scalar.com/) page the bot serves at `http://127.0.0.1:8090/docs` when running with
-`INTERNAL_API_TOKEN` set. A **public API** (with its reference at `https://percy.klappstuhl.me/api/docs`) is planned —
-see `PUBLIC_API_PLAN.md` in the workspace root.
+`INTERNAL_API_TOKEN` set. There is no third-party public API, and none is currently planned — the concept is parked
+in `PUBLIC_API_IDEA.md` in the workspace root.
 
 ---
 
