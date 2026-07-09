@@ -1,6 +1,6 @@
 [package]
 name = "dashboard"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license = "AGPL-v3"
 description = "Percy dashboard — standalone web binary built on the shared klappstuhl.me kernel."

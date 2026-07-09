@@ -82,13 +82,22 @@ pub async fn login(State(state): State<AppState>) -> Response {
     ([(SET_COOKIE, cookie.to_string())], Redirect::to(url.as_str())).into_response()
 }
 
-/// `GET /logout` — clear the session cookie and return home.
-pub async fn logout() -> Response {
-    (
-        [(SET_COOKIE, Session::clearing_cookie().to_string())],
-        Redirect::to("/"),
-    )
-        .into_response()
+/// `GET /logout` — clear the session cookie and return to the dashboard's own
+/// index (never the main klappstuhl.me site).
+///
+/// The clear is emitted at **both** the host-only scope and the registrable
+/// domain scope (`.klappstuhl.me`). A host-only expiry alone won't remove a
+/// session cookie that happens to be domain-scoped (shared with the main site
+/// for SSO, or left over from an earlier deploy), which would otherwise leave the
+/// user signed in after logging out.
+pub async fn logout(State(app): State<AppState>) -> Response {
+    let mut resp = Redirect::to("/").into_response();
+    let headers = resp.headers_mut();
+    append_cookie(headers, &Session::clearing_cookie().to_string());
+    if let Some(domain) = app.config.cookie_domain() {
+        append_cookie(headers, &Session::clearing_cookie_scoped(Some(&domain)).to_string());
+    }
+    resp
 }
 
 #[derive(Debug, Deserialize)]

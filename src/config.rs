@@ -163,6 +163,40 @@ impl Config {
             .unwrap_or_default()
     }
 
+    /// The `Domain` attribute used when **clearing** the session cookie on logout.
+    ///
+    /// The dashboard normally sets a host-only session cookie (scoped to
+    /// `percy.<domain>`). But if a session cookie ever ends up scoped to the
+    /// registrable domain (`.klappstuhl.me`, which the main site uses for its own
+    /// SSO cookie, or a leftover from an earlier deploy), a host-only expiry alone
+    /// leaves it in the browser jar and the user stays logged in. Logout therefore
+    /// also emits a clear at this scope.
+    ///
+    /// Derived from `base_url`'s host: the parent domain (leftmost label stripped)
+    /// for a real multi-label host like `percy.klappstuhl.me` → `klappstuhl.me`;
+    /// `None` for `localhost`/IP/dev so no invalid `Domain` is ever set.
+    pub fn cookie_domain(&self) -> Option<String> {
+        let host = self
+            .base_url
+            .split("://")
+            .nth(1)
+            .unwrap_or(&self.base_url)
+            .split('/')
+            .next()?
+            .split(':')
+            .next()?;
+        if host.parse::<std::net::IpAddr>().is_ok() {
+            return None;
+        }
+        let labels: Vec<&str> = host.split('.').collect();
+        // Need a subdomain to strip (e.g. `percy.klappstuhl.me`). A bare
+        // `klappstuhl.me` or `localhost` has nothing to widen to.
+        if labels.len() < 3 {
+            return None;
+        }
+        Some(labels[1..].join("."))
+    }
+
     /// The OAuth2 redirect URI, derived from `base_url` when not set explicitly.
     pub fn discord_redirect_uri(&self) -> String {
         if self.discord.redirect_uri.is_empty() {
@@ -212,6 +246,43 @@ impl Config {
             },
             sso_secret: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config_with_base(base: &str) -> Config {
+        let mut c = Config::test_default();
+        c.base_url = base.to_string();
+        c
+    }
+
+    #[test]
+    fn cookie_domain_widens_subdomain_to_parent() {
+        assert_eq!(
+            config_with_base("https://percy.klappstuhl.me")
+                .cookie_domain()
+                .as_deref(),
+            Some("klappstuhl.me")
+        );
+        assert_eq!(
+            config_with_base("https://dash.percy.klappstuhl.me")
+                .cookie_domain()
+                .as_deref(),
+            Some("percy.klappstuhl.me")
+        );
+    }
+
+    #[test]
+    fn cookie_domain_is_none_for_dev_and_bare_domains() {
+        // No subdomain to widen to.
+        assert_eq!(config_with_base("https://klappstuhl.me").cookie_domain(), None);
+        // localhost / IP / port — never a valid Domain attribute.
+        assert_eq!(config_with_base("http://localhost").cookie_domain(), None);
+        assert_eq!(config_with_base("http://127.0.0.1:8091").cookie_domain(), None);
+        assert_eq!(config_with_base("http://localhost:8091").cookie_domain(), None);
     }
 }
 

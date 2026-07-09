@@ -69,13 +69,30 @@ impl Session {
     }
 
     /// A `Set-Cookie` that clears the session (for logout).
+    ///
+    /// Host-only (no `Domain`) — matches the cookie [`Session::to_cookie`] sets.
     pub fn clearing_cookie() -> Cookie<'static> {
-        Cookie::build((SESSION_COOKIE, ""))
+        Self::clearing_cookie_scoped(None)
+    }
+
+    /// A `Set-Cookie` that clears the session at a specific `Domain` scope.
+    ///
+    /// A host-only clear does **not** remove a cookie that was stored with a
+    /// `Domain` attribute (the browser keys them separately), so logout emits a
+    /// clear at the registrable-domain scope too — otherwise a domain-scoped
+    /// `session` cookie (e.g. shared with the main site, or left by an earlier
+    /// deploy) would survive logout and keep the user signed in. `None` yields the
+    /// host-only clear.
+    pub fn clearing_cookie_scoped(domain: Option<&str>) -> Cookie<'static> {
+        let mut builder = Cookie::build((SESSION_COOKIE, ""))
             .path("/")
             .http_only(true)
             .same_site(cookie::SameSite::Lax)
-            .expires(cookie::time::OffsetDateTime::UNIX_EPOCH)
-            .build()
+            .expires(cookie::time::OffsetDateTime::UNIX_EPOCH);
+        if let Some(domain) = domain {
+            builder = builder.domain(domain.to_owned());
+        }
+        builder.build()
     }
 }
 
