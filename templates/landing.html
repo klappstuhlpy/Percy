@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block nav_dashboard_active %} active{% endblock %}
+{% block nav_home_active %} active{% endblock %}
 
 {% block title %}Percy Dashboard{% endblock %}
 
@@ -24,10 +24,19 @@
         </p>
 
         <div class="percy-hero-actions">
+            {% match account %}
+            {% when Some with (viewer) %}
+            <a href="/dashboard" class="invite-percy-btn">Go to your dashboard</a>
+            {% when None %}
             <a href="/login?next=/dashboard" class="invite-percy-btn">Log in to continue</a>
             <a href="/signup?next=/dashboard" class="percy-hero-secondary">Create an account</a>
+            {% endmatch %}
         </div>
+        {% match account %}
+        {% when None %}
         <p class="percy-hero-note">You need to be signed in to manage your servers.</p>
+        {% when Some with (viewer) %}
+        {% endmatch %}
     </section>
 
     <section class="percy-feature-grid">

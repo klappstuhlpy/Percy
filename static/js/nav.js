@@ -18,8 +18,8 @@
             a.href = apex + '/account';
         });
 
-        // Auth links: in production, redirect through the apex (shared cookie).
-        // On localhost, keep them local (independent sessions per host).
+        // Login/signup go through the apex so the shared-domain cookie is minted
+        // there (SSO). On localhost, keep them local (independent sessions per host).
         if (window.location.hostname !== 'percy.localhost') {
             var percyDash = window.location.origin + '/dashboard';
             var nextParam = 'next=' + encodeURIComponent(percyDash);
@@ -29,9 +29,10 @@
             document.querySelectorAll('a[href*="/signup"]').forEach(function (a) {
                 a.href = apex + '/signup?' + nextParam;
             });
-            document.querySelectorAll('a[href*="/logout"]').forEach(function (a) {
-                a.href = apex + '/logout?next=' + encodeURIComponent(window.location.origin + '/');
-            });
+            // Log out stays LOCAL: the dashboard's own /logout clears its session
+            // *and* the shared apex `token` cookie (single sign-out), then returns
+            // to the dashboard's index. Rewriting it to the apex would only clear
+            // the main-site cookie and leave the dashboard session intact.
         }
     }
 

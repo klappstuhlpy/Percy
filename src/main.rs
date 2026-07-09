@@ -540,14 +540,14 @@ struct LandingTemplate {
 }
 
 async fn index(session: Option<session::Session>) -> axum::response::Response {
-    use axum::response::{IntoResponse, Redirect};
-    // Signed-in visitors go straight to their servers; everyone else sees the
-    // landing page. `Option<Session>` yields `None` when the cookie is absent or
-    // invalid (the extractor's redirect rejection is swallowed by `Option`).
-    if session.is_some() {
-        return Redirect::to("/dashboard").into_response();
-    }
-    LandingTemplate { account: None }.into_response()
+    use axum::response::IntoResponse;
+    // Always render the landing/home page — even for signed-in visitors — so there
+    // is a viewable home distinct from /dashboard (reachable via the nav "Home"
+    // link and by visiting "/" directly). The header reflects auth state: signed-in
+    // users see their account menu, everyone else the login link. `Option<Session>`
+    // yields `None` when the cookie is absent or invalid.
+    let account = session.as_ref().map(view::Viewer::from_session);
+    LandingTemplate { account }.into_response()
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
@@ -610,5 +610,17 @@ mod tests {
     fn landing_template_renders() {
         let html = LandingTemplate { account: None }.render().expect("render");
         assert!(html.contains("Percy"));
+        // Logged-out hero prompts a login.
+        assert!(html.contains("Log in to continue"));
+    }
+
+    /// The landing page also renders for a signed-in visitor, swapping the hero
+    /// CTA for a dashboard link (so "/" is a viewable home even when logged in).
+    #[test]
+    fn landing_template_renders_when_signed_in() {
+        let viewer = view::Viewer::from_session(&session::Session::new("1", "ferris"));
+        let html = LandingTemplate { account: Some(viewer) }.render().expect("render");
+        assert!(html.contains("Go to your dashboard"));
+        assert!(!html.contains("Log in to continue"));
     }
 }

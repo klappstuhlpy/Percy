@@ -82,22 +82,39 @@ pub async fn login(State(state): State<AppState>) -> Response {
     ([(SET_COOKIE, cookie.to_string())], Redirect::to(url.as_str())).into_response()
 }
 
-/// `GET /logout` — clear the session cookie and return to the dashboard's own
-/// index (never the main klappstuhl.me site).
+/// `GET /logout` — clear the session and return to the dashboard's own index
+/// (never the main klappstuhl.me site).
 ///
-/// The clear is emitted at **both** the host-only scope and the registrable
-/// domain scope (`.klappstuhl.me`). A host-only expiry alone won't remove a
-/// session cookie that happens to be domain-scoped (shared with the main site
-/// for SSO, or left over from an earlier deploy), which would otherwise leave the
-/// user signed in after logging out.
+/// Single sign-out: this clears three cookies so a logout here is complete and
+/// also ends the main-site session (the user configured a shared SSO secret and
+/// expects one logout to cover both apps):
+///   1. the dashboard `session` at host-only scope,
+///   2. the dashboard `session` at the registrable-domain scope (matches what
+///      [`Session::to_cookie`] now sets — a host-only clear alone would leave the
+///      domain-scoped copy and keep the user signed in), and
+///   3. the main site's `token` cookie at the registrable-domain scope.
 pub async fn logout(State(app): State<AppState>) -> Response {
     let mut resp = Redirect::to("/").into_response();
     let headers = resp.headers_mut();
     append_cookie(headers, &Session::clearing_cookie().to_string());
     if let Some(domain) = app.config.cookie_domain() {
         append_cookie(headers, &Session::clearing_cookie_scoped(Some(&domain)).to_string());
+        append_cookie(headers, &clear_apex_token(&domain));
     }
     resp
+}
+
+/// A `Set-Cookie` that clears the main site's `token` auth cookie at the shared
+/// registrable-domain scope, so logging out of the dashboard also logs the user
+/// out of klappstuhl.me. Matching name + `Domain` + `Path` is what the browser
+/// keys deletion on; other attributes are irrelevant to the clear.
+fn clear_apex_token(domain: &str) -> String {
+    Cookie::build(("token", ""))
+        .path("/")
+        .domain(domain.to_owned())
+        .expires(cookie::time::OffsetDateTime::UNIX_EPOCH)
+        .build()
+        .to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,7 +149,12 @@ pub async fn callback(State(app): State<AppState>, headers: HeaderMap, Query(que
                 .build();
             let mut resp = Redirect::to("/dashboard").into_response();
             let h = resp.headers_mut();
-            append_cookie(h, &session.to_cookie(&app.config.secret_key).to_string());
+            append_cookie(
+                h,
+                &session
+                    .to_cookie(&app.config.secret_key, app.config.cookie_domain().as_deref())
+                    .to_string(),
+            );
             append_cookie(h, &clear_state.to_string());
             resp
         }
@@ -296,7 +318,9 @@ pub async fn handoff(State(app): State<AppState>, Query(query): Query<HandoffQue
     let mut resp = Redirect::to("/dashboard").into_response();
     append_cookie(
         resp.headers_mut(),
-        &session.to_cookie(&app.config.secret_key).to_string(),
+        &session
+            .to_cookie(&app.config.secret_key, app.config.cookie_domain().as_deref())
+            .to_string(),
     );
     resp
 }

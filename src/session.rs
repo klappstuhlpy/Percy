@@ -58,14 +58,23 @@ impl Session {
     }
 
     /// The signed `Set-Cookie` value carrying this session.
-    pub fn to_cookie(&self, key: &SecretKey) -> Cookie<'static> {
+    ///
+    /// `domain` scopes the cookie to the registrable domain (`.klappstuhl.me`) so
+    /// that logging out on the main site can clear it too (single sign-out). Pass
+    /// `None` in dev (localhost/IP) for a host-only cookie — see
+    /// [`crate::config::Config::cookie_domain`]. It must match the scope logout
+    /// clears at, or the browser keeps a second, uncleared copy.
+    pub fn to_cookie(&self, key: &SecretKey, domain: Option<&str>) -> Cookie<'static> {
         let signed = key.sign(self).expect("session serialises");
-        Cookie::build((SESSION_COOKIE, signed))
+        let mut builder = Cookie::build((SESSION_COOKIE, signed))
             .path("/")
             .http_only(true)
             .same_site(cookie::SameSite::Lax)
-            .max_age(cookie::time::Duration::seconds(SESSION_TTL_SECS))
-            .build()
+            .max_age(cookie::time::Duration::seconds(SESSION_TTL_SECS));
+        if let Some(domain) = domain {
+            builder = builder.domain(domain.to_owned());
+        }
+        builder.build()
     }
 
     /// A `Set-Cookie` that clears the session (for logout).
@@ -131,7 +140,7 @@ mod tests {
     fn sign_verify_round_trip() {
         let key = SecretKey::random().unwrap();
         let session = Session::new("42", "ferris");
-        let cookie = session.to_cookie(&key);
+        let cookie = session.to_cookie(&key, None);
         assert_eq!(cookie.name(), SESSION_COOKIE);
 
         // A correctly-signed value verifies back to the same session.
