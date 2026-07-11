@@ -13,7 +13,6 @@ use percy_client::{
     BalancesResponse, BotStats, EconomyInfo, LeaderboardResponse, MusicFiltersState, MusicInfo, UserSettings,
     UserSettingsPatch,
 };
-
 use crate::{
     guilds::{user_can_manage, user_is_member},
     session::Session,
@@ -202,11 +201,14 @@ pub async fn guild_user_lookup(
         Ok(m) => m,
         Err(_) => return Redirect::to(&format!("/dashboard/guild/{guild_id}/members")).into_response(),
     };
+    let member_name = member.name.clone();
 
     UserLookupTemplate {
         account: Some(Viewer::from_session(&session)),
         guild_id,
         guild_name: guild.name,
+        nav_active: "members",
+        page_title: member_name,
         member,
     }
     .into_response()

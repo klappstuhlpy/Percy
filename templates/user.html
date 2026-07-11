@@ -1,378 +1,332 @@
-{% extends "layout.html" %}
+{% extends "dashboard_layout.html" %}
 
-{% block nav_dashboard_active %} active{% endblock %}
-
-{% block title %}{{ member.display_name }} — {{ guild_name }} | Dashboard{% endblock %}
-
-{% block css %}
-<link rel="stylesheet" href="/static/css/dashboard.css" type="text/css"/>
+{% block page_css %}
 <link rel="stylesheet" href="/static/css/user.css" type="text/css"/>
 {% endblock %}
 
-{% block body %}
-<div class="dashboard-shell">
-    <aside class="dash-sidebar" id="dash-sidebar">
-        <div class="dash-sidebar-top">
-            <a href="/dashboard" class="dash-sidebar-back">&larr; All servers</a>
-            <div class="dash-sidebar-guild">
-                <span class="dash-sidebar-guild-mark" aria-hidden="true"><span class="spark">✻</span></span>
-                <div class="dash-sidebar-guild-text">
-                    <span class="dash-sidebar-guild-name" title="{{ guild_name }}">{{ guild_name }}</span>
-                    <span class="dash-sidebar-guild-sub">Server dashboard</span>
-                </div>
-            </div>
-        </div>
-        <button type="button" class="dash-sidebar-toggle" aria-expanded="false" aria-controls="dash-sidebar"><span>Menu</span></button>
-        <nav class="dash-nav" aria-label="Dashboard sections">
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Overview</span>
-                <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link">Configuration</a>
-                <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link active">Members</a>
-                <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link">Statistics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link">Commands</a>
-            </div>
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Features</span>
-                <a href="/dashboard/guild/{{ guild_id }}/leveling" class="dash-nav-link">Leveling</a>
-                <a href="/dashboard/guild/{{ guild_id }}/economy" class="dash-nav-link">Economy</a>
-                <a href="/dashboard/guild/{{ guild_id }}/music" class="dash-nav-link">Music</a>
-                <a href="/dashboard/guild/{{ guild_id }}/autoresponders" class="dash-nav-link">Autoresponders</a>
-                <a href="/dashboard/guild/{{ guild_id }}/comics" class="dash-nav-link">Comics</a>
-                <a href="/dashboard/guild/{{ guild_id }}/temp-channels" class="dash-nav-link">Temp Channels</a>
-            </div>
-            <div class="dash-nav-group">
-                <span class="dash-nav-heading">Community</span>
-                <a href="/dashboard/guild/{{ guild_id }}/polls" class="dash-nav-link">Polls</a>
-                <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link">Giveaways</a>
-                <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link">Tags</a>
-                <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link">Highlights</a>
-                <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link">Emoji Stats</a>
-            </div>
-        </nav>
-    </aside>
+{% block content %}
+<a href="/dashboard/guild/{{ guild_id }}/members" class="dashboard-back">&larr; Back to members</a>
 
-    <div class="dashboard-content">
-    <a href="/dashboard/guild/{{ guild_id }}/members" class="dashboard-back">&larr; Back to members</a>
-
-    {# ─── Profile Header ─────────────────────────────────────────── #}
-    <div class="user-profile-header">
-        <img class="user-profile-avatar" src="{{ member.avatar_url }}?size=128" alt="" width="80" height="80">
-        <div class="user-profile-info">
-            <h2>{{ member.display_name }}</h2>
-            <div class="user-username">{{ member.name }}</div>
-            <div class="user-meta">
-                <span>ID: {{ member.id }}</span>
-                <span>Created: <time class="js-ts" datetime="{{ member.created_at }}">{{ member.created_at }}</time></span>
-                {% match member.joined_at %}
-                {% when Some with (ts) %}
-                <span>Joined: <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
-                {% when None %}
-                {% endmatch %}
-            </div>
-            <div class="user-profile-badges">
-                {% if member.bot %}
-                <span class="badge">BOT</span>
-                {% endif %}
-                {% if !member.in_guild %}
-                <span class="user-not-in-guild">Not in server</span>
-                {% endif %}
-                {% match member.status %}
-                {% when Some with (s) %}
-                <span class="badge badge-status badge-{{ s }}">{{ s }}</span>
-                {% when None %}
-                {% endmatch %}
-                {% for flag in member.public_flags %}
-                <span class="badge badge-flag">{{ flag }}</span>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-
-    {# ─── Guild Info ─────────────────────────────────────────────── #}
-    {% if member.in_guild %}
-    <section class="config-section">
-        <h2>Guild Info</h2>
-        <div class="user-stats-grid">
-            {% match member.join_position %}
-            {% when Some with (pos) %}
-            <div class="metric-tile">
-                <span class="tile-label">Join Position</span>
-                <span class="tile-value">#{{ pos }}<span class="tile-sub"> / {{ member.member_count }}</span></span>
-            </div>
-            {% when None %}
-            {% endmatch %}
-            {% match member.top_role %}
-            {% when Some with (role) %}
-            <div class="metric-tile">
-                <span class="tile-label">Top Role</span>
-                <span class="tile-value" style="color: {% if member.top_role_color != 0 %}{{ member.top_role_color_hex() }}{% else %}inherit{% endif %};">{{ role }}</span>
-            </div>
-            {% when None %}
-            {% endmatch %}
-            <div class="metric-tile">
-                <span class="tile-label">Mutual Servers</span>
-                <span class="tile-value">{{ member.mutual_guilds }}</span>
-            </div>
-            {% match member.boosting_since %}
+{# ─── Profile Header ─────────────────────────────────────────── #}
+<div class="user-profile-header">
+    <img class="user-profile-avatar" src="{{ member.avatar_url }}?size=128" alt="" width="80" height="80">
+    <div class="user-profile-info">
+        <h2>{{ member.display_name }}</h2>
+        <div class="user-username">{{ member.name }}</div>
+        <div class="user-meta">
+            <span>ID: {{ member.id }}</span>
+            <span>Created: <time class="js-ts" datetime="{{ member.created_at }}">{{ member.created_at }}</time></span>
+            {% match member.joined_at %}
             {% when Some with (ts) %}
-            <div class="metric-tile">
-                <span class="tile-label">Boosting Since</span>
-                <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
-            </div>
+            <span>Joined: <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
             {% when None %}
             {% endmatch %}
-            {% if member.permissions != 0 %}
-            <div class="metric-tile">
-                <span class="tile-label">Permissions</span>
-                <a href="https://discordapi.com/permissions.html#{{ member.permissions }}" class="tile-value tile-value-small">{{ member.permissions }}</a>
-            </div>
+        </div>
+        <div class="user-profile-badges">
+            {% if member.bot %}
+            <span class="badge">BOT</span>
             {% endif %}
-        </div>
-    </section>
-    {% endif %}
-
-    {# ─── Roles ───────────────────────────────────────────── #}
-    {% if !member.roles.is_empty() %}
-    <section class="config-section">
-        <h2>Roles</h2>
-        <div class="member-roles expanded">
-            {% for role in member.roles %}
-            <span class="role-chip" style="border-color: {{ role.color_hex() }}; color: {% if role.color != 0 %}{{ role.color_hex() }}{% else %}var(--foreground){% endif %};">{{ role.name }}</span>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {# ─── Leveling Stats ─────────────────────────────────────────── #}
-    {% match member.leveling %}
-    {% when Some with (lvl) %}
-    <section class="config-section">
-        <h2>Leveling</h2>
-        <div class="user-stats-grid">
-            <div class="metric-tile">
-                <span class="tile-label">Level</span>
-                <span class="tile-value">{{ lvl.level }}</span>
-            </div>
-            <div class="metric-tile">
-                <span class="tile-label">XP</span>
-                <span class="tile-value">{{ lvl.xp }}</span>
-            </div>
-            <div class="metric-tile">
-                <span class="tile-label">Messages</span>
-                <span class="tile-value">{{ lvl.messages }}</span>
-            </div>
-            <div class="metric-tile">
-                <span class="tile-label">Rank</span>
-                <span class="tile-value">#{{ lvl.rank }}</span>
-            </div>
-        </div>
-    </section>
-    {% when None %}
-    {% endmatch %}
-
-    {# ─── Tags ───────────────────────────────────────────────────── #}
-    {% if !member.owned_tags.is_empty() %}
-    <section class="config-section">
-        <h2>Tags <span class="section-count">({{ member.owned_tags.len() }})</span></h2>
-        <p class="config-section-description">Tags this member owns in the server.</p>
-        <div class="user-tags-list">
-            {% for tag in member.owned_tags %}
-            <a href="/dashboard/guild/{{ guild_id }}/tags" class="user-tag-chip" title="{{ tag.uses }} uses">
-                <span class="user-tag-name">{{ tag.name }}</span>
-                <span class="user-tag-uses">{{ tag.uses }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {# ─── Command Usage ──────────────────────────────────────────── #}
-    {% match member.command_stats %}
-    {% when Some with (stats) %}
-    {% if stats.total_commands > 0 %}
-    <section class="config-section">
-        <h2>Command Usage</h2>
-        <div class="user-stats-grid">
-            <div class="metric-tile">
-                <span class="tile-label">Total Commands</span>
-                <span class="tile-value">{{ stats.total_commands }}</span>
-            </div>
-            {% match stats.first_command_at %}
-            {% when Some with (ts) %}
-            <div class="metric-tile">
-                <span class="tile-label">First Used</span>
-                <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
-            </div>
+            {% if !member.in_guild %}
+            <span class="user-not-in-guild">Not in server</span>
+            {% endif %}
+            {% match member.status %}
+            {% when Some with (s) %}
+            <span class="badge badge-status badge-{{ s }}">{{ s }}</span>
             {% when None %}
             {% endmatch %}
-        </div>
-        {% if !stats.top_commands.is_empty() %}
-        <div class="user-top-commands">
-            <h3>Top Commands</h3>
-            <ul class="top-commands-list">
-                {% for cmd in stats.top_commands %}
-                <li>
-                    <span class="cmd-name">{{ cmd.command }}</span>
-                    <span class="cmd-uses">{{ cmd.uses }} uses</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-    </section>
-    {% endif %}
-    {% when None %}
-    {% endmatch %}
-
-    {# ─── Activity ────────────────────────────────────────────────── #}
-    {% match member.last_seen %}
-    {% when Some with (ts) %}
-    <section class="config-section">
-        <h2>Activity</h2>
-        <div class="user-stats-grid">
-            <div class="metric-tile">
-                <span class="tile-label">Last Seen</span>
-                <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
-            </div>
-        </div>
-    </section>
-    {% when None %}
-    {% endmatch %}
-
-    {# ─── Activity Heatmap ───────────────────────────────────────────── #}
-    <section class="config-section">
-        <h2>Activity Graph</h2>
-        <p class="config-section-description">Command usage over the past year.</p>
-        <div id="activity-heatmap" class="activity-heatmap-container">
-            <div class="avatar-grid-loading">Loading activity data&hellip;</div>
-        </div>
-    </section>
-
-    {# ─── Name History ────────────────────────────────────────────── #}
-    {% match member.names %}
-    {% when Some with (names) %}
-    {% if !names.usernames.is_empty() || !names.nicknames.is_empty() %}
-    <section class="config-section">
-        <h2>Name History</h2>
-        {% if !names.usernames.is_empty() %}
-        <div class="name-history-group">
-            <h3>Usernames</h3>
-            <ul class="name-history-list">
-                {% for entry in names.usernames %}
-                <li>
-                    <span class="name-value">{{ entry.name }}</span>
-                    <time class="js-ts name-date" datetime="{{ entry.changed_at }}">{{ entry.changed_at }}</time>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        {% if !names.nicknames.is_empty() %}
-        <div class="name-history-group">
-            <h3>Nicknames</h3>
-            <ul class="name-history-list">
-                {% for entry in names.nicknames %}
-                <li>
-                    <span class="name-value">{{ entry.name }}</span>
-                    <time class="js-ts name-date" datetime="{{ entry.changed_at }}">{{ entry.changed_at }}</time>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-    </section>
-    {% endif %}
-    {% when None %}
-    {% endmatch %}
-
-    {# ─── Avatar History ────────────────────────────────────────────── #}
-    {% if member.avatar_count > 0 %}
-    <section class="config-section">
-        <h2>Avatar History <span class="section-count">({{ member.avatar_count }})</span></h2>
-        <div class="avatar-grid" id="avatar-grid">
-            <div class="avatar-grid-loading">Loading avatars&hellip;</div>
-        </div>
-    </section>
-    {% endif %}
-
-    {# ─── Moderation Summary ─────────────────────────────────────── #}
-    <section class="config-section">
-        <h2>Moderation</h2>
-        <p class="config-section-description">
-            {{ member.case_count }} case{% if member.case_count != 1 %}s{% endif %},
-            {{ member.warning_count }} warning{% if member.warning_count != 1 %}s{% endif %}
-        </p>
-
-        <form id="open-case-form" class="open-case-form">
-            <div class="open-case-fields">
-                <select id="case-action" required>
-                    <option value="warn" selected>Warn</option>
-                    <option value="mute">Mute</option>
-                    <option value="tempmute">Tempmute</option>
-                    <option value="unmute">Unmute</option>
-                    <option value="kick">Kick</option>
-                    <option value="softban">Softban</option>
-                    <option value="ban">Ban</option>
-                    <option value="tempban">Tempban</option>
-                    <option value="unban">Unban</option>
-                </select>
-                <input type="text" id="case-reason" placeholder="Reason (optional)" maxlength="500">
-                <button type="submit" class="button small primary">Open Case</button>
-            </div>
-            <p class="open-case-hint">Records a case in the modlog (and announces it in the modlog channel). It does not kick/ban/mute by itself — use member actions for that.</p>
-            <p class="open-case-status" id="open-case-status" hidden></p>
-        </form>
-
-        {% if member.cases.is_empty() %}
-        <div class="empty-state">
-            <h3>Clean record</h3>
-            <p>No moderation cases on file for this member.</p>
-        </div>
-        {% else %}
-        <ul class="case-timeline">
-            {% for c in member.cases %}
-            <li class="case-entry" data-case-index="{{ c.case_index }}">
-                <span class="case-index">#{{ c.case_index }}</span>
-                <div class="case-body">
-                    <span class="case-action {{ c.action }}">{{ c.action }}</span>
-                    {% match c.reason %}
-                    {% when Some with (r) %}
-                    <div class="case-reason">{{ r }}</div>
-                    {% when None %}
-                    <div class="case-reason is-empty"><em>No reason given</em></div>
-                    {% endmatch %}
-                    <div class="case-meta">
-                        {% match c.moderator_name %}
-                        {% when Some with (name) %}
-                        By {{ name }}
-                        {% when None %}
-                        {% endmatch %}
-                        {% match c.created_at %}
-                        {% when Some with (ts) %}
-                        &middot; <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time>
-                        {% when None %}
-                        {% endmatch %}
-                    </div>
-                </div>
-                <div class="case-actions">
-                    <button type="button" class="case-edit" title="Edit reason">Edit</button>
-                    <button type="button" class="case-delete" title="Delete case">Delete</button>
-                </div>
-            </li>
+            {% for flag in member.public_flags %}
+            <span class="badge badge-flag">{{ flag }}</span>
             {% endfor %}
-        </ul>
-        {% endif %}
-    </section>
+        </div>
     </div>
 </div>
 
+{# ─── Guild Info ─────────────────────────────────────────────── #}
+{% if member.in_guild %}
+<section class="config-section">
+    <h2>Guild Info</h2>
+    <div class="user-stats-grid">
+        {% match member.join_position %}
+        {% when Some with (pos) %}
+        <div class="metric-tile">
+            <span class="tile-label">Join Position</span>
+            <span class="tile-value">#{{ pos }}<span class="tile-sub"> / {{ member.member_count }}</span></span>
+        </div>
+        {% when None %}
+        {% endmatch %}
+        {% match member.top_role %}
+        {% when Some with (role) %}
+        <div class="metric-tile">
+            <span class="tile-label">Top Role</span>
+            <span class="tile-value" style="color: {% if member.top_role_color != 0 %}{{ member.top_role_color_hex() }}{% else %}inherit{% endif %};">{{ role }}</span>
+        </div>
+        {% when None %}
+        {% endmatch %}
+        <div class="metric-tile">
+            <span class="tile-label">Mutual Servers</span>
+            <span class="tile-value">{{ member.mutual_guilds }}</span>
+        </div>
+        {% match member.boosting_since %}
+        {% when Some with (ts) %}
+        <div class="metric-tile">
+            <span class="tile-label">Boosting Since</span>
+            <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+        </div>
+        {% when None %}
+        {% endmatch %}
+        {% if member.permissions != 0 %}
+        <div class="metric-tile">
+            <span class="tile-label">Permissions</span>
+            <a href="https://discordapi.com/permissions.html#{{ member.permissions }}" class="tile-value tile-value-small">{{ member.permissions }}</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{# ─── Roles ───────────────────────────────────────────── #}
+{% if !member.roles.is_empty() %}
+<section class="config-section">
+    <h2>Roles</h2>
+    <div class="member-roles expanded">
+        {% for role in member.roles %}
+        <span class="role-chip" style="border-color: {{ role.color_hex() }}; color: {% if role.color != 0 %}{{ role.color_hex() }}{% else %}var(--foreground){% endif %};">{{ role.name }}</span>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{# ─── Leveling Stats ─────────────────────────────────────────── #}
+{% match member.leveling %}
+{% when Some with (lvl) %}
+<section class="config-section">
+    <h2>Leveling</h2>
+    <div class="user-stats-grid">
+        <div class="metric-tile">
+            <span class="tile-label">Level</span>
+            <span class="tile-value">{{ lvl.level }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">XP</span>
+            <span class="tile-value">{{ lvl.xp }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Messages</span>
+            <span class="tile-value">{{ lvl.messages }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Rank</span>
+            <span class="tile-value">#{{ lvl.rank }}</span>
+        </div>
+    </div>
+</section>
+{% when None %}
+{% endmatch %}
+
+{# ─── Tags ───────────────────────────────────────────────────── #}
+{% if !member.owned_tags.is_empty() %}
+<section class="config-section">
+    <h2>Tags <span class="section-count">({{ member.owned_tags.len() }})</span></h2>
+    <p class="config-section-description">Tags this member owns in the server.</p>
+    <div class="user-tags-list">
+        {% for tag in member.owned_tags %}
+        <a href="/dashboard/guild/{{ guild_id }}/tags" class="user-tag-chip" title="{{ tag.uses }} uses">
+            <span class="user-tag-name">{{ tag.name }}</span>
+            <span class="user-tag-uses">{{ tag.uses }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{# ─── Command Usage ──────────────────────────────────────────── #}
+{% match member.command_stats %}
+{% when Some with (stats) %}
+{% if stats.total_commands > 0 %}
+<section class="config-section">
+    <h2>Command Usage</h2>
+    <div class="user-stats-grid">
+        <div class="metric-tile">
+            <span class="tile-label">Total Commands</span>
+            <span class="tile-value">{{ stats.total_commands }}</span>
+        </div>
+        {% match stats.first_command_at %}
+        {% when Some with (ts) %}
+        <div class="metric-tile">
+            <span class="tile-label">First Used</span>
+            <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+        </div>
+        {% when None %}
+        {% endmatch %}
+    </div>
+    {% if !stats.top_commands.is_empty() %}
+    <div class="user-top-commands">
+        <h3>Top Commands</h3>
+        <ul class="top-commands-list">
+            {% for cmd in stats.top_commands %}
+            <li>
+                <span class="cmd-name">{{ cmd.command }}</span>
+                <span class="cmd-uses">{{ cmd.uses }} uses</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+{% when None %}
+{% endmatch %}
+
+{# ─── Activity ────────────────────────────────────────────────── #}
+{% match member.last_seen %}
+{% when Some with (ts) %}
+<section class="config-section">
+    <h2>Activity</h2>
+    <div class="user-stats-grid">
+        <div class="metric-tile">
+            <span class="tile-label">Last Seen</span>
+            <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+        </div>
+    </div>
+</section>
+{% when None %}
+{% endmatch %}
+
+{# ─── Activity Heatmap ───────────────────────────────────────────── #}
+<section class="config-section">
+    <h2>Activity Graph</h2>
+    <p class="config-section-description">Command usage over the past year.</p>
+    <div id="activity-heatmap" class="activity-heatmap-container">
+        <div class="avatar-grid-loading">Loading activity data&hellip;</div>
+    </div>
+</section>
+
+{# ─── Name History ────────────────────────────────────────────── #}
+{% match member.names %}
+{% when Some with (names) %}
+{% if !names.usernames.is_empty() || !names.nicknames.is_empty() %}
+<section class="config-section">
+    <h2>Name History</h2>
+    {% if !names.usernames.is_empty() %}
+    <div class="name-history-group">
+        <h3>Usernames</h3>
+        <ul class="name-history-list">
+            {% for entry in names.usernames %}
+            <li>
+                <span class="name-value">{{ entry.name }}</span>
+                <time class="js-ts name-date" datetime="{{ entry.changed_at }}">{{ entry.changed_at }}</time>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% if !names.nicknames.is_empty() %}
+    <div class="name-history-group">
+        <h3>Nicknames</h3>
+        <ul class="name-history-list">
+            {% for entry in names.nicknames %}
+            <li>
+                <span class="name-value">{{ entry.name }}</span>
+                <time class="js-ts name-date" datetime="{{ entry.changed_at }}">{{ entry.changed_at }}</time>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+{% when None %}
+{% endmatch %}
+
+{# ─── Avatar History ────────────────────────────────────────────── #}
+{% if member.avatar_count > 0 %}
+<section class="config-section">
+    <h2>Avatar History <span class="section-count">({{ member.avatar_count }})</span></h2>
+    <div class="avatar-grid" id="avatar-grid">
+        <div class="avatar-grid-loading">Loading avatars&hellip;</div>
+    </div>
+</section>
+{% endif %}
+
+{# ─── Moderation Summary ─────────────────────────────────────── #}
+<section class="config-section">
+    <h2>Moderation</h2>
+    <p class="config-section-description">
+        {{ member.case_count }} case{% if member.case_count != 1 %}s{% endif %},
+        {{ member.warning_count }} warning{% if member.warning_count != 1 %}s{% endif %}
+    </p>
+
+    <form id="open-case-form" class="open-case-form">
+        <div class="open-case-fields">
+            <select id="case-action" required>
+                <option value="warn" selected>Warn</option>
+                <option value="mute">Mute</option>
+                <option value="tempmute">Tempmute</option>
+                <option value="unmute">Unmute</option>
+                <option value="kick">Kick</option>
+                <option value="softban">Softban</option>
+                <option value="ban">Ban</option>
+                <option value="tempban">Tempban</option>
+                <option value="unban">Unban</option>
+            </select>
+            <input type="text" id="case-reason" placeholder="Reason (optional)" maxlength="500">
+            <button type="submit" class="button small primary">Open Case</button>
+        </div>
+        <p class="open-case-hint">Records a case in the modlog (and announces it in the modlog channel). It does not kick/ban/mute by itself — use member actions for that.</p>
+        <p class="open-case-status" id="open-case-status" hidden></p>
+    </form>
+
+    {% if member.cases.is_empty() %}
+    <div class="empty-state">
+        <h3>Clean record</h3>
+        <p>No moderation cases on file for this member.</p>
+    </div>
+    {% else %}
+    <ul class="case-timeline">
+        {% for c in member.cases %}
+        <li class="case-entry" data-case-index="{{ c.case_index }}">
+            <span class="case-index">#{{ c.case_index }}</span>
+            <div class="case-body">
+                <span class="case-action {{ c.action }}">{{ c.action }}</span>
+                {% match c.reason %}
+                {% when Some with (r) %}
+                <div class="case-reason">{{ r }}</div>
+                {% when None %}
+                <div class="case-reason is-empty"><em>No reason given</em></div>
+                {% endmatch %}
+                <div class="case-meta">
+                    {% match c.moderator_name %}
+                    {% when Some with (name) %}
+                    By {{ name }}
+                    {% when None %}
+                    {% endmatch %}
+                    {% match c.created_at %}
+                    {% when Some with (ts) %}
+                    &middot; <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time>
+                    {% when None %}
+                    {% endmatch %}
+                </div>
+            </div>
+            <div class="case-actions">
+                <button type="button" class="case-edit" title="Edit reason">Edit</button>
+                <button type="button" class="case-delete" title="Delete case">Delete</button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
 {% endblock %}
 
-{% block body_end %}
+{% block page_js %}
 <script>
 const GUILD_ID = '{{ guild_id }}';
 const MEMBER_ID = '{{ member.id }}';
+
+/* disable: dashboard-header dash-rise that roots from dashboard_layout.html */
+var dash_head = document.getElementsByClassName('dashboard-header dash-rise')[0];
+dash_head.hidden = true;
 </script>
-<script src="/static/js/common.js"></script>
 <script src="/static/js/user.js"></script>
 {% endblock %}

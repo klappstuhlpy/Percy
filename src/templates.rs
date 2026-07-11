@@ -193,6 +193,8 @@ pub(crate) struct UserLookupTemplate {
     pub(crate) account: Option<Viewer>,
     pub(crate) guild_id: u64,
     pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: String,
     pub(crate) member: MemberDetail,
 }
 
