@@ -4,6 +4,7 @@
 //! except the moderator-facing member **lookup**, which requires manage access.
 
 use crate::{
+    errors::percy_message,
     guilds::{user_can_manage, user_is_member},
     session::Session,
     templates::{OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
@@ -91,7 +92,7 @@ pub async fn guild_user_settings_update(
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": percy_message(&e)})),
         )
             .into_response(),
     }
@@ -111,7 +112,7 @@ pub async fn guild_user_history(State(app): State<AppState>, session: Session, P
         Ok(history) => Json(history).into_response(),
         Err(e) => (
             StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": percy_message(&e)})),
         )
             .into_response(),
     }
@@ -147,7 +148,7 @@ pub async fn guild_user_data_export(
         }
         Err(e) => (
             StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": percy_message(&e)})),
         )
             .into_response(),
     }
@@ -171,7 +172,7 @@ pub async fn guild_user_data_delete(
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (
             StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": percy_message(&e)})),
         )
             .into_response(),
     }
@@ -350,7 +351,7 @@ pub async fn guild_overview_music_status(
             }))
             .into_response()
         }
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -378,7 +379,7 @@ pub async fn guild_overview_music_lyrics(
             "plain": l.plain,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -404,6 +405,6 @@ pub async fn guild_overview_music_control(
     }
     match percy.music_control(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }

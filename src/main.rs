@@ -32,6 +32,7 @@ mod auth;
 mod config;
 mod crud;
 mod db;
+mod errors;
 mod forms;
 mod guilds;
 mod integrations;

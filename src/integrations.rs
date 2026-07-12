@@ -17,6 +17,7 @@ use percy_client::PercyError;
 use serde::Deserialize;
 
 use crate::{
+    errors::percy_message,
     mutations::{gate_json, ok_or_err},
     session::Session,
     AppState,
@@ -62,7 +63,7 @@ pub async fn guild_webhook_create(
     };
     match percy.create_webhook(guild_id, &body).await {
         Ok(resp) => Json(serde_json::json!({"ok": true, "subscription": resp.subscription})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -106,7 +107,7 @@ pub async fn guild_webhook_test(
     };
     match percy.test_webhook(guild_id, sub_id).await {
         Ok(resp) => Json(serde_json::json!({"ok": resp.ok, "result": resp.result})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -122,7 +123,7 @@ pub async fn guild_webhook_deliveries(
     };
     match percy.get_webhook_deliveries(guild_id, sub_id, 25).await {
         Ok(resp) => Json(serde_json::json!({"ok": true, "deliveries": resp.deliveries})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -147,7 +148,7 @@ pub async fn guild_analytics_series(
         .await
     {
         Ok(series) => Json(serde_json::json!(series)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -165,7 +166,7 @@ pub async fn guild_analytics_summary(
     let range = q.range.as_deref().unwrap_or("30d");
     match percy.get_analytics_summary(guild_id, range).await {
         Ok(summary) => Json(serde_json::json!(summary)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -194,7 +195,7 @@ pub async fn guild_backup_export(State(app): State<AppState>, session: Session, 
             )
                 .into_response()
         }
-        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, percy_message(&e)).into_response(),
     }
 }
 
@@ -214,7 +215,7 @@ pub async fn guild_backup_import(
     };
     match percy.import_backup(guild_id, &body, q.dry_run).await {
         Ok(report) => Json(report).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -252,7 +253,7 @@ pub async fn guild_template_apply(
             Json(serde_json::json!({"ok": false, "error": "template not found"})),
         )
             .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 

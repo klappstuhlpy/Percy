@@ -16,6 +16,7 @@ use percy_client::BatchOperation;
 use serde::Deserialize;
 
 use crate::{
+    errors::percy_message,
     forms::{build_patch, build_sentinel_patch, json_or_redirect, ConfigForm, AI_FLAG_NAMES},
     guilds::user_can_manage,
     session::Session,
@@ -26,7 +27,7 @@ use crate::{
 pub(crate) fn ok_or_err(result: Result<(), percy_client::PercyError>) -> Response {
     match result {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -60,7 +61,7 @@ pub async fn guild_command_permissions(
     };
     match percy.set_command_permissions(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -77,7 +78,7 @@ pub async fn guild_command_toggle(
     };
     match percy.toggle_command(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -94,7 +95,7 @@ pub async fn guild_plonk_manage(
     };
     match percy.manage_plonk(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -111,7 +112,7 @@ pub async fn guild_lockdown_lock(
     };
     match percy.lock_channels(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -128,7 +129,7 @@ pub async fn guild_lockdown_unlock(
     };
     match percy.unlock_channels(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -145,7 +146,7 @@ pub async fn guild_moderation_ignore(
     };
     match percy.manage_moderation_ignore(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -162,7 +163,7 @@ pub async fn guild_audit_log_flags(
     };
     match percy.patch_audit_log_flags(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -293,7 +294,7 @@ pub async fn guild_ai_override_update(
     let payload = serde_json::json!({ "controlled": body.controlled, "enabled": body.enabled });
     match percy.put_ai_override(guild_id, channel_id, &payload).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -350,7 +351,7 @@ pub async fn guild_ai_override_delete(
     }
     match percy.delete_ai_override(guild_id, channel_id).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -379,7 +380,7 @@ pub async fn guild_sentinel_update(
     if let (Some(title), Some(content), Some(ch_id)) = (starter_title, starter_content, channel_id) {
         if let Err(e) = percy.send_sentinel_message(guild_id, ch_id, title, content).await {
             tracing::error!(error = %e, "Failed to send sentinel starter message");
-            let msg = format!("Failed to send verification message: {e}");
+            let msg = format!("Could not send the verification message: {}", percy_message(&e));
             return json_or_redirect(&headers, false, &msg, &redirect_url);
         }
     }

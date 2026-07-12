@@ -17,6 +17,7 @@ use percy_client::PercyError;
 use serde::Deserialize;
 
 use crate::{
+    errors::percy_message,
     forms::json_or_redirect,
     guilds::user_can_manage,
     mutations::{gate_json, ok_or_err},
@@ -82,7 +83,7 @@ pub async fn guild_member_action(
 
     match percy.member_action_json(guild_id, &user_id, &body).await {
         Ok(data) => Json(data).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -112,7 +113,7 @@ pub async fn guild_member_messages(
         .await
     {
         Ok(data) => Json(serde_json::json!(data)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -255,7 +256,7 @@ pub async fn guild_poll_create(
 
     match percy.create_poll(guild_id, &fields, image).await {
         Ok(data) => Json(serde_json::json!({"ok": true, "id": data.get("id")})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -274,7 +275,7 @@ pub async fn guild_giveaway_create(
     };
     match percy.create_giveaway(guild_id, &body).await {
         Ok(data) => Json(serde_json::json!({"ok": true, "id": data.get("id")})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -323,7 +324,7 @@ pub async fn guild_tag_detail(
             Json(serde_json::json!({"error": "tag not found"})),
         )
             .into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -435,7 +436,7 @@ pub async fn guild_leveling_config_update(
     let redirect_url = format!("/dashboard/guild/{guild_id}/leveling");
     match percy.patch_leveling_config(guild_id, &body).await {
         Ok(()) => json_or_redirect(&headers, true, "Configuration saved.", &redirect_url),
-        Err(e) => json_or_redirect(&headers, false, &format!("Failed: {e}"), &redirect_url),
+        Err(e) => json_or_redirect(&headers, false, &percy_message(&e), &redirect_url),
     }
 }
 
@@ -513,7 +514,7 @@ pub async fn guild_autoresponders_action(
     let redirect_url = format!("/dashboard/guild/{guild_id}/autoresponders");
     match percy.create_autoresponder(guild_id, &body).await {
         Ok(()) => json_or_redirect(&headers, true, "Autoresponder created.", &redirect_url),
-        Err(e) => json_or_redirect(&headers, false, &format!("Failed: {e}"), &redirect_url),
+        Err(e) => json_or_redirect(&headers, false, &percy_message(&e), &redirect_url),
     }
 }
 
@@ -570,7 +571,7 @@ pub async fn guild_music_status(State(app): State<AppState>, session: Session, P
             "always_on": music.always_on,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -611,7 +612,7 @@ pub async fn guild_music_lyrics(State(app): State<AppState>, session: Session, P
             "plain": l.plain,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -661,7 +662,7 @@ pub async fn guild_music_setup(
             "channel_name": resp.channel_name,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -733,40 +734,7 @@ pub async fn guild_gallery_upload(
             "infected": result.infected,
         }))
         .into_response(),
-        Err(e) => {
-            Json(serde_json::json!({"ok": false, "error": humanize_upload_error(&e.to_string())})).into_response()
-        }
-    }
-}
-
-/// Peel a nested Percy/klappstuhl error envelope down to its innermost human
-/// sentence so the dashboard flashes a readable message instead of raw JSON.
-///
-/// Percy surfaces upstream upload failures as
-/// `{"detail":"upload failed: HTTP 400: {\"error\":\"No valid files…\",\"code\":1}"}`;
-/// we recurse through the `detail` / `error` / `message` fields (and the JSON
-/// objects embedded in their string values) to reach `No valid files…`. Falls
-/// back to the raw string when it isn't a recognisable envelope.
-fn humanize_upload_error(raw: &str) -> String {
-    fn deepest(s: &str) -> Option<String> {
-        let start = s.find('{')?;
-        let end = s.rfind('}')?;
-        if end <= start {
-            return None;
-        }
-        let obj: serde_json::Value = serde_json::from_str(&s[start..=end]).ok()?;
-        for key in ["error", "detail", "message"] {
-            if let Some(v) = obj.get(key).and_then(serde_json::Value::as_str) {
-                return Some(deepest(v).unwrap_or_else(|| v.to_string()));
-            }
-        }
-        None
-    }
-    let msg = deepest(raw).unwrap_or_else(|| raw.trim().to_string());
-    if msg.is_empty() {
-        "Upload failed. Please try again.".to_string()
-    } else {
-        msg
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -876,7 +844,7 @@ pub async fn guild_tags_import(
             "failed": result.failed,
         }))
         .into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 

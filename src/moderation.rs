@@ -12,8 +12,8 @@ use percy_client::{CasesResponse, LeaderboardResponse, PercyError};
 use serde::Deserialize;
 
 use crate::{
-    guilds::user_can_manage, mutations::gate_json, session::Session, templates::AuditLogTemplate, view::Viewer,
-    AppState,
+    errors::percy_message, guilds::user_can_manage, mutations::gate_json, session::Session,
+    templates::AuditLogTemplate, view::Viewer, AppState,
 };
 
 #[derive(Deserialize)]
@@ -122,7 +122,7 @@ pub async fn guild_audit_log_json(
         .await
     {
         Ok(data) => Json(serde_json::json!(data)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -141,7 +141,7 @@ pub async fn guild_bulk_action(
     body["moderator_id"] = serde_json::Value::String(session.discord_user_id.clone());
     match percy.bulk_member_action(guild_id, &body).await {
         Ok(resp) => Json(serde_json::json!(resp)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -157,7 +157,7 @@ pub async fn guild_member_activity(
     };
     match percy.get_member_activity(guild_id, &user_id, 365).await {
         Ok(data) => Json(serde_json::json!(data)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -289,7 +289,7 @@ pub async fn guild_case_create(
         .await
     {
         Ok(resp) => Json(serde_json::json!(resp)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -312,7 +312,7 @@ pub async fn guild_case_update(
     match percy.update_case_reason(guild_id, case_index, &body.reason).await {
         Ok(resp) => Json(serde_json::json!(resp)).into_response(),
         Err(PercyError::NotFound) => Json(serde_json::json!({"error": "case not found"})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -329,7 +329,7 @@ pub async fn guild_case_delete(
     match percy.delete_case(guild_id, case_index).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(PercyError::NotFound) => Json(serde_json::json!({"error": "case not found"})).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -350,7 +350,7 @@ pub async fn guild_cases_recent(
     }
     match percy.get_recent_cases(guild_id, since).await {
         Ok(data) => Json(serde_json::json!(data)).into_response(),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -367,7 +367,7 @@ pub async fn guild_custom_bot_update(
     };
     match percy.patch_custom_bot(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "message": "Bot profile updated"})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }
 
@@ -383,6 +383,6 @@ pub async fn guild_custom_bot_reset(
     };
     match percy.reset_custom_bot(guild_id).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "message": "Bot profile reset to defaults"})).into_response(),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
     }
 }

@@ -11,6 +11,7 @@ use axum::{
 };
 
 use crate::{
+    errors::percy_message,
     forms::json_or_redirect,
     guilds::user_can_manage,
     mutations::{gate_json, ok_or_err},
@@ -34,7 +35,7 @@ pub async fn guild_comics_push(
     let redirect_url = format!("/dashboard/guild/{guild_id}/comics");
     match percy.push_comic(guild_id, &brand).await {
         Ok(()) => json_or_redirect(&headers, true, "Feed pushed.", &redirect_url),
-        Err(e) => json_or_redirect(&headers, false, &format!("Failed: {e}"), &redirect_url),
+        Err(e) => json_or_redirect(&headers, false, &percy_message(&e), &redirect_url),
     }
 }
 
