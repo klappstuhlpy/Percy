@@ -32,7 +32,9 @@ function syncChannelPickerVisibility() {
     }
     syncChannelPickerVisibility();
 })();
-lvlChannelMode.addEventListener('change', syncChannelPickerVisibility);
+// Bound on the form so it also fires for the change event the unsaved tracker dispatches
+// when it restores a discarded snapshot.
+lvlChannelMode.closest('form').addEventListener('change', syncChannelPickerVisibility);
 
 function computeLevelUpChannel() {
     if (lvlChannelMode.value === 'channel') {
@@ -43,84 +45,26 @@ function computeLevelUpChannel() {
 }
 
 // ─── Leveling Config Form ────────────────────────────────────────────────────
+// No Save button: the global tracker (unsaved.js) raises the banner on any edit and
+// POSTs the form's fields as the JSON body the leveling endpoint expects.
 const configForm = document.getElementById('leveling-config-form');
 if (configForm) {
-    // -- Unsaved changes banner --
-    const initialState = {};
-    for (const el of configForm.elements) {
-        if (!el.name || el.type === 'hidden') continue;
-        initialState[el.name] = el.type === 'checkbox' ? el.checked : el.value;
-    }
-    let lvlBanner = null;
-    function createLvlBanner() {
-        if (lvlBanner) return lvlBanner;
-        lvlBanner = document.createElement('div');
-        lvlBanner.className = 'unsaved-banner';
-        lvlBanner.innerHTML = `
-            <span class="unsaved-banner-text">You have unsaved changes</span>
-            <div class="unsaved-banner-actions">
-                <button type="button" class="button small" id="lvl-banner-cancel">Cancel</button>
-                <button type="button" class="button primary small" id="lvl-banner-save">Save Changes</button>
-            </div>
-        `;
-        document.body.appendChild(lvlBanner);
-        lvlBanner.querySelector('#lvl-banner-cancel').addEventListener('click', () => {
-            for (const el of configForm.elements) {
-                if (!el.name || el.type === 'hidden') continue;
-                if (el.type === 'checkbox') el.checked = !!initialState[el.name];
-                else el.value = initialState[el.name] !== undefined ? initialState[el.name] : '';
-            }
-            lvlChannelMode.value = initialState['__channelMode'] || String(LEVEL_UP_CHANNEL === 0 || LEVEL_UP_CHANNEL === 1 || LEVEL_UP_CHANNEL === 2 ? LEVEL_UP_CHANNEL : 'channel');
-            syncChannelPickerVisibility();
-            hideLvlBanner();
-            showToast('success', 'Changes discarded.');
-        });
-        lvlBanner.querySelector('#lvl-banner-save').addEventListener('click', () => configForm.requestSubmit());
-        return lvlBanner;
-    }
-    function showLvlBanner() { const b = createLvlBanner(); requestAnimationFrame(() => b.classList.add('visible')); }
-    function hideLvlBanner() { if (lvlBanner) lvlBanner.classList.remove('visible'); }
-    function checkLvlDirty() {
-        let dirty = false;
-        for (const el of configForm.elements) {
-            if (!el.name || el.type === 'hidden') continue;
-            if (el.type === 'checkbox') { if (el.checked !== !!initialState[el.name]) { dirty = true; break; } }
-            else { if (el.value !== (initialState[el.name] || '')) { dirty = true; break; } }
-        }
-        if (dirty) showLvlBanner(); else hideLvlBanner();
-    }
-    configForm.addEventListener('input', checkLvlDirty);
-    configForm.addEventListener('change', checkLvlDirty);
-
-    configForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const body = {
-            enabled: configForm.querySelector('[name="enabled"]').checked,
-            voice_enabled: configForm.querySelector('[name="voice_enabled"]').checked,
-            role_stack: configForm.querySelector('[name="role_stack"]').checked,
-            delete_after_leave: configForm.querySelector('[name="delete_after_leave"]').checked,
-            factor: parseFloat(configForm.querySelector('[name="factor"]').value) || 1.0,
-            base: parseInt(configForm.querySelector('[name="base"]').value) || 100,
-            min_gain: parseInt(configForm.querySelector('[name="min_gain"]').value) || 0,
-            max_gain: parseInt(configForm.querySelector('[name="max_gain"]').value) || 0,
-            cooldown_per: parseInt(configForm.querySelector('[name="cooldown_per"]').value) || 0,
+    PercyUnsaved.watchForm(configForm, {
+        label: 'Leveling Configuration',
+        reload: true,
+        save: (form) => postJSON('/leveling/config', {
+            enabled: form.querySelector('[name="enabled"]').checked,
+            voice_enabled: form.querySelector('[name="voice_enabled"]').checked,
+            role_stack: form.querySelector('[name="role_stack"]').checked,
+            delete_after_leave: form.querySelector('[name="delete_after_leave"]').checked,
+            factor: parseFloat(form.querySelector('[name="factor"]').value) || 1.0,
+            base: parseInt(form.querySelector('[name="base"]').value) || 100,
+            min_gain: parseInt(form.querySelector('[name="min_gain"]').value) || 0,
+            max_gain: parseInt(form.querySelector('[name="max_gain"]').value) || 0,
+            cooldown_per: parseInt(form.querySelector('[name="cooldown_per"]').value) || 0,
             level_up_channel: computeLevelUpChannel(),
-            level_up_message: configForm.querySelector('[name="level_up_message"]').value.trim() || null,
-        };
-        try {
-            const data = await postJSON('/leveling/config', body);
-            if (data.ok) { showToast('success', 'Configuration saved.'); hideLvlBanner(); setTimeout(() => location.reload(), 400); }
-            else { showToast('error', data.error || 'Failed to save.'); }
-        } catch { showToast('error', 'Network error.'); }
-    });
-    document.getElementById('lvl-cancel-btn').addEventListener('click', () => {
-        for (const el of configForm.elements) {
-            if (!el.name || el.type === 'hidden') continue;
-            if (el.type === 'checkbox') el.checked = !!initialState[el.name];
-            else el.value = initialState[el.name] !== undefined ? initialState[el.name] : '';
-        }
-        hideLvlBanner();
-        showToast('success', 'Changes discarded.');
+            level_up_message: form.querySelector('[name="level_up_message"]').value.trim() || null,
+        }),
     });
 }
 

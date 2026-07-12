@@ -37,9 +37,58 @@
             {% for flag in member.public_flags %}
             <span class="badge badge-flag">{{ flag }}</span>
             {% endfor %}
+            {% if member.muted %}
+            <span class="badge badge-danger">MUTED</span>
+            {% endif %}
+            {% match member.timed_out_until %}
+            {% when Some with (ts) %}
+            <span class="badge badge-danger">TIMED OUT until <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+            {% when None %}
+            {% endmatch %}
         </div>
     </div>
 </div>
+
+{# ─── Moderation Actions ─────────────────────────────────────── #}
+{% if member.in_guild && !member.bot %}
+<section class="config-section">
+    <h2>Moderation Actions</h2>
+    <p class="config-section-description">Every action here is proxied through Percy and recorded as a case in the
+        modlog below.</p>
+    <div class="member-action-bar">
+        <button type="button" class="button small" data-member-action="warn">Warn</button>
+        <button type="button" class="button small" data-member-action="timeout">Timeout</button>
+        {% match member.timed_out_until %}
+        {% when Some with (_ts) %}
+        <button type="button" class="button small" data-member-action="untimeout">Remove Timeout</button>
+        {% when None %}
+        {% endmatch %}
+        {% if member.mute_role_configured %}
+        {% if member.muted %}
+        <button type="button" class="button small" data-member-action="unmute">Unmute</button>
+        {% else %}
+        <button type="button" class="button small" data-member-action="mute">Mute</button>
+        {% endif %}
+        {% endif %}
+        <button type="button" class="button small" data-member-action="purge">Purge Messages</button>
+        <button type="button" class="button small danger" data-member-action="kick">Kick</button>
+        <button type="button" class="button small danger" data-member-action="softban">Softban</button>
+        <button type="button" class="button small danger" data-member-action="ban">Ban</button>
+    </div>
+</section>
+
+{# ─── Recent Messages ────────────────────────────────────────── #}
+<section class="config-section">
+    <h2>Recent Messages</h2>
+    <p class="config-section-description">Percy keeps no message archive — these are read live from the server's most
+        recently active channels, so this is a recency view rather than a full history.</p>
+    <div class="member-actions-row">
+        <button type="button" class="button small primary" id="load-messages-btn">Load recent messages</button>
+        <span class="text-muted" id="messages-meta"></span>
+    </div>
+    <div class="member-messages" id="member-messages"></div>
+</section>
+{% endif %}
 
 {# ─── Guild Info ─────────────────────────────────────────────── #}
 {% if member.in_guild %}
@@ -317,12 +366,61 @@
     {% endif %}
 </section>
 
+{# -- Moderation action modal (fields shown per action by user.js) -- #}
+<div class="modal-overlay" id="action-modal" hidden>
+    <div class="modal-card">
+        <h3 id="modal-title">Confirm Action</h3>
+        <p id="modal-description"></p>
+
+        <div class="config-field mt-md" id="modal-duration-field" hidden>
+            <label class="config-label" for="modal-duration">Duration</label>
+            <select id="modal-duration" class="config-input">
+                <option value="60">1 minute</option>
+                <option value="300">5 minutes</option>
+                <option value="600">10 minutes</option>
+                <option value="3600" selected>1 hour</option>
+                <option value="21600">6 hours</option>
+                <option value="86400">1 day</option>
+                <option value="604800">1 week</option>
+                <option value="2419200">4 weeks (max)</option>
+                <option value="" id="modal-duration-forever" hidden>Indefinite</option>
+            </select>
+        </div>
+
+        <div class="config-field mt-md" id="modal-purge-field" hidden>
+            <label class="config-label" for="modal-purge-days">Delete message history</label>
+            <select id="modal-purge-days" class="config-input">
+                <option value="0" selected>Don't delete any</option>
+                <option value="1">Last 24 hours</option>
+                <option value="3">Last 3 days</option>
+                <option value="7">Last 7 days</option>
+            </select>
+        </div>
+
+        <div class="config-field mt-md" id="modal-limit-field" hidden>
+            <label class="config-label" for="modal-limit">Messages to delete</label>
+            <input type="number" id="modal-limit" class="config-input" min="1" max="500" value="100">
+            <span class="config-description">Scans the most recently active channels for this member's messages. Discord cannot bulk-delete messages older than 14 days.</span>
+        </div>
+
+        <div class="config-field mt-md mb-md">
+            <label class="config-label" for="modal-reason">Reason (optional)</label>
+            <input type="text" id="modal-reason" class="config-input" placeholder="Moderation reason...">
+        </div>
+        <div class="modal-actions">
+            <button class="button small" id="modal-cancel">Cancel</button>
+            <button class="button small danger" id="modal-confirm">Confirm</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block page_js %}
 <script>
 const GUILD_ID = '{{ guild_id }}';
 const MEMBER_ID = '{{ member.id }}';
+const MEMBER_NAME = {{ member.display_name|json|safe }};
 
 /* disable: dashboard-header dash-rise that roots from dashboard_layout.html */
 var dash_head = document.getElementsByClassName('dashboard-header dash-rise')[0];

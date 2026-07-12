@@ -89,3 +89,58 @@
 }
 .open-case-status.error { color: var(--error-text); }
 .open-case-status.success { color: var(--success-text); }
+
+/* -- Moderation action bar + recent messages ------------------------------ */
+
+.member-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.member-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.member-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.member-message {
+    padding: 0.7rem 0.9rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 0.5rem;
+}
+
+.msg-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    color: var(--foreground-muted, #9aa0a6);
+}
+.msg-channel { font-weight: 600; color: var(--branding); }
+.msg-jump { margin-left: auto; }
+
+.msg-content {
+    margin: 0.4rem 0 0;
+    font-size: 0.88rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.msg-empty { font-style: italic; opacity: 0.6; }
+
+.msg-extras {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+}
+.msg-extras:empty { display: none; }

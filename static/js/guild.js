@@ -79,66 +79,63 @@
     }
 
     // -- Audit Log Flags --
+    // A checkbox grid, not a form: its state is a flag → bool map, tracked as a whole so
+    // "Enable all" is one save instead of one request per event.
     var auditGrid = document.getElementById('audit-flags-grid');
     if (auditGrid) {
-        async function saveAuditFlags(flags) {
-            try {
+        var auditBoxes = function() {
+            return Array.prototype.slice.call(auditGrid.querySelectorAll('input[data-flag]'));
+        };
+
+        PercyUnsaved.register({
+            label: 'Audit Log Events',
+            element: auditGrid,
+            read: function() {
+                var flags = {};
+                auditBoxes().forEach(function(cb) { flags[cb.dataset.flag] = cb.checked; });
+                return flags;
+            },
+            write: function(flags) {
+                auditBoxes().forEach(function(cb) { cb.checked = !!flags[cb.dataset.flag]; });
+            },
+            save: async function(flags) {
                 var resp = await fetch('/dashboard/guild/' + GUILD_ID + '/audit-log-flags', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify(flags),
                 });
-                var data = await resp.json();
-                if (data.ok) toast('success', 'Audit log events updated.');
-                else toast('error', data.error || 'Failed to update.');
-            } catch (e) { toast('error', 'Network error'); }
-        }
-
-        auditGrid.addEventListener('change', function(e) {
-            if (e.target.tagName !== 'INPUT') return;
-            var flags = {};
-            flags[e.target.dataset.flag] = e.target.checked;
-            saveAuditFlags(flags);
+                return resp.json();
+            },
         });
 
+        var setAllFlags = function(checked) {
+            auditBoxes().forEach(function(cb) { cb.checked = checked; });
+            PercyUnsaved.refresh();
+        };
         var allBtn = document.getElementById('audit-flags-all');
         var noneBtn = document.getElementById('audit-flags-none');
-        if (allBtn) {
-            allBtn.addEventListener('click', function() {
-                var flags = {};
-                auditGrid.querySelectorAll('input[data-flag]').forEach(function(cb) {
-                    cb.checked = true;
-                    flags[cb.dataset.flag] = true;
-                });
-                saveAuditFlags(flags);
-            });
-        }
-        if (noneBtn) {
-            noneBtn.addEventListener('click', function() {
-                var flags = {};
-                auditGrid.querySelectorAll('input[data-flag]').forEach(function(cb) {
-                    cb.checked = false;
-                    flags[cb.dataset.flag] = false;
-                });
-                saveAuditFlags(flags);
-            });
-        }
+        if (allBtn) allBtn.addEventListener('click', function() { setAllFlags(true); });
+        if (noneBtn) noneBtn.addEventListener('click', function() { setAllFlags(false); });
     }
 
     // ── Bot status feed (General tab) ──────────────────────────────────────
-    var statusSubBtn = document.getElementById('status-feed-sub');
+    // Picking a channel is the save; unsubscribing stays an explicit button.
     var statusUnsubBtn = document.getElementById('status-feed-unsub');
     var statusSelect = document.getElementById('status-feed-channel');
     var statusFeedUrl = '/dashboard/guild/' + GUILD_ID + '/status-feed';
-    if (statusSubBtn && statusSelect) {
-        statusSubBtn.addEventListener('click', async function() {
-            var channelId = statusSelect.value;
-            if (!channelId) { toast('error', 'Select a channel first.'); return; }
-            try {
-                var data = await postJSON(statusFeedUrl, { channel_id: channelId });
-                if (data.ok) { toast('success', 'Subscribed to status feed.'); setTimeout(function(){ location.reload(); }, 400); }
-                else { toast('error', data.error || 'Failed.'); }
-            } catch (e) { toast('error', 'Network error.'); }
+    if (statusSelect) {
+        PercyUnsaved.register({
+            label: 'Bot Status Feed',
+            element: statusSelect,
+            reload: true,
+            read: function() { return { channel_id: statusSelect.value }; },
+            write: function(state) { statusSelect.value = state.channel_id; },
+            save: function(state) {
+                if (!state.channel_id) {
+                    return Promise.resolve({ ok: false, error: 'Select a channel first.' });
+                }
+                return postJSON(statusFeedUrl, { channel_id: state.channel_id });
+            },
         });
     }
     if (statusUnsubBtn) {
@@ -161,8 +158,8 @@
     var cbNameInput = document.getElementById('cb-name-input');
     var cbAboutInput = document.getElementById('cb-about-input');
     var cbCharcount = document.getElementById('cb-charcount');
-    var cbSaveBtn = document.getElementById('cb-save-btn');
     var cbResetBtn = document.getElementById('cb-reset-btn');
+    var cbProfile = null;
 
     if (cbAboutInput && cbCharcount) {
         cbAboutInput.addEventListener('input', function() {
@@ -323,6 +320,7 @@
             }
 
             closeCropModal();
+            if (cbProfile) cbProfile.refresh();
         });
     }
 
@@ -348,26 +346,46 @@
     }
 
     // ── Save / Reset ──────────────────────────────────────────────────
-    if (cbSaveBtn) {
-        cbSaveBtn.addEventListener('click', async function() {
-            var body = {};
-            if (cbNameInput) body.name = cbNameInput.value.trim() || null;
-            if (cbAboutInput) body.about_me = cbAboutInput.value.trim() || null;
-            if (pendingAvatar) body.avatar = pendingAvatar;
-            if (pendingBanner) body.banner = pendingBanner;
-            if (!Object.keys(body).length) { toast('info', 'Nothing to save.'); return; }
-            cbSaveBtn.disabled = true;
-            try {
+    // The card's savable state is the name, the bio, and any freshly cropped images.
+    // Cropping does not fire an input event, so applyCrop() refreshes the tracker itself.
+    if (cbNameInput && cbAboutInput) {
+        cbProfile = PercyUnsaved.register({
+            label: 'Bot Profile',
+            element: document.getElementById('cb-card'),
+            read: function() {
+                return {
+                    name: cbNameInput.value.trim() || null,
+                    about_me: cbAboutInput.value.trim() || null,
+                    avatar: pendingAvatar,
+                    banner: pendingBanner,
+                };
+            },
+            write: function(state) {
+                cbNameInput.value = state.name || '';
+                cbAboutInput.value = state.about_me || '';
+                if (cbCharcount) cbCharcount.textContent = cbAboutInput.value.length + '/190';
+                // A discarded crop cannot be un-rendered from the preview without the
+                // original URLs, so reload to restore the card as the server sent it.
+                // Clear the pending images first, or the section still reads as dirty and
+                // the unload guard would ask to confirm the reload we just triggered.
+                var hadCrop = pendingAvatar || pendingBanner;
+                pendingAvatar = null;
+                pendingBanner = null;
+                if (hadCrop) location.reload();
+            },
+            save: async function(state) {
+                var body = { name: state.name, about_me: state.about_me };
+                if (state.avatar) body.avatar = state.avatar;
+                if (state.banner) body.banner = state.banner;
                 var resp = await fetch('/dashboard/guild/' + GUILD_ID + '/custom-bot', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify(body)
+                    body: JSON.stringify(body),
                 });
                 var data = await resp.json();
-                if (data.ok) { toast('success', 'Saved'); pendingAvatar = null; pendingBanner = null; }
-                else toast('error', data.error || 'Failed to save');
-            } catch (ex) { toast('error', 'Network error'); }
-            cbSaveBtn.disabled = false;
+                if (data.ok) { pendingAvatar = null; pendingBanner = null; }
+                return data;
+            },
         });
     }
 

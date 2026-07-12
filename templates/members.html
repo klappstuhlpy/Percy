@@ -27,8 +27,11 @@
     {# ─── Bulk Action Toolbar ─────────────────────────────────────── #}
     <div class="bulk-toolbar" id="bulk-toolbar" hidden>
         <span class="bulk-count"><strong id="bulk-selected-count">0</strong> selected</span>
-        <button class="button small" id="bulk-kick">Kick Selected</button>
-        <button class="button small danger" id="bulk-ban">Ban Selected</button>
+        <button class="button small" data-bulk="warn">Warn</button>
+        <button class="button small" data-bulk="timeout">Timeout</button>
+        <button class="button small" data-bulk="kick">Kick</button>
+        <button class="button small danger" data-bulk="softban">Softban</button>
+        <button class="button small danger" data-bulk="ban">Ban</button>
         <button class="button small" id="bulk-deselect">Deselect All</button>
     </div>
 
@@ -67,8 +70,7 @@
                     <td>
                         <div class="member-actions">
                             {% if !member.bot %}
-                            <button class="button small" data-action="kick" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}">Kick</button>
-                            <button class="button small danger" data-action="ban" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}">Ban</button>
+                            <button class="button small member-menu-btn" data-user-id="{{ member.id }}" data-name="{{ member.display_name }}" aria-haspopup="true" aria-expanded="false">Manage &#9662;</button>
                             {% endif %}
                         </div>
                     </td>
@@ -82,11 +84,43 @@
         <button id="load-more" class="button small">Load more</button>
     </div>
 
-    {# -- Action confirmation modal -- #}
+    {# -- Action confirmation modal (fields shown per action by members.js) -- #}
     <div class="modal-overlay" id="action-modal" hidden>
         <div class="modal-card">
             <h3 id="modal-title">Confirm Action</h3>
             <p id="modal-description"></p>
+
+            <div class="config-field mt-md" id="modal-duration-field" hidden>
+                <label class="config-label" for="modal-duration">Duration</label>
+                <select id="modal-duration" class="config-input">
+                    <option value="60">1 minute</option>
+                    <option value="300">5 minutes</option>
+                    <option value="600">10 minutes</option>
+                    <option value="3600" selected>1 hour</option>
+                    <option value="21600">6 hours</option>
+                    <option value="86400">1 day</option>
+                    <option value="604800">1 week</option>
+                    <option value="2419200">4 weeks (max)</option>
+                    <option value="" id="modal-duration-forever" hidden>Indefinite</option>
+                </select>
+            </div>
+
+            <div class="config-field mt-md" id="modal-purge-field" hidden>
+                <label class="config-label" for="modal-purge-days">Delete message history</label>
+                <select id="modal-purge-days" class="config-input">
+                    <option value="0" selected>Don't delete any</option>
+                    <option value="1">Last 24 hours</option>
+                    <option value="3">Last 3 days</option>
+                    <option value="7">Last 7 days</option>
+                </select>
+            </div>
+
+            <div class="config-field mt-md" id="modal-limit-field" hidden>
+                <label class="config-label" for="modal-limit">Messages to delete</label>
+                <input type="number" id="modal-limit" class="config-input" min="1" max="500" value="100">
+                <span class="config-description">Scans the most recently active channels for this member's messages. Discord cannot bulk-delete messages older than 14 days.</span>
+            </div>
+
             <div class="config-field mt-md mb-md">
                 <label class="config-label" for="modal-reason">Reason (optional)</label>
                 <input type="text" id="modal-reason" class="config-input" placeholder="Moderation reason...">
@@ -104,6 +138,7 @@
 <script>
 const GUILD_ID = '{{ guild_id }}';
 const ROLES = [{% for role in roles %}{ id: '{{ role.id }}', name: '{{ role.name }}', color: {{ role.color }} },{% endfor %}];
+const MUTE_ROLE_CONFIGURED = {{ mute_role_configured }};
 </script>
 <script src="/static/js/members.js"></script>
 {% endblock %}

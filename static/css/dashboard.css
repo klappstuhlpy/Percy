@@ -2818,7 +2818,7 @@ th.th-sortable[aria-sort="descending"]::after {
     padding: 12px 16px;
     background: #111214;
 }
-.cb-save-btn, .cb-reset-btn {
+.cb-reset-btn {
     font-size: 0.78rem;
     font-family: inherit;
     font-weight: 500;
@@ -2827,14 +2827,6 @@ th.th-sortable[aria-sort="descending"]::after {
     cursor: pointer;
     border: none;
     transition: background 0.12s, opacity 0.12s;
-}
-.cb-save-btn {
-    background: var(--branding);
-    color: #fff;
-}
-.cb-save-btn:hover { background: var(--branding-bright); }
-.cb-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.cb-reset-btn {
     background: transparent;
     color: #b5bac1;
 }

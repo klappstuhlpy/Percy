@@ -106,10 +106,6 @@
                 <input type="hidden" name="sentinel" value="true">
                 {% endmatch %}{% endif %}
             </div>
-            <div class="config-actions">
-                <button type="button" class="button small cancel-btn">Cancel</button>
-                <button type="submit" class="button primary small">Save Changes</button>
-            </div>
         </form>
     </section>
 
@@ -193,10 +189,6 @@
                            value="{{ guild.prefixes.join(" , ") }}">
                 </div>
             </div>
-            <div class="config-actions">
-                <button type="button" class="button small cancel-btn">Cancel</button>
-                <button type="submit" class="button primary small">Save Changes</button>
-            </div>
         </form>
     </section>
 
@@ -220,9 +212,6 @@
         <div class="config-actions">
             <button type="button" class="button small danger" id="status-feed-unsub" {% if !status_feed.subscribed %}
                     hidden{% endif %}>Unsubscribe
-            </button>
-            <button type="button" class="button primary small" id="status-feed-sub">{% if status_feed.subscribed %}Move
-                Channel{% else %}Subscribe{% endif %}
             </button>
         </div>
     </section>
@@ -291,10 +280,6 @@
                     <input type="checkbox" name="reminders" value="true" {% if guild.ai.flags.reminders %}checked{%
                            endif %}>
                 </label>
-            </div>
-            <div class="config-actions">
-                <button type="button" class="button small cancel-btn">Cancel</button>
-                <button type="submit" class="button primary small">Save Changes</button>
             </div>
         </form>
     </section>
@@ -470,10 +455,6 @@
                         {% endfor %}
                     </select>
                 </div>
-            </div>
-            <div class="config-actions">
-                <button type="button" class="button small cancel-btn">Cancel</button>
-                <button type="submit" class="button primary small">Save Changes</button>
             </div>
         </form>
     </section>
@@ -735,10 +716,6 @@
                     >
                 </div>
             </div>
-            <div class="config-actions">
-                <button type="button" class="button small cancel-btn">Discard</button>
-                <button type="submit" class="button primary small">Apply Changes</button>
-            </div>
         </form>
         {% when None %}
         <p class="text-muted">Sentinel is not initialized for this server. Enable the flag in General Settings and run
@@ -811,7 +788,6 @@
                 </div>
                 <div class="cb-actions">
                     <button type="button" class="cb-reset-btn" id="cb-reset-btn">Reset</button>
-                    <button type="button" class="cb-save-btn" id="cb-save-btn">Save Changes</button>
                 </div>
             </div>
 
@@ -917,6 +893,7 @@
     dash_head.hidden = true;
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" crossorigin="anonymous"></script>
+<script src="/static/js/dashboard.js"></script>
 <script src="/static/js/guild.js"></script>
 <script src="/static/js/ai.js"></script>
 {% endblock %}

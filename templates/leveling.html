@@ -83,7 +83,7 @@
                 <div class="config-field">
                     <label class="config-label" for="lvl-channel-mode">Level-Up Announcements</label>
                     <span class="config-description">Where to send level-up messages</span>
-                    <select id="lvl-channel-mode" class="config-input">
+                    <select id="lvl-channel-mode" name="level_up_mode" class="config-input">
                         <option value="1">Same channel as the message</option>
                         <option value="2">Direct message</option>
                         <option value="0">Don't send</option>
@@ -93,7 +93,7 @@
                 <div class="config-field" id="lvl-channel-picker-field" hidden>
                     <label class="config-label" for="lvl-channel-picker">Announcement Channel</label>
                     <span class="config-description">Channel that receives level-up messages</span>
-                    <select id="lvl-channel-picker" class="config-input">
+                    <select id="lvl-channel-picker" name="level_up_channel_id" class="config-input">
                         {% for ch in text_channels %}
                         <option value="{{ ch.id }}">#{{ ch.name }}</option>
                         {% endfor %}
@@ -104,10 +104,6 @@
                     <span class="config-description">Template shown on level up. Use {user} and {level}.</span>
                     <input type="text" name="level_up_message" id="level_up_message" class="config-input" placeholder="Congrats {user}, you reached level {level}!" value="{{ config.level_up_message.as_deref().unwrap_or("") }}">
                 </div>
-            </div>
-            <div class="config-actions">
-                <button type="button" class="button small" id="lvl-cancel-btn">Cancel</button>
-                <button type="submit" class="button primary small">Save Configuration</button>
             </div>
         </form>
     </section>

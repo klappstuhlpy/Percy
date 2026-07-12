@@ -159,6 +159,8 @@ pub(crate) struct MembersTemplate {
     pub(crate) page_title: &'static str,
     pub(crate) members: Vec<Member>,
     pub(crate) roles: Vec<Role>,
+    /// Whether the guild has a mute role — without one the `mute` action is not offered.
+    pub(crate) mute_role_configured: bool,
 }
 
 #[allow(dead_code)]

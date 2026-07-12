@@ -117,3 +117,40 @@
     .members-table tbody td:nth-child(4):not(:has(.role-chip)) { display: none; }
     .members-table tbody td:nth-child(5):not(:has(.button)) { display: none; }
 }
+
+/* -- Row action menu ------------------------------------------------------
+   Anchored under the row's "Manage" button; the cell is the positioning
+   context so the popup follows the button in both table and card layouts. */
+
+.member-actions {
+    position: relative;
+}
+
+.member-menu {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 11rem;
+    padding: 0.25rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+
+.member-menu-item {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    text-align: left;
+    color: var(--foreground);
+    background: transparent;
+    border: none;
+    border-radius: 0.35rem;
+    cursor: pointer;
+}
+.member-menu-item:hover { background: var(--box-shade); }
+.member-menu-item.danger { color: #f87171; }

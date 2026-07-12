@@ -20,9 +20,9 @@ dirs = "5.0.1"
 # Renders the public legal docs (fetched as CommonMark from the canonical GitHub
 # repo) and the local command-syntax guide to HTML.
 pulldown-cmark = "0.10"
-kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.7" }
-kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.7" }
-percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.7" }
+kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.8" }
+kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.8" }
+percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.8" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.

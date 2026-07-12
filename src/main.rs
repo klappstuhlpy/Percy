@@ -320,6 +320,10 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/members/:user_id/roles",
             patch(actions::guild_member_roles),
         )
+        .route(
+            "/dashboard/guild/:guild_id/members/:user_id/messages",
+            get(actions::guild_member_messages),
+        )
         // Leveling mutations.
         .route(
             "/dashboard/guild/:guild_id/leveling/users/:user_id",

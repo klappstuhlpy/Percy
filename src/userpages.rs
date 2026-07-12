@@ -3,6 +3,13 @@
 //! weaker "is a member" gate ([`user_is_member`]) rather than manage access,
 //! except the moderator-facing member **lookup**, which requires manage access.
 
+use crate::{
+    guilds::{user_can_manage, user_is_member},
+    session::Session,
+    templates::{OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
+    view::Viewer,
+    AppState,
+};
 use axum::{
     extract::{Path, State},
     http::{header, StatusCode},
@@ -12,13 +19,6 @@ use axum::{
 use percy_client::{
     BalancesResponse, BotStats, EconomyInfo, LeaderboardResponse, MusicFiltersState, MusicInfo, UserSettings,
     UserSettingsPatch,
-};
-use crate::{
-    guilds::{user_can_manage, user_is_member},
-    session::Session,
-    templates::{OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
-    view::Viewer,
-    AppState,
 };
 
 /// `GET /dashboard/guild/:guild_id/me` — the signed-in member's own profile page.

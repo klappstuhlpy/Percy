@@ -283,43 +283,10 @@ document.getElementById('poll-create-modal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeCreatePoll();
 });
 
-// ─── Poll Settings form (async submit) ────────────────────────────────
+// ─── Poll Settings ────────────────────────────────────────────────────
+// No Save button: the global tracker (unsaved.js) raises the banner on any edit and
+// POSTs the form to its own action.
 (function () {
     const form = document.getElementById('poll-config-form');
-    if (!form) return;
-    const snapshot = new FormData(form);
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        try {
-            const resp = await fetch(form.action, {
-                method: 'POST',
-                headers: { 'Accept': 'application/json' },
-                body: new URLSearchParams(new FormData(form)),
-            });
-            const data = await resp.json();
-            if (data.ok) {
-                showToast('success', data.message || 'Settings saved.');
-            } else {
-                showToast('error', data.error || 'Failed to save settings.');
-            }
-        } catch {
-            showToast('error', 'Network error. Please try again.');
-        } finally {
-            if (btn) btn.disabled = false;
-        }
-    });
-
-    const cancel = document.getElementById('poll-config-cancel');
-    if (cancel) {
-        cancel.addEventListener('click', () => {
-            for (const el of form.elements) {
-                if (!el.name || el.name.startsWith('_')) continue;
-                el.value = snapshot.get(el.name) || '';
-            }
-            showToast('success', 'Changes discarded.');
-        });
-    }
+    if (form) PercyUnsaved.watchForm(form, { label: 'Poll Settings' });
 })();

@@ -146,6 +146,7 @@ pub async fn guild_members(State(app): State<AppState>, session: Session, Path(g
     MembersTemplate {
         account: Some(Viewer::from_session(&session)),
         guild_id,
+        mute_role_configured: guild.mute_role.is_some(),
         guild_name: guild.name,
         nav_active: "members",
         page_title: "Members",

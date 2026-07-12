@@ -61,34 +61,59 @@ pub async fn guild_members_json(
     }
 }
 
-#[derive(Deserialize)]
-pub struct MemberActionBody {
-    action: String,
-    reason: Option<String>,
-}
-
-/// `POST /dashboard/guild/:guild_id/members/:user_id/action` — kick/ban/unban.
+/// `POST /dashboard/guild/:guild_id/members/:user_id/action` — kick, ban, unban,
+/// softban, warn, mute/unmute, timeout/untimeout, purge.
+///
+/// The body is forwarded to Percy as-is (minus the moderator id, which is overwritten):
+/// each action carries its own parameters (`duration`, `delete_message_days`, `limit`) and
+/// Percy owns the whitelist, so the dashboard does not re-validate them.
 pub async fn guild_member_action(
     State(app): State<AppState>,
     session: Session,
     Path((guild_id, user_id)): Path<(u64, String)>,
-    Json(body): Json<MemberActionBody>,
+    Json(mut body): Json<serde_json::Value>,
 ) -> Response {
     let percy = match gate_json(&app, &session, guild_id).await {
         Ok(percy) => percy,
         Err(response) => return response,
     };
     // The acting moderator is the authenticated user, never a client-supplied id.
-    let result = percy
-        .member_action(
-            guild_id,
-            &user_id,
-            &body.action,
-            body.reason.as_deref(),
-            Some(&session.discord_user_id),
-        )
-        .await;
-    ok_or_err(result)
+    body["moderator_id"] = serde_json::Value::String(session.discord_user_id.clone());
+
+    match percy.member_action_json(guild_id, &user_id, &body).await {
+        Ok(data) => Json(data).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct MemberMessagesQuery {
+    #[serde(default = "default_message_limit")]
+    limit: u32,
+}
+
+fn default_message_limit() -> u32 {
+    25
+}
+
+/// `GET /dashboard/guild/:guild_id/members/:user_id/messages` — the member message viewer.
+pub async fn guild_member_messages(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, user_id)): Path<(u64, String)>,
+    Query(query): Query<MemberMessagesQuery>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy
+        .get_member_messages(guild_id, &user_id, query.limit.min(100))
+        .await
+    {
+        Ok(data) => Json(serde_json::json!(data)).into_response(),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
+    }
 }
 
 #[derive(Deserialize)]

@@ -245,3 +245,164 @@
             container.innerHTML = '<div class="empty-state"><p>Failed to load activity data.</p></div>';
         });
 })();
+
+// ─── Moderation actions ──────────────────────────────────────────────
+// The same action vocabulary the members table uses, driving one shared modal: each
+// action reveals only the fields it needs (a duration, a message-history window, a count).
+(function() {
+    const modal = document.getElementById('action-modal');
+    if (!modal) return;
+
+    const ACTIONS = {
+        warn:      { label: 'Warn', verb: 'warn' },
+        timeout:   { label: 'Timeout', verb: 'time out', duration: true },
+        untimeout: { label: 'Remove Timeout', verb: 'remove the timeout from' },
+        mute:      { label: 'Mute', verb: 'mute', duration: true, optionalDuration: true },
+        unmute:    { label: 'Unmute', verb: 'unmute' },
+        purge:     { label: 'Purge Messages', verb: 'purge the recent messages of', limit: true },
+        kick:      { label: 'Kick', verb: 'kick', danger: true },
+        softban:   { label: 'Softban', verb: 'softban', danger: true, purgeDays: true },
+        ban:       { label: 'Ban', verb: 'ban', danger: true, purgeDays: true },
+    };
+
+    const title = document.getElementById('modal-title');
+    const desc = document.getElementById('modal-description');
+    const reason = document.getElementById('modal-reason');
+    const confirmBtn = document.getElementById('modal-confirm');
+    const cancelBtn = document.getElementById('modal-cancel');
+    const durationField = document.getElementById('modal-duration-field');
+    const duration = document.getElementById('modal-duration');
+    const durationForever = document.getElementById('modal-duration-forever');
+    const purgeField = document.getElementById('modal-purge-field');
+    const purgeDays = document.getElementById('modal-purge-days');
+    const limitField = document.getElementById('modal-limit-field');
+    const limitInput = document.getElementById('modal-limit');
+
+    let pending = null;
+
+    function close() {
+        modal.hidden = true;
+        pending = null;
+    }
+
+    document.querySelectorAll('[data-member-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.memberAction;
+            const action = ACTIONS[name];
+            if (!action) return;
+
+            pending = name;
+            title.textContent = action.label + ' Member';
+            desc.textContent = 'Are you sure you want to ' + action.verb + ' ' + MEMBER_NAME + '?';
+            reason.value = '';
+
+            durationField.hidden = !action.duration;
+            // An indefinite mute is valid; an indefinite timeout is not (Discord caps it).
+            durationForever.hidden = !action.optionalDuration;
+            duration.value = '3600';
+            purgeField.hidden = !action.purgeDays;
+            purgeDays.value = '0';
+            limitField.hidden = !action.limit;
+            limitInput.value = '100';
+
+            confirmBtn.className = action.danger ? 'button small danger' : 'button small primary';
+            confirmBtn.textContent = action.label;
+            modal.hidden = false;
+        });
+    });
+
+    cancelBtn.addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    confirmBtn.addEventListener('click', async () => {
+        if (!pending) return;
+        const action = ACTIONS[pending];
+        const body = { action: pending, reason: reason.value.trim() || undefined };
+        if (action.duration && duration.value) body.duration = parseInt(duration.value, 10);
+        if (action.purgeDays) body.delete_message_days = parseInt(purgeDays.value, 10);
+        if (action.limit) body.limit = parseInt(limitInput.value, 10);
+
+        confirmBtn.disabled = true;
+        try {
+            const resp = await fetch(`/dashboard/guild/${GUILD_ID}/members/${MEMBER_ID}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                const deleted = data.deleted !== undefined ? ` (${data.deleted} messages deleted)` : '';
+                showToast('success', `${action.label} applied.${deleted}`);
+                // The header carries the mute/timeout badges and the case list just grew.
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast('error', data.error || `Failed to ${action.verb} the member.`);
+            }
+        } catch {
+            showToast('error', 'Network error.');
+        } finally {
+            confirmBtn.disabled = false;
+            close();
+        }
+    });
+})();
+
+// ─── Recent messages ─────────────────────────────────────────────────
+// Loaded on demand: the endpoint scans live channel history, which is far too costly to
+// fire on every page view.
+(function() {
+    const btn = document.getElementById('load-messages-btn');
+    const list = document.getElementById('member-messages');
+    const meta = document.getElementById('messages-meta');
+    if (!btn || !list) return;
+
+    const escape = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    function messageHtml(m) {
+        const attachments = (m.attachments || []).map(
+            url => `<a class="msg-attachment" href="${escape(url)}" target="_blank" rel="noopener">attachment</a>`
+        ).join('');
+        const embeds = m.embed_count ? `<span class="msg-embed-count">${m.embed_count} embed(s)</span>` : '';
+        const content = m.content
+            ? `<p class="msg-content">${escape(m.content)}</p>`
+            : '<p class="msg-content msg-empty">(no text content)</p>';
+        return `<article class="member-message">
+            <header class="msg-head">
+                <span class="msg-channel">#${escape(m.channel_name)}</span>
+                <time class="js-ts" datetime="${escape(m.created_at)}">${escape(m.created_at)}</time>
+                ${m.edited_at ? '<span class="msg-edited">(edited)</span>' : ''}
+                <a class="msg-jump" href="${escape(m.jump_url)}" target="_blank" rel="noopener">Jump</a>
+            </header>
+            ${content}
+            <div class="msg-extras">${attachments}${embeds}</div>
+        </article>`;
+    }
+
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Loading…';
+        try {
+            const resp = await fetch(`/dashboard/guild/${GUILD_ID}/members/${MEMBER_ID}/messages?limit=25`);
+            const data = await resp.json();
+            if (data.error) {
+                showToast('error', data.error);
+                return;
+            }
+            if (!data.messages || !data.messages.length) {
+                list.innerHTML = '<div class="empty-state"><p>No recent messages found in the scanned channels.</p></div>';
+            } else {
+                list.innerHTML = data.messages.map(messageHtml).join('');
+                if (window.formatTimestamps) window.formatTimestamps(list);
+            }
+            meta.textContent = `Scanned ${data.scanned_channels} channel(s)`
+                + (data.partial ? ' — some channels were skipped.' : '.');
+        } catch {
+            showToast('error', 'Failed to load messages.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Reload recent messages';
+        }
+    });
+})();

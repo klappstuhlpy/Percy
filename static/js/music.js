@@ -355,6 +355,27 @@
     // Re-poll after a local EQ/filter mutation so the UI reflects the bot.
     function refreshStatus() { if (playerInstance) playerInstance.refresh(); }
 
+    // DJ mode — a setting rather than a live player control, so it goes through the
+    // global unsaved-changes banner instead of saving on change.
+    const djSelect = document.getElementById('dj-mode-select');
+    if (djSelect && !djSelect.disabled) {
+        PercyUnsaved.register({
+            label: 'DJ Mode',
+            element: djSelect,
+            reload: true,
+            read: () => ({ dj_mode: parseInt(djSelect.value, 10) }),
+            write: (state) => { djSelect.value = String(state.dj_mode); },
+            save: async (state) => {
+                const resp = await fetch(`${base}/dj-mode`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(state),
+                });
+                return resp.json();
+            },
+        });
+    }
+
     // Hide EQ/filters until we know the player is active.
     applyActivity(initialActive);
 

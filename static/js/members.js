@@ -1,4 +1,9 @@
-/* Percy Dashboard — Members management */
+/* Percy Dashboard — Members management.
+
+   Each row opens a "Manage" menu of moderation actions; the shared confirmation modal
+   grows the fields that action needs (a duration for timeout/mute, a message-history
+   window for ban/softban, a message count for purge). Percy owns the action whitelist
+   and every action lands in the modlog. */
 
 (function() {
     const tbody = document.getElementById('members-tbody');
@@ -10,6 +15,31 @@
     const modalReason = document.getElementById('modal-reason');
     const modalCancel = document.getElementById('modal-cancel');
     const modalConfirm = document.getElementById('modal-confirm');
+    const durationField = document.getElementById('modal-duration-field');
+    const durationSelect = document.getElementById('modal-duration');
+    const durationForever = document.getElementById('modal-duration-forever');
+    const purgeField = document.getElementById('modal-purge-field');
+    const purgeDays = document.getElementById('modal-purge-days');
+    const limitField = document.getElementById('modal-limit-field');
+    const limitInput = document.getElementById('modal-limit');
+
+    // What each action is called, what it needs, and how destructive it looks.
+    // `removes` marks the actions after which the member is no longer in the guild,
+    // so their row is dropped from the table.
+    const ACTIONS = {
+        warn:     { label: 'Warn',     verb: 'warn' },
+        timeout:  { label: 'Timeout',  verb: 'time out', duration: true },
+        mute:     { label: 'Mute',     verb: 'mute', duration: true, optionalDuration: true, needsMuteRole: true },
+        unmute:   { label: 'Unmute',   verb: 'unmute', needsMuteRole: true },
+        untimeout:{ label: 'Remove Timeout', verb: 'remove the timeout from' },
+        purge:    { label: 'Purge Messages', verb: 'purge the recent messages of', limit: true },
+        kick:     { label: 'Kick',     verb: 'kick', danger: true, removes: true },
+        softban:  { label: 'Softban',  verb: 'softban', danger: true, purgeDays: true, removes: true },
+        ban:      { label: 'Ban',      verb: 'ban', danger: true, purgeDays: true, removes: true },
+    };
+
+    // The order the row menu offers them in: reversible first, terminal last.
+    const MENU = ['warn', 'timeout', 'untimeout', 'mute', 'unmute', 'purge', 'kick', 'softban', 'ban'];
 
     let pendingAction = null;
 
@@ -71,8 +101,7 @@
                     }).join('');
 
                     const actionsHtml = m.bot ? '' :
-                        `<button class="button small" data-action="kick" data-user-id="${m.id}" data-name="${esc(m.display_name)}">Kick</button>` +
-                        `<button class="button small danger" data-action="ban" data-user-id="${m.id}" data-name="${esc(m.display_name)}">Ban</button>`;
+                        `<button class="button small member-menu-btn" data-user-id="${m.id}" data-name="${esc(m.display_name)}" aria-haspopup="true" aria-expanded="false">Manage &#9662;</button>`;
 
                     // Mirror the server-rendered row structure so the responsive
                     // card layout, the selection checkbox and the profile link all
@@ -106,61 +135,129 @@
         }
     });
 
-    // Action buttons (delegated)
-    tbody.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
+    // ─── Row action menu ──────────────────────────────────────────────
+    let openMenu = null;
 
-        const action = btn.dataset.action;
-        const userId = btn.dataset.userId;
-        const name = btn.dataset.name;
+    function closeMenu() {
+        if (!openMenu) return;
+        const btn = openMenu.previousElementSibling;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        openMenu.remove();
+        openMenu = null;
+    }
 
-        pendingAction = { action, userId };
-        modalTitle.textContent = action === 'ban' ? 'Ban Member' : 'Kick Member';
-        modalDesc.textContent = `Are you sure you want to ${action} ${name}?`;
-        modalReason.value = '';
-        modal.hidden = false;
+    function toggleMenu(btn) {
+        const wasOpen = openMenu && openMenu.dataset.userId === btn.dataset.userId;
+        closeMenu();
+        if (wasOpen) return;
+
+        const menu = document.createElement('div');
+        menu.className = 'member-menu';
+        menu.dataset.userId = btn.dataset.userId;
+        menu.innerHTML = MENU
+            // A mute needs the guild's mute role; without one the API would only 400.
+            .filter(name => !ACTIONS[name].needsMuteRole || MUTE_ROLE_CONFIGURED)
+            .map(name => {
+                const action = ACTIONS[name];
+                return `<button type="button" class="member-menu-item${action.danger ? ' danger' : ''}" data-action="${name}">${action.label}</button>`;
+            })
+            .join('');
+
+        btn.after(menu);
+        btn.setAttribute('aria-expanded', 'true');
+        openMenu = menu;
+    }
+
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('.member-menu-btn');
+        if (trigger) {
+            toggleMenu(trigger);
+            return;
+        }
+        const item = e.target.closest('.member-menu-item');
+        if (item) {
+            const btn = item.closest('.member-actions').querySelector('.member-menu-btn');
+            openActionModal(item.dataset.action, btn.dataset.userId, btn.dataset.name);
+            closeMenu();
+            return;
+        }
+        closeMenu();
     });
 
-    // Modal handlers
-    modalCancel.addEventListener('click', () => {
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { closeMenu(); closeActionModal(); }
+    });
+
+    // ─── Action modal ─────────────────────────────────────────────────
+    function openActionModal(name, userId, displayName) {
+        const action = ACTIONS[name];
+        if (!action) return;
+
+        pendingAction = { name, userId };
+        modalTitle.textContent = `${action.label} Member`;
+        modalDesc.textContent = `Are you sure you want to ${action.verb} ${displayName}?`;
+        modalReason.value = '';
+
+        durationField.hidden = !action.duration;
+        // An indefinite mute is valid; an indefinite timeout is not (Discord caps it).
+        durationForever.hidden = !action.optionalDuration;
+        durationSelect.value = '3600';
+        purgeField.hidden = !action.purgeDays;
+        purgeDays.value = '0';
+        limitField.hidden = !action.limit;
+        limitInput.value = '100';
+
+        modalConfirm.className = action.danger ? 'button small danger' : 'button small primary';
+        modalConfirm.textContent = action.label;
+        modal.hidden = false;
+    }
+
+    function closeActionModal() {
         modal.hidden = true;
         pendingAction = null;
+    }
+
+    modalCancel.addEventListener('click', closeActionModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeActionModal();
     });
 
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.hidden = true;
-            pendingAction = null;
-        }
-    });
+    // Build the request body from whichever fields this action revealed.
+    function actionBody(name) {
+        const action = ACTIONS[name];
+        const body = { action: name, reason: modalReason.value.trim() || undefined };
+        if (action.duration && durationSelect.value) body.duration = parseInt(durationSelect.value, 10);
+        if (action.purgeDays) body.delete_message_days = parseInt(purgeDays.value, 10);
+        if (action.limit) body.limit = parseInt(limitInput.value, 10);
+        return body;
+    }
 
     modalConfirm.addEventListener('click', async () => {
         if (!pendingAction) return;
+        const { name, userId } = pendingAction;
         modalConfirm.disabled = true;
-
-        const { action, userId } = pendingAction;
-        const reason = modalReason.value.trim() || undefined;
 
         try {
             const resp = await fetch(`/dashboard/guild/${GUILD_ID}/members/${userId}/action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, reason }),
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(actionBody(name)),
             });
             const data = await resp.json();
             if (data.ok) {
-                showToast('success', `Successfully ${action === 'ban' ? 'banned' : 'kicked'} the member.`);
-                const row = tbody.querySelector(`tr[data-user-id="${userId}"]`);
-                if (row) row.remove();
+                const deleted = data.deleted !== undefined ? ` (${data.deleted} messages deleted)` : '';
+                showToast('success', `${ACTIONS[name].label} applied.${deleted}`);
+                if (ACTIONS[name].removes) {
+                    const row = tbody.querySelector(`tr[data-user-id="${userId}"]`);
+                    if (row) row.remove();
+                }
             } else {
-                showToast('error', data.error || `Failed to ${action} member.`);
+                showToast('error', data.error || `Failed to ${ACTIONS[name].verb} the member.`);
             }
         } catch {
             showToast('error', 'Network error.');
         } finally {
-            modal.hidden = true;
-            pendingAction = null;
+            closeActionModal();
             modalConfirm.disabled = false;
         }
     });
@@ -205,27 +302,44 @@
         });
     }
 
-    async function doBulkAction(action) {
+    async function doBulkAction(name) {
         const userIds = getSelected();
         if (!userIds.length) return;
-        if (!confirm(`Are you sure you want to ${action} ${userIds.length} member(s)?`)) return;
+
+        const action = ACTIONS[name];
+        if (!confirm(`${action.label} ${userIds.length} member(s)?`)) return;
+
+        const body = { user_ids: userIds, action: name };
+        if (action.duration) {
+            // Reuse the modal's duration vocabulary rather than inventing a second one.
+            const hours = prompt('Timeout duration in hours (max 672):', '1');
+            if (hours === null) return;
+            const seconds = Math.round(parseFloat(hours) * 3600);
+            if (!Number.isFinite(seconds) || seconds < 60) {
+                showToast('error', 'Enter a duration of at least one minute.');
+                return;
+            }
+            body.duration = seconds;
+        }
 
         try {
             const resp = await fetch(`/dashboard/guild/${GUILD_ID}/members/bulk-action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_ids: userIds, action }),
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(body),
             });
             const data = await resp.json();
             if (data.ok) {
-                showToast('success', `${data.successes} member(s) ${action === 'ban' ? 'banned' : 'kicked'}.`);
+                showToast('success', `${data.successes} member(s): ${action.label.toLowerCase()} applied.`);
                 if (data.failures && data.failures.length > 0) {
                     showToast('warning', `${data.failures.length} failed.`);
                 }
-                userIds.forEach(uid => {
-                    const row = tbody.querySelector(`tr[data-user-id="${uid}"]`);
-                    if (row && !data.failures.some(f => f.user_id === uid)) row.remove();
-                });
+                if (action.removes) {
+                    userIds.forEach(uid => {
+                        const row = tbody.querySelector(`tr[data-user-id="${uid}"]`);
+                        if (row && !data.failures.some(f => String(f.user_id) === uid)) row.remove();
+                    });
+                }
                 updateBulkUI();
             } else {
                 showToast('error', data.error || 'Bulk action failed.');
@@ -235,8 +349,7 @@
         }
     }
 
-    const bulkKick = document.getElementById('bulk-kick');
-    const bulkBan = document.getElementById('bulk-ban');
-    if (bulkKick) bulkKick.addEventListener('click', () => doBulkAction('kick'));
-    if (bulkBan) bulkBan.addEventListener('click', () => doBulkAction('ban'));
+    document.querySelectorAll('[data-bulk]').forEach(btn => {
+        btn.addEventListener('click', () => doBulkAction(btn.dataset.bulk));
+    });
 })();

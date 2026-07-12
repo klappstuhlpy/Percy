@@ -185,11 +185,17 @@
         <div class="config-grid">
             <div class="config-field">
                 <label class="config-label" for="dj-mode-select">Access Level</label>
+                {% match music.setup %}{% when Some with (setup) %}
                 <select id="dj-mode-select" class="config-select">
-                    <option value="0">Everyone &mdash; anyone in the voice channel can use all controls</option>
-                    <option value="1">DJ Only &mdash; only DJ role or Manage Server can control playback</option>
-                    <option value="2">Hybrid &mdash; everyone can pause/resume; destructive actions require DJ</option>
+                    <option value="0" {% if setup.dj_mode == 0 %}selected{% endif %}>Everyone &mdash; anyone in the voice channel can use all controls</option>
+                    <option value="1" {% if setup.dj_mode == 1 %}selected{% endif %}>DJ Only &mdash; only DJ role or Manage Server can control playback</option>
+                    <option value="2" {% if setup.dj_mode == 2 %}selected{% endif %}>Hybrid &mdash; everyone can pause/resume; destructive actions require DJ</option>
                 </select>
+                {% when None %}
+                <select id="dj-mode-select" class="config-select" disabled>
+                    <option>Configure the music panel first</option>
+                </select>
+                {% endmatch %}
             </div>
         </div>
         <p class="text-muted" id="dj-mode-description">
