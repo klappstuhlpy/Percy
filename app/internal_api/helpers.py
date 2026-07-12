@@ -1,10 +1,29 @@
 """Shared helpers for resolving Discord entities into API-friendly dicts."""
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING
+
+from fastapi import HTTPException, status
 
 if TYPE_CHECKING:
     import discord
+
+# Discord caps a timeout at 28 days; anything under a minute is not worth a round trip.
+MIN_TIMEOUT_SECONDS = 60
+MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
+
+
+def validate_timeout_duration(duration: int | None) -> datetime.timedelta:
+    """Validates a timeout duration in seconds, returning it as a timedelta."""
+    if duration is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='timeout requires a duration')
+    if not MIN_TIMEOUT_SECONDS <= duration <= MAX_TIMEOUT_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'duration must be between {MIN_TIMEOUT_SECONDS} seconds and 28 days',
+        )
+    return datetime.timedelta(seconds=duration)
 
 
 def resolve_channel(guild: discord.Guild, channel_id: int | None) -> dict | None:

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
+from ..helpers import validate_timeout_duration
 
 if TYPE_CHECKING:
     import discord
@@ -16,6 +17,12 @@ if TYPE_CHECKING:
     from app.cogs.modlog.models import ModerationCase
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Moderation"], dependencies=[Depends(verify_token)])
+
+BULK_ACTIONS = frozenset({'kick', 'ban', 'unban', 'softban', 'timeout', 'warn', 'add_roles', 'remove_roles'})
+# Actions refused when the target outranks Percy.
+BULK_HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout'})
+# Actions that leave a modlog case behind (role edits are config, not moderation).
+BULK_CASE_ACTIONS = frozenset({'kick', 'ban', 'unban', 'softban', 'timeout', 'warn'})
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +47,8 @@ class BulkActionBody(BaseModel):
     reason: str | None = None
     role_ids: list[str | int] = []
     moderator_id: str | int | None = None
+    #: Seconds, required by the ``timeout`` action.
+    duration: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -218,13 +227,15 @@ async def bulk_member_action(
     """Apply a moderation action to multiple members at once."""
     if not body.user_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='user_ids is required')
-    if body.action not in ('kick', 'ban', 'unban', 'add_roles', 'remove_roles'):
+    if body.action not in BULK_ACTIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='action must be kick, ban, unban, add_roles, or remove_roles',
+            detail=f'action must be one of: {", ".join(sorted(BULK_ACTIONS))}',
         )
     if body.action in ('add_roles', 'remove_roles') and not body.role_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='role_ids is required for role actions')
+
+    timeout_for = validate_timeout_duration(body.duration) if body.action == 'timeout' else None
 
     bot_member = guild.me
     moderator_id = int(body.moderator_id) if body.moderator_id else None
@@ -247,7 +258,7 @@ async def bulk_member_action(
                 if member is None:
                     failures.append({'user_id': uid, 'error': 'member not found'})
                     continue
-                if body.action in ('kick', 'ban') and member.top_role >= bot_member.top_role:
+                if body.action in BULK_HIERARCHY_ACTIONS and member.top_role >= bot_member.top_role:
                     failures.append({'user_id': uid, 'error': 'higher role hierarchy'})
                     continue
 
@@ -255,12 +266,21 @@ async def bulk_member_action(
                     await member.kick(reason=reason)
                 elif body.action == 'ban':
                     await member.ban(reason=reason)
+                elif body.action == 'softban':
+                    await member.ban(reason=reason, delete_message_seconds=86400)
+                    await guild.unban(member, reason=reason)
+                elif body.action == 'timeout':
+                    await member.timeout(timeout_for, reason=reason)
+                elif body.action == 'warn':
+                    if member.bot:
+                        failures.append({'user_id': uid, 'error': 'cannot warn a bot'})
+                        continue
                 elif body.action == 'add_roles':
                     await member.add_roles(*roles, reason=reason or 'Dashboard bulk role update')
                 elif body.action == 'remove_roles':
                     await member.remove_roles(*roles, reason=reason or 'Dashboard bulk role update')
 
-            if body.action in ('kick', 'ban', 'unban'):
+            if body.action in BULK_CASE_ACTIONS:
                 bot.dispatch('mod_action', guild.id, body.action, uid_int, moderator_id, reason)
             successes.append(uid)
         except Exception as e:

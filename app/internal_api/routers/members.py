@@ -1,14 +1,34 @@
 """Internal API members endpoints (FastAPI router)."""
 from __future__ import annotations
 
+import asyncio
 import base64
+import datetime
+from contextlib import suppress
 
+import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from ..dependencies import BotDep, GuildDep, verify_token
+from ..helpers import validate_timeout_duration
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Members"], dependencies=[Depends(verify_token)])
+
+# Percy keeps no message archive (the gateway cache holds 10 messages), so both the message
+# viewer and the purge action read live channel history. The scan is bounded on both axes:
+# only the most recently active channels are visited, and only a slice of each is read.
+MAX_SCAN_CHANNELS = 20
+MAX_SCAN_CONCURRENCY = 5
+
+# Discord refuses to bulk-delete messages older than two weeks.
+BULK_DELETE_MAX_AGE = datetime.timedelta(days=14)
+
+ACTIONS = frozenset(
+    {'kick', 'ban', 'unban', 'softban', 'warn', 'mute', 'unmute', 'timeout', 'untimeout', 'purge'}
+)
+# Actions that move a member down the hierarchy — refused when the target outranks Percy.
+HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'mute', 'timeout'})
 
 
 # ---------------------------------------------------------------------------
@@ -20,11 +40,143 @@ class MemberActionBody(BaseModel):
     action: str
     reason: str | None = None
     moderator_id: str | int | None = None
+    #: Seconds, for ``timeout`` (required) and ``mute`` (optional — a mute with a
+    #: duration becomes a ``tempmute`` and is lifted by a timer).
+    duration: int | None = None
+    #: Days of message history to wipe, for ``ban`` and ``softban`` (Discord allows 0-7).
+    delete_message_days: int = 0
+    #: How many of the member's recent messages ``purge`` should delete.
+    limit: int = 100
 
 
 class MemberRolesBody(BaseModel):
     add: list[str] = []
     remove: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _scan_member_messages(
+    guild: discord.Guild,
+    user_id: int,
+    *,
+    limit: int,
+    per_channel: int = 100,
+) -> tuple[list[discord.Message], int]:
+    """Best-effort scan of recent channel history for one member's messages.
+
+    Returns the newest ``limit`` messages (across channels) plus the number of channels
+    actually read. Channels are visited newest-activity-first and capped at
+    :data:`MAX_SCAN_CHANNELS`, so a member who last spoke in a quiet channel long ago may
+    not show up — this is a recency view, not a complete history.
+    """
+    me = guild.me
+    readable = [c for c in guild.text_channels if c.permissions_for(me).read_message_history]
+    readable.sort(key=lambda c: c.last_message_id or 0, reverse=True)
+    targets = readable[:MAX_SCAN_CHANNELS]
+
+    semaphore = asyncio.Semaphore(MAX_SCAN_CONCURRENCY)
+
+    async def scan(channel: discord.TextChannel) -> list[discord.Message]:
+        async with semaphore:
+            try:
+                return [m async for m in channel.history(limit=per_channel) if m.author.id == user_id]
+            except discord.HTTPException:
+                return []
+
+    found = await asyncio.gather(*(scan(channel) for channel in targets))
+    messages = [message for chunk in found for message in chunk]
+    messages.sort(key=lambda m: m.created_at, reverse=True)
+    return messages[:limit], len(targets)
+
+
+def _message_payload(message: discord.Message) -> dict:
+    return {
+        'id': str(message.id),
+        'channel_id': str(message.channel.id),
+        'channel_name': getattr(message.channel, 'name', 'unknown'),
+        'content': message.content,
+        'created_at': message.created_at.isoformat(),
+        'edited_at': message.edited_at.isoformat() if message.edited_at else None,
+        'jump_url': message.jump_url,
+        'attachments': [a.url for a in message.attachments],
+        'embed_count': len(message.embeds),
+    }
+
+
+async def _purge_member_messages(guild: discord.Guild, user_id: int, limit: int, reason: str | None) -> int:
+    """Deletes up to ``limit`` of a member's recent messages. Returns how many were removed."""
+    messages, _ = await _scan_member_messages(guild, user_id, limit=limit)
+    cutoff = datetime.datetime.now(datetime.UTC) - BULK_DELETE_MAX_AGE
+
+    by_channel: dict[int, list[discord.Message]] = {}
+    for message in messages:
+        if message.created_at > cutoff:
+            by_channel.setdefault(message.channel.id, []).append(message)
+
+    deleted = 0
+    for channel_id, batch in by_channel.items():
+        channel = guild.get_channel(channel_id)
+        if channel is None or not channel.permissions_for(guild.me).manage_messages:
+            continue
+        # delete_messages chunks internally but caps at 100 per call.
+        for start in range(0, len(batch), 100):
+            chunk = batch[start:start + 100]
+            with suppress(discord.HTTPException):
+                await channel.delete_messages(chunk, reason=reason)
+                deleted += len(chunk)
+    return deleted
+
+
+async def _apply_mute(bot, guild: discord.Guild, member: discord.Member, body: MemberActionBody) -> str:
+    """Adds the configured mute role, arming an expiry timer when a duration is given.
+
+    Returns the action recorded on the case (``mute`` or ``tempmute``).
+    """
+    config = await bot.db.get_guild_config(guild.id)
+    role_id = config.mute_role_id if config else None
+    if role_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='no mute role is configured for this server — set one in the Moderation tab',
+        )
+    role = guild.get_role(role_id)
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='the configured mute role no longer exists')
+    if guild.me.top_role <= role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='the mute role is equal to or above my highest role',
+        )
+    if member.get_role(role_id) is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is already muted')
+
+    await member.add_roles(role, reason=body.reason)
+
+    if body.duration is None:
+        return 'mute'
+
+    moderator_id = int(body.moderator_id) if body.moderator_id else member.id
+    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=body.duration)
+    await bot.timers.create(expires, 'tempmute', guild.id, moderator_id, member.id, role_id)
+    return 'tempmute'
+
+
+async def _lift_mute(bot, guild: discord.Guild, member: discord.Member, reason: str | None) -> None:
+    """Removes the mute role and cancels any pending tempmute expiry."""
+    config = await bot.db.get_guild_config(guild.id)
+    role_id = config.mute_role_id if config else None
+    if role_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no mute role is configured for this server')
+    if member.get_role(role_id) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not muted')
+
+    await member.remove_roles(discord.Object(id=role_id), reason=reason)
+    with suppress(Exception):
+        await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +225,10 @@ async def get_member_detail(
     if member is not None:
         sorted_members = sorted((m for m in guild.members if m.joined_at), key=lambda m: m.joined_at)
         join_position = next((i for i, m in enumerate(sorted_members, 1) if m.id == member.id), None)
+        # Mute state drives the dashboard's action menu (offer mute vs. unmute), so it is
+        # resolved against the guild's configured mute role rather than guessed from roles.
+        guild_config = await bot.db.get_guild_config(guild.id)
+        mute_role_id = guild_config.mute_role_id if guild_config else None
         identity = {
             'id': str(member.id),
             'name': member.name,
@@ -95,6 +251,9 @@ async def get_member_detail(
             'boosting_since': member.premium_since.isoformat() if member.premium_since else None,
             'public_flags': [flag.replace('_', ' ') for flag, value in member.public_flags if value],
             'status': member.status.name if hasattr(member, 'status') else None,
+            'muted': mute_role_id is not None and member.get_role(mute_role_id) is not None,
+            'mute_role_configured': mute_role_id is not None,
+            'timed_out_until': member.timed_out_until.isoformat() if member.timed_out_until else None,
         }
     else:
         try:
@@ -120,6 +279,9 @@ async def get_member_detail(
             'boosting_since': None,
             'public_flags': [flag.replace('_', ' ') for flag, value in user.public_flags if value],
             'status': None,
+            'muted': False,
+            'mute_role_configured': False,
+            'timed_out_until': None,
         }
 
     # Leveling
@@ -277,36 +439,108 @@ async def member_action(
     bot: BotDep,
     guild: GuildDep,
 ) -> dict:
+    """Apply one moderation action to a member.
+
+    Every action that changes a member's standing is recorded as a modlog case through the
+    same ``mod_action`` dispatch the in-Discord commands use, so dashboard and bot actions
+    land in one history.
+    """
     moderator_id = int(body.moderator_id) if body.moderator_id else None
 
-    if body.action not in ('kick', 'ban', 'unban'):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='action must be kick, ban, or unban')
+    if body.action not in ACTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'action must be one of: {", ".join(sorted(ACTIONS))}',
+        )
+
+    delete_days = max(0, min(7, body.delete_message_days))
+    extra: dict = {}
+    # The recorded case can differ from the requested action (a mute with a duration is a
+    # tempmute), so actions set this rather than assuming body.action.
+    case_action = body.action
 
     if body.action == 'unban':
         try:
             user = await bot.fetch_user(user_id)
             await guild.unban(user, reason=body.reason)
-        except Exception as e:
+        except discord.HTTPException as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     else:
         member = guild.get_member(user_id)
         if member is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
 
-        bot_member = guild.me
-        if member.top_role >= bot_member.top_role:
+        if body.action in HIERARCHY_ACTIONS and member.top_role >= guild.me.top_role:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail='cannot moderate a member with equal or higher role',
             )
 
-        if body.action == 'kick':
-            await member.kick(reason=body.reason)
-        elif body.action == 'ban':
-            await member.ban(reason=body.reason)
+        try:
+            if body.action == 'kick':
+                await member.kick(reason=body.reason)
+            elif body.action == 'ban':
+                await member.ban(reason=body.reason, delete_message_seconds=delete_days * 86400)
+            elif body.action == 'softban':
+                # Ban-then-unban: kicks the member and wipes their recent messages.
+                await member.ban(reason=body.reason, delete_message_seconds=(delete_days or 1) * 86400)
+                await guild.unban(member, reason=body.reason)
+            elif body.action == 'timeout':
+                delta = validate_timeout_duration(body.duration)
+                await member.timeout(delta, reason=body.reason)
+                extra['until'] = (datetime.datetime.now(datetime.UTC) + delta).isoformat()
+            elif body.action == 'untimeout':
+                if member.timed_out_until is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not timed out')
+                await member.timeout(None, reason=body.reason)
+            elif body.action == 'mute':
+                case_action = await _apply_mute(bot, guild, member, body)
+            elif body.action == 'unmute':
+                await _lift_mute(bot, guild, member, body.reason)
+            elif body.action == 'warn':
+                if member.bot:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='cannot warn a bot')
+                # A warning is only a case plus a courtesy DM — closed DMs are not an error.
+                with suppress(discord.HTTPException):
+                    note = f': {body.reason}' if body.reason else '.'
+                    await member.send(f'\N{WARNING SIGN} You were warned in **{guild.name}**{note}')
+            elif body.action == 'purge':
+                extra['deleted'] = await _purge_member_messages(
+                    guild, user_id, max(1, min(500, body.limit)), body.reason
+                )
+        except discord.Forbidden:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'I am missing the permissions to {body.action} this member',
+            )
+        except discord.HTTPException as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    bot.dispatch('mod_action', guild.id, body.action, user_id, moderator_id, body.reason)
-    return {'ok': True}
+    # Purging messages is a cleanup, not a standing change — it gets no case.
+    if body.action != 'purge':
+        bot.dispatch('mod_action', guild.id, case_action, user_id, moderator_id, body.reason)
+
+    return {'ok': True, 'action': case_action, **extra}
+
+
+@router.get("/members/{user_id}/messages")
+async def get_member_messages(
+    user_id: int,
+    guild: GuildDep,
+    limit: int = Query(default=25, le=100),
+    per_channel: int = Query(default=100, le=200),
+) -> dict:
+    """A member's most recent messages, read live from channel history.
+
+    Percy stores no message archive, so this is a bounded scan of the guild's most recently
+    active channels (see :data:`MAX_SCAN_CHANNELS`) rather than a complete history.
+    """
+    messages, scanned = await _scan_member_messages(guild, user_id, limit=limit, per_channel=per_channel)
+    return {
+        'messages': [_message_payload(m) for m in messages],
+        'scanned_channels': scanned,
+        'partial': len(guild.text_channels) > scanned,
+    }
 
 
 @router.patch("/members/{user_id}/roles")

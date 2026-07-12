@@ -28,6 +28,8 @@ class CaseType(enum.Enum):
     MUTE = 'mute'
     TEMPMUTE = 'tempmute'
     UNMUTE = 'unmute'
+    TIMEOUT = 'timeout'
+    UNTIMEOUT = 'untimeout'
 
     @classmethod
     def from_action(cls, action: str) -> CaseType | None:
@@ -60,6 +62,8 @@ _LABELS: dict[CaseType, str] = {
     CaseType.MUTE: 'Mute',
     CaseType.TEMPMUTE: 'Tempmute',
     CaseType.UNMUTE: 'Unmute',
+    CaseType.TIMEOUT: 'Timeout',
+    CaseType.UNTIMEOUT: 'Untimeout',
 }
 
 # Reds for removals, oranges for kicks, yellow for warns, greens for reversals, grey for mutes.
@@ -73,6 +77,8 @@ _COLOURS: dict[CaseType, int] = {
     CaseType.MUTE: 0x95A5A6,
     CaseType.TEMPMUTE: 0x95A5A6,
     CaseType.UNMUTE: 0x2ECC71,
+    CaseType.TIMEOUT: 0x95A5A6,
+    CaseType.UNTIMEOUT: 0x2ECC71,
 }
 
 _EMOJIS: dict[CaseType, str] = {
@@ -85,6 +91,8 @@ _EMOJIS: dict[CaseType, str] = {
     CaseType.MUTE: '\N{SPEAKER WITH CANCELLATION STROKE}',
     CaseType.TEMPMUTE: '\N{SPEAKER WITH CANCELLATION STROKE}',
     CaseType.UNMUTE: '\N{SPEAKER}',
+    CaseType.TIMEOUT: '\N{HOURGLASS WITH FLOWING SAND}',
+    CaseType.UNTIMEOUT: '\N{SPEAKER}',
 }
 
 
