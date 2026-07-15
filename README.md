@@ -22,10 +22,9 @@ Documentation search · and much more — all in a single, self-hostable package
 
 </div>
 
-> **The recommended way to use Percy is
->
-to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).
-** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
+> The **recommended** way to use Percy is
+> to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).
+> ** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
 
 ## Documentation
 
