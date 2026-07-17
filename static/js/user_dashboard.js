@@ -196,38 +196,4 @@
 
     loadHistory();
 
-    // -- Data deletion ---------------------------------------------------------
-    const deleteBtn = document.getElementById('delete-data-btn');
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', async function () {
-            const ok = window.confirm(
-                'Permanently delete your stored presence, avatar and name/nickname history?\n\n' +
-                'This cannot be undone.'
-            );
-            if (!ok) return;
-
-            deleteBtn.disabled = true;
-            const original = deleteBtn.textContent;
-            deleteBtn.textContent = 'Deleting…';
-            try {
-                const res = await fetch(`/dashboard/guild/${GUILD_ID}/me/delete-data`, {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json' },
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data.ok) {
-                    if (window.showToast) showToast('success', 'Your history has been deleted.');
-                    setTimeout(() => window.location.reload(), 800);
-                } else {
-                    if (window.showToast) showToast('error', data.error || 'Failed to delete data.');
-                    deleteBtn.disabled = false;
-                    deleteBtn.textContent = original;
-                }
-            } catch (err) {
-                if (window.showToast) showToast('error', 'Network error — check your connection.');
-                deleteBtn.disabled = false;
-                deleteBtn.textContent = original;
-            }
-        });
-    }
 })();

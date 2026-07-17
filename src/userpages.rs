@@ -7,7 +7,7 @@ use crate::{
     errors::percy_message,
     guilds::{user_can_manage, user_is_member},
     session::Session,
-    templates::{OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
+    templates::{AccountTemplate, OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
     view::Viewer,
     AppState,
 };
@@ -118,19 +118,88 @@ pub async fn guild_user_history(State(app): State<AppState>, session: Session, P
     }
 }
 
-/// `GET /dashboard/guild/:guild_id/me/data-export` — full GDPR-style export.
+/// `GET /dashboard/guild/:guild_id/me/data-export` — redirects to the
+/// account-level export (these operations are global, not guild-scoped).
 pub async fn guild_user_data_export(
+    _state: State<AppState>,
+    _session: Session,
+    Path(_guild_id): Path<u64>,
+) -> Redirect {
+    Redirect::to("/account/data-export")
+}
+
+/// `POST /dashboard/guild/:guild_id/me/delete-data` — redirects to the account
+/// page (deletion is now handled globally at `/account`).
+pub async fn guild_user_data_delete(
+    _state: State<AppState>,
+    _session: Session,
+    Path(_guild_id): Path<u64>,
+) -> Redirect {
+    Redirect::to("/account")
+}
+
+// ─── Account-level pages (no guild scope) ─────────────────────────────────
+
+/// `GET /account` — the signed-in user's account page. Shows global settings
+/// and data management (export/delete) without guild scoping.
+pub async fn account_page(State(app): State<AppState>, session: Session) -> Response {
+    let Some(percy) = &app.percy else {
+        return Redirect::to("/").into_response();
+    };
+    let discord_id = &session.discord_user_id;
+
+    let settings = percy.get_user_settings(discord_id).await.unwrap_or(UserSettings {
+        timezone: None,
+        track_presence: true,
+        track_history: true,
+    });
+
+    AccountTemplate {
+        account: Some(Viewer::from_session(&session)),
+        settings,
+        discord_id: discord_id.clone(),
+        username: session.username.clone(),
+    }
+    .into_response()
+}
+
+/// `POST /account/settings` — update the user's global settings.
+pub async fn account_settings_update(
     State(app): State<AppState>,
     session: Session,
-    Path(guild_id): Path<u64>,
+    Json(body): Json<serde_json::Value>,
 ) -> Response {
     let Some(percy) = &app.percy else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     let discord_id = &session.discord_user_id;
-    if !user_is_member(&app, discord_id, guild_id).await {
-        return StatusCode::FORBIDDEN.into_response();
+
+    let patch = UserSettingsPatch {
+        timezone: if body.get("timezone").is_some() {
+            Some(body["timezone"].as_str().map(|s| s.to_string()))
+        } else {
+            None
+        },
+        track_presence: body.get("track_presence").and_then(|v| v.as_bool()),
+        track_history: body.get("track_history").and_then(|v| v.as_bool()),
+    };
+
+    match percy.patch_user_settings(discord_id, &patch).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": percy_message(&e)})),
+        )
+            .into_response(),
     }
+}
+
+/// `GET /account/data-export` — full GDPR-style export, not guild-scoped.
+pub async fn account_data_export(State(app): State<AppState>, session: Session) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let discord_id = &session.discord_user_id;
     match percy.export_user_data(discord_id).await {
         Ok(data) => {
             let body = serde_json::to_vec_pretty(&data).unwrap_or_default();
@@ -154,20 +223,13 @@ pub async fn guild_user_data_export(
     }
 }
 
-/// `POST /dashboard/guild/:guild_id/me/delete-data` — irreversibly erases the
-/// user's stored presence/avatar/name history.
-pub async fn guild_user_data_delete(
-    State(app): State<AppState>,
-    session: Session,
-    Path(guild_id): Path<u64>,
-) -> Response {
+/// `POST /account/delete-data` — irreversibly erases the user's stored
+/// personal history across all guilds.
+pub async fn account_data_delete(State(app): State<AppState>, session: Session) -> Response {
     let Some(percy) = &app.percy else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     let discord_id = &session.discord_user_id;
-    if !user_is_member(&app, discord_id, guild_id).await {
-        return StatusCode::FORBIDDEN.into_response();
-    }
     match percy.delete_user_personal_data(discord_id).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (
