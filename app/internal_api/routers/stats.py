@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import asdict
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -196,85 +195,21 @@ async def get_bot_metrics(bot: BotDep) -> dict:
 
 @router.get("/bot/changelog")
 async def get_changelog(limit: int = Query(default=20, le=50)) -> dict:
-    """Git log grouped by version tags. Falls back gracefully if pygit2 is unavailable."""
-    try:
-        import pygit2
+    """Parsed CHANGELOG.md releases with categorized sections."""
+    from ..changelog import RELEASES
 
-        repo = pygit2.Repository(str(Path(__file__).parents[3]))
-        entries: list[dict] = []
-
-        # Collect version tags sorted by commit time (newest first)
-        tag_commits: list[tuple[str, pygit2.Commit]] = []
-        for ref_name in repo.references:
-            if not ref_name.startswith('refs/tags/v'):
-                continue
-            tag_name = ref_name.removeprefix('refs/tags/')
-            obj = repo.references[ref_name].resolve().peel(pygit2.Commit)
-            tag_commits.append((tag_name, obj))
-
-        tag_commits.sort(key=lambda t: t[1].commit_time, reverse=True)
-
-        if tag_commits:
-            # Group commits between consecutive tags
-            for i, (tag_name, tag_commit) in enumerate(tag_commits[:limit]):
-                parent_oid = tag_commits[i + 1][1].id if i + 1 < len(tag_commits) else None
-
-                changes: list[str] = []
-                walker = repo.walk(tag_commit.id, pygit2.GIT_SORT_TOPOLOGICAL)
-                for commit in walker:
-                    if parent_oid and commit.id == parent_oid:
-                        break
-                    msg = commit.message.split('\n', 1)[0].strip()
-                    if msg:
-                        changes.append(msg)
-
-                dt = datetime.datetime.fromtimestamp(tag_commit.commit_time, tz=datetime.UTC)
-                entries.append({
-                    'version': tag_name.removeprefix('v'),
-                    'date': dt.strftime('%Y-%m-%d'),
-                    'changes': changes[:30],
-                })
-        else:
-            # No tags: group recent commits by date
-            walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL)
-            current_date = None
-            current_changes: list[str] = []
-            count = 0
-
-            for commit in walker:
-                if count >= limit * 5:
-                    break
-                dt = datetime.datetime.fromtimestamp(commit.commit_time, tz=datetime.UTC)
-                date_str = dt.strftime('%Y-%m-%d')
-                msg = commit.message.split('\n', 1)[0].strip()
-                if not msg:
-                    continue
-
-                if date_str != current_date:
-                    if current_date and current_changes:
-                        entries.append({
-                            'version': current_date,
-                            'date': current_date,
-                            'changes': current_changes,
-                        })
-                        if len(entries) >= limit:
-                            break
-                    current_date = date_str
-                    current_changes = []
-                current_changes.append(msg)
-                count += 1
-
-            if current_date and current_changes and len(entries) < limit:
-                entries.append({
-                    'version': current_date,
-                    'date': current_date,
-                    'changes': current_changes,
-                })
-
-        return {'entries': entries, 'current_version': get_full_version()}
-
-    except Exception:
-        return {'entries': [], 'current_version': get_full_version()}
+    entries = [
+        {
+            'version': r.version,
+            'date': r.date,
+            'sections': [
+                {'name': s.name, 'slug': s.slug, 'entries': s.entries}
+                for s in r.sections
+            ],
+        }
+        for r in RELEASES[:limit]
+    ]
+    return {'entries': entries, 'current_version': get_full_version()}
 
 
 @router.get("/commands/public")
