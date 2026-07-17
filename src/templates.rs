@@ -117,14 +117,22 @@ pub(crate) struct PublicCommand {
 #[template(path = "changelog.html")]
 pub(crate) struct PercyChangelogTemplate {
     pub(crate) account: Option<Viewer>,
-    pub(crate) entries: Vec<ChangelogEntry>,
+    pub(crate) entries: Vec<ChangelogRelease>,
+    pub(crate) current_version: String,
 }
 
-/// A changelog entry representing a version release or group of commits.
-pub(crate) struct ChangelogEntry {
+/// A changelog release with categorized sections.
+pub(crate) struct ChangelogRelease {
     pub(crate) version: String,
     pub(crate) date: String,
-    pub(crate) changes: Vec<String>,
+    pub(crate) sections: Vec<ChangelogSection>,
+}
+
+/// A category section within a release (Added, Changed, Fixed, etc.).
+pub(crate) struct ChangelogSection {
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    pub(crate) entries: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -146,6 +154,16 @@ pub(crate) struct UserDashboardTemplate {
     pub(crate) guild_icon: Option<String>,
     pub(crate) profile: MemberSelf,
     pub(crate) settings: UserSettings,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "account.html")]
+pub(crate) struct AccountTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) settings: UserSettings,
+    pub(crate) discord_id: String,
+    pub(crate) username: String,
 }
 
 #[allow(dead_code)]

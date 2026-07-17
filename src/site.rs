@@ -21,8 +21,8 @@ use percy_client::CommandInfo;
 use crate::{
     session::Session,
     templates::{
-        ChangelogEntry, CommandCategory, PercyChangelogTemplate, PercyCommandsTemplate, PercyLegalTemplate,
-        PublicCommand,
+        ChangelogRelease, ChangelogSection, CommandCategory, PercyChangelogTemplate, PercyCommandsTemplate,
+        PercyLegalTemplate, PublicCommand,
     },
     view::Viewer,
     AppState,
@@ -193,29 +193,41 @@ fn group_commands_by_category(commands: Vec<CommandInfo>) -> Vec<CommandCategory
     categories
 }
 
-/// `GET /changelog` — version history from Percy's internal API.
+/// `GET /changelog` — version history from Percy's CHANGELOG.md via internal API.
 pub async fn percy_changelog(State(app): State<AppState>, session: Option<Session>) -> Response {
-    let entries: Vec<ChangelogEntry> = match &app.percy {
+    let (entries, current_version) = match &app.percy {
         Some(percy) => percy
             .get_changelog()
             .await
             .map(|resp| {
-                resp.entries
+                let releases: Vec<ChangelogRelease> = resp
+                    .entries
                     .into_iter()
-                    .map(|e| ChangelogEntry {
+                    .map(|e| ChangelogRelease {
                         version: e.version,
                         date: e.date,
-                        changes: e.changes,
+                        sections: e
+                            .sections
+                            .into_iter()
+                            .map(|s| ChangelogSection {
+                                name: s.name,
+                                slug: s.slug,
+                                entries: s.entries,
+                            })
+                            .collect(),
                     })
-                    .collect()
+                    .collect();
+                let ver = resp.current_version.unwrap_or_default();
+                (releases, ver)
             })
             .unwrap_or_default(),
-        None => Vec::new(),
+        None => (Vec::new(), String::new()),
     };
 
     PercyChangelogTemplate {
         account: viewer(&session),
         entries,
+        current_version,
     }
     .into_response()
 }

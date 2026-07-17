@@ -6,43 +6,83 @@
 
 {% block css %}
 <style>
-/* `.percy-main` already supplies horizontal padding; only add our own max-width
-   and vertical rhythm. box-sizing keeps the block inside the viewport and
-   overflow-wrap stops long unbroken tokens (URLs, hashes) pushing it sideways. */
 .cl-page { box-sizing: border-box; width: 100%; max-width: 900px; margin: 2rem auto; overflow-wrap: anywhere; }
-.cl-entry { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--box-border); }
-.cl-entry:last-child { border-bottom: none; }
-.cl-version { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.25rem; overflow-wrap: anywhere; }
-.cl-version .percy-version-badge { font-size: 0.65em; }
-.cl-date { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem; }
-.cl-changes { list-style: none; padding: 0; margin: 0; }
-.cl-changes li { position: relative; padding-left: 1.25rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; overflow-wrap: anywhere; }
-.cl-changes li::before { content: "~"; position: absolute; left: 0; color: var(--branding); font-weight: 600; }
+.cl-head { margin-bottom: 2.5rem; }
+.cl-head h1 { margin: 0; }
+.cl-sub { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem; }
+.cl-current { color: var(--branding); font-weight: 600; }
+.cl-release { margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid var(--box-border); }
+.cl-release:last-child { border-bottom: none; }
+.cl-version { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.25rem; display: flex; align-items: center; gap: 0.75rem; }
+.cl-version a { color: inherit; text-decoration: none; }
+.cl-version a:hover { text-decoration: underline; }
+.cl-latest { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15em 0.5em; border-radius: 3px; background: var(--branding); color: var(--bg-main); font-weight: 700; }
+.cl-date { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem; }
+.cl-section { margin-bottom: 1rem; }
+.cl-category { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.4rem; padding: 0.2em 0.6em; display: inline-block; border-radius: 3px; }
+.cl-entries { list-style: none; padding: 0; margin: 0 0 0.5rem; }
+.cl-entries li { position: relative; padding-left: 1.25rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; overflow-wrap: anywhere; }
+.cl-entries li::before { position: absolute; left: 0; font-weight: 600; }
+/* Category colors */
+.cl-added .cl-category { color: var(--success-text, #4ade80); background: var(--success-bg, rgba(74,222,128,0.1)); }
+.cl-added .cl-entries li::before { content: "+"; color: var(--success-text, #4ade80); }
+.cl-changed .cl-category { color: var(--info-text, #60a5fa); background: var(--info-bg, rgba(96,165,250,0.1)); }
+.cl-changed .cl-entries li::before { content: "~"; color: var(--info-text, #60a5fa); }
+.cl-deprecated .cl-category { color: var(--warning-text, #fbbf24); background: var(--warning-bg, rgba(251,191,36,0.1)); }
+.cl-deprecated .cl-entries li::before { content: "!"; color: var(--warning-text, #fbbf24); }
+.cl-removed .cl-category { color: var(--error-text, #f87171); background: var(--error-bg, rgba(248,113,113,0.1)); }
+.cl-removed .cl-entries li::before { content: "-"; color: var(--error-text, #f87171); }
+.cl-fixed .cl-category { color: var(--branding, #ff7b72); background: var(--branding-dim, rgba(255,123,114,0.1)); }
+.cl-fixed .cl-entries li::before { content: "*"; color: var(--branding, #ff7b72); }
+.cl-security .cl-category { color: var(--error-text, #f87171); background: var(--error-bg, rgba(248,113,113,0.1)); border: 1px solid var(--error-border, rgba(248,113,113,0.3)); }
+.cl-security .cl-entries li::before { content: "\1F6A9"; color: var(--error-text, #f87171); }
 .cl-empty { text-align: center; color: var(--text-muted); padding: 3rem 0; }
+.cl-foot { color: var(--text-muted); font-size: 0.78rem; text-align: center; margin-top: 2rem; }
+.cl-foot a { color: var(--branding); }
 </style>
 {% endblock %}
 
 {% block body %}
 <div class="cl-page">
-    <h1><span class="spark" aria-hidden="true">✻</span> Changelog</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem; font-size: 0.9rem;">Recent changes and version history for Percy.</p>
+    <header class="cl-head">
+        <h1><span class="spark" aria-hidden="true">&#x2733;</span> Changelog</h1>
+        <p class="cl-sub">
+            Every notable change to Percy, newest first.
+            {% if !current_version.is_empty() %}Currently running <span class="cl-current">v{{ current_version }}</span>.{% endif %}
+        </p>
+    </header>
 
     {% if entries.is_empty() %}
     <div class="cl-empty">
-        <p>No changelog entries yet. Version history will appear here once releases are tagged.</p>
+        <p>No changelog entries yet. Version history will appear here once releases are documented.</p>
     </div>
     {% else %}
     {% for entry in entries %}
-    <article class="cl-entry">
-        <h2 class="cl-version"><span class="percy-version-badge">v{{ entry.version }}</span></h2>
+    <article class="cl-release" id="v{{ entry.version }}">
+        <h2 class="cl-version">
+            <a href="#v{{ entry.version }}">v{{ entry.version }}</a>
+            {% if loop.first %}<span class="cl-latest">latest</span>{% endif %}
+        </h2>
         <p class="cl-date">{{ entry.date }}</p>
-        <ul class="cl-changes">
-            {% for change in entry.changes %}
-            <li>{{ change }}</li>
-            {% endfor %}
-        </ul>
+
+        {% for section in entry.sections %}
+        <div class="cl-section cl-{{ section.slug }}">
+            <h3 class="cl-category">{{ section.name }}</h3>
+            <ul class="cl-entries">
+                {% for item in section.entries %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
     </article>
     {% endfor %}
     {% endif %}
+
+    <p class="cl-foot">
+        Versioning follows <a href="https://semver.org" target="_blank" rel="noopener">Semantic Versioning</a>.
+        The source of this page is
+        <a href="https://github.com/klappstuhlpy/Percy-v2/blob/master/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.
+    </p>
 </div>
 {% endblock %}
