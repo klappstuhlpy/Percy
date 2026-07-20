@@ -1,6 +1,3 @@
-# Fetch the private klappstuhl_me-shared git dependency with the git CLI rather
-# than built-in libgit2, so SSH auth via the user's agent/~/.ssh config works
-# reliably (especially on Windows). CI needs an SSH key with read access to
-# klappstuhl_me-shared.
-[net]
-git-fetch-with-cli = true
+# kls-core is fetched over public HTTPS, so libgit2 handles it and no SSH agent,
+# credential helper, or `git-fetch-with-cli` escape hatch is needed. A clean
+# checkout builds with nothing but a Rust toolchain.

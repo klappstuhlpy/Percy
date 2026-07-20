@@ -769,7 +769,7 @@ dependencies = [
 [[package]]
 name = "kls-ui"
 version = "0.1.0"
-source = "git+ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared?tag=v0.1.12#17d0f3b0de457bb80c66874f6409a52283a316f5"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.1.0#f4e036a16c8a9820328979ff773bdd15a4271942"
 dependencies = [
  "axum",
 ]
@@ -777,7 +777,7 @@ dependencies = [
 [[package]]
 name = "kls-web-core"
 version = "0.1.0"
-source = "git+ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared?tag=v0.1.12#17d0f3b0de457bb80c66874f6409a52283a316f5"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.1.0#f4e036a16c8a9820328979ff773bdd15a4271942"
 dependencies = [
  "anyhow",
  "askama",
@@ -970,7 +970,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "percy-client"
 version = "0.1.0"
-source = "git+ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared?tag=v0.1.12#17d0f3b0de457bb80c66874f6409a52283a316f5"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.1.0#f4e036a16c8a9820328979ff773bdd15a4271942"
 dependencies = [
  "reqwest",
  "serde",

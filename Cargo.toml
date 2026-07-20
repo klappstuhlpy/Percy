@@ -5,10 +5,10 @@ edition = "2021"
 license = "AGPL-v3"
 description = "Percy dashboard — standalone web binary built on the shared klappstuhl.me kernel."
 
-# The three shared crates come from the klappstuhl_me-shared repo as a
-# tag-pinned git dependency (see DASHBOARD_DECOUPLING_PLAN.md, Phase 5) — the
-# same pin the main klappstuhl_me site uses, so both apps share one design/auth/
-# API-client foundation. Bump the tag in lock-step with klappstuhl_me.
+# The three shared crates come from the public kls-core repo as a tag-pinned git
+# dependency over HTTPS — the same pin the main klappstuhl_me site uses, so both
+# apps share one design/auth/API-client foundation. Bump the tag in lock-step
+# with klappstuhl_me.
 [dependencies]
 anyhow = "1.0.80"
 async-trait = "0.1.77"
@@ -20,9 +20,9 @@ dirs = "5.0.1"
 # Renders the public legal docs (fetched as CommonMark from the canonical GitHub
 # repo) and the local command-syntax guide to HTML.
 pulldown-cmark = "0.10"
-kls-ui = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.12" }
-kls-web-core = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.12" }
-percy-client = { git = "ssh://git@github.com/klappstuhlpy/klappstuhl_me-shared", tag = "v0.1.12" }
+kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.1.0" }
+kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.1.0" }
+percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.1.0" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.

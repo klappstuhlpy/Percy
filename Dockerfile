@@ -1,34 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1 – builder
 #
-# Official Rust image. git + openssh-client are needed because the shared crates
-# (kls-web-core / kls-ui / percy-client) are pulled from the PRIVATE
-# klappstuhlpy/klappstuhl_me-shared repo as a tag-pinned SSH git dependency.
-# .cargo/config.toml sets net.git-fetch-with-cli so cargo uses the git CLI + SSH.
+# Official Rust image. git is needed because the shared crates (kls-web-core /
+# kls-ui / percy-client) are pulled from the public klappstuhlpy/kls-core repo as
+# a tag-pinned HTTPS git dependency — no credentials required.
 # TLS is rustls (no OpenSSL) and SQLite is bundled, so no libssl/pkg-config here.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM rust:1.88-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    openssh-client \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-
-# Seed github.com's host key so the SSH fetch doesn't fail strict host
-# verification, then forward an SSH key at build time via BuildKit's ssh mount.
-# Build with:  DOCKER_BUILDKIT=1 docker compose build   (BuildKit is default on
-# modern Docker; the invoking shell's SSH agent must hold a key with read access
-# to klappstuhlpy/klappstuhl_me-shared).
-RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
 # BuildKit cache mounts persist the cargo registry/git checkouts and target/ dir
 # across builds (incremental recompiles on a `git pull`). Because target/ is a
 # cache mount (not a layer), copy the finished binary out before the RUN ends.
 COPY . .
-RUN --mount=type=ssh \
-    --mount=type=cache,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/target \
     cargo build --release \
