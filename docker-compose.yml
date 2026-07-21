@@ -3,13 +3,6 @@ services:
     container_name: percy-dashboard
     build:
       context: .
-      # Forward the host SSH agent into the build so cargo can fetch the private
-      # klappstuhl_me-shared git dependency over SSH. The invoking shell's agent
-      # must hold a key with read access to klappstuhlpy/klappstuhl_me-shared.
-      # Requires BuildKit (default on modern Docker). If you have no agent, pass
-      # the key file directly:  docker compose build --ssh default=$HOME/.ssh/id_ed25519
-      ssh:
-        - default=$HOME/.ssh/id_ed25519
     image: percy-dashboard:latest
     restart: unless-stopped
 

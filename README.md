@@ -44,7 +44,7 @@ Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──
   HTTP API, which owns the database and cache invalidation — the dashboard **never** touches
   Percy's PostgreSQL directly.
 - **Shared foundation.** Its design system, signed-cookie crypto, and Percy API client come
-  from the tag-pinned [`klappstuhl_me-shared`](https://github.com/klappstuhlpy/klappstuhl_me-shared)
+  from the tag-pinned [`kls-core`](https://github.com/klappstuhlpy/kls-core)
   crates, so it stays visually and behaviourally consistent with the main site — without a common monolith.
 
 ---
@@ -64,7 +64,6 @@ Browser ──▶ percy-dashboard (this app) ──▶ Percy internal API ──
 ## Quick start (standalone)
 
 ```bash
-# 1. Build (needs SSH access to the private klappstuhl_me-shared repo — see Development)
 cargo run
 # → writes a default config with a freshly generated signing key on first run, then
 #   serves on http://127.0.0.1:8091
@@ -178,10 +177,6 @@ Two flows require the optional scan token: **poll banner upload** and **tag CSV 
 cargo build && cargo test     # build + run the test suite
 cargo fmt && cargo clippy     # format (width 120) + lint (kept clean)
 ```
-
-- **Private dependency.** The `klappstuhl_me-shared` crates are pulled over SSH; you need an SSH key with read access to that repo. `.cargo/config.toml` sets `net.git-fetch-with-cli = true` so SSH auth is reliable (especially on Windows). CI/Docker must forward an SSH key (`--mount=type=ssh`).
-- **Pinned versions.** The shared crates are pinned by tag (currently `v0.1.5`); bump in lock-step with klappstuhl.me when cutting a new shared release. `Cargo.lock` is committed.
-- **Data cutover.** Migrating the two owned tables from the old monolith DB is a separate, gated step — see `docs/DATA_IMPORT_RUNBOOK.md`.
 
 ---
 
