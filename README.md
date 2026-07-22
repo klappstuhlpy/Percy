@@ -203,4 +203,4 @@ docker compose up --build -d        # build + start
 
 ## License
 
-[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0) (per `Cargo.toml`).
+[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0)
