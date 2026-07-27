@@ -6,7 +6,7 @@ services:
     image: percy-dashboard:latest
     restart: unless-stopped
 
-    environment:
+    # environment:
       # Percy's internal API (the dashboard's one hard runtime dependency).
       # These override blank config.json fields; set them here or in config.json.
       # - PERCY_API_URL=http://host.docker.internal:8090
