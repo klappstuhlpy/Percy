@@ -16,3 +16,10 @@ services:
 
     ports:
       - "8090:8090"
+
+    networks:
+      - homelab
+
+networks:
+  homelab:
+    external: true
