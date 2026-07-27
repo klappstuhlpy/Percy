@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Timeout duration validation helper for the internal API.
 - `codeimage`, `chart`, and `mdpdf` render commands via klappstuhl.me integration.
 
+### Removed
+
+- SSH tunnel logic for the database and Ollama (and the `sshtunnel`/`paramiko`
+  dependencies). Percy now connects directly to the configured `DATABASE_HOST`
+  and `OLLAMA_HOST`; the `SSH_TUNNEL_*` and `OLLAMA_TUNNEL_*` env vars are gone.
+
 ## [2.4.0] - 2026-07-08
 
 ### Added

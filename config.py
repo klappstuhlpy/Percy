@@ -111,19 +111,13 @@ class DatabaseConfig:
     """Represents the configuration for the database."""
 
     # Beta mode (Windows/macOS local dev) points at a separate ``percy_beta`` database so
-    # local testing never touches production data — the SSH tunnel still reaches the same
-    # Postgres host, only the database name differs. Override either with ``DATABASE_NAME``.
+    # local testing never touches production data — same Postgres host, only the database
+    # name differs. Override either with ``DATABASE_NAME``.
     database: str = env('DATABASE_NAME') or ('percy_beta' if beta else 'percy')
     user: str = 'percy'
     password: str = env('DATABASE_PASSWORD')
-    host: str = env('DATABASE_HOST')
+    host: str = env('DATABASE_HOST') or '192.168.178.102'
     port: int = int(env('DATABASE_PORT') or 5432)
-
-    ssh_host: str | None = env('SSH_TUNNEL_HOST')
-    ssh_port: int = int(env('SSH_TUNNEL_PORT') or '22')
-    ssh_user: str | None = env('SSH_TUNNEL_USER')
-    ssh_key_path: str | None = env('SSH_TUNNEL_KEY_PATH')
-    ssh_key_passphrase: str | None = env('SSH_TUNNEL_KEY_PASSPHRASE')
 
     @classmethod
     def to_url(cls) -> str:
@@ -184,7 +178,7 @@ github_key: str | None = env('GITHUB_TOKEN')
 # degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
 ollama = SimpleNamespace(
     enabled=(env('OLLAMA_ENABLED') or 'true').strip().lower() not in ('false', '0', 'no', 'off'),
-    host=env('OLLAMA_HOST') or 'http://127.0.0.1:11434',
+    host=env('OLLAMA_HOST') or 'http://192.168.178.102:11434',
     fast_model=env('OLLAMA_FAST_MODEL') or 'qwen2.5:1.5b',
     balanced_model=env('OLLAMA_BALANCED_MODEL') or 'qwen2.5-coder:3b',
     smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
@@ -204,12 +198,6 @@ ollama = SimpleNamespace(
     # time (Ollama's default is 5m). Accepts an Ollama duration string ('30m', '1h', '-1' = forever).
     keep_alive=env('OLLAMA_KEEP_ALIVE') or '30m',
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
-    # SSH tunnel (beta/Windows testing only): when running off-Linux with the shared
-    # SSH_TUNNEL_* credentials set, Percy forwards a local port to where Ollama listens on
-    # the remote host (default 127.0.0.1:11434) and talks to it over the tunnel — mirroring
-    # the database tunnel. On Linux it connects to ``host`` directly.
-    tunnel_remote_host=env('OLLAMA_TUNNEL_REMOTE_HOST') or '127.0.0.1',
-    tunnel_remote_port=int(env('OLLAMA_TUNNEL_REMOTE_PORT') or 11434),
 )
 
 dbots_key: str | None = env('DBOTS_TOKEN')

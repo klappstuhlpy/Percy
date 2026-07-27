@@ -15,7 +15,6 @@ import asyncpg
 import dateutil.tz
 import discord
 from discord.utils import MISSING
-from sshtunnel import SSHTunnelForwarder
 
 from app.core.permissions import CommandOverride
 from app.database.repositories import (
@@ -137,12 +136,11 @@ class _Database:
         Cache-invalidation signal hub shared with repositories and BaseRecord instances.
     """
 
-    __slots__ = ("_connect_task", "_internal_pool", "_ready", "_ssh_tunnel", "bot", "loop", "query_tracker", "signals")
+    __slots__ = ("_connect_task", "_internal_pool", "_ready", "bot", "loop", "query_tracker", "signals")
 
     if TYPE_CHECKING:
         loop: asyncio.AbstractEventLoop
         _connect_task: asyncio.Task
-        _ssh_tunnel: SSHTunnelForwarder | None
         query_tracker: QueryTracker
         signals: CacheSignalHub
 
@@ -152,14 +150,12 @@ class _Database:
         self.signals = CacheSignalHub()
         self.query_tracker = QueryTracker()
         self._internal_pool: asyncpg.Pool | None = None
-        self._ssh_tunnel: SSHTunnelForwarder | None = None
         self._ready: asyncio.Event = asyncio.Event()
         self._connect_task: asyncio.Task = self.loop.create_task(self._connect())
 
     async def _connect(self) -> None:
         """Builds the pool and applies pending migrations; shuts the bot down on failure."""
         try:
-            await self._open_ssh_tunnel()
             self._internal_pool = await self.create_pool()
             async with self.acquire() as conn:
                 await MigrationRunner().upgrade(conn)  # type: ignore[arg-type]
@@ -181,26 +177,6 @@ class _Database:
             # raise a clear error rather than hanging on ``_ready``.
             self._ready.set()
 
-    async def _open_ssh_tunnel(self) -> None:
-        """Opens an SSH tunnel to the database host when running in beta mode with SSH config set."""
-        import config as app_config
-
-        if not app_config.beta or not DatabaseConfig.ssh_host:
-            return
-
-        self._ssh_tunnel = SSHTunnelForwarder(
-            (DatabaseConfig.ssh_host, DatabaseConfig.ssh_port),
-            ssh_username=DatabaseConfig.ssh_user,
-            ssh_pkey=DatabaseConfig.ssh_key_path,
-            ssh_private_key_password=DatabaseConfig.ssh_key_passphrase,
-            remote_bind_address=(DatabaseConfig.host, DatabaseConfig.port),
-        )
-        await asyncio.to_thread(self._ssh_tunnel.start)
-
-        DatabaseConfig.host = '127.0.0.1'
-        DatabaseConfig.port = self._ssh_tunnel.local_bind_port
-        log.info("SSH tunnel open: localhost:%d -> %s:%d", self._ssh_tunnel.local_bind_port, DatabaseConfig.ssh_host, 5432)
-
     @classmethod
     async def create_pool(cls) -> asyncpg.Pool:
         """Creates the connection pool, registering a JSONB text codec on each connection."""
@@ -211,13 +187,10 @@ class _Database:
         return await asyncpg.create_pool(init=init, **DatabaseConfig.pool_kwargs())  # type: ignore[arg-type]
 
     async def close(self) -> None:
-        """Closes the connection pool and SSH tunnel (if active)."""
+        """Closes the connection pool."""
         if self._internal_pool is not None:
             await self._internal_pool.close()
             self._internal_pool = None
-        if self._ssh_tunnel is not None:
-            self._ssh_tunnel.stop()
-            self._ssh_tunnel = None
 
     async def wait(self: DatabaseT) -> DatabaseT:
         """|coro| Waits for the pool to finish connecting and returns the database instance."""

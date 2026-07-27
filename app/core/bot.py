@@ -56,7 +56,6 @@ from app.utils.lock import LockedResourceError
 from app.utils.metrics import MetricsCollector
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
 from config import (
-    DatabaseConfig,
     Emojis,
     allowed_mentions,
     beta,
@@ -78,8 +77,6 @@ from config import (
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Generator, Iterable
-
-    from sshtunnel import SSHTunnelForwarder
 
 GuildFeatureT = TypeVar('GuildFeatureT', bound=list[tuple[str, str]] | Any)
 
@@ -179,10 +176,7 @@ class Bot(commands.Bot):
 
         self.initial_extensions: list[str] = EXTENSIONS
         self._setup_finished: asyncio.Event = asyncio.Event()
-        #: SSH tunnel to the remote Ollama, opened only in beta mode (see _open_ollama_tunnel).
-        self._ollama_tunnel: SSHTunnelForwarder | None = None
-        #: The URL the AI client actually talks to (tunnel URL in beta, ``ollama_config.host``
-        #: on Linux). Set in setup_hook; used for accurate health logging.
+        #: The URL the AI client talks to (``ollama_config.host``). Used for health logging.
         self._ollama_host: str = ollama_config.host
         #: Throttles AI command-routing so a stream of prefix-misses can't hammer the model.
         self._ai_route_cooldown: commands.CooldownMapping = commands.CooldownMapping.from_cooldown(
@@ -270,13 +264,11 @@ class Bot(commands.Bot):
 
         self.timers = TimerManager(self)
         self.render = RenderingService()
-        # Beta/Windows testing tunnels to the remote Ollama over SSH; Linux uses host directly.
-        ollama_host = await self._open_ollama_tunnel() or ollama_config.host
-        self._ollama_host = ollama_host
+        self._ollama_host = ollama_config.host
         self.ai = AIService(
             OllamaClient(
                 self.session,
-                host=ollama_host,
+                host=ollama_config.host,
                 default_model=ollama_config.balanced_model,
                 keep_alive=ollama_config.keep_alive,
             ),
@@ -300,38 +292,6 @@ class Bot(commands.Bot):
         jishaku.Flags.HIDE = True
         jishaku.Flags.NO_UNDERSCORE = True
         jishaku.Flags.NO_DM_TRACEBACK = True
-
-    async def _open_ollama_tunnel(self) -> str | None:
-        """Open an SSH tunnel to the remote Ollama in beta mode and return the local URL.
-
-        Mirrors the database SSH tunnel: only active off-Linux (``beta``) with the shared
-        ``SSH_TUNNEL_*`` credentials set. Forwards a local port to where Ollama listens on
-        the SSH host (``OLLAMA_TUNNEL_REMOTE_*``, default ``127.0.0.1:11434``) so Windows
-        testing reaches it directly over SSH instead of through the public Cloudflare host.
-        Returns the ``http://127.0.0.1:<local_port>`` URL to use, or ``None`` to connect to
-        the configured ``host`` directly (Linux/production).
-        """
-        if not beta or not DatabaseConfig.ssh_host:
-            return None
-
-        from sshtunnel import SSHTunnelForwarder
-
-        tunnel = SSHTunnelForwarder(
-            (DatabaseConfig.ssh_host, DatabaseConfig.ssh_port),
-            ssh_username=DatabaseConfig.ssh_user,
-            ssh_pkey=DatabaseConfig.ssh_key_path,
-            ssh_private_key_password=DatabaseConfig.ssh_key_passphrase,
-            remote_bind_address=(ollama_config.tunnel_remote_host, ollama_config.tunnel_remote_port),
-        )
-        await asyncio.to_thread(tunnel.start)
-        self._ollama_tunnel = tunnel
-
-        local_url = f'http://127.0.0.1:{tunnel.local_bind_port}'
-        self.log.info(
-            'Ollama SSH tunnel open: %s -> %s:%d', local_url,
-            ollama_config.tunnel_remote_host, ollama_config.tunnel_remote_port,
-        )
-        return local_url
 
     async def _check_ai_health(self) -> None:
         """Probe the AI engine on startup and log whether it is reachable.
@@ -1228,9 +1188,6 @@ class Bot(commands.Bot):
             await self.session.close()
         if hasattr(self, 'db'):
             await self.db.close()
-        if self._ollama_tunnel is not None:
-            self._ollama_tunnel.stop()
-            self._ollama_tunnel = None
 
         await super().close()
 
