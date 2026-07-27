@@ -116,7 +116,7 @@ class DatabaseConfig:
     database: str = env('DATABASE_NAME') or ('percy_beta' if beta else 'percy')
     user: str = 'percy'
     password: str = env('DATABASE_PASSWORD')
-    host: str = env('DATABASE_HOST') or '192.168.178.102'
+    host: str = (env('DATABASE_HOST') or '192.168.178.102') if beta else 'postgres'
     port: int = int(env('DATABASE_PORT') or 5432)
 
     @classmethod
