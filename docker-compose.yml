@@ -6,9 +6,6 @@ services:
 
     env_file: .env
 
-    # Host networking: container shares host network stack
-    network_mode: host
-
     # Helps debugging logs (optional but very useful)
     tty: true
     stdin_open: true
@@ -16,3 +13,6 @@ services:
     # Ensure container uses same timezone as host (logs consistency)
     environment:
       PYTHONUNBUFFERED: "1"
+
+    ports:
+      - "8090:8090"
