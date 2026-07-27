@@ -9,7 +9,7 @@ services:
     environment:
       # Percy's internal API (the dashboard's one hard runtime dependency).
       # These override blank config.json fields; set them here or in config.json.
-      - PERCY_API_URL=http://host.docker.internal:8090
+      # - PERCY_API_URL=http://host.docker.internal:8090
       # - PERCY_API_TOKEN=<same as Percy's INTERNAL_API_TOKEN>
       # Optional: klappstuhl.me API token (images:read) for upload virus scanning.
       # - PERCY_SCAN_TOKEN=<token>
