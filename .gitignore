@@ -6,3 +6,5 @@
 /.idea
 reference/
 /reference
+.env
+/data
