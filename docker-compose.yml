@@ -14,8 +14,18 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
 
-    ports:
-      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as u, urllib.error as e\ntry: u.urlopen(\"http://localhost:8090/\", timeout=3)\nexcept e.HTTPError: pass" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
     networks:
       - homelab
