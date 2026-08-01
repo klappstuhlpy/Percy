@@ -116,7 +116,7 @@ class DatabaseConfig:
     database: str = env('DATABASE_NAME') or ('percy_beta' if beta else 'percy')
     user: str = 'percy'
     password: str = env('DATABASE_PASSWORD')
-    host: str = (env('DATABASE_HOST') or '192.168.178.102') if beta else 'postgres'
+    host: str = env('DATABASE_HOST') or "localhost"
     port: int = int(env('DATABASE_PORT') or 5432)
 
     @classmethod
@@ -178,7 +178,7 @@ github_key: str | None = env('GITHUB_TOKEN')
 # degrade gracefully when the host is unreachable; set OLLAMA_ENABLED=false to hard-disable.
 ollama = SimpleNamespace(
     enabled=(env('OLLAMA_ENABLED') or 'true').strip().lower() not in ('false', '0', 'no', 'off'),
-    host=env('OLLAMA_HOST') or 'http://192.168.178.102:11434',
+    host=env('OLLAMA_HOST') or "http://localhost:11434",
     fast_model=env('OLLAMA_FAST_MODEL') or 'qwen2.5:1.5b',
     balanced_model=env('OLLAMA_BALANCED_MODEL') or 'qwen2.5-coder:3b',
     smart_model=env('OLLAMA_SMART_MODEL') or 'llama3.2:3b',
