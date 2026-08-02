@@ -200,6 +200,16 @@ ollama = SimpleNamespace(
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
 )
 
+# The Movie Database (https://www.themoviedb.org) — metadata source for the universe
+# watchlist. Optional: with no token the ingest CLI refuses to run and the watchlist
+# serves whatever is already in the database.
+tmdb = SimpleNamespace(
+    token=env('TMDB_API_TOKEN') or None,
+    language=env('TMDB_LANGUAGE') or 'en-US',
+    timeout=float(env('TMDB_TIMEOUT') or 20.0),
+    regions=tuple(r.strip().upper() for r in (env('WATCHLIST_REGIONS') or 'US,GB,DE').split(',') if r.strip()),
+)
+
 dbots_key: str | None = env('DBOTS_TOKEN')
 top_gg_key: str | None = env('TOPGG_TOKEN')
 discordbotlist_key: str | None = env('DISCORDBOTLIST_TOKEN')

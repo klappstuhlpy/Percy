@@ -1,0 +1,93 @@
+"""Tests for :class:`~app.clients.tmdb.TMDBClient`.
+
+Reuses the fake-session pattern from ``tests/test_clients.py`` (transport is not
+re-tested here — that's :class:`~app.clients.base.BaseHTTPClient`'s job).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.clients.tmdb import TMDBClient, image_url
+from tests.test_clients import FakeResponse, FakeSession
+
+
+def make_client(responses: list[FakeResponse], *, token: str | None = 'tok') -> TMDBClient:
+    return TMDBClient(FakeSession(responses), token=token)  # type: ignore[arg-type]
+
+
+async def test_bearer_header_sent_on_request() -> None:
+    client = make_client([FakeResponse(json_data={})], token='secret-token')
+    session = client.session
+
+    await client.movie(1)
+
+    _method, _url, kwargs = session.calls[0]  # type: ignore[attr-defined]
+    assert kwargs['headers']['Authorization'] == 'Bearer secret-token'
+
+
+async def test_available_false_without_token() -> None:
+    client = make_client([], token=None)
+    assert client.available is False
+
+
+async def test_available_true_with_token() -> None:
+    client = make_client([], token='tok')
+    assert client.available is True
+
+
+async def test_movie_hits_correct_url_with_append_to_response() -> None:
+    session = FakeSession([FakeResponse(json_data={'id': 1})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    result = await client.movie(42)
+
+    assert result == {'id': 1}
+    _method, url, kwargs = session.calls[0]
+    assert url == 'https://api.themoviedb.org/3/movie/42'
+    assert kwargs['params']['append_to_response'] == 'external_ids'
+
+
+async def test_tv_hits_correct_url_with_append_to_response() -> None:
+    session = FakeSession([FakeResponse(json_data={'id': 7})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    result = await client.tv(7)
+
+    assert result == {'id': 7}
+    _method, url, kwargs = session.calls[0]
+    assert url == 'https://api.themoviedb.org/3/tv/7'
+    assert kwargs['params']['append_to_response'] == 'external_ids'
+
+
+async def test_watch_providers_rejects_invalid_kind() -> None:
+    client = make_client([])
+
+    with pytest.raises(ValueError, match="kind must be 'movie' or 'tv'"):
+        await client.watch_providers('film', 1)
+
+
+async def test_search_rejects_invalid_kind() -> None:
+    client = make_client([])
+
+    with pytest.raises(ValueError, match="kind must be 'movie' or 'tv'"):
+        await client.search('film', 'query')
+
+
+async def test_configuration_caches_within_window() -> None:
+    session = FakeSession([FakeResponse(json_data={'images': {}})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    first = await client.configuration()
+    second = await client.configuration()
+
+    assert first == second == {'images': {}}
+    assert len(session.calls) == 1  # only one request issued
+
+
+async def test_image_url_none_in_none_out() -> None:
+    assert image_url(None) is None
+
+
+async def test_image_url_builds_default_size() -> None:
+    assert image_url('/x.jpg') == 'https://image.tmdb.org/t/p/w342/x.jpg'
