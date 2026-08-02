@@ -8,12 +8,24 @@ from __future__ import annotations
 
 import pytest
 
+import config
 from app.clients.tmdb import TMDBClient, image_url
 from tests.test_clients import FakeResponse, FakeSession
 
 
 def make_client(responses: list[FakeResponse], *, token: str | None = 'tok') -> TMDBClient:
     return TMDBClient(FakeSession(responses), token=token)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def no_configured_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blanks ``config.tmdb.token`` so ``token=None`` really means "no token".
+
+    ``TMDBClient`` falls back to the configured token when none is passed, so a developer with
+    ``TMDB_API_TOKEN`` set in ``.env`` would otherwise get a *configured* client here and these
+    assertions would flip.
+    """
+    monkeypatch.setattr(config.tmdb, 'token', None)
 
 
 async def test_bearer_header_sent_on_request() -> None:
@@ -26,7 +38,7 @@ async def test_bearer_header_sent_on_request() -> None:
     assert kwargs['headers']['Authorization'] == 'Bearer secret-token'
 
 
-async def test_no_authorization_header_without_token() -> None:
+async def test_no_authorization_header_without_token(no_configured_token: None) -> None:
     client = make_client([FakeResponse(json_data={})], token=None)
     session = client.session
 
@@ -36,7 +48,7 @@ async def test_no_authorization_header_without_token() -> None:
     assert 'Authorization' not in kwargs['headers']
 
 
-async def test_available_false_without_token() -> None:
+async def test_available_false_without_token(no_configured_token: None) -> None:
     client = make_client([], token=None)
     assert client.available is False
 
