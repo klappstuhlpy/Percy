@@ -321,7 +321,7 @@ class WatchlistRepository(BaseRepository):
         if not entries:
             return
         # Validate all statuses upfront before any query is issued.
-        for title_id, status, updated_at in entries:
+        for _, status, _ in entries:
             if status not in _PROGRESS_STATUSES:
                 raise ValueError(f"Invalid watch progress status: {status!r}")
         query = """
