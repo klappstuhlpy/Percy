@@ -63,6 +63,10 @@ class TMDBClient(BaseHTTPClient):
         return self.token is not None
 
     def _headers(self) -> dict[str, str]:
+        # No token -> no Authorization header (TMDB 401s and BaseHTTPClient raises;
+        # sending literal "Bearer None" would be misleading in logs/traces).
+        if self.token is None:
+            return {}
         return {'Authorization': f'Bearer {self.token}'}
 
     def _params(self, **extra: Any) -> dict[str, Any]:
@@ -110,7 +114,13 @@ class TMDBClient(BaseHTTPClient):
         return await self._get(f'collection/{collection_id}', params=self._params())
 
     async def search(self, kind: str, query: str, *, year: int | None = None) -> Any:
-        """``GET search/{kind}``; ``kind`` is ``'movie'`` or ``'tv'``."""
+        """``GET search/{kind}``; ``kind`` is ``'movie'`` or ``'tv'``.
+
+        TMDB's ``/search/movie`` takes a ``year`` param; ``/search/tv`` has no such param
+        and only recognises ``first_air_date_year`` — so ``year`` is sent under the
+        matching name per ``kind`` (the public signature stays a single ``year`` arg).
+        """
         if kind not in _SEARCH_KINDS:
             raise ValueError(f"kind must be 'movie' or 'tv', got {kind!r}")
-        return await self._get(f'search/{kind}', params=self._params(query=query, year=year))
+        year_field = 'year' if kind == 'movie' else 'first_air_date_year'
+        return await self._get(f'search/{kind}', params=self._params(query=query, **{year_field: year}))

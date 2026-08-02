@@ -26,6 +26,16 @@ async def test_bearer_header_sent_on_request() -> None:
     assert kwargs['headers']['Authorization'] == 'Bearer secret-token'
 
 
+async def test_no_authorization_header_without_token() -> None:
+    client = make_client([FakeResponse(json_data={})], token=None)
+    session = client.session
+
+    await client.movie(1)
+
+    _method, _url, kwargs = session.calls[0]  # type: ignore[attr-defined]
+    assert 'Authorization' not in kwargs['headers']
+
+
 async def test_available_false_without_token() -> None:
     client = make_client([], token=None)
     assert client.available is False
@@ -72,6 +82,28 @@ async def test_search_rejects_invalid_kind() -> None:
 
     with pytest.raises(ValueError, match="kind must be 'movie' or 'tv'"):
         await client.search('film', 'query')
+
+
+async def test_search_movie_sends_year_param() -> None:
+    session = FakeSession([FakeResponse(json_data={})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    await client.search('movie', 'q', year=2020)
+
+    _method, _url, kwargs = session.calls[0]  # type: ignore[attr-defined]
+    assert kwargs['params']['year'] == 2020
+    assert 'first_air_date_year' not in kwargs['params']
+
+
+async def test_search_tv_sends_first_air_date_year_param() -> None:
+    session = FakeSession([FakeResponse(json_data={})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    await client.search('tv', 'q', year=2020)
+
+    _method, _url, kwargs = session.calls[0]  # type: ignore[attr-defined]
+    assert kwargs['params']['first_air_date_year'] == 2020
+    assert 'year' not in kwargs['params']
 
 
 async def test_configuration_caches_within_window() -> None:
