@@ -2,8 +2,10 @@
 .idea/
 __pycache__/
 ruff_cache/
-# Runtime directories (generated state stores and rotating logs)
-/data/
+# Runtime directories (generated state stores and rotating logs). data/universes/ is
+# hand-curated watchlist seed content, not runtime state, so it stays tracked.
+/data/*
+!/data/universes/
 /logs/
 percy.log
 .env

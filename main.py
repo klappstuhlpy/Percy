@@ -7,13 +7,18 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, ClassVar
 
+import aiohttp
 import asyncpg
 import click
 import discord
 
+import config
+from app.clients.base import HTTPClientError
+from app.clients.tmdb import TMDBClient
 from app.core import Bot
-from app.database import MigrationRunner
+from app.database import Database, MigrationRunner
 from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
+from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
 from config import DatabaseConfig, logs_path
 
 try:
@@ -36,6 +41,10 @@ __all__ = (
     'status',
     'upgrade',
     'verify',
+    'watchlist',
+    'watchlist_lint',
+    'watchlist_search',
+    'watchlist_sync',
 )
 
 
@@ -378,6 +387,141 @@ def reseal(version: int | None, reseal_all: bool, dry_run: bool) -> None:
         click.secho(f'Dry run — {changed} migration(s) would be resealed. Re-run without --dry-run to apply.', fg='yellow')
     else:
         click.secho(f'Resealed {changed} migration(s). `db verify` should now be clean.', fg='green', bold=True)
+
+
+class _NullBot:
+    """Minimal stand-in so :class:`Database` can be constructed outside a running bot.
+
+    ``Database`` only ever touches ``self.bot`` to call ``.close()`` if the connection pool
+    fails to build; the watchlist repository never touches ``bot`` at all. Building a real
+    ``app.core.Bot`` here would pull in the Discord gateway/cog loader for no reason.
+    """
+
+    async def close(self) -> None:
+        pass
+
+
+@main.group('watchlist', short_help='Universe watchlist seed ingest', options_metavar='[options]')
+def watchlist() -> None:
+    """Turns hand-curated TOML seed files (``data/universes/*.toml``) plus TMDB metadata into
+    ``watch_*`` table rows. See ``app/services/watchlist/`` for the seed format and ingest logic.
+    """
+
+
+def _seed_paths(universe: str | None) -> list[Path]:
+    """Every seed file in ``data/universes/``, optionally filtered to one filename stem."""
+    directory = config.data_path / 'universes'
+    paths = sorted(directory.glob('*.toml'))
+    if universe is not None:
+        paths = [p for p in paths if p.stem == universe]
+    return paths
+
+
+_universe_option = click.option(
+    '--universe', '-u', default=None, help='Only this universe (matches the seed filename stem, e.g. "mcu").',
+)
+
+
+@watchlist.command('lint')
+@_universe_option
+def watchlist_lint(universe: str | None) -> None:
+    """Validates every seed file. No network, no database."""
+    paths = _seed_paths(universe)
+    if not paths:
+        click.secho('No seed files found in data/universes/.', fg='green')
+        return
+
+    any_invalid = False
+    for path in paths:
+        try:
+            seed = load_seed(path)
+        except SeedError as exc:
+            any_invalid = True
+            click.secho(f'{path.name}: {len(exc.problems)} problem(s):', fg='red', bold=True)
+            for problem in exc.problems:
+                click.secho(f'  ! {problem}', fg='red')
+        else:
+            click.secho(f'{path.name}: OK ({seed.slug}, {len(seed.titles)} title(s)).', fg='green')
+
+    if any_invalid:
+        raise SystemExit(1)
+
+
+@watchlist.command('sync')
+@_universe_option
+@click.option('--dry-run', is_flag=True, help='Fetch from TMDB but write nothing; report what would change.')
+def watchlist_sync(universe: str | None, dry_run: bool) -> None:
+    """Fetches TMDB metadata for every seed and upserts it into the watchlist tables."""
+    if config.tmdb.token is None:
+        click.secho('TMDB_API_TOKEN is not set — refusing to sync.', fg='red')
+        raise SystemExit(1)
+
+    paths = _seed_paths(universe)
+    if not paths:
+        click.secho('No seed files found in data/universes/.', fg='green')
+        return
+
+    seeds: list[UniverseSeed] = []
+    for path in paths:
+        try:
+            seeds.append(load_seed(path))
+        except SeedError as exc:
+            click.secho(f'{path.name}: {len(exc.problems)} problem(s):', fg='red', bold=True)
+            for problem in exc.problems:
+                click.secho(f'  ! {problem}', fg='red')
+            raise SystemExit(1) from None
+
+    asyncio.run(_run_sync(seeds, dry_run=dry_run))
+
+
+async def _run_sync(seeds: list[UniverseSeed], *, dry_run: bool) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, syncs, closes both."""
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        client = TMDBClient(session)
+        ingest = WatchlistIngest(client, db.watchlist)
+        for seed in seeds:
+            report = await ingest.sync(seed, regions=config.tmdb.regions, dry_run=dry_run)
+            click.echo(report.summary())
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
+
+
+@watchlist.command('search')
+@click.argument('kind', type=click.Choice(('movie', 'tv')))
+@click.argument('query')
+def watchlist_search(kind: str, query: str) -> None:
+    """Searches TMDB for a title — a curation helper for finding ``tmdb_id`` values."""
+    if config.tmdb.token is None:
+        click.secho('TMDB_API_TOKEN is not set — refusing to search.', fg='red')
+        raise SystemExit(1)
+
+    asyncio.run(_run_search(kind, query))
+
+
+async def _run_search(kind: str, query: str) -> None:
+    async with aiohttp.ClientSession() as session:
+        client = TMDBClient(session)
+        try:
+            data = await client.search(kind, query)
+        except HTTPClientError:
+            _fail('TMDB search failed.')
+            raise SystemExit(1) from None
+
+    results = data.get('results', [])
+    if not results:
+        click.secho('No results.', fg='yellow')
+        return
+
+    for result in results:
+        title = result.get('title') or result.get('name') or '?'
+        date = result.get('release_date') or result.get('first_air_date') or ''
+        year = date[:4] if date else '?'
+        click.echo(f'{result.get("id")} · {title} · {year}')
 
 
 if __name__ == '__main__':
