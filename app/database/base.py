@@ -46,6 +46,7 @@ from app.database.repositories import (
     TimersRepository,
     UsersRepository,
     VotesRepository,
+    WatchlistRepository,
 )
 from app.utils import BaseFlags, CancellableQueue, cache, flag_value
 from app.utils.query_tracker import QueryTracker
@@ -305,6 +306,7 @@ class Database(_Database):
     votes: VotesRepository
     event_webhooks: EventWebhooksRepository
     templates: GuildTemplatesRepository
+    watchlist: WatchlistRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -336,6 +338,7 @@ class Database(_Database):
         self.votes = VotesRepository(self)
         self.event_webhooks = EventWebhooksRepository(self)
         self.templates = GuildTemplatesRepository(self)
+        self.watchlist = WatchlistRepository(self)
 
         self._register_cache_signals()
 

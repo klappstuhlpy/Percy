@@ -26,6 +26,7 @@ from app.database.repositories.users import (
     UsersRepository,
     VotesRepository,
 )
+from app.database.repositories.watchlist import WatchlistRepository
 
 __all__ = (
     'AdminRepository',
@@ -57,4 +58,5 @@ __all__ = (
     'TimersRepository',
     'UsersRepository',
     'VotesRepository',
+    'WatchlistRepository',
 )
