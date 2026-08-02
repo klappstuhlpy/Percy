@@ -72,6 +72,16 @@ async def test_set_progress_upserts_with_last_write_wins(mock_db: MagicMock) -> 
     assert params == [1, 2, 'watched', now]
 
 
+async def test_set_progress_bulk_rejects_bad_status(mock_db: MagicMock) -> None:
+    repo = make_repo(mock_db)
+    now = datetime.datetime.now(datetime.UTC)
+
+    with pytest.raises(ValueError):
+        await repo.set_progress_bulk(1, [(2, 'deleted', now)])
+
+    mock_db.acquire.assert_not_called()
+
+
 async def test_upsert_prefs_rejects_unknown_column(mock_db: MagicMock) -> None:
     repo = make_repo(mock_db)
 

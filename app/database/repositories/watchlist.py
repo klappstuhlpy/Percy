@@ -320,6 +320,10 @@ class WatchlistRepository(BaseRepository):
         """Upserts many titles' watch status for a user in one batch, last-write-wins."""
         if not entries:
             return
+        # Validate all statuses upfront before any query is issued.
+        for title_id, status, updated_at in entries:
+            if status not in _PROGRESS_STATUSES:
+                raise ValueError(f"Invalid watch progress status: {status!r}")
         query = """
             INSERT INTO watch_progress (user_id, title_id, status, updated_at)
             VALUES ($1, $2, $3, $4)
