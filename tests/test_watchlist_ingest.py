@@ -604,3 +604,28 @@ async def test_sync_dry_run_performs_no_writes() -> None:
     assert not repo.importance
     assert report.dry_run is True
     assert report.titles_written == 1
+
+
+async def test_sync_resolves_credits_of_to_the_upserted_titles_row_id() -> None:
+    # child.credits_of names the *parent's tmdb_id* (1) -- set_credits_of must be called with
+    # the parent's resolved watch_titles.id, not 1 itself, and only after both are upserted
+    # (the "second pass" the credits_of resolution needs, since the parent's row id doesn't
+    # exist yet when the child itself is upserted).
+    parent = _title(tmdb_id=1)
+    child = _title(tmdb_id=2, story=2, release=2, credits_of=1)
+    seed = _seed((parent, child))
+
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 10}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    call_names = [call[0] for call in repo.calls]
+    upsert_indices = [i for i, name in enumerate(call_names) if name == 'upsert_title']
+    assert len(upsert_indices) == 2
+    assert call_names.index('set_credits_of') > max(upsert_indices)
+
+    # FakeWatchlistRepository.upsert_title returns incrementing ids in call order; this seed
+    # has no paths, so parent (upserted first) gets 1001 and child (upserted second) gets 1002.
+    assert repo.credits_of == {1002: 1001}

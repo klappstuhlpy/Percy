@@ -471,7 +471,10 @@ def watchlist_sync(universe: str | None, dry_run: bool) -> None:
                 click.secho(f'  ! {problem}', fg='red')
             raise SystemExit(1) from None
 
-    asyncio.run(_run_sync(seeds, dry_run=dry_run))
+    try:
+        asyncio.run(_run_sync(seeds, dry_run=dry_run))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while syncing the watchlist. Check your database connection.')
 
 
 async def _run_sync(seeds: list[UniverseSeed], *, dry_run: bool) -> None:
