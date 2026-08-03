@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .analytics import router as analytics_router
 from .backup import router as backup_router
+from .comics import router as comics_router
 from .content import router as content_router
 from .economy import router as economy_router
 from .gallery import router as gallery_router
@@ -35,4 +36,5 @@ ALL_ROUTERS = [
     subscriptions_router,
     gallery_router,
     watchlist_router,
+    comics_router,
 ]

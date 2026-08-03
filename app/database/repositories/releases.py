@@ -209,18 +209,39 @@ class ReleasesRepository(BaseRepository):
         return await self.fetch(
             "SELECT name, kind FROM comic_characters WHERE release_id = $1 ORDER BY name;", release_id)
 
-    async def list_series(self, brand: str, *, limit: int = 200) -> list[asyncpg.Record]:
-        """Fetches a brand's series with issue counts and latest release date."""
+    async def list_series(self, *, brand: str | None = None, limit: int = 200) -> list[asyncpg.Record]:
+        """Fetches series with issue counts and latest release date, optionally scoped to a brand.
+
+        Grouped by ``(series_slug, brand)``, not by slug alone: a series slug is derived from a
+        title, so two publishers *can* land on the same one. Grouping by slug alone would merge
+        their issue counts under whichever brand happened to sort first.
+        """
         query = """
-            SELECT series_slug, MIN(series_name) AS series_name,
+            SELECT series_slug, brand, MIN(series_name) AS series_name,
                    COUNT(*) AS issue_count, MAX(release_date) AS latest
             FROM comic_releases
-            WHERE brand = $1 AND series_slug IS NOT NULL
-            GROUP BY series_slug
+            WHERE series_slug IS NOT NULL AND ($1::text IS NULL OR brand = $1)
+            GROUP BY series_slug, brand
             ORDER BY latest DESC NULLS LAST
             LIMIT $2;
         """
         return await self.fetch(query, brand, limit)
+
+    async def list_series_releases(self, series_slug: str, *, brand: str | None = None) -> list[asyncpg.Record]:
+        """Fetches every release in one series, unordered.
+
+        ``brand`` scopes the lookup, and callers that know it should pass it: a series slug
+        comes from a title, so two publishers can collide on one, and a release's neighbours
+        must never be another publisher's book. It stays optional because a bare
+        ``/comics/series/{slug}`` URL has no brand to scope by.
+
+        The caller (the payload service) sorts these into reading order -- issue number
+        ascending on the leading digits, release date as the tiebreak -- since that comparison
+        belongs with the rest of the JSON shaping, not the SQL.
+        """
+        return await self.fetch(
+            "SELECT * FROM comic_releases WHERE series_slug = $1 AND ($2::text IS NULL OR brand = $2);",
+            series_slug, brand)
 
     async def list_names(self, table: str, *, brand: str | None = None, limit: int = 200) -> list[asyncpg.Record]:
         """Fetches distinct creator or character names with appearance counts.
