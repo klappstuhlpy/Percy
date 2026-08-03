@@ -1,0 +1,579 @@
+/* Comics — the public comic-catalogue pages (browse, one series, one release).
+
+   Native to the Percy site: every colour and the type face come from base.css
+   tokens, matching `watchlist.css`'s approach. The only page-specific colour
+   is `--comic-accent`, set inline per page from the release/series' own
+   brand: Marvel red, DC blue, or the site's `--branding` for manga (VIZ has
+   no usable brand colour) and for the mixed-brand browse/series-index pages.
+
+   Everything here is prefixed `.cx-` and scoped under `.cx`: `base.css` styles
+   `a:not(.button)` at specificity (0,1,1), which beats a bare class selector
+   at (0,1,0) — an unprefixed link rule loses that fight silently and titles
+   render in the link colour instead of the page's own type colour. */
+
+.cx {
+    --comic-accent: var(--branding);
+    color: var(--foreground);
+}
+
+.cx-page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.cx-head {
+    margin-bottom: 1.5rem;
+}
+
+.cx-head__eyebrow {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--comic-accent);
+}
+
+.cx-head__title {
+    margin: 0;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.cx-head__lede {
+    margin: 0.75rem 0 0;
+    max-width: 68ch;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+/* ── Figures (series page) ──────────────────────────────────────── */
+
+.cx-figures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.75rem;
+    margin: 1.5rem 0 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--box-border);
+}
+
+.cx-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.cx-figure__value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+.cx-figure__label {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* ── Controls (browse page: brand tabs + search) ────────────────── */
+
+.cx-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 2rem 0 0.5rem;
+}
+
+.cx-tabs {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.cx .cx-tab {
+    padding-bottom: 0.2rem;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.cx .cx-tab:hover {
+    color: var(--foreground);
+}
+
+.cx .cx-tab[aria-selected='true'] {
+    border-bottom-color: var(--comic-accent);
+    color: var(--foreground);
+    font-weight: 600;
+}
+
+.cx-search {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.cx-search input[type='search'] {
+    padding: 0.45rem 0.7rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.85rem;
+    min-width: 200px;
+}
+
+.cx-search input[type='search']:focus {
+    outline: none;
+    border-color: var(--comic-accent);
+}
+
+.cx-search__submit {
+    padding: 0.45rem 0.9rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.cx-search__submit:hover {
+    border-color: var(--comic-accent);
+}
+
+.cx-total {
+    margin: 0.5rem 0 1rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ── Card grid (browse, series, "more from this series") ───────── */
+
+.cx-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+}
+
+.cx-grid--compact {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.cx .cx-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.cx .cx-card:hover,
+.cx .cx-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: var(--comic-accent);
+}
+
+.cx-card__cover {
+    display: block;
+    width: 100%;
+    height: 210px;
+    object-fit: cover;
+    background: var(--box-shade);
+}
+
+.cx-card__cover--placeholder {
+    display: flex;
+}
+
+.cx-card__body {
+    padding: 0.65rem 0.75rem 0.8rem;
+}
+
+.cx-card__title {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.cx-card__issue {
+    margin-left: 0.3rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.cx-card__series {
+    margin: 0.25rem 0 0;
+    font-size: 0.72rem;
+    color: var(--comic-accent);
+}
+
+.cx-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.35rem 0 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ── Series index grid ──────────────────────────────────────────── */
+
+.cx-series-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.cx .cx-series-card {
+    display: block;
+    padding: 1rem 1.1rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease;
+}
+
+.cx .cx-series-card:hover,
+.cx .cx-series-card:focus-visible {
+    border-color: var(--branding);
+}
+
+.cx-series-card__brand {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.cx-series-card__name {
+    margin: 0.35rem 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.cx-series-card__count {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── Pagination ──────────────────────────────────────────────────── */
+
+.cx-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--box-border);
+    font-size: 0.8rem;
+}
+
+.cx .cx-pagination__link {
+    color: var(--comic-accent);
+    text-decoration: none;
+}
+
+.cx .cx-pagination__link:hover {
+    text-decoration: underline;
+}
+
+.cx .cx-pagination__link--disabled {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.cx-pagination__page {
+    color: var(--text-muted);
+}
+
+/* ── Hero (detail page) ─────────────────────────────────────────── */
+
+.cx-hero {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.cx-hero__cover {
+    flex: none;
+    width: 200px;
+    height: 300px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.cx-hero__cover--placeholder {
+    display: block;
+}
+
+.cx-hero__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.cx-hero__issue {
+    margin-left: 0.5rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.cx-hero__date {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* ── Fact panel — layered a step above the page background ─────── */
+
+.cx-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0;
+    margin: 0 0 2rem;
+    padding: 0.25rem 0;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.cx-facts__row {
+    padding: 0.75rem 1.1rem;
+}
+
+.cx-facts__row dt {
+    margin: 0 0 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.cx-facts__row dd {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.cx .cx-facts__row a {
+    color: var(--comic-accent);
+}
+
+/* ── Section headings ────────────────────────────────────────────── */
+
+.cx-section__title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.cx-section__subtitle {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.cx-hero,
+.cx-facts,
+.cx-neighbours,
+.cx-creators,
+.cx-characters,
+.cx-description {
+    padding-bottom: 1.75rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.cx-description:last-of-type {
+    border-bottom: none;
+}
+
+/* ── Where it fits ───────────────────────────────────────────────── */
+
+.cx-neighbours__row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.cx .cx-neighbour {
+    display: block;
+    padding: 0.85rem 1rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease;
+}
+
+.cx .cx-neighbour:hover,
+.cx .cx-neighbour:focus-visible {
+    border-color: var(--comic-accent);
+}
+
+.cx-neighbour__dir {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--comic-accent);
+}
+
+.cx-neighbour__title {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* ── Creators ────────────────────────────────────────────────────── */
+
+.cx-creators__group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+}
+
+.cx-creators__group + .cx-creators__group {
+    border-top: 1px solid var(--box-border);
+}
+
+.cx-creators__role {
+    min-width: 8rem;
+    font-weight: 600;
+    color: var(--comic-accent);
+}
+
+.cx-creators__names {
+    color: var(--foreground);
+}
+
+/* ── Characters ──────────────────────────────────────────────────── */
+
+.cx-characters__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.cx-character {
+    padding: 0.3rem 0.7rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.cx-character__kind {
+    margin-left: 0.4rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+/* ── Description ─────────────────────────────────────────────────── */
+
+.cx-description p {
+    max-width: 68ch;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: var(--foreground);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+
+.cx-empty {
+    margin-top: 2rem;
+    padding: 3rem 1.5rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* ── Attribution (required wherever comic data is shown) ──────────── */
+
+.cx-attribution {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--box-border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.cx .cx-attribution a {
+    color: var(--text-muted);
+    text-decoration: underline;
+}
+
+/* ── Responsive / motion ─────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .cx-hero {
+        flex-direction: column;
+    }
+
+    .cx-hero__cover {
+        width: 160px;
+        height: 240px;
+    }
+
+    .cx-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cx-search input[type='search'] {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cx .cx-card {
+        transition: none;
+    }
+}

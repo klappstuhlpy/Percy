@@ -691,3 +691,118 @@ pub(crate) struct OrderProvider {
     pub(crate) name: String,
     pub(crate) logo_url: String,
 }
+
+// -- Comics --------------------------------------------------------------------
+//
+// Public comic-catalogue pages (browse, one series, one release). Shaping lives
+// in `comics.rs`, mirroring the watchlist split above. `comics.html` is already
+// taken by the guild dashboard's comic-feed tab, so these templates are named
+// `comic_*` instead.
+
+/// A release, shaped for a card. Shared by the browse grid, a series' issue
+/// list, and the detail page's previous/next/more-from-series links.
+pub(crate) struct ComicCard {
+    pub(crate) brand: String,
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) issue_label: Option<String>,
+    pub(crate) series_name: Option<String>,
+    pub(crate) release_date: Option<String>,
+    pub(crate) cover_url: Option<String>,
+    pub(crate) price_label: Option<String>,
+}
+
+/// One brand-filter tab on the browse page.
+pub(crate) struct BrandTab {
+    pub(crate) label: String,
+    pub(crate) href: String,
+    pub(crate) active: bool,
+}
+
+/// One credited role and everyone credited under it on a release.
+pub(crate) struct CreditGroup {
+    pub(crate) role: String,
+    pub(crate) names: Vec<String>,
+}
+
+/// `GET /comics` — the release browser.
+#[derive(Template)]
+#[template(path = "comic_browse.html")]
+pub(crate) struct ComicBrowseTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) items: Vec<ComicCard>,
+    pub(crate) brand_tabs: Vec<BrandTab>,
+    /// Echoed back so the search form keeps the active brand filter.
+    pub(crate) brand: Option<String>,
+    pub(crate) search: String,
+    pub(crate) total: i64,
+    pub(crate) page: i64,
+    pub(crate) total_pages: i64,
+    pub(crate) prev_href: Option<String>,
+    pub(crate) next_href: Option<String>,
+    /// Empty on this page: results mix brands, so the attribution partial
+    /// shows only the general League of Comic Geeks / VIZ notice.
+    pub(crate) comic_copyright: String,
+}
+
+/// `GET /comics/series` — every series as a card.
+#[derive(Template)]
+#[template(path = "comic_series_index.html")]
+pub(crate) struct ComicSeriesIndexTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) series: Vec<ComicSeriesSummary>,
+    /// Always empty here for the same reason as `ComicBrowseTemplate`'s.
+    pub(crate) comic_copyright: String,
+}
+
+/// `GET /comics/series/:slug` — one series, issues in reading order.
+#[derive(Template)]
+#[template(path = "comic_series.html")]
+pub(crate) struct ComicSeriesTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) series_slug: String,
+    pub(crate) series_name: String,
+    pub(crate) brand: String,
+    pub(crate) brand_label: String,
+    /// The page's one `--comic-accent`, resolved from `brand`.
+    pub(crate) accent: String,
+    pub(crate) publisher: Option<String>,
+    pub(crate) issue_count: i64,
+    /// Already in reading order as Percy returned them — never re-sorted.
+    pub(crate) issues: Vec<ComicCard>,
+    /// The publisher copyright line for the attribution partial; empty when
+    /// the series (and so its brand) couldn't be resolved.
+    pub(crate) comic_copyright: String,
+}
+
+/// `GET /comics/:brand/:slug` — one release.
+#[derive(Template)]
+#[template(path = "comic_detail.html")]
+pub(crate) struct ComicDetailTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) brand: String,
+    pub(crate) brand_label: String,
+    /// The page's one `--comic-accent`, resolved from `brand`.
+    pub(crate) accent: String,
+    /// Empty when Percy is unreachable or the release doesn't exist — the
+    /// template's empty-state signal, the same way `watch_order.html` checks
+    /// `eras.is_empty()`.
+    pub(crate) title: String,
+    pub(crate) slug: String,
+    pub(crate) issue_label: Option<String>,
+    pub(crate) release_date: Option<String>,
+    pub(crate) cover_url: Option<String>,
+    pub(crate) format: Option<String>,
+    pub(crate) page_count: Option<i64>,
+    pub(crate) price_label: Option<String>,
+    pub(crate) publisher: Option<String>,
+    pub(crate) series_name: Option<String>,
+    pub(crate) series_slug: Option<String>,
+    pub(crate) previous: Option<ComicCard>,
+    pub(crate) next: Option<ComicCard>,
+    pub(crate) more_from_series: Vec<ComicCard>,
+    pub(crate) credit_groups: Vec<CreditGroup>,
+    pub(crate) characters: Vec<ComicCharacter>,
+    pub(crate) description: Option<String>,
+    pub(crate) comic_copyright: String,
+}

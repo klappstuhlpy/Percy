@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block nav_comics_active %} active{% endblock %}
+
+{% block title %}{{ series_name }} | Percy{% endblock %}
+
+{% block meta_description %}{{ series_name }} — {{ issue_count }} issues, in reading order.{% endblock %}
+{% block og_title %}{{ series_name }}{% endblock %}
+{% block og_description %}{{ issue_count }} issues, in reading order.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/comics/series/{{ series_slug }}{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/comics.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx" style="--comic-accent: {{ accent }}">
+    <div class="cx-page">
+        <header class="cx-head">
+            <span class="cx-head__eyebrow">{{ brand_label }}</span>
+            <h1 class="cx-head__title">{{ series_name }}</h1>
+
+            <div class="cx-figures">
+                <span class="cx-figure">
+                    <span class="cx-figure__value">{{ issue_count }}</span>
+                    <span class="cx-figure__label">Issues</span>
+                </span>
+                {% match publisher %}
+                {% when Some with (publisher_name) %}
+                <span class="cx-figure">
+                    <span class="cx-figure__value">{{ publisher_name }}</span>
+                    <span class="cx-figure__label">Publisher</span>
+                </span>
+                {% when None %}
+                {% endmatch %}
+            </div>
+        </header>
+
+        {% if issues.is_empty() %}
+        <div class="cx-empty">
+            <p>This series couldn't be loaded right now. Try again in a moment.</p>
+        </div>
+        {% else %}
+        <div class="cx-grid">
+            {% for issue in issues %}
+            <a class="cx-card" href="/comics/{{ issue.brand }}/{{ issue.slug }}">
+                {% match issue.cover_url %}
+                {% when Some with (cover) %}
+                <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
+                {% when None %}
+                <span class="cx-card__cover cx-card__cover--placeholder" aria-hidden="true"></span>
+                {% endmatch %}
+                <div class="cx-card__body">
+                    <h2 class="cx-card__title">
+                        {{ issue.title }}
+                        {% match issue.issue_label %}
+                        {% when Some with (label) %}
+                        <span class="cx-card__issue">{{ label }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                    </h2>
+                    <p class="cx-card__meta">
+                        {% match issue.release_date %}
+                        {% when Some with (date) %}
+                        <span>{{ date }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                        {% match issue.price_label %}
+                        {% when Some with (price) %}
+                        <span>{{ price }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                    </p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% include "comics_attribution.html" %}
+    </div>
+</div>
+{% endblock %}
