@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+
+{% block nav_watchlist_active %} active{% endblock %}
+
+{% block title %}Watch Orders | Percy{% endblock %}
+
+{% block meta_description %}Curated watch orders for film and TV universes — story order or release order, with runtimes, streaming availability and what you can safely skip.{% endblock %}
+{% block og_title %}Watch Orders — Percy{% endblock %}
+{% block og_description %}Curated watch orders for film and TV universes — story order or release order, with runtimes and streaming availability.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/watchlist{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/watchlist.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx">
+    <div class="cx-page">
+        <header class="cx-head">
+            <div>
+                <h1 class="cx-bit cx-bit--lg cx-head__title">Watch Orders</h1>
+                <p class="cx-head__tagline">
+                    Every film and show of a universe in the order that actually makes sense —
+                    story or release, with runtimes, what's essential and where to stream it.
+                </p>
+            </div>
+        </header>
+
+        {% if universes.is_empty() %}
+        <div class="cx-panel">
+            <div class="cx-panel__head"><span>No catalogue</span></div>
+            <div class="cx-panel__body cx-empty">
+                <p>No watch orders are published yet. Check back soon.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="cx-grid">
+            {% for universe in universes %}
+            <a class="cx-panel cx-card" href="/watchlist/{{ universe.slug }}"
+               style="--cx-accent: {{ universe.accent }}">
+                <div class="cx-panel__head">
+                    <span>{{ universe.short_name }}</span>
+                    <span>{{ universe.title_count }} titles</span>
+                </div>
+                <div class="cx-panel__body">
+                    <h2 class="cx-bit" style="margin: 0; font-size: 1rem; color: var(--cx-accent);">{{ universe.name }}</h2>
+                    {% match universe.tagline %}
+                    {% when Some with (tagline) %}
+                    <p class="cx-head__tagline" style="margin-top: 0.4rem; font-size: 0.8rem;">{{ tagline }}</p>
+                    {% when None %}
+                    {% endmatch %}
+                    <div class="cx-card__stats">
+                        <span class="cx-stat">
+                            <span class="cx-stat__value">{{ universe.title_count }}</span>
+                            <span class="cx-bit cx-bit--sm">Titles</span>
+                        </span>
+                        <span class="cx-stat">
+                            <span class="cx-stat__value">{{ universe.total_runtime / 60 }}</span>
+                            <span class="cx-bit cx-bit--sm">Hours</span>
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% include "watchlist_attribution.html" %}
+    </div>
+</div>
+{% endblock %}

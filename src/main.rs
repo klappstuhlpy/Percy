@@ -47,6 +47,7 @@ mod site;
 mod templates;
 mod userpages;
 mod view;
+mod watchlist;
 
 /// Shared application state, threaded through every handler.
 #[derive(Clone)]
@@ -145,6 +146,8 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
+        .route("/watchlist", get(watchlist::watchlist_index))
+        .route("/watchlist/:slug", get(watchlist::watch_order))
         .route("/dashboard", get(guilds::dashboard))
         .route("/dashboard/guild/:guild_id", get(guilds::guild_detail))
         .route("/dashboard/guild/:guild_id/members", get(guilds::guild_members))

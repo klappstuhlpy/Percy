@@ -1,0 +1,427 @@
+/* Watchlist — the tracker-HUD skin.
+
+   A deliberately different surface from the rest of the dashboard: near-black
+   ground, ice-blue ink, phosphor-green live accents and amber panel headers,
+   with notched "bit" panel corners cut in pure CSS. Nothing here is a sprite or
+   a 9-slice image — the notch is one clip-path driven by `--cx-step`, so a panel
+   recolours per universe and costs no asset.
+
+   Scoped under `.cx` so it cannot leak into the dashboard's own chrome. */
+
+/* ── Display face ────────────────────────────────────────────────
+   Bitcount Prop Single, self-hosted (SIL OFL 1.1 — see fonts/bitcount-OFL.txt).
+   Used for numerals, labels and headings only; body prose keeps the dashboard's
+   own stack, because a pixel face at paragraph length is unreadable. */
+
+@font-face {
+    font-family: 'Bitcount Prop Single';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('/static/fonts/bitcount-prop-single-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+        U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Bitcount Prop Single';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('/static/fonts/bitcount-prop-single-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+        U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+        U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── Tokens ──────────────────────────────────────────────────────
+   Contrast floor (checked, not eyeballed): #96e0f7 on #1f1f1f ≈ 9.6:1 and
+   #00ff50 on #000 ≈ 15:1, both far past AA. The amber bars are the exception —
+   they only ever carry near-black text, never ice-blue. */
+
+.cx {
+    --cx-bg: #000;
+    --cx-surface: #1f1f1f;
+    --cx-surface-2: #2c2c2c;
+    --cx-line: #3a3a3a;
+    --cx-text: #96e0f7;
+    --cx-dim: #6f9fb0;
+    --cx-live: #00ff50;
+    --cx-warn: #f89d51;
+    --cx-tv: #2fc9ff;
+    --cx-ink: #111;
+    --cx-accent: #96e0f7; /* overridden per universe from its stored accent */
+    --cx-step: 3px;
+    --cx-glow: 0 0 10px rgb(150 224 247 / 0.2);
+    --cx-track: 0.06em;
+    --cx-display: 'Bitcount Prop Single', ui-monospace, monospace;
+
+    background: var(--cx-bg);
+    color: var(--cx-text);
+}
+
+/* ── Bit panel ───────────────────────────────────────────────────
+   The notch: two steps bitten out of the bottom-left and bottom-right corners.
+   One shape, one variable — scale `--cx-step` for a chunkier or finer cut. */
+
+.cx-panel {
+    background: var(--cx-surface-2);
+    border: 1px solid var(--cx-line);
+    clip-path: polygon(
+        0 0,
+        100% 0,
+        100% calc(100% - 2 * var(--cx-step)),
+        calc(100% - 2 * var(--cx-step)) calc(100% - 2 * var(--cx-step)),
+        calc(100% - 2 * var(--cx-step)) 100%,
+        2 * var(--cx-step) 100%,
+        2 * var(--cx-step) calc(100% - 2 * var(--cx-step)),
+        0 calc(100% - 2 * var(--cx-step))
+    );
+}
+
+.cx-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 36px;
+    padding: 0 0.75rem;
+    background: var(--cx-warn);
+    color: var(--cx-ink);
+    font-family: var(--cx-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.cx-panel__body {
+    padding: 0.9rem 0.85rem;
+}
+
+/* ── Type helpers ────────────────────────────────────────────────
+   Ice-blue small text needs weight >= 500 to stay legible on the dark ground. */
+
+.cx-bit {
+    font-family: var(--cx-display);
+    font-weight: 500;
+    letter-spacing: var(--cx-track);
+    text-transform: uppercase;
+}
+
+.cx-bit--lg {
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-shadow: var(--cx-glow);
+}
+
+.cx-bit--sm {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    color: var(--cx-dim);
+}
+
+/* ── Page shell ──────────────────────────────────────────────────── */
+
+.cx-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.cx-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.cx-head__title {
+    margin: 0;
+    color: var(--cx-accent);
+}
+
+.cx-head__tagline {
+    margin: 0.4rem 0 0;
+    max-width: 60ch;
+    font-size: 0.9rem;
+    color: var(--cx-dim);
+}
+
+/* ── Universe cards (index) ──────────────────────────────────────── */
+
+.cx-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.cx .cx-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.cx .cx-card:hover,
+.cx .cx-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: var(--cx-accent);
+}
+
+.cx-card__stats {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 0.75rem;
+}
+
+.cx-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.cx-stat__value {
+    font-family: var(--cx-display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--cx-live);
+}
+
+/* ── Order table ─────────────────────────────────────────────────── */
+
+.cx-era {
+    margin: 2rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--cx-line);
+    color: var(--cx-accent);
+}
+
+.cx-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cx-row {
+    display: grid;
+    grid-template-columns: 3.2rem 3.4rem 1fr auto;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.55rem 0.75rem;
+    background: var(--cx-surface);
+    border: 1px solid var(--cx-line);
+}
+
+/* Importance is carried by the row's badge alone -- a coloured edge stripe would
+   say the same thing twice. */
+
+.cx-row--milestone {
+    background: var(--cx-surface-2);
+}
+
+.cx-row__index {
+    font-family: var(--cx-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--cx-dim);
+    text-align: right;
+}
+
+.cx-row__poster {
+    /* Both dimensions stated: the TMDB w92 poster's intrinsic 92x138 would otherwise
+       drive the row height, and aspect-ratio alone did not hold it. */
+    width: 3.4rem;
+    height: 5.1rem;
+    object-fit: cover;
+    background: var(--cx-surface-2);
+    border: 1px solid var(--cx-line);
+}
+
+.cx .cx-row__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--cx-text);
+    text-decoration: none;
+}
+
+.cx .cx-row__title:hover {
+    text-decoration: underline;
+}
+
+.cx-row__year {
+    font-family: var(--cx-display);
+    font-size: 0.72rem;
+    color: var(--cx-dim);
+}
+
+.cx-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+    color: var(--cx-dim);
+}
+
+.cx-row__instruction {
+    color: var(--cx-warn);
+    font-weight: 600;
+}
+
+.cx-row__right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ── Badges & tags ───────────────────────────────────────────────── */
+
+.cx-tag {
+    padding: 0.12rem 0.4rem;
+    border: 1px solid currentColor;
+    font-family: var(--cx-display);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.cx-tag--essential {
+    color: var(--cx-live);
+}
+
+.cx-tag--recommended {
+    color: var(--cx-warn);
+}
+
+.cx-tag--optional {
+    color: var(--cx-dim);
+}
+
+.cx-tag--tv {
+    color: var(--cx-tv);
+}
+
+.cx-tag--milestone {
+    color: var(--cx-ink);
+    background: var(--cx-warn);
+    border-color: var(--cx-warn);
+}
+
+/* ── Controls ────────────────────────────────────────────────────── */
+
+.cx-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.cx .cx-toggle {
+    display: inline-flex;
+    padding: 0.35rem 0.7rem;
+    background: var(--cx-surface);
+    border: 1px solid var(--cx-line);
+    color: var(--cx-dim);
+    font-family: var(--cx-display);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+
+.cx .cx-toggle:hover {
+    border-color: var(--cx-accent);
+    color: var(--cx-text);
+}
+
+.cx .cx-toggle[aria-current='true'] {
+    background: var(--cx-accent);
+    border-color: var(--cx-accent);
+    color: var(--cx-ink);
+    font-weight: 700;
+}
+
+.cx-select {
+    padding: 0.35rem 0.6rem;
+    background: var(--cx-surface);
+    border: 1px solid var(--cx-line);
+    color: var(--cx-text);
+    font-family: var(--cx-display);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+}
+
+/* ── Providers ───────────────────────────────────────────────────── */
+
+.cx-providers {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.cx-providers img {
+    width: 1.4rem;
+    height: 1.4rem;
+    object-fit: cover;
+    border: 1px solid var(--cx-line);
+}
+
+/* ── Empty / degraded state ──────────────────────────────────────── */
+
+.cx-empty {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--cx-dim);
+}
+
+/* ── Attribution (mandatory wherever TMDB data is shown) ─────────── */
+
+.cx-attribution {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--cx-line);
+    font-size: 0.72rem;
+    color: var(--cx-dim);
+}
+
+.cx .cx-attribution a {
+    color: var(--cx-dim);
+}
+
+/* ── Motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .cx .cx-card {
+        transition: none;
+    }
+
+    .cx .cx-card:hover,
+    .cx .cx-card:focus-visible {
+        transform: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .cx-row {
+        grid-template-columns: 2.4rem 2.6rem 1fr;
+    }
+
+    .cx-row__right {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}

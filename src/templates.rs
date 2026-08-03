@@ -618,3 +618,67 @@ mod tests {
         assert!(html.contains("Template gallery"));
     }
 }
+
+// -- Watchlist ---------------------------------------------------------------
+
+/// `GET /watchlist` — the universe index.
+#[derive(Template)]
+#[template(path = "watchlist.html")]
+pub(crate) struct WatchlistTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) universes: Vec<WatchUniverseSummary>,
+}
+
+/// `GET /watchlist/:slug` — one universe's ordered catalogue.
+#[derive(Template)]
+#[template(path = "watch_order.html")]
+pub(crate) struct WatchOrderTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) universe: WatchUniverse,
+    /// The curated paths offered as toggles.
+    pub(crate) paths: Vec<WatchPath>,
+    /// Titles grouped into their era sections, in watch order.
+    pub(crate) eras: Vec<OrderEra>,
+    /// The resolved path/region/sort, echoed back so the toggles keep the other two.
+    pub(crate) path: String,
+    pub(crate) region: String,
+    pub(crate) sort: String,
+    /// `story order` / `release order`, for prose in the meta description.
+    pub(crate) sort_label: String,
+    pub(crate) total: usize,
+    pub(crate) hours: i64,
+    pub(crate) essential: usize,
+}
+
+/// One era heading and the titles under it.
+pub(crate) struct OrderEra {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) rows: Vec<OrderRow>,
+}
+
+/// One row of a watch order, with everything the template needs precomputed.
+pub(crate) struct OrderRow {
+    /// Position in the whole order (1-based), not within the era.
+    pub(crate) position: usize,
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) year: Option<String>,
+    pub(crate) runtime_label: String,
+    /// The row era, shown as a chip in story order (where era headings are absent).
+    pub(crate) era: Option<String>,
+    pub(crate) rating: Option<String>,
+    pub(crate) poster_url: Option<String>,
+    /// `essential` / `recommended` / `optional`, doubling as the badge's modifier class.
+    pub(crate) importance: Option<String>,
+    pub(crate) instruction: Option<String>,
+    pub(crate) milestone: bool,
+    pub(crate) is_show: bool,
+    pub(crate) providers: Vec<OrderProvider>,
+}
+
+/// A streaming service logo on a row.
+pub(crate) struct OrderProvider {
+    pub(crate) name: String,
+    pub(crate) logo_url: String,
+}

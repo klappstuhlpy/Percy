@@ -1,0 +1,137 @@
+{% extends "layout.html" %}
+
+{% block nav_watchlist_active %} active{% endblock %}
+
+{% block title %}{{ universe.name }} Watch Order | Percy{% endblock %}
+
+{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ total }} titles, {{ hours }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
+{% block og_title %}{{ universe.name }} Watch Order{% endblock %}
+{% block og_description %}{{ total }} titles in {{ sort_label }}, {{ hours }} hours total — with runtimes, importance and streaming availability.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/watchlist/{{ universe.slug }}{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/watchlist.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx" style="--cx-accent: {{ universe.accent }}">
+    <div class="cx-page">
+        <header class="cx-head">
+            <div>
+                <h1 class="cx-bit cx-bit--lg cx-head__title">{{ universe.name }}</h1>
+                {% match universe.tagline %}
+                {% when Some with (tagline) %}
+                <p class="cx-head__tagline">{{ tagline }}</p>
+                {% when None %}
+                {% endmatch %}
+            </div>
+            <div class="cx-card__stats">
+                <span class="cx-stat">
+                    <span class="cx-stat__value">{{ total }}</span>
+                    <span class="cx-bit cx-bit--sm">Titles</span>
+                </span>
+                <span class="cx-stat">
+                    <span class="cx-stat__value">{{ hours }}</span>
+                    <span class="cx-bit cx-bit--sm">Hours</span>
+                </span>
+                <span class="cx-stat">
+                    <span class="cx-stat__value">{{ essential }}</span>
+                    <span class="cx-bit cx-bit--sm">Essential</span>
+                </span>
+            </div>
+        </header>
+
+        <nav class="cx-controls" aria-label="Watch order options">
+            <a class="cx-toggle" href="?sort=story&amp;path={{ path }}&amp;region={{ region }}"
+               aria-current="{% if sort == "story" %}true{% else %}false{% endif %}">Story order</a>
+            <a class="cx-toggle" href="?sort=release&amp;path={{ path }}&amp;region={{ region }}"
+               aria-current="{% if sort == "release" %}true{% else %}false{% endif %}">Release order</a>
+            {% for option in paths %}
+            <a class="cx-toggle" href="?sort={{ sort }}&amp;path={{ option.slug }}&amp;region={{ region }}"
+               aria-current="{% if option.slug == path %}true{% else %}false{% endif %}">{{ option.name }}</a>
+            {% endfor %}
+        </nav>
+
+        {% if eras.is_empty() %}
+        <div class="cx-panel">
+            <div class="cx-panel__head"><span>Catalogue unavailable</span></div>
+            <div class="cx-panel__body cx-empty">
+                <p>This watch order couldn't be loaded right now. Try again in a moment.</p>
+            </div>
+        </div>
+        {% else %}
+        {% for era in eras %}
+        <section>
+            {% if !era.label.is_empty() %}
+            <h2 class="cx-bit cx-era">{{ era.label }}</h2>
+            {% endif %}
+            <ol class="cx-rows">
+                {% for row in era.rows %}
+                <li class="cx-row{% if row.milestone %} cx-row--milestone{% endif %}">
+                    <span class="cx-row__index">{{ row.position }}</span>
+                    {% match row.poster_url %}
+                    {% when Some with (poster) %}
+                    <img class="cx-row__poster" src="{{ poster }}" alt="" loading="lazy" width="92" height="138">
+                    {% when None %}
+                    <span class="cx-row__poster" aria-hidden="true"></span>
+                    {% endmatch %}
+                    <div>
+                        <a class="cx-row__title" href="/watchlist/{{ universe.slug }}/{{ row.slug }}">
+                            {{ row.title }}
+                            {% match row.year %}
+                            {% when Some with (year) %}
+                            <span class="cx-row__year">{{ year }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                        </a>
+                        <p class="cx-row__meta">
+                            {% match row.era %}
+                            {% when Some with (era_name) %}
+                            <span>{{ era_name }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            <span>{{ row.runtime_label }}</span>
+                            {% match row.rating %}
+                            {% when Some with (rating) %}
+                            <span>★ {{ rating }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            {% match row.instruction %}
+                            {% when Some with (instruction) %}
+                            <span class="cx-row__instruction">{{ instruction }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                        </p>
+                    </div>
+                    <div class="cx-row__right">
+                        {% if row.is_show %}
+                        <span class="cx-tag cx-tag--tv">Series</span>
+                        {% endif %}
+                        {% if row.milestone %}
+                        <span class="cx-tag cx-tag--milestone">Milestone</span>
+                        {% endif %}
+                        {% match row.importance %}
+                        {% when Some with (importance) %}
+                        <span class="cx-tag cx-tag--{{ importance }}">{{ importance }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                        {% if !row.providers.is_empty() %}
+                        <span class="cx-providers">
+                            {% for provider in row.providers %}
+                            <img src="{{ provider.logo_url }}" alt="{{ provider.name }}" title="{{ provider.name }}"
+                                 loading="lazy" width="24" height="24">
+                            {% endfor %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+        {% endfor %}
+        {% endif %}
+
+        {% include "watchlist_attribution.html" %}
+    </div>
+</div>
+{% endblock %}
