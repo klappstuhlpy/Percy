@@ -694,17 +694,22 @@ async def test_sync_resolves_credits_of_to_the_upserted_titles_row_id() -> None:
 
 async def test_sync_clears_credits_of_when_seed_no_longer_sets_one() -> None:
     # A title with no credits_of in the seed must still get set_credits_of(id, None) -- covers
-    # the case where a previous seed/run had set one and a later re-sync drops it.
+    # the case where a previous seed/run had set one and a later re-sync drops it. The repo is
+    # pre-seeded with a *previously set* value so this asserts the flip 77 -> None, not merely
+    # that None is written for a title that never had one.
     t1 = _title(tmdb_id=1)
     seed = _seed((t1,))
 
     tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
     repo = FakeWatchlistRepository()
+    repo.credits_of[1001] = 77  # the id upsert_title will hand back for this title
+
     ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
 
     await ingest.sync(seed, regions=('US',))
 
     title_id = repo.pruned_with[0]
+    assert title_id == 1001
     assert repo.credits_of == {title_id: None}
 
 
