@@ -16,14 +16,13 @@
 {% block body %}
 <div class="wl">
     <div class="wl-page">
-        <header class="wl-hero">
-            <div>
-                <h1 class="wl-hero__title">Watch Orders</h1>
-                <p class="wl-hero__tagline">
-                    Every film and show of a universe in the order that actually makes sense — story or release,
-                    with runtimes, what's essential, and where to stream it.
-                </p>
-            </div>
+        <header class="wl-head">
+            <span class="wl-head__eyebrow">Watch orders</span>
+            <h1 class="wl-head__title">Every universe, in order</h1>
+            <p class="wl-head__lede">
+                Films and shows arranged the way they're meant to be watched — story or release order, with
+                runtimes, what's essential, and where each one is streaming.
+            </p>
         </header>
 
         {% if universes.is_empty() %}
@@ -35,20 +34,19 @@
             {% for universe in universes %}
             <a class="wl-card" href="/watchlist/{{ universe.slug }}" style="--wl-accent: {{ universe.accent }}">
                 <h2 class="wl-card__name">{{ universe.name }}</h2>
-                <span class="wl-card__rule"></span>
                 {% match universe.tagline %}
                 {% when Some with (tagline) %}
                 <p class="wl-card__tagline">{{ tagline }}</p>
                 {% when None %}
                 {% endmatch %}
-                <div class="wl-card__stats">
-                    <span class="wl-stat">
-                        <span class="wl-stat__value">{{ universe.title_count }}</span>
-                        <span class="wl-stat__label">Titles</span>
+                <div class="wl-card__figures">
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ universe.title_count }}</span>
+                        <span class="wl-figure__label">Titles</span>
                     </span>
-                    <span class="wl-stat">
-                        <span class="wl-stat__value">{{ universe.total_runtime / 60 }}h</span>
-                        <span class="wl-stat__label">Runtime</span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ universe.total_runtime / 60 }}h</span>
+                        <span class="wl-figure__label">Runtime</span>
                     </span>
                 </div>
             </a>
