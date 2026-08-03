@@ -200,6 +200,20 @@ ollama = SimpleNamespace(
     max_concurrency=int(env('OLLAMA_MAX_CONCURRENCY') or 1),
 )
 
+def _parse_regions(value: str | None) -> tuple[str, ...]:
+    """Parses ``WATCHLIST_REGIONS`` into upper-case region codes, rejecting non-2-character ones.
+
+    ``watch_providers.region`` is ``CHAR(2)`` -- an entry of the wrong length (e.g.
+    ``WATCHLIST_REGIONS=USA``) must fail here, at the config boundary, rather than aborting a
+    sync mid-run after some titles' provider rows have already been written for other regions.
+    """
+    regions = tuple(r.strip().upper() for r in (value or 'US,GB,DE').split(',') if r.strip())
+    invalid = [r for r in regions if len(r) != 2]
+    if invalid:
+        raise ValueError(f'WATCHLIST_REGIONS entries must be 2-letter region codes, got: {", ".join(invalid)}')
+    return regions
+
+
 # The Movie Database (https://www.themoviedb.org) — metadata source for the universe
 # watchlist. Optional: with no token the ingest CLI refuses to run and the watchlist
 # serves whatever is already in the database.
@@ -207,7 +221,7 @@ tmdb = SimpleNamespace(
     token=env('TMDB_API_TOKEN') or None,
     language=env('TMDB_LANGUAGE') or 'en-US',
     timeout=float(env('TMDB_TIMEOUT') or 20.0),
-    regions=tuple(r.strip().upper() for r in (env('WATCHLIST_REGIONS') or 'US,GB,DE').split(',') if r.strip()),
+    regions=_parse_regions(env('WATCHLIST_REGIONS')),
 )
 
 dbots_key: str | None = env('DBOTS_TOKEN')

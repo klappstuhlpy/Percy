@@ -27,6 +27,9 @@ _TITLE_SORT_COLUMNS = {'story': 'story_order', 'release': 'release_order'}
 #: Valid ``watch_progress.status`` values.
 _PROGRESS_STATUSES = ('watched', 'skipped')
 
+#: Valid ``watch_title_importance.importance`` values.
+_IMPORTANCE_VALUES = ('essential', 'recommended', 'optional')
+
 #: Columns callers may write via :meth:`WatchlistRepository.upsert_prefs`.
 _PREFS_COLUMNS = (
     'region', 'path_slug', 'sort_mode', 'show_spoiler', 'with_credits', 'hide_sub',
@@ -241,12 +244,27 @@ class WatchlistRepository(BaseRepository):
 
     async def set_importance(self, title_id: int, path_id: int, importance: str) -> None:
         """Upserts a title's importance tag for a viewing path (composite-PK upsert)."""
+        if importance not in _IMPORTANCE_VALUES:
+            raise ValueError(f"Invalid importance value: {importance!r}")
         query = """
             INSERT INTO watch_title_importance (title_id, path_id, importance)
             VALUES ($1, $2, $3)
             ON CONFLICT (title_id, path_id) DO UPDATE SET importance = EXCLUDED.importance;
         """
         await self.execute(query, title_id, path_id, importance)
+
+    async def prune_importance(self, title_id: int, keep_path_ids: Sequence[int]) -> int:
+        """Deletes a title's importance rows for paths not in ``keep_path_ids``. Returns the count deleted.
+
+        Unlike :meth:`prune_titles`, an empty ``keep_path_ids`` is *not* a "refuse to wipe"
+        signal here -- it correctly deletes **all** of the title's importance rows, since a
+        seed with no ``importance`` entries for this title means it belongs to no path.
+        """
+        rows = await self.fetch(
+            "DELETE FROM watch_title_importance WHERE title_id = $1 AND path_id != ALL($2::bigint[]) RETURNING path_id;",
+            title_id, list(keep_path_ids),
+        )
+        return len(rows)
 
     async def replace_providers(self, title_id: int, region: str, rows: Sequence[dict[str, Any]]) -> None:
         """Replaces every provider row for a title+region with ``rows``, atomically.
@@ -271,7 +289,9 @@ class WatchlistRepository(BaseRepository):
         """Deletes titles of ``universe`` whose id is not in ``keep_ids``. Returns the count deleted.
 
         An empty ``keep_ids`` performs no delete and returns 0 — a seed that failed to
-        parse must never wipe the catalogue.
+        parse must never wipe the catalogue. Deletion cascades to ``watch_progress``
+        (``ON DELETE CASCADE``), so a pruned title also destroys every user's watch
+        progress for it.
         """
         if not keep_ids:
             return 0
@@ -302,7 +322,12 @@ class WatchlistRepository(BaseRepository):
     async def set_progress(
         self, user_id: int, title_id: int, status: str, updated_at: datetime.datetime,
     ) -> None:
-        """Upserts a title's watch status for a user, last-write-wins on ``updated_at``."""
+        """Upserts a title's watch status for a user, last-write-wins on ``updated_at``.
+
+        ``updated_at`` must be a naive UTC :class:`~datetime.datetime` -- ``watch_progress
+        .updated_at`` is a naive ``TIMESTAMP`` column, and asyncpg's timestamp encoder raises
+        ``TypeError`` on a timezone-aware value.
+        """
         if status not in _PROGRESS_STATUSES:
             raise ValueError(f"Invalid watch progress status: {status!r}")
         query = """

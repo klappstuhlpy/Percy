@@ -1,7 +1,7 @@
 slug = "mcu"
 name = "Marvel Cinematic Universe"
 short_name = "MCU"
-tagline = "Thirty-eight films across six phases, from a cave workshop to a multiverse-spanning threat."
+tagline = "Six phases, from a cave workshop to a multiverse-spanning threat."
 accent = "#E62429"
 published = true
 sort_order = 0
@@ -74,7 +74,6 @@ era = "phase1"
 story = 400
 release = 300
 context = "Tony Stark battles the fallout of publicly revealing he is Iron Man while a rival weapons developer targets Stark Industries."
-spoiler = "Introduces Black Widow and War Machine; ends with the first mention of the Avenger Initiative recruiting further members."
 importance = { complete = "recommended", essentials = "optional" }
 
 [[titles]]
@@ -159,7 +158,7 @@ era = "phase2"
 story = 1400
 release = 1200
 context = "Scott Lang is recruited by Hank Pym to master the Ant-Man suit and stop a former protege from weaponizing shrinking technology."
-instruction = "Post-credits scene has Sam Wilson tell Steve Rogers about a lead on the Winter Soldier -- watch before Captain America: Civil War."
+instruction = "Watch post-credits scene before Civil War"
 importance = { complete = "recommended", essentials = "optional" }
 
 # --- Phase 3 ---
@@ -216,7 +215,7 @@ era = "phase3"
 story = 2100
 release = 2000
 context = "Scott Lang helps Hope van Dyne and Hank Pym attempt a rescue from deep within the Quantum Realm."
-instruction = "Post-credits scene ties directly into the opening of Avengers: Endgame -- watch before it."
+instruction = "Watch post-credits scene before Endgame"
 importance = { complete = "recommended", essentials = "optional" }
 
 [[titles]]
@@ -264,7 +263,7 @@ era = "phase3"
 story = 2400
 release = 2300
 context = "Peter Parker travels to Europe on a school trip and is recruited by Nick Fury to face a new threat while adjusting to a world without Tony Stark."
-instruction = "Post-credits scene changes the setup for Spider-Man: No Way Home -- watch before it."
+instruction = "Watch post-credits scene before No Way Home"
 spoiler = "Mysterio frames Spider-Man publicly and exposes Peter's identity to the world."
 importance = { complete = "recommended", essentials = "recommended" }
 

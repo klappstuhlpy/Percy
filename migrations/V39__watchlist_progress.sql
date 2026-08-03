@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS watch_progress
     updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     PRIMARY KEY (user_id, title_id)
 );
-CREATE INDEX IF NOT EXISTS watch_progress_user_idx ON watch_progress (user_id);
 
 CREATE TABLE IF NOT EXISTS watch_prefs
 (

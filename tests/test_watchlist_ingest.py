@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import asyncpg
 import pytest
 
 from app.clients.base import HTTPClientError
@@ -88,11 +89,18 @@ class FakeTMDBClient:
 class FakeWatchlistRepository:
     """Stand-in for :class:`~app.database.repositories.watchlist.WatchlistRepository`."""
 
-    def __init__(self, existing_titles: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        existing_titles: list[dict[str, Any]] | None = None,
+        *,
+        upsert_conflicts: set[tuple[str, int]] | None = None,
+    ) -> None:
         self._existing_titles = existing_titles or []
         self._next_id = 1000
+        self._upsert_conflicts = upsert_conflicts or set()
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.importance: list[tuple[int, int, str]] = []
+        self.pruned_importance_with: list[tuple[int, tuple[int, ...]]] = []
         self.providers: dict[tuple[int, str], list[dict[str, Any]]] = {}
         self.credits_of: dict[int, int | None] = {}
         self.pruned_with: list[int] | None = None
@@ -111,12 +119,26 @@ class FakeWatchlistRepository:
 
     async def upsert_title(self, universe: str, data: dict[str, Any]) -> int:
         self.calls.append(('upsert_title', (universe, data)))
+        key = (data['tmdb_type'], data['tmdb_id'])
+        if key in self._upsert_conflicts:
+            raise asyncpg.UniqueViolationError(
+                f'duplicate key value violates unique constraint "watch_titles_universe_slug_key": {key}'
+            )
         self._next_id += 1
         return self._next_id
 
     async def set_importance(self, title_id: int, path_id: int, importance: str) -> None:
         self.calls.append(('set_importance', (title_id, path_id, importance)))
         self.importance.append((title_id, path_id, importance))
+
+    async def prune_importance(self, title_id: int, keep_path_ids: Sequence[int]) -> int:
+        self.calls.append(('prune_importance', (title_id, tuple(keep_path_ids))))
+        self.pruned_importance_with.append((title_id, tuple(keep_path_ids)))
+        before = len(self.importance)
+        self.importance = [
+            entry for entry in self.importance if entry[0] != title_id or entry[1] in keep_path_ids
+        ]
+        return before - len(self.importance)
 
     async def replace_providers(self, title_id: int, region: str, rows: Sequence[dict[str, Any]]) -> None:
         self.calls.append(('replace_providers', (title_id, region, rows)))
@@ -409,6 +431,40 @@ short_name = "U"
 accent = "red"
 """
 
+_NON_INT_STORY = """
+slug = "u"
+name = "U"
+short_name = "U"
+
+[[eras]]
+key = "e"
+name = "E"
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1
+era = "e"
+story = "100"
+release = 1
+"""
+
+_BOOL_STORY_REJECTED_AS_NON_INT = """
+slug = "u"
+name = "U"
+short_name = "U"
+
+[[eras]]
+key = "e"
+name = "E"
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1
+era = "e"
+story = true
+release = 1
+"""
+
 
 def test_load_seed_valid(tmp_path: Path) -> None:
     path = _write_seed(tmp_path, _VALID_SEED)
@@ -434,10 +490,13 @@ def test_load_seed_valid(tmp_path: Path) -> None:
     (_BAD_CREDITS_OF, 'credits_of'),
     (_MULTIPLE_DEFAULT_PATHS, 'more than one path'),
     (_BAD_ACCENT, 'hex string'),
+    (_NON_INT_STORY, 'non-integer'),
+    (_BOOL_STORY_REJECTED_AS_NON_INT, 'non-integer'),
 ], ids=[
     'missing-required', 'duplicate-title-id', 'duplicate-path-slug', 'duplicate-era-key',
     'undeclared-era', 'undeclared-importance-path', 'bad-importance-value', 'bad-tmdb-type',
     'bad-kind', 'seasons-on-movie', 'bad-credits-of', 'multiple-default-paths', 'bad-accent',
+    'non-integer-story-string', 'non-integer-story-bool',
 ])
 def test_seed_validation_rejects(tmp_path: Path, toml_text: str, expected_fragment: str) -> None:
     path = _write_seed(tmp_path, toml_text)
@@ -628,4 +687,119 @@ async def test_sync_resolves_credits_of_to_the_upserted_titles_row_id() -> None:
 
     # FakeWatchlistRepository.upsert_title returns incrementing ids in call order; this seed
     # has no paths, so parent (upserted first) gets 1001 and child (upserted second) gets 1002.
-    assert repo.credits_of == {1002: 1001}
+    # The parent itself has no credits_of, so it also gets an explicit clear (I3) -- a seed is
+    # authoritative for the column's absence too.
+    assert repo.credits_of == {1002: 1001, 1001: None}
+
+
+async def test_sync_clears_credits_of_when_seed_no_longer_sets_one() -> None:
+    # A title with no credits_of in the seed must still get set_credits_of(id, None) -- covers
+    # the case where a previous seed/run had set one and a later re-sync drops it.
+    t1 = _title(tmdb_id=1)
+    seed = _seed((t1,))
+
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    title_id = repo.pruned_with[0]
+    assert repo.credits_of == {title_id: None}
+
+
+async def test_sync_prunes_importance_for_paths_no_longer_seeded() -> None:
+    # A title's importance map only names 'complete' -- prune_importance must be called with
+    # exactly that path's resolved id, so a later drop of 'essentials' (or 'complete' itself)
+    # from the seed clears the stale watch_title_importance row rather than leaving it forever.
+    complete = PathSeed(slug='complete', name='Complete', default=True)
+    essentials = PathSeed(slug='essentials', name='Essentials')
+    t1 = _title(tmdb_id=1, importance={'complete': 'essential'})
+    seed = _seed((t1,), paths=(complete, essentials))
+
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    # FakeWatchlistRepository.upsert_path/upsert_title return incrementing ids in call order:
+    # 'complete' (1001), 'essentials' (1002), then the title itself (1003).
+    assert len(repo.pruned_importance_with) == 1
+    title_id, kept_path_ids = repo.pruned_importance_with[0]
+    assert title_id == 1003
+    assert kept_path_ids == (1001,)  # only 'complete' -- 'essentials' got no importance entry
+
+
+async def test_sync_dry_run_reports_titles_that_would_be_pruned() -> None:
+    # I4: dry-run must compute the destructive prune count from data already in hand, not
+    # always report 0 -- the operator's pre-flight check must see what would be deleted.
+    t1 = _title(tmdb_id=1)
+    seed = _seed((t1,))
+
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    # title 2 exists in the database from a prior sync but is absent from this seed.
+    repo = FakeWatchlistRepository(existing_titles=[{'tmdb_type': 'movie', 'tmdb_id': 2, 'id': 555}])
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',), dry_run=True)
+
+    assert report.titles_pruned == 1
+    assert any('movie:2' in warning for warning in report.warnings)
+    assert repo.pruned_with is None  # still no actual write in dry-run
+
+
+async def test_sync_records_provider_rows_and_report_count() -> None:
+    # I6: the provider write path (region loop, providers_written accounting,
+    # replace_providers wiring) is otherwise never exercised by any sync test.
+    t1 = _title(tmdb_id=1)
+    seed = _seed((t1,))
+
+    providers_payload = {
+        'results': {
+            'US': {
+                'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg'}],
+                'rent': [],
+                'buy': [],
+            },
+        },
+    }
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        providers={('movie', 1): providers_payload},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US', 'GB'))
+
+    title_id = repo.pruned_with[0]
+    assert repo.providers[(title_id, 'US')] == [
+        {'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg', 'offer': 'flatrate'},
+    ]
+    assert repo.providers[(title_id, 'GB')] == []  # GB has no providers in the payload
+    assert report.providers_written == 1
+
+
+async def test_sync_skips_title_on_slug_conflict_and_keeps_existing_row() -> None:
+    # I7: watch_titles' UNIQUE (universe, slug) is unguarded by upsert_title's ON CONFLICT
+    # target (universe, tmdb_type, tmdb_id) -- a slug collision must be caught, warned about,
+    # and must not abort the rest of the run or let prune_titles delete the existing row.
+    good = _title(tmdb_id=1)
+    conflicting = _title(tmdb_id=2, story=2, release=2)
+    seed = _seed((good, conflicting))
+
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 50}})
+    repo = FakeWatchlistRepository(
+        existing_titles=[{'tmdb_type': 'movie', 'tmdb_id': 2, 'id': 555}],
+        upsert_conflicts={('movie', 2)},
+    )
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.titles_seen == 2
+    assert report.titles_written == 1  # the conflicting title was not actually written
+    assert any('slug conflict' in warning for warning in report.warnings)
+    assert repo.pruned_with is not None
+    assert 555 in repo.pruned_with  # existing row preserved, not pruned

@@ -23,9 +23,11 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import asyncpg
+
 # Matches the AIService pattern: the *orchestrator* below is allowed to touch the resilient
-# HTTP-client error hierarchy (it does real I/O); the pure mapping functions above it never
-# import discord/asyncpg/aiohttp and never raise or catch these.
+# HTTP-client error hierarchy and asyncpg's exception hierarchy (it does real I/O); the pure
+# mapping functions above it never import discord/asyncpg/aiohttp and never raise or catch these.
 from app.clients.base import HTTPClientError
 from app.services.watchlist.seeds import accent_to_int
 
@@ -217,8 +219,15 @@ def _universe_row(seed: UniverseSeed) -> dict[str, Any]:
     }
 
 
-def _path_row(path: PathSeed) -> dict[str, Any]:
-    return {'slug': path.slug, 'name': path.name, 'description': path.description, 'is_default': path.default}
+def _path_row(path: PathSeed, sort_order: int) -> dict[str, Any]:
+    """``sort_order`` is the path's declaration index -- ``PathSeed`` has no such field, and
+    ``list_paths``' ``ORDER BY sort_order`` needs a deterministic value rather than the column
+    default of 0 for every path.
+    """
+    return {
+        'slug': path.slug, 'name': path.name, 'description': path.description,
+        'is_default': path.default, 'sort_order': sort_order,
+    }
 
 
 @dataclass(slots=True)
@@ -264,18 +273,33 @@ class WatchlistIngest:
 
         Order of operations: upsert the universe -> upsert paths (collecting slug -> path_id)
         -> per title fetch/build/upsert + importance + providers -> a second pass resolving
-        ``credits_of`` (the referenced title may not have existed yet on first insert) ->
-        ``prune_titles`` with every id seen this run.
+        ``credits_of`` (the referenced title may not have existed yet on first insert, and
+        clearing it for any synced title whose seed no longer sets one) -> ``prune_titles``
+        with every id seen this run.
 
-        Failure policy: a TMDB failure fetching one title's metadata is recorded as a warning
-        and that title is skipped rather than aborting the run. Its *existing* row (if any,
-        from a prior successful sync) is preserved by keeping its id in the prune keep-list --
-        a transient TMDB error must never delete data a previous run already wrote. Only a
+        Curation authority: a seed is authoritative for every column it owns, including the
+        *absence* of a value -- dropping a title's ``importance`` entry for a path, or its
+        ``credits_of``, must clear the stale row/column on re-sync rather than leaving it
+        forever. See :meth:`~app.database.repositories.watchlist.WatchlistRepository
+        .prune_importance` and the ``credits_of`` clearing pass below.
+
+        Failure policy: a TMDB failure fetching one title's metadata, or a Postgres unique-
+        constraint violation upserting it (two seeded titles whose TMDB titles slugify
+        identically, or a TMDB rename colliding with another title's stored slug -- see
+        ``watch_titles``' ``UNIQUE (universe, slug)``), is recorded as a warning and that
+        title is skipped rather than aborting the run. Its *existing* row (if any, from a
+        prior successful sync) is preserved by keeping its id in the prune keep-list -- a
+        transient failure must never delete data a previous run already wrote. Only a
         seed/validation error (raised before :meth:`sync` is even called) or an exception
-        outside :class:`~app.clients.base.HTTPClientError` (a genuinely broken client) aborts.
+        outside :class:`~app.clients.base.HTTPClientError` / ``asyncpg.UniqueViolationError``
+        (a genuinely broken client/database) aborts.
 
         ``dry_run=True`` performs every read (including TMDB fetches, so the report reflects
-        what *would* change) but issues no repository write.
+        what *would* change) but issues no repository write. Because pruning is the one
+        destructive thing a sync does -- it cascades to ``watch_progress``, i.e. user data --
+        a dry run still computes ``titles_pruned`` (from the titles already in the database
+        that this run's seed no longer keeps) and warns about each one by name, rather than
+        always reporting 0.
         """
         report = IngestReport(universe=seed.slug, dry_run=dry_run)
 
@@ -286,13 +310,14 @@ class WatchlistIngest:
             await self._repo.upsert_universe(_universe_row(seed))
 
         path_ids: dict[str, int] = {}
-        for path in seed.paths:
+        for index, path in enumerate(seed.paths):
             if not dry_run:
-                path_ids[path.slug] = await self._repo.upsert_path(seed.slug, _path_row(path))
+                path_ids[path.slug] = await self._repo.upsert_path(seed.slug, _path_row(path, index))
 
         era_order = {era.key: era.order for era in seed.eras}
         tmdb_id_to_title_id: dict[int, int] = {}
         pending_credits_of: list[tuple[int, int]] = []
+        credits_of_clear: list[int] = []
         keep_ids: list[int] = []
 
         for seed_title in seed.titles:
@@ -320,33 +345,62 @@ class WatchlistIngest:
                 providers = None
             for region in regions:
                 region_rows[region] = provider_rows(providers, region) if providers is not None else []
-            report.providers_written += sum(len(rows) for rows in region_rows.values())
+            written_provider_rows = sum(len(rows) for rows in region_rows.values())
+            report.providers_written += written_provider_rows
 
             if dry_run:
                 if key in existing_ids:
                     keep_ids.append(existing_ids[key])
                 continue
 
-            title_id = await self._repo.upsert_title(seed.slug, row)
+            try:
+                title_id = await self._repo.upsert_title(seed.slug, row)
+            except asyncpg.UniqueViolationError as exc:
+                report.titles_written -= 1
+                report.providers_written -= written_provider_rows
+                report.warnings.append(
+                    f'{seed.slug}: slug conflict upserting {key[0]}:{key[1]} -- {exc}. Skipped.'
+                )
+                if key in existing_ids:
+                    keep_ids.append(existing_ids[key])
+                continue
+
             tmdb_id_to_title_id[seed_title.tmdb_id] = title_id
             keep_ids.append(title_id)
 
+            kept_path_ids = [
+                path_ids[path_slug] for path_slug in seed_title.importance if path_slug in path_ids
+            ]
             for path_slug, importance in seed_title.importance.items():
                 path_id = path_ids.get(path_slug)
                 if path_id is not None:
                     await self._repo.set_importance(title_id, path_id, importance)
+            await self._repo.prune_importance(title_id, kept_path_ids)
 
             for region, rows in region_rows.items():
                 await self._repo.replace_providers(title_id, region, rows)
 
             if seed_title.credits_of is not None:
                 pending_credits_of.append((title_id, seed_title.credits_of))
+            else:
+                credits_of_clear.append(title_id)
 
-        if not dry_run:
+        if dry_run:
+            keep_id_set = set(keep_ids)
+            would_prune = [key for key, row_id in existing_ids.items() if row_id not in keep_id_set]
+            report.titles_pruned = len(would_prune)
+            report.warnings.extend(
+                f'{seed.slug}: {tmdb_type}:{tmdb_id} exists in the database but not in this seed -- '
+                f'would be pruned (cascades to watch_progress).'
+                for tmdb_type, tmdb_id in would_prune
+            )
+        else:
             for title_id, credits_of_tmdb_id in pending_credits_of:
                 credits_of_id = tmdb_id_to_title_id.get(credits_of_tmdb_id)
                 if credits_of_id is not None:
                     await self._repo.set_credits_of(title_id, credits_of_id)
+            for title_id in credits_of_clear:
+                await self._repo.set_credits_of(title_id, None)
 
             report.titles_pruned = await self._repo.prune_titles(seed.slug, keep_ids)
 

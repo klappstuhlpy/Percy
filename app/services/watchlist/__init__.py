@@ -13,7 +13,6 @@ from app.services.watchlist.seeds import (
     TitleSeed,
     UniverseSeed,
     accent_to_int,
-    load_all,
     load_seed,
 )
 
@@ -26,7 +25,6 @@ __all__ = (
     'UniverseSeed',
     'WatchlistIngest',
     'accent_to_int',
-    'load_all',
     'load_seed',
     'movie_row',
     'provider_rows',

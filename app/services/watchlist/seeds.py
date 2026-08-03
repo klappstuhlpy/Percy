@@ -12,7 +12,6 @@ list and validation rules this module implements.
 from __future__ import annotations
 
 import tomllib
-import unicodedata
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -27,7 +26,6 @@ __all__ = (
     'TitleSeed',
     'UniverseSeed',
     'accent_to_int',
-    'load_all',
     'load_seed',
 )
 
@@ -136,6 +134,20 @@ def _title_ident(raw: Mapping[str, Any]) -> str:
     return f'{raw.get("tmdb_type", "?")}:{raw.get("tmdb_id", "?")}'
 
 
+def _require_int(raw: Mapping[str, Any], key: str, default: int, *, ident: str, filename: str, problems: list[str]) -> int:
+    """Reads ``raw[key]`` (falling back to ``default``), rejecting non-``int`` values (``bool`` included).
+
+    A network-free ``lint`` is only useful if it catches what would otherwise die at insert
+    against an ``INTEGER`` column -- ``story = 100.5`` or ``story = "100"`` must fail here, not
+    silently coerce or wait for Postgres.
+    """
+    value = raw.get(key, default)
+    if not isinstance(value, int) or isinstance(value, bool):
+        problems.append(f'{filename}: {ident} has non-integer {key} {value!r}')
+        return default
+    return value
+
+
 def _parse_paths(raw_paths: list[Any], filename: str, problems: list[str]) -> tuple[tuple[PathSeed, ...], set[str]]:
     seen: set[str] = set()
     defaults = 0
@@ -172,7 +184,8 @@ def _parse_eras(raw_eras: list[Any], filename: str, problems: list[str]) -> tupl
             problems.append(f'{filename}: duplicate era key {key!r}')
         seen.add(key)
 
-        result.append(EraSeed(key=key, name=raw.get('name', ''), order=raw.get('order', 0)))
+        order = _require_int(raw, 'order', 0, ident=f'era {key!r}', filename=filename, problems=problems)
+        result.append(EraSeed(key=key, name=raw.get('name', ''), order=order))
 
     return tuple(result), seen
 
@@ -224,12 +237,15 @@ def _parse_titles(
         if credits_of is not None and credits_of not in present_ids:
             problems.append(f'{filename}: title {ident} credits_of {credits_of!r} is not a tmdb_id in this seed')
 
+        story = _require_int(raw, 'story', 0, ident=f'title {ident}', filename=filename, problems=problems)
+        release = _require_int(raw, 'release', 0, ident=f'title {ident}', filename=filename, problems=problems)
+
         result.append(TitleSeed(
             tmdb_type=tmdb_type,
             tmdb_id=tmdb_id,
             era=era,
-            story=raw.get('story', 0),
-            release=raw.get('release', 0),
+            story=story,
+            release=release,
             kind=kind,
             importance=importance,
             seasons=tuple(seasons) if seasons is not None else None,
@@ -258,6 +274,7 @@ def _parse_universe(raw: Mapping[str, Any], filename: str, problems: list[str]) 
     paths, path_slugs = _parse_paths(raw.get('paths') or [], filename, problems)
     eras, era_keys = _parse_eras(raw.get('eras') or [], filename, problems)
     titles = _parse_titles(raw.get('titles') or [], filename, problems, path_slugs=path_slugs, era_keys=era_keys)
+    sort_order = _require_int(raw, 'sort_order', 0, ident='universe', filename=filename, problems=problems)
 
     return UniverseSeed(
         slug=raw.get('slug', ''),
@@ -267,7 +284,7 @@ def _parse_universe(raw: Mapping[str, Any], filename: str, problems: list[str]) 
         accent=accent,
         logo_url=raw.get('logo_url'),
         backdrop_url=raw.get('backdrop_url'),
-        sort_order=raw.get('sort_order', 0),
+        sort_order=sort_order,
         published=raw.get('published', False),
         paths=paths,
         eras=eras,
@@ -288,8 +305,3 @@ def load_seed(path: Path) -> UniverseSeed:
     if problems:
         raise SeedError(problems)
     return universe
-
-
-def load_all(directory: Path) -> list[UniverseSeed]:
-    """Load and validate every ``*.toml`` seed in ``directory``, sorted by filename."""
-    return [load_seed(seed_path) for seed_path in sorted(directory.glob('*.toml'))]
