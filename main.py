@@ -18,8 +18,9 @@ from app.clients.tmdb import TMDBClient
 from app.core import Bot
 from app.database import Database, MigrationRunner
 from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
+from app.services.comics import ComicIngest
 from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
-from config import DatabaseConfig, logs_path
+from config import DatabaseConfig, locg_api_url, logs_path
 
 try:
     import uvloop  # type: ignore[import-not-found]
@@ -31,6 +32,8 @@ else:
 
 __all__ = (
     'RemoveNoise',
+    'comics',
+    'comics_backfill',
     'db',
     'history',
     'init',
@@ -399,6 +402,70 @@ class _NullBot:
 
     async def close(self) -> None:
         pass
+
+
+@main.group('comics', short_help='Comic catalogue archive', options_metavar='[options]')
+def comics() -> None:
+    """Fills the ``comic_*`` archive (V40) from the same sources the bot's 6 h refresh uses.
+
+    The bot ingests on every refresh, so this is only needed to populate the archive without
+    waiting for one — a fresh database, or a backfill after downtime.
+    """
+
+
+@comics.command('backfill')
+@click.option(
+    '--brand', '-b', type=click.Choice(('marvel', 'dc', 'manga', 'all')), default='all',
+    help='Only this brand. Defaults to all three.',
+)
+def comics_backfill(brand: str) -> None:
+    """Fetches the current release list for each brand and upserts it into the archive."""
+    try:
+        asyncio.run(_run_backfill(brand))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while backfilling comics. Check your database connection.')
+        raise SystemExit(1) from None
+
+
+async def _run_backfill(brand: str) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, ingests, closes both.
+
+    Deliberately mirrors :func:`_run_sync`. The fetch is the fragile part (a self-hosted
+    locg-api, a scraped manga page), so a brand that fails is reported and skipped rather than
+    aborting the other two.
+    """
+    # Imported here rather than at module scope: this pulls in the comic cog's Discord-facing
+    # models, which no other CLI command needs.
+    from app.cogs.comic.client import LOCGClient, Parser
+
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        ingest = ComicIngest(db.releases)
+        client = LOCGClient(session, base_url=locg_api_url)
+
+        sources: list[tuple[str, Callable[[], Awaitable[list[Any]]]]] = [
+            ('MARVEL', lambda: client.fetch_comics('marvel')),
+            ('DC', lambda: client.fetch_comics('dc')),
+            ('MANGA', Parser.bs4_viz),
+        ]
+        for name, fetch in sources:
+            if brand != 'all' and name != brand.upper():
+                continue
+            try:
+                data = await fetch()
+            except (HTTPClientError, aiohttp.ClientError, OSError) as exc:
+                click.secho(f'{name}: fetch failed ({exc}).', fg='red')
+                continue
+            if not data:
+                click.secho(f'{name}: nothing returned.', fg='yellow')
+                continue
+            click.echo(str(await ingest.ingest(name, data)))
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
 
 
 @main.group('watchlist', short_help='Universe watchlist seed ingest', options_metavar='[options]')
