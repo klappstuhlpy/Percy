@@ -15,6 +15,7 @@ from .profile import router as profile_router
 from .stats import router as stats_router
 from .subscriptions import router as subscriptions_router
 from .users import router as users_router
+from .watchlist import router as watchlist_router
 from .webhooks import router as webhooks_router
 
 ALL_ROUTERS = [
@@ -33,4 +34,5 @@ ALL_ROUTERS = [
     backup_router,
     subscriptions_router,
     gallery_router,
+    watchlist_router,
 ]
