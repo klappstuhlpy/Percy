@@ -66,8 +66,16 @@ class CacheProtocol(Protocol[P, R]):
         ...
 
 
+#: Distinguishes "absent" from a legitimately stored ``None`` in :meth:`ExpiringCache.pop`.
+_SENTINEL: Any = object()
+
+
 class ExpiringCache(dict):
-    """A cache that expires after a given amount of time."""
+    """A cache that expires after a given amount of time.
+
+    Entries are stored internally as ``(value, inserted_at)``; every read path unwraps that
+    pair, so callers only ever see the value they put in.
+    """
 
     def __init__(self, seconds: float) -> None:
         self.__ttl: float = seconds
@@ -86,7 +94,19 @@ class ExpiringCache(dict):
 
     def __getitem__(self, key: str) -> Any:
         self.__verify_cache_integrity()
-        return super().__getitem__(key)
+        # Unwrap the (value, inserted_at) pair this cache stores, so subscripting returns
+        # what was put in -- exactly like ``get``/``values``/``items`` already do.
+        return super().__getitem__(key)[0]
+
+    def pop(self, key: str, *default: Any) -> Any:
+        """Removes an entry and returns the stored value (not the internal timestamped pair)."""
+        self.__verify_cache_integrity()
+        entry = super().pop(key, _SENTINEL)
+        if entry is _SENTINEL:
+            if default:
+                return default[0]
+            raise KeyError(key)
+        return entry[0]
 
     def get(self, key: str, default: Any = None) -> Any:
         self.__verify_cache_integrity()
