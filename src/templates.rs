@@ -648,6 +648,8 @@ pub(crate) struct WatchOrderTemplate {
     pub(crate) total: usize,
     pub(crate) hours: i64,
     pub(crate) essential: usize,
+    pub(crate) movies: usize,
+    pub(crate) shows: usize,
 }
 
 /// One era heading and the titles under it.
@@ -661,6 +663,12 @@ pub(crate) struct OrderEra {
 pub(crate) struct OrderRow {
     /// Position in the whole order (1-based), not within the era.
     pub(crate) position: usize,
+    /// `position` zero-padded to two digits, as the row's index column shows it.
+    pub(crate) number: String,
+    /// `movie` / `tv` / `special` -- the modifier that colours the row and its tile.
+    pub(crate) kind_class: String,
+    /// The word inside the type tile: FILM, TV, SPEC.
+    pub(crate) kind_label: String,
     pub(crate) slug: String,
     pub(crate) title: String,
     pub(crate) year: Option<String>,
@@ -668,12 +676,13 @@ pub(crate) struct OrderRow {
     /// The row era, shown as a chip in story order (where era headings are absent).
     pub(crate) era: Option<String>,
     pub(crate) rating: Option<String>,
-    pub(crate) poster_url: Option<String>,
     /// `essential` / `recommended` / `optional`, doubling as the badge's modifier class.
     pub(crate) importance: Option<String>,
     pub(crate) instruction: Option<String>,
+    /// The sub-brand a title belongs to (Sony's Spider-Man films, Fox's X-Men), shown
+    /// as a neutral tag so a licensing detour is visible at a glance.
+    pub(crate) studio: Option<String>,
     pub(crate) milestone: bool,
-    pub(crate) is_show: bool,
     pub(crate) providers: Vec<OrderProvider>,
 }
 

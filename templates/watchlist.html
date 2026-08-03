@@ -14,51 +14,42 @@
 {% endblock %}
 
 {% block body %}
-<div class="cx">
-    <div class="cx-page">
-        <header class="cx-head">
+<div class="wl">
+    <div class="wl-page">
+        <header class="wl-hero">
             <div>
-                <h1 class="cx-bit cx-bit--lg cx-head__title">Watch Orders</h1>
-                <p class="cx-head__tagline">
-                    Every film and show of a universe in the order that actually makes sense —
-                    story or release, with runtimes, what's essential and where to stream it.
+                <h1 class="wl-hero__title">Watch Orders</h1>
+                <p class="wl-hero__tagline">
+                    Every film and show of a universe in the order that actually makes sense — story or release,
+                    with runtimes, what's essential, and where to stream it.
                 </p>
             </div>
         </header>
 
         {% if universes.is_empty() %}
-        <div class="cx-panel">
-            <div class="cx-panel__head"><span>No catalogue</span></div>
-            <div class="cx-panel__body cx-empty">
-                <p>No watch orders are published yet. Check back soon.</p>
-            </div>
+        <div class="wl-empty">
+            <p>No watch orders are published yet. Check back soon.</p>
         </div>
         {% else %}
-        <div class="cx-grid">
+        <div class="wl-grid">
             {% for universe in universes %}
-            <a class="cx-panel cx-card" href="/watchlist/{{ universe.slug }}"
-               style="--cx-accent: {{ universe.accent }}">
-                <div class="cx-panel__head">
-                    <span>{{ universe.short_name }}</span>
-                    <span>{{ universe.title_count }} titles</span>
-                </div>
-                <div class="cx-panel__body">
-                    <h2 class="cx-bit" style="margin: 0; font-size: 1rem; color: var(--cx-accent);">{{ universe.name }}</h2>
-                    {% match universe.tagline %}
-                    {% when Some with (tagline) %}
-                    <p class="cx-head__tagline" style="margin-top: 0.4rem; font-size: 0.8rem;">{{ tagline }}</p>
-                    {% when None %}
-                    {% endmatch %}
-                    <div class="cx-card__stats">
-                        <span class="cx-stat">
-                            <span class="cx-stat__value">{{ universe.title_count }}</span>
-                            <span class="cx-bit cx-bit--sm">Titles</span>
-                        </span>
-                        <span class="cx-stat">
-                            <span class="cx-stat__value">{{ universe.total_runtime / 60 }}</span>
-                            <span class="cx-bit cx-bit--sm">Hours</span>
-                        </span>
-                    </div>
+            <a class="wl-card" href="/watchlist/{{ universe.slug }}" style="--wl-accent: {{ universe.accent }}">
+                <h2 class="wl-card__name">{{ universe.name }}</h2>
+                <span class="wl-card__rule"></span>
+                {% match universe.tagline %}
+                {% when Some with (tagline) %}
+                <p class="wl-card__tagline">{{ tagline }}</p>
+                {% when None %}
+                {% endmatch %}
+                <div class="wl-card__stats">
+                    <span class="wl-stat">
+                        <span class="wl-stat__value">{{ universe.title_count }}</span>
+                        <span class="wl-stat__label">Titles</span>
+                    </span>
+                    <span class="wl-stat">
+                        <span class="wl-stat__value">{{ universe.total_runtime / 60 }}h</span>
+                        <span class="wl-stat__label">Runtime</span>
+                    </span>
                 </div>
             </a>
             {% endfor %}

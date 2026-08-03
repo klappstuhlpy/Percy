@@ -14,112 +14,130 @@
 {% endblock %}
 
 {% block body %}
-<div class="cx" style="--cx-accent: {{ universe.accent }}">
-    <div class="cx-page">
-        <header class="cx-head">
+<div class="wl" style="--wl-accent: {{ universe.accent }}">
+    <div class="wl-page">
+        <header class="wl-hero">
             <div>
-                <h1 class="cx-bit cx-bit--lg cx-head__title">{{ universe.name }}</h1>
+                <h1 class="wl-hero__title">{{ universe.name }}</h1>
                 {% match universe.tagline %}
                 {% when Some with (tagline) %}
-                <p class="cx-head__tagline">{{ tagline }}</p>
+                <p class="wl-hero__tagline">{{ tagline }}</p>
                 {% when None %}
                 {% endmatch %}
             </div>
-            <div class="cx-card__stats">
-                <span class="cx-stat">
-                    <span class="cx-stat__value">{{ total }}</span>
-                    <span class="cx-bit cx-bit--sm">Titles</span>
-                </span>
-                <span class="cx-stat">
-                    <span class="cx-stat__value">{{ hours }}</span>
-                    <span class="cx-bit cx-bit--sm">Hours</span>
-                </span>
-                <span class="cx-stat">
-                    <span class="cx-stat__value">{{ essential }}</span>
-                    <span class="cx-bit cx-bit--sm">Essential</span>
-                </span>
-            </div>
         </header>
 
-        <nav class="cx-controls" aria-label="Watch order options">
-            <a class="cx-toggle" href="?sort=story&amp;path={{ path }}&amp;region={{ region }}"
-               aria-current="{% if sort == "story" %}true{% else %}false{% endif %}">Story order</a>
-            <a class="cx-toggle" href="?sort=release&amp;path={{ path }}&amp;region={{ region }}"
-               aria-current="{% if sort == "release" %}true{% else %}false{% endif %}">Release order</a>
-            {% for option in paths %}
-            <a class="cx-toggle" href="?sort={{ sort }}&amp;path={{ option.slug }}&amp;region={{ region }}"
-               aria-current="{% if option.slug == path %}true{% else %}false{% endif %}">{{ option.name }}</a>
-            {% endfor %}
+        <p class="wl-lede">
+            The complete <strong>{{ universe.short_name }} watch order</strong> — every film and show, ranked by
+            importance. Watch in <strong>story order</strong> or <strong>release order</strong>, see what each entry
+            is worth, and check where it's streaming.
+        </p>
+
+        <div class="wl-stats">
+            <div class="wl-stat">
+                <span class="wl-stat__value">{{ total }}</span>
+                <span class="wl-stat__label">Titles</span>
+            </div>
+            <div class="wl-stat">
+                <span class="wl-stat__value">{{ hours }}h</span>
+                <span class="wl-stat__label">Runtime</span>
+            </div>
+            <div class="wl-stat">
+                <span class="wl-stat__value">{{ essential }}</span>
+                <span class="wl-stat__label">Essential</span>
+            </div>
+            <div class="wl-stat">
+                <span class="wl-stat__value">{{ movies }}</span>
+                <span class="wl-stat__label">Films</span>
+            </div>
+            <div class="wl-stat">
+                <span class="wl-stat__value">{{ shows }}</span>
+                <span class="wl-stat__label">Series</span>
+            </div>
+        </div>
+
+        <nav class="wl-controls" aria-label="Watch order options">
+            <div class="wl-controls__group">
+                <a class="wl-chip" href="?sort=story&amp;path={{ path }}&amp;region={{ region }}"
+                   aria-current="{% if sort == "story" %}true{% else %}false{% endif %}">Story Order</a>
+                <a class="wl-chip" href="?sort=release&amp;path={{ path }}&amp;region={{ region }}"
+                   aria-current="{% if sort == "release" %}true{% else %}false{% endif %}">Release Order</a>
+            </div>
+            {% if paths.len() > 1 %}
+            <div class="wl-controls__group">
+                {% for option in paths %}
+                <a class="wl-chip" href="?sort={{ sort }}&amp;path={{ option.slug }}&amp;region={{ region }}"
+                   aria-current="{% if option.slug == path %}true{% else %}false{% endif %}">{{ option.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
         </nav>
 
         {% if eras.is_empty() %}
-        <div class="cx-panel">
-            <div class="cx-panel__head"><span>Catalogue unavailable</span></div>
-            <div class="cx-panel__body cx-empty">
-                <p>This watch order couldn't be loaded right now. Try again in a moment.</p>
-            </div>
+        <div class="wl-empty">
+            <p>This watch order couldn't be loaded right now. Try again in a moment.</p>
         </div>
         {% else %}
         {% for era in eras %}
         <section>
             {% if !era.label.is_empty() %}
-            <h2 class="cx-bit cx-era">{{ era.label }}</h2>
+            <div class="wl-era">
+                <h2 class="wl-era__title">{{ era.label }}</h2>
+                <span class="wl-era__count">{{ era.rows.len() }} titles</span>
+            </div>
             {% endif %}
-            <ol class="cx-rows">
+            <ol class="wl-entries">
                 {% for row in era.rows %}
-                <li class="cx-row{% if row.milestone %} cx-row--milestone{% endif %}">
-                    <span class="cx-row__index">{{ row.position }}</span>
-                    {% match row.poster_url %}
-                    {% when Some with (poster) %}
-                    <img class="cx-row__poster" src="{{ poster }}" alt="" loading="lazy" width="92" height="138">
-                    {% when None %}
-                    <span class="cx-row__poster" aria-hidden="true"></span>
-                    {% endmatch %}
+                <li class="wl-entry wl-entry--{{ row.kind_class }}{% if row.milestone %} wl-entry--milestone{% endif %}">
+                    <span class="wl-entry__num">{{ row.number }}</span>
+                    <span class="wl-entry__type">{{ row.kind_label }}</span>
                     <div>
-                        <a class="cx-row__title" href="/watchlist/{{ universe.slug }}/{{ row.slug }}">
-                            {{ row.title }}
+                        <div class="wl-entry__head">
+                            <a class="wl-entry__title" href="/watchlist/{{ universe.slug }}/{{ row.slug }}">{{ row.title }}</a>
                             {% match row.year %}
                             {% when Some with (year) %}
-                            <span class="cx-row__year">{{ year }}</span>
+                            <span class="wl-entry__year">{{ year }}</span>
                             {% when None %}
                             {% endmatch %}
-                        </a>
-                        <p class="cx-row__meta">
-                            {% match row.era %}
-                            {% when Some with (era_name) %}
-                            <span>{{ era_name }}</span>
+                            {% match row.studio %}
+                            {% when Some with (studio) %}
+                            <span class="wl-badge wl-badge--studio">{{ studio }}</span>
                             {% when None %}
                             {% endmatch %}
-                            <span>{{ row.runtime_label }}</span>
+                            {% match row.importance %}
+                            {% when Some with (importance) %}
+                            <span class="wl-badge wl-badge--{{ importance }}">{{ importance }}</span>
+                            {% when None %}
+                            {% endmatch %}
+                            {% if row.milestone %}
+                            <span class="wl-badge wl-badge--milestone">Milestone</span>
+                            {% endif %}
+                        </div>
+                        <p class="wl-entry__note">
                             {% match row.rating %}
                             {% when Some with (rating) %}
-                            <span>★ {{ rating }}</span>
+                            <span class="wl-entry__rating">★ {{ rating }}</span> ·
+                            {% when None %}
+                            {% endmatch %}
+                            {{ row.runtime_label }}
+                            {% match row.era %}
+                            {% when Some with (era_name) %}
+                            · {{ era_name }}
                             {% when None %}
                             {% endmatch %}
                             {% match row.instruction %}
                             {% when Some with (instruction) %}
-                            <span class="cx-row__instruction">{{ instruction }}</span>
+                            · <span class="wl-entry__instruction">{{ instruction }}</span>
                             {% when None %}
                             {% endmatch %}
                         </p>
                     </div>
-                    <div class="cx-row__right">
-                        {% if row.is_show %}
-                        <span class="cx-tag cx-tag--tv">Series</span>
-                        {% endif %}
-                        {% if row.milestone %}
-                        <span class="cx-tag cx-tag--milestone">Milestone</span>
-                        {% endif %}
-                        {% match row.importance %}
-                        {% when Some with (importance) %}
-                        <span class="cx-tag cx-tag--{{ importance }}">{{ importance }}</span>
-                        {% when None %}
-                        {% endmatch %}
+                    <div class="wl-entry__side">
                         {% if !row.providers.is_empty() %}
-                        <span class="cx-providers">
+                        <span class="wl-providers">
                             {% for provider in row.providers %}
                             <img src="{{ provider.logo_url }}" alt="{{ provider.name }}" title="{{ provider.name }}"
-                                 loading="lazy" width="24" height="24">
+                                 loading="lazy" width="25" height="25">
                             {% endfor %}
                         </span>
                         {% endif %}

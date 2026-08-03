@@ -26,6 +26,9 @@ use crate::{
 /// TMDB image CDN. Sizes are fixed buckets, not arbitrary dimensions.
 const TMDB_IMAGE_BASE: &str = "https://image.tmdb.org/t/p";
 
+/// How many streaming logos a row has room for before it starts wrapping.
+const MAX_PROVIDER_LOGOS: usize = 4;
+
 /// Fallback region when the visitor has expressed no preference.
 const DEFAULT_REGION: &str = "US";
 
@@ -104,6 +107,8 @@ pub async fn watch_order(
             total: 0,
             hours: 0,
             essential: 0,
+            movies: 0,
+            shows: 0,
         }
         .into_response();
     };
@@ -115,6 +120,8 @@ pub async fn watch_order(
         .iter()
         .filter(|title| title.importance.as_deref() == Some("essential"))
         .count();
+    let movies = page.titles.iter().filter(|title| title.kind == "movie").count();
+    let shows = page.titles.iter().filter(|title| title.kind == "tv").count();
 
     WatchOrderTemplate {
         account: viewer(&session),
@@ -128,6 +135,8 @@ pub async fn watch_order(
         total,
         hours: runtime / 60,
         essential,
+        movies,
+        shows,
     }
     .into_response()
 }
@@ -201,8 +210,16 @@ fn era_label(key: &str) -> String {
 }
 
 fn order_row(title: &WatchTitle, position: usize) -> OrderRow {
+    let (kind_class, kind_label) = match title.kind.as_str() {
+        "tv" => ("tv", "TV"),
+        "special" => ("special", "SPEC"),
+        _ => ("movie", "FILM"),
+    };
     OrderRow {
         position,
+        number: format!("{position:02}"),
+        kind_class: kind_class.to_string(),
+        kind_label: kind_label.to_string(),
         slug: title.slug.clone(),
         title: title.title.clone(),
         year: title
@@ -212,15 +229,11 @@ fn order_row(title: &WatchTitle, position: usize) -> OrderRow {
             .map(str::to_string),
         runtime_label: runtime_label(title),
         rating: title.tmdb_rating.map(|rating| format!("{rating:.1}")),
-        poster_url: title
-            .poster_path
-            .as_deref()
-            .map(|path| format!("{TMDB_IMAGE_BASE}/w92{path}")),
         era: title.era.as_deref().map(era_label),
         importance: title.importance.clone(),
         instruction: title.instruction.clone(),
+        studio: title.sub_universe.clone(),
         milestone: title.milestone,
-        is_show: title.kind == "tv",
         providers: providers(title),
     }
 }
@@ -250,6 +263,9 @@ fn providers(title: &WatchTitle) -> Vec<OrderProvider> {
     let mut seen: Vec<i64> = Vec::new();
     let mut out = Vec::new();
     for provider in title.providers.iter().filter(|p| p.offer == "flatrate") {
+        if out.len() >= MAX_PROVIDER_LOGOS {
+            break;
+        }
         if seen.contains(&provider.provider_id) {
             continue;
         }
@@ -340,6 +356,26 @@ mod tests {
         assert_eq!(era_label("phase12"), "Phase 12");
         assert_eq!(era_label("infinity-saga"), "Infinity-saga");
         assert_eq!(era_label("phaseX"), "PhaseX");
+    }
+
+    #[test]
+    fn rows_carry_a_padded_number_and_their_kind() {
+        let mut show = title("loki", None);
+        show.kind = "tv".into();
+
+        let film_row = order_row(&title("iron-man", None), 3);
+        assert_eq!(film_row.number, "03");
+        assert_eq!(
+            (film_row.kind_class.as_str(), film_row.kind_label.as_str()),
+            ("movie", "FILM")
+        );
+
+        let show_row = order_row(&show, 12);
+        assert_eq!(show_row.number, "12");
+        assert_eq!(
+            (show_row.kind_class.as_str(), show_row.kind_label.as_str()),
+            ("tv", "TV")
+        );
     }
 
     #[test]
