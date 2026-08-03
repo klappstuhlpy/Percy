@@ -37,6 +37,7 @@ from app.database.repositories import (
     MusicSessionsRepository,
     PlaylistsRepository,
     PollsRepository,
+    ReleasesRepository,
     RoleMenusRepository,
     StarboardRepository,
     StatCountersRepository,
@@ -307,6 +308,7 @@ class Database(_Database):
     event_webhooks: EventWebhooksRepository
     templates: GuildTemplatesRepository
     watchlist: WatchlistRepository
+    releases: ReleasesRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -339,6 +341,7 @@ class Database(_Database):
         self.event_webhooks = EventWebhooksRepository(self)
         self.templates = GuildTemplatesRepository(self)
         self.watchlist = WatchlistRepository(self)
+        self.releases = ReleasesRepository(self)
 
         self._register_cache_signals()
 

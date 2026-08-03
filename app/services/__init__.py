@@ -62,6 +62,14 @@ from app.services.bot_health import (
 )
 from app.services.char_info import MAX_CHARACTERS, CharInfo, get_char_info
 from app.services.code_stats import CodeStats, count_code_stats
+from app.services.comics import (
+    ComicIngest,
+    ComicIngestReport,
+    character_rows,
+    creator_rows,
+    release_row,
+    split_series,
+)
 from app.services.economy import (
     DailyResult,
     EconomySnapshot,
@@ -148,6 +156,8 @@ __all__ = (
     'BotHealthReport',
     'CharInfo',
     'CodeStats',
+    'ComicIngest',
+    'ComicIngestReport',
     'CommandRouter',
     'ConnectionState',
     'DailyResult',
@@ -198,6 +208,7 @@ __all__ = (
     'build_purge_predicate',
     'build_route_system_prompt',
     'build_tag_find_prompt',
+    'character_rows',
     'clean_track_title',
     'compute_daily',
     'compute_periodic',
@@ -205,6 +216,7 @@ __all__ = (
     'compute_shift',
     'compute_spam_penalty',
     'count_code_stats',
+    'creator_rows',
     'default_granularity',
     'describe_effect',
     'describe_interval',
@@ -227,6 +239,7 @@ __all__ = (
     'prestige_multiplier',
     'prestige_requirement',
     'provider_rows',
+    'release_row',
     'resolve_granularity',
     'resolve_range',
     'resolve_search',
@@ -236,6 +249,7 @@ __all__ = (
     'serialize_envelope',
     'sign_body',
     'slugify',
+    'split_series',
     'summarize_gateway_traffic',
     'summarize_presence',
     'summarize_sections',

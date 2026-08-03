@@ -18,8 +18,6 @@ drift back to whatever TMDB happens to say, and vice versa.
 from __future__ import annotations
 
 import datetime
-import re
-import unicodedata
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -30,6 +28,7 @@ import asyncpg
 # mapping functions above it never import discord/asyncpg/aiohttp and never raise or catch these.
 from app.clients.base import HTTPClientError
 from app.services.watchlist.seeds import accent_to_int
+from app.utils.text import slugify
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -40,28 +39,8 @@ if TYPE_CHECKING:
 
 __all__ = ('IngestReport', 'WatchlistIngest', 'movie_row', 'provider_rows', 'slugify', 'tv_row')
 
-_SLUG_STRIP_RE = re.compile(r'[^a-z0-9]+')
-_APOSTROPHE_RE = re.compile(r"['’]")
-
 #: TMDB's ``watch/providers`` result buckets, in the order rows are emitted.
 _PROVIDER_BUCKETS = ('flatrate', 'rent', 'buy')
-
-
-def slugify(title: str) -> str:
-    """Lowercase, ASCII, hyphen-separated slug (``"Avengers: Endgame"`` -> ``"avengers-endgame"``).
-
-    Non-ASCII characters are transliterated where possible (``"Pokémon"`` -> ``"pokemon"``),
-    apostrophes are dropped rather than turned into a hyphen (``"Marvel's Daredevil"`` ->
-    ``"marvels-daredevil"``), and every other run of non-alphanumeric characters collapses to
-    a single hyphen with leading/trailing hyphens stripped.
-
-    May return ``""`` for a title with no ASCII alphanumerics at all -- callers that have a
-    TMDB id (:func:`movie_row`, :func:`tv_row`) fall back to ``str(tmdb_id)`` in that case, so
-    the *stored* slug is never empty even though this pure function can be.
-    """
-    normalized = unicodedata.normalize('NFKD', title).encode('ascii', 'ignore').decode('ascii')
-    normalized = _APOSTROPHE_RE.sub('', normalized)
-    return _SLUG_STRIP_RE.sub('-', normalized.lower()).strip('-')
 
 
 def _parse_date(value: str | None) -> datetime.date | None:
