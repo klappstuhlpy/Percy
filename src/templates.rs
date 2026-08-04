@@ -629,6 +629,42 @@ pub(crate) struct WatchlistTemplate {
     pub(crate) universes: Vec<WatchUniverseSummary>,
 }
 
+/// `GET /people/:slug` — one person's filmography across every universe.
+#[derive(Template)]
+#[template(path = "person.html")]
+pub(crate) struct PersonTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    /// TMDB profile image, already sized. Absent for a person TMDB has no photo of.
+    pub(crate) photo_url: Option<String>,
+    /// `Actor · Director` — the distinct roles they are credited with.
+    pub(crate) roles: String,
+    pub(crate) credit_count: usize,
+    /// How many universes they appear in.
+    pub(crate) universes: usize,
+    /// Undated or still-ahead titles — the "what's next" the page opens with.
+    pub(crate) upcoming: Vec<PersonCreditRow>,
+    /// Everything already out, newest first (Percy's order, never re-sorted here).
+    pub(crate) filmography: Vec<PersonCreditRow>,
+}
+
+/// One row of a person's filmography.
+pub(crate) struct PersonCreditRow {
+    pub(crate) universe_slug: String,
+    pub(crate) universe_name: String,
+    /// The universe's accent as `#RRGGBB`, so a row keeps its franchise's colour.
+    pub(crate) accent: String,
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) year: Option<String>,
+    /// `FILM` / `TV` / `SPEC`.
+    pub(crate) kind_label: String,
+    /// The character for an acting credit, else the role noun.
+    pub(crate) role_label: String,
+    pub(crate) poster_url: Option<String>,
+}
+
 /// `GET /watchlist/:slug` — one universe's ordered catalogue.
 #[derive(Template)]
 #[template(path = "watch_order.html")]

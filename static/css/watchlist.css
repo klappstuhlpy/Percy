@@ -426,3 +426,70 @@
         transition: none;
     }
 }
+
+/* ── Person page ─────────────────────────────────────────────────────
+   A filmography reuses the watch-order row wholesale; only the portrait
+   header and the poster column are new. The importance marker is switched
+   off here — a credit has no importance, and an inherited dot would read
+   as one. */
+
+.wl-person {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.wl-person__photo {
+    width: 120px;
+    height: 180px;
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--box-shade);
+}
+
+.wl-person__photo--placeholder {
+    display: block;
+}
+
+.wl-person-entry {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
+.wl-person-entry::before {
+    content: none;
+}
+
+.wl-person-entry__poster {
+    width: 60px;
+    height: 90px;
+    border: 1px solid var(--box-border);
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--box-shade);
+}
+
+.wl-person-entry__poster--placeholder {
+    display: block;
+}
+
+.wl-person-entry__role {
+    color: var(--foreground);
+}
+
+.wl-person-entry__universe {
+    color: var(--wl-accent);
+    text-decoration: none;
+}
+
+.wl-person-entry__universe:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    .wl-person {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+    }
+}

@@ -149,6 +149,7 @@ fn build_router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/watchlist", get(watchlist::watchlist_index))
         .route("/watchlist/:slug", get(watchlist::watch_order))
+        .route("/people/:slug", get(watchlist::person_page))
         .route("/comics", get(comics::comic_browse))
         .route("/comics/series", get(comics::comic_series_index))
         .route("/comics/series/:slug", get(comics::comic_series_detail))

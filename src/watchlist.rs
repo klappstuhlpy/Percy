@@ -11,14 +11,17 @@
 
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{WatchTitle, WatchUniverse};
+use percy_client::{PercyError, WatchPersonCredit, WatchTitle, WatchUniverse};
 use serde::Deserialize;
 
 use crate::{
     session::Session,
-    templates::{OrderEra, OrderProvider, OrderRow, WatchOrderTemplate, WatchlistTemplate},
+    templates::{
+        OrderEra, OrderProvider, OrderRow, PersonCreditRow, PersonTemplate, WatchOrderTemplate, WatchlistTemplate,
+    },
     view::Viewer,
     AppState,
 };
@@ -139,6 +142,142 @@ pub async fn watch_order(
         shows,
     }
     .into_response()
+}
+
+/// `GET /people/:slug` — one person: what they have coming, then their filmography.
+///
+/// Same soft-404 split the comic pages make: an unknown slug is a real 404, a backend
+/// that is down is a 200 empty state. A page that answered 200 to any invented name
+/// would get indexed as a real person.
+pub async fn person_page(State(app): State<AppState>, session: Option<Session>, Path(slug): Path<String>) -> Response {
+    let fetched = match &app.percy {
+        Some(percy) => percy.get_watch_person(&slug).await,
+        None => Err(PercyError::Api("percy is not configured".into())),
+    };
+
+    let page = match fetched {
+        Ok(page) => page,
+        Err(error) => {
+            let body = PersonTemplate {
+                account: viewer(&session),
+                name: slug.clone(),
+                slug,
+                photo_url: None,
+                roles: String::new(),
+                credit_count: 0,
+                universes: 0,
+                upcoming: Vec::new(),
+                filmography: Vec::new(),
+            };
+            let status = match error {
+                PercyError::NotFound => StatusCode::NOT_FOUND,
+                _ => StatusCode::OK,
+            };
+            return (status, body).into_response();
+        }
+    };
+
+    let today = today_iso();
+    let (upcoming, filmography): (Vec<_>, Vec<_>) = page
+        .credits
+        .iter()
+        .partition(|credit| is_upcoming(credit.title.release_date.as_deref(), &today));
+
+    let mut universes: Vec<&str> = page.credits.iter().map(|c| c.title.universe.as_str()).collect();
+    universes.sort_unstable();
+    universes.dedup();
+
+    PersonTemplate {
+        account: viewer(&session),
+        name: page.person.name,
+        slug: page.person.slug,
+        photo_url: page
+            .person
+            .profile_path
+            .as_deref()
+            .map(|path| format!("{TMDB_IMAGE_BASE}/w185{path}")),
+        roles: role_summary(&page.credits),
+        credit_count: page.credits.len(),
+        universes: universes.len(),
+        upcoming: upcoming.into_iter().map(person_row).collect(),
+        filmography: filmography.into_iter().map(person_row).collect(),
+    }
+    .into_response()
+}
+
+/// Today as `YYYY-MM-DD`, matching the format TMDB release dates come in.
+///
+/// Uses the `time` crate the cookie layer already pulls in rather than adding a date
+/// dependency for one comparison. ISO dates compare correctly as strings, which is why
+/// no parsing happens anywhere on this path.
+fn today_iso() -> String {
+    cookie::time::OffsetDateTime::now_utc().date().to_string()
+}
+
+/// A title counts as upcoming when it has no date yet *or* its date is still ahead.
+///
+/// The undated case is the important one: an announced-but-unscheduled film is exactly
+/// what somebody following a person came to see, and it must not sink into the
+/// filmography just because TMDB has no date for it.
+fn is_upcoming(release_date: Option<&str>, today: &str) -> bool {
+    match release_date {
+        None => true,
+        Some(date) => date.is_empty() || date > today,
+    }
+}
+
+/// `Actor · Director` — the distinct roles this person is credited with, in a fixed order
+/// so the same person never reads differently on two visits.
+fn role_summary(credits: &[WatchPersonCredit]) -> String {
+    ["cast", "director", "writer", "creator"]
+        .into_iter()
+        .filter(|role| credits.iter().any(|credit| credit.role == *role))
+        .map(role_noun)
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn role_noun(role: &str) -> &'static str {
+    match role {
+        "cast" => "Actor",
+        "director" => "Director",
+        "writer" => "Writer",
+        "creator" => "Creator",
+        _ => "Credited",
+    }
+}
+
+fn person_row(credit: &WatchPersonCredit) -> PersonCreditRow {
+    let title = &credit.title;
+    let kind_label = match title.kind.as_str() {
+        "tv" => "TV",
+        "special" => "SPEC",
+        _ => "FILM",
+    };
+    PersonCreditRow {
+        universe_slug: title.universe.clone(),
+        universe_name: credit.universe_name.clone(),
+        accent: credit.universe_accent.clone(),
+        slug: title.slug.clone(),
+        title: title.title.clone(),
+        year: title
+            .release_date
+            .as_deref()
+            .and_then(|date| date.get(..4))
+            .map(str::to_string),
+        kind_label: kind_label.to_string(),
+        // The character is the interesting half of an acting credit; the bare role is
+        // all there is for crew, and for an actor TMDB left uncredited.
+        role_label: credit
+            .character_name
+            .clone()
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| role_noun(&credit.role).to_string()),
+        poster_url: title
+            .poster_path
+            .as_deref()
+            .map(|path| format!("{TMDB_IMAGE_BASE}/w154{path}")),
+    }
 }
 
 fn sort_label(sort: &str) -> &'static str {
@@ -392,6 +531,94 @@ mod tests {
         let mut unknown = title("c", None);
         unknown.runtime = 0;
         assert_eq!(runtime_label(&unknown), "");
+    }
+
+    fn credit(role: &str, character: Option<&str>, release_date: Option<&str>) -> WatchPersonCredit {
+        WatchPersonCredit {
+            role: role.to_string(),
+            character_name: character.map(str::to_string),
+            universe_name: "Marvel Cinematic Universe".into(),
+            universe_accent: "#E62429".into(),
+            title: WatchTitle {
+                universe: "mcu".into(),
+                slug: "iron-man".into(),
+                title: "Iron Man".into(),
+                release_date: release_date.map(str::to_string),
+                ..WatchTitle::default()
+            },
+            ..WatchPersonCredit::default()
+        }
+    }
+
+    #[test]
+    fn an_undated_title_is_upcoming_forever() {
+        // The load-bearing case: TMDB announces long before it schedules, and the
+        // announced film is exactly what a follower came to the page for.
+        assert!(is_upcoming(None, "2026-08-04"));
+        assert!(is_upcoming(Some(""), "2026-08-04"));
+    }
+
+    #[test]
+    fn upcoming_is_decided_by_the_date_alone() {
+        assert!(is_upcoming(Some("2026-12-18"), "2026-08-04"));
+        assert!(!is_upcoming(Some("2008-05-02"), "2026-08-04"));
+        // Released *today* is not upcoming -- it is out.
+        assert!(!is_upcoming(Some("2026-08-04"), "2026-08-04"));
+    }
+
+    #[test]
+    fn today_is_an_iso_date() {
+        // is_upcoming compares strings, so the clock must produce exactly TMDB's format.
+        let today = today_iso();
+        assert_eq!(today.len(), 10, "{today}");
+        assert_eq!(today.as_bytes()[4], b'-');
+        assert_eq!(today.as_bytes()[7], b'-');
+    }
+
+    #[test]
+    fn role_summary_lists_distinct_roles_in_a_fixed_order() {
+        let credits = vec![
+            credit("writer", None, None),
+            credit("cast", Some("Tony Stark"), None),
+            credit("cast", Some("Tony Stark"), None),
+        ];
+        assert_eq!(role_summary(&credits), "Actor \u{b7} Writer");
+        assert_eq!(role_summary(&[]), "");
+    }
+
+    #[test]
+    fn a_row_shows_the_character_for_acting_and_the_role_for_crew() {
+        assert_eq!(
+            person_row(&credit("cast", Some("Tony Stark"), None)).role_label,
+            "Tony Stark"
+        );
+        assert_eq!(person_row(&credit("director", None, None)).role_label, "Director");
+        // An uncredited actor has no character: the role noun is all there is to say.
+        assert_eq!(person_row(&credit("cast", Some(""), None)).role_label, "Actor");
+    }
+
+    #[test]
+    fn the_person_page_renders_both_sections() {
+        use askama::Template;
+
+        let page = PersonTemplate {
+            account: None,
+            name: "Robert Downey Jr.".into(),
+            slug: "robert-downey-jr".into(),
+            photo_url: Some("https://image.tmdb.org/t/p/w185/rdj.jpg".into()),
+            roles: "Actor".into(),
+            credit_count: 2,
+            universes: 1,
+            upcoming: vec![person_row(&credit("cast", Some("Doctor Doom"), None))],
+            filmography: vec![person_row(&credit("cast", Some("Tony Stark"), Some("2008-05-02")))],
+        };
+        let html = page.render().expect("the person template renders");
+
+        assert!(html.contains("Coming up"));
+        assert!(html.contains("Filmography"));
+        assert!(html.contains("Doctor Doom"), "the macro body reaches the loop variable");
+        assert!(html.contains("href=\"/watchlist/mcu/iron-man\""));
+        assert!(html.contains("2008"), "a released title keeps its year");
     }
 
     #[test]
