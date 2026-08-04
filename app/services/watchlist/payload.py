@@ -19,8 +19,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 __all__ = (
+    'credit_payloads',
     'era_payloads',
     'path_payloads',
+    'person_payload',
+    'person_summary',
     'title_payload',
     'universe_payload',
     'universe_stats',
@@ -159,6 +162,70 @@ def universe_payload(
         'paths': path_payloads(paths),
         'eras': era_payloads(titles),
         'titles': [title_payload(row, providers=by_title.get(row['id'], ())) for row in titles],
+    }
+
+
+def credit_payloads(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Shapes ``list_credits`` rows (a credit joined to its person) for a title's cast & crew.
+
+    Emitted flat and in query order (role, then billing) rather than pre-grouped: the page
+    decides whether to render one list or a section per role, and a flat list survives a new
+    role being added without changing the payload's shape.
+    """
+    return [
+        {
+            'tmdb_person_id': row['tmdb_person_id'],
+            'name': row['name'],
+            'slug': row['slug'],
+            'profile_path': row['profile_path'],
+            'role': row['role'],
+            'character_name': row['character_name'],
+            'billing_order': row['billing_order'],
+        }
+        for row in rows
+    ]
+
+
+def person_summary(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Shapes one ``search_people`` row -- what an autocomplete entry needs, nothing more."""
+    return {
+        'tmdb_person_id': row['tmdb_person_id'],
+        'name': row['name'],
+        'slug': row['slug'],
+        'profile_path': row['profile_path'],
+        'credit_count': row['credit_count'],
+    }
+
+
+def person_payload(
+    person: Mapping[str, Any], credits: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Builds a person page: the person plus every title they are credited on.
+
+    ``credits`` are ``list_person_credits`` rows -- a credit joined to the full title *and* its
+    universe -- so each entry nests a complete :func:`title_payload` and the caller needs no
+    second lookup to render a poster row. The repository's ordering (undated first, then newest)
+    is preserved, which is what makes the top of the list read as "what's next".
+    """
+    return {
+        'person': {
+            'tmdb_person_id': person['tmdb_person_id'],
+            'name': person['name'],
+            'slug': person['slug'],
+            'profile_path': person['profile_path'],
+            'updated_at': _iso(person['updated_at']),
+        },
+        'credits': [
+            {
+                'role': row['role'],
+                'character_name': row['character_name'],
+                'billing_order': row['billing_order'],
+                'universe_name': row['universe_name'],
+                'universe_accent': _accent_hex(row['universe_accent']),
+                'title': title_payload(row),
+            }
+            for row in credits
+        ],
     }
 
 

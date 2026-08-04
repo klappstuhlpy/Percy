@@ -27,6 +27,7 @@ import asyncpg
 # HTTP-client error hierarchy and asyncpg's exception hierarchy (it does real I/O); the pure
 # mapping functions above it never import discord/asyncpg/aiohttp and never raise or catch these.
 from app.clients.base import HTTPClientError
+from app.services.watchlist.people import credit_rows
 from app.services.watchlist.seeds import accent_to_int
 from app.utils.text import slugify
 
@@ -120,6 +121,11 @@ def tv_row(
     that episode plus a warning recorded under the returned dict's ``'_warnings'`` key -- an
     extra key the orchestrator pops off and folds into :class:`IngestReport.warnings`, since
     this function itself must stay side-effect-free.
+
+    ``'_created_by'`` is carried out the same way: a show's creators live on this payload and
+    *not* on TMDB's ``credits`` response, so the orchestrator pops them off here and hands
+    them to :func:`~app.services.watchlist.people.credit_rows` rather than re-fetching the
+    show. Movies have no equivalent and :func:`movie_row` emits no such key.
     """
     wanted = _wanted_seasons(seed_title, season_payloads.keys())
     fallback_runtime = next(iter(payload.get('episode_run_time') or []), None)
@@ -155,6 +161,9 @@ def tv_row(
         'tmdb_rating': payload.get('vote_average'),
         'tmdb_votes': payload.get('vote_count'),
     }
+    created_by = payload.get('created_by')
+    if created_by:
+        row['_created_by'] = created_by
     if missing_runtime:
         row['_warnings'] = [f'{universe}/{row["slug"]}: at least one episode has no runtime data, counted as 0']
     return row
@@ -218,6 +227,8 @@ class IngestReport:
     titles_written: int = 0
     titles_pruned: int = 0
     providers_written: int = 0
+    credits_written: int = 0
+    people_pruned: int = 0
     warnings: list[str] = field(default_factory=list)
     dry_run: bool = False
 
@@ -226,7 +237,8 @@ class IngestReport:
         verb = 'Would sync' if self.dry_run else 'Synced'
         header = (
             f'{self.universe}: {verb} {self.titles_written}/{self.titles_seen} title(s), '
-            f'{self.providers_written} provider row(s), pruned {self.titles_pruned}.'
+            f'{self.providers_written} provider row(s), {self.credits_written} credit(s), '
+            f'pruned {self.titles_pruned} title(s) and {self.people_pruned} orphaned person(s).'
         )
         if not self.warnings:
             return header
@@ -251,7 +263,7 @@ class WatchlistIngest:
         """Sync one universe. See the module docstring for the curation/factual column split.
 
         Order of operations: upsert the universe -> upsert paths (collecting slug -> path_id)
-        -> per title fetch/build/upsert + importance + providers -> a second pass resolving
+        -> per title fetch/build/upsert + importance + providers + credits -> a second pass resolving
         ``credits_of`` (the referenced title may not have existed yet on first insert, and
         clearing it for any synced title whose seed no longer sets one) -> ``prune_titles``
         with every id seen this run.
@@ -261,6 +273,10 @@ class WatchlistIngest:
         ``credits_of``, must clear the stale row/column on re-sync rather than leaving it
         forever. See :meth:`~app.database.repositories.watchlist.WatchlistRepository
         .prune_importance` and the ``credits_of`` clearing pass below.
+
+        Credits (cast/crew, ``V41``) are fetched for every seeded title *including unreleased
+        ones* -- a person subscription that only knew about released films would be useless --
+        and people left with no credit at all are swept once at the end.
 
         Failure policy: a TMDB failure fetching one title's metadata, or a Postgres unique-
         constraint violation upserting it (two seeded titles whose TMDB titles slugify
@@ -278,7 +294,8 @@ class WatchlistIngest:
         destructive thing a sync does -- it cascades to ``watch_progress``, i.e. user data --
         a dry run still computes ``titles_pruned`` (from the titles already in the database
         that this run's seed no longer keeps) and warns about each one by name, rather than
-        always reporting 0.
+        always reporting 0. Credits are the one read a dry run skips: they cost an extra TMDB
+        request per title and report a number nobody acts on, so ``credits_written`` stays 0.
         """
         report = IngestReport(universe=seed.slug, dry_run=dry_run)
 
@@ -312,6 +329,7 @@ class WatchlistIngest:
                 continue
 
             warnings = row.pop('_warnings', None)
+            created_by = row.pop('_created_by', ())
             if warnings:
                 report.warnings.extend(warnings)
             report.titles_written += 1
@@ -346,6 +364,11 @@ class WatchlistIngest:
 
             tmdb_id_to_title_id[seed_title.tmdb_id] = title_id
             keep_ids.append(title_id)
+
+            try:
+                report.credits_written += await self._sync_credits(title_id, seed_title, created_by=created_by)
+            except HTTPClientError as exc:
+                report.warnings.append(f'{seed.slug}: credits fetch failed for {key[0]}:{key[1]} -- {exc}.')
 
             kept_path_ids = [
                 path_ids[path_slug] for path_slug in seed_title.importance if path_slug in path_ids
@@ -382,8 +405,30 @@ class WatchlistIngest:
                 await self._repo.set_credits_of(title_id, None)
 
             report.titles_pruned = await self._repo.prune_titles(seed.slug, keep_ids)
+            report.people_pruned = await self._repo.prune_people()
 
         return report
+
+    async def _sync_credits(
+        self, title_id: int, seed_title: TitleSeed, *, created_by: Sequence[Mapping[str, Any]],
+    ) -> int:
+        """Fetches one title's TMDB credits and writes the people + credit rows. Returns the row count.
+
+        People are upserted one at a time *before* :meth:`~app.database.repositories.watchlist
+        .WatchlistRepository.replace_credits` opens its transaction, because a slug collision
+        is resolved by retrying the failed insert -- inside a transaction that first failure
+        would abort the whole batch.
+
+        A TMDB failure propagates to the caller, which records it as a warning: the existing
+        credit rows are then left untouched rather than deleted, so an outage never empties a
+        title's cast.
+        """
+        payload = await self._client.credits(seed_title.tmdb_type, seed_title.tmdb_id)
+        rows = credit_rows(payload, created_by=created_by)
+        for row in rows:
+            await self._repo.upsert_person(row)
+        await self._repo.replace_credits(title_id, rows)
+        return len(rows)
 
     async def _build_row(self, seed_title: TitleSeed, *, universe: str, era_order: int) -> dict[str, Any]:
         """Fetches TMDB metadata for one title and maps it via :func:`movie_row`/:func:`tv_row`."""

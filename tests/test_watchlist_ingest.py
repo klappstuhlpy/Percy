@@ -56,12 +56,14 @@ class FakeTMDBClient:
         tv: dict[int, Any] | None = None,
         seasons: dict[tuple[int, int], Any] | None = None,
         providers: dict[tuple[str, int], Any] | None = None,
+        credits: dict[tuple[str, int], Any] | None = None,
         errors: dict[tuple[str, int], BaseException] | None = None,
     ) -> None:
         self._movies = movies or {}
         self._tv = tv or {}
         self._seasons = seasons or {}
         self._providers = providers or {}
+        self._credits = credits or {}
         self._errors = errors or {}
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
 
@@ -85,6 +87,13 @@ class FakeTMDBClient:
         self.calls.append(('watch_providers', (kind, item_id)))
         return self._providers.get((kind, item_id), {'results': {}})
 
+    async def credits(self, kind: str, item_id: int) -> Any:
+        self.calls.append(('credits', (kind, item_id)))
+        # Keyed apart from the movie/tv errors so a test can fail *only* the credits fetch.
+        if ('credits', item_id) in self._errors:
+            raise self._errors[('credits', item_id)]
+        return self._credits.get((kind, item_id), {'cast': [], 'crew': []})
+
 
 class FakeWatchlistRepository:
     """Stand-in for :class:`~app.database.repositories.watchlist.WatchlistRepository`."""
@@ -104,6 +113,9 @@ class FakeWatchlistRepository:
         self.providers: dict[tuple[int, str], list[dict[str, Any]]] = {}
         self.credits_of: dict[int, int | None] = {}
         self.pruned_with: list[int] | None = None
+        self.people: dict[int, dict[str, Any]] = {}
+        self.credits: dict[int, list[dict[str, Any]]] = {}
+        self.people_pruned = 0
 
     async def list_titles(self, universe: str, *, path_slug: str | None = None, sort: str = 'story') -> list[dict[str, Any]]:
         self.calls.append(('list_titles', (universe,)))
@@ -152,6 +164,20 @@ class FakeWatchlistRepository:
     async def set_credits_of(self, title_id: int, credits_of_id: int | None) -> None:
         self.calls.append(('set_credits_of', (title_id, credits_of_id)))
         self.credits_of[title_id] = credits_of_id
+
+    async def upsert_person(self, row: dict[str, Any]) -> int:
+        self.calls.append(('upsert_person', (row['tmdb_person_id'],)))
+        self.people[row['tmdb_person_id']] = dict(row)
+        return row['tmdb_person_id']
+
+    async def replace_credits(self, title_id: int, credits: Sequence[dict[str, Any]]) -> None:
+        self.calls.append(('replace_credits', (title_id, len(credits))))
+        self.credits[title_id] = [dict(row) for row in credits]
+
+    async def prune_people(self) -> int:
+        self.calls.append(('prune_people', ()))
+        self.people_pruned += 1
+        return 0
 
 
 def _title(**overrides: Any) -> TitleSeed:
@@ -808,3 +834,93 @@ async def test_sync_skips_title_on_slug_conflict_and_keeps_existing_row() -> Non
     assert any('slug conflict' in warning for warning in report.warnings)
     assert repo.pruned_with is not None
     assert 555 in repo.pruned_with  # existing row preserved, not pruned
+
+
+# -- credits (V41 people) -----------------------------------------------------------------------
+
+
+async def test_sync_writes_people_and_credits_for_each_title() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        credits={('movie', 1): {
+            'cast': [{'id': 3223, 'name': 'Robert Downey Jr.', 'order': 0, 'character': 'Tony Stark'}],
+            'crew': [{'id': 15277, 'name': 'Jon Favreau', 'job': 'Director'}],
+        }},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert set(repo.people) == {3223, 15277}
+    title_id = next(iter(repo.credits))
+    assert [(row['tmdb_person_id'], row['role']) for row in repo.credits[title_id]] == [
+        (3223, 'cast'), (15277, 'director'),
+    ]
+    assert report.credits_written == 2
+    # People are upserted before the credit rows that reference them (FK ordering).
+    names = [call[0] for call in repo.calls]
+    assert names.index('upsert_person') < names.index('replace_credits')
+
+
+async def test_sync_passes_a_shows_created_by_through_as_creator_credits() -> None:
+    seed = _seed((_title(tmdb_type='tv', tmdb_id=7),))
+    tmdb = FakeTMDBClient(
+        tv={7: {
+            'name': 'Show', 'episode_run_time': [45], 'seasons': [{'season_number': 1}],
+            'created_by': [{'id': 20, 'name': 'Jac Schaeffer'}],
+        }},
+        seasons={(7, 1): {'episodes': [{'runtime': 45}]}},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    title_id = next(iter(repo.credits))
+    assert [(row['tmdb_person_id'], row['role']) for row in repo.credits[title_id]] == [(20, 'creator')]
+    # ``_created_by`` is an ingest-internal key and must never reach upsert_title.
+    upsert = next(call for call in repo.calls if call[0] == 'upsert_title')
+    assert '_created_by' not in upsert[1][1]
+
+
+async def test_sync_credits_failure_warns_and_leaves_existing_credits_alone() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        errors={('credits', 1): _FakeTMDBError('credits are down')},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.titles_written == 1  # the title itself still synced
+    assert report.credits_written == 0
+    assert any('credits are down' in warning for warning in report.warnings)
+    assert repo.credits == {}  # never called -> an outage cannot empty a title's cast
+
+
+async def test_sync_dry_run_fetches_no_credits() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',), dry_run=True)
+
+    assert not any(call[0] == 'credits' for call in tmdb.calls)
+    assert report.credits_written == 0
+    assert repo.people_pruned == 0
+
+
+async def test_sync_prunes_orphaned_people_once_per_run() -> None:
+    seed = _seed((_title(tmdb_id=1), _title(tmdb_id=2, story=2, release=2)))
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 90}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    assert repo.people_pruned == 1

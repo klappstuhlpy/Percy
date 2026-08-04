@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import asyncpg
+
 from app.database.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
     import datetime
     from collections.abc import Sequence
-
-    import asyncpg
 
 __all__ = ('WatchlistRepository',)
 
@@ -304,6 +304,129 @@ class WatchlistRepository(BaseRepository):
     async def set_credits_of(self, title_id: int, credits_of_id: int | None) -> None:
         """Sets or clears a title's ``credits_of`` reference (resolved in a second ingest pass)."""
         await self.execute("UPDATE watch_titles SET credits_of = $2 WHERE id = $1;", title_id, credits_of_id)
+
+    # -- People / credits ------------------------------------------------------
+
+    async def upsert_person(self, row: dict[str, Any]) -> int:
+        """Inserts or refreshes one person, returning their ``tmdb_person_id``.
+
+        Identity is TMDB's person id. ``slug`` carries its own ``UNIQUE`` constraint and two
+        different people genuinely share a name (TMDB lists several "Chris Evans"), so a slug
+        collision is retried once with the person id appended -- deterministic from then on,
+        because the resolved slug is what gets stored.
+        """
+        try:
+            return await self._upsert_person(row)
+        except asyncpg.UniqueViolationError:
+            return await self._upsert_person({**row, 'slug': f'{row["slug"]}-{row["tmdb_person_id"]}'})
+
+    async def _upsert_person(self, row: dict[str, Any]) -> int:
+        query = """
+            INSERT INTO watch_people (tmdb_person_id, name, slug, profile_path)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (tmdb_person_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                slug = EXCLUDED.slug,
+                profile_path = EXCLUDED.profile_path,
+                updated_at = (now() AT TIME ZONE 'utc')
+            RETURNING tmdb_person_id;
+        """
+        return await self.fetchval(
+            query, row['tmdb_person_id'], row['name'], row['slug'], row.get('profile_path'))
+
+    async def replace_credits(self, title_id: int, credits: Sequence[dict[str, Any]]) -> None:
+        """Replaces a title's credit rows, atomically.
+
+        Delete-then-insert rather than upsert, for the same reason as the comic archive's
+        ``replace_creators``: a re-sync that *drops* a credit (a miscredited writer removed
+        upstream) has to actually drop it. Every ``person_id`` must already exist in
+        ``watch_people`` -- :meth:`upsert_person` runs first, outside this transaction, so its
+        slug-collision retry cannot poison it.
+        """
+        async with self.acquire() as connection, connection.transaction():
+            await connection.execute("DELETE FROM watch_credits WHERE title_id = $1;", title_id)
+            if credits:
+                await connection.executemany(
+                    """
+                    INSERT INTO watch_credits (title_id, person_id, role, character_name, billing_order)
+                    VALUES ($1, $2, $3, $4, $5);
+                    """,
+                    [
+                        (title_id, row['tmdb_person_id'], row['role'],
+                         row.get('character_name'), row.get('billing_order'))
+                        for row in credits
+                    ],
+                )
+
+    async def prune_people(self) -> int:
+        """Deletes people who no longer hold a single credit. Returns the count deleted.
+
+        ``watch_credits`` cascades from ``watch_titles``, so pruning a title leaves its
+        exclusive cast behind as orphans; this is the sweep that clears them. Safe to run at
+        any time -- a person is only ever reachable through a credit.
+        """
+        rows = await self.fetch(
+            """
+            DELETE FROM watch_people p
+            WHERE NOT EXISTS (SELECT 1 FROM watch_credits c WHERE c.person_id = p.tmdb_person_id)
+            RETURNING p.tmdb_person_id;
+            """,
+        )
+        return len(rows)
+
+    async def list_credits(self, title_ids: Sequence[int]) -> list[asyncpg.Record]:
+        """Fetches credits (joined to the person) for many titles in one query.
+
+        Ordered by title, then role, then billing -- so a caller grouping by role gets cast in
+        billing order without a second sort. Crew rows have no billing and sort by name.
+        """
+        if not title_ids:
+            return []
+        query = """
+            SELECT c.title_id, c.role, c.character_name, c.billing_order,
+                   p.tmdb_person_id, p.name, p.slug, p.profile_path
+            FROM watch_credits c
+            JOIN watch_people p ON p.tmdb_person_id = c.person_id
+            WHERE c.title_id = ANY($1::bigint[])
+            ORDER BY c.title_id, c.role, c.billing_order NULLS LAST, p.name;
+        """
+        return await self.fetch(query, list(title_ids))
+
+    async def get_person(self, slug: str) -> asyncpg.Record | None:
+        """Fetches a single person by slug."""
+        return await self.fetchrow("SELECT * FROM watch_people WHERE slug = $1;", slug)
+
+    async def list_person_credits(self, person_id: int) -> list[asyncpg.Record]:
+        """Every title this person is credited on, newest first, undated titles leading.
+
+        ``NULLS FIRST`` is the point rather than an accident: a title TMDB has announced but
+        not dated is exactly the "what's next" a person page opens with.
+        """
+        query = """
+            SELECT c.role, c.character_name, c.billing_order,
+                   t.*, u.name AS universe_name, u.accent AS universe_accent
+            FROM watch_credits c
+            JOIN watch_titles t ON t.id = c.title_id
+            JOIN watch_universes u ON u.slug = t.universe
+            WHERE c.person_id = $1
+            ORDER BY t.release_date DESC NULLS FIRST, t.id;
+        """
+        return await self.fetch(query, person_id)
+
+    async def search_people(self, query: str, *, limit: int = 25) -> list[asyncpg.Record]:
+        """Trigram-similarity search over person names, best match first, with credit counts.
+
+        Backs person autocomplete; uses the ``watch_people_name_trgm_idx`` GIN index.
+        """
+        sql = """
+            SELECT p.*, similarity(p.name, $1) AS score,
+                   (SELECT COUNT(*) FROM watch_credits c WHERE c.person_id = p.tmdb_person_id) AS credit_count
+            FROM watch_people p
+            WHERE p.name % $1
+            ORDER BY score DESC, p.name
+            LIMIT $2;
+        """
+        return await self.fetch(sql, query, limit)
 
     # -- Progress / prefs -----------------------------------------------------
 

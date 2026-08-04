@@ -21,7 +21,10 @@ from fastapi import HTTPException
 
 from app.internal_api.routers import watchlist as api
 from app.services.watchlist.payload import (
+    credit_payloads,
     era_payloads,
+    person_payload,
+    person_summary,
     title_payload,
     universe_payload,
     universe_stats,
@@ -100,6 +103,21 @@ PROVIDERS = [
      'logo_path': '/d.jpg', 'offer': 'flatrate'},
     {'title_id': 1, 'region': 'DE', 'provider_id': 3, 'provider_name': 'Google Play',
      'logo_path': None, 'offer': 'rent'},
+]
+
+PEOPLE = [
+    {'tmdb_person_id': 3223, 'name': 'Robert Downey Jr.', 'slug': 'robert-downey-jr',
+     'profile_path': '/rdj.jpg', 'updated_at': datetime.datetime(2026, 8, 4, 9, 0, 0)},
+    {'tmdb_person_id': 15277, 'name': 'Jon Favreau', 'slug': 'jon-favreau',
+     'profile_path': None, 'updated_at': datetime.datetime(2026, 8, 4, 9, 0, 0)},
+]
+
+#: ``list_credits`` rows: a credit joined to its person, in the query's (role, billing) order.
+CREDITS = [
+    {'title_id': 1, 'role': 'cast', 'character_name': 'Tony Stark', 'billing_order': 0,
+     **{k: v for k, v in PEOPLE[0].items() if k != 'updated_at'}},
+    {'title_id': 1, 'role': 'director', 'character_name': None, 'billing_order': None,
+     **{k: v for k, v in PEOPLE[1].items() if k != 'updated_at'}},
 ]
 
 
@@ -199,6 +217,24 @@ class FakeWatchlistRepository:
 
     async def list_providers(self, title_ids: Any, region: str) -> list[dict[str, Any]]:
         return [p for p in PROVIDERS if p['title_id'] in set(title_ids) and p['region'] == region]
+
+    async def list_credits(self, title_ids: Any) -> list[dict[str, Any]]:
+        return [dict(c) for c in CREDITS if c['title_id'] in set(title_ids)]
+
+    async def get_person(self, slug: str) -> dict[str, Any] | None:
+        return next((dict(p) for p in PEOPLE if p['slug'] == slug), None)
+
+    async def list_person_credits(self, person_id: int) -> list[dict[str, Any]]:
+        return [
+            {**TITLES[0], 'role': credit['role'], 'character_name': credit['character_name'],
+             'billing_order': credit['billing_order'], 'universe_name': UNIVERSE['name'],
+             'universe_accent': UNIVERSE['accent']}
+            for credit in CREDITS if credit['tmdb_person_id'] == person_id
+        ]
+
+    async def search_people(self, query: str, *, limit: int = 25) -> list[dict[str, Any]]:
+        matches = [p for p in PEOPLE if query.lower() in p['name'].lower()]
+        return [{**p, 'score': 0.9, 'credit_count': 1} for p in matches[:limit]]
 
     async def get_progress(self, user_id: int, *, universe: str | None = None) -> list[dict[str, Any]]:
         return [
@@ -342,6 +378,65 @@ async def test_get_title_404s_an_unknown_slug(bot: Any) -> None:
     with pytest.raises(HTTPException) as exc:
         await api.get_title(bot, 'mcu', 'not-a-film')
     assert exc.value.status_code == 404
+
+
+# -- People -------------------------------------------------------------------
+
+
+def test_credit_payloads_keep_query_order_and_are_flat() -> None:
+    payloads = credit_payloads(CREDITS)
+    assert [row['role'] for row in payloads] == ['cast', 'director']
+    assert payloads[0]['character_name'] == 'Tony Stark'
+    assert payloads[1]['billing_order'] is None
+    assert 'title_id' not in payloads[0]  # the caller already knows which title it asked for
+
+
+def test_person_payload_nests_a_json_safe_title() -> None:
+    credits = [
+        {**TITLES[0], 'role': 'cast', 'character_name': 'Tony Stark', 'billing_order': 0,
+         'universe_name': 'Marvel Cinematic Universe', 'universe_accent': 0xE62429},
+    ]
+    payload = person_payload(PEOPLE[0], credits)
+    assert payload['person']['slug'] == 'robert-downey-jr'
+    assert payload['person']['updated_at'] == '2026-08-04T09:00:00'
+    entry = payload['credits'][0]
+    assert entry['universe_accent'] == '#E62429'
+    assert entry['title']['release_date'] == '2008-05-02'
+    assert isinstance(entry['title']['tmdb_rating'], float)
+
+
+def test_person_summary_is_autocomplete_sized() -> None:
+    summary = person_summary({**PEOPLE[0], 'score': 0.9, 'credit_count': 4})
+    assert summary == {
+        'tmdb_person_id': 3223, 'name': 'Robert Downey Jr.', 'slug': 'robert-downey-jr',
+        'profile_path': '/rdj.jpg', 'credit_count': 4,
+    }
+
+
+async def test_get_title_carries_its_credits(bot: Any) -> None:
+    detail = await api.get_title(bot, 'mcu', 'iron-man')
+    assert [(c['name'], c['role']) for c in detail['credits']] == [
+        ('Robert Downey Jr.', 'cast'), ('Jon Favreau', 'director'),
+    ]
+
+
+async def test_get_person_returns_the_filmography(bot: Any) -> None:
+    payload = await api.get_person(bot, 'robert-downey-jr')
+    assert payload['person']['name'] == 'Robert Downey Jr.'
+    assert payload['credits'][0]['title']['slug'] == 'iron-man'
+    assert payload['credits'][0]['role'] == 'cast'
+
+
+async def test_get_person_404s_an_unknown_slug(bot: Any) -> None:
+    with pytest.raises(HTTPException) as exc:
+        await api.get_person(bot, 'nobody')
+    assert exc.value.status_code == 404
+
+
+async def test_search_people_returns_summaries(bot: Any) -> None:
+    payload = await api.search_people(bot, 'downey')
+    assert [row['slug'] for row in payload['people']] == ['robert-downey-jr']
+    assert payload['people'][0]['credit_count'] == 1
 
 
 # -- Progress / prefs ---------------------------------------------------------

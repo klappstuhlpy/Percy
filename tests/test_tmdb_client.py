@@ -89,6 +89,26 @@ async def test_watch_providers_rejects_invalid_kind() -> None:
         await client.watch_providers('film', 1)
 
 
+async def test_credits_hits_the_plain_credits_endpoint() -> None:
+    session = FakeSession([FakeResponse(json_data={'cast': [], 'crew': []})])
+    client = TMDBClient(session, token='tok')  # type: ignore[arg-type]
+
+    result = await client.credits('tv', 88396)
+
+    assert result == {'cast': [], 'crew': []}
+    _method, url, _kwargs = session.calls[0]
+    # Not ``aggregate_credits``: a show's series-level credits share the movie payload shape,
+    # which is what keeps one mapping function for both kinds.
+    assert url == 'https://api.themoviedb.org/3/tv/88396/credits'
+
+
+async def test_credits_rejects_invalid_kind() -> None:
+    client = make_client([])
+
+    with pytest.raises(ValueError, match="kind must be 'movie' or 'tv'"):
+        await client.credits('film', 1)
+
+
 async def test_search_rejects_invalid_kind() -> None:
     client = make_client([])
 

@@ -18,7 +18,14 @@ from typing import TYPE_CHECKING, Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.services.watchlist.payload import universe_payload, universe_stats, universe_summary
+from app.services.watchlist.payload import (
+    credit_payloads,
+    person_payload,
+    person_summary,
+    universe_payload,
+    universe_stats,
+    universe_summary,
+)
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
@@ -198,10 +205,42 @@ async def get_title(
     return {
         'title': current,
         'credits_of': credits_of,
+        'credits': credit_payloads(await bot.db.watchlist.list_credits([title['id']])),
         'previous': titles[index - 1] if index > 0 else None,
         'next': titles[index + 1] if index + 1 < len(titles) else None,
         'universe': payload['universe'],
     }
+
+
+# -- People -------------------------------------------------------------------
+
+
+@router.get("/people")
+async def search_people(
+    bot: BotDep,
+    q: Annotated[str, Query(description="Name to match, trigram-similarity")],
+    limit: Annotated[int, Query(ge=1, le=50, description="Maximum matches to return")] = 25,
+) -> dict:
+    """Person search, best match first -- backs autocomplete on both surfaces.
+
+    Deliberately not cached: it is a per-keystroke query against one GIN index, and caching it
+    would fill the shared TTL cache with one entry per prefix anybody ever typed.
+    """
+    rows = await bot.db.watchlist.search_people(q, limit=limit)
+    return {'people': [person_summary(row) for row in rows]}
+
+
+@router.get("/people/{slug}")
+async def get_person(bot: BotDep, slug: str) -> dict:
+    """One person and their whole filmography, undated titles first, then newest.
+
+    An unknown slug is a real 404 -- the dashboard turns that into a not-found page, and it
+    must stay distinguishable from a person who exists with no credits (an empty list).
+    """
+    person = await bot.db.watchlist.get_person(slug)
+    if person is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown person {slug!r}")
+    return person_payload(person, await bot.db.watchlist.list_person_credits(person['tmdb_person_id']))
 
 
 # -- Progress / prefs ---------------------------------------------------------

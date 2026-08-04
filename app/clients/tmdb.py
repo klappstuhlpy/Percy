@@ -103,6 +103,20 @@ class TMDBClient(BaseHTTPClient):
         """``GET tv/{id}/season/{n}``."""
         return await self._get(f'tv/{tv_id}/season/{season}', params=self._params())
 
+    async def credits(self, kind: str, item_id: int) -> Any:
+        """``GET {kind}/{id}/credits``; ``kind`` is ``'movie'`` or ``'tv'``.
+
+        The plain ``credits`` endpoint is used for both kinds deliberately: for a show it
+        returns the *series-level* cast in the same ``cast[]``/``crew[]`` shape a movie has,
+        which keeps one mapping function for both. (``tv/{id}/aggregate_credits`` returns a
+        per-episode roll-up under a different shape and would need a second mapper for a
+        cast list we do not display per episode.) A show's creators are not in ``crew`` --
+        they come from ``created_by`` on the ``tv/{id}`` payload.
+        """
+        if kind not in _SEARCH_KINDS:
+            raise ValueError(f"kind must be 'movie' or 'tv', got {kind!r}")
+        return await self._get(f'{kind}/{item_id}/credits', params=self._params())
+
     async def watch_providers(self, kind: str, item_id: int) -> Any:
         """``GET {kind}/{id}/watch/providers``; ``kind`` is ``'movie'`` or ``'tv'``."""
         if kind not in _SEARCH_KINDS:
