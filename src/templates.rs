@@ -740,6 +740,9 @@ pub(crate) struct ComicBrowseTemplate {
     pub(crate) total_pages: i64,
     pub(crate) prev_href: Option<String>,
     pub(crate) next_href: Option<String>,
+    /// Percy could not be reached, so an empty grid is an outage rather than a
+    /// filter that matched nothing. The two need different wording.
+    pub(crate) unavailable: bool,
     /// Empty on this page: results mix brands, so the attribution partial
     /// shows only the general League of Comic Geeks / VIZ notice.
     pub(crate) comic_copyright: String,

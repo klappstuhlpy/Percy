@@ -46,7 +46,11 @@
 
         {% if items.is_empty() %}
         <div class="cx-empty">
+            {% if unavailable %}
+            <p>Releases can't be loaded right now. Try again in a moment.</p>
+            {% else %}
             <p>No releases match these filters.</p>
+            {% endif %}
         </div>
         {% else %}
         <div class="cx-grid">

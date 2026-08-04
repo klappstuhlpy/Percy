@@ -6,9 +6,10 @@
 
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{ComicBrowseQuery, ComicCredit, ComicRelease};
+use percy_client::{ComicBrowseQuery, ComicCredit, ComicRelease, PercyError};
 use serde::Deserialize;
 
 use crate::{
@@ -27,6 +28,18 @@ const PER_PAGE: i64 = 24;
 
 /// Brand filter tabs, in display order. Empty string means "no filter".
 const BRANDS: &[(&str, &str)] = &[("", "All"), ("MARVEL", "Marvel"), ("DC", "DC"), ("MANGA", "Manga")];
+
+/// Percy's "not found" becomes ours; every other failure is a 200 empty state.
+///
+/// The distinction is the point: a catalogue page that answers 200 to any URL a crawler
+/// invents is a soft 404 and gets indexed as a real page. A backend outage is different --
+/// the release probably exists, so the page says "try again" and keeps its 200.
+fn status_for(error: &PercyError) -> StatusCode {
+    match error {
+        PercyError::NotFound => StatusCode::NOT_FOUND,
+        _ => StatusCode::OK,
+    }
+}
 
 fn viewer(session: &Option<Session>) -> Option<Viewer> {
     session.as_ref().map(Viewer::from_session)
@@ -66,6 +79,10 @@ pub async fn comic_browse(
             .ok(),
         None => None,
     };
+    // An empty grid has two causes that read identically but are not the same thing. Telling
+    // someone their filter matched nothing, when really the backend is down, sends them off
+    // adjusting a filter that was never the problem.
+    let unavailable = fetched.is_none();
     let data = fetched.unwrap_or_default();
 
     let (prev_page, next_page) = adjacent_pages(page, data.total_pages);
@@ -91,6 +108,7 @@ pub async fn comic_browse(
         total: data.total,
         page,
         total_pages: data.total_pages,
+        unavailable,
         comic_copyright: String::new(),
     }
     .into_response()
@@ -132,27 +150,32 @@ pub async fn comic_series_detail(
 ) -> Response {
     let brand_filter = params.brand.filter(|b| !b.is_empty());
 
-    let page = match &app.percy {
-        Some(percy) => percy.get_comic_series(&slug, brand_filter.as_deref()).await.ok(),
-        None => None,
+    let fetched = match &app.percy {
+        Some(percy) => percy.get_comic_series(&slug, brand_filter.as_deref()).await,
+        None => Err(PercyError::Api("percy is not configured".into())),
     };
 
-    // A missing series is rendered as the template's empty state rather than a
-    // 404: it may well exist and Percy simply be unreachable.
-    let Some(page) = page else {
-        return ComicSeriesTemplate {
-            account: viewer(&session),
-            series_slug: slug.clone(),
-            series_name: slug,
-            brand: String::new(),
-            brand_label: brand_label("").to_string(),
-            accent: brand_accent("").to_string(),
-            publisher: None,
-            issue_count: 0,
-            issues: Vec::new(),
-            comic_copyright: String::new(),
+    // "No such series" and "Percy is unreachable" are different answers and must not share a
+    // status code: a public catalogue that returns 200 for every nonsense URL is a soft 404,
+    // which search engines index. Percy's 404 becomes ours; anything else stays a 200 empty
+    // state, because the series may well exist and only the backend be down.
+    let page = match fetched {
+        Ok(page) => page,
+        Err(error) => {
+            let body = ComicSeriesTemplate {
+                account: viewer(&session),
+                series_slug: slug.clone(),
+                series_name: slug,
+                brand: String::new(),
+                brand_label: brand_label("").to_string(),
+                accent: brand_accent("").to_string(),
+                publisher: None,
+                issue_count: 0,
+                issues: Vec::new(),
+                comic_copyright: String::new(),
+            };
+            return (status_for(&error), body).into_response();
         }
-        .into_response();
     };
 
     ComicSeriesTemplate {
@@ -176,40 +199,43 @@ pub async fn comic_detail(
     session: Option<Session>,
     Path((brand, slug)): Path<(String, String)>,
 ) -> Response {
-    let detail = match &app.percy {
-        Some(percy) => percy.get_comic(&brand, &slug).await.ok(),
-        None => None,
+    let fetched = match &app.percy {
+        Some(percy) => percy.get_comic(&brand, &slug).await,
+        None => Err(PercyError::Api("percy is not configured".into())),
     };
 
-    // Same graceful-degradation contract as the series page: no 500, a stated
-    // empty state (checked in the template via an empty `title`, the way
+    // Same split as the series page: an unknown release is a real 404, a backend that is down
+    // is a 200 empty state (checked in the template via an empty `title`, the way
     // `watch_order.html` checks `eras.is_empty()`).
-    let Some(detail) = detail else {
-        return ComicDetailTemplate {
-            account: viewer(&session),
-            brand: brand.clone(),
-            brand_label: brand_label(&brand).to_string(),
-            accent: brand_accent(&brand).to_string(),
-            title: String::new(),
-            slug,
-            issue_label: None,
-            release_date: None,
-            cover_url: None,
-            format: None,
-            page_count: None,
-            price_label: None,
-            publisher: None,
-            series_name: None,
-            series_slug: None,
-            previous: None,
-            next: None,
-            more_from_series: Vec::new(),
-            credit_groups: Vec::new(),
-            characters: Vec::new(),
-            description: None,
-            comic_copyright: String::new(),
+    let detail = match fetched {
+        Ok(detail) => detail,
+        Err(error) => {
+            let body = ComicDetailTemplate {
+                account: viewer(&session),
+                brand: brand.clone(),
+                brand_label: brand_label(&brand).to_string(),
+                accent: brand_accent(&brand).to_string(),
+                title: String::new(),
+                slug,
+                issue_label: None,
+                release_date: None,
+                cover_url: None,
+                format: None,
+                page_count: None,
+                price_label: None,
+                publisher: None,
+                series_name: None,
+                series_slug: None,
+                previous: None,
+                next: None,
+                more_from_series: Vec::new(),
+                credit_groups: Vec::new(),
+                characters: Vec::new(),
+                description: None,
+                comic_copyright: String::new(),
+            };
+            return (status_for(&error), body).into_response();
         }
-        .into_response();
     };
 
     let release = detail.release;
@@ -217,7 +243,7 @@ pub async fn comic_detail(
         account: viewer(&session),
         brand_label: brand_label(&release.brand).to_string(),
         accent: brand_accent(&release.brand).to_string(),
-        issue_label: issue_label(release.issue_number.as_deref()),
+        issue_label: issue_label(release.issue_number.as_deref(), &release.title),
         price_label: price_label(release.price),
         previous: detail.series.previous.as_ref().map(comic_card),
         next: detail.series.next.as_ref().map(comic_card),
@@ -273,16 +299,43 @@ fn publisher_copyright(brand: &str) -> &'static str {
 
 /// `#12` for a numbered issue; `None` when the release carries no issue number
 /// (a one-shot or a collected edition).
-fn issue_label(issue_number: Option<&str>) -> Option<String> {
-    issue_number
+fn issue_label(issue_number: Option<&str>, title: &str) -> Option<String> {
+    let label = issue_number
         .map(str::trim)
         .filter(|n| !n.is_empty())
-        .map(|n| format!("#{n}"))
+        .map(|n| format!("#{n}"))?;
+    // locg-api titles carry the issue number already ("Batgirl #22"), and Percy's ingest
+    // parses it back out into its own column. Showing both renders "Batgirl #22 #22", so the
+    // chip is only worth drawing when the title does not already end with it.
+    if title.trim_end().ends_with(&label) {
+        return None;
+    }
+    Some(label)
 }
 
-/// `$4.99`. Percy already resolves currency to USD, so this is a fixed format.
+/// The series name, unless the title already opens with it.
+///
+/// A card showing "Batgirl #22" over "Batgirl" spends a line saying nothing: for an ongoing
+/// series the title *is* the series plus an issue number. Collected editions and one-shots,
+/// whose title and series diverge, still get the line.
+fn card_series_name(series_name: Option<&str>, title: &str) -> Option<String> {
+    let series = series_name.map(str::trim).filter(|s| !s.is_empty())?;
+    if title.trim().starts_with(series) {
+        return None;
+    }
+    Some(series.to_string())
+}
+
+/// `$4.99`, or `Free` — a fair number of tracked releases are $0.00 digital or promo issues
+/// ("DC Connect"), and a price tag reading "$0.00" looks like missing data rather than a fact.
 fn price_label(price: Option<f64>) -> Option<String> {
-    price.map(|p| format!("${p:.2}"))
+    price.map(|p| {
+        if p <= 0.0 {
+            "Free".to_string()
+        } else {
+            format!("${p:.2}")
+        }
+    })
 }
 
 /// Groups a release's credits by role, preserving the order roles first
@@ -327,8 +380,8 @@ fn comic_card(release: &ComicRelease) -> ComicCard {
         brand: release.brand.clone(),
         slug: release.slug.clone(),
         title: release.title.clone(),
-        issue_label: issue_label(release.issue_number.as_deref()),
-        series_name: release.series_name.clone(),
+        issue_label: issue_label(release.issue_number.as_deref(), &release.title),
+        series_name: card_series_name(release.series_name.as_deref(), &release.title),
         release_date: release.release_date.clone(),
         cover_url: release.cover_url.clone(),
         price_label: price_label(release.price),
@@ -403,15 +456,44 @@ mod tests {
 
     #[test]
     fn issue_label_prefixes_the_number_and_omits_when_absent() {
-        assert_eq!(issue_label(Some("12")), Some("#12".to_string()));
-        assert_eq!(issue_label(Some("  ")), None);
-        assert_eq!(issue_label(None), None);
+        assert_eq!(
+            issue_label(Some("12"), "Some Collected Edition"),
+            Some("#12".to_string())
+        );
+        assert_eq!(issue_label(Some("  "), "Whatever"), None);
+        assert_eq!(issue_label(None, "Whatever"), None);
+    }
+
+    #[test]
+    fn issue_label_is_dropped_when_the_title_already_carries_it() {
+        // The common case: every locg-api title ends with its own issue number.
+        assert_eq!(issue_label(Some("22"), "Batgirl #22"), None);
+        assert_eq!(issue_label(Some("22"), "Batgirl #22 "), None);
+        // ...but a number that merely *appears* in the title is not the same thing.
+        assert_eq!(issue_label(Some("2"), "100 Bullets #12"), Some("#2".to_string()));
+    }
+
+    #[test]
+    fn card_series_name_is_dropped_when_the_title_opens_with_it() {
+        assert_eq!(card_series_name(Some("Batgirl"), "Batgirl #22"), None);
+        assert_eq!(
+            card_series_name(Some("Batman"), "Batman by Tom King Omnibus Vol. 2 HC"),
+            None
+        );
+        assert_eq!(
+            card_series_name(Some("Amazing Spider-Man"), "Spider-Verse #1"),
+            Some("Amazing Spider-Man".to_string())
+        );
+        assert_eq!(card_series_name(None, "Anything"), None);
+        assert_eq!(card_series_name(Some("  "), "Anything"), None);
     }
 
     #[test]
     fn price_label_formats_two_decimals() {
         assert_eq!(price_label(Some(4.9)), Some("$4.90".to_string()));
         assert_eq!(price_label(None), None);
+        // Free digital/promo issues are common; "$0.00" reads as missing data.
+        assert_eq!(price_label(Some(0.0)), Some("Free".to_string()));
     }
 
     #[test]
@@ -504,9 +586,16 @@ mod tests {
         let card = comic_card(&source);
         assert_eq!(card.brand, "MARVEL");
         assert_eq!(card.slug, "amazing-spider-man-1");
+        // The fixture's title does not carry the issue number, so both survive.
         assert_eq!(card.issue_label, Some("#1".to_string()));
         assert_eq!(card.price_label, Some("$3.99".to_string()));
         assert_eq!(card.series_name, Some("Amazing Spider-Man".to_string()));
+    }
+
+    #[test]
+    fn status_for_separates_a_missing_release_from_a_backend_outage() {
+        assert_eq!(status_for(&PercyError::NotFound), StatusCode::NOT_FOUND);
+        assert_eq!(status_for(&PercyError::Api("boom".into())), StatusCode::OK);
     }
 
     #[test]

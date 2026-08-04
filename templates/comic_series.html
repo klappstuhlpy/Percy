@@ -4,9 +4,9 @@
 
 {% block title %}{{ series_name }} | Percy{% endblock %}
 
-{% block meta_description %}{{ series_name }} — {{ issue_count }} issues, in reading order.{% endblock %}
+{% block meta_description %}{{ series_name }} — {{ issue_count }} issue{% if issue_count != 1 %}s{% endif %}, in reading order.{% endblock %}
 {% block og_title %}{{ series_name }}{% endblock %}
-{% block og_description %}{{ issue_count }} issues, in reading order.{% endblock %}
+{% block og_description %}{{ issue_count }} issue{% if issue_count != 1 %}s{% endif %}, in reading order.{% endblock %}
 {% block og_url %}{{ crate::config::public_base_url() }}/comics/series/{{ series_slug }}{% endblock %}
 
 {% block css %}
