@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from app.services.watchlist.trailers import trailer_urls
+
 if TYPE_CHECKING:
     import datetime
     from collections.abc import Iterable, Mapping, Sequence
@@ -25,6 +27,7 @@ __all__ = (
     'person_payload',
     'person_summary',
     'title_payload',
+    'trailer_payload',
     'universe_payload',
     'universe_stats',
     'universe_summary',
@@ -100,19 +103,39 @@ def era_payloads(titles: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return sorted(eras.values(), key=lambda era: (era['order'], era['key']))
 
 
+def trailer_payload(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Shapes a title row's ``V44`` trailer columns, or ``None`` when it has no trailer.
+
+    Both URLs are handed over ready to use: ``url`` for the plain link-out and ``embed_url``
+    for the click-to-load iframe. Neither carries playback parameters -- autoplay is forbidden
+    (the plan's §6.2), and *when* the iframe appears stays entirely the renderer's decision.
+    Absent rather than empty, so a page can branch on the section existing at all.
+    """
+    site, key = row.get('trailer_site'), row.get('trailer_key')
+    if not site or not key:
+        return None
+    urls = trailer_urls(site, key)
+    if urls is None:  # a site stored before it was renderable; nothing honest to show
+        return None
+    watch, embed = urls
+    return {'site': site, 'key': key, 'name': row.get('trailer_name'), 'url': watch, 'embed_url': embed}
+
+
 def title_payload(
     row: Mapping[str, Any], *, providers: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Shapes one title row, with its (already region-filtered) provider rows attached.
 
     ``importance`` is present only when the row came from a path-joined query; it is emitted
-    as ``None`` otherwise so the key is always there for the typed Rust model.
+    as ``None`` otherwise so the key is always there for the typed Rust model. ``trailer`` is
+    read the same forgiving way, so a row selected before ``V44`` landed still shapes.
     """
     payload: dict[str, Any] = {key: row[key] for key in _TITLE_PASSTHROUGH}
     payload['release_date'] = _iso(row['release_date'])
     rating = row['tmdb_rating']
     payload['tmdb_rating'] = float(rating) if rating is not None else None
     payload['importance'] = row.get('importance')
+    payload['trailer'] = trailer_payload(row)
     payload['providers'] = [
         {
             'provider_id': provider['provider_id'],

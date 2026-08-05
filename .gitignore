@@ -17,3 +17,4 @@ temp_channels.json
 .claude/
 /tests/artifacts
 SELF_HOSTING_GUIDE.md
+.playwright-mcp/

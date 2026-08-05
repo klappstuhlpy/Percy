@@ -14,11 +14,13 @@ import discord
 
 import config
 from app.clients.base import HTTPClientError
+from app.clients.news import NewsClient
 from app.clients.tmdb import TMDBClient
 from app.core import Bot
 from app.database import Database, MigrationRunner
 from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
 from app.services.comics import ComicIngest
+from app.services.news import NewsIngest, load_vocabulary, seed_sources
 from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
 from config import DatabaseConfig, locg_api_url, logs_path
 
@@ -39,6 +41,9 @@ __all__ = (
     'init',
     'main',
     'migrate',
+    'news',
+    'news_poll',
+    'news_sources',
     'run_bot',
     'setup_logging',
     'status',
@@ -593,6 +598,93 @@ async def _run_search(kind: str, query: str) -> None:
         date = result.get('release_date') or result.get('first_air_date') or ''
         year = date[:4] if date else '?'
         click.echo(f'{result.get("id")} · {title} · {year}')
+
+
+@main.group('news', short_help='News feed polling', options_metavar='[options]')
+def news() -> None:
+    """Polls the RSS/Atom sources in ``news_sources`` (V43) into ``news_items``/``news_subjects``.
+
+    The bot polls on its own 15-minute loop, so this exists for the same reason
+    ``comics backfill`` does: a fresh database stays empty until a background task has run, and
+    an operator debugging a source should not have to wait for the next tick.
+    """
+
+
+@news.command('poll')
+@click.option('--source', '-s', default=None, help='Only this source slug. Defaults to every enabled source.')
+def news_poll(source: str | None) -> None:
+    """Runs one polling pass now: fetch, parse, upsert and tag every story."""
+    try:
+        asyncio.run(_run_news_poll(source))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while polling news. Check your database connection.')
+        raise SystemExit(1) from None
+
+
+async def _run_news_poll(source: str | None) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, polls, closes both.
+
+    The cadence rule (``due_sources``) is deliberately **not** applied: an operator asking for a
+    run is the cadence, and a CLI that silently did nothing because a feed was polled twenty
+    minutes ago is a CLI nobody can debug with. The per-source politeness budget still holds in
+    the loop that actually runs unattended.
+    """
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        added = await seed_sources(db.news)
+        if added:
+            click.secho(f'Seeded {len(added)} source(s): {", ".join(added)}.', fg='green')
+
+        if source is None:
+            sources = await db.news.list_sources()
+        else:
+            row = await db.news.get_source(source)
+            if row is None:
+                _fail(f'No such news source: {source!r}.')
+                raise SystemExit(1)
+            sources = [row]
+
+        if not sources:
+            click.secho('No enabled news sources.', fg='yellow')
+            return
+
+        index = await load_vocabulary(db.releases, db.watchlist)
+        report = await NewsIngest(NewsClient(session), db.news, index).run(sources)
+        click.echo(str(report))
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
+
+
+@news.command('sources')
+def news_sources() -> None:
+    """Lists every configured source with the outcome of its last poll."""
+    asyncio.run(_run_news_sources())
+
+
+async def _run_news_sources() -> None:
+    """Prints the sources table, disabled rows included -- a dead feed has to be *visible*."""
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        rows = await db.news.list_sources(enabled_only=False)
+    finally:
+        if db is not None:
+            await db.close()
+
+    if not rows:
+        click.secho('No news sources — run `news poll` once to seed the built-in list.', fg='yellow')
+        return
+
+    for row in rows:
+        state = click.style('enabled', fg='green') if row['enabled'] else click.style('disabled', fg='red')
+        fetched = row['last_fetched'].strftime('%Y-%m-%d %H:%M') if row['last_fetched'] else 'never'
+        status = row['last_status'] or '—'
+        colour = 'green' if status == '200' else 'yellow'
+        click.echo(f'{row["slug"]:<24} {state} · {fetched} · {click.style(status, fg=colour)}')
 
 
 if __name__ == '__main__':

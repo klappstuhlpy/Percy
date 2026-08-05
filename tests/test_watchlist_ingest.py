@@ -57,8 +57,10 @@ class FakeTMDBClient:
         seasons: dict[tuple[int, int], Any] | None = None,
         providers: dict[tuple[str, int], Any] | None = None,
         credits: dict[tuple[str, int], Any] | None = None,
+        videos: dict[tuple[str, int], Any] | None = None,
         errors: dict[tuple[str, int], BaseException] | None = None,
     ) -> None:
+        self._videos = videos or {}
         self._movies = movies or {}
         self._tv = tv or {}
         self._seasons = seasons or {}
@@ -94,6 +96,13 @@ class FakeTMDBClient:
             raise self._errors[('credits', item_id)]
         return self._credits.get((kind, item_id), {'cast': [], 'crew': []})
 
+    async def videos(self, kind: str, item_id: int) -> Any:
+        self.calls.append(('videos', (kind, item_id)))
+        # Keyed apart again, so a test can fail *only* the videos fetch.
+        if ('videos', item_id) in self._errors:
+            raise self._errors[('videos', item_id)]
+        return self._videos.get((kind, item_id), {'results': []})
+
 
 class FakeWatchlistRepository:
     """Stand-in for :class:`~app.database.repositories.watchlist.WatchlistRepository`."""
@@ -115,6 +124,7 @@ class FakeWatchlistRepository:
         self.pruned_with: list[int] | None = None
         self.people: dict[int, dict[str, Any]] = {}
         self.credits: dict[int, list[dict[str, Any]]] = {}
+        self.trailers: dict[int, dict[str, Any]] = {}
         self.people_pruned = 0
 
     async def list_titles(self, universe: str, *, path_slug: str | None = None, sort: str = 'story') -> list[dict[str, Any]]:
@@ -173,6 +183,10 @@ class FakeWatchlistRepository:
     async def replace_credits(self, title_id: int, credits: Sequence[dict[str, Any]]) -> None:
         self.calls.append(('replace_credits', (title_id, len(credits))))
         self.credits[title_id] = [dict(row) for row in credits]
+
+    async def set_trailer(self, title_id: int, trailer: dict[str, Any]) -> None:
+        self.calls.append(('set_trailer', (title_id, trailer)))
+        self.trailers[title_id] = dict(trailer)
 
     async def prune_people(self) -> int:
         self.calls.append(('prune_people', ()))
@@ -913,6 +927,68 @@ async def test_sync_dry_run_fetches_no_credits() -> None:
     assert not any(call[0] == 'credits' for call in tmdb.calls)
     assert report.credits_written == 0
     assert repo.people_pruned == 0
+
+
+async def test_sync_writes_the_selected_trailer() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        videos={('movie', 1): {'results': [
+            {'name': 'Teaser', 'key': 'teaser', 'site': 'YouTube', 'type': 'Teaser', 'official': True},
+            {'name': 'Official Trailer', 'key': 'yt', 'site': 'YouTube', 'type': 'Trailer', 'official': True},
+        ]}},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.trailers_written == 1
+    assert list(repo.trailers.values()) == [
+        {'trailer_site': 'YouTube', 'trailer_key': 'yt', 'trailer_name': 'Official Trailer'}]
+
+
+async def test_sync_writes_no_trailer_when_there_is_none() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})  # -> {'results': []}
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    # A title with no trailer is normal, not an error: nothing written, nothing warned about.
+    assert report.trailers_written == 0
+    assert repo.trailers == {}
+    assert report.warnings == []
+
+
+async def test_sync_videos_failure_warns_and_leaves_the_stored_trailer_alone() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        errors={('videos', 1): _FakeTMDBError('videos are down')},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.titles_written == 1  # the title itself still synced
+    assert report.trailers_written == 0
+    assert any('videos are down' in warning for warning in report.warnings)
+    assert repo.trailers == {}  # never called -> an outage cannot clear a stored trailer
+
+
+async def test_sync_dry_run_fetches_no_videos() -> None:
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',), dry_run=True)
+
+    assert not any(call[0] == 'videos' for call in tmdb.calls)
+    assert report.trailers_written == 0
 
 
 async def test_sync_prunes_orphaned_people_once_per_run() -> None:

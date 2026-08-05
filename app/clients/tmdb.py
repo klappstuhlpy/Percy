@@ -117,6 +117,19 @@ class TMDBClient(BaseHTTPClient):
             raise ValueError(f"kind must be 'movie' or 'tv', got {kind!r}")
         return await self._get(f'{kind}/{item_id}/credits', params=self._params())
 
+    async def videos(self, kind: str, item_id: int) -> Any:
+        """``GET {kind}/{id}/videos``; ``kind`` is ``'movie'`` or ``'tv'``.
+
+        The one call that deliberately does **not** send ``language``: TMDB filters videos by
+        it, so the configured ``en-US`` would hide a non-English film's only trailer entirely
+        and would make the selector's language preference meaningless (there would never be
+        another language to prefer against). All languages come back and
+        :func:`~app.services.watchlist.trailers.select_trailer` decides.
+        """
+        if kind not in _SEARCH_KINDS:
+            raise ValueError(f"kind must be 'movie' or 'tv', got {kind!r}")
+        return await self._get(f'{kind}/{item_id}/videos')
+
     async def watch_providers(self, kind: str, item_id: int) -> Any:
         """``GET {kind}/{id}/watch/providers``; ``kind`` is ``'movie'`` or ``'tv'``."""
         if kind not in _SEARCH_KINDS:

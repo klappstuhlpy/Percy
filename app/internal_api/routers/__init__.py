@@ -12,7 +12,9 @@ from .leveling import router as leveling_router
 from .members import router as members_router
 from .moderation import router as moderation_router
 from .music import router as music_router
+from .news import router as news_router
 from .profile import router as profile_router
+from .releases import router as releases_router
 from .stats import router as stats_router
 from .subscriptions import router as subscriptions_router
 from .users import router as users_router
@@ -37,4 +39,6 @@ ALL_ROUTERS = [
     gallery_router,
     watchlist_router,
     comics_router,
+    releases_router,
+    news_router,
 ]

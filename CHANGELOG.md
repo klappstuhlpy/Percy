@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Personal release subscriptions: `/subscribe` follows a comic series, creator, character, film universe or person, and Percy DMs you a digest when something you follow lands.
+- `/subscriptions` lists everything you follow with a remove and a per-row updates toggle; `/unsubscribe` removes one directly.
+- A **Subscriptions** page on the website for managing what you follow, including muting a follow without losing it.
+- News delivery: a subscription set to `news` or `both` now brings recent articles about what you follow into the same hourly digest, each headline credited to its source and linking to the original.
+- A **Releases** page on the website: what just landed and what is imminent across comics and film & TV, with the entries you follow lifted to the top when you are signed in.
+- A **News** page on the website, filterable by subject, source and search, plus a headline strip on the releases, comics and watch-order pages that leads with what you follow.
+- Related news on comic pages: the most recent stories written about that series.
+- A page for every film and show on the website, with its cast and crew, where it sits in the watch order, where to stream it and a trailer — a link that only becomes an embedded player once you click it, so nothing starts playing on its own.
+- Read/watched marks across the website: mark a comic read or a film watched from the releases page, the comic archive, a watch order or any detail page, with an unmark on every one of them. A watch order also shows how far through it you are, and `j`/`k`/`w` step through a list and mark without the mouse.
+- Film and TV release dates are re-checked against TMDB every night, so a digest arrives on the day something is actually out.
 - Timeout duration validation helper for the internal API.
 - `codeimage`, `chart`, and `mdpdf` render commands via klappstuhl.me integration.
 

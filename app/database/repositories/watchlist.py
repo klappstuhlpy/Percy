@@ -106,6 +106,31 @@ class WatchlistRepository(BaseRepository):
         return await self.fetchrow(
             "SELECT * FROM watch_titles WHERE universe = $1 AND slug = $2;", universe, slug)
 
+    async def titles_releasing_between(
+        self, start: datetime.date, end: datetime.date,
+    ) -> list[asyncpg.Record]:
+        """Fetches titles whose ``release_date`` falls in ``[start, end]``, earliest first.
+
+        The release dispatcher's half of the catalogue: it asks "what is out today" and turns
+        each row into a releasable, so this selects the columns
+        :func:`app.services.releases.title_releasable` reads, the ``id`` its credits are looked
+        up by, and the TMDB identity the nightly re-check
+        (:meth:`~app.services.watchlist.ingest.WatchlistIngest.refresh_release_dates`) needs to
+        ask TMDB whether the date it is about to dispatch on still holds. Undated titles never
+        match -- an announcement with no date is not a release yet.
+
+        Both bounds are inclusive: a title releasing on ``start`` or on ``end`` is in.
+        """
+        return await self.fetch(
+            """
+            SELECT id, universe, slug, title, release_date, poster_path, sub_universe,
+                   tmdb_type, tmdb_id
+            FROM watch_titles
+            WHERE release_date BETWEEN $1 AND $2
+            ORDER BY release_date, id;
+            """,
+            start, end)
+
     async def search_titles(
         self, query: str, *, universe: str | None = None, limit: int = 25,
     ) -> list[asyncpg.Record]:
@@ -301,6 +326,28 @@ class WatchlistRepository(BaseRepository):
         )
         return len(rows)
 
+    async def set_release_date(self, title_id: int, release_date: datetime.date) -> None:
+        """Writes one title's ``release_date`` -- the nightly TMDB re-check's only write.
+
+        Deliberately a single column: a date that moved is a *factual* correction, and a full
+        :meth:`upsert_title` would need the seed's curation columns, which this path does not
+        have and must not guess at.
+        """
+        await self.execute("UPDATE watch_titles SET release_date = $2 WHERE id = $1;", title_id, release_date)
+
+    async def set_trailer(self, title_id: int, trailer: dict[str, Any]) -> None:
+        """Writes one title's trailer columns (``V44``). Separate from :meth:`upsert_title` by design.
+
+        A trailer is only ever written when the ingest *found* one, so a TMDB outage, a title
+        with no videos, or a payload where nothing matches the selection precedence all leave
+        the stored trailer exactly as it was. Folding these columns into the upsert would
+        instead null them out on every such run.
+        """
+        await self.execute(
+            "UPDATE watch_titles SET trailer_site = $2, trailer_key = $3, trailer_name = $4 WHERE id = $1;",
+            title_id, trailer['trailer_site'], trailer['trailer_key'], trailer.get('trailer_name'),
+        )
+
     async def set_credits_of(self, title_id: int, credits_of_id: int | None) -> None:
         """Sets or clears a title's ``credits_of`` reference (resolved in a second ingest pass)."""
         await self.execute("UPDATE watch_titles SET credits_of = $2 WHERE id = $1;", title_id, credits_of_id)
@@ -412,6 +459,42 @@ class WatchlistRepository(BaseRepository):
             ORDER BY t.release_date DESC NULLS FIRST, t.id;
         """
         return await self.fetch(query, person_id)
+
+    async def list_people(self, *, limit: int = 5000) -> list[asyncpg.Record]:
+        """Every credited person, most-credited first, with their credit count.
+
+        The uncounted twin of :meth:`search_people`: the news tagger needs the whole roster once
+        per polling run to build its vocabulary, not a ranked answer to a query. Bounded by
+        ``limit`` because the vocabulary is held in memory, and a person with no credits cannot
+        be the subject of anything (``prune_people`` removes them anyway).
+        """
+        return await self.fetch(
+            """
+            SELECT p.*, COUNT(c.title_id) AS credit_count
+            FROM watch_people p
+            JOIN watch_credits c ON c.person_id = p.tmdb_person_id
+            GROUP BY p.tmdb_person_id
+            ORDER BY credit_count DESC, p.name
+            LIMIT $1;
+            """,
+            limit)
+
+    async def list_franchises(self) -> list[asyncpg.Record]:
+        """Every distinct ``sub_universe``, with how many titles carry it.
+
+        A franchise is a curated string on a title rather than a table of its own, so this is
+        the only way to enumerate the ``franchise`` subject type -- which the fan-out and the
+        news tagger both need a list of.
+        """
+        return await self.fetch(
+            """
+            SELECT sub_universe AS name, COUNT(*) AS title_count
+            FROM watch_titles
+            WHERE sub_universe IS NOT NULL AND sub_universe <> ''
+            GROUP BY sub_universe
+            ORDER BY title_count DESC, sub_universe;
+            """,
+        )
 
     async def search_people(self, query: str, *, limit: int = 25) -> list[asyncpg.Record]:
         """Trigram-similarity search over person names, best match first, with credit counts.

@@ -10,6 +10,7 @@ from app.services.watchlist.payload import (
     credit_payloads,
     person_payload,
     person_summary,
+    trailer_payload,
     universe_payload,
     universe_stats,
     universe_summary,
@@ -24,10 +25,13 @@ from app.services.watchlist.seeds import (
     accent_to_int,
     load_seed,
 )
+from app.services.watchlist.trailers import SITES, TRAILER_TYPES, select_trailer, trailer_urls
 
 __all__ = (
     'CAST_LIMIT',
     'CREW_ROLES',
+    'SITES',
+    'TRAILER_TYPES',
     'EraSeed',
     'IngestReport',
     'PathSeed',
@@ -43,7 +47,10 @@ __all__ = (
     'person_payload',
     'person_summary',
     'provider_rows',
+    'select_trailer',
     'slugify',
+    'trailer_payload',
+    'trailer_urls',
     'tv_row',
     'universe_payload',
     'universe_stats',

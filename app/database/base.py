@@ -35,6 +35,7 @@ from app.database.repositories import (
     LevelingRepository,
     ModerationRepository,
     MusicSessionsRepository,
+    NewsRepository,
     PlaylistsRepository,
     PollsRepository,
     ReleasesRepository,
@@ -309,6 +310,7 @@ class Database(_Database):
     templates: GuildTemplatesRepository
     watchlist: WatchlistRepository
     releases: ReleasesRepository
+    news: NewsRepository
 
     def __init__(self, bot: Bot, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         super().__init__(bot, loop=loop)
@@ -342,6 +344,7 @@ class Database(_Database):
         self.templates = GuildTemplatesRepository(self)
         self.watchlist = WatchlistRepository(self)
         self.releases = ReleasesRepository(self)
+        self.news = NewsRepository(self)
 
         self._register_cache_signals()
 

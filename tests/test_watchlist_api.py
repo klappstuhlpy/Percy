@@ -78,6 +78,9 @@ def _title(**overrides: Any) -> dict[str, Any]:
         'spoiler': None,
         'credits_of': None,
         'sub_universe': None,
+        'trailer_site': 'YouTube',
+        'trailer_key': 'yt-key',
+        'trailer_name': 'Official Trailer',
         'importance': 'essential',
     }
     row.update(overrides)
@@ -369,9 +372,23 @@ async def test_get_title_returns_neighbours_and_credits_parent(bot: Any) -> None
     assert detail['next']['slug'] == 'loki'
     assert detail['credits_of'] is None
 
+    assert (detail['position'], detail['total']) == (2, 3)
+    assert detail['path'] == 'complete'  # the universe's default path, whose importance it carries
+    assert detail['sort'] == 'story'
+
     loki = await api.get_title(bot, 'mcu', 'loki')
     assert loki['credits_of']['slug'] == 'iron-man'  # credits_of = 1
     assert loki['next'] is None
+    assert (loki['position'], loki['total']) == (3, 3)
+
+
+async def test_get_title_carries_the_trailer_with_both_urls(bot: Any) -> None:
+    detail = await api.get_title(bot, 'mcu', 'iron-man')
+    assert detail['title']['trailer'] == {
+        'site': 'YouTube', 'key': 'yt-key', 'name': 'Official Trailer',
+        'url': 'https://www.youtube.com/watch?v=yt-key',
+        'embed_url': 'https://www.youtube.com/embed/yt-key',
+    }
 
 
 async def test_get_title_404s_an_unknown_slug(bot: Any) -> None:

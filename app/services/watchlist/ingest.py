@@ -18,6 +18,7 @@ drift back to whatever TMDB happens to say, and vice versa.
 from __future__ import annotations
 
 import datetime
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,7 @@ import asyncpg
 from app.clients.base import HTTPClientError
 from app.services.watchlist.people import credit_rows
 from app.services.watchlist.seeds import accent_to_int
+from app.services.watchlist.trailers import select_trailer
 from app.utils.text import slugify
 
 if TYPE_CHECKING:
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
     from app.services.watchlist.seeds import PathSeed, TitleSeed, UniverseSeed
 
 __all__ = ('IngestReport', 'WatchlistIngest', 'movie_row', 'provider_rows', 'slugify', 'tv_row')
+
+log = logging.getLogger(__name__)
 
 #: TMDB's ``watch/providers`` result buckets, in the order rows are emitted.
 _PROVIDER_BUCKETS = ('flatrate', 'rent', 'buy')
@@ -228,6 +232,7 @@ class IngestReport:
     titles_pruned: int = 0
     providers_written: int = 0
     credits_written: int = 0
+    trailers_written: int = 0
     people_pruned: int = 0
     warnings: list[str] = field(default_factory=list)
     dry_run: bool = False
@@ -238,6 +243,7 @@ class IngestReport:
         header = (
             f'{self.universe}: {verb} {self.titles_written}/{self.titles_seen} title(s), '
             f'{self.providers_written} provider row(s), {self.credits_written} credit(s), '
+            f'{self.trailers_written} trailer(s), '
             f'pruned {self.titles_pruned} title(s) and {self.people_pruned} orphaned person(s).'
         )
         if not self.warnings:
@@ -274,9 +280,10 @@ class WatchlistIngest:
         forever. See :meth:`~app.database.repositories.watchlist.WatchlistRepository
         .prune_importance` and the ``credits_of`` clearing pass below.
 
-        Credits (cast/crew, ``V41``) are fetched for every seeded title *including unreleased
-        ones* -- a person subscription that only knew about released films would be useless --
-        and people left with no credit at all are swept once at the end.
+        Credits (cast/crew, ``V41``) and the trailer (``V44``) are both fetched for every seeded
+        title *including unreleased ones* -- a person subscription that only knew about released
+        films would be useless, and an unreleased title is precisely the one whose trailer people
+        come looking for. People left with no credit at all are swept once at the end.
 
         Failure policy: a TMDB failure fetching one title's metadata, or a Postgres unique-
         constraint violation upserting it (two seeded titles whose TMDB titles slugify
@@ -294,8 +301,9 @@ class WatchlistIngest:
         destructive thing a sync does -- it cascades to ``watch_progress``, i.e. user data --
         a dry run still computes ``titles_pruned`` (from the titles already in the database
         that this run's seed no longer keeps) and warns about each one by name, rather than
-        always reporting 0. Credits are the one read a dry run skips: they cost an extra TMDB
-        request per title and report a number nobody acts on, so ``credits_written`` stays 0.
+        always reporting 0. Credits and trailers are the reads a dry run skips: each costs an
+        extra TMDB request per title and reports a number nobody acts on, so ``credits_written``
+        and ``trailers_written`` stay 0.
         """
         report = IngestReport(universe=seed.slug, dry_run=dry_run)
 
@@ -370,6 +378,11 @@ class WatchlistIngest:
             except HTTPClientError as exc:
                 report.warnings.append(f'{seed.slug}: credits fetch failed for {key[0]}:{key[1]} -- {exc}.')
 
+            try:
+                report.trailers_written += await self._sync_trailer(title_id, seed_title)
+            except HTTPClientError as exc:
+                report.warnings.append(f'{seed.slug}: videos fetch failed for {key[0]}:{key[1]} -- {exc}.')
+
             kept_path_ids = [
                 path_ids[path_slug] for path_slug in seed_title.importance if path_slug in path_ids
             ]
@@ -409,6 +422,48 @@ class WatchlistIngest:
 
         return report
 
+    async def refresh_release_dates(self, rows: Iterable[Mapping[str, Any]]) -> int:
+        """Re-checks stored release dates against TMDB, writing only the ones that moved.
+
+        The bounded counterpart to :meth:`sync`: a sync is seed-driven and whole-universe, but
+        TMDB dates *move* after a sync has run, and a date that slipped is a subscriber DMed on
+        the wrong day. So the ``Releases`` cog hands this the titles due in the next 30 days
+        each night. It reuses the same client and the same :func:`_parse_date` as the ingest --
+        there is deliberately no second path from a TMDB payload to a ``watch_titles`` row.
+
+        Each row must carry ``id``, ``tmdb_type``, ``tmdb_id`` and ``release_date`` (what
+        :meth:`~app.database.repositories.watchlist.WatchlistRepository.titles_releasing_between`
+        selects). Returns how many dates were written.
+
+        Two deliberate refusals to act:
+
+        * a title TMDB no longer publishes a date for keeps the date it has, rather than being
+          nulled out of the catalogue by one bad payload;
+        * a TMDB failure on one title is logged and skipped, exactly as in :meth:`sync` -- an
+          outage must never rewrite dates, and one dead ``tmdb_id`` must not cost the run.
+        """
+        moved = 0
+        for row in rows:
+            try:
+                if row['tmdb_type'] == 'movie':
+                    payload = await self._client.movie(row['tmdb_id'])
+                    fetched = _parse_date(payload.get('release_date'))
+                else:
+                    payload = await self._client.tv(row['tmdb_id'])
+                    fetched = _parse_date(payload.get('first_air_date'))
+            except HTTPClientError as exc:
+                log.warning('Release-date re-check failed for %s:%s -- %s.', row['tmdb_type'], row['tmdb_id'], exc)
+                continue
+
+            if fetched is None or fetched == row['release_date']:
+                continue
+
+            await self._repo.set_release_date(row['id'], fetched)
+            log.info('Release date moved: %s:%s %s -> %s.',
+                     row['tmdb_type'], row['tmdb_id'], row['release_date'], fetched)
+            moved += 1
+        return moved
+
     async def _sync_credits(
         self, title_id: int, seed_title: TitleSeed, *, created_by: Sequence[Mapping[str, Any]],
     ) -> int:
@@ -429,6 +484,26 @@ class WatchlistIngest:
             await self._repo.upsert_person(row)
         await self._repo.replace_credits(title_id, rows)
         return len(rows)
+
+    async def _sync_trailer(self, title_id: int, seed_title: TitleSeed) -> int:
+        """Fetches one title's TMDB videos and stores the winning trailer. Returns 1 if one was written.
+
+        Run for **every** seeded title, unreleased ones included -- the title whose trailer
+        people actually want is the one that is not out yet. It costs one extra request per
+        title (38 for the current seed set, against TMDB's ~40 req/s ceiling), which is why
+        there is no filter here to justify.
+
+        A payload with no videos, or none matching
+        :func:`~app.services.watchlist.trailers.select_trailer`'s precedence, writes nothing and
+        returns 0: the stored trailer (if any) survives, and "this title has no trailer" is a
+        normal state rather than a warning. A TMDB failure propagates to the caller, which
+        records it as a warning, with the same effect.
+        """
+        trailer = select_trailer(await self._client.videos(seed_title.tmdb_type, seed_title.tmdb_id))
+        if trailer is None:
+            return 0
+        await self._repo.set_trailer(title_id, trailer)
+        return 1
 
     async def _build_row(self, seed_title: TitleSeed, *, universe: str, era_order: int) -> dict[str, Any]:
         """Fetches TMDB metadata for one title and maps it via :func:`movie_row`/:func:`tv_row`."""

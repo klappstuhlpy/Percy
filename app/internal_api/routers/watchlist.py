@@ -12,7 +12,7 @@ are per-user and never cached.
 """
 from __future__ import annotations
 
-import datetime
+import datetime  # noqa: TC003 -- used in pydantic body models, whose annotations are evaluated at runtime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -29,6 +29,7 @@ from app.services.watchlist.payload import (
 from app.utils import cache
 
 from ..dependencies import BotDep, verify_token
+from ..helpers import naive_utc
 
 if TYPE_CHECKING:
     from app.core.bot import Bot
@@ -89,19 +90,6 @@ def _check_region(region: str) -> str:
             detail=f"invalid region {region!r}; expected a two-letter ISO 3166-1 code",
         )
     return region
-
-
-def _naive_utc(value: datetime.datetime | None) -> datetime.datetime:
-    """Coerces a client timestamp to naive UTC (``watch_progress.updated_at`` is naive).
-
-    asyncpg's timestamp encoder raises ``TypeError`` on an aware value, and clients send ISO
-    strings with a ``Z`` offset, so the conversion happens here rather than at the boundary.
-    """
-    if value is None:
-        return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-    if value.tzinfo is not None:
-        return value.astimezone(datetime.UTC).replace(tzinfo=None)
-    return value
 
 
 async def _resolve_path(bot: Bot, slug: str, path: str | None) -> tuple[list[Any], str | None]:
@@ -187,7 +175,10 @@ async def get_title(
     """One title in detail: providers, the title it plays the credits of, and its neighbours.
 
     Neighbours come from the same ordering the page uses, so "next" on a detail page always
-    matches the row below it on the watch order.
+    matches the row below it on the watch order. ``position``/``total`` and ``path`` complete
+    the same thought -- the detail page's "position N of M" strip needs the index within that
+    ordering and the name of the path whose ``importance`` the title carries, neither of which
+    is derivable from a title row alone.
     """
     sort = _check_sort(sort)
     title = await bot.db.watchlist.get_title(universe, slug)
@@ -208,6 +199,10 @@ async def get_title(
         'credits': credit_payloads(await bot.db.watchlist.list_credits([title['id']])),
         'previous': titles[index - 1] if index > 0 else None,
         'next': titles[index + 1] if index + 1 < len(titles) else None,
+        'position': index + 1,
+        'total': len(titles),
+        'path': payload['path'],
+        'sort': sort,
         'universe': payload['universe'],
     }
 
@@ -275,7 +270,7 @@ async def put_progress(bot: BotDep, discord_id: int, body: Annotated[ProgressBod
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"unknown status {entry.status!r}; expected one of {list(_STATUSES)}",
             )
-    entries = [(entry.title_id, entry.status, _naive_utc(entry.updated_at)) for entry in body.entries]
+    entries = [(entry.title_id, entry.status, naive_utc(entry.updated_at)) for entry in body.entries]
     await bot.db.watchlist.set_progress_bulk(discord_id, entries)
     return await get_progress(bot, discord_id, None)
 
