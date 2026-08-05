@@ -1,0 +1,163 @@
+/* Progress — the read/watched toggle and the "N of M" summary (§6.2, §6.3, phase R8).
+
+   One file rather than three copies, because the same control appears on the release
+   overview, both detail pages, the comic browse grid and both order pages. It is loaded
+   *after* the page's own sheet, so a host page can still position `.pg` in its own grid.
+
+   Native Percy (D6): every colour is a base.css token — `--success-*` for a mark, per
+   §6.3 — so both themes come free and no new palette is introduced. Motion is 140 ms on
+   transform/opacity only and stops entirely under prefers-reduced-motion.
+
+   Selectors are prefixed `.pg` and never bare element selectors: base.css styles
+   `a:not(.button)` at (0,1,1), which beats a single class. */
+
+.pg,
+.pg-signin {
+    display: inline-flex;
+    align-items: center;
+}
+
+.pg__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--box);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: transform 140ms ease, background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.pg__button:hover {
+    background: var(--box-shade);
+    color: var(--text);
+    transform: translateY(-1px);
+}
+
+.pg__button:active {
+    transform: none;
+}
+
+/* The tick is drawn, not typed: a glyph would inherit the label's font metrics and
+   shift the row's baseline between the two states. */
+.pg__tick {
+    width: 0.85em;
+    height: 0.85em;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    opacity: 0.45;
+    transition: opacity 140ms ease, background-color 140ms ease;
+}
+
+.pg--on .pg__button {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success-text);
+}
+
+.pg--on .pg__tick {
+    background: currentColor;
+    opacity: 1;
+}
+
+/* A grid cell holding a card and its toggle. The control cannot live *inside* a card
+   that is one big <a> — a form may not nest in a link — so the cell is what the grid
+   lays out and the card is what fills it. */
+.pg-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.pg-cell > a {
+    flex: 1 1 auto;
+}
+
+/* An honest failure: the mark is still in localStorage and will be retried, and the
+   control says so instead of pretending it saved. */
+.pg__note {
+    margin-left: 0.45rem;
+    font-size: 0.66rem;
+    color: var(--warning-text);
+}
+
+.pg__note:empty {
+    display: none;
+}
+
+.pg-signin {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ── The "N of M" summary on an order page ───────────────────────── */
+
+.pg-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0 0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.pg-summary__count {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.pg-summary__bar {
+    flex: 1 1 auto;
+    max-width: 18rem;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--box-shade);
+    overflow: hidden;
+}
+
+/* Width is set inline from the server-rendered count and never animated: the value only
+   changes on a reload, and a transition on a layout property would buy jank for nothing. */
+.pg-summary__fill {
+    display: block;
+    height: 100%;
+    background: var(--success-border);
+}
+
+/* The keyboard hint. Server-rendered but `hidden`: progress.js reveals it, so the page
+   never promises shortcuts a JS-off visitor does not have. */
+.pg-keys {
+    margin: 0.35rem 0 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.pg-keys kbd {
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--box);
+    font-family: inherit;
+    font-size: 0.95em;
+}
+
+/* Real focus moves with j/k, so the ring is the whole feedback — it must be obvious. */
+[data-entry]:focus-visible {
+    outline: 2px solid var(--branding);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pg__button,
+    .pg__tick {
+        transition: none;
+    }
+
+    .pg__button:hover {
+        transform: none;
+    }
+}

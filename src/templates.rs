@@ -627,6 +627,8 @@ mod tests {
 pub(crate) struct WatchlistTemplate {
     pub(crate) account: Option<Viewer>,
     pub(crate) universes: Vec<WatchUniverseSummary>,
+    /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
+    pub(crate) ticker: Vec<TickerItem>,
 }
 
 /// `GET /people/:slug` — one person's filmography across every universe.
@@ -675,6 +677,9 @@ pub(crate) struct WatchOrderTemplate {
     pub(crate) paths: Vec<WatchPath>,
     /// Titles grouped into their era sections, in watch order.
     pub(crate) eras: Vec<OrderEra>,
+    /// `N of M watched` over exactly the rows below, or `None` signed out — see
+    /// `ProgressSummary::new`.
+    pub(crate) progress: Option<ProgressSummary>,
     /// The resolved path/region/sort, echoed back so the toggles keep the other two.
     pub(crate) path: String,
     pub(crate) region: String,
@@ -720,12 +725,352 @@ pub(crate) struct OrderRow {
     pub(crate) studio: Option<String>,
     pub(crate) milestone: bool,
     pub(crate) providers: Vec<OrderProvider>,
+    /// The watched control, keyed `{universe}/{slug}` — `release_progress`, not V39's
+    /// per-title table; `progress.rs`'s module doc says why.
+    pub(crate) toggle: ProgressToggle,
 }
 
 /// A streaming service logo on a row.
 pub(crate) struct OrderProvider {
     pub(crate) name: String,
     pub(crate) logo_url: String,
+}
+
+/// `GET /watchlist/:universe/:slug` — one title as a destination of its own.
+///
+/// Sections follow the plan's §6.2 in order. Everything is precomputed here rather than
+/// in the template, exactly as `OrderRow` is, so the markup stays a layout and the rules
+/// (what an empty runtime prints, which offer group leads) stay testable.
+#[derive(Template)]
+#[template(path = "watch_title.html")]
+pub(crate) struct WatchTitleTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) universe: WatchUniverse,
+    /// Empty when Percy is unreachable or the title doesn't exist — the template's
+    /// empty-state signal, the same check `comic_detail.html` makes.
+    pub(crate) title: String,
+    pub(crate) slug: String,
+    /// The watched control, keyed `{universe}/{slug}` — the same key the order row uses,
+    /// so marking a title here and marking it in the order are one row.
+    pub(crate) toggle: ProgressToggle,
+    pub(crate) year: Option<String>,
+    /// `Film` / `Series` / `Special`, spelled out — the hero has room for a word.
+    pub(crate) kind_label: String,
+    pub(crate) backdrop_url: Option<String>,
+    pub(crate) poster_url: Option<String>,
+    /// The curator's one-line "why it matters" (`context`), not TMDB's synopsis.
+    pub(crate) context: Option<String>,
+    pub(crate) overview: Option<String>,
+    // -- Fact panel --
+    pub(crate) runtime_label: String,
+    pub(crate) rating: Option<String>,
+    pub(crate) votes: Option<i64>,
+    pub(crate) release_date: Option<String>,
+    /// The sub-brand a licensing detour belongs to (Sony's Spider-Man films).
+    pub(crate) studio: Option<String>,
+    pub(crate) era: Option<String>,
+    // -- Where it fits --
+    pub(crate) position: i64,
+    pub(crate) total: i64,
+    /// The curated path whose importance this title carries, humanised.
+    pub(crate) path_name: Option<String>,
+    pub(crate) importance: Option<String>,
+    pub(crate) instruction: Option<String>,
+    pub(crate) milestone: bool,
+    pub(crate) sort_label: String,
+    /// Back to the ordering this position is measured in, carrying path/region/sort.
+    pub(crate) order_href: String,
+    /// `?sort=…&region=…` — appended to every link to a sibling title, so walking
+    /// previous/next never silently drops back to story order in the default region.
+    pub(crate) link_query: String,
+    pub(crate) previous: Option<TitleNeighbour>,
+    pub(crate) next: Option<TitleNeighbour>,
+    /// The title whose credits scene this entry really is, when it is one.
+    pub(crate) credits_of: Option<TitleNeighbour>,
+    // -- Streaming --
+    pub(crate) region: String,
+    pub(crate) regions: Vec<RegionOption>,
+    /// Providers grouped by offer, in a fixed order (stream, rent, buy).
+    pub(crate) provider_groups: Vec<ProviderGroup>,
+    // -- Cast & crew --
+    pub(crate) cast: Vec<TitleCredit>,
+    pub(crate) crew: Vec<TitleCredit>,
+    /// A long cast starts collapsed — a `<details>`, so it opens with JS off.
+    pub(crate) cast_collapsed: bool,
+    // -- Related news (§6.2's 6b): absent rather than empty --
+    pub(crate) related_news: Vec<NewsRow>,
+    pub(crate) related_news_href: String,
+    // -- Trailer: rendered only when Percy selected one --
+    pub(crate) trailer: Option<TrailerView>,
+    /// The curator's spoiler note, shown only inside a collapsed `<details>`.
+    pub(crate) spoiler: Option<String>,
+    /// Signed out, the action row collapses to one "Sign in to track" link.
+    pub(crate) signed_in: bool,
+}
+
+/// A neighbouring title, or the one this entry plays the credits of.
+pub(crate) struct TitleNeighbour {
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) year: Option<String>,
+    pub(crate) poster_url: Option<String>,
+}
+
+/// One offer type's providers — "Stream", "Rent", "Buy".
+pub(crate) struct ProviderGroup {
+    pub(crate) label: String,
+    pub(crate) providers: Vec<OrderProvider>,
+}
+
+/// One option in the region form's `<select>`.
+pub(crate) struct RegionOption {
+    pub(crate) code: String,
+    pub(crate) name: String,
+    pub(crate) selected: bool,
+}
+
+/// One credited person on a title.
+pub(crate) struct TitleCredit {
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    /// The character for an acting credit, else the role noun.
+    pub(crate) role_label: String,
+    pub(crate) photo_url: Option<String>,
+}
+
+/// The one trailer, ready to render: a link that JS upgrades into an iframe.
+pub(crate) struct TrailerView {
+    /// TMDB's video title, or a plain "Trailer" when it carries none.
+    pub(crate) label: String,
+    /// `YouTube` / `Vimeo` — named on the fallback link so the destination is stated.
+    pub(crate) site: String,
+    /// Where a JS-off click goes. Never omitted.
+    pub(crate) url: String,
+    /// What the click-to-load swaps in. Never in the initial HTML.
+    pub(crate) embed_url: String,
+}
+
+// -- Release overview ----------------------------------------------------------
+
+/// `GET /releases` — the front door: what just landed and what is imminent.
+#[derive(Template)]
+#[template(path = "releases.html")]
+pub(crate) struct ReleasesTemplate {
+    pub(crate) account: Option<Viewer>,
+    /// Half-width of the window, in days — the `days` control's current value.
+    pub(crate) days: u32,
+    /// The window's ends, as Percy reported them (ISO `YYYY-MM-DD`).
+    pub(crate) window_start: String,
+    pub(crate) window_end: String,
+    /// The cards the viewer's subscriptions matched. Empty signed out, and the section
+    /// is omitted rather than shown empty — see `releases.rs`.
+    pub(crate) followed: Vec<ReleaseCardRow>,
+    pub(crate) comics: Vec<ReleaseCardRow>,
+    pub(crate) titles: Vec<ReleaseCardRow>,
+    /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
+    pub(crate) ticker: Vec<TickerItem>,
+    /// A signed-out visitor gets a one-line invitation instead of the `Following` section.
+    pub(crate) signed_in: bool,
+    /// Percy could not be reached — an empty page is an outage, not an empty catalogue.
+    /// The two need different wording, exactly as on `/comics`.
+    pub(crate) unavailable: bool,
+    /// Empty here: the page mixes brands, so the attribution partial shows only the
+    /// general League of Comic Geeks / VIZ notice.
+    pub(crate) comic_copyright: String,
+}
+
+/// One overview card. Both media flatten into this — the differences (which CDN prefixes
+/// the art, where the link points) are resolved in `releases.rs`, not in the template.
+pub(crate) struct ReleaseCardRow {
+    /// `comic` or `title`, doubling as the card's modifier class.
+    pub(crate) media: String,
+    /// COMIC / FILM & TV — the tile that says which catalogue a card came from.
+    pub(crate) media_label: String,
+    /// Where the card links on *this* site. Never the external source listing: a
+    /// catalogue page that sends its traffic off-site on the first click is a link farm.
+    pub(crate) href: String,
+    pub(crate) name: String,
+    pub(crate) subtitle: Option<String>,
+    pub(crate) release_date: Option<String>,
+    /// Already CDN-prefixed for titles.
+    pub(crate) cover_url: Option<String>,
+    pub(crate) chips: Vec<ChipRow>,
+    /// The read/watched control, keyed by the card's own `key`.
+    pub(crate) toggle: ProgressToggle,
+}
+
+// -- Progress ------------------------------------------------------------------
+
+/// One read/watched control, as `templates/progress_toggle.html` renders it.
+///
+/// Everything the markup needs is resolved in `progress.rs` — which verb this medium
+/// takes, whether it is already marked, where a JS-off POST comes back to — so the macro
+/// stays a layout and the rules stay testable.
+pub(crate) struct ProgressToggle {
+    /// Signed out this is not a dead button: the macro renders the sign-in link instead.
+    pub(crate) signed_in: bool,
+    pub(crate) marked: bool,
+    /// `comic` / `title` — half of the identity, and what decides the verb.
+    pub(crate) media: String,
+    /// The card's `key` verbatim (`{brand}/{slug}`, `{universe}/{slug}`).
+    pub(crate) release_key: String,
+    /// `read` / `watched` — Percy 400s the wrong one for a medium rather than coercing it.
+    pub(crate) status: String,
+    /// `Mark read` / `Mark watched`.
+    pub(crate) label: String,
+    /// `Read` / `Watched` — what the control says once it is on.
+    pub(crate) marked_label: String,
+    /// The page this control is on, posted back so a JS-off click lands where it started.
+    pub(crate) redirect: String,
+    pub(crate) sign_in_href: String,
+}
+
+/// `done of total` on an order page, plus the percentage its bar is drawn at.
+pub(crate) struct ProgressSummary {
+    pub(crate) done: usize,
+    pub(crate) total: usize,
+    pub(crate) percent: usize,
+    /// `read` / `watched` — the participle the count is phrased with.
+    pub(crate) verb: String,
+}
+
+impl ProgressSummary {
+    /// The summary for a page, or `None` when there is nothing to count (signed out, or
+    /// an empty list) — an order page must not draw a "0 of 0" bar.
+    pub(crate) fn new(signed_in: bool, done: usize, total: usize, verb: &str) -> Option<Self> {
+        (signed_in && total > 0).then(|| Self {
+            done,
+            total,
+            percent: done * 100 / total,
+            verb: verb.to_string(),
+        })
+    }
+}
+
+/// One subject chip. `href` is `None` when no catalogue page exists for that subject —
+/// a franchise, a creator — and the chip renders as plain text rather than a dead link.
+pub(crate) struct ChipRow {
+    pub(crate) label: String,
+    pub(crate) href: Option<String>,
+}
+
+// -- News ----------------------------------------------------------------------
+
+/// `GET /news` — the stream, filterable and paged.
+#[derive(Template)]
+#[template(path = "news.html")]
+pub(crate) struct NewsTemplate {
+    pub(crate) account: Option<Viewer>,
+    /// A signed-out visitor gets a one-line invitation instead of the followed markers.
+    pub(crate) signed_in: bool,
+    /// One list, in Percy's order — the followed stories already lead it.
+    pub(crate) rows: Vec<NewsRow>,
+    /// Options for the source `<select>`; empty when the source call failed, which
+    /// costs the page a filter and nothing else.
+    pub(crate) sources: Vec<SourceOption>,
+    /// Where "clear filters" goes — `/news`, built by the same code as every other href.
+    pub(crate) clear_href: String,
+    pub(crate) prev_href: Option<String>,
+    pub(crate) next_href: Option<String>,
+    /// Echoed back so the form keeps its state with JS off.
+    pub(crate) media: String,
+    /// The subject pair, carried through the form as hidden fields. `subject_value` is
+    /// Percy's opaque key and travels verbatim — the label would match nothing.
+    pub(crate) subject_type: Option<String>,
+    pub(crate) subject_value: Option<String>,
+    pub(crate) source: String,
+    pub(crate) search: String,
+    /// Any filter is in force, so the empty state can offer to clear them.
+    pub(crate) filtered: bool,
+    pub(crate) total: i64,
+    pub(crate) page: i64,
+    pub(crate) total_pages: i64,
+    /// Percy could not be reached — an empty list is an outage, not "nothing matched".
+    pub(crate) unavailable: bool,
+}
+
+/// One story, carrying **only** what §9 permits a page to show: the headline, a short
+/// excerpt, the link to the original and the source's name. The payload's `image_url` and
+/// `author` are deliberately absent from this struct so no template can reach them.
+pub(crate) struct NewsRow {
+    /// The original article. The headline links here, never to a page of ours.
+    pub(crate) url: String,
+    pub(crate) headline: String,
+    pub(crate) excerpt: Option<String>,
+    pub(crate) source_name: String,
+    /// `YYYY-MM-DD`, and the full timestamp for `<time datetime>`.
+    pub(crate) published: Option<String>,
+    pub(crate) published_iso: Option<String>,
+    /// This story matched one of the viewer's subscriptions. A quiet marker on a row in
+    /// the one list — never a second list.
+    pub(crate) followed: bool,
+    pub(crate) chips: Vec<ChipRow>,
+}
+
+/// One option in the source filter.
+pub(crate) struct SourceOption {
+    pub(crate) slug: String,
+    pub(crate) name: String,
+    pub(crate) selected: bool,
+}
+
+/// One headline in the ticker (§6.3), rendered server-side into the page it decorates.
+pub(crate) struct TickerItem {
+    pub(crate) url: String,
+    pub(crate) headline: String,
+    pub(crate) source_name: String,
+}
+
+// -- Release subscriptions -----------------------------------------------------
+
+/// `GET /account/subscriptions` — what the signed-in user follows, plus the picker.
+#[derive(Template)]
+#[template(path = "subscriptions.html")]
+pub(crate) struct SubscriptionsTemplate {
+    pub(crate) account: Option<Viewer>,
+    /// One section per medium, in a fixed order, so the page never reshuffles.
+    pub(crate) groups: Vec<SubscriptionGroup>,
+    pub(crate) total: usize,
+    /// The picker's current search term, echoed back so the form keeps it with JS off.
+    pub(crate) query: String,
+    /// Popular subjects on first paint, search results once a query is set.
+    pub(crate) subjects: Vec<SubjectRow>,
+    /// Percy could not be reached — an empty page is an outage, not "you follow nothing".
+    pub(crate) unavailable: bool,
+    /// A mutation failed and bounced back here (`?error=1`).
+    pub(crate) errored: bool,
+}
+
+/// One medium's subscriptions.
+pub(crate) struct SubscriptionGroup {
+    pub(crate) media: String,
+    pub(crate) label: String,
+    pub(crate) rows: Vec<SubscriptionRow>,
+}
+
+/// One followed subject, with every control's state precomputed.
+pub(crate) struct SubscriptionRow {
+    pub(crate) media: String,
+    pub(crate) subject_type: String,
+    /// The opaque key — posted back verbatim, never the label.
+    pub(crate) subject_value: String,
+    pub(crate) label: String,
+    /// The `Series` / `Person` / `Character` chip.
+    pub(crate) type_label: String,
+    pub(crate) streams: String,
+    /// `dm` or `off`; `off` mutes without unfollowing.
+    pub(crate) delivery: String,
+    pub(crate) muted: bool,
+}
+
+/// One picker row. `followed` greys the subscribe button for something already followed.
+pub(crate) struct SubjectRow {
+    pub(crate) media: String,
+    pub(crate) subject_type: String,
+    pub(crate) subject_value: String,
+    pub(crate) label: String,
+    pub(crate) hint: String,
+    pub(crate) followed: bool,
 }
 
 // -- Comics --------------------------------------------------------------------
@@ -746,6 +1091,10 @@ pub(crate) struct ComicCard {
     pub(crate) release_date: Option<String>,
     pub(crate) cover_url: Option<String>,
     pub(crate) price_label: Option<String>,
+    /// The read control, on the surfaces that offer one. `None` on the detail page's
+    /// neighbours and a series' issue list: those cards are navigation, and a toggle on
+    /// every thumbnail would be a second, quieter way to mark the wrong issue.
+    pub(crate) toggle: Option<ProgressToggle>,
 }
 
 /// One brand-filter tab on the browse page.
@@ -768,6 +1117,8 @@ pub(crate) struct ComicBrowseTemplate {
     pub(crate) account: Option<Viewer>,
     pub(crate) items: Vec<ComicCard>,
     pub(crate) brand_tabs: Vec<BrandTab>,
+    /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
+    pub(crate) ticker: Vec<TickerItem>,
     /// Echoed back so the search form keeps the active brand filter.
     pub(crate) brand: Option<String>,
     pub(crate) search: String,
@@ -828,6 +1179,9 @@ pub(crate) struct ComicDetailTemplate {
     /// `eras.is_empty()`.
     pub(crate) title: String,
     pub(crate) slug: String,
+    /// The read control, keyed by `{brand}/{slug}` — the same string the browse grid
+    /// and a release card file their marks under, so one release is one row.
+    pub(crate) toggle: ProgressToggle,
     pub(crate) issue_label: Option<String>,
     pub(crate) release_date: Option<String>,
     pub(crate) cover_url: Option<String>,
@@ -843,5 +1197,10 @@ pub(crate) struct ComicDetailTemplate {
     pub(crate) credit_groups: Vec<CreditGroup>,
     pub(crate) characters: Vec<ComicCharacter>,
     pub(crate) description: Option<String>,
+    /// §6.2's "6b. Related news" — the most recent stories tagged with this release's
+    /// series. Empty means the section is *absent*, not an empty box.
+    pub(crate) related_news: Vec<NewsRow>,
+    /// Everything tagged with that series, on `/news`.
+    pub(crate) related_news_href: String,
     pub(crate) comic_copyright: String,
 }

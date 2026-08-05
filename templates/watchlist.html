@@ -11,6 +11,7 @@
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/watchlist.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/news.css" type="text/css"/>
 {% endblock %}
 
 {% block body %}
@@ -24,6 +25,8 @@
                 runtimes, what's essential, and where each one is streaming.
             </p>
         </header>
+
+        {% include "news_ticker.html" %}
 
         {% if universes.is_empty() %}
         <div class="wl-empty">

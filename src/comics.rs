@@ -9,10 +9,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{ComicBrowseQuery, ComicCredit, ComicRelease, PercyError};
+use percy_client::{ComicBrowseQuery, ComicCredit, ComicRelease, PercyError, ProgressMap};
 use serde::Deserialize;
 
 use crate::{
+    progress,
     session::Session,
     templates::{
         BrandTab, ComicBrowseTemplate, ComicCard, ComicDetailTemplate, ComicSeriesIndexTemplate, ComicSeriesTemplate,
@@ -66,18 +67,26 @@ pub async fn comic_browse(
     let search = params.search.unwrap_or_default();
     let page = params.page.filter(|p| *p > 0).unwrap_or(1);
 
-    let fetched = match &app.percy {
-        Some(percy) => percy
-            .list_comics(&ComicBrowseQuery {
+    let discord_id = session.as_ref().map(|s| s.discord_user_id.clone());
+    // All three calls go out together: neither the ticker nor the read marks may add a
+    // round trip to the grid they decorate, and neither may take it down when it fails.
+    let (fetched, ticker, marks) = match &app.percy {
+        Some(percy) => {
+            let query = ComicBrowseQuery {
                 brand: brand.as_deref(),
                 search: (!search.is_empty()).then_some(search.as_str()),
                 page: Some(page),
                 per_page: Some(PER_PAGE),
                 ..Default::default()
-            })
-            .await
-            .ok(),
-        None => None,
+            };
+            let (releases, ticker, marks) = tokio::join!(
+                percy.list_comics(&query),
+                crate::news::ticker(&app, discord_id.as_deref()),
+                progress::fetch(&app, &session, "comic")
+            );
+            (releases.ok(), ticker, marks)
+        }
+        None => (None, Vec::new(), ProgressMap::default()),
     };
     // An empty grid has two causes that read identically but are not the same thing. Telling
     // someone their filter matched nothing, when really the backend is down, sends them off
@@ -86,10 +95,30 @@ pub async fn comic_browse(
     let data = fetched.unwrap_or_default();
 
     let (prev_page, next_page) = adjacent_pages(page, data.total_pages);
+    // A JS-off mark bounces back to *this* filtered page, not to a bare `/comics` that
+    // has lost the brand, the search and the page the visitor was reading. Built by the
+    // same helper as the pagination links, so the two can never disagree.
+    let here = browse_href(brand.as_deref(), &search, page);
+    let signed_in = session.is_some();
 
     ComicBrowseTemplate {
         account: viewer(&session),
-        items: data.items.iter().map(comic_card).collect(),
+        items: data
+            .items
+            .iter()
+            .map(|release| {
+                let mut card = comic_card(release);
+                card.toggle = Some(progress::toggle(
+                    &marks,
+                    signed_in,
+                    "comic",
+                    &release_key(&release.brand, &release.slug),
+                    &here,
+                ));
+                card
+            })
+            .collect(),
+        ticker,
         brand_tabs: BRANDS
             .iter()
             .map(|&(value, label)| {
@@ -199,10 +228,17 @@ pub async fn comic_detail(
     session: Option<Session>,
     Path((brand, slug)): Path<(String, String)>,
 ) -> Response {
-    let fetched = match &app.percy {
-        Some(percy) => percy.get_comic(&brand, &slug).await,
-        None => Err(PercyError::Api("percy is not configured".into())),
+    // The marks ride along with the release rather than behind it: progress is decoration
+    // on a public page and must never add a round trip to it.
+    let (fetched, marks) = match &app.percy {
+        Some(percy) => tokio::join!(percy.get_comic(&brand, &slug), progress::fetch(&app, &session, "comic")),
+        None => (
+            Err(PercyError::Api("percy is not configured".into())),
+            ProgressMap::default(),
+        ),
     };
+    let signed_in = session.is_some();
+    let here = format!("/comics/{brand}/{slug}");
 
     // Same split as the series page: an unknown release is a real 404, a backend that is down
     // is a 200 empty state (checked in the template via an empty `title`, the way
@@ -216,6 +252,7 @@ pub async fn comic_detail(
                 brand_label: brand_label(&brand).to_string(),
                 accent: brand_accent(&brand).to_string(),
                 title: String::new(),
+                toggle: progress::toggle(&marks, signed_in, "comic", &release_key(&brand, &slug), &here),
                 slug,
                 issue_label: None,
                 release_date: None,
@@ -232,6 +269,8 @@ pub async fn comic_detail(
                 credit_groups: Vec::new(),
                 characters: Vec::new(),
                 description: None,
+                related_news: Vec::new(),
+                related_news_href: String::new(),
                 comic_copyright: String::new(),
             };
             return (status_for(&error), body).into_response();
@@ -239,8 +278,27 @@ pub async fn comic_detail(
     };
 
     let release = detail.release;
+    // §6.2's "6b. Related news": the stories tagged with this release's series. The subject
+    // key is the series slug verbatim — Percy normalises both sides of the comparison, so a
+    // prettified label would match nothing. No series, no section.
+    let series_subject = release.series_slug.clone().unwrap_or_default();
+    let related_news = if series_subject.is_empty() {
+        Vec::new()
+    } else {
+        crate::news::related(&app, "comic", "series", &series_subject).await
+    };
     ComicDetailTemplate {
         account: viewer(&session),
+        // Percy's own brand and slug, not the ones off the URL: the key is stored with the
+        // brand cased as the catalogue holds it, and a mark filed under `/comics/marvel/…`
+        // would never match the one the browse grid writes.
+        toggle: progress::toggle(
+            &marks,
+            signed_in,
+            "comic",
+            &release_key(&release.brand, &release.slug),
+            &here,
+        ),
         brand_label: brand_label(&release.brand).to_string(),
         accent: brand_accent(&release.brand).to_string(),
         issue_label: issue_label(release.issue_number.as_deref(), &release.title),
@@ -249,6 +307,8 @@ pub async fn comic_detail(
         next: detail.series.next.as_ref().map(comic_card),
         more_from_series: detail.series.more_from_series.iter().map(comic_card).collect(),
         credit_groups: group_credits_by_role(&release.credits),
+        related_news,
+        related_news_href: crate::news::subject_news_href("comic", "series", &series_subject),
         comic_copyright: publisher_copyright(&release.brand).to_string(),
         brand: release.brand,
         title: release.title,
@@ -373,10 +433,23 @@ fn adjacent_pages(page: i64, total_pages: i64) -> (Option<i64>, Option<i64>) {
     (prev, next)
 }
 
+/// The string Percy files a comic's read mark under, and the only way one is built.
+///
+/// `{brand}/{slug}` with the brand cased exactly as the catalogue stores it (uppercase) —
+/// it is the same `key` a release card on `/releases` carries, which is what makes a mark
+/// made on one surface visible on the other.
+fn release_key(brand: &str, slug: &str) -> String {
+    format!("{brand}/{slug}")
+}
+
 /// A release, shaped for a card — the browse grid, a series' issue list, and
 /// the detail page's previous/next/more-from-series links all reuse it.
+///
+/// The toggle is left off here and filled in by the surfaces that offer one, so a
+/// navigation thumbnail never grows a control the visitor did not come for.
 fn comic_card(release: &ComicRelease) -> ComicCard {
     ComicCard {
+        toggle: None,
         brand: release.brand.clone(),
         slug: release.slug.clone(),
         title: release.title.clone(),
@@ -391,8 +464,8 @@ fn comic_card(release: &ComicRelease) -> ComicCard {
 /// `application/x-www-form-urlencoded`-style percent-encoding for a query
 /// value (space -> `+`, everything outside the unreserved set -> `%XX`).
 /// No `urlencoding` crate in this workspace, and this is the entire surface
-/// this module needs it for.
-fn encode_query_value(value: &str) -> String {
+/// the catalogue pages need it for (`news.rs` builds its filter hrefs with it too).
+pub(crate) fn encode_query_value(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
         match byte {
@@ -603,5 +676,157 @@ mod tests {
         assert_eq!(publisher_copyright("MARVEL"), "© Marvel");
         assert_eq!(publisher_copyright("DC"), "© DC Comics");
         assert_eq!(publisher_copyright("MANGA"), "© VIZ Media, LLC");
+    }
+
+    // -- Progress: the read toggle on the two comic surfaces (R8b) ---------
+
+    /// The browse page as the handler assembles it, with the two things that must agree:
+    /// the toggle's key and the `redirect` the pagination links are built from.
+    fn browse_page(
+        releases: &[ComicRelease],
+        map: &ProgressMap,
+        signed_in: bool,
+        brand: Option<&str>,
+        search: &str,
+    ) -> ComicBrowseTemplate {
+        let here = browse_href(brand, search, 2);
+        ComicBrowseTemplate {
+            account: None,
+            items: releases
+                .iter()
+                .map(|release| {
+                    let mut card = comic_card(release);
+                    card.toggle = Some(progress::toggle(
+                        map,
+                        signed_in,
+                        "comic",
+                        &release_key(&release.brand, &release.slug),
+                        &here,
+                    ));
+                    card
+                })
+                .collect(),
+            brand_tabs: Vec::new(),
+            ticker: Vec::new(),
+            brand: brand.map(str::to_string),
+            search: search.to_string(),
+            total: releases.len() as i64,
+            page: 2,
+            total_pages: 3,
+            prev_href: None,
+            next_href: None,
+            unavailable: false,
+            comic_copyright: String::new(),
+        }
+    }
+
+    fn detail_page(map: &ProgressMap, signed_in: bool) -> ComicDetailTemplate {
+        let source = release("MARVEL", "amazing-spider-man-1");
+        ComicDetailTemplate {
+            account: None,
+            brand_label: brand_label(&source.brand).to_string(),
+            accent: brand_accent(&source.brand).to_string(),
+            toggle: progress::toggle(
+                map,
+                signed_in,
+                "comic",
+                &release_key(&source.brand, &source.slug),
+                "/comics/MARVEL/amazing-spider-man-1",
+            ),
+            title: "Amazing Spider-Man #1".into(),
+            issue_label: None,
+            release_date: Some("2026-08-01".into()),
+            cover_url: None,
+            format: None,
+            page_count: None,
+            price_label: None,
+            publisher: None,
+            series_name: None,
+            series_slug: None,
+            previous: None,
+            next: None,
+            more_from_series: Vec::new(),
+            credit_groups: Vec::new(),
+            characters: Vec::new(),
+            description: None,
+            related_news: Vec::new(),
+            related_news_href: String::new(),
+            comic_copyright: publisher_copyright(&source.brand).to_string(),
+            brand: source.brand,
+            slug: source.slug,
+        }
+    }
+
+    fn render<T: askama::Template>(page: T) -> String {
+        page.render().expect("the comic template renders")
+    }
+
+    #[test]
+    fn a_read_row_renders_the_undo_and_an_unread_one_renders_the_mark() {
+        let map = crate::progress::tests::map("comic", &["MARVEL/amazing-spider-man-1"]);
+        let html = render(browse_page(
+            &[release("MARVEL", "amazing-spider-man-1"), release("DC", "batman-2")],
+            &map,
+            true,
+            None,
+            "",
+        ));
+
+        assert!(html.contains(r#"action="/account/progress/remove""#));
+        // The brand keeps the casing the catalogue stores it in: a key built from a
+        // lowercased brand would file the mark against nothing.
+        assert!(html.contains(r#"value="MARVEL/amazing-spider-man-1""#));
+        assert!(html.contains("pg--on"));
+        assert!(html.contains(r#"action="/account/progress""#));
+        assert!(html.contains(r#"value="DC/batman-2""#));
+        assert!(html.contains("Mark read"));
+        assert!(html.contains(r#"name="status" value="read""#));
+    }
+
+    #[test]
+    fn a_browse_row_comes_back_to_the_page_the_visitor_was_reading() {
+        // Otherwise a JS-off click drops them on an unfiltered page one, having lost the
+        // brand, the search and their place.
+        let html = render(browse_page(
+            &[release("MARVEL", "amazing-spider-man-1")],
+            &ProgressMap::default(),
+            true,
+            Some("MARVEL"),
+            "spider man",
+        ));
+        assert!(html.contains(r#"name="redirect" value="/comics?brand=MARVEL&amp;search=spider+man&amp;page=2""#));
+    }
+
+    #[test]
+    fn signed_out_the_browse_grid_offers_a_sign_in_rather_than_a_dead_button() {
+        let html = render(browse_page(
+            &[release("MARVEL", "amazing-spider-man-1")],
+            &ProgressMap::default(),
+            false,
+            None,
+            "",
+        ));
+
+        assert!(
+            !html.contains("/account/progress"),
+            "no write control without a session"
+        );
+        assert!(html.contains("Sign in to track"));
+        // ...and the catalogue is untouched: this page is useful logged out.
+        assert!(html.contains("/comics/MARVEL/amazing-spider-man-1"));
+    }
+
+    #[test]
+    fn the_detail_page_marks_the_release_under_the_same_key_the_grid_uses() {
+        let map = crate::progress::tests::map("comic", &["MARVEL/amazing-spider-man-1"]);
+        let marked = render(detail_page(&map, true));
+        assert!(marked.contains(r#"action="/account/progress/remove""#));
+        assert!(marked.contains(r#"value="MARVEL/amazing-spider-man-1""#));
+        assert!(marked.contains(r#"name="redirect" value="/comics/MARVEL/amazing-spider-man-1""#));
+        assert!(marked.contains("Read</span>"));
+
+        let out = render(detail_page(&ProgressMap::default(), false));
+        assert!(!out.contains("/account/progress"));
+        assert!(out.contains("Sign in to track"));
     }
 }

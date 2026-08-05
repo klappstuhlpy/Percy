@@ -41,10 +41,14 @@ mod leaderboard;
 mod migrations;
 mod moderation;
 mod mutations;
+mod news;
 mod pages;
+mod progress;
+mod releases;
 mod scan;
 mod session;
 mod site;
+mod subscriptions;
 mod templates;
 mod userpages;
 mod view;
@@ -120,6 +124,8 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
         .await?;
 
     let percy = config.percy_api_url().map(|url| {
+        tracing::info!("Percy API client configured: {}", url);
+
         Arc::new(percy_client::PercyClient::new(
             reqwest::Client::new(),
             url,
@@ -149,11 +155,18 @@ fn build_router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/watchlist", get(watchlist::watchlist_index))
         .route("/watchlist/:slug", get(watchlist::watch_order))
+        .route("/watchlist/:universe/:slug", get(watchlist::watch_title))
         .route("/people/:slug", get(watchlist::person_page))
         .route("/comics", get(comics::comic_browse))
         .route("/comics/series", get(comics::comic_series_index))
         .route("/comics/series/:slug", get(comics::comic_series_detail))
         .route("/comics/:brand/:slug", get(comics::comic_detail))
+        // The overview across both catalogues. Public (D9): signed out it renders the
+        // same page minus the `Following` section.
+        .route("/releases", get(releases::releases_page))
+        // The news stream, and the ticker's "All news" target. Public (D9): signed out it
+        // is the same page, minus the followed stories leading the list.
+        .route("/news", get(news::news_page))
         .route("/dashboard", get(guilds::dashboard))
         .route("/dashboard/guild/:guild_id", get(guilds::guild_detail))
         .route("/dashboard/guild/:guild_id/members", get(guilds::guild_members))
@@ -541,6 +554,28 @@ fn build_router(state: AppState) -> Router {
         .route("/account/data-export", get(userpages::account_data_export))
         .route("/account/delete-data", post(userpages::account_data_delete))
         .route("/account/discord/avatar", get(auth::discord_avatar))
+        // Release subscriptions: the page, its picker feed, and the three one-off
+        // mutations (subscribe / retune / unfollow), each a plain form post.
+        .route(
+            "/account/subscriptions",
+            get(subscriptions::subscriptions_page).post(subscriptions::subscription_create),
+        )
+        .route(
+            "/account/subscriptions/update",
+            post(subscriptions::subscription_update),
+        )
+        .route(
+            "/account/subscriptions/remove",
+            post(subscriptions::subscription_delete),
+        )
+        .route("/account/subscriptions/search", get(subscriptions::subscription_search))
+        // Read/watched marks (R8). Two plain form posts plus the JSON read `progress.js`
+        // reconciles against — the same endpoints whether or not JS is running.
+        .route(
+            "/account/progress",
+            get(progress::progress_list).post(progress::progress_mark),
+        )
+        .route("/account/progress/remove", post(progress::progress_unmark))
         .route("/api-info", get(api_info))
         .nest("/kls", kls_ui::routes())
         // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a

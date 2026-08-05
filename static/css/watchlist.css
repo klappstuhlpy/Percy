@@ -493,3 +493,580 @@
         gap: 1rem;
     }
 }
+
+/* ── Title detail page (/watchlist/:universe/:slug) ───────────────────
+   The same layered contrast steps the comic detail page uses — page
+   background, then `--box` panels, then `--box-shade` wells — reusing the
+   `wl-*` type scale, tags and rail vocabulary above rather than inventing a
+   second one. The only per-page colour is still `--wl-accent`; the highlight
+   colours are the shared semantic tokens (`--warning-*` for the curator's
+   instruction, `--info-*` for the spoiler well), never a new palette. */
+
+.wl-detail-hero {
+    position: relative;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* Decorative band: it sits behind the head, faded, and is never the meaning. */
+.wl-detail-hero__backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+    opacity: 0.14;
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 92%);
+}
+
+.wl-detail-hero__body {
+    position: relative;
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    padding: 1.25rem 0 0;
+}
+
+.wl-detail-hero__poster {
+    flex: none;
+    width: 200px;
+    height: 300px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-detail-hero__poster--placeholder {
+    display: block;
+}
+
+.wl-detail-hero__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.wl .wl-detail-hero__universe {
+    color: inherit;
+    text-decoration: none;
+}
+
+.wl .wl-detail-hero__universe:hover {
+    text-decoration: underline;
+}
+
+.wl-detail-hero__year {
+    margin-left: 0.5rem;
+    font-size: 0.6em;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+/* ── Action row ──────────────────────────────────────────────────── */
+
+.wl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+}
+
+.wl .wl-action {
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--wl-accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--wl-accent) 12%, transparent);
+    color: var(--foreground);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform 0.13s ease, background-color 0.13s ease;
+}
+
+.wl .wl-action:hover,
+.wl .wl-action:focus-visible {
+    background: color-mix(in srgb, var(--wl-accent) 22%, transparent);
+    transform: translateY(-1px);
+}
+
+.wl .wl-action--quiet {
+    border-color: var(--box-border);
+    background: var(--box);
+    font-weight: 500;
+}
+
+/* ── Fact panel ──────────────────────────────────────────────────── */
+
+.wl-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    margin: 0 0 1.75rem;
+    padding: 0.25rem 0;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-facts__row {
+    padding: 0.75rem 1.1rem;
+}
+
+.wl-facts__row dt {
+    margin: 0 0 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl-facts__row dd {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.wl-facts__aside {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+
+.wl-section__title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl-fits,
+.wl-watch,
+.wl-credits,
+.wl-related-news,
+.wl-trailer,
+.wl-synopsis {
+    padding-bottom: 1.75rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* ── Where it fits — the page's reason to exist, so it gets the weight ── */
+
+.wl-fits__rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+}
+
+.wl-fits__position {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--wl-accent);
+}
+
+.wl-fits__of {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.wl .wl-fits__order {
+    margin-left: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.wl .wl-fits__order:hover {
+    color: var(--foreground);
+    border-bottom-color: var(--wl-accent);
+}
+
+.wl-fits__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0 0 0.75rem;
+}
+
+/* The one line that changes what you do while watching. */
+.wl-fits__instruction {
+    margin: 0 0 0.85rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: 6px;
+    color: var(--warning-text);
+    font-size: 0.85rem;
+}
+
+.wl-fits__credits-of {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.wl .wl-fits__credits-of a {
+    color: var(--wl-accent);
+}
+
+.wl-neighbours {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.wl .wl-neighbour {
+    display: block;
+    padding: 0.85rem 1rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.13s ease, transform 0.13s ease;
+}
+
+.wl .wl-neighbour:hover,
+.wl .wl-neighbour:focus-visible {
+    border-color: var(--wl-accent);
+    transform: translateY(-1px);
+}
+
+.wl-neighbour--next {
+    text-align: right;
+}
+
+.wl-neighbour__dir {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--wl-accent);
+}
+
+.wl-neighbour__title {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.wl-neighbour__year {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── Streaming ───────────────────────────────────────────────────── */
+
+.wl-region {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.wl-region__label {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.wl-region__select,
+.wl-region__submit {
+    padding: 0.3rem 0.6rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 0.82rem;
+}
+
+.wl-region__submit {
+    cursor: pointer;
+}
+
+.wl-region__submit:hover {
+    border-color: var(--wl-accent);
+}
+
+.wl-offer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+}
+
+.wl-offer + .wl-offer {
+    border-top: 1px solid var(--box-border);
+}
+
+.wl-offer__label {
+    min-width: 5rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--wl-accent);
+}
+
+.wl-offer__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-offer__item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.wl-offer__item img {
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.wl-watch__none,
+.wl-watch__source {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── Cast & crew ─────────────────────────────────────────────────── */
+
+.wl-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-person-chip {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.wl-person-chip__role {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.wl-cast {
+    margin-top: 1.5rem;
+}
+
+.wl-cast__summary {
+    margin: 0 0 0.75rem;
+    cursor: pointer;
+}
+
+.wl-cast__count {
+    margin-left: 0.4rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.wl-people--cards {
+    gap: 0.85rem;
+}
+
+.wl-castcard {
+    display: flex;
+    flex-direction: column;
+    width: 88px;
+}
+
+.wl-castcard__photo {
+    width: 88px;
+    height: 132px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+}
+
+.wl-castcard__photo--placeholder {
+    display: block;
+}
+
+.wl .wl-castcard__name {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-castcard__name:hover {
+    color: var(--wl-accent);
+}
+
+.wl-castcard__role {
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: var(--text-muted);
+}
+
+/* ── Trailer ─────────────────────────────────────────────────────────
+   The play control is a real link; `trailer.js` swaps it for the iframe on
+   click. Both occupy the same 16:9 well, so the swap costs no layout shift. */
+
+.wl .wl-trailer__play {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    aspect-ratio: 16 / 9;
+    max-width: 720px;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 10px;
+    color: var(--foreground);
+    text-decoration: none;
+    transition: border-color 0.13s ease, transform 0.13s ease;
+}
+
+.wl .wl-trailer__play:hover,
+.wl .wl-trailer__play:focus-visible {
+    border-color: var(--wl-accent);
+    transform: scale(1.005);
+}
+
+.wl-trailer__icon {
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--wl-accent);
+}
+
+.wl-trailer__label {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.wl-trailer__site {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.wl-trailer__frame {
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    max-width: 720px;
+    border: 1px solid var(--box-border);
+    border-radius: 10px;
+}
+
+/* ── Spoilers ────────────────────────────────────────────────────── */
+
+.wl-spoiler {
+    margin-bottom: 1.75rem;
+    padding: 0.85rem 1rem;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: 8px;
+}
+
+.wl-spoiler__summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--info-text);
+}
+
+.wl-spoiler__body {
+    margin: 0.75rem 0 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+/* ── Synopsis ────────────────────────────────────────────────────── */
+
+.wl-synopsis p {
+    margin: 0;
+    max-width: 72ch;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+}
+
+/* The attribution partial is shared with the comic pages, which name it `cx-`;
+   the watch-order pages load only this sheet, so it has to be styled here too
+   or TMDB's mandatory notice renders unstyled. */
+.cx-attribution {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--box-border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+    .wl-detail-hero__body {
+        flex-direction: column;
+    }
+
+    .wl-detail-hero__poster {
+        width: 140px;
+        height: 210px;
+    }
+
+    .wl-neighbour--next {
+        text-align: left;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wl .wl-action,
+    .wl .wl-neighbour,
+    .wl .wl-trailer__play {
+        transition: none;
+    }
+
+    .wl .wl-action:hover,
+    .wl .wl-neighbour:hover,
+    .wl .wl-trailer__play:hover,
+    .wl .wl-action:focus-visible,
+    .wl .wl-neighbour:focus-visible,
+    .wl .wl-trailer__play:focus-visible {
+        transform: none;
+    }
+}

@@ -2,6 +2,8 @@
 
 {% block nav_comics_active %} active{% endblock %}
 
+{% import "progress_toggle.html" as progress %}
+
 {% block title %}Comics | Percy{% endblock %}
 
 {% block meta_description %}Browse comic releases from Marvel, DC and manga publishers — covers, issue numbers, release dates and prices, sourced from League of Comic Geeks and VIZ Media.{% endblock %}
@@ -11,6 +13,8 @@
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/progress.css" type="text/css"/>
 {% endblock %}
 
 {% block body %}
@@ -24,6 +28,8 @@
                 release dates and prices.
             </p>
         </header>
+
+        {% include "news_ticker.html" %}
 
         <nav class="cx-controls" aria-label="Comic filters">
             <div class="cx-tabs" role="tablist" aria-label="Brand">
@@ -55,6 +61,10 @@
         {% else %}
         <div class="cx-grid">
             {% for item in items %}
+            {# The toggle is a sibling of the card, not a child: the card is one big <a>
+               and a form may not nest inside a link. `data-entry` + a programmatic-only
+               tabindex is what j/k moves between — see progress.js. #}
+            <div class="pg-cell" data-entry tabindex="-1">
             <a class="cx-card" href="/comics/{{ item.brand }}/{{ item.slug }}">
                 {% match item.cover_url %}
                 {% when Some with (cover) %}
@@ -90,8 +100,18 @@
                     </p>
                 </div>
             </a>
+            {% match item.toggle %}
+            {% when Some with (mark) %}
+            {% call progress::toggle(mark) %}
+            {% when None %}
+            {% endmatch %}
+            </div>
             {% endfor %}
         </div>
+
+        {# Revealed by progress.js: a JS-off visitor is never told about shortcuts they
+           do not have. #}
+        <p class="pg-keys" hidden><kbd>j</kbd> / <kbd>k</kbd> to move, <kbd>w</kbd> to mark.</p>
 
         <nav class="cx-pagination" aria-label="Pagination">
             {% match prev_href %}
@@ -113,4 +133,5 @@
         {% include "comics_attribution.html" %}
     </div>
 </div>
+<script src="/static/js/progress.js" defer></script>
 {% endblock %}

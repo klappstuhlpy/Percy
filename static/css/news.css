@@ -1,0 +1,388 @@
+/* News — the stream at /news, the ticker, and the related-news strip on detail pages.
+
+   A thin layer on top of `comics.css`, not a fourth card style: `/news` carries both
+   `.cx` and `.nx` on its root, so the page frame, the empty state and the pagination
+   are the ones the comic catalogue already ships. Only what news adds lives here.
+
+   Native Percy (D6, §6.3): every colour is a base.css token, the type face is the
+   site's JetBrains Mono, and state comes from the existing semantic tokens
+   (--info-* for subject chips, --success-* for a followed story) rather than a new
+   palette. Both themes come free. Motion is 120–150 ms on transform/opacity only,
+   except the ticker's own long, linear translate — which stops entirely under
+   prefers-reduced-motion.
+
+   Prefixed `.nx-` for the reason `comics.css` documents: base.css styles
+   `a:not(.button)` at (0,1,1), which beats a bare class selector. Link rules here are
+   written as two classes so they win that fight wherever they land — the ticker is
+   included on pages scoped `.cx`, `.rx` and `.wl` alike, so it cannot rely on an
+   ancestor of its own. */
+
+/* ── Ticker (§6.3) ───────────────────────────────────────────────── */
+
+/* One strip under the page header. Its content is server-rendered into the HTML, so
+   it never appears late and never shifts the layout. */
+.nx-ticker {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.5rem 0 0;
+    padding: 0.5rem 0.75rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+    /* The clipping is the viewport's job, not the strip's: a focus ring on the chip or
+       the "All news" link must not be cut off by the thing that hides the track. */
+}
+
+.nx-ticker__chip {
+    flex: none;
+    padding: 0.12rem 0.45rem;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.nx-ticker__viewport {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* The whole motion: one transform on a track holding two identical runs, translated
+   by exactly half its width so the loop is seamless. No <marquee>, and no JS timer —
+   a CSS animation on a compositor property is throttled to nothing when the strip is
+   off-screen or the tab is hidden, which a requestAnimationFrame loop is not. */
+.nx-ticker__track {
+    display: flex;
+    width: max-content;
+    animation: nx-ticker-scroll 45s linear infinite;
+}
+
+@keyframes nx-ticker-scroll {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+/* WCAG 2.2.2: auto-moving content lasting over five seconds must be pausable. Hover
+   covers the pointer, :focus-within covers the keyboard — and every headline is a
+   real link, so tabbing into the strip stops it before the first one moves away. */
+.nx-ticker:hover .nx-ticker__track,
+.nx-ticker:focus-within .nx-ticker__track {
+    animation-play-state: paused;
+}
+
+.nx-ticker__run {
+    display: flex;
+    align-items: center;
+    gap: 1.75rem;
+    /* Half the track: the keyframe's -50% lands exactly on the copy's start. */
+    margin: 0;
+    padding: 0 0.875rem;
+    list-style: none;
+}
+
+.nx-ticker__item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+.nx-ticker .nx-ticker__link {
+    color: var(--foreground);
+    font-size: 0.78rem;
+    text-decoration: none;
+    transition: color 0.13s ease;
+}
+
+.nx-ticker .nx-ticker__link:hover,
+.nx-ticker .nx-ticker__link:focus-visible {
+    color: var(--branding);
+    text-decoration: underline;
+}
+
+/* §9: a story names its source wherever it is shown, the ticker included. */
+.nx-ticker__source {
+    color: var(--text-muted);
+    font-size: 0.64rem;
+}
+
+.nx-ticker .nx-ticker__all {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nx-ticker .nx-ticker__all:hover,
+.nx-ticker .nx-ticker__all:focus-visible {
+    color: var(--foreground);
+    text-decoration: underline;
+}
+
+/* ── Filters ─────────────────────────────────────────────────────── */
+
+.nx-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin: 2rem 0 0.5rem;
+}
+
+.nx-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.nx-field--grow {
+    flex: 1;
+    min-width: 180px;
+}
+
+.nx-field__label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.nx-field select,
+.nx-field input[type='search'] {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.82rem;
+}
+
+.nx-field select:focus,
+.nx-field input[type='search']:focus {
+    outline: none;
+    border-color: var(--branding);
+}
+
+.nx-filters__submit {
+    padding: 0.4rem 0.9rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 6px;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.13s ease;
+}
+
+.nx-filters__submit:hover {
+    border-color: var(--branding);
+}
+
+.nx-subject {
+    margin: 0.75rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.nx .nx-subject__clear {
+    margin-left: 0.5rem;
+    color: var(--branding);
+    font-size: 0.72rem;
+}
+
+/* ── Stream ──────────────────────────────────────────────────────── */
+
+.nx-list {
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.nx-row {
+    padding: 1.1rem 0;
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* The followed head of the list is marked, not moved: Percy already ordered it, and
+   a second section would be a second list. */
+.nx-row--followed {
+    border-left: 2px solid var(--success-border);
+    padding-left: 0.75rem;
+}
+
+.nx-row__headline {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.nx .nx-row__headline a {
+    color: var(--foreground);
+    text-decoration: none;
+    transition: color 0.13s ease;
+}
+
+.nx .nx-row__headline a:hover,
+.nx .nx-row__headline a:focus-visible {
+    color: var(--branding);
+    text-decoration: underline;
+}
+
+.nx-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.3rem 0 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.nx-row__source {
+    font-weight: 600;
+    color: var(--foreground);
+}
+
+.nx-row__followed {
+    padding: 0.05rem 0.4rem;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: 999px;
+    color: var(--success-text);
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Percy caps the excerpt on the way in; this is the whole of what §9 permits beyond
+   the headline, so it is styled as a sample, not as body copy. */
+.nx-row__excerpt {
+    margin: 0.45rem 0 0;
+    max-width: 78ch;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+.nx-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.nx-chip {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: 999px;
+    color: var(--info-text);
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+}
+
+.nx .nx-chip--link {
+    text-decoration: none;
+    transition: opacity 0.13s ease;
+}
+
+.nx .nx-chip--link:hover,
+.nx .nx-chip--link:focus-visible {
+    opacity: 0.75;
+    text-decoration: underline;
+}
+
+.nx-signin,
+.nx-empty__hint {
+    margin: 1.5rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.nx .nx-signin a,
+.nx .nx-empty__hint a {
+    color: var(--branding);
+}
+
+/* ── Related news (§6.2's 6b, on the comic detail page) ──────────── */
+
+.cx-related-news {
+    padding-bottom: 1.75rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.nx-list--compact .nx-row {
+    padding: 0.6rem 0;
+}
+
+.nx-list--compact .nx-row:last-child {
+    border-bottom: none;
+}
+
+.nx-list--compact .nx-row__headline {
+    font-size: 0.88rem;
+}
+
+.nx .nx-more {
+    display: inline-block;
+    margin-top: 0.4rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* ── Responsive / motion ─────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .nx-ticker__all {
+        display: none;
+    }
+
+    .nx-field--grow {
+        min-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The ticker becomes a static row the reader scrolls themselves. The duplicate
+       run only existed to make the loop seamless, so it goes — leaving one copy of
+       each headline rather than a list that repeats itself. */
+    .nx-ticker__track {
+        animation: none;
+        width: auto;
+    }
+
+    .nx-ticker__viewport {
+        overflow-x: auto;
+    }
+
+    .nx-ticker__run[aria-hidden='true'] {
+        display: none;
+    }
+
+    .nx-ticker .nx-ticker__link,
+    .nx .nx-row__headline a,
+    .nx .nx-chip--link,
+    .nx-filters__submit {
+        transition: none;
+    }
+}

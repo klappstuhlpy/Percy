@@ -354,6 +354,12 @@
     color: var(--text-muted);
 }
 
+/* The read control sits under the date. Only spacing lives here — the control itself is
+   styled once, in progress.css, so it looks the same on every surface. */
+.cx-hero__actions {
+    margin-top: 0.85rem;
+}
+
 /* ── Fact panel — layered a step above the page background ─────── */
 
 .cx-facts {

@@ -2,6 +2,8 @@
 
 {% block nav_comics_active %} active{% endblock %}
 
+{% import "progress_toggle.html" as progress %}
+
 {% block title %}{% if title.is_empty() %}Comic unavailable{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %}{% endif %} | Percy{% endblock %}
 
 {% block meta_description %}{% if title.is_empty() %}This release couldn't be loaded right now.{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %} — release date, creators and where it fits in the series.{% endif %}{% endblock %}
@@ -10,6 +12,8 @@
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/progress.css" type="text/css"/>
 {% endblock %}
 
 {% block body %}
@@ -42,6 +46,7 @@
                 <p class="cx-hero__date">{{ date }}</p>
                 {% when None %}
                 {% endmatch %}
+                <div class="cx-hero__actions">{% call progress::toggle(toggle) %}</div>
             </div>
         </section>
 
@@ -168,6 +173,32 @@
         </section>
         {% endif %}
 
+        {# §6.2's 6b: absent rather than empty when nothing has been written about the
+           series. Headline + source + date, linking out — §9 permits nothing more. #}
+        {% if !related_news.is_empty() %}
+        <section class="cx-related-news nx">
+            <h2 class="cx-section__title">Related news</h2>
+            <ul class="nx-list nx-list--compact">
+                {% for row in related_news %}
+                <li class="nx-row">
+                    <h3 class="nx-row__headline">
+                        <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
+                    </h3>
+                    <p class="nx-row__meta">
+                        <span class="nx-row__source">{{ row.source_name }}</span>
+                        {% match row.published %}
+                        {% when Some with (date) %}
+                        <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
+                        {% when None %}
+                        {% endmatch %}
+                    </p>
+                </li>
+                {% endfor %}
+            </ul>
+            <a class="nx-more" href="{{ related_news_href }}">All news for this series →</a>
+        </section>
+        {% endif %}
+
         {% match description %}
         {% when Some with (text) %}
         <section class="cx-description">
@@ -181,4 +212,5 @@
         {% include "comics_attribution.html" %}
     </div>
 </div>
+<script src="/static/js/progress.js" defer></script>
 {% endblock %}
