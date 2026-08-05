@@ -88,6 +88,64 @@
     background: var(--branding-dim);
 }
 
+/* ── Discover menu ───────────────────────────────────────────── */
+
+.percy-nav-menu {
+    position: relative;
+}
+
+.percy-nav-menu > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.percy-nav-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.percy-nav-caret {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid currentColor;
+    transition: transform 0.2s;
+}
+
+.percy-nav-menu[open] .percy-nav-caret {
+    transform: rotate(180deg);
+}
+
+/* The summary carries the active styling for whichever child page you are on,
+   so the pages themselves only ever declare their own block. */
+.percy-nav-menu:has(.active) > summary {
+    color: var(--branding);
+    background: var(--branding-dim);
+}
+
+.percy-nav-dropdown {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    min-width: 160px;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    padding: 0.35rem;
+    z-index: 200;
+}
+
+.percy-nav-dropdown .percy-dropdown-item.active {
+    color: var(--branding);
+    background: var(--branding-dim);
+}
+
 .percy-nav-right {
     display: flex;
     align-items: center;
@@ -310,6 +368,20 @@
     .percy-nav-link {
         width: 100%;
         padding: 0.6rem 0.75rem;
+    }
+
+    .percy-nav-menu {
+        width: 100%;
+    }
+
+    /* In the stacked mobile menu the dropdown is just the next block, not a
+       floating panel over the page. */
+    .percy-nav-dropdown {
+        position: static;
+        border: none;
+        box-shadow: none;
+        background: none;
+        padding: 0 0 0 0.75rem;
     }
 
     .percy-mobile-toggle {

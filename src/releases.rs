@@ -392,6 +392,25 @@ mod tests {
     }
 
     #[test]
+    fn the_four_catalogue_surfaces_sit_under_one_discover_menu_that_needs_no_script() {
+        let html = render(page(Vec::new(), false, false));
+
+        // A <details>, so the menu opens with the keyboard and with JS off; nav.js only
+        // adds outside-click and Escape dismissal on top.
+        assert!(html.contains("<details class=\"percy-nav-menu\""));
+        for href in ["/releases", "/news", "/watchlist", "/comics"] {
+            assert!(
+                html.contains(&format!("href=\"{href}\" class=\"percy-dropdown-item")),
+                "{href} belongs in the Discover menu"
+            );
+        }
+        // The page marks only its own item; the summary lights up via :has(.active) in CSS,
+        // which is why no page declares a second "discover" block.
+        assert!(html.contains("href=\"/releases\" class=\"percy-dropdown-item active\""));
+        assert!(html.contains("href=\"/news\" class=\"percy-dropdown-item\""));
+    }
+
+    #[test]
     fn an_empty_catalogue_points_at_the_two_catalogues() {
         let mut empty = page(Vec::new(), false, false);
         empty.comics = Vec::new();

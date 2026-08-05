@@ -45,6 +45,21 @@
             .catch(function () {});
     }
 
+    // The Discover menu is a <details>, so it opens on its own. JS only adds the
+    // dismissal a native details lacks: a click elsewhere or Escape closes it.
+    var discover = document.getElementById('nav-discover');
+    if (discover) {
+        document.addEventListener('click', function (e) {
+            if (discover.open && !discover.contains(e.target)) discover.open = false;
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && discover.open) {
+                discover.open = false;
+                discover.querySelector('summary').focus();
+            }
+        });
+    }
+
     var menu = document.getElementById('account-menu');
     if (menu) {
         var trigger = menu.querySelector('.percy-account-trigger');
