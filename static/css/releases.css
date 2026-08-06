@@ -122,17 +122,11 @@
 
 /* ── Cards ───────────────────────────────────────────────────────── */
 
-/* The chip list sits outside the card's <a>, so each cell is card + chips. */
-.rx-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-}
-
-.rx .rx-card {
-    height: 100%;
-}
-
+/* One grid child per item. The card is `.cx-card--stretch` (comics.css): the cover and
+   title live in a stretched-link <a> whose ::after covers the panel, and the toggle form
+   and the chip list are siblings of that anchor — a form may not nest in a link — lifted
+   above the overlay by `.cx-card__aside`. So all of it is one bordered, hoverable card
+   and the three targets stay separately clickable and tabbable. */
 .rx-card__media {
     display: block;
     margin-bottom: 0.3rem;

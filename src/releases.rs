@@ -382,6 +382,34 @@ mod tests {
         assert!(following < comics, "what the viewer follows comes first");
     }
 
+    /* One cell, one item. The toggle is a <form> and the chips are links, so neither may
+    nest inside the card's <a> — the card is the container and the anchor is a stretched
+    link. This test is the guard on that containment, and on the tab order it produces:
+    card link, then toggle, then chips, all inside one card. */
+    #[test]
+    fn a_card_is_one_element_holding_the_link_the_toggle_and_the_chips() {
+        let mut template = page(Vec::new(), false, true);
+        // A signed-in row, so the toggle is the real <form> rather than the sign-in link.
+        template.comics = vec![card_row(&comic(), &ProgressMap::default(), true)];
+        let html = render(template);
+        let comics = html.find("id=\"comics\"").expect("the Comics section is rendered");
+        let titles = html.find("id=\"titles\"").expect("the Film & TV section is rendered");
+        let cell = &html[comics..titles];
+
+        assert_eq!(cell.matches("cx-card cx-card--stretch").count(), 1, "one card per item");
+        let card = cell.find("cx-card--stretch").expect("the card opens");
+        let link = cell.find("cx-card__link").expect("the stretched link");
+        let toggle = cell.find("data-progress").expect("the read toggle");
+        let chips = cell.find("rx-chips").expect("the subject chips");
+        assert!(
+            card < link && link < toggle && toggle < chips,
+            "all three sit inside the card"
+        );
+
+        // The old shape — a bare cell wrapping card + orphaned furniture — is gone.
+        assert!(!html.contains("rx-cell"));
+    }
+
     #[test]
     fn percy_down_is_a_stated_empty_state_rather_than_a_bare_empty_grid() {
         let html = render(page(Vec::new(), true, false));

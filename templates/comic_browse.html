@@ -61,11 +61,12 @@
         {% else %}
         <div class="cx-grid">
             {% for item in items %}
-            {# The toggle is a sibling of the card, not a child: the card is one big <a>
-               and a form may not nest inside a link. `data-entry` + a programmatic-only
-               tabindex is what j/k moves between — see progress.js. #}
-            <div class="pg-cell" data-entry tabindex="-1">
-            <a class="cx-card" href="/comics/{{ item.brand }}/{{ item.slug }}">
+            {# The toggle is a sibling of the anchor, not a child — a form may not nest
+               inside a link — so the *card* is the container and the anchor is a
+               stretched link inside it (see comics.css). `data-entry` + a
+               programmatic-only tabindex is what j/k moves between — see progress.js. #}
+            <div class="cx-card cx-card--stretch" data-entry tabindex="-1">
+            <a class="cx-card__link" href="/comics/{{ item.brand }}/{{ item.slug }}">
                 {% match item.cover_url %}
                 {% when Some with (cover) %}
                 <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
@@ -102,7 +103,7 @@
             </a>
             {% match item.toggle %}
             {% when Some with (mark) %}
-            {% call progress::toggle(mark) %}
+            <div class="cx-card__aside">{% call progress::toggle(mark) %}</div>
             {% when None %}
             {% endmatch %}
             </div>

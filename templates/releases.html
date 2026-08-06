@@ -7,50 +7,55 @@
 {# A macro, not an include: Askama renders an include against the root context, so a
    partial could not see the loop's `card`. Same reason `subscriptions.html` uses one. #}
 {% macro card(card) %}
-<a class="cx-card rx-card rx-card--{{ card.media }}" href="{{ card.href }}">
-    {% match card.cover_url %}
-    {% when Some with (cover) %}
-    <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
-    {% when None %}
-    <span class="cx-card__cover cx-card__cover--placeholder" aria-hidden="true"></span>
-    {% endmatch %}
-    <div class="cx-card__body">
-        <span class="rx-card__media">{{ card.media_label }}</span>
-        <h3 class="cx-card__title">{{ card.name }}</h3>
-        {% match card.subtitle %}
-        {% when Some with (subtitle) %}
-        <p class="cx-card__series">{{ subtitle }}</p>
+{# The card is the container, not the anchor: it also holds a <form> and a list of
+   links, neither of which may nest inside an <a>. The anchor is a stretched link
+   (`cx-card__link`, see comics.css) so the whole surface still routes to `href`. #}
+<div class="cx-card cx-card--stretch rx-card rx-card--{{ card.media }}">
+    <a class="cx-card__link" href="{{ card.href }}">
+        {% match card.cover_url %}
+        {% when Some with (cover) %}
+        <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
         {% when None %}
+        <span class="cx-card__cover cx-card__cover--placeholder" aria-hidden="true"></span>
         {% endmatch %}
-        {% match card.release_date %}
-        {% when Some with (date) %}
-        <p class="cx-card__meta"><span>{{ date }}</span></p>
-        {% when None %}
-        {% endmatch %}
-    </div>
-</a>
-<div class="rx-card__actions">{% call progress::toggle(card.toggle) %}</div>
-{% if !card.chips.is_empty() %}
-<ul class="rx-chips" aria-label="Follow {{ card.name }} by">
-    {% for chip in card.chips %}
-    <li>
-        {# A chip with nowhere to go is a label, not a dead link. #}
-        {% match chip.href %}
-        {% when Some with (href) %}
-        <a class="rx-chip rx-chip--link" href="{{ href }}">{{ chip.label }}</a>
-        {% when None %}
-        <span class="rx-chip">{{ chip.label }}</span>
-        {% endmatch %}
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+        <div class="cx-card__body">
+            <span class="rx-card__media">{{ card.media_label }}</span>
+            <h3 class="cx-card__title">{{ card.name }}</h3>
+            {% match card.subtitle %}
+            {% when Some with (subtitle) %}
+            <p class="cx-card__series">{{ subtitle }}</p>
+            {% when None %}
+            {% endmatch %}
+            {% match card.release_date %}
+            {% when Some with (date) %}
+            <p class="cx-card__meta"><span>{{ date }}</span></p>
+            {% when None %}
+            {% endmatch %}
+        </div>
+    </a>
+    <div class="cx-card__aside">{% call progress::toggle(card.toggle) %}</div>
+    {% if !card.chips.is_empty() %}
+    <ul class="cx-card__aside rx-chips" aria-label="Follow {{ card.name }} by">
+        {% for chip in card.chips %}
+        <li>
+            {# A chip with nowhere to go is a label, not a dead link. #}
+            {% match chip.href %}
+            {% when Some with (href) %}
+            <a class="rx-chip rx-chip--link" href="{{ href }}">{{ chip.label }}</a>
+            {% when None %}
+            <span class="rx-chip">{{ chip.label }}</span>
+            {% endmatch %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
 {% endmacro %}
 
 {% macro grid(cards) %}
 <div class="cx-grid rx-grid">
     {% for item in cards %}
-    <div class="rx-cell">{% call card(item) %}</div>
+    {% call card(item) %}
     {% endfor %}
 </div>
 {% endmacro %}

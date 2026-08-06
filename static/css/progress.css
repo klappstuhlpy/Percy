@@ -65,19 +65,6 @@
     opacity: 1;
 }
 
-/* A grid cell holding a card and its toggle. The control cannot live *inside* a card
-   that is one big <a> — a form may not nest in a link — so the cell is what the grid
-   lays out and the card is what fills it. */
-.pg-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-}
-
-.pg-cell > a {
-    flex: 1 1 auto;
-}
-
 /* An honest failure: the mark is still in localStorage and will be retried, and the
    control says so instead of pretending it saved. */
 .pg__note {

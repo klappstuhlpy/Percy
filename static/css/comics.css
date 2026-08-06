@@ -194,6 +194,54 @@
     border-color: var(--comic-accent);
 }
 
+/* A card that holds more than a link — a read/watched form, a row of subject chips —
+   cannot be one big <a>, because a form may not nest inside a link. So the card is the
+   container and the anchor is a *stretched link*: its ::after covers the whole card, so
+   the cover and the title still navigate, while the siblings sit above that overlay on
+   z-index and stay independently clickable and tabbable.
+
+   Opt-in: a plain `.cx-card` anchor is unchanged, so pages that need no toggle keep the
+   markup they already have. */
+.cx .cx-card--stretch {
+    position: relative;
+}
+
+.cx .cx-card__link {
+    position: static;
+    /* The link takes the slack, so the asides below it line up across a grid row. */
+    flex: 1 1 auto;
+    color: inherit;
+    text-decoration: none;
+}
+
+.cx .cx-card__link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+}
+
+/* Focus lands on the inner anchor, so the lift the anchor used to get for itself has to
+   be asked for from the card. */
+.cx .cx-card--stretch:focus-within {
+    transform: translateY(-2px);
+    border-color: var(--comic-accent);
+}
+
+/* Anything beside the link inside the card, indented to the body's own gutter. */
+.cx .cx-card__aside {
+    position: relative;
+    z-index: 1;
+    padding: 0 0.75rem;
+}
+
+.cx .cx-card__aside + .cx-card__aside {
+    padding-top: 0.5rem;
+}
+
+.cx .cx-card__aside:last-child {
+    padding-bottom: 0.75rem;
+}
+
 .cx-card__cover {
     display: block;
     width: 100%;
