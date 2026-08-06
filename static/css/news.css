@@ -73,10 +73,14 @@
 }
 
 /* WCAG 2.2.2: auto-moving content lasting over five seconds must be pausable. Hover
-   covers the pointer, :focus-within covers the keyboard — and every headline is a
-   real link, so tabbing into the strip stops it before the first one moves away. */
+   covers the pointer; :has(:focus-visible) covers the keyboard — deliberately not
+   :focus-within, which also matches a mouse click. A click focuses the clicked
+   headline, and restoring the page from the bfcache (Back button) restores that
+   focus too, so :focus-within would keep the strip paused forever until the reader
+   clicked elsewhere. :focus-visible only matches keyboard focus, so a mouse click
+   never pauses it and a bfcache restore never leaves it stuck. */
 .nx-ticker:hover .nx-ticker__track,
-.nx-ticker:focus-within .nx-ticker__track {
+.nx-ticker:has(:focus-visible) .nx-ticker__track {
     animation-play-state: paused;
 }
 
