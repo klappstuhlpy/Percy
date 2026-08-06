@@ -140,6 +140,27 @@ class TMDBClient(BaseHTTPClient):
         """``GET collection/{id}``."""
         return await self._get(f'collection/{collection_id}', params=self._params())
 
+    async def discover(
+        self, kind: str, *, keyword: int | None = None, company: int | None = None, page: int = 1,
+    ) -> Any:
+        """``GET discover/{kind}``; ``kind`` is ``'movie'`` or ``'tv'``.
+
+        Backs a seed's ``[[discover]]`` blocks: TMDB already knows which films and shows carry
+        a franchise keyword or a studio's company id, so a universe seed can name the query
+        instead of retyping the membership. Results are paged (20 per page, ``total_pages`` in
+        the payload) — see :class:`~app.services.watchlist.ingest.WatchlistIngest` for the crawl
+        and its page cap.
+
+        Sorted oldest-first, which TMDB names per kind (``primary_release_date.asc`` for movies,
+        ``first_air_date.asc`` for TV) exactly as it does with :meth:`search`'s ``year``.
+        """
+        if kind not in _SEARCH_KINDS:
+            raise ValueError(f"kind must be 'movie' or 'tv', got {kind!r}")
+        sort_by = 'primary_release_date.asc' if kind == 'movie' else 'first_air_date.asc'
+        return await self._get(f'discover/{kind}', params=self._params(
+            sort_by=sort_by, with_keywords=keyword, with_companies=company, page=page,
+        ))
+
     async def search(self, kind: str, query: str, *, year: int | None = None) -> Any:
         """``GET search/{kind}``; ``kind`` is ``'movie'`` or ``'tv'``.
 

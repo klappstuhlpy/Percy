@@ -7,6 +7,8 @@ A fake TMDB client (canned payloads / queued errors) and a fake watchlist reposi
 
 from __future__ import annotations
 
+import datetime
+import logging
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
@@ -14,6 +16,10 @@ import pytest
 
 from app.clients.base import HTTPClientError
 from app.services.watchlist import (
+    DISCOVER_ORDER_BASE,
+    DISCOVER_ORDER_STEP,
+    DISCOVER_PAGE_CAP,
+    DiscoverSeed,
     EraSeed,
     PathSeed,
     SeedError,
@@ -58,9 +64,14 @@ class FakeTMDBClient:
         providers: dict[tuple[str, int], Any] | None = None,
         credits: dict[tuple[str, int], Any] | None = None,
         videos: dict[tuple[str, int], Any] | None = None,
+        discover: dict[tuple[str, int], list[list[dict[str, Any]]]] | None = None,
+        collections: dict[int, Any] | None = None,
         errors: dict[tuple[str, int], BaseException] | None = None,
     ) -> None:
         self._videos = videos or {}
+        # Keyed (kind, source_id) -> one list of results per TMDB page.
+        self._discover = discover or {}
+        self._collections = collections or {}
         self._movies = movies or {}
         self._tv = tv or {}
         self._seasons = seasons or {}
@@ -84,6 +95,23 @@ class FakeTMDBClient:
     async def tv_season(self, tv_id: int, season: int) -> Any:
         self.calls.append(('tv_season', (tv_id, season)))
         return self._seasons[(tv_id, season)]
+
+    async def discover(
+        self, kind: str, *, keyword: int | None = None, company: int | None = None, page: int = 1,
+    ) -> Any:
+        self.calls.append(('discover', (kind, keyword, company, page)))
+        source_id = keyword if keyword is not None else company
+        if ('discover', source_id) in self._errors:
+            raise self._errors[('discover', source_id)]
+        pages = self._discover.get((kind, source_id or 0), [])
+        results = pages[page - 1] if 1 <= page <= len(pages) else []
+        return {'page': page, 'results': results, 'total_pages': len(pages)}
+
+    async def collection(self, collection_id: int) -> Any:
+        self.calls.append(('collection', (collection_id,)))
+        if ('collection', collection_id) in self._errors:
+            raise self._errors[('collection', collection_id)]
+        return self._collections[collection_id]
 
     async def watch_providers(self, kind: str, item_id: int) -> Any:
         self.calls.append(('watch_providers', (kind, item_id)))
@@ -200,10 +228,14 @@ def _title(**overrides: Any) -> TitleSeed:
     return TitleSeed(**base)
 
 
-def _seed(titles: tuple[TitleSeed, ...], paths: tuple[PathSeed, ...] = ()) -> UniverseSeed:
+def _seed(
+    titles: tuple[TitleSeed, ...],
+    paths: tuple[PathSeed, ...] = (),
+    discover: tuple[DiscoverSeed, ...] = (),
+) -> UniverseSeed:
     return UniverseSeed(
         slug='mcu', name='MCU', short_name='MCU', paths=paths,
-        eras=(EraSeed(key='p1', name='Phase 1', order=100),), titles=titles,
+        eras=(EraSeed(key='p1', name='Phase 1', order=100),), titles=titles, discover=discover,
     )
 
 
@@ -506,6 +538,99 @@ release = 1
 """
 
 
+_VALID_DISCOVER = """
+slug = "u"
+name = "U"
+short_name = "U"
+
+[[paths]]
+slug = "complete"
+name = "Complete"
+
+[[eras]]
+key = "phase4"
+name = "Phase 4"
+
+[[discover]]
+kind = "movie"
+keyword = 180547
+era = "phase4"
+importance = "recommended"
+min_date = "2008-01-01"
+max_date = "2030-12-31"
+exclude = [12345, 67890]
+"""
+
+_DISCOVER_HEAD = """
+slug = "u"
+name = "U"
+short_name = "U"
+
+[[eras]]
+key = "e"
+name = "E"
+
+[[discover]]
+"""
+
+_DISCOVER_BAD_KIND = _DISCOVER_HEAD + 'kind = "book"\nkeyword = 1\n'
+_DISCOVER_NO_SOURCE = _DISCOVER_HEAD + 'kind = "movie"\n'
+_DISCOVER_TWO_SOURCES = _DISCOVER_HEAD + 'kind = "movie"\nkeyword = 1\ncompany = 2\n'
+_DISCOVER_NEGATIVE_SOURCE = _DISCOVER_HEAD + 'kind = "movie"\ncompany = -5\n'
+_DISCOVER_NON_INT_SOURCE = _DISCOVER_HEAD + 'kind = "movie"\ncollection = "86311"\n'
+_DISCOVER_UNDECLARED_ERA = _DISCOVER_HEAD + 'kind = "tv"\nkeyword = 1\nera = "nope"\n'
+_DISCOVER_BAD_IMPORTANCE = _DISCOVER_HEAD + 'kind = "movie"\nkeyword = 1\nimportance = "vital"\n'
+_DISCOVER_BAD_DATE = _DISCOVER_HEAD + 'kind = "movie"\nkeyword = 1\nmin_date = "yesterday"\n'
+_DISCOVER_BAD_EXCLUDE = _DISCOVER_HEAD + 'kind = "movie"\nkeyword = 1\nexclude = ["12345"]\n'
+
+
+def test_load_seed_accepts_a_discover_block(tmp_path: Path) -> None:
+    seed = load_seed(_write_seed(tmp_path, _VALID_DISCOVER))
+
+    assert len(seed.discover) == 1
+    block = seed.discover[0]
+    assert block.kind == 'movie'
+    assert block.source == ('keyword', 180547)
+    assert (block.company, block.collection) == (None, None)
+    assert block.era == 'phase4'
+    assert block.importance == 'recommended'
+    assert block.min_date == datetime.date(2008, 1, 1)
+    assert block.max_date == datetime.date(2030, 12, 31)
+    assert block.exclude == frozenset({12345, 67890})
+
+
+def test_load_seed_defaults_a_discover_block_to_optional_and_no_window(tmp_path: Path) -> None:
+    # Everything but kind + one source is optional, and the defaults must be the harmless ones:
+    # no era, no date window, no exclusions, and the weakest importance.
+    seed = load_seed(_write_seed(tmp_path, _DISCOVER_HEAD + 'kind = "tv"\ncompany = 420\n'))
+
+    block = seed.discover[0]
+    assert block.source == ('company', 420)
+    assert (block.era, block.min_date, block.max_date) == (None, None, None)
+    assert block.importance == 'optional'
+    assert block.exclude == frozenset()
+
+
+@pytest.mark.parametrize(('toml_text', 'expected_fragment'), [
+    (_DISCOVER_BAD_KIND, 'discover[0] has invalid kind'),
+    (_DISCOVER_NO_SOURCE, 'must set exactly one of keyword/company/collection'),
+    (_DISCOVER_TWO_SOURCES, 'must set exactly one of keyword/company/collection'),
+    (_DISCOVER_NEGATIVE_SOURCE, 'has invalid company -5'),
+    (_DISCOVER_NON_INT_SOURCE, "has invalid collection '86311'"),
+    (_DISCOVER_UNDECLARED_ERA, 'discover[0] references undeclared era'),
+    (_DISCOVER_BAD_IMPORTANCE, 'discover[0] has invalid importance'),
+    (_DISCOVER_BAD_DATE, 'has invalid min_date'),
+    (_DISCOVER_BAD_EXCLUDE, 'must be a list of integer tmdb_ids'),
+], ids=[
+    'bad-kind', 'no-source', 'two-sources', 'negative-source', 'non-int-source',
+    'undeclared-era', 'bad-importance', 'bad-date', 'non-int-exclude',
+])
+def test_discover_validation_rejects(tmp_path: Path, toml_text: str, expected_fragment: str) -> None:
+    with pytest.raises(SeedError) as exc_info:
+        load_seed(_write_seed(tmp_path, toml_text))
+    assert any(expected_fragment in problem for problem in exc_info.value.problems)
+
+
 def test_load_seed_valid(tmp_path: Path) -> None:
     path = _write_seed(tmp_path, _VALID_SEED)
     seed = load_seed(path)
@@ -514,6 +639,7 @@ def test_load_seed_valid(tmp_path: Path) -> None:
     assert len(seed.eras) == 1
     assert len(seed.titles) == 1
     assert seed.titles[0].importance == {'complete': 'essential'}
+    assert seed.discover == ()  # a seed with no [[discover]] block parses exactly as before
 
 
 @pytest.mark.parametrize(('toml_text', 'expected_fragment'), [
@@ -989,6 +1115,242 @@ async def test_sync_dry_run_fetches_no_videos() -> None:
 
     assert not any(call[0] == 'videos' for call in tmdb.calls)
     assert report.trailers_written == 0
+
+
+# -- [[discover]] expansion ---------------------------------------------------------------------
+
+
+def _movie(tmdb_id: int, date: str | None) -> dict[str, Any]:
+    """One TMDB ``discover/movie`` result, trimmed to the fields the expansion reads."""
+    return {'id': tmdb_id, 'title': f'Movie {tmdb_id}', 'release_date': date}
+
+
+def _upserted_orders(repo: FakeWatchlistRepository) -> dict[int, tuple[int, int]]:
+    """``{tmdb_id: (story_order, release_order)}`` for every title actually upserted."""
+    return {
+        call[1][1]['tmdb_id']: (call[1][1]['story_order'], call[1][1]['release_order'])
+        for call in repo.calls if call[0] == 'upsert_title'
+    }
+
+
+async def test_discovery_never_overrides_a_curated_title() -> None:
+    # Curation always wins: id 1 is hand-written with its own era/story/release/context, and
+    # TMDB returning it must not add a second title nor restate any curated column.
+    curated = _title(tmdb_id=1, story=100, release=100, context='Where it starts', milestone=True)
+    seed = _seed((curated,), discover=(DiscoverSeed(kind='movie', keyword=180547, era='p1'),))
+
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 90}},
+        discover={('movie', 180547): [[_movie(1, '2008-05-02'), _movie(2, '2008-06-13')]]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 1  # only id 2; id 1 was already curated
+    assert report.titles_seen == 2
+    orders = _upserted_orders(repo)
+    assert orders[1] == (100, 100)  # curated ordering untouched
+    assert orders[2] == (DISCOVER_ORDER_BASE, DISCOVER_ORDER_BASE)
+    curated_row = next(call[1][1] for call in repo.calls if call[0] == 'upsert_title' and call[1][1]['tmdb_id'] == 1)
+    assert curated_row['context'] == 'Where it starts'
+    assert curated_row['milestone'] is True
+
+
+async def test_discovery_orders_by_release_date_from_the_base_in_steps() -> None:
+    # The later film is returned first; ordering is by release date, not payload order.
+    seed = _seed((), discover=(DiscoverSeed(kind='movie', keyword=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'Later', 'runtime': 100}, 2: {'title': 'Earlier', 'runtime': 90}},
+        discover={('movie', 1): [[_movie(1, '2012-05-04'), _movie(2, '2008-05-02')]]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 2
+    assert _upserted_orders(repo) == {
+        2: (DISCOVER_ORDER_BASE, DISCOVER_ORDER_BASE),
+        1: (DISCOVER_ORDER_BASE + DISCOVER_ORDER_STEP, DISCOVER_ORDER_BASE + DISCOVER_ORDER_STEP),
+    }
+
+
+async def test_discovery_drops_undated_excluded_and_out_of_window_results() -> None:
+    seed = _seed((), discover=(DiscoverSeed(
+        kind='movie', keyword=1, exclude=frozenset({3}),
+        min_date=datetime.date(2008, 1, 1), max_date=datetime.date(2020, 12, 31),
+    ),))
+    tmdb = FakeTMDBClient(
+        movies={num: {'title': f'M{num}', 'runtime': 100} for num in range(1, 7)},
+        discover={('movie', 1): [[
+            _movie(1, None),          # undated announcement -- nothing to order by
+            _movie(2, ''),            # TMDB's other spelling of "no date"
+            _movie(3, '2010-01-01'),  # excluded by id
+            _movie(4, '2007-12-31'),  # before min_date
+            _movie(5, '2021-01-01'),  # after max_date
+            _movie(6, '2015-06-01'),  # the only survivor
+        ]]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 1
+    assert list(_upserted_orders(repo)) == [6]
+
+
+async def test_discovery_applies_era_and_importance_to_every_declared_path() -> None:
+    paths = (PathSeed(slug='complete', name='Complete', default=True), PathSeed(slug='essentials', name='Essentials'))
+    seed = _seed((), paths=paths, discover=(
+        DiscoverSeed(kind='movie', keyword=1, era='p1', importance='recommended'),
+    ))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        discover={('movie', 1): [[_movie(1, '2015-06-01')]]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    await ingest.sync(seed, regions=('US',))
+
+    row = next(call[1][1] for call in repo.calls if call[0] == 'upsert_title')
+    assert (row['era'], row['era_order']) == ('p1', 100)  # the block's era, resolved to its order
+    assert row['context'] is None and row['instruction'] is None and row['milestone'] is False
+    assert {level for _, _, level in repo.importance} == {'recommended'}
+    assert len(repo.importance) == 2  # one row per declared path
+
+
+async def test_discovery_expands_a_collections_parts_in_one_request() -> None:
+    seed = _seed((), discover=(DiscoverSeed(kind='movie', collection=86311),))
+    tmdb = FakeTMDBClient(
+        movies={24428: {'title': 'The Avengers', 'runtime': 143}},
+        collections={86311: {'id': 86311, 'name': 'The Avengers Collection', 'parts': [_movie(24428, '2012-04-25')]}},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 1
+    assert [call for call in tmdb.calls if call[0] == 'collection'] == [('collection', (86311,))]
+    assert not any(call[0] == 'discover' for call in tmdb.calls)  # a collection is not paged
+
+
+async def test_discovery_pages_until_exhausted_then_stops() -> None:
+    seed = _seed((), discover=(DiscoverSeed(kind='tv', company=420),))
+    tmdb = FakeTMDBClient(
+        tv={num: {'name': f'Show {num}', 'seasons': [], 'episode_run_time': [45]} for num in (1, 2)},
+        discover={('tv', 420): [
+            [{'id': 1, 'name': 'Show 1', 'first_air_date': '2013-09-24'}],
+            [{'id': 2, 'name': 'Show 2', 'first_air_date': '2015-01-06'}],
+        ]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 2  # both pages consumed
+    pages = [call[1][3] for call in tmdb.calls if call[0] == 'discover']
+    assert pages == [1, 2]  # and no third request once total_pages is reached
+    assert len(pages) <= DISCOVER_PAGE_CAP
+
+
+async def test_discovery_stops_at_the_page_cap() -> None:
+    # A runaway query (here: TMDB claims 500 pages) must cost a bounded crawl, not 500 requests.
+    seed = _seed((), discover=(DiscoverSeed(kind='movie', company=420),))
+    tmdb = FakeTMDBClient(
+        movies={num: {'title': f'M{num}', 'runtime': 100} for num in range(1, 100)},
+        discover={('movie', 420): [[_movie(page, f'20{page:02d}-01-01')] for page in range(1, 60)]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert len([call for call in tmdb.calls if call[0] == 'discover']) == DISCOVER_PAGE_CAP
+    assert report.discovered == DISCOVER_PAGE_CAP  # one result per page
+
+
+async def test_discovery_deduplicates_across_overlapping_blocks() -> None:
+    # A keyword and a company query legitimately cover much of the same franchise; the same
+    # film must not be seeded twice (and must not consume two order slots).
+    seed = _seed((), discover=(
+        DiscoverSeed(kind='movie', keyword=1),
+        DiscoverSeed(kind='movie', company=2),
+    ))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 90}},
+        discover={
+            ('movie', 1): [[_movie(1, '2008-05-02')]],
+            ('movie', 2): [[_movie(1, '2008-05-02'), _movie(2, '2010-05-07')]],
+        },
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 2
+    assert _upserted_orders(repo) == {
+        1: (DISCOVER_ORDER_BASE, DISCOVER_ORDER_BASE),
+        2: (DISCOVER_ORDER_BASE + DISCOVER_ORDER_STEP, DISCOVER_ORDER_BASE + DISCOVER_ORDER_STEP),
+    }
+
+
+async def test_discovery_failure_keeps_the_curated_titles_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    # A sync must never be all-or-nothing on an optional expansion: the hand-curated titles are
+    # the part someone actually authored, and a dead keyword query must not cost them.
+    seed = _seed((_title(tmdb_id=1),), discover=(DiscoverSeed(kind='movie', keyword=999),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        errors={('discover', 999): _FakeTMDBError('tmdb is down')},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.WARNING, logger='app.services.watchlist.ingest'):
+        report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 0
+    assert report.titles_written == 1  # the curated title still synced
+    assert list(_upserted_orders(repo)) == [1]
+    logged = [record.getMessage() for record in caplog.records]
+    assert any('mcu' in message and 'keyword=999' in message and 'tmdb is down' in message for message in logged)
+
+
+async def test_sync_without_discover_makes_no_tmdb_discovery_calls() -> None:
+    # The no-[[discover]] path must behave exactly as it did before this feature existed.
+    seed = _seed((_title(tmdb_id=1),))
+    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}})
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert not any(call[0] in {'discover', 'collection'} for call in tmdb.calls)
+    assert report.discovered == 0
+
+
+async def test_dry_run_still_expands_discovery_so_nothing_looks_prunable() -> None:
+    # Without expanding in a dry run, every discovered title already in the database would be
+    # reported as about to be pruned -- the exact opposite of what the run is about to do.
+    seed = _seed((), discover=(DiscoverSeed(kind='movie', keyword=1),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        discover={('movie', 1): [[_movie(1, '2008-05-02')]]},
+    )
+    repo = FakeWatchlistRepository(existing_titles=[{'tmdb_type': 'movie', 'tmdb_id': 1, 'id': 555}])
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',), dry_run=True)
+
+    assert report.discovered == 1
+    assert report.titles_pruned == 0
+    assert repo.pruned_with is None
 
 
 async def test_sync_prunes_orphaned_people_once_per_run() -> None:

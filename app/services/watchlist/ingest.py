@@ -1,7 +1,8 @@
 """TMDB ingest for the universe watchlist: seed + TMDB payload -> ``watch_*`` table rows.
 
 Split in the same spirit as ``app/services/ai/service.py``: the mapping functions
-(:func:`slugify`, :func:`movie_row`, :func:`tv_row`, :func:`provider_rows`) are pure --
+(:func:`slugify`, :func:`movie_row`, :func:`tv_row`, :func:`provider_rows`,
+:func:`discovered_titles`) are pure --
 no network, no database, unit-tested directly with hand-built payloads. The only impure
 part is :class:`WatchlistIngest`, which is the sole caller of the TMDB client and the
 watchlist repository, mirroring how ``AIService`` is the sole caller of ``OllamaClient``.
@@ -29,23 +30,46 @@ import asyncpg
 # mapping functions above it never import discord/asyncpg/aiohttp and never raise or catch these.
 from app.clients.base import HTTPClientError
 from app.services.watchlist.people import credit_rows
-from app.services.watchlist.seeds import accent_to_int
+from app.services.watchlist.seeds import TitleSeed, accent_to_int
 from app.services.watchlist.trailers import select_trailer
 from app.utils.text import slugify
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Container, Iterable, Mapping, Sequence
 
     from app.clients.tmdb import TMDBClient
     from app.database.repositories.watchlist import WatchlistRepository
-    from app.services.watchlist.seeds import PathSeed, TitleSeed, UniverseSeed
+    from app.services.watchlist.seeds import DiscoverSeed, PathSeed, UniverseSeed
 
-__all__ = ('IngestReport', 'WatchlistIngest', 'movie_row', 'provider_rows', 'slugify', 'tv_row')
+__all__ = (
+    'DISCOVER_ORDER_BASE',
+    'DISCOVER_ORDER_STEP',
+    'DISCOVER_PAGE_CAP',
+    'IngestReport',
+    'WatchlistIngest',
+    'discovered_titles',
+    'movie_row',
+    'provider_rows',
+    'slugify',
+    'tv_row',
+)
 
 log = logging.getLogger(__name__)
 
 #: TMDB's ``watch/providers`` result buckets, in the order rows are emitted.
 _PROVIDER_BUCKETS = ('flatrate', 'rent', 'buy')
+
+#: Hard cap on pages fetched per ``[[discover]]`` block (TMDB pages hold 20 results, so 200
+#: titles). A mis-specified query -- a company id that owns a back catalogue, say -- must cost
+#: one bounded crawl, not a 400-page one.
+DISCOVER_PAGE_CAP = 10
+
+#: ``story``/``release`` order of the first discovered title, and the gap between two.
+#: The base sits far above the hundreds hand-written seeds use, so every discovered title
+#: sorts after every curated one; the step leaves room to slot a title in during a later
+#: curation pass without renumbering its neighbours.
+DISCOVER_ORDER_BASE = 10000
+DISCOVER_ORDER_STEP = 10
 
 
 def _parse_date(value: str | None) -> datetime.date | None:
@@ -197,6 +221,70 @@ def provider_rows(payload: Mapping[str, Any], region: str) -> list[dict[str, Any
     return rows
 
 
+def discovered_titles(
+    found: Sequence[tuple[DiscoverSeed, Sequence[Mapping[str, Any]]]],
+    *,
+    curated: Container[tuple[str, int]],
+    path_slugs: Sequence[str],
+) -> list[TitleSeed]:
+    """Turns fetched ``[[discover]]`` results into synthetic :class:`TitleSeed`\\ s.
+
+    Pure: ``found`` pairs each block with the raw TMDB results
+    :meth:`WatchlistIngest._discover_block` fetched for it, so every rule below is testable
+    without a network. A result is dropped when it is
+
+    * already curated -- ``curated`` holds the ``(tmdb_type, tmdb_id)`` of every
+      hand-written ``[[titles]]`` block. **Curation always wins**: a discovered title never
+      overwrites one, and contributes no ``era``/``story``/``context``/``importance`` to it.
+      Keying on the *pair* rather than the bare id is deliberate -- TMDB numbers movies and
+      shows in separate spaces, so movie ``1403`` and TV ``1403`` are unrelated titles and
+      curating one must not silently swallow the other;
+    * listed in the block's ``exclude``;
+    * undated -- an announced-but-undated entry has nothing to order by and is usually a
+      placeholder;
+    * outside the block's ``min_date``/``max_date`` window;
+    * a duplicate of something an earlier block already contributed (two blocks legitimately
+      overlap: a keyword and a company query cover much of the same franchise).
+
+    Survivors are ordered by release date across *all* blocks -- one shared sequence, so two
+    blocks can never claim the same order -- and numbered ``DISCOVER_ORDER_BASE + index *
+    DISCOVER_ORDER_STEP``, with ``story`` equal to ``release``. A discovered title's story
+    order is honestly just its release order: that is what "not curated yet" looks like, and
+    it beats inventing a chronology. Ties break on ``(tmdb_type, tmdb_id)`` so a re-sync of
+    two same-day releases never churns the numbering.
+    """
+    accepted: dict[tuple[str, int], tuple[datetime.date, DiscoverSeed]] = {}
+
+    for block, results in found:
+        date_field = 'release_date' if block.kind == 'movie' else 'first_air_date'
+        for result in results:
+            tmdb_id = result.get('id')
+            if not isinstance(tmdb_id, int):
+                continue
+            key = (block.kind, tmdb_id)
+            if key in curated or key in accepted or tmdb_id in block.exclude:
+                continue
+            released = _parse_date(result.get(date_field))
+            if released is None:
+                continue
+            if (block.min_date and released < block.min_date) or (block.max_date and released > block.max_date):
+                continue
+            accepted[key] = (released, block)
+
+    ordered = sorted(accepted.items(), key=lambda item: (item[1][0], item[0]))
+    return [
+        TitleSeed(
+            tmdb_type=tmdb_type,
+            tmdb_id=tmdb_id,
+            era=block.era,
+            story=DISCOVER_ORDER_BASE + index * DISCOVER_ORDER_STEP,
+            release=DISCOVER_ORDER_BASE + index * DISCOVER_ORDER_STEP,
+            importance=dict.fromkeys(path_slugs, block.importance),
+        )
+        for index, ((tmdb_type, tmdb_id), (_, block)) in enumerate(ordered)
+    ]
+
+
 def _universe_row(seed: UniverseSeed) -> dict[str, Any]:
     return {
         'slug': seed.slug,
@@ -229,6 +317,7 @@ class IngestReport:
     universe: str
     titles_seen: int = 0
     titles_written: int = 0
+    discovered: int = 0
     titles_pruned: int = 0
     providers_written: int = 0
     credits_written: int = 0
@@ -241,7 +330,8 @@ class IngestReport:
         """A short, human-readable line (plus one indented line per warning)."""
         verb = 'Would sync' if self.dry_run else 'Synced'
         header = (
-            f'{self.universe}: {verb} {self.titles_written}/{self.titles_seen} title(s), '
+            f'{self.universe}: {verb} {self.titles_written}/{self.titles_seen} title(s) '
+            f'({self.discovered} discovered), '
             f'{self.providers_written} provider row(s), {self.credits_written} credit(s), '
             f'{self.trailers_written} trailer(s), '
             f'pruned {self.titles_pruned} title(s) and {self.people_pruned} orphaned person(s).'
@@ -273,6 +363,11 @@ class WatchlistIngest:
         ``credits_of`` (the referenced title may not have existed yet on first insert, and
         clearing it for any synced title whose seed no longer sets one) -> ``prune_titles``
         with every id seen this run.
+
+        A seed's ``[[discover]]`` blocks (if any) are expanded into synthetic titles up front
+        by :meth:`_discover` and appended *after* the curated ones, so the loop below -- and
+        everything downstream of it -- cannot tell the two apart. A seed with no such block
+        behaves exactly as it did before discovery existed.
 
         Curation authority: a seed is authoritative for every column it owns, including the
         *absence* of a value -- dropping a title's ``importance`` entry for a path, or its
@@ -324,7 +419,10 @@ class WatchlistIngest:
         credits_of_clear: list[int] = []
         keep_ids: list[int] = []
 
-        for seed_title in seed.titles:
+        discovered = await self._discover(seed)
+        report.discovered = len(discovered)
+
+        for seed_title in (*seed.titles, *discovered):
             report.titles_seen += 1
             key = (seed_title.tmdb_type, seed_title.tmdb_id)
 
@@ -421,6 +519,63 @@ class WatchlistIngest:
             report.people_pruned = await self._repo.prune_people()
 
         return report
+
+    async def _discover(self, seed: UniverseSeed) -> list[TitleSeed]:
+        """Expands every ``[[discover]]`` block into synthetic titles. See :func:`discovered_titles`.
+
+        Failure policy: a block that errors (TMDB down, an id nobody ever created,
+        :class:`~app.clients.base.HTTPClientError`) logs a warning naming the universe and the
+        block, contributes zero titles, and lets the rest of the sync proceed with the curated
+        ones. A sync must never be all-or-nothing on an *optional* expansion -- the hand-written
+        titles are the part someone actually curated, and losing them because a keyword query
+        timed out would be the worse outcome by a distance.
+
+        Runs in a dry run too: the report would otherwise claim every discovered title is about
+        to be pruned.
+        """
+        if not seed.discover:
+            return []
+
+        found: list[tuple[DiscoverSeed, Sequence[Mapping[str, Any]]]] = []
+        for block in seed.discover:
+            source, source_id = block.source
+            try:
+                found.append((block, await self._discover_block(block)))
+            except HTTPClientError as exc:
+                log.warning(
+                    '%s: discovery block %s (%s=%s) failed -- %s. Contributed no titles.',
+                    seed.slug, block.kind, source, source_id, exc,
+                )
+
+        return discovered_titles(
+            found,
+            curated={(title.tmdb_type, title.tmdb_id) for title in seed.titles},
+            path_slugs=[path.slug for path in seed.paths],
+        )
+
+    async def _discover_block(self, block: DiscoverSeed) -> list[Mapping[str, Any]]:
+        """Fetches one block's raw TMDB results, stopping at the last page or :data:`DISCOVER_PAGE_CAP`.
+
+        A collection is one request whose ``parts`` array *is* the result list -- TMDB does not
+        page it, and a collection is small by construction.
+        """
+        source, source_id = block.source
+        if source == 'collection':
+            payload = await self._client.collection(source_id)
+            return list(payload.get('parts') or [])
+
+        results: list[Mapping[str, Any]] = []
+        for page in range(1, DISCOVER_PAGE_CAP + 1):
+            payload = await self._client.discover(
+                block.kind,
+                keyword=source_id if source == 'keyword' else None,
+                company=source_id if source == 'company' else None,
+                page=page,
+            )
+            results.extend(payload.get('results') or [])
+            if page >= (payload.get('total_pages') or 0):
+                break
+        return results
 
     async def refresh_release_dates(self, rows: Iterable[Mapping[str, Any]]) -> int:
         """Re-checks stored release dates against TMDB, writing only the ones that moved.

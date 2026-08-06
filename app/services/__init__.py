@@ -176,6 +176,7 @@ from app.services.releases import (
 )
 from app.services.spam_penalty import compute_spam_penalty
 from app.services.watchlist import (
+    DiscoverSeed,
     EraSeed,
     IngestReport,
     PathSeed,
@@ -184,6 +185,7 @@ from app.services.watchlist import (
     UniverseSeed,
     WatchlistIngest,
     accent_to_int,
+    discovered_titles,
     load_seed,
     movie_row,
     provider_rows,
@@ -246,6 +248,7 @@ __all__ = (
     'DailyResult',
     'Digest',
     'DigestGroup',
+    'DiscoverSeed',
     'EconomySnapshot',
     'Entry',
     'EraSeed',
@@ -327,6 +330,7 @@ __all__ = (
     'default_granularity',
     'describe_effect',
     'describe_interval',
+    'discovered_titles',
     'due_sources',
     'evaluate_achievements',
     'fill_buckets',

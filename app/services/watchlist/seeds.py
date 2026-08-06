@@ -11,6 +11,7 @@ list and validation rules this module implements.
 
 from __future__ import annotations
 
+import datetime
 import tomllib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = (
+    'DiscoverSeed',
     'EraSeed',
     'PathSeed',
     'SeedError',
@@ -38,6 +40,9 @@ _DEFAULT_ACCENT = '#D97757'
 _TMDB_TYPES = ('movie', 'tv')
 _KINDS = ('movie', 'tv', 'special')
 _IMPORTANCE_VALUES = ('essential', 'recommended', 'optional')
+
+#: The three mutually exclusive ways a ``[[discover]]`` block can name a TMDB query.
+_DISCOVER_SOURCES = ('keyword', 'company', 'collection')
 
 
 class SeedError(Exception):
@@ -98,6 +103,41 @@ class TitleSeed:
 
 
 @dataclass(frozen=True, slots=True)
+class DiscoverSeed:
+    """One ``[[discover]]`` block: a TMDB query whose results join the universe unattended.
+
+    The complement to :class:`TitleSeed` -- a hand-written block for the titles whose story
+    order, context and importance are worth curating, one query for the long tail nobody
+    wants to retype every time a franchise ships something. Exactly one of
+    ``keyword``/``company``/``collection`` names the query; the rest narrows or labels what
+    it returns.
+
+    Expansion (paging TMDB, filtering, numbering) lives in
+    :class:`~app.services.watchlist.ingest.WatchlistIngest` -- this module stays network-free.
+    ``kind`` is only invalid transiently while :func:`load_seed` is still collecting problems.
+    """
+
+    kind: str
+    keyword: int | None = None
+    company: int | None = None
+    collection: int | None = None
+    era: str | None = None
+    importance: str = 'optional'
+    min_date: datetime.date | None = None
+    max_date: datetime.date | None = None
+    exclude: frozenset[int] = frozenset()
+
+    @property
+    def source(self) -> tuple[str, int]:
+        """``('keyword', 180547)`` -- which of the three queries this block names, and its id."""
+        for name in _DISCOVER_SOURCES:
+            value: int | None = getattr(self, name)
+            if value is not None:
+                return name, value
+        return '?', 0  # unreachable for a returned seed; load_seed rejects a block with no source
+
+
+@dataclass(frozen=True, slots=True)
 class UniverseSeed:
     """A fully parsed and validated ``data/universes/<slug>.toml`` seed."""
 
@@ -113,6 +153,7 @@ class UniverseSeed:
     paths: tuple[PathSeed, ...] = ()
     eras: tuple[EraSeed, ...] = ()
     titles: tuple[TitleSeed, ...] = ()
+    discover: tuple[DiscoverSeed, ...] = ()
 
 
 def accent_to_int(value: str) -> int:
@@ -260,6 +301,81 @@ def _parse_titles(
     return tuple(result)
 
 
+def _parse_iso_date(
+    raw: Mapping[str, Any], key: str, *, ident: str, filename: str, problems: list[str],
+) -> datetime.date | None:
+    """Reads an optional ``"YYYY-MM-DD"`` string. A bare TOML date is rejected on purpose --
+    ``tomllib`` hands those back as ``datetime.date`` already, but accepting both shapes would
+    make two spellings of the same field valid and neither obviously canonical.
+    """
+    value = raw.get(key)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            return datetime.date.fromisoformat(value)
+        except ValueError:
+            pass
+    problems.append(f'{filename}: {ident} has invalid {key} {value!r} (must be an ISO date string, e.g. "2008-01-01")')
+    return None
+
+
+def _parse_discover(
+    raw_discover: list[Any], filename: str, problems: list[str], *, era_keys: set[str],
+) -> tuple[DiscoverSeed, ...]:
+    result: list[DiscoverSeed] = []
+
+    for index, raw in enumerate(raw_discover):
+        ident = f'discover[{index}]'
+
+        kind = raw.get('kind')
+        if kind not in _TMDB_TYPES:
+            problems.append(f'{filename}: {ident} has invalid kind {kind!r} (must be movie|tv)')
+
+        sources: dict[str, int] = {}
+        for name in _DISCOVER_SOURCES:
+            value = raw.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                problems.append(f'{filename}: {ident} has invalid {name} {value!r} (must be a positive integer)')
+                continue
+            sources[name] = value
+        if len(sources) != 1:
+            problems.append(
+                f'{filename}: {ident} must set exactly one of keyword/company/collection, got {len(sources)}'
+            )
+
+        era = raw.get('era')
+        if era is not None and era not in era_keys:
+            problems.append(f'{filename}: {ident} references undeclared era {era!r}')
+
+        importance = raw.get('importance', 'optional')
+        if importance not in _IMPORTANCE_VALUES:
+            problems.append(f'{filename}: {ident} has invalid importance {importance!r}')
+
+        # An exclusion that isn't an integer never matches a tmdb_id, so it would silently
+        # exclude nothing -- exactly the class of mistake a network-free lint exists to catch.
+        raw_exclude = raw.get('exclude') or []
+        if not all(isinstance(item, int) and not isinstance(item, bool) for item in raw_exclude):
+            problems.append(f'{filename}: {ident} exclude {raw_exclude!r} must be a list of integer tmdb_ids')
+            raw_exclude = []
+
+        result.append(DiscoverSeed(
+            kind=kind,
+            keyword=sources.get('keyword'),
+            company=sources.get('company'),
+            collection=sources.get('collection'),
+            era=era,
+            importance=importance,
+            min_date=_parse_iso_date(raw, 'min_date', ident=ident, filename=filename, problems=problems),
+            max_date=_parse_iso_date(raw, 'max_date', ident=ident, filename=filename, problems=problems),
+            exclude=frozenset(raw_exclude),
+        ))
+
+    return tuple(result)
+
+
 def _parse_universe(raw: Mapping[str, Any], filename: str, problems: list[str]) -> UniverseSeed:
     problems.extend(
         f'{filename}: missing required field {required!r}'
@@ -274,6 +390,7 @@ def _parse_universe(raw: Mapping[str, Any], filename: str, problems: list[str]) 
     paths, path_slugs = _parse_paths(raw.get('paths') or [], filename, problems)
     eras, era_keys = _parse_eras(raw.get('eras') or [], filename, problems)
     titles = _parse_titles(raw.get('titles') or [], filename, problems, path_slugs=path_slugs, era_keys=era_keys)
+    discover = _parse_discover(raw.get('discover') or [], filename, problems, era_keys=era_keys)
     sort_order = _require_int(raw, 'sort_order', 0, ident='universe', filename=filename, problems=problems)
 
     return UniverseSeed(
@@ -289,6 +406,7 @@ def _parse_universe(raw: Mapping[str, Any], filename: str, problems: list[str]) 
         paths=paths,
         eras=eras,
         titles=titles,
+        discover=discover,
     )
 
 

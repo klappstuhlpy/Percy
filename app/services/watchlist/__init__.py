@@ -5,7 +5,18 @@ this ingests into, ``app/database/repositories/watchlist.py`` for the data-acces
 ``main.py``'s ``watchlist`` CLI group for the entry point.
 """
 
-from app.services.watchlist.ingest import IngestReport, WatchlistIngest, movie_row, provider_rows, slugify, tv_row
+from app.services.watchlist.ingest import (
+    DISCOVER_ORDER_BASE,
+    DISCOVER_ORDER_STEP,
+    DISCOVER_PAGE_CAP,
+    IngestReport,
+    WatchlistIngest,
+    discovered_titles,
+    movie_row,
+    provider_rows,
+    slugify,
+    tv_row,
+)
 from app.services.watchlist.payload import (
     credit_payloads,
     person_payload,
@@ -17,6 +28,7 @@ from app.services.watchlist.payload import (
 )
 from app.services.watchlist.people import CAST_LIMIT, CREW_ROLES, credit_rows
 from app.services.watchlist.seeds import (
+    DiscoverSeed,
     EraSeed,
     PathSeed,
     SeedError,
@@ -30,8 +42,12 @@ from app.services.watchlist.trailers import SITES, TRAILER_TYPES, select_trailer
 __all__ = (
     'CAST_LIMIT',
     'CREW_ROLES',
+    'DISCOVER_ORDER_BASE',
+    'DISCOVER_ORDER_STEP',
+    'DISCOVER_PAGE_CAP',
     'SITES',
     'TRAILER_TYPES',
+    'DiscoverSeed',
     'EraSeed',
     'IngestReport',
     'PathSeed',
@@ -42,6 +58,7 @@ __all__ = (
     'accent_to_int',
     'credit_payloads',
     'credit_rows',
+    'discovered_titles',
     'load_seed',
     'movie_row',
     'person_payload',
