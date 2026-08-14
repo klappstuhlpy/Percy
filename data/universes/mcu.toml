@@ -9,13 +9,18 @@ sort_order = 0
 [[paths]]
 slug = "complete"
 name = "Complete Chronology"
-description = "Every theatrical MCU film in in-universe order."
+description = "Every MCU release in in-universe order, theatrical films first."
 default = true
 
 [[paths]]
 slug = "essentials"
 name = "Essentials"
 description = "The spine of the Infinity Saga and the Multiverse Saga that followed it."
+
+[[paths]]
+slug = "television"
+name = "Television"
+description = "The series: the Marvel Television era, the Netflix run and the Disney+ shows."
 
 [[eras]]
 key = "phase1"
@@ -46,6 +51,16 @@ order = 500
 key = "phase6"
 name = "Phase 6 (2025-)"
 order = 600
+
+[[eras]]
+key = "extras"
+name = "Shorts & Specials"
+order = 650
+
+[[eras]]
+key = "television"
+name = "Television"
+order = 700
 
 # --- Phase 1 ---
 
@@ -411,3 +426,34 @@ release = 3700
 context = "The Avengers face a new, universe-spanning threat that draws together heroes from across the MCU's expanding multiverse."
 milestone = true
 importance = { complete = "essential", essentials = "essential" }
+
+# --- Discovery: sweeps in everything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+
+[[discover]]
+kind = "movie"
+# Marvel Studios -- verified via GET /company/420 -> name "Marvel Studios"
+company = 420
+era = "extras"
+importance = "optional"
+# Iron Man's release: excludes the pre-MCU Marvel-licensed films (2007 Sony/Fox/animated
+# titles) this company id also carries from Marvel's pre-Marvel Studios licensing days.
+min_date = "2008-01-01"
+# Confirmed non-MCU survivors of the date filter (checked each via GET /movie/{id}):
+#  13056  Punisher: War Zone (2008) -- Lionsgate/Marvel Knights, not an MCU film
+#  15257  Hulk Vs. Wolverine (2009) -- Lionsgate/Marvel Animation, pre-MCU
+#  101907 Hulk Vs. Thor (2009) -- Lionsgate/Marvel Animation, pre-MCU
+#  14613  Next Avengers: Heroes of Tomorrow (2008) -- Lionsgate/Marvel Animation, pre-MCU
+#  1275606 Marvel Studios Assembled: The Making of X-Men '97 (2024) -- about a Marvel
+#          Animation show, not an MCU release
+#  717082 Stan Lee (2023) -- biographical documentary, not an MCU release
+exclude = [13056, 15257, 101907, 14613, 1275606, 717082]
+
+[[discover]]
+kind = "tv"
+# "marvel cinematic universe (mcu)" keyword -- verified via GET /keyword/180547
+# Covers the Marvel Television era (Agents of S.H.I.E.L.D., Agent Carter, Inhumans, the
+# Netflix Defenders shows, Runaways, Cloak & Dagger, Helstrom) and every Disney+ series.
+keyword = 180547
+era = "television"
+importance = "optional"
