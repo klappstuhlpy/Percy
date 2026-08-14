@@ -789,6 +789,10 @@ fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow
             .as_deref()
             .and_then(|date| date.get(..4))
             .map(str::to_string),
+        poster_url: title
+            .poster_path
+            .as_deref()
+            .map(|path| format!("{TMDB_IMAGE_BASE}/w154{path}")),
         runtime_label: runtime_label(title),
         rating: title.tmdb_rating.map(|rating| format!("{rating:.1}")),
         era: title.era.as_deref().map(era_label),

@@ -713,6 +713,7 @@ pub(crate) struct OrderRow {
     pub(crate) slug: String,
     pub(crate) title: String,
     pub(crate) year: Option<String>,
+    pub(crate) poster_url: Option<String>,
     pub(crate) runtime_label: String,
     /// The row era, shown as a chip in story order (where era headings are absent).
     pub(crate) era: Option<String>,

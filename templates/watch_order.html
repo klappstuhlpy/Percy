@@ -19,36 +19,47 @@
 {% block body %}
 <div class="wl" style="--wl-accent: {{ universe.accent }}">
     <div class="wl-page">
-        <header class="wl-head">
-            <span class="wl-head__eyebrow">Watch order</span>
-            <h1 class="wl-head__title">{{ universe.name }}</h1>
-            {% match universe.tagline %}
-            {% when Some with (tagline) %}
-            <p class="wl-head__lede">{{ tagline }}</p>
+        <header class="wl-head{% if universe.backdrop_url.is_some() %} wl-head--art{% endif %}">
+            {# Decorative only -- a CSS background-image on a `span`, never an `<img>` a
+               screen reader would announce, and never rendered at all without art (no
+               empty band). `wl-head--art` is what adds the padding/scrim; plain `wl-head`
+               is untouched, so a universe with no key art gets today's header exactly. #}
+            {% match universe.backdrop_url %}
+            {% when Some with (backdrop) %}
+            <span class="wl-head__backdrop" aria-hidden="true" style="background-image: url('{{ backdrop }}')"></span>
             {% when None %}
             {% endmatch %}
+            <div class="wl-head__content">
+                <span class="wl-head__eyebrow">Watch order</span>
+                <h1 class="wl-head__title">{{ universe.name }}</h1>
+                {% match universe.tagline %}
+                {% when Some with (tagline) %}
+                <p class="wl-head__lede">{{ tagline }}</p>
+                {% when None %}
+                {% endmatch %}
 
-            <div class="wl-figures">
-                <span class="wl-figure">
-                    <span class="wl-figure__value">{{ total }}</span>
-                    <span class="wl-figure__label">Titles</span>
-                </span>
-                <span class="wl-figure">
-                    <span class="wl-figure__value">{{ hours }}h</span>
-                    <span class="wl-figure__label">Runtime</span>
-                </span>
-                <span class="wl-figure">
-                    <span class="wl-figure__value">{{ essential }}</span>
-                    <span class="wl-figure__label">Essential</span>
-                </span>
-                <span class="wl-figure">
-                    <span class="wl-figure__value">{{ movies }}</span>
-                    <span class="wl-figure__label">Films</span>
-                </span>
-                <span class="wl-figure">
-                    <span class="wl-figure__value">{{ shows }}</span>
-                    <span class="wl-figure__label">Series</span>
-                </span>
+                <div class="wl-figures">
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ total }}</span>
+                        <span class="wl-figure__label">Titles</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ hours }}h</span>
+                        <span class="wl-figure__label">Runtime</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ essential }}</span>
+                        <span class="wl-figure__label">Essential</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ movies }}</span>
+                        <span class="wl-figure__label">Films</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ shows }}</span>
+                        <span class="wl-figure__label">Series</span>
+                    </span>
+                </div>
             </div>
         </header>
 
@@ -109,6 +120,14 @@
                    the focus ring is base.css's own :focus-visible. #}
                 <li class="wl-entry{% match row.importance %}{% when Some with (importance) %} wl-entry--{{ importance }}{% when None %}{% endmatch %}{% if row.milestone %} wl-entry--milestone{% endif %}"
                     data-entry tabindex="-1">
+                    {# Same poster convention as person.html's `credit_row` -- same classes,
+                       same placeholder, so the two surfaces read as one product. #}
+                    {% match row.poster_url %}
+                    {% when Some with (poster) %}
+                    <img class="wl-person-entry__poster" src="{{ poster }}" alt="" loading="lazy" width="60" height="90">
+                    {% when None %}
+                    <span class="wl-person-entry__poster wl-person-entry__poster--placeholder" aria-hidden="true"></span>
+                    {% endmatch %}
                     <div>
                         <div class="wl-entry__head">
                             <span class="wl-entry__index">{{ row.number }}</span>

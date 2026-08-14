@@ -37,6 +37,51 @@
     margin-bottom: 2rem;
 }
 
+/* The universe's own key art behind the header -- absent entirely without art, so a
+   universe with none renders exactly like `.wl-head` alone. `.wl-head__backdrop` is
+   the photo layer; the scrim is `::before` on the modifier so it composites above the
+   image but stays out of `.wl-head`'s own box (a pseudo-element, not an element, so it
+   is invisible to assistive tech without an `aria-hidden` of its own). Content moves to
+   `.wl-head__content` for the stacking context. */
+.wl-head--art {
+    position: relative;
+    padding: 2rem 1.75rem;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.wl-head__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.55;
+}
+
+/* The scrim is `var(--background)` itself -- the page's own background token, not a
+   new colour -- so wherever it reaches full strength the heading sits on exactly the
+   contrast it has everywhere else on the page, in both themes, regardless of what the
+   photo underneath looks like. It is closest to full strength on the text side and
+   fades toward the far edge, so the art still reads as art. */
+.wl-head--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        100deg,
+        var(--background) 0%,
+        color-mix(in srgb, var(--background) 82%, transparent) 55%,
+        color-mix(in srgb, var(--background) 58%, transparent) 100%
+    );
+}
+
+.wl-head__content {
+    position: relative;
+    z-index: 2;
+}
+
 .wl-head__eyebrow {
     display: block;
     margin-bottom: 0.5rem;
@@ -191,7 +236,9 @@
 .wl-entry {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    /* poster (or its placeholder) | content | tags/toggle -- the rail marker below sits
+       in `.wl-entries`' own left padding, so adding this column does not move it. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
     gap: 0.75rem 1rem;
     padding: 0.85rem 0;
@@ -409,15 +456,22 @@
 
 @media (max-width: 640px) {
     .wl-entry {
-        grid-template-columns: minmax(0, 1fr);
+        /* Poster stays beside the title; the side row (tags/toggle) drops to a full-width
+           row beneath rather than fighting the title for a third narrow column. */
+        grid-template-columns: auto minmax(0, 1fr);
     }
 
     .wl-entry__side {
+        grid-column: 1 / -1;
         justify-content: flex-start;
     }
 
     .wl-controls {
         gap: 1rem;
+    }
+
+    .wl-head--art {
+        padding: 1.5rem 1.25rem;
     }
 }
 
