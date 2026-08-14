@@ -134,7 +134,10 @@ class DiscoverSeed:
             value: int | None = getattr(self, name)
             if value is not None:
                 return name, value
-        return '?', 0  # unreachable for a returned seed; load_seed rejects a block with no source
+        # Unreachable via load_seed (it rejects a block with no source), but DiscoverSeed is
+        # exported and constructible by hand -- a silent ('?', 0) would fall through to the
+        # discover path with both filters None, silently seeding the 200 oldest titles on TMDB.
+        raise ValueError('DiscoverSeed has no source set (exactly one of keyword/company/collection is required)')
 
 
 @dataclass(frozen=True, slots=True)

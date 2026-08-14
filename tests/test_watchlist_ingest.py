@@ -631,6 +631,16 @@ def test_discover_validation_rejects(tmp_path: Path, toml_text: str, expected_fr
     assert any(expected_fragment in problem for problem in exc_info.value.problems)
 
 
+def test_discover_seed_source_raises_when_none_is_set() -> None:
+    # Regression: a hand-built DiscoverSeed (unreachable via load_seed, but DiscoverSeed is
+    # exported and the tests construct it directly) with no source used to return the sentinel
+    # ('?', 0) instead of raising. _discover_block would then send both filters as None,
+    # silently discovering the 200 oldest titles on TMDB. It must raise instead.
+    block = DiscoverSeed(kind='movie')
+    with pytest.raises(ValueError, match='no source set'):
+        _ = block.source
+
+
 def test_load_seed_valid(tmp_path: Path) -> None:
     path = _write_seed(tmp_path, _VALID_SEED)
     seed = load_seed(path)
@@ -1320,6 +1330,33 @@ async def test_discovery_failure_keeps_the_curated_titles_and_logs(caplog: pytes
     assert list(_upserted_orders(repo)) == [1]
     logged = [record.getMessage() for record in caplog.records]
     assert any('mcu' in message and 'keyword=999' in message and 'tmdb is down' in message for message in logged)
+
+
+async def test_discovery_failure_skips_the_prune_so_previously_discovered_titles_survive() -> None:
+    # Finding 1 regression. Before the fix: a failing discovery block meant `discovered` (and
+    # therefore keep_ids) was missing whatever that block previously contributed, so
+    # prune_titles deleted those titles -- cascading to every user's watch_progress for them,
+    # over a transient TMDB error. Id 2 here stands for a title a *previous, successful* sync
+    # of this block discovered and wrote; this run's block is down.
+    curated = _title(tmdb_id=1)
+    seed = _seed((curated,), discover=(DiscoverSeed(kind='movie', keyword=999),))
+    tmdb = FakeTMDBClient(
+        movies={1: {'title': 'One', 'runtime': 100}},
+        errors={('discover', 999): _FakeTMDBError('tmdb is down')},
+    )
+    repo = FakeWatchlistRepository(existing_titles=[
+        {'tmdb_type': 'movie', 'tmdb_id': 1, 'id': 500},
+        {'tmdb_type': 'movie', 'tmdb_id': 2, 'id': 777},  # previously discovered; must survive
+    ])
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.discovered == 0  # the block failed -- nothing contributed this run
+    assert report.titles_written == 1  # the curated title still synced
+    assert repo.pruned_with is None  # prune_titles was never called -- id 2 was never at risk
+    assert report.titles_pruned == 0
+    assert any('skipping the title prune' in warning for warning in report.warnings)
 
 
 async def test_sync_without_discover_makes_no_tmdb_discovery_calls() -> None:

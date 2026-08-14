@@ -419,7 +419,7 @@ class WatchlistIngest:
         credits_of_clear: list[int] = []
         keep_ids: list[int] = []
 
-        discovered = await self._discover(seed)
+        discovered, discovery_failed = await self._discover(seed)
         report.discovered = len(discovered)
 
         for seed_title in (*seed.titles, *discovered):
@@ -498,7 +498,17 @@ class WatchlistIngest:
             else:
                 credits_of_clear.append(title_id)
 
-        if dry_run:
+        if discovery_failed:
+            # A failed discovery block means `discovered` (and therefore `keep_ids`) is
+            # missing whatever that block previously contributed -- pruning against it would
+            # delete those titles, cascading to every user's watch_progress for them, over a
+            # transient TMDB error. Same precedent as prune_titles' empty-keep_ids guard: an
+            # optional expansion failing must never wipe the catalogue. See _discover.
+            report.warnings.append(
+                f'{seed.slug}: a discovery block failed this run -- skipping the title prune '
+                f'entirely so a transient TMDB error cannot delete previously discovered titles.'
+            )
+        elif dry_run:
             keep_id_set = set(keep_ids)
             would_prune = [key for key, row_id in existing_ids.items() if row_id not in keep_id_set]
             report.titles_pruned = len(would_prune)
@@ -507,7 +517,8 @@ class WatchlistIngest:
                 f'would be pruned (cascades to watch_progress).'
                 for tmdb_type, tmdb_id in would_prune
             )
-        else:
+
+        if not dry_run:
             for title_id, credits_of_tmdb_id in pending_credits_of:
                 credits_of_id = tmdb_id_to_title_id.get(credits_of_tmdb_id)
                 if credits_of_id is not None:
@@ -515,43 +526,55 @@ class WatchlistIngest:
             for title_id in credits_of_clear:
                 await self._repo.set_credits_of(title_id, None)
 
-            report.titles_pruned = await self._repo.prune_titles(seed.slug, keep_ids)
+            if not discovery_failed:
+                report.titles_pruned = await self._repo.prune_titles(seed.slug, keep_ids)
             report.people_pruned = await self._repo.prune_people()
 
         return report
 
-    async def _discover(self, seed: UniverseSeed) -> list[TitleSeed]:
+    async def _discover(self, seed: UniverseSeed) -> tuple[list[TitleSeed], bool]:
         """Expands every ``[[discover]]`` block into synthetic titles. See :func:`discovered_titles`.
 
-        Failure policy: a block that errors (TMDB down, an id nobody ever created,
-        :class:`~app.clients.base.HTTPClientError`) logs a warning naming the universe and the
-        block, contributes zero titles, and lets the rest of the sync proceed with the curated
-        ones. A sync must never be all-or-nothing on an *optional* expansion -- the hand-written
-        titles are the part someone actually curated, and losing them because a keyword query
-        timed out would be the worse outcome by a distance.
+        Returns ``(titles, any_block_failed)``. Failure policy: a block that errors (TMDB down,
+        an id nobody ever created, :class:`~app.clients.base.HTTPClientError`) logs a warning
+        naming the universe and the block, contributes zero titles, and lets the rest of the
+        sync proceed with the curated ones plus whatever other blocks produced. A sync must
+        never be all-or-nothing on an *optional* expansion -- the hand-written titles are the
+        part someone actually curated, and losing them because a keyword query timed out would
+        be the worse outcome by a distance.
+
+        ``any_block_failed`` is why :meth:`sync` skips :meth:`~app.database.repositories.
+        watchlist.WatchlistRepository.prune_titles` entirely for this run: a failed block means
+        this call's ``titles`` is missing whatever that block previously contributed, so
+        pruning against it would delete those titles and cascade to every user's watch
+        progress for them -- over a transient TMDB error rather than a deliberate curation
+        change. Same precedent as ``prune_titles``' own empty-``keep_ids`` guard.
 
         Runs in a dry run too: the report would otherwise claim every discovered title is about
         to be pruned.
         """
         if not seed.discover:
-            return []
+            return [], False
 
         found: list[tuple[DiscoverSeed, Sequence[Mapping[str, Any]]]] = []
+        any_failed = False
         for block in seed.discover:
             source, source_id = block.source
             try:
                 found.append((block, await self._discover_block(block)))
             except HTTPClientError as exc:
+                any_failed = True
                 log.warning(
                     '%s: discovery block %s (%s=%s) failed -- %s. Contributed no titles.',
                     seed.slug, block.kind, source, source_id, exc,
                 )
 
-        return discovered_titles(
+        titles = discovered_titles(
             found,
             curated={(title.tmdb_type, title.tmdb_id) for title in seed.titles},
             path_slugs=[path.slug for path in seed.paths],
         )
+        return titles, any_failed
 
     async def _discover_block(self, block: DiscoverSeed) -> list[Mapping[str, Any]]:
         """Fetches one block's raw TMDB results, stopping at the last page or :data:`DISCOVER_PAGE_CAP`.
