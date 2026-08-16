@@ -91,6 +91,14 @@
             </div>
             {% when None %}
             {% endmatch %}
+            {% match source_url %}
+            {% when Some with (url) %}
+            <div class="cx-facts__row">
+                <dt>Source</dt>
+                <dd><a href="{{ url }}" target="_blank" rel="noopener">View original listing</a></dd>
+            </div>
+            {% when None %}
+            {% endmatch %}
         </dl>
 
         {% if previous.is_some() || next.is_some() || !more_from_series.is_empty() %}
@@ -149,7 +157,11 @@
             {% for group in credit_groups %}
             <div class="cx-creators__group">
                 <span class="cx-creators__role">{{ group.role }}</span>
-                <span class="cx-creators__names">{{ group.names.join(", ") }}</span>
+                <span class="cx-creators__names">
+                    {% for credit in group.credits %}
+                    <a href="{{ credit.href }}">{{ credit.name }}</a>{% if !loop.last %}, {% endif %}
+                    {% endfor %}
+                </span>
             </div>
             {% endfor %}
         </section>
@@ -161,7 +173,7 @@
             <ul class="cx-characters__list">
                 {% for character in characters %}
                 <li class="cx-character">
-                    {{ character.name }}
+                    <a href="{{ character.href }}">{{ character.name }}</a>
                     {% match character.kind %}
                     {% when Some with (kind) %}
                     <span class="cx-character__kind">{{ kind }}</span>

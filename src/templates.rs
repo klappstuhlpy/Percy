@@ -1108,10 +1108,31 @@ pub(crate) struct BrandTab {
     pub(crate) active: bool,
 }
 
+/// One credited contributor, linked to the browse page filtered to their name.
+pub(crate) struct CreditLink {
+    pub(crate) name: String,
+    pub(crate) href: String,
+}
+
 /// One credited role and everyone credited under it on a release.
 pub(crate) struct CreditGroup {
     pub(crate) role: String,
-    pub(crate) names: Vec<String>,
+    pub(crate) credits: Vec<CreditLink>,
+}
+
+/// A character appearing in a release, linked to the browse page filtered to their name.
+pub(crate) struct CharacterLink {
+    pub(crate) name: String,
+    pub(crate) kind: Option<String>,
+    pub(crate) href: String,
+}
+
+/// One active browse filter (creator/character/series), shown as a removable chip
+/// above the grid. The × is a plain link back to the same page without that
+/// parameter -- no script required to undo a filter.
+pub(crate) struct FilterChip {
+    pub(crate) label: String,
+    pub(crate) remove_href: String,
 }
 
 /// `GET /comics` — the release browser.
@@ -1123,9 +1144,15 @@ pub(crate) struct ComicBrowseTemplate {
     pub(crate) brand_tabs: Vec<BrandTab>,
     /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
     pub(crate) ticker: Vec<TickerItem>,
-    /// Echoed back so the search form keeps the active brand filter.
+    /// Echoed back so the search form and brand tabs keep the active filters.
     pub(crate) brand: Option<String>,
     pub(crate) search: String,
+    pub(crate) creator: Option<String>,
+    pub(crate) character: Option<String>,
+    pub(crate) series: Option<String>,
+    /// The active `creator`/`character`/`series` filters, each removable. Empty when
+    /// none are set -- the chip row is then absent, not an empty box.
+    pub(crate) filter_chips: Vec<FilterChip>,
     pub(crate) total: i64,
     pub(crate) page: i64,
     pub(crate) total_pages: i64,
@@ -1199,7 +1226,10 @@ pub(crate) struct ComicDetailTemplate {
     pub(crate) next: Option<ComicCard>,
     pub(crate) more_from_series: Vec<ComicCard>,
     pub(crate) credit_groups: Vec<CreditGroup>,
-    pub(crate) characters: Vec<ComicCharacter>,
+    pub(crate) characters: Vec<CharacterLink>,
+    /// The outbound link to this issue's own listing on its source (League of Comic
+    /// Geeks / VIZ) -- distinct from the general attribution notice in the footer.
+    pub(crate) source_url: Option<String>,
     pub(crate) description: Option<String>,
     /// §6.2's "6b. Related news" — the most recent stories tagged with this release's
     /// series. Empty means the section is *absent*, not an empty box.

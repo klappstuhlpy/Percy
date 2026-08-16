@@ -43,10 +43,36 @@
                 <input type="hidden" name="brand" value="{{ value }}">
                 {% when None %}
                 {% endmatch %}
+                {% match creator %}
+                {% when Some with (value) %}
+                <input type="hidden" name="creator" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match character %}
+                {% when Some with (value) %}
+                <input type="hidden" name="character" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match series %}
+                {% when Some with (value) %}
+                <input type="hidden" name="series" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
                 <input type="search" name="search" value="{{ search }}" placeholder="Search titles…" aria-label="Search titles">
                 <button type="submit" class="cx-search__submit">Search</button>
             </form>
         </nav>
+
+        {% if !filter_chips.is_empty() %}
+        <div class="cx-filters" aria-label="Active filters">
+            {% for chip in filter_chips %}
+            <span class="cx-filter-chip">
+                {{ chip.label }}
+                <a class="cx-filter-chip__remove" href="{{ chip.remove_href }}" aria-label="Remove filter: {{ chip.label }}">×</a>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <p class="cx-total">{{ total }} release{% if total != 1 %}s{% endif %}</p>
 
