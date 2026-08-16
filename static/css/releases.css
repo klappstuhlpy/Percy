@@ -19,7 +19,16 @@
     --rx-accent: var(--branding);
 }
 
-/* ── Window control: three submits, so it works with JS off ──────── */
+/* ── Window + sort controls: two forms, six submits, so both work with JS off ──── */
+
+/* The only rule this task adds: puts the window and sort forms on one row on wide
+   viewports and lets them wrap to their own lines on narrow ones, rather than
+   overflowing. Each form's own layout is unchanged `.rx-window`. */
+.rx-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.75rem;
+}
 
 .rx-window {
     display: flex;

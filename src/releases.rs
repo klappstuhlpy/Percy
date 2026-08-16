@@ -44,11 +44,71 @@ const DEFAULT_DAYS: u32 = 7;
 /// Cards per list. The grid is four wide at desktop width, so this is six clean rows.
 const LIMIT: u32 = 24;
 
-/// Query string of the page: just the window width.
+/// Query string of the page: the window width and the sort order.
 #[derive(Debug, Default, Deserialize)]
 pub struct ReleasesQuery {
     #[serde(default)]
     days: Option<u32>,
+    #[serde(default)]
+    sort: Option<String>,
+}
+
+/// The order the three lists render in.
+///
+/// Sorting happens here, not on Percy: `GET /releases/overview` takes no `sort` and its
+/// response sits behind a TTL cache, so a Percy-side parameter would multiply the cache key
+/// for no reason — the cards already in the response are enough to reorder client-side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sort {
+    /// Release date descending, unknown dates last. The default.
+    Date,
+    /// Release date ascending, unknown dates last.
+    DateAsc,
+    /// Display name, case-insensitive ascending.
+    Name,
+}
+
+impl Sort {
+    /// The offered value nearest what was asked for; unrecognised or absent falls back to
+    /// [`Sort::Date`], same as an out-of-range `days` falls back to [`DEFAULT_DAYS`].
+    fn parse(value: Option<&str>) -> Self {
+        match value {
+            Some("date_asc") => Sort::DateAsc,
+            Some("name") => Sort::Name,
+            _ => Sort::Date,
+        }
+    }
+
+    /// The `value` attribute this variant's button carries, and what a hidden field
+    /// preserving the current sort must echo back.
+    fn as_str(self) -> &'static str {
+        match self {
+            Sort::Date => "date",
+            Sort::DateAsc => "date_asc",
+            Sort::Name => "name",
+        }
+    }
+}
+
+/// Order `cards` in place per `sort`. Stable (`sort_by`, never `sort_unstable_by`) so cards
+/// Percy returned in the same order stay in that order when their sort keys tie — otherwise
+/// the same request could render the list differently on a second load.
+///
+/// Unknown release dates land last in *both* date directions, which a bare `Option`
+/// comparison does not give you: `None` sorts first ascending under `Ord`'s derived rule, so
+/// the ascending branch inverts the comparison and then reverses it back rather than just
+/// flipping `a.cmp(b)`.
+fn sort_cards(cards: &mut [ReleaseCard], sort: Sort) {
+    match sort {
+        Sort::Date => cards.sort_by(|a, b| b.release_date.cmp(&a.release_date)),
+        Sort::DateAsc => cards.sort_by(|a, b| match (&a.release_date, &b.release_date) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (Some(a), Some(b)) => a.cmp(b),
+        }),
+        Sort::Name => cards.sort_by_key(|a| a.name.to_lowercase()),
+    }
 }
 
 /// `GET /releases` — the overview.
@@ -58,6 +118,7 @@ pub async fn releases_page(
     Query(query): Query<ReleasesQuery>,
 ) -> Response {
     let days = normalise_days(query.days);
+    let sort = Sort::parse(query.sort.as_deref());
     let account = session.as_ref().map(Viewer::from_session);
     let discord_id = session.as_ref().map(|s| s.discord_user_id.clone());
 
@@ -77,7 +138,13 @@ pub async fn releases_page(
     // catalogue with nothing in this window, and a Percy that never answered. The first
     // wants "come back later", the second wants "try again".
     let unavailable = fetched.is_none();
-    let overview = fetched.unwrap_or_default();
+    let mut overview = fetched.unwrap_or_default();
+
+    // Applied to all three lists, so the control means one thing everywhere rather than
+    // ordering "what you follow" differently from the catalogue underneath it.
+    sort_cards(&mut overview.followed, sort);
+    sort_cards(&mut overview.comics, sort);
+    sort_cards(&mut overview.titles, sort);
 
     // Progress rides *beside* the cards in the same response — no second call, and no
     // per-user field on a card, which is what keeps the card half shareable across
@@ -88,6 +155,7 @@ pub async fn releases_page(
 
     ReleasesTemplate {
         days,
+        sort: sort.as_str(),
         window_start: overview.window.start,
         window_end: overview.window.end,
         followed: overview.followed.iter().map(row).collect(),
@@ -241,6 +309,89 @@ mod tests {
         }
     }
 
+    /// A minimal card for the sort tests — only `name` and `release_date` matter to
+    /// `sort_cards`, so nothing else here is populated.
+    fn card_named(name: &str, release_date: Option<&str>) -> ReleaseCard {
+        ReleaseCard {
+            media: "title".into(),
+            key: name.to_lowercase(),
+            name: name.into(),
+            subtitle: None,
+            release_date: release_date.map(Into::into),
+            cover_url: None,
+            url: None,
+            subjects: Vec::new(),
+        }
+    }
+
+    fn names(cards: &[ReleaseCard]) -> Vec<&str> {
+        cards.iter().map(|c| c.name.as_str()).collect()
+    }
+
+    #[test]
+    fn sort_parses_the_three_values_and_falls_back_to_date_on_anything_else() {
+        assert_eq!(Sort::parse(Some("date")), Sort::Date);
+        assert_eq!(Sort::parse(Some("date_asc")), Sort::DateAsc);
+        assert_eq!(Sort::parse(Some("name")), Sort::Name);
+        assert_eq!(Sort::parse(Some("bogus")), Sort::Date);
+        assert_eq!(Sort::parse(None), Sort::Date);
+    }
+
+    #[test]
+    fn date_sort_is_descending_with_unknown_dates_last() {
+        let mut cards = vec![
+            card_named("Undated", None),
+            card_named("Early", Some("2026-08-01")),
+            card_named("Late", Some("2026-08-20")),
+            card_named("Middle", Some("2026-08-10")),
+        ];
+        sort_cards(&mut cards, Sort::Date);
+        assert_eq!(names(&cards), ["Late", "Middle", "Early", "Undated"]);
+    }
+
+    #[test]
+    fn date_asc_sort_is_ascending_with_unknown_dates_still_last() {
+        // Same set as the descending case — proves it isn't just a mirror-image bug where
+        // `None` would land first under the derived `Option<String>` ordering.
+        let mut cards = vec![
+            card_named("Undated", None),
+            card_named("Early", Some("2026-08-01")),
+            card_named("Late", Some("2026-08-20")),
+            card_named("Middle", Some("2026-08-10")),
+        ];
+        sort_cards(&mut cards, Sort::DateAsc);
+        assert_eq!(names(&cards), ["Early", "Middle", "Late", "Undated"]);
+    }
+
+    #[test]
+    fn name_sort_is_case_insensitive_ascending() {
+        let mut cards = vec![
+            card_named("zebra", Some("2026-08-01")),
+            card_named("Avengers", Some("2026-08-20")),
+            card_named("bat-man", None),
+        ];
+        sort_cards(&mut cards, Sort::Name);
+        assert_eq!(names(&cards), ["Avengers", "bat-man", "zebra"]);
+    }
+
+    #[test]
+    fn sort_is_stable_so_equal_keys_keep_percys_order() {
+        // Two undated cards: if the comparator ever regressed to `sort_unstable_by`, this
+        // couldn't tell — the point of `sort_by` is that a tie leaves relative order alone,
+        // which is only observable with a stable sort and equal keys.
+        let mut cards = vec![
+            card_named("First", None),
+            card_named("Second", None),
+            card_named("Dated", Some("2026-08-01")),
+        ];
+        sort_cards(&mut cards, Sort::Date);
+        assert_eq!(names(&cards), ["Dated", "First", "Second"]);
+
+        let mut cards = vec![card_named("First", None), card_named("Second", None)];
+        sort_cards(&mut cards, Sort::DateAsc);
+        assert_eq!(names(&cards), ["First", "Second"]);
+    }
+
     #[test]
     fn a_days_outside_the_offered_set_snaps_back_to_the_default() {
         assert_eq!(normalise_days(Some(30)), 30);
@@ -299,6 +450,7 @@ mod tests {
         ReleasesTemplate {
             account: None,
             days: DEFAULT_DAYS,
+            sort: Sort::Date.as_str(),
             window_start: "2026-07-28".into(),
             window_end: "2026-08-11".into(),
             followed: followed.iter().map(row).collect(),
@@ -370,6 +522,29 @@ mod tests {
         // Both attributions are mandatory wherever their data is shown.
         assert!(html.contains("League of Comic Geeks"));
         assert!(html.contains("TMDB"));
+    }
+
+    #[test]
+    fn the_window_and_sort_forms_each_carry_the_others_current_value() {
+        let mut template = page(Vec::new(), false, false);
+        template.days = 14;
+        template.sort = Sort::Name.as_str();
+        let html = render(template);
+
+        // The sort form's hidden field keeps the chosen window...
+        assert!(html.contains(r#"<input type="hidden" name="days" value="14">"#));
+        // ...and the window form's hidden field keeps the chosen sort, so picking one
+        // control never resets the other.
+        assert!(html.contains(r#"<input type="hidden" name="sort" value="name">"#));
+        // The active sort option is marked, same as the window control (the attribute
+        // wraps onto its own line in the markup, so check name/value and aria-pressed
+        // separately rather than as one contiguous string).
+        assert!(html.contains(r#"name="sort" value="name""#));
+        assert_eq!(
+            html.matches("aria-pressed=\"true\"").count(),
+            2,
+            "one pressed window option and one pressed sort option"
+        );
     }
 
     #[test]

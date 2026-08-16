@@ -860,6 +860,9 @@ pub(crate) struct ReleasesTemplate {
     pub(crate) account: Option<Viewer>,
     /// Half-width of the window, in days — the `days` control's current value.
     pub(crate) days: u32,
+    /// The sort control's current value (`date`, `date_asc` or `name`) — echoed into the
+    /// window form's hidden field so choosing a window never resets the sort.
+    pub(crate) sort: &'static str,
     /// The window's ends, as Percy reported them (ISO `YYYY-MM-DD`).
     pub(crate) window_start: String,
     pub(crate) window_end: String,

@@ -88,8 +88,10 @@
 
         {% include "news_ticker.html" %}
 
-        {# A plain GET form: three submits, no JS, and the browser keeps the chosen
-           window in the URL so the page is linkable and back works. #}
+        {# Two plain GET forms, no JS: each carries the other's current value as a hidden
+           field, so picking a window doesn't reset the sort and picking a sort doesn't
+           reset the window. #}
+        <div class="rx-controls">
         <form class="rx-window" method="get" action="/releases">
             <span class="rx-window__label" id="rx-window-label">Window</span>
             <div class="rx-seg" role="group" aria-labelledby="rx-window-label">
@@ -100,7 +102,22 @@
                 <button type="submit" class="rx-seg__opt" name="days" value="30"
                         aria-pressed="{% if days == 30 %}true{% else %}false{% endif %}">30 days</button>
             </div>
+            <input type="hidden" name="sort" value="{{ sort }}">
         </form>
+
+        <form class="rx-window" method="get" action="/releases">
+            <span class="rx-window__label" id="rx-sort-label">Sort</span>
+            <div class="rx-seg" role="group" aria-labelledby="rx-sort-label">
+                <button type="submit" class="rx-seg__opt" name="sort" value="date"
+                        aria-pressed="{% if sort == "date" %}true{% else %}false{% endif %}">Newest</button>
+                <button type="submit" class="rx-seg__opt" name="sort" value="date_asc"
+                        aria-pressed="{% if sort == "date_asc" %}true{% else %}false{% endif %}">Oldest</button>
+                <button type="submit" class="rx-seg__opt" name="sort" value="name"
+                        aria-pressed="{% if sort == "name" %}true{% else %}false{% endif %}">Name</button>
+            </div>
+            <input type="hidden" name="days" value="{{ days }}">
+        </form>
+        </div>
 
         {% if unavailable %}
         <div class="cx-empty">
