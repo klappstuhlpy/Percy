@@ -365,13 +365,18 @@ mod tests {
 
     #[test]
     fn name_sort_is_case_insensitive_ascending() {
+        // "Banana" vs "apple": case-*sensitive* ordering would put "Banana" first
+        // ('B' = 66 < 'a' = 97), so this pair only comes out "apple" first if the
+        // comparison actually folds case — unlike zebra/Avengers/bat-man, where the
+        // case-sensitive order happens to match the case-insensitive one and the
+        // assertion would pass even with `.to_lowercase()` deleted from `Sort::Name`.
         let mut cards = vec![
-            card_named("zebra", Some("2026-08-01")),
-            card_named("Avengers", Some("2026-08-20")),
-            card_named("bat-man", None),
+            card_named("Banana", Some("2026-08-01")),
+            card_named("apple", Some("2026-08-20")),
+            card_named("cherry", None),
         ];
         sort_cards(&mut cards, Sort::Name);
-        assert_eq!(names(&cards), ["Avengers", "bat-man", "zebra"]);
+        assert_eq!(names(&cards), ["apple", "Banana", "cherry"]);
     }
 
     #[test]
