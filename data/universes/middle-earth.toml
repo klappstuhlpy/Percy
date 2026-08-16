@@ -1,0 +1,105 @@
+slug = "middle-earth"
+name = "Middle-earth"
+short_name = "Middle-earth"
+tagline = "Peter Jackson's Hobbit and Lord of the Rings trilogies, plus the Third Age prequel War of the Rohirrim."
+accent = "#C9A227"
+published = true
+sort_order = 60
+
+[[paths]]
+slug = "release"
+name = "Release Order"
+description = "How the six theatrical films reached cinemas, 2001 to 2014, plus 2024's prequel."
+default = true
+
+[[paths]]
+slug = "chronological"
+name = "Chronological Order"
+description = "Middle-earth's in-universe order: War of the Rohirrim, then the Hobbit trilogy, then The Lord of the Rings."
+
+[[eras]]
+key = "third-age"
+name = "The Third Age"
+order = 100
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 839033
+era = "third-age"
+story = 100
+release = 700
+context = "Two centuries before the War of the Ring, King Helm Hammerhand of Rohan defends his people against a scorned suitor's invasion."
+importance = { release = "optional", chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 49051
+era = "third-age"
+story = 200
+release = 400
+context = "Bilbo Baggins joins Gandalf and thirteen dwarves on a quest to reclaim the Lonely Mountain from the dragon Smaug."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 57158
+era = "third-age"
+story = 300
+release = 500
+context = "The company reaches Mirkwood and Lake-town before Bilbo faces Smaug alone within the Lonely Mountain."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 122917
+era = "third-age"
+story = 400
+release = 600
+context = "Smaug's death sparks a war among men, elves, dwarves and orcs for control of the Lonely Mountain's treasure."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 120
+era = "third-age"
+story = 500
+release = 100
+context = "Frodo Baggins inherits the One Ring and sets out from the Shire with eight companions to destroy it in Mordor."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 121
+era = "third-age"
+story = 600
+release = 200
+context = "The broken Fellowship presses on separately as Rohan faces Saruman's army at Helm's Deep."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 122
+era = "third-age"
+story = 700
+release = 300
+context = "Gondor makes its final stand against Sauron's forces while Frodo and Sam carry the Ring to Mount Doom."
+milestone = true
+importance = { release = "essential", chronological = "essential" }
+
+# --- Discovery: sweeps in anything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+
+[[discover]]
+kind = "movie"
+# "Middle-earth Enterprises" -- verified via GET /company/194237, the rights-holding
+# company credited on War of the Rohirrim. Clean and narrow: GET /discover/movie with
+# this company returns exactly 3 results, all legitimate Middle-earth productions --
+# War of the Rohirrim (already curated above), the upcoming The Hunt for Gollum (2027),
+# and an undated Shadow of the Past (dropped by discovery until it carries a date).
+# Amazon's The Rings of Power does not carry this company id on TMDB, so it is not
+# swept in here.
+company = 194237
+era = "third-age"
+importance = "optional"
+
+# No TV discovery block: GET /discover/tv with company 194237 returns 0 results.

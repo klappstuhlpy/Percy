@@ -1,0 +1,204 @@
+slug = "star-wars"
+name = "Star Wars"
+short_name = "Star Wars"
+tagline = "Nine chapters of the Skywalker saga, plus the anthology films that stand beside them."
+accent = "#FFE81F"
+published = true
+sort_order = 20
+
+[[paths]]
+slug = "release"
+name = "Release Order"
+description = "How the saga reached theaters, anthology films included."
+default = true
+
+[[paths]]
+slug = "chronological"
+name = "Chronological Order"
+description = "Every film in in-universe story order, prequels first."
+
+[[eras]]
+key = "original-trilogy"
+name = "Original Trilogy (1977-1983)"
+order = 100
+
+[[eras]]
+key = "prequel-trilogy"
+name = "Prequel Trilogy (1999-2005)"
+order = 200
+
+[[eras]]
+key = "anthology"
+name = "Anthology Films (2016-2018)"
+order = 250
+
+[[eras]]
+key = "sequel-trilogy"
+name = "Sequel Trilogy (2015-2019)"
+order = 300
+
+[[eras]]
+key = "extras"
+name = "Shorts & Specials"
+order = 400
+
+[[eras]]
+key = "television"
+name = "Television"
+order = 450
+
+# --- Original Trilogy ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 11
+era = "original-trilogy"
+story = 600
+release = 100
+context = "Luke Skywalker joins Obi-Wan Kenobi, Han Solo and Princess Leia to destroy the Empire's planet-killing Death Star."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1891
+era = "original-trilogy"
+story = 700
+release = 200
+context = "The Rebel Alliance is scattered by an Imperial assault, and Luke begins his Jedi training under Yoda on Dagobah."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1892
+era = "original-trilogy"
+story = 800
+release = 300
+context = "Luke confronts Darth Vader and the Emperor while the Alliance mounts an assault on the second Death Star."
+importance = { release = "essential", chronological = "essential" }
+
+# --- Prequel Trilogy ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1893
+era = "prequel-trilogy"
+story = 100
+release = 400
+context = "Two Jedi Knights protect young Queen Padme Amidala while discovering a boy who may be the Chosen One foretold to bring balance to the Force."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1894
+era = "prequel-trilogy"
+story = 200
+release = 500
+context = "Obi-Wan investigates a separatist assassination plot while Anakin's secret feelings for Padme deepen amid a galaxy sliding toward war."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1895
+era = "prequel-trilogy"
+story = 300
+release = 600
+context = "Anakin Skywalker's fall to the dark side and Palpatine's rise complete the Republic's transformation into the Empire."
+milestone = true
+importance = { release = "essential", chronological = "essential" }
+
+# --- Anthology ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 348350
+era = "anthology"
+story = 400
+release = 1000
+context = "A young Han Solo falls in with a gang of smugglers and meets Chewbacca and Lando Calrissian for the first time."
+importance = { release = "optional", chronological = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 330459
+era = "anthology"
+story = 500
+release = 800
+context = "A ragtag group of rebels undertakes a suicide mission to steal the Death Star's plans, directly setting up A New Hope."
+importance = { release = "recommended", chronological = "recommended" }
+
+# --- Sequel Trilogy ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 140607
+era = "sequel-trilogy"
+story = 900
+release = 700
+context = "Rey, Finn and Poe Dameron are drawn into a new conflict against the First Order as Luke Skywalker remains missing."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 181808
+era = "sequel-trilogy"
+story = 1000
+release = 900
+context = "Rey seeks out the reluctant Luke Skywalker for training while the Resistance is chased across the galaxy by the First Order."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 181812
+era = "sequel-trilogy"
+story = 1100
+release = 1100
+context = "The Resistance makes a final stand against a returned Emperor Palpatine and his Final Order fleet."
+milestone = true
+importance = { release = "essential", chronological = "essential" }
+
+# --- Discovery: sweeps in everything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+
+[[discover]]
+kind = "movie"
+# Lucasfilm Ltd. -- verified via GET /company/1 -> name "Lucasfilm Ltd."
+company = 1
+era = "extras"
+importance = "optional"
+# Lucasfilm's company id also carries Indiana Jones, American Graffiti and various
+# unrelated documentaries from its decades-long back catalogue; this excludes the
+# non-Star Wars survivors of the date filter (checked each via GET /movie/{id}):
+min_date = "2008-01-01"
+#  1692755 Ho Chi Minh: The Price of Freedom (2008) -- unrelated documentary
+#  1507542 Irving Thalberg: Hollywood's Boy Wonder (2008) -- unrelated documentary
+#  1507007 Tin Pan Alley: Soundtrack of America (2008) -- unrelated documentary
+#  1505495 Ben Hecht: Shakespeare of Hollywood (2008) -- unrelated documentary
+#  1504010 The Rise of the Moguls: The Men Who Built Hollywood (2008) -- unrelated documentary
+#  1403210 The World of John Ford (2008) -- unrelated documentary
+#  139282  Lego Indiana Jones and the Raiders of the Lost Brick (2008) -- Indiana Jones, not Star Wars
+#  217     Indiana Jones and the Kingdom of the Crystal Skull (2008) -- Indiana Jones
+#  1505987 The Secret Life of Edith Wharton (2008) -- unrelated documentary
+#  72431   Red Tails (2012) -- Lucasfilm war film, not Star Wars
+#  302429  Strange Magic (2015) -- Lucasfilm animated musical, not Star Wars
+#  1076366 Willow: Behind the Magic (2023) -- about the Willow franchise, not Star Wars
+#  335977  Indiana Jones and the Dial of Destiny (2023) -- Indiana Jones
+#  1168918 The Making of Indiana Jones and the Dial of Destiny (2023) -- Indiana Jones
+#  1199447 Timeless Heroes: Indiana Jones and Harrison Ford (2023) -- Indiana Jones
+#  1076708 Music by John Williams (2024) -- career-spanning documentary, not Star Wars-specific
+exclude = [
+    1692755, 1507542, 1507007, 1505495, 1504010, 1403210, 139282, 217,
+    1505987, 72431, 302429, 1076366, 335977, 1168918, 1199447, 1076708,
+]
+
+[[discover]]
+kind = "tv"
+# Same company id, TV side -- catches every animated series (The Clone Wars, Rebels,
+# Resistance, The Bad Batch, Visions) and live-action Disney+ show (The Mandalorian,
+# Boba Fett, Obi-Wan Kenobi, Andor, Ahsoka, Skeleton Crew) in one sweep.
+company = 1
+era = "television"
+importance = "optional"
+min_date = "2008-01-01"
+# Non-Star Wars survivor of the date filter, verified via GET /tv/111837:
+#  111837 Willow (2022) -- the Willow franchise's Disney+ series, not Star Wars
+exclude = [111837]

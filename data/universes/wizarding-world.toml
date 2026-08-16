@@ -1,0 +1,147 @@
+slug = "wizarding-world"
+name = "Wizarding World"
+short_name = "Wizarding World"
+tagline = "Harry Potter's seven years at Hogwarts, framed by Newt Scamander's Fantastic Beasts."
+accent = "#740001"
+published = true
+sort_order = 40
+
+[[paths]]
+slug = "chronological"
+name = "Chronological Order"
+description = "Every film in the order its story takes place, Fantastic Beasts first."
+default = true
+
+[[eras]]
+key = "fantastic-beasts"
+name = "Fantastic Beasts (1926-1932)"
+order = 100
+
+[[eras]]
+key = "hogwarts"
+name = "Harry Potter (1991-1998)"
+order = 200
+
+# --- Fantastic Beasts ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 259316
+era = "fantastic-beasts"
+story = 100
+release = 900
+context = "Magizoologist Newt Scamander arrives in 1920s New York with a case of magical creatures that escape into the city."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 338952
+era = "fantastic-beasts"
+story = 200
+release = 1000
+context = "Newt is drawn into the fight against the dark wizard Gellert Grindelwald, who is gathering followers to his cause."
+importance = { chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 338953
+era = "fantastic-beasts"
+story = 300
+release = 1100
+context = "Albus Dumbledore enlists Newt and his allies to stop Grindelwald from seizing control of the wizarding world."
+importance = { chronological = "optional" }
+
+# --- Harry Potter ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 671
+era = "hogwarts"
+story = 400
+release = 100
+context = "An orphaned boy discovers he is a wizard and begins his first year at Hogwarts School of Witchcraft and Wizardry."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 672
+era = "hogwarts"
+story = 500
+release = 200
+context = "Harry's second year is disrupted by a monster loose in Hogwarts and warnings written in blood on the walls."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 673
+era = "hogwarts"
+story = 600
+release = 300
+context = "An escaped prisoner believed to be hunting Harry forces Hogwarts to bring in Dementors for protection."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 674
+era = "hogwarts"
+story = 700
+release = 400
+context = "Harry is mysteriously entered into the perilous Triwizard Tournament against three older, more experienced students."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 675
+era = "hogwarts"
+story = 800
+release = 500
+context = "Harry forms a secret student group to teach real defense against the dark arts as the Ministry denies Voldemort's return."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 767
+era = "hogwarts"
+story = 900
+release = 600
+context = "Harry uncovers Voldemort's past through memories while Dumbledore searches for a way to destroy his Horcruxes."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 12444
+era = "hogwarts"
+story = 1000
+release = 700
+context = "Harry, Ron and Hermione abandon Hogwarts to hunt down Voldemort's remaining Horcruxes."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 12445
+era = "hogwarts"
+story = 1100
+release = 800
+context = "Harry returns to a besieged Hogwarts for the final battle against Voldemort and his followers."
+milestone = true
+importance = { chronological = "essential" }
+
+# --- Discovery: sweeps in anything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+# Both blocks currently contribute 0 titles -- every film in each collection is already
+# hand-curated above -- and exist purely to future-proof a new mainline film in either
+# series without a seed edit.
+
+[[discover]]
+kind = "movie"
+# "Harry Potter Collection" -- verified via GET /collection/1241 (8 parts, all curated)
+collection = 1241
+era = "hogwarts"
+importance = "optional"
+
+[[discover]]
+kind = "movie"
+# "Fantastic Beasts Collection" -- verified via GET /collection/435259 (3 parts, all curated)
+collection = 435259
+era = "fantastic-beasts"
+importance = "optional"
