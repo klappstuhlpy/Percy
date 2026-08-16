@@ -1385,6 +1385,7 @@ mod tests {
             url: "https://example.test/story".into(),
             headline: headline.into(),
             excerpt: None,
+            image_url: None,
             source_name: "Marvel.com".into(),
             published: Some("2026-08-01".into()),
             published_iso: Some("2026-08-01T09:00:00".into()),

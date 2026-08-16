@@ -229,6 +229,33 @@
     padding-left: 0.75rem;
 }
 
+/* A story's own image (§9, narrowed 2026-08-06): hotlinked, never rehosted. The flex
+   layout only applies to rows carrying this modifier — a text-only row is never given
+   it, so it stays the plain block shape above and never reserves a gap for an image
+   that isn't there. */
+.nx-row--with-image {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.nx-row__image {
+    flex: none;
+    width: 112px;
+    height: 112px;
+    border-radius: 8px;
+    /* A hotlinked asset arrives at whatever size the feed chose; object-fit crops it
+       to the reserved box instead of distorting it. */
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+}
+
+.nx-row__body {
+    min-width: 0;
+    flex: 1;
+}
+
 .nx-row__headline {
     margin: 0;
     font-size: 0.98rem;
@@ -363,6 +390,11 @@
 
     .nx-field--grow {
         min-width: 0;
+    }
+
+    .nx-row__image {
+        width: 72px;
+        height: 72px;
     }
 }
 

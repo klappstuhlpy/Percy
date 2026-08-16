@@ -1020,14 +1020,24 @@ pub(crate) struct NewsTemplate {
     pub(crate) unavailable: bool,
 }
 
-/// One story, carrying **only** what §9 permits a page to show: the headline, a short
-/// excerpt, the link to the original and the source's name. The payload's `image_url` and
-/// `author` are deliberately absent from this struct so no template can reach them.
+/// One story, carrying what §9 permits a page to show: the headline, a short excerpt,
+/// the link to the original, the source's name and — as of the 2026-08-06 narrowing —
+/// the feed's own `image_url`, hotlinked rather than rehosted. `author` is still
+/// deliberately absent from this struct so no template can reach it; the byline stays
+/// hidden everywhere.
+///
+/// Shared with the related-news macro ([`crate::news::related`]): `image_url` rides
+/// along there too since it comes from the same [`row`](crate::news::row) mapping, but
+/// `news_strip.html` never reads the field — §9's image allowance is scoped to `/news`
+/// cards, not the compact detail-page strip.
 pub(crate) struct NewsRow {
     /// The original article. The headline links here, never to a page of ours.
     pub(crate) url: String,
     pub(crate) headline: String,
     pub(crate) excerpt: Option<String>,
+    /// The feed's own image, hotlinked straight from the URL it published — never
+    /// rehosted, never proxied, never cached by us. `None` when the feed gave none.
+    pub(crate) image_url: Option<String>,
     pub(crate) source_name: String,
     /// `YYYY-MM-DD`, and the full timestamp for `<time datetime>`.
     pub(crate) published: Option<String>,
