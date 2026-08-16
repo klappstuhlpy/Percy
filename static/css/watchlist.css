@@ -541,11 +541,75 @@
     text-decoration: underline;
 }
 
+/* The character a cast row's title is credited under -- muted, since the film title and
+   the role noun above it already carry the visual weight of the row. */
+.wl-person-entry__character {
+    color: var(--text-muted);
+}
+
+/* The universes a person spans, listed in the header as links rather than left as the
+   bare figure count below -- same inline "· "-separated run as `.wl-entry__meta`. */
+.wl-person__universes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.6rem 0 0;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+.wl-person__universes > * + *::before {
+    content: '·';
+    margin-right: 0.6rem;
+    color: var(--text-muted);
+}
+
+.wl-person__universe {
+    color: var(--wl-accent);
+    text-decoration: none;
+}
+
+.wl-person__universe:hover {
+    text-decoration: underline;
+}
+
+/* The TMDB attribution link §9 requires on any page showing TMDB data. */
+.wl-person__tmdb {
+    margin: 0.75rem 0 0;
+    font-size: 0.72rem;
+}
+
+.wl-person__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-person__tmdb a:hover {
+    color: var(--foreground);
+}
+
 @media (max-width: 640px) {
     .wl-person {
         grid-template-columns: minmax(0, 1fr);
         gap: 1rem;
     }
+}
+
+/* ── Related news (§6.2's 6b, reusing the row markup comic_detail.html shares
+   through templates/news_strip.html) ──────────────────────────────────── */
+
+.wl-person__news {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--box-border);
+}
+
+.wl-person__news-title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 /* ── Title detail page (/watchlist/:universe/:slug) ───────────────────

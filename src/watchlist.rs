@@ -21,13 +21,17 @@ use crate::{
     progress,
     session::Session,
     templates::{
-        OrderEra, OrderProvider, OrderRow, PersonCreditRow, PersonTemplate, ProgressSummary, ProviderGroup,
-        RegionOption, TitleCredit, TitleNeighbour, TrailerView, WatchOrderTemplate, WatchTitleTemplate,
-        WatchlistTemplate,
+        OrderEra, OrderProvider, OrderRow, PersonCreditRow, PersonRoleGroup, PersonTemplate, PersonUniverseLink,
+        ProgressSummary, ProviderGroup, RegionOption, TitleCredit, TitleNeighbour, TrailerView, WatchOrderTemplate,
+        WatchTitleTemplate, WatchlistTemplate,
     },
     view::Viewer,
     AppState,
 };
+
+/// Role order a person's filmography is grouped and rendered in — cast first, since
+/// that is what most visitors came for, then the behind-the-camera credits.
+const ROLE_ORDER: [&str; 4] = ["cast", "director", "writer", "creator"];
 
 /// TMDB image CDN. Sizes are fixed buckets, not arbitrary dimensions.
 const TMDB_IMAGE_BASE: &str = "https://image.tmdb.org/t/p";
@@ -427,9 +431,12 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
                 photo_url: None,
                 roles: String::new(),
                 credit_count: 0,
-                universes: 0,
+                universe_links: Vec::new(),
                 upcoming: Vec::new(),
-                filmography: Vec::new(),
+                role_groups: Vec::new(),
+                related_news: Vec::new(),
+                related_news_href: String::new(),
+                tmdb_person_id: None,
             };
             return (status_for(&error), body).into_response();
         }
@@ -441,14 +448,14 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
         .iter()
         .partition(|credit| is_upcoming(credit.title.release_date.as_deref(), &today));
 
-    let mut universes: Vec<&str> = page.credits.iter().map(|c| c.title.universe.as_str()).collect();
-    universes.sort_unstable();
-    universes.dedup();
+    // Related news needs the slug before `page.person` is moved into the template fields
+    // below, and a person with no id gets no TMDB link rather than one pointing at `/0`.
+    let slug = page.person.slug.clone();
+    let related_news = crate::news::related(&app, "title", "person", &slug).await;
 
     PersonTemplate {
         account: viewer(&session),
         name: page.person.name,
-        slug: page.person.slug,
         photo_url: page
             .person
             .profile_path
@@ -456,11 +463,66 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
             .map(|path| format!("{TMDB_IMAGE_BASE}/w185{path}")),
         roles: role_summary(&page.credits),
         credit_count: page.credits.len(),
-        universes: universes.len(),
+        universe_links: universe_links(&page.credits),
         upcoming: upcoming.into_iter().map(person_row).collect(),
-        filmography: filmography.into_iter().map(person_row).collect(),
+        role_groups: group_by_role(&filmography),
+        related_news,
+        related_news_href: crate::news::subject_news_href("title", "person", &slug),
+        tmdb_person_id: (page.person.tmdb_person_id != 0).then_some(page.person.tmdb_person_id),
+        slug,
     }
     .into_response()
+}
+
+/// The universes a person spans, deduplicated in the order they first appear in the
+/// credits — never alphabetical, never by count, so the header reads in the same order
+/// as the filmography below it.
+fn universe_links(credits: &[WatchPersonCredit]) -> Vec<PersonUniverseLink> {
+    let mut links: Vec<PersonUniverseLink> = Vec::new();
+    for credit in credits {
+        if links.iter().any(|link| link.slug == credit.title.universe) {
+            continue;
+        }
+        links.push(PersonUniverseLink {
+            slug: credit.title.universe.clone(),
+            name: credit.universe_name.clone(),
+        });
+    }
+    links
+}
+
+/// Splits the (already-released) filmography into one section per role present, in
+/// `ROLE_ORDER`, preserving Percy's newest-first ordering within each.
+fn group_by_role(filmography: &[&WatchPersonCredit]) -> Vec<PersonRoleGroup> {
+    ROLE_ORDER
+        .into_iter()
+        .filter_map(|role| {
+            let rows: Vec<PersonCreditRow> = filmography
+                .iter()
+                .filter(|credit| credit.role == role)
+                .map(|credit| person_row(credit))
+                .collect();
+            if rows.is_empty() {
+                None
+            } else {
+                Some(PersonRoleGroup {
+                    role_label: role_section_label(role).to_string(),
+                    rows,
+                })
+            }
+        })
+        .collect()
+}
+
+/// The heading for a role's filmography section.
+fn role_section_label(role: &str) -> &'static str {
+    match role {
+        "cast" => "Cast",
+        "director" => "Director",
+        "writer" => "Writer",
+        "creator" => "Creator",
+        _ => "Credited",
+    }
 }
 
 /// Today as `YYYY-MM-DD`, matching the format TMDB release dates come in.
@@ -524,13 +586,10 @@ fn person_row(credit: &WatchPersonCredit) -> PersonCreditRow {
             .and_then(|date| date.get(..4))
             .map(str::to_string),
         kind_label: kind_label.to_string(),
-        // The character is the interesting half of an acting credit; the bare role is
-        // all there is for crew, and for an actor TMDB left uncredited.
-        role_label: credit
-            .character_name
-            .clone()
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| role_noun(&credit.role).to_string()),
+        role_label: role_noun(&credit.role).to_string(),
+        // The character is the interesting half of an acting credit; crew and an actor
+        // TMDB left uncredited get nothing here, so the row falls back to `role_label`.
+        character: credit.character_name.clone().filter(|name| !name.is_empty()),
         poster_url: title
             .poster_path
             .as_deref()
@@ -1034,20 +1093,56 @@ mod tests {
     }
 
     #[test]
-    fn a_row_shows_the_character_for_acting_and_the_role_for_crew() {
-        assert_eq!(
-            person_row(&credit("cast", Some("Tony Stark"), None)).role_label,
-            "Tony Stark"
-        );
-        assert_eq!(person_row(&credit("director", None, None)).role_label, "Director");
+    fn a_row_keeps_the_role_noun_and_the_character_separate() {
+        let acted = person_row(&credit("cast", Some("Tony Stark"), None));
+        assert_eq!(acted.role_label, "Actor");
+        assert_eq!(acted.character.as_deref(), Some("Tony Stark"));
+
+        let directed = person_row(&credit("director", None, None));
+        assert_eq!(directed.role_label, "Director");
+        assert_eq!(directed.character, None);
+
         // An uncredited actor has no character: the role noun is all there is to say.
-        assert_eq!(person_row(&credit("cast", Some(""), None)).role_label, "Actor");
+        assert_eq!(person_row(&credit("cast", Some(""), None)).character, None);
     }
 
     #[test]
-    fn the_person_page_renders_both_sections() {
+    fn universe_links_dedupe_in_first_appearance_order() {
+        let mut second = credit("cast", None, None);
+        second.universe_name = "DC Extended Universe".into();
+        second.title.universe = "dceu".into();
+
+        let mut repeat = credit("director", None, None);
+        repeat.title.universe = "dceu".into();
+        repeat.universe_name = "DC Extended Universe".into();
+
+        let credits = vec![credit("cast", None, None), second, repeat];
+        let links = universe_links(&credits);
+
+        assert_eq!(links.len(), 2, "the repeated dceu credit is not a second link");
+        assert_eq!(links[0].slug, "mcu");
+        assert_eq!(links[1].slug, "dceu");
+    }
+
+    #[test]
+    fn filmography_groups_by_role_in_a_fixed_order_with_only_present_roles() {
+        let cast = credit("cast", Some("Tony Stark"), Some("2008-05-02"));
+        let directed = credit("director", None, Some("2012-05-04"));
+        let refs = vec![&cast, &directed];
+
+        let groups = group_by_role(&refs);
+
+        assert_eq!(groups.len(), 2, "no writer or creator credits, no section for them");
+        assert_eq!(groups[0].role_label, "Cast");
+        assert_eq!(groups[0].rows.len(), 1);
+        assert_eq!(groups[1].role_label, "Director");
+    }
+
+    #[test]
+    fn the_person_page_renders_role_grouped_sections() {
         use askama::Template;
 
+        let cast_credit = credit("cast", Some("Tony Stark"), Some("2008-05-02"));
         let page = PersonTemplate {
             account: None,
             name: "Robert Downey Jr.".into(),
@@ -1055,17 +1150,54 @@ mod tests {
             photo_url: Some("https://image.tmdb.org/t/p/w185/rdj.jpg".into()),
             roles: "Actor".into(),
             credit_count: 2,
-            universes: 1,
+            universe_links: vec![PersonUniverseLink {
+                slug: "mcu".into(),
+                name: "Marvel Cinematic Universe".into(),
+            }],
             upcoming: vec![person_row(&credit("cast", Some("Doctor Doom"), None))],
-            filmography: vec![person_row(&credit("cast", Some("Tony Stark"), Some("2008-05-02")))],
+            role_groups: group_by_role(&[&cast_credit]),
+            related_news: Vec::new(),
+            related_news_href: String::new(),
+            tmdb_person_id: Some(3223),
         };
         let html = page.render().expect("the person template renders");
 
         assert!(html.contains("Coming up"));
-        assert!(html.contains("Filmography"));
+        assert!(html.contains("Cast"));
         assert!(html.contains("Doctor Doom"), "the macro body reaches the loop variable");
+        assert!(
+            html.contains("as Tony Stark"),
+            "a cast row shows the character it played"
+        );
         assert!(html.contains("href=\"/watchlist/mcu/iron-man\""));
+        assert!(
+            html.contains("href=\"/watchlist/mcu\""),
+            "the header links the universe"
+        );
         assert!(html.contains("2008"), "a released title keeps its year");
+        assert!(html.contains("https://www.themoviedb.org/person/3223"));
+    }
+
+    #[test]
+    fn a_person_with_no_tmdb_id_gets_no_attribution_link() {
+        use askama::Template;
+
+        let page = PersonTemplate {
+            account: None,
+            name: "unknown".into(),
+            slug: "unknown".into(),
+            photo_url: None,
+            roles: String::new(),
+            credit_count: 0,
+            universe_links: Vec::new(),
+            upcoming: Vec::new(),
+            role_groups: Vec::new(),
+            related_news: Vec::new(),
+            related_news_href: String::new(),
+            tmdb_person_id: None,
+        };
+        let html = page.render().expect("the empty-state person template renders");
+        assert!(!html.contains("themoviedb.org/person"));
     }
 
     #[test]

@@ -23,11 +23,18 @@
         </div>
         <p class="wl-entry__meta">
             <span class="wl-person-entry__role">{{ entry.role_label }}</span>
+            {% match entry.character %}
+            {% when Some with (name) %}
+            <span class="wl-person-entry__character">as {{ name }}</span>
+            {% when None %}
+            {% endmatch %}
             <a class="wl-person-entry__universe" href="/watchlist/{{ entry.universe_slug }}">{{ entry.universe_name }}</a>
         </p>
     </div>
 </li>
 {% endmacro %}
+
+{% import "news_strip.html" as news_strip %}
 
 {% block nav_watchlist_active %} active{% endblock %}
 
@@ -40,6 +47,7 @@
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/watchlist.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/news.css" type="text/css"/>
 {% endblock %}
 
 {% block body %}
@@ -59,6 +67,14 @@
                 {% endif %}
                 <h1 class="wl-head__title">{{ name }}</h1>
 
+                {% if !universe_links.is_empty() %}
+                <p class="wl-person__universes">
+                    {% for link in universe_links %}
+                    <a class="wl-person__universe" href="/watchlist/{{ link.slug }}">{{ link.name }}</a>
+                    {% endfor %}
+                </p>
+                {% endif %}
+
                 {% if credit_count > 0 %}
                 <div class="wl-figures">
                     <span class="wl-figure">
@@ -66,8 +82,8 @@
                         <span class="wl-figure__label">Credits</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ universes }}</span>
-                        <span class="wl-figure__label">Universe{% if universes != 1 %}s{% endif %}</span>
+                        <span class="wl-figure__value">{{ universe_links.len() }}</span>
+                        <span class="wl-figure__label">Universe{% if universe_links.len() != 1 %}s{% endif %}</span>
                     </span>
                     <span class="wl-figure">
                         <span class="wl-figure__value">{{ upcoming.len() }}</span>
@@ -75,6 +91,14 @@
                     </span>
                 </div>
                 {% endif %}
+
+                {% match tmdb_person_id %}
+                {% when Some with (id) %}
+                <p class="wl-person__tmdb">
+                    <a href="https://www.themoviedb.org/person/{{ id }}" target="_blank" rel="noopener">View on TMDB</a>
+                </p>
+                {% when None %}
+                {% endmatch %}
             </div>
         </header>
 
@@ -95,17 +119,28 @@
         </ol>
         {% endif %}
 
-        {% if !filmography.is_empty() %}
+        {% for group in role_groups %}
         <section class="wl-era">
-            <h2 class="wl-era__title">Filmography</h2>
+            <h2 class="wl-era__title">{{ group.role_label }}</h2>
             <span class="wl-era__rule" aria-hidden="true"></span>
-            <span class="wl-era__count">{{ filmography.len() }}</span>
+            <span class="wl-era__count">{{ group.rows.len() }}</span>
         </section>
         <ol class="wl-entries">
-            {% for entry in filmography %}{% call credit_row(entry) %}{% endfor %}
+            {% for entry in group.rows %}{% call credit_row(entry) %}{% endfor %}
         </ol>
+        {% endfor %}
+
         {% endif %}
 
+        {# §6.2's 6b, reused from the comic detail page: headline, source name, date and a
+           rel="noopener nofollow ugc" link out — §9 permits nothing more. Absent rather
+           than empty when Percy has nothing tagged, or the news call itself failed. #}
+        {% if !related_news.is_empty() %}
+        <section class="wl-person__news nx">
+            <h2 class="wl-person__news-title">Related news</h2>
+            {% call news_strip::list(related_news) %}
+            <a class="nx-more" href="{{ related_news_href }}">All news about {{ name }} →</a>
+        </section>
         {% endif %}
 
         {% include "watchlist_attribution.html" %}

@@ -3,6 +3,7 @@
 {% block nav_comics_active %} active{% endblock %}
 
 {% import "progress_toggle.html" as progress %}
+{% import "news_strip.html" as news_strip %}
 
 {% block title %}{% if title.is_empty() %}Comic unavailable{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %}{% endif %} | Percy{% endblock %}
 
@@ -190,23 +191,7 @@
         {% if !related_news.is_empty() %}
         <section class="cx-related-news nx">
             <h2 class="cx-section__title">Related news</h2>
-            <ul class="nx-list nx-list--compact">
-                {% for row in related_news %}
-                <li class="nx-row">
-                    <h3 class="nx-row__headline">
-                        <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
-                    </h3>
-                    <p class="nx-row__meta">
-                        <span class="nx-row__source">{{ row.source_name }}</span>
-                        {% match row.published %}
-                        {% when Some with (date) %}
-                        <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
-                        {% when None %}
-                        {% endmatch %}
-                    </p>
-                </li>
-                {% endfor %}
-            </ul>
+            {% call news_strip::list(related_news) %}
             <a class="nx-more" href="{{ related_news_href }}">All news for this series →</a>
         </section>
         {% endif %}

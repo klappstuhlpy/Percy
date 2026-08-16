@@ -643,12 +643,36 @@ pub(crate) struct PersonTemplate {
     /// `Actor · Director` — the distinct roles they are credited with.
     pub(crate) roles: String,
     pub(crate) credit_count: usize,
-    /// How many universes they appear in.
-    pub(crate) universes: usize,
-    /// Undated or still-ahead titles — the "what's next" the page opens with.
+    /// The universes they appear in, deduplicated in the order they first appear in the
+    /// credits — never re-sorted, so the first title Percy lists is also the first link.
+    pub(crate) universe_links: Vec<PersonUniverseLink>,
+    /// Undated or still-ahead titles — the "what's next" the page opens with, unsplit by
+    /// role since it is a short, mixed list.
     pub(crate) upcoming: Vec<PersonCreditRow>,
-    /// Everything already out, newest first (Percy's order, never re-sorted here).
-    pub(crate) filmography: Vec<PersonCreditRow>,
+    /// Everything already out, grouped by role (cast, director, writer, creator, in that
+    /// order) and present only for a role this person actually has a credit under.
+    pub(crate) role_groups: Vec<PersonRoleGroup>,
+    /// §6.2's related-news strip for this person. Empty means the section is absent, not
+    /// an empty box — same rule as `ComicDetailTemplate::related_news`.
+    pub(crate) related_news: Vec<NewsRow>,
+    /// Everything tagged with this person, on `/news`.
+    pub(crate) related_news_href: String,
+    /// `https://www.themoviedb.org/person/{id}` — the attribution §9 requires on any page
+    /// showing TMDB data. Absent when Percy has no id for the person (the error page).
+    pub(crate) tmdb_person_id: Option<i64>,
+}
+
+/// One universe this person has a credit in, linked from the page header.
+pub(crate) struct PersonUniverseLink {
+    pub(crate) slug: String,
+    pub(crate) name: String,
+}
+
+/// One role's section of a person's filmography — "Cast", "Director", "Writer",
+/// "Creator" — rendered only when the person has at least one credit under it.
+pub(crate) struct PersonRoleGroup {
+    pub(crate) role_label: String,
+    pub(crate) rows: Vec<PersonCreditRow>,
 }
 
 /// One row of a person's filmography.
@@ -662,8 +686,11 @@ pub(crate) struct PersonCreditRow {
     pub(crate) year: Option<String>,
     /// `FILM` / `TV` / `SPEC`.
     pub(crate) kind_label: String,
-    /// The character for an acting credit, else the role noun.
+    /// The role noun — "Actor" / "Director" / "Writer" / "Creator".
     pub(crate) role_label: String,
+    /// The character played, for a cast credit TMDB actually credited. `None` for crew
+    /// and for an uncredited actor — the row then falls back to `role_label` alone.
+    pub(crate) character: Option<String>,
     pub(crate) poster_url: Option<String>,
 }
 
