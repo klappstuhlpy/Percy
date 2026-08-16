@@ -17,11 +17,19 @@ Choosing the list
 §9 asks for official publisher feeds first. Marvel's and DC's own feeds are behind a bot-blocking
 edge (both answer ``403`` to any identified client, including ours), so they are **not** in this
 list: a URL that cannot be verified to be a working feed would ship as a permanently red row in
-``last_status`` pretending to be a source. What is here instead are the trade and comics
-newsrooms that syndicate full RSS and are conventionally cited by name -- which is exactly the
-shape §9 permits: headline, short excerpt, source name, link out, never the article body.
+``last_status`` pretending to be a source. The same check ruled out several other candidates on
+the 2026-08-16 pass -- AIPT and ICv2 also 403 an identified client, Newsarama's feed now redirects
+to a GameRadar category page rather than a document, and IndieWire's feed sits behind a paid
+bot-access gate (``402``) -- so none of the four are here either. What is here instead are the
+trade newsrooms, comics sites and anime/manga outlets that syndicate full RSS and are
+conventionally cited by name -- which is exactly the shape §9 permits: headline, short excerpt,
+source name, link out, never the article body.
 
-Every URL below was fetched and confirmed to return an RSS document with items on 2026-08-04.
+Every URL below was fetched and confirmed to return an RSS document with items on 2026-08-04;
+the six added on 2026-08-16 were verified the same day -- two more comics-only newsrooms
+(ComicsXF, Graphic Policy), one more film/TV fandom site (Collider), and three ``both`` sources
+(ComicBook.com, plus Anime News Network and Otaku USA Magazine, which bring anime and manga --
+a real gap given ``Brand.MANGA`` in the comic catalogue -- into the feed).
 """
 
 from __future__ import annotations
@@ -45,20 +53,36 @@ class NewsSource(NamedTuple):
 
 
 #: The shipped list. Small on purpose: every source is volume, and news volume is the risk §8
-#: names. Two comics newsrooms, one that covers both, three film/TV trades.
+#: names. Four comics newsrooms, four that cover both comics/anime-manga and film/TV, four
+#: film/TV trades and fandom sites -- grouped by ``media`` below, not by when each was added.
 DEFAULT_SOURCES: tuple[NewsSource, ...] = (
+    # -- comic --
     NewsSource('comics-beat', 'The Beat', 'https://www.comicsbeat.com/',
                'https://www.comicsbeat.com/feed/', 'comic'),
     NewsSource('bleeding-cool-comics', 'Bleeding Cool (Comics)', 'https://bleedingcool.com/comics/',
                'https://bleedingcool.com/comics/feed/', 'comic'),
+    NewsSource('comicsxf', 'ComicsXF', 'https://comicsxf.com/',
+               'https://comicsxf.com/feed/', 'comic'),
+    NewsSource('graphic-policy', 'Graphic Policy', 'https://www.graphicpolicy.com/',
+               'https://www.graphicpolicy.com/feed/', 'comic'),
+    # -- both --
     NewsSource('cbr', 'CBR', 'https://www.cbr.com/',
                'https://www.cbr.com/feed/', 'both'),
+    NewsSource('comicbook-com', 'ComicBook.com', 'https://comicbook.com/',
+               'https://comicbook.com/feed/', 'both'),
+    NewsSource('anime-news-network', 'Anime News Network', 'https://www.animenewsnetwork.com/',
+               'https://www.animenewsnetwork.com/all/rss.xml', 'both'),
+    NewsSource('otaku-usa', 'Otaku USA Magazine', 'https://otakuusamagazine.com/',
+               'https://otakuusamagazine.com/feed/', 'both'),
+    # -- title --
     NewsSource('deadline', 'Deadline', 'https://deadline.com/',
                'https://deadline.com/feed/', 'title'),
     NewsSource('variety', 'Variety', 'https://variety.com/',
                'https://variety.com/feed/', 'title'),
     NewsSource('hollywood-reporter', 'The Hollywood Reporter', 'https://www.hollywoodreporter.com/',
                'https://www.hollywoodreporter.com/feed/', 'title'),
+    NewsSource('collider', 'Collider', 'https://collider.com/',
+               'https://collider.com/feed/', 'title'),
 )
 
 
