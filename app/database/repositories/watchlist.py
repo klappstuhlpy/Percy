@@ -30,6 +30,13 @@ _PROGRESS_STATUSES = ('watched', 'skipped')
 #: Valid ``watch_title_importance.importance`` values.
 _IMPORTANCE_VALUES = ('essential', 'recommended', 'optional')
 
+#: A series row that has season children (``V45``) is a container, not a watch entry: the
+#: seasons are what a reader watches and marks, and counting the parent as well would double
+#: every exploded show's runtime and announce a series and its first season as two releases.
+#: Spelled against the alias ``t`` so the count/runtime aggregate and the release window use one
+#: predicate; a film or a never-exploded single-season show matches it trivially.
+_NOT_A_CONTAINER = "NOT EXISTS (SELECT 1 FROM watch_titles c WHERE c.parent_id = t.id)"
+
 #: Columns callers may write via :meth:`WatchlistRepository.upsert_prefs`.
 _PREFS_COLUMNS = (
     'region', 'path_slug', 'sort_mode', 'show_spoiler', 'with_credits', 'hide_sub',
@@ -52,14 +59,18 @@ class WatchlistRepository(BaseRepository):
 
         Ordered by ``sort_order`` then ``name``. When ``published_only`` is set (the
         default), unpublished universes are excluded.
+
+        Both aggregates skip container rows (:data:`_NOT_A_CONTAINER`) -- a series that was
+        exploded into seasons is not itself an entry, and summing it alongside its seasons would
+        report every such show's runtime twice.
         """
-        query = """
+        query = f"""
             SELECT
                 u.*,
                 COUNT(t.id) AS title_count,
                 COALESCE(SUM(t.runtime), 0) AS total_runtime
             FROM watch_universes u
-            LEFT JOIN watch_titles t ON t.universe = u.slug
+            LEFT JOIN watch_titles t ON t.universe = u.slug AND {_NOT_A_CONTAINER}
             WHERE (NOT $1::boolean OR u.published)
             GROUP BY u.slug
             ORDER BY u.sort_order, u.name;
@@ -86,6 +97,13 @@ class WatchlistRepository(BaseRepository):
         ``release_order``; any other value raises :class:`ValueError` and is never
         interpolated into the query unchecked. Ordering is deterministic: the chosen
         column, then ``id``.
+
+        Seasons (``V45``) inherit their series' order value *exactly* rather than being offset
+        from it, so the tiebreak is where they are placed: ``COALESCE(season_number, -1)`` puts
+        the series row first (its ``season_number`` is NULL) and its seasons after it in season
+        order. Inheriting rather than offsetting means seasons consume no order space at all,
+        which is what keeps them from ever colliding with a curated neighbour or with a
+        discovered title's ``DISCOVER_ORDER_BASE + index * DISCOVER_ORDER_STEP`` slot.
         """
         order_column = _TITLE_SORT_COLUMNS.get(sort)
         if order_column is None:
@@ -97,7 +115,7 @@ class WatchlistRepository(BaseRepository):
             LEFT JOIN watch_paths p ON p.universe = t.universe AND p.slug = $2
             LEFT JOIN watch_title_importance wti ON wti.title_id = t.id AND wti.path_id = p.id
             WHERE t.universe = $1
-            ORDER BY t.{order_column}, t.id;
+            ORDER BY t.{order_column}, COALESCE(t.season_number, -1), t.id;
         """
         return await self.fetch(query, universe, path_slug)
 
@@ -120,14 +138,20 @@ class WatchlistRepository(BaseRepository):
         match -- an announcement with no date is not a release yet.
 
         Both bounds are inclusive: a title releasing on ``start`` or on ``end`` is in.
+
+        Container rows are excluded (:data:`_NOT_A_CONTAINER`): a series exploded into seasons
+        shares its first season's air date, and dispatching both would tell a subscriber about
+        "Daredevil" and "Daredevil: Season 1" on the same day. ``season_number`` rides along so
+        the nightly re-check knows to compare a season's air date rather than the show's
+        ``first_air_date``.
         """
         return await self.fetch(
-            """
-            SELECT id, universe, slug, title, release_date, poster_path, sub_universe,
-                   tmdb_type, tmdb_id
-            FROM watch_titles
-            WHERE release_date BETWEEN $1 AND $2
-            ORDER BY release_date, id;
+            f"""
+            SELECT t.id, t.universe, t.slug, t.title, t.release_date, t.poster_path,
+                   t.sub_universe, t.tmdb_type, t.tmdb_id, t.season_number
+            FROM watch_titles t
+            WHERE t.release_date BETWEEN $1 AND $2 AND {_NOT_A_CONTAINER}
+            ORDER BY t.release_date, t.id;
             """,
             start, end)
 
@@ -217,22 +241,34 @@ class WatchlistRepository(BaseRepository):
         provide ``kind``, ``runtime``, ``episodes``, ``release_date``, ``poster_path``,
         ``backdrop_path``, ``overview``, ``tmdb_rating``, ``tmdb_votes``, ``era``,
         ``era_order``, ``story_order``, ``release_order``, ``milestone``, ``instruction``,
-        ``context``, ``spoiler``, ``sub_universe``. ``credits_of`` is resolved separately
-        via :meth:`set_credits_of`, since the referenced title may not exist yet on first
-        insert.
+        ``context``, ``spoiler``, ``sub_universe``, ``season_number``, ``season_name``,
+        ``parent_id``. ``credits_of`` is resolved separately via :meth:`set_credits_of`, since
+        the referenced title may not exist yet on first insert.
+
+        The conflict target is ``V45``'s expression index rather than a plain column list: a
+        season carries its series' ``tmdb_id``, so identity is
+        ``(universe, tmdb_type, tmdb_id, COALESCE(season_number, -1))``. The ``COALESCE`` must be
+        written exactly as the index declares it or Postgres cannot infer the index -- and a
+        bare ``season_number`` in the target would silently stop matching films, because NULLs
+        are distinct in a unique index and every sync would insert a duplicate.
+
+        A :class:`asyncpg.UniqueViolationError` out of here is therefore always the *other*
+        unique index, ``UNIQUE (universe, slug)`` -- see
+        :meth:`~app.services.watchlist.ingest.WatchlistIngest.sync`, which retries with a
+        disambiguated slug instead of dropping the row.
         """
         query = """
             INSERT INTO watch_titles (
                 universe, tmdb_type, tmdb_id, slug, title, kind, runtime, episodes,
                 release_date, poster_path, backdrop_path, overview, tmdb_rating, tmdb_votes,
                 era, era_order, story_order, release_order, milestone, instruction, context,
-                spoiler, sub_universe
+                spoiler, sub_universe, season_number, season_name, parent_id
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                $18, $19, $20, $21, $22, $23
+                $18, $19, $20, $21, $22, $23, $24, $25, $26
             )
-            ON CONFLICT (universe, tmdb_type, tmdb_id) DO UPDATE SET
+            ON CONFLICT (universe, tmdb_type, tmdb_id, COALESCE(season_number, -1)) DO UPDATE SET
                 slug = EXCLUDED.slug,
                 title = EXCLUDED.title,
                 kind = EXCLUDED.kind,
@@ -252,7 +288,9 @@ class WatchlistRepository(BaseRepository):
                 instruction = EXCLUDED.instruction,
                 context = EXCLUDED.context,
                 spoiler = EXCLUDED.spoiler,
-                sub_universe = EXCLUDED.sub_universe
+                sub_universe = EXCLUDED.sub_universe,
+                season_name = EXCLUDED.season_name,
+                parent_id = EXCLUDED.parent_id
             RETURNING id;
         """
         return await self.fetchval(
@@ -264,7 +302,8 @@ class WatchlistRepository(BaseRepository):
             data.get('era'), data.get('era_order', 0), data.get('story_order', 0),
             data.get('release_order', 0), data.get('milestone', False),
             data.get('instruction'), data.get('context'), data.get('spoiler'),
-            data.get('sub_universe'),
+            data.get('sub_universe'), data.get('season_number'), data.get('season_name'),
+            data.get('parent_id'),
         )
 
     async def set_importance(self, title_id: int, path_id: int, importance: str) -> None:

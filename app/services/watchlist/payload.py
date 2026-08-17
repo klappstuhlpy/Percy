@@ -38,6 +38,7 @@ _TITLE_PASSTHROUGH = (
     'id', 'universe', 'tmdb_type', 'tmdb_id', 'slug', 'title', 'kind', 'runtime', 'episodes',
     'poster_path', 'backdrop_path', 'overview', 'tmdb_votes', 'era', 'era_order', 'story_order',
     'release_order', 'milestone', 'instruction', 'context', 'spoiler', 'credits_of', 'sub_universe',
+    'season_number', 'season_name', 'parent_id',
 )
 
 
@@ -257,7 +258,15 @@ def universe_stats(titles: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
     ``essential`` / ``recommended`` / ``optional`` count the path-joined ``importance``
     values; titles with no importance row for the path are counted only in ``total``.
+
+    A series row that other rows name as their ``parent_id`` is a **container** (``V45``), not an
+    entry: its seasons are what a reader watches, and its ``runtime`` is their sum, so counting
+    both would report every exploded show twice and its runtime twice over. Derived from the
+    list itself rather than queried, since the whole universe is already in hand -- and it
+    matches ``list_universes``' own aggregate, which excludes containers in SQL.
     """
+    containers = {row['parent_id'] for row in titles if row.get('parent_id') is not None}
+    titles = [row for row in titles if row['id'] not in containers]
     runtime = sum(row['runtime'] or 0 for row in titles)
     counts = {'essential': 0, 'recommended': 0, 'optional': 0}
     for row in titles:

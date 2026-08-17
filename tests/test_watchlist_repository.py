@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from app.database.repositories import WatchlistRepository
-from app.services.watchlist.ingest import movie_row
+from app.services.watchlist.ingest import movie_row, tv_row
 from app.services.watchlist.seeds import TitleSeed
 
 if TYPE_CHECKING:
@@ -25,6 +25,12 @@ _PLACEHOLDER_RE = re.compile(r'\$\d+')
 
 def make_repo(mock_db: MagicMock) -> WatchlistRepository:
     return WatchlistRepository(mock_db)
+
+
+def _insert_columns(query: str) -> set[str]:
+    """The column names of an ``INSERT INTO watch_titles (...)`` statement."""
+    columns_text = query.split('INSERT INTO watch_titles (', 1)[1].split(')', 1)[0]
+    return {column.strip() for column in columns_text.split(',')}
 
 
 async def test_list_titles_rejects_bad_sort(mock_db: MagicMock) -> None:
@@ -42,7 +48,9 @@ async def test_list_titles_story_sort_orders_by_story_order(mock_db: MagicMock) 
     await repo.list_titles('mcu', sort='story')
 
     query, *params = mock_db.fetch.await_args.args
-    assert 'ORDER BY t.story_order, t.id' in query
+    # The season tiebreak (V45) sits between the order column and the id: a season inherits its
+    # series' order value exactly, so this clause is the only thing placing it under its series.
+    assert 'ORDER BY t.story_order, COALESCE(t.season_number, -1), t.id' in query
     assert params == ['mcu', None]
 
 
@@ -52,7 +60,7 @@ async def test_list_titles_release_sort_orders_by_release_order(mock_db: MagicMo
     await repo.list_titles('mcu', path_slug='chronological', sort='release')
 
     query, *params = mock_db.fetch.await_args.args
-    assert 'ORDER BY t.release_order, t.id' in query
+    assert 'ORDER BY t.release_order, COALESCE(t.season_number, -1), t.id' in query
     assert params == ['mcu', 'chronological']
 
 
@@ -189,6 +197,55 @@ async def test_upsert_title_insert_columns_match_row_builder_output(mock_db: Mag
     await repo.upsert_title('mcu', row)
 
     query, *_params = mock_db.fetchval.await_args.args
-    columns_text = query.split('INSERT INTO watch_titles (', 1)[1].split(')', 1)[0]
-    columns = {c.strip() for c in columns_text.split(',')}
-    assert columns == set(row) | {'universe'}
+    # V45's three columns are written from `data.get(...)`, so a film's row legitimately omits
+    # them (they land as NULL) -- see the season-row test below for the exact-match half.
+    assert _insert_columns(query) == set(row) | {'universe', 'season_number', 'season_name', 'parent_id'}
+
+
+async def test_upsert_title_insert_columns_cover_every_season_row_key(mock_db: MagicMock) -> None:
+    # V45: a season row is the widest row the ingest builds -- it is the one that fills every
+    # column including the three season ones, so it is what pins the INSERT list exactly.
+    seed_title = TitleSeed(tmdb_type='tv', tmdb_id=61889, era='phase4', story=500, release=500)
+    row = tv_row(
+        seed_title,
+        {'name': 'Daredevil', 'episode_run_time': [50]},
+        {1: {'name': 'Season 1', 'episodes': [{'runtime': 50}]},
+         2: {'name': 'Season 2', 'episodes': [{'runtime': 55}]}},
+        universe='mcu', era_order=400,
+    )
+    season = {**row['_seasons'][0], 'parent_id': 77}
+    repo = make_repo(mock_db)
+
+    await repo.upsert_title('mcu', season)
+
+    query, *params = mock_db.fetchval.await_args.args
+    assert _insert_columns(query) == set(season) | {'universe'}
+    assert len(set(_PLACEHOLDER_RE.findall(query))) == len(params)
+    # Identity is the V45 expression index; a bare `season_number` here would stop matching films.
+    assert 'ON CONFLICT (universe, tmdb_type, tmdb_id, COALESCE(season_number, -1))' in query
+    # season_number is part of the key, so the update clause must not try to move it.
+    assert 'season_number = EXCLUDED' not in query
+
+
+async def test_titles_releasing_between_skips_container_rows(mock_db: MagicMock) -> None:
+    # V45: a series exploded into seasons shares its first season's air date, so dispatching both
+    # would DM a subscriber about the series and its season 1 on the same day.
+    repo = make_repo(mock_db)
+
+    await repo.titles_releasing_between(datetime.date(2026, 8, 1), datetime.date(2026, 8, 8))
+
+    query, *params = mock_db.fetch.await_args.args
+    assert 'NOT EXISTS (SELECT 1 FROM watch_titles c WHERE c.parent_id = t.id)' in query
+    assert 't.season_number' in query  # the nightly re-check needs it to pick the right air date
+    assert params == [datetime.date(2026, 8, 1), datetime.date(2026, 8, 8)]
+
+
+async def test_list_universes_aggregates_skip_container_rows(mock_db: MagicMock) -> None:
+    # Otherwise every exploded show's runtime is counted twice: once on the series, once across
+    # its seasons.
+    repo = make_repo(mock_db)
+
+    await repo.list_universes()
+
+    query, *_params = mock_db.fetch.await_args.args
+    assert 'NOT EXISTS (SELECT 1 FROM watch_titles c WHERE c.parent_id = t.id)' in query

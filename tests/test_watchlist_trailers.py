@@ -152,6 +152,7 @@ def test_the_title_payload_carries_the_trailer() -> None:
         'tmdb_rating': None, 'tmdb_votes': None, 'era': None, 'era_order': 0, 'story_order': 0,
         'release_order': 0, 'milestone': False, 'instruction': None, 'context': None,
         'spoiler': None, 'credits_of': None, 'sub_universe': None,
+        'season_number': None, 'season_name': None, 'parent_id': None,
         'trailer_site': 'YouTube', 'trailer_key': 'k-best', 'trailer_name': 'Official Trailer',
     }
     assert title_payload(row)['trailer'] == {

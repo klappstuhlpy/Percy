@@ -78,6 +78,9 @@ def _title(**overrides: Any) -> dict[str, Any]:
         'spoiler': None,
         'credits_of': None,
         'sub_universe': None,
+        'season_number': None,
+        'season_name': None,
+        'parent_id': None,
         'trailer_site': 'YouTube',
         'trailer_key': 'yt-key',
         'trailer_name': 'Official Trailer',
@@ -189,6 +192,9 @@ class FakeWatchlistRepository:
 
     def __init__(self) -> None:
         self.universes: dict[str, dict[str, Any]] = {'mcu': dict(UNIVERSE)}
+        #: Copied per instance so a test can add rows (V45 season entries, say) without the
+        #: shared ``TITLES`` constant leaking into every other test.
+        self.titles: list[dict[str, Any]] = [dict(row) for row in TITLES]
         self.progress: dict[int, dict[int, tuple[str, datetime.datetime]]] = {}
         self.prefs: dict[int, dict[str, Any]] = {}
         self.bulk_calls: list[Any] = []
@@ -208,15 +214,20 @@ class FakeWatchlistRepository:
     async def list_titles(
         self, _universe: str, *, path_slug: str | None = None, sort: str = 'story',
     ) -> list[dict[str, Any]]:
-        titles = [dict(t) for t in TITLES]
+        titles = [dict(t) for t in self.titles]
         if path_slug != 'complete':
             for row in titles:
                 row['importance'] = None
-        titles.sort(key=lambda r: r['story_order' if sort == 'story' else 'release_order'])
+        # Mirrors the repository's ORDER BY, season tiebreak included (V45).
+        titles.sort(key=lambda r: (
+            r['story_order' if sort == 'story' else 'release_order'],
+            -1 if r['season_number'] is None else r['season_number'],
+            r['id'],
+        ))
         return titles
 
     async def get_title(self, _universe: str, slug: str) -> dict[str, Any] | None:
-        return next((dict(t) for t in TITLES if t['slug'] == slug), None)
+        return next((dict(t) for t in self.titles if t['slug'] == slug), None)
 
     async def list_providers(self, title_ids: Any, region: str) -> list[dict[str, Any]]:
         return [p for p in PROVIDERS if p['title_id'] in set(title_ids) and p['region'] == region]
@@ -389,6 +400,60 @@ async def test_get_title_carries_the_trailer_with_both_urls(bot: Any) -> None:
         'url': 'https://www.youtube.com/watch?v=yt-key',
         'embed_url': 'https://www.youtube.com/embed/yt-key',
     }
+
+
+#: A series (id 3, "loki") turned into a container plus two season entries, as V45's ingest
+#: writes it: the seasons share the series' story/release order and carry its parent id.
+SEASONS = [
+    _title(id=4, tmdb_type='tv', kind='tv', tmdb_id=88396, slug='loki-season-1',
+           title='Loki: Season 1', season_number=1, season_name='Season 1', parent_id=3,
+           runtime=270, episodes=6, era='phase4', era_order=400, story_order=300,
+           release_order=300, importance='recommended'),
+    _title(id=5, tmdb_type='tv', kind='tv', tmdb_id=88396, slug='loki-season-2',
+           title='Loki: Season 2', season_number=2, season_name='Season 2', parent_id=3,
+           runtime=300, episodes=6, era='phase4', era_order=400, story_order=300,
+           release_order=300, importance='recommended'),
+]
+
+
+def test_title_payload_carries_the_season_columns() -> None:
+    payload = title_payload(SEASONS[0])
+    assert (payload['season_number'], payload['season_name'], payload['parent_id']) == (1, 'Season 1', 3)
+    assert title_payload(TITLES[0])['season_number'] is None  # a film is untouched
+
+
+def test_universe_stats_excludes_a_series_that_has_season_entries() -> None:
+    # The container's runtime is the sum of its seasons', so counting both would report the show
+    # twice and its runtime twice over.
+    stats = universe_stats([*TITLES, *SEASONS])
+    assert stats['total'] == 4  # 2 films + 2 seasons; the series row is not an entry
+    assert (stats['movies'], stats['shows']) == (2, 2)
+    assert stats['runtime'] == 126 + 112 + 270 + 300  # the series' own 300 is not double-counted
+
+
+async def test_get_title_carries_season_context_both_ways(bot: Any, repo: FakeWatchlistRepository) -> None:
+    repo.titles.extend(dict(row) for row in SEASONS)
+
+    series = await api.get_title(bot, 'mcu', 'loki')
+    assert series['parent'] is None
+    assert [row['slug'] for row in series['seasons']] == ['loki-season-1', 'loki-season-2']
+
+    asked: list[list[int]] = []
+    original = repo.list_credits
+
+    async def spy(title_ids: Any) -> list[dict[str, Any]]:
+        asked.append(list(title_ids))
+        return await original(title_ids)
+
+    repo.list_credits = spy  # type: ignore[method-assign]
+    season = await api.get_title(bot, 'mcu', 'loki-season-2')
+    assert season['parent']['slug'] == 'loki'
+    assert season['seasons'] == []
+    # Seasons sort under their series even though all three share story_order 300.
+    assert (season['position'], season['total']) == (5, 5)
+    assert season['previous']['slug'] == 'loki-season-1'
+    # A season has no credit rows of its own, so it reads its series' cast rather than nothing.
+    assert asked == [[3]]
 
 
 async def test_get_title_404s_an_unknown_slug(bot: Any) -> None:

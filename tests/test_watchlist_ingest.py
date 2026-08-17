@@ -34,6 +34,9 @@ from app.services.watchlist import (
     tv_row,
 )
 
+# Not re-exported from the package (see ingest.py's __all__ note), so imported from the module.
+from app.services.watchlist.ingest import SEASON_SPLIT_MIN, season_slug, slug_candidates
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
@@ -139,11 +142,16 @@ class FakeWatchlistRepository:
         self,
         existing_titles: list[dict[str, Any]] | None = None,
         *,
-        upsert_conflicts: set[tuple[str, int]] | None = None,
+        taken_slugs: set[str] | None = None,
     ) -> None:
         self._existing_titles = existing_titles or []
         self._next_id = 1000
-        self._upsert_conflicts = upsert_conflicts or set()
+        # Models ``watch_titles``' ``UNIQUE (universe, slug)`` -- the *slug* is what collides,
+        # which is the whole point of the disambiguation chain. A fake that raised on
+        # ``(tmdb_type, tmdb_id)`` instead would make every candidate fail and could never tell
+        # a retry from a skip.
+        self._taken_slugs = taken_slugs or set()
+        self.rows: dict[int, dict[str, Any]] = {}
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.importance: list[tuple[int, int, str]] = []
         self.pruned_importance_with: list[tuple[int, tuple[int, ...]]] = []
@@ -169,12 +177,14 @@ class FakeWatchlistRepository:
 
     async def upsert_title(self, universe: str, data: dict[str, Any]) -> int:
         self.calls.append(('upsert_title', (universe, data)))
-        key = (data['tmdb_type'], data['tmdb_id'])
-        if key in self._upsert_conflicts:
+        if data['slug'] in self._taken_slugs:
             raise asyncpg.UniqueViolationError(
-                f'duplicate key value violates unique constraint "watch_titles_universe_slug_key": {key}'
+                'duplicate key value violates unique constraint '
+                f'"watch_titles_universe_slug_key": {data["slug"]!r}'
             )
+        self._taken_slugs.add(data['slug'])
         self._next_id += 1
+        self.rows[self._next_id] = dict(data)
         return self._next_id
 
     async def set_importance(self, title_id: int, path_id: int, importance: str) -> None:
@@ -750,6 +760,125 @@ def test_tv_row_excludes_season_zero_when_seasons_absent() -> None:
     assert row['episodes'] == 1
 
 
+# -- season entries (V45) -----------------------------------------------------------------------
+
+
+def _show(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        'name': 'Daredevil', 'episode_run_time': [50], 'first_air_date': '2015-04-10',
+        'poster_path': '/show.jpg', 'backdrop_path': '/back.jpg', 'overview': 'A blind lawyer.',
+        'vote_average': 8.4, 'vote_count': 3000,
+        # What `_build_row` reads to decide which seasons to fetch details for.
+        'seasons': [{'season_number': 1, 'air_date': '2015-04-10'},
+                    {'season_number': 2, 'air_date': '2016-03-18'}],
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.parametrize(('number', 'expected'), [
+    (1, 'daredevil-season-1'),
+    (2, 'daredevil-season-2'),
+    (0, 'daredevil-specials'),
+])
+def test_season_slug_is_derived_from_the_series_slug(number: int, expected: str) -> None:
+    # Derived from the *series slug*, which is what makes a collision with the series itself
+    # impossible -- and unrelated to the season's own name, which is usually just "Season 2".
+    assert season_slug('daredevil', number) == expected
+
+
+def test_slug_candidates_chain_is_year_then_tmdb_id() -> None:
+    assert slug_candidates('fantastic-four', release_date=datetime.date(2015, 8, 5), tmdb_id=166424) == [
+        'fantastic-four', 'fantastic-four-2015', 'fantastic-four-166424',
+    ]
+
+
+def test_slug_candidates_skip_the_year_for_an_undated_title() -> None:
+    assert slug_candidates('untitled', release_date=None, tmdb_id=7) == ['untitled', 'untitled-7']
+
+
+def test_tv_row_splits_a_multi_season_show_into_one_entry_per_season() -> None:
+    seed_title = _title(tmdb_type='tv', tmdb_id=61889, story=500, release=500, milestone=True,
+                        instruction='Watch any time', sub_universe='Defenders')
+    seasons = {
+        1: {'name': 'Season 1', 'air_date': '2015-04-10', 'poster_path': '/s1.jpg',
+            'overview': 'Origin.', 'episodes': [{'runtime': 50}] * 13},
+        2: {'name': 'Season 2', 'air_date': '2016-03-18', 'poster_path': None,
+            'overview': '', 'episodes': [{'runtime': 55}] * 13},
+    }
+    row = tv_row(seed_title, _show(), seasons, universe='mcu', era_order=400)
+
+    entries = row['_seasons']
+    assert [entry['season_number'] for entry in entries] == [1, 2]
+    assert [entry['slug'] for entry in entries] == ['daredevil-season-1', 'daredevil-season-2']
+    assert [entry['title'] for entry in entries] == ['Daredevil: Season 1', 'Daredevil: Season 2']
+    assert [entry['season_name'] for entry in entries] == ['Season 1', 'Season 2']
+    assert [entry['episodes'] for entry in entries] == [13, 13]
+    assert [entry['runtime'] for entry in entries] == [13 * 50, 13 * 55]
+    assert [entry['release_date'] for entry in entries] == [
+        datetime.date(2015, 4, 10), datetime.date(2016, 3, 18)]
+    # Order is inherited verbatim, never offset: the repository breaks the tie on season_number,
+    # so seasons consume no order space a curated or discovered neighbour might own.
+    assert {entry['story_order'] for entry in entries} == {500}
+    assert {entry['release_order'] for entry in entries} == {500}
+    assert {entry['era_order'] for entry in entries} == {400}
+    # Curation is inherited except the landmark badge, which belongs to the series once.
+    assert [entry['milestone'] for entry in entries] == [False, False]
+    assert {entry['instruction'] for entry in entries} == {'Watch any time'}
+    assert {entry['sub_universe'] for entry in entries} == {'Defenders'}
+    # A season with nothing of its own falls back to the series' poster/overview.
+    assert entries[0]['poster_path'] == '/s1.jpg'
+    assert entries[1]['poster_path'] == '/show.jpg'
+    assert entries[1]['overview'] == 'A blind lawyer.'
+    # The series row itself is untouched: it keeps the aggregate the read side then ignores.
+    assert (row['slug'], row['runtime'], row['episodes']) == ('daredevil', 13 * 50 + 13 * 55, 26)
+    assert 'season_number' not in row  # only season rows carry the column
+    assert 'parent_id' not in entries[0]  # the orchestrator fills it in; the mapper cannot
+
+
+def test_tv_row_leaves_a_single_season_show_exactly_as_it_was() -> None:
+    # The "films and one-season shows behave byte-identically" half of V45: no season columns,
+    # no `_seasons`, nothing for a consumer to branch on.
+    seed_title = _title(tmdb_type='tv', tmdb_id=88396)
+    seasons = {1: {'name': 'Season 1', 'air_date': '2021-06-09', 'episodes': [{'runtime': 45}] * 6}}
+    row = tv_row(seed_title, _show(name='Loki'), seasons, universe='mcu', era_order=0)
+
+    assert '_seasons' not in row
+    assert 'season_number' not in row
+    assert (row['slug'], row['title'], row['episodes'], row['runtime']) == ('loki', 'Loki', 6, 270)
+    assert SEASON_SPLIT_MIN == 2
+
+
+def test_tv_row_gives_season_zero_no_entry_unless_the_seed_pins_it() -> None:
+    seasons = {
+        0: {'name': 'Specials', 'air_date': '2015-01-01', 'episodes': [{'runtime': 5}] * 4},
+        1: {'name': 'Season 1', 'air_date': '2015-04-10', 'episodes': [{'runtime': 50}] * 13},
+        2: {'name': 'Season 2', 'air_date': '2016-03-18', 'episodes': [{'runtime': 55}] * 13},
+    }
+    unpinned = tv_row(_title(tmdb_type='tv', tmdb_id=61889), _show(), seasons, universe='mcu', era_order=0)
+    assert [entry['season_number'] for entry in unpinned['_seasons']] == [1, 2]
+
+    pinned = tv_row(
+        _title(tmdb_type='tv', tmdb_id=61889, seasons=(0, 1, 2)), _show(), seasons,
+        universe='mcu', era_order=0)
+    assert [entry['season_number'] for entry in pinned['_seasons']] == [0, 1, 2]
+    assert pinned['_seasons'][0]['slug'] == 'daredevil-specials'
+    assert pinned['_seasons'][0]['title'] == 'Daredevil: Specials'
+
+
+def test_tv_row_ignores_a_season_with_no_episodes() -> None:
+    # An announced season TMDB lists with an empty episode list is not something to watch, and
+    # it must not push a one-season show over the split threshold either.
+    seasons = {
+        1: {'name': 'Season 1', 'episodes': [{'runtime': 45}] * 6},
+        2: {'name': 'Season 2', 'episodes': []},
+    }
+    row = tv_row(_title(tmdb_type='tv', tmdb_id=88396), _show(name='Loki'), seasons,
+                 universe='mcu', era_order=0)
+
+    assert '_seasons' not in row
+
+
 # -- provider_rows ------------------------------------------------------------------------------
 
 
@@ -962,28 +1091,142 @@ async def test_sync_records_provider_rows_and_report_count() -> None:
     assert report.providers_written == 1
 
 
-async def test_sync_skips_title_on_slug_conflict_and_keeps_existing_row() -> None:
-    # I7: watch_titles' UNIQUE (universe, slug) is unguarded by upsert_title's ON CONFLICT
-    # target (universe, tmdb_type, tmdb_id) -- a slug collision must be caught, warned about,
-    # and must not abort the rest of the run or let prune_titles delete the existing row.
-    good = _title(tmdb_id=1)
-    conflicting = _title(tmdb_id=2, story=2, release=2)
-    seed = _seed((good, conflicting))
+async def test_sync_disambiguates_a_colliding_slug_instead_of_dropping_the_title() -> None:
+    # V45. Two genuinely different films whose TMDB titles slugify identically -- exactly the
+    # x-men/fantastic-four case that silently lost movie 166424 (and star-wars/the-clone-wars
+    # before it). The old behaviour was to warn and skip the loser; both must now be stored.
+    seed = _seed((_title(tmdb_id=1), _title(tmdb_id=166424, story=2, release=2)))
+    tmdb = FakeTMDBClient(movies={
+        1: {'title': 'Fantastic Four', 'runtime': 106, 'release_date': '2005-07-08'},
+        166424: {'title': 'Fantastic Four', 'runtime': 100, 'release_date': '2015-08-05'},
+    })
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
 
-    tmdb = FakeTMDBClient(movies={1: {'title': 'One', 'runtime': 100}, 2: {'title': 'Two', 'runtime': 50}})
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert report.titles_written == 2  # nothing was dropped
+    slugs = [row['slug'] for row in repo.rows.values()]
+    assert slugs == ['fantastic-four', 'fantastic-four-2015']  # release year disambiguates
+    assert len(repo.pruned_with or []) == 2  # both rows are kept from the prune
+    assert any('stored as' in warning and '2015' in warning for warning in report.warnings)
+
+
+async def test_sync_falls_back_to_the_tmdb_id_when_the_year_is_taken_too() -> None:
+    # Two same-year collisions: the year suffix cannot separate them, so the terminal candidate
+    # (the TMDB id, which is unique by construction) has to.
+    seed = _seed((_title(tmdb_id=1), _title(tmdb_id=2, story=2, release=2)))
+    tmdb = FakeTMDBClient(movies={
+        1: {'title': 'Twin', 'runtime': 100, 'release_date': '2011-04-01'},
+        2: {'title': 'Twin', 'runtime': 90, 'release_date': '2011-09-01'},
+    })
+    repo = FakeWatchlistRepository(taken_slugs={'twin-2011'})
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert [row['slug'] for row in repo.rows.values()] == ['twin', 'twin-2']
+    assert report.titles_written == 2
+
+
+async def test_sync_skips_a_title_whose_every_slug_candidate_collides() -> None:
+    # The pre-V45 failure path is still the failure path once disambiguation is exhausted: warn,
+    # skip, and keep the existing row so prune_titles cannot delete it.
+    seed = _seed((_title(tmdb_id=2),))
+    tmdb = FakeTMDBClient(movies={2: {'title': 'Two', 'runtime': 50, 'release_date': '2009-01-01'}})
     repo = FakeWatchlistRepository(
-        existing_titles=[{'tmdb_type': 'movie', 'tmdb_id': 2, 'id': 555}],
-        upsert_conflicts={('movie', 2)},
+        existing_titles=[{'tmdb_type': 'movie', 'tmdb_id': 2, 'season_number': None, 'id': 555}],
+        taken_slugs={'two', 'two-2009', 'two-2'},
     )
     ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
 
     report = await ingest.sync(seed, regions=('US',))
 
-    assert report.titles_seen == 2
-    assert report.titles_written == 1  # the conflicting title was not actually written
+    assert report.titles_seen == 1
+    assert report.titles_written == 0  # the conflicting title was not actually written
     assert any('slug conflict' in warning for warning in report.warnings)
     assert repo.pruned_with is not None
     assert 555 in repo.pruned_with  # existing row preserved, not pruned
+
+
+async def test_sync_writes_season_entries_under_their_series() -> None:
+    seed = _seed(
+        (_title(tmdb_type='tv', tmdb_id=61889, story=500, release=500,
+                importance={'complete': 'essential'}),),
+        paths=(PathSeed(slug='complete', name='Complete', default=True),),
+    )
+    tmdb = FakeTMDBClient(
+        tv={61889: _show()},
+        seasons={
+            (61889, 1): {'name': 'Season 1', 'air_date': '2015-04-10', 'episodes': [{'runtime': 50}] * 13},
+            (61889, 2): {'name': 'Season 2', 'air_date': '2016-03-18', 'episodes': [{'runtime': 55}] * 13},
+        },
+        providers={('tv', 61889): {'results': {'US': {
+            'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg'}]}}}},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert (report.titles_written, report.seasons_written) == (1, 2)
+    written = list(repo.rows.items())
+    assert [row['slug'] for _, row in written] == ['daredevil', 'daredevil-season-1', 'daredevil-season-2']
+    series_id = written[0][0]
+    assert [row.get('parent_id') for _, row in written] == [None, series_id, series_id]
+    # Every row is kept from the prune, and each season inherits the series' path importance and
+    # streaming providers -- otherwise a path-filtered order or a provider chip loses the seasons.
+    assert sorted(repo.pruned_with or []) == sorted(row_id for row_id, _ in written)
+    assert {title_id for title_id, _, _ in repo.importance} == {row_id for row_id, _ in written}
+    assert all(repo.providers[(row_id, 'US')] for row_id, _ in written)
+    # One TMDB round trip per season, and it is the one that already existed to count episodes.
+    assert [call for call in tmdb.calls if call[0] == 'tv_season'] == [
+        ('tv_season', (61889, 1)), ('tv_season', (61889, 2))]
+
+
+async def test_sync_keeps_existing_season_rows_when_the_series_fetch_fails() -> None:
+    # A transient TMDB error must not let prune_titles delete the seasons a previous run wrote --
+    # that would cascade to every user's watch_progress for them.
+    seed = _seed((_title(tmdb_type='tv', tmdb_id=61889),))
+    tmdb = FakeTMDBClient(errors={('tv', 61889): _FakeTMDBError('tv is down')})
+    repo = FakeWatchlistRepository(existing_titles=[
+        {'tmdb_type': 'tv', 'tmdb_id': 61889, 'season_number': None, 'id': 10},
+        {'tmdb_type': 'tv', 'tmdb_id': 61889, 'season_number': 1, 'id': 11},
+        {'tmdb_type': 'tv', 'tmdb_id': 61889, 'season_number': 2, 'id': 12},
+    ])
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    report = await ingest.sync(seed, regions=('US',))
+
+    assert sorted(repo.pruned_with or []) == [10, 11, 12]
+    assert any('tv is down' in warning for warning in report.warnings)
+
+
+async def test_refresh_release_dates_compares_a_season_against_its_own_air_date() -> None:
+    # The show's first_air_date is season 1's; re-checking a season against it would drag every
+    # season back onto the premiere date and DM its subscribers on the wrong day.
+    tmdb = FakeTMDBClient(tv={61889: _show(seasons=[
+        {'season_number': 1, 'air_date': '2015-04-10'},
+        {'season_number': 2, 'air_date': '2016-03-25'},
+    ])})
+    repo = FakeWatchlistRepository()
+    written: list[tuple[int, datetime.date]] = []
+
+    async def set_release_date(title_id: int, release_date: datetime.date) -> None:
+        written.append((title_id, release_date))
+
+    repo.set_release_date = set_release_date  # type: ignore[attr-defined]
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    moved = await ingest.refresh_release_dates([
+        {'id': 11, 'tmdb_type': 'tv', 'tmdb_id': 61889, 'season_number': 1,
+         'release_date': datetime.date(2015, 4, 10)},
+        {'id': 12, 'tmdb_type': 'tv', 'tmdb_id': 61889, 'season_number': 2,
+         'release_date': datetime.date(2016, 3, 18)},
+    ])
+
+    assert moved == 1  # season 1 is unchanged; only season 2 slipped
+    assert written == [(12, datetime.date(2016, 3, 25))]
 
 
 # -- credits (V41 people) -----------------------------------------------------------------------

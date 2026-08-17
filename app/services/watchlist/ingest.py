@@ -11,9 +11,14 @@ watchlist repository, mirroring how ``AIService`` is the sole caller of ``Ollama
 (``era``, ``era_order``, ``story_order``, ``release_order``, ``milestone``, ``instruction``,
 ``context``, ``spoiler``, ``sub_universe``, ``kind``) come only from the seed; factual
 columns (``title``, ``runtime``, ``episodes``, ``release_date``, ``poster_path``,
-``backdrop_path``, ``overview``, ``tmdb_rating``, ``tmdb_votes``) come only from TMDB. No
-column is ever written from both sources -- keeps a re-sync from letting a curated field
-drift back to whatever TMDB happens to say, and vice versa.
+``backdrop_path``, ``overview``, ``tmdb_rating``, ``tmdb_votes``, ``season_number``,
+``season_name``) come only from TMDB. No column is ever written from both sources -- keeps a
+re-sync from letting a curated field drift back to whatever TMDB happens to say, and vice versa.
+
+``V45`` added the per-season entries: a TV show with :data:`SEASON_SPLIT_MIN` or more countable
+seasons becomes a container row plus one row per season, built by the (also pure)
+:func:`_season_rows` and attached to the series row under the ``'_seasons'`` key for the
+orchestrator to write once it knows the series' id.
 """
 
 from __future__ import annotations
@@ -53,6 +58,10 @@ __all__ = (
     'slugify',
     'tv_row',
 )
+# ``SEASON_SPLIT_MIN``, ``season_slug`` and ``slug_candidates`` are public on this module but
+# deliberately absent from ``__all__``: re-exporting them would mean editing
+# ``app/services/watchlist/__init__.py`` and ``app/services/__init__.py``, which this change does
+# not own. Import them from ``app.services.watchlist.ingest`` directly.
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +79,14 @@ DISCOVER_PAGE_CAP = 10
 #: curation pass without renumbering its neighbours.
 DISCOVER_ORDER_BASE = 10000
 DISCOVER_ORDER_STEP = 10
+
+#: How many countable seasons a show needs before it is split into one entry per season (``V45``).
+#:
+#: Two, so a limited series stays a single row reading "WandaVision" rather than the sillier
+#: "WandaVision: Season 1", and so a show that has only ever had one season is *byte-identically*
+#: what it was before seasons existed. A show that grows a second season is split on the next
+#: sync without anyone editing a seed.
+SEASON_SPLIT_MIN = 2
 
 
 def _parse_date(value: str | None) -> datetime.date | None:
@@ -124,10 +141,139 @@ def movie_row(seed_title: TitleSeed, payload: Mapping[str, Any], *, universe: st
 
 
 def _wanted_seasons(seed_title: TitleSeed, available: Iterable[int]) -> set[int]:
-    """Season numbers that count toward runtime/episodes: pinned seasons, else all but 0."""
+    """Season numbers that count toward runtime/episodes: pinned seasons, else all but 0.
+
+    **The season-0 rule, in one place for both counting and per-season entries (``V45``):**
+    TMDB's season 0 is the "Specials" bucket, and it is a grab-bag -- recaps, webisodes,
+    convention panels, behind-the-scenes shorts. The plan excludes behind-the-scenes material
+    from the catalogue outright, and a watch order that opens with a specials entry nobody can
+    place in the story is worse than one that omits it. So season 0 is skipped **unless a seed
+    pins it explicitly** via ``seasons`` -- curation asking for it is the one signal that its
+    contents are real content. This function is deliberately the only place that decides, so a
+    season can never be counted toward a show's runtime while being denied its own entry.
+    """
     if seed_title.seasons is not None:
         return set(seed_title.seasons)
     return {number for number in available if number != 0}
+
+
+def _episode_totals(season: Mapping[str, Any], fallback_runtime: int | None) -> tuple[int, int, bool]:
+    """``(episodes, runtime, any_runtime_missing)`` for one ``tv/{id}/season/{n}`` payload."""
+    episodes = 0
+    runtime = 0
+    missing = False
+    for episode in season.get('episodes') or []:
+        episodes += 1
+        episode_runtime = episode.get('runtime')
+        if episode_runtime is None:
+            episode_runtime = fallback_runtime
+        if episode_runtime is None:
+            episode_runtime = 0
+            missing = True
+        runtime += episode_runtime
+    return episodes, runtime, missing
+
+
+def _season_air_date(payload: Mapping[str, Any], season_number: int) -> datetime.date | None:
+    """One season's ``air_date`` out of a ``tv/{id}`` payload's ``seasons[]``, or ``None``."""
+    for season in payload.get('seasons') or []:
+        if season.get('season_number') == season_number:
+            return _parse_date(season.get('air_date'))
+    return None
+
+
+def season_slug(series_slug: str, season_number: int) -> str:
+    """The slug for one season, derived from its **series' slug** rather than its own name.
+
+    Deriving from the series slug is what makes a collision with the series impossible: no
+    series slug ends in ``-season-<n>`` unless a real title is literally named that, and the
+    ingest's :func:`slug_candidates` fallback covers even that. Season 0 reads ``-specials``
+    rather than ``-season-0``, which is TMDB's own name for the bucket and the only form a
+    reader would recognise in a URL.
+    """
+    return f'{series_slug}-specials' if season_number == 0 else f'{series_slug}-season-{season_number}'
+
+
+def slug_candidates(slug: str, *, release_date: datetime.date | None, tmdb_id: int) -> list[str]:
+    """The deterministic disambiguation chain tried when ``UNIQUE (universe, slug)`` collides.
+
+    Two distinct titles legitimately slugify identically -- ``star-wars`` holds both *The Clone
+    Wars* film and the series, ``x-men`` two *Fantastic Four* films -- and the sync used to
+    **skip** the loser with a warning, which is how tv ``4194`` and movie ``166424`` silently
+    vanished from the catalogue. Losing a whole Netflix series is the defect; a slightly uglier
+    slug is not.
+
+    Release year first, because that is what a reader would disambiguate by and what every
+    other catalogue does (``fantastic-four-2015``). TMDB id last, as the terminal candidate that
+    cannot collide: two rows can only want the same id-suffixed slug if they share
+    ``(universe, tmdb_type, tmdb_id)``, and then they are the same row (or two seasons of one
+    show, whose base slugs already differ). An undated title skips straight to the id.
+    """
+    candidates = [slug]
+    if release_date is not None:
+        candidates.append(f'{slug}-{release_date.year}')
+    candidates.append(f'{slug}-{tmdb_id}')
+    return candidates
+
+
+def _season_rows(
+    seed_title: TitleSeed,
+    payload: Mapping[str, Any],
+    season_payloads: Mapping[int, Mapping[str, Any]],
+    totals: Mapping[int, tuple[int, int]],
+    *,
+    series_slug: str,
+    era_order: int,
+) -> list[dict[str, Any]]:
+    """One ``watch_titles`` row per season, or ``[]`` when the show is not split.
+
+    Facts come from the season's own ``tv/{id}/season/{n}`` payload -- which
+    :meth:`WatchlistIngest._build_row` already fetches to count episodes, so per-season entries
+    cost **no additional TMDB requests** -- falling back to the series where a season has
+    nothing of its own to offer (a season with no poster shows the show's; an empty season
+    overview reads better as the show's than as blank).
+
+    Curation is inherited from the seed, with one exception: ``milestone``. It marks a landmark
+    release for a badge, and stamping it onto seven seasons would render seven badges for one
+    landmark. The editorial fields (``instruction``, ``context``, ``spoiler``) *are* inherited,
+    because with the series row demoted to a container they would otherwise stop being shown at
+    all. ``credits_of`` is series-level and resolved separately.
+
+    Order is inherited verbatim (``story_order``/``release_order``), never offset:
+    :meth:`~app.database.repositories.watchlist.WatchlistRepository.list_titles` breaks the tie
+    on ``season_number``, so seasons sort under their series without consuming order space that
+    a curated neighbour -- or a discovered title's ``DISCOVER_ORDER_BASE + index *
+    DISCOVER_ORDER_STEP`` slot -- already owns.
+    """
+    countable = sorted(number for number, (episodes, _) in totals.items() if episodes > 0)
+    if len(countable) < SEASON_SPLIT_MIN:
+        return []
+
+    series_title = payload.get('name') or ''
+    rows: list[dict[str, Any]] = []
+    for number in countable:
+        season = season_payloads.get(number) or {}
+        episodes, runtime = totals[number]
+        name = season.get('name') or ('Specials' if number == 0 else f'Season {number}')
+        rows.append({
+            **_curation_columns(seed_title, era_order),
+            'milestone': False,  # see docstring
+            'tmdb_type': seed_title.tmdb_type,
+            'tmdb_id': seed_title.tmdb_id,
+            'season_number': number,
+            'season_name': name,
+            'slug': season_slug(series_slug, number),
+            'title': f'{series_title}: {name}',
+            'runtime': runtime,
+            'episodes': episodes,
+            'release_date': _parse_date(season.get('air_date')),
+            'poster_path': season.get('poster_path') or payload.get('poster_path'),
+            'backdrop_path': payload.get('backdrop_path'),
+            'overview': season.get('overview') or payload.get('overview'),
+            'tmdb_rating': payload.get('vote_average'),
+            'tmdb_votes': payload.get('vote_count'),
+        })
+    return rows
 
 
 def tv_row(
@@ -154,34 +300,35 @@ def tv_row(
     *not* on TMDB's ``credits`` response, so the orchestrator pops them off here and hands
     them to :func:`~app.services.watchlist.people.credit_rows` rather than re-fetching the
     show. Movies have no equivalent and :func:`movie_row` emits no such key.
+
+    ``'_seasons'`` is the third such key (``V45``): the per-season rows from
+    :func:`_season_rows`, present only when the show has :data:`SEASON_SPLIT_MIN` or more
+    countable seasons. The orchestrator pops them off, upserts this row first to learn its id,
+    and writes each season with that id as its ``parent_id`` -- which this function cannot do,
+    since it has never seen the database. This row keeps its aggregate ``runtime``/``episodes``
+    either way; when it has seasons it becomes a *container* the read side excludes from counts
+    (see ``V45``), so the aggregate is the series' own figure rather than a double count.
     """
     wanted = _wanted_seasons(seed_title, season_payloads.keys())
     fallback_runtime = next(iter(payload.get('episode_run_time') or []), None)
 
-    runtime = 0
-    episodes = 0
+    totals: dict[int, tuple[int, int]] = {}
     missing_runtime = False
     for number in wanted:
-        season = season_payloads.get(number) or {}
-        for episode in season.get('episodes') or []:
-            episodes += 1
-            episode_runtime = episode.get('runtime')
-            if episode_runtime is None:
-                episode_runtime = fallback_runtime
-            if episode_runtime is None:
-                episode_runtime = 0
-                missing_runtime = True
-            runtime += episode_runtime
+        episodes, runtime, missing = _episode_totals(season_payloads.get(number) or {}, fallback_runtime)
+        totals[number] = (episodes, runtime)
+        missing_runtime = missing_runtime or missing
 
     title = payload.get('name') or ''
+    slug = slugify(title) or str(seed_title.tmdb_id)
     row: dict[str, Any] = {
         **_curation_columns(seed_title, era_order),
         'tmdb_type': seed_title.tmdb_type,
         'tmdb_id': seed_title.tmdb_id,
-        'slug': slugify(title) or str(seed_title.tmdb_id),
+        'slug': slug,
         'title': title,
-        'runtime': runtime,
-        'episodes': episodes,
+        'runtime': sum(runtime for _, runtime in totals.values()),
+        'episodes': sum(episodes for episodes, _ in totals.values()),
         'release_date': _parse_date(payload.get('first_air_date')),
         'poster_path': payload.get('poster_path'),
         'backdrop_path': payload.get('backdrop_path'),
@@ -189,6 +336,10 @@ def tv_row(
         'tmdb_rating': payload.get('vote_average'),
         'tmdb_votes': payload.get('vote_count'),
     }
+    seasons = _season_rows(
+        seed_title, payload, season_payloads, totals, series_slug=slug, era_order=era_order)
+    if seasons:
+        row['_seasons'] = seasons
     created_by = payload.get('created_by')
     if created_by:
         row['_created_by'] = created_by
@@ -317,6 +468,7 @@ class IngestReport:
     universe: str
     titles_seen: int = 0
     titles_written: int = 0
+    seasons_written: int = 0
     discovered: int = 0
     titles_pruned: int = 0
     providers_written: int = 0
@@ -331,7 +483,7 @@ class IngestReport:
         verb = 'Would sync' if self.dry_run else 'Synced'
         header = (
             f'{self.universe}: {verb} {self.titles_written}/{self.titles_seen} title(s) '
-            f'({self.discovered} discovered), '
+            f'({self.discovered} discovered, {self.seasons_written} season entr(ies)), '
             f'{self.providers_written} provider row(s), {self.credits_written} credit(s), '
             f'{self.trailers_written} trailer(s), '
             f'pruned {self.titles_pruned} title(s) and {self.people_pruned} orphaned person(s).'
@@ -380,13 +532,19 @@ class WatchlistIngest:
         films would be useless, and an unreleased title is precisely the one whose trailer people
         come looking for. People left with no credit at all are swept once at the end.
 
-        Failure policy: a TMDB failure fetching one title's metadata, or a Postgres unique-
-        constraint violation upserting it (two seeded titles whose TMDB titles slugify
-        identically, or a TMDB rename colliding with another title's stored slug -- see
-        ``watch_titles``' ``UNIQUE (universe, slug)``), is recorded as a warning and that
-        title is skipped rather than aborting the run. Its *existing* row (if any, from a
-        prior successful sync) is preserved by keeping its id in the prune keep-list -- a
-        transient failure must never delete data a previous run already wrote. Only a
+        A TV show with :data:`SEASON_SPLIT_MIN` or more countable seasons additionally writes
+        one row per season (``V45``), each carrying the series' id as its ``parent_id``, the
+        series' order value, and its own importance and provider rows. The series row stays as
+        the container the seasons hang off; it is the read side, not the ingest, that stops
+        counting it as an entry. See :func:`_season_rows`.
+
+        Failure policy: a TMDB failure fetching one title's metadata is recorded as a warning
+        and that title is skipped rather than aborting the run. A slug collision is no longer a
+        skip -- :meth:`_upsert_title` disambiguates and warns -- and only the exhausted-candidate
+        case still skips. Whenever a title *is* skipped, its existing rows (the series and every
+        season of it, from a prior successful sync) are preserved by keeping their ids in the
+        prune keep-list -- a transient failure must never delete data a previous run already
+        wrote, least of all a season somebody has marked watched. Only a
         seed/validation error (raised before :meth:`sync` is even called) or an exception
         outside :class:`~app.clients.base.HTTPClientError` / ``asyncpg.UniqueViolationError``
         (a genuinely broken client/database) aborts.
@@ -403,7 +561,21 @@ class WatchlistIngest:
         report = IngestReport(universe=seed.slug, dry_run=dry_run)
 
         existing_rows = await self._repo.list_titles(seed.slug)
-        existing_ids = {(row['tmdb_type'], row['tmdb_id']): row['id'] for row in existing_rows}
+        # Keyed by full row identity (``V45`` put every season of a show on the show's tmdb_id,
+        # so a two-part key would collapse them and mis-report the dry-run prune).
+        existing_ids = {
+            (row['tmdb_type'], row['tmdb_id'], row.get('season_number')): row['id']
+            for row in existing_rows
+        }
+
+        def existing_for(tmdb_key: tuple[str, int]) -> list[int]:
+            """Every stored row id for one TMDB identity -- the series *and* its seasons.
+
+            What the keep-list needs whenever a title could not be written this run: keeping
+            only the series row would let ``prune_titles`` delete its seasons, cascading to
+            every user's ``watch_progress`` for them, over a transient TMDB error.
+            """
+            return [row_id for (kind, tmdb_id, _), row_id in existing_ids.items() if (kind, tmdb_id) == tmdb_key]
 
         if not dry_run:
             await self._repo.upsert_universe(_universe_row(seed))
@@ -430,12 +602,13 @@ class WatchlistIngest:
                 row = await self._build_row(seed_title, universe=seed.slug, era_order=era_order.get(seed_title.era, 0))
             except HTTPClientError as exc:
                 report.warnings.append(f'{seed.slug}: TMDB fetch failed for {key[0]}:{key[1]} -- {exc}. Skipped.')
-                if key in existing_ids:
-                    keep_ids.append(existing_ids[key])
+                keep_ids.extend(existing_for(key))
                 continue
 
             warnings = row.pop('_warnings', None)
             created_by = row.pop('_created_by', ())
+            season_rows: list[dict[str, Any]] = row.pop('_seasons', [])
+            report.seasons_written += len(season_rows)
             if warnings:
                 report.warnings.extend(warnings)
             report.titles_written += 1
@@ -452,20 +625,19 @@ class WatchlistIngest:
             report.providers_written += written_provider_rows
 
             if dry_run:
-                if key in existing_ids:
-                    keep_ids.append(existing_ids[key])
+                keep_ids.extend(existing_for(key))
                 continue
 
             try:
-                title_id = await self._repo.upsert_title(seed.slug, row)
+                title_id = await self._upsert_title(seed.slug, row, report)
             except asyncpg.UniqueViolationError as exc:
                 report.titles_written -= 1
+                report.seasons_written -= len(season_rows)
                 report.providers_written -= written_provider_rows
                 report.warnings.append(
                     f'{seed.slug}: slug conflict upserting {key[0]}:{key[1]} -- {exc}. Skipped.'
                 )
-                if key in existing_ids:
-                    keep_ids.append(existing_ids[key])
+                keep_ids.extend(existing_for(key))
                 continue
 
             tmdb_id_to_title_id[seed_title.tmdb_id] = title_id
@@ -481,17 +653,27 @@ class WatchlistIngest:
             except HTTPClientError as exc:
                 report.warnings.append(f'{seed.slug}: videos fetch failed for {key[0]}:{key[1]} -- {exc}.')
 
-            kept_path_ids = [
-                path_ids[path_slug] for path_slug in seed_title.importance if path_slug in path_ids
-            ]
-            for path_slug, importance in seed_title.importance.items():
-                path_id = path_ids.get(path_slug)
-                if path_id is not None:
-                    await self._repo.set_importance(title_id, path_id, importance)
-            await self._repo.prune_importance(title_id, kept_path_ids)
+            await self._write_side_rows(
+                title_id, seed_title, path_ids=path_ids, region_rows=region_rows)
 
-            for region, rows in region_rows.items():
-                await self._repo.replace_providers(title_id, region, rows)
+            for season in season_rows:
+                season['parent_id'] = title_id
+                season_key = (*key, season['season_number'])
+                try:
+                    season_id = await self._upsert_title(seed.slug, season, report)
+                except asyncpg.UniqueViolationError as exc:
+                    report.seasons_written -= 1
+                    report.warnings.append(
+                        f'{seed.slug}: slug conflict upserting season {season["season_number"]} of '
+                        f'{key[0]}:{key[1]} -- {exc}. Skipped.'
+                    )
+                    if season_key in existing_ids:
+                        keep_ids.append(existing_ids[season_key])
+                    continue
+                keep_ids.append(season_id)
+                report.providers_written += written_provider_rows
+                await self._write_side_rows(
+                    season_id, seed_title, path_ids=path_ids, region_rows=region_rows)
 
             if seed_title.credits_of is not None:
                 pending_credits_of.append((title_id, seed_title.credits_of))
@@ -513,9 +695,10 @@ class WatchlistIngest:
             would_prune = [key for key, row_id in existing_ids.items() if row_id not in keep_id_set]
             report.titles_pruned = len(would_prune)
             report.warnings.extend(
-                f'{seed.slug}: {tmdb_type}:{tmdb_id} exists in the database but not in this seed -- '
-                f'would be pruned (cascades to watch_progress).'
-                for tmdb_type, tmdb_id in would_prune
+                f'{seed.slug}: {tmdb_type}:{tmdb_id}'
+                f'{"" if season is None else f" season {season}"} exists in the database but not '
+                f'in this seed -- would be pruned (cascades to watch_progress).'
+                for tmdb_type, tmdb_id, season in would_prune
             )
 
         if not dry_run:
@@ -531,6 +714,76 @@ class WatchlistIngest:
             report.people_pruned = await self._repo.prune_people()
 
         return report
+
+    async def _upsert_title(self, universe: str, row: dict[str, Any], report: IngestReport) -> int:
+        """Upserts one title row, disambiguating its slug rather than dropping it on a collision.
+
+        ``watch_titles`` carries ``UNIQUE (universe, slug)`` beside its identity index, and two
+        distinct titles do slugify identically. Until ``V45`` this raised straight out of
+        :meth:`sync`, which warned and skipped -- and that is how ``star-wars`` lost tv ``4194``
+        and ``x-men`` lost movie ``166424``, entire catalogue entries gone behind one log line.
+        Now each of :func:`slug_candidates`' forms is tried in turn and what it settled on is
+        recorded as a report warning, so the operator sees the rename instead of a deletion.
+
+        A ``UniqueViolationError`` here can only be the slug index -- the identity index is what
+        the upsert's ON CONFLICT targets -- so retrying with a different slug is always the right
+        response. The terminal candidate is not retried: if even the id-suffixed slug collides,
+        the error propagates and :meth:`sync` reports it exactly as before.
+        """
+        original = row['slug']
+        *retryable, final = slug_candidates(
+            original, release_date=row.get('release_date'), tmdb_id=row['tmdb_id'])
+
+        def renamed(candidate: str) -> None:
+            report.warnings.append(
+                f'{universe}: slug {original!r} was already taken -- {row["tmdb_type"]}:'
+                f'{row["tmdb_id"]} stored as {candidate!r} instead of being skipped.'
+            )
+
+        for candidate in retryable:
+            try:
+                title_id = await self._repo.upsert_title(universe, {**row, 'slug': candidate})
+            except asyncpg.UniqueViolationError:
+                log.warning(
+                    '%s: slug %r is already taken by another title; disambiguating %s:%s.',
+                    universe, candidate, row['tmdb_type'], row['tmdb_id'],
+                )
+                continue
+            if candidate != original:
+                renamed(candidate)
+            return title_id
+
+        # The terminal candidate is never the original (the chain always holds at least the
+        # id-suffixed form), so reaching here and succeeding is always a rename worth reporting.
+        title_id = await self._repo.upsert_title(universe, {**row, 'slug': final})
+        renamed(final)
+        return title_id
+
+    async def _write_side_rows(
+        self,
+        title_id: int,
+        seed_title: TitleSeed,
+        *,
+        path_ids: Mapping[str, int],
+        region_rows: Mapping[str, list[dict[str, Any]]],
+    ) -> None:
+        """Writes one row's per-path importance and per-region providers, pruning stale importance.
+
+        Shared by a title and by each of its season entries (``V45``): a season inherits its
+        series' importance, or a path-filtered watch order would drop every season it has, and
+        it inherits the series' providers because TMDB's availability *is* series-level -- an
+        entry that renders no "where to watch" chip is a visible regression against the row it
+        replaced.
+        """
+        kept_path_ids = [path_ids[path_slug] for path_slug in seed_title.importance if path_slug in path_ids]
+        for path_slug, importance in seed_title.importance.items():
+            path_id = path_ids.get(path_slug)
+            if path_id is not None:
+                await self._repo.set_importance(title_id, path_id, importance)
+        await self._repo.prune_importance(title_id, kept_path_ids)
+
+        for region, rows in region_rows.items():
+            await self._repo.replace_providers(title_id, region, rows)
 
     async def _discover(self, seed: UniverseSeed) -> tuple[list[TitleSeed], bool]:
         """Expands every ``[[discover]]`` block into synthetic titles. See :func:`discovered_titles`.
@@ -624,9 +877,16 @@ class WatchlistIngest:
         each night. It reuses the same client and the same :func:`_parse_date` as the ingest --
         there is deliberately no second path from a TMDB payload to a ``watch_titles`` row.
 
-        Each row must carry ``id``, ``tmdb_type``, ``tmdb_id`` and ``release_date`` (what
+        Each row must carry ``id``, ``tmdb_type``, ``tmdb_id``, ``release_date`` and
+        ``season_number`` (what
         :meth:`~app.database.repositories.watchlist.WatchlistRepository.titles_releasing_between`
         selects). Returns how many dates were written.
+
+        A season row (``season_number`` set) is compared against **that season's** ``air_date``
+        inside the ``tv/{id}`` payload's ``seasons[]``, not the show's ``first_air_date`` -- the
+        show's date is season 1's, so re-checking a season against it would drag every season of
+        every show back onto the premiere date and DM its subscribers on the wrong day. Same one
+        request either way.
 
         Two deliberate refusals to act:
 
@@ -643,7 +903,11 @@ class WatchlistIngest:
                     fetched = _parse_date(payload.get('release_date'))
                 else:
                     payload = await self._client.tv(row['tmdb_id'])
-                    fetched = _parse_date(payload.get('first_air_date'))
+                    season_number = row.get('season_number')
+                    if season_number is None:
+                        fetched = _parse_date(payload.get('first_air_date'))
+                    else:
+                        fetched = _season_air_date(payload, season_number)
             except HTTPClientError as exc:
                 log.warning('Release-date re-check failed for %s:%s -- %s.', row['tmdb_type'], row['tmdb_id'], exc)
                 continue

@@ -179,6 +179,12 @@ async def get_title(
     the same thought -- the detail page's "position N of M" strip needs the index within that
     ordering and the name of the path whose ``importance`` the title carries, neither of which
     is derivable from a title row alone.
+
+    ``parent`` and ``seasons`` are the two halves of ``V45``'s season context: a season names
+    the series it belongs to, a series lists the seasons under it, and exactly one of the two is
+    ever non-empty. Both are picked out of the page payload already in hand rather than queried,
+    so the season context costs no round trip -- and both are always present (``null`` / ``[]``)
+    so a renderer never has to guess which kind of row it is holding.
     """
     sort = _check_sort(sort)
     title = await bot.db.watchlist.get_title(universe, slug)
@@ -196,7 +202,15 @@ async def get_title(
     return {
         'title': current,
         'credits_of': credits_of,
-        'credits': credit_payloads(await bot.db.watchlist.list_credits([title['id']])),
+        'parent': next((row for row in titles if row['id'] == current['parent_id']), None),
+        'seasons': [row for row in titles if row['parent_id'] == current['id']],
+        # A season carries no credit rows of its own -- TMDB's ``credits`` for a show is
+        # series-level, so the ingest writes it once against the series rather than copying the
+        # same cast onto every season (which would also put seven duplicate entries on each
+        # actor's person page). A season therefore reads its series' cast, which is the same
+        # answer TMDB would give for it.
+        'credits': credit_payloads(
+            await bot.db.watchlist.list_credits([title['parent_id'] or title['id']])),
         'previous': titles[index - 1] if index > 0 else None,
         'next': titles[index + 1] if index + 1 < len(titles) else None,
         'position': index + 1,
