@@ -130,8 +130,6 @@
         </ol>
         {% endfor %}
 
-        {% endif %}
-
         {# §6.2's 6b, reused from the comic detail page: headline, source name, date and a
            rel="noopener nofollow ugc" link out — §9 permits nothing more. Absent rather
            than empty when Percy has nothing tagged, or the news call itself failed. #}
@@ -141,6 +139,8 @@
             {% call news_strip::list(related_news) %}
             <a class="nx-more" href="{{ related_news_href }}">All news about {{ name }} →</a>
         </section>
+        {% endif %}
+
         {% endif %}
 
         {% include "watchlist_attribution.html" %}
