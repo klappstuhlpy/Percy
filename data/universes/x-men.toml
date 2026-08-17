@@ -47,6 +47,11 @@ key = "new-mutants"
 name = "The New Mutants"
 order = 300
 
+[[eras]]
+key = "extras"
+name = "Shorts & Specials"
+order = 350
+
 # --- Original trilogy ---
 
 [[titles]]
@@ -214,6 +219,7 @@ kind = "movie"
 # Apocalypse, Dark Phoenix). Kept as a future-proof: a new mainline entry added to this
 # TMDB collection is swept in automatically without a seed edit.
 collection = 748
+era = "extras"
 importance = "optional"
 
 # No TV discovery block: Legion (2017) and The Gifted (2017) are this era's only shows,
