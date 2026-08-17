@@ -416,9 +416,12 @@ fn empty_title_page(account: Option<Viewer>) -> WatchTitleTemplate {
 /// that is down is a 200 empty state. A page that answered 200 to any invented name
 /// would get indexed as a real person.
 pub async fn person_page(State(app): State<AppState>, session: Option<Session>, Path(slug): Path<String>) -> Response {
-    let fetched = match &app.percy {
-        Some(percy) => percy.get_watch_person(&slug).await,
-        None => Err(PercyError::Api("percy is not configured".into())),
+    let (fetched, related_news) = match &app.percy {
+        Some(percy) => tokio::join!(
+            percy.get_watch_person(&slug),
+            crate::news::related(&app, "title", "person", &slug)
+        ),
+        None => (Err(PercyError::Api("percy is not configured".into())), Vec::new()),
     };
 
     let page = match fetched {
@@ -448,11 +451,7 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
         .iter()
         .partition(|credit| is_upcoming(credit.title.release_date.as_deref(), &today));
 
-    // Related news needs the slug before `page.person` is moved into the template fields
-    // below, and a person with no id gets no TMDB link rather than one pointing at `/0`.
-    let slug = page.person.slug.clone();
-    let related_news = crate::news::related(&app, "title", "person", &slug).await;
-
+    // A person with no id gets no TMDB link rather than one pointing at `/0`.
     PersonTemplate {
         account: viewer(&session),
         name: page.person.name,
@@ -467,9 +466,9 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
         upcoming: upcoming.into_iter().map(person_row).collect(),
         role_groups: group_by_role(&filmography),
         related_news,
-        related_news_href: crate::news::subject_news_href("title", "person", &slug),
+        related_news_href: crate::news::subject_news_href("title", "person", &page.person.slug),
         tmdb_person_id: (page.person.tmdb_person_id != 0).then_some(page.person.tmdb_person_id),
-        slug,
+        slug: page.person.slug,
     }
     .into_response()
 }
