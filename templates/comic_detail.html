@@ -100,6 +100,16 @@
             </div>
             {% when None %}
             {% endmatch %}
+            {% match first_seen %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>First tracked</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match updated_at %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>Updated</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
         </dl>
 
         {% if previous.is_some() || next.is_some() || !more_from_series.is_empty() %}
@@ -189,7 +199,7 @@
         {# §6.2's 6b: absent rather than empty when nothing has been written about the
            series. Headline + source + date, linking out — §9 permits nothing more. #}
         {% if !related_news.is_empty() %}
-        <section class="cx-related-news nx">
+        <section class="nx-related nx">
             <h2 class="cx-section__title">Related news</h2>
             {% call news_strip::list(related_news) %}
             <a class="nx-more" href="{{ related_news_href }}">All news for this series →</a>

@@ -1237,6 +1237,11 @@ pub(crate) struct ComicSeriesTemplate {
     pub(crate) accent: String,
     pub(crate) publisher: Option<String>,
     pub(crate) issue_count: i64,
+    /// The most recent issue's release date, derived from `issues` (which already
+    /// carries every issue's own date) rather than a second payload field — this page
+    /// gets its issues from `GET /comics/series/{slug}`, whose response has no `latest`
+    /// of its own (that field lives only on the `/comics/series` index summary row).
+    pub(crate) latest: Option<String>,
     /// Already in reading order as Percy returned them — never re-sorted.
     pub(crate) issues: Vec<ComicCard>,
     /// The publisher copyright line for the attribution partial; empty when
@@ -1279,6 +1284,14 @@ pub(crate) struct ComicDetailTemplate {
     /// Geeks / VIZ) -- distinct from the general attribution notice in the footer.
     pub(crate) source_url: Option<String>,
     pub(crate) description: Option<String>,
+    /// When Percy first saw this release (a solicitation is tracked long before it ships).
+    /// Date-only — `ComicRelease.first_seen` is a full timestamp, trimmed the same way
+    /// `news.rs::published_date` trims a story's `published_at`.
+    pub(crate) first_seen: Option<String>,
+    /// When Percy's record for this release last changed, trimmed the same way. Rendered
+    /// independently of `first_seen` — the two rows agree on a release nothing has
+    /// touched since it was first tracked, and that agreement is itself the fact.
+    pub(crate) updated_at: Option<String>,
     /// §6.2's "6b. Related news" — the most recent stories tagged with this release's
     /// series. Empty means the section is *absent*, not an empty box.
     pub(crate) related_news: Vec<NewsRow>,

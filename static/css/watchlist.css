@@ -600,11 +600,9 @@
 /* ── Related news (§6.2's 6b, reusing the row markup comic_detail.html shares
    through templates/news_strip.html) ──────────────────────────────────── */
 
-.wl-person__news {
-    margin-top: 2.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--box-border);
-}
+/* The section's own separator is `.nx-related.nx-related--trailing` in `news.css` —
+   the same rule `comic_detail.html` uses, mirrored to the other border side, so it is
+   not duplicated here. Only the heading style below is specific to this page. */
 
 .wl-person__news-title {
     margin: 0 0 0.75rem;

@@ -230,6 +230,7 @@ pub async fn comic_series_detail(
                 accent: brand_accent("").to_string(),
                 publisher: None,
                 issue_count: 0,
+                latest: None,
                 issues: Vec::new(),
                 comic_copyright: String::new(),
             };
@@ -245,6 +246,7 @@ pub async fn comic_series_detail(
         accent: brand_accent(&page.brand).to_string(),
         publisher: page.publisher,
         issue_count: page.issue_count,
+        latest: latest_release_date(&page.issues),
         issues: page.issues.iter().map(comic_card).collect(),
         comic_copyright: publisher_copyright(&page.brand).to_string(),
         brand: page.brand,
@@ -300,6 +302,8 @@ pub async fn comic_detail(
                 characters: Vec::new(),
                 source_url: None,
                 description: None,
+                first_seen: None,
+                updated_at: None,
                 related_news: Vec::new(),
                 related_news_href: String::new(),
                 comic_copyright: String::new(),
@@ -344,6 +348,8 @@ pub async fn comic_detail(
             .map(|character| character_link(character, &release.brand))
             .collect(),
         source_url: release.url.clone(),
+        first_seen: release.first_seen.as_deref().map(date_only),
+        updated_at: release.updated_at.as_deref().map(date_only),
         related_news,
         related_news_href: crate::news::subject_news_href("comic", "series", &series_subject),
         comic_copyright: publisher_copyright(&release.brand).to_string(),
@@ -495,6 +501,27 @@ fn adjacent_pages(page: i64, total_pages: i64) -> (Option<i64>, Option<i64>) {
     let prev = (page > 1).then_some(page - 1);
     let next = (total_pages > 0 && page < total_pages).then_some(page + 1);
     (prev, next)
+}
+
+/// The date half of a full ISO timestamp — `2026-08-05T09:30:00` becomes `2026-08-05`.
+/// `ComicRelease.first_seen`/`updated_at` are `TIMESTAMP` columns, unlike `release_date`
+/// (a plain `date`), so they carry a time component a reader has no use for. Same trim
+/// `news.rs::published_date` already applies to a story's `published_at`.
+fn date_only(value: &str) -> String {
+    value.split('T').next().unwrap_or(value).to_string()
+}
+
+/// The most recent issue's release date across a series' issues, for the header figure —
+/// `GET /comics/series/{slug}` carries no `latest` field of its own (only the `/comics/series`
+/// index's summary rows do), so this page derives it from the dates already on the page
+/// rather than needing one. Absent issues without a date don't count; an all-undated series
+/// (nothing solicited yet) has no "latest" to show.
+fn latest_release_date(issues: &[ComicRelease]) -> Option<String> {
+    issues
+        .iter()
+        .filter_map(|issue| issue.release_date.as_deref())
+        .max()
+        .map(str::to_string)
 }
 
 /// The string Percy files a comic's read mark under, and the only way one is built.
@@ -975,6 +1002,8 @@ mod tests {
             characters: Vec::new(),
             source_url: None,
             description: None,
+            first_seen: None,
+            updated_at: None,
             related_news: Vec::new(),
             related_news_href: String::new(),
             comic_copyright: publisher_copyright(&source.brand).to_string(),
@@ -1097,6 +1126,77 @@ mod tests {
     fn the_detail_page_omits_the_source_row_when_percy_carries_no_url() {
         let html = render(detail_page(&ProgressMap::default(), false));
         assert!(!html.contains("<dt>Source</dt>"));
+    }
+
+    #[test]
+    fn date_only_trims_a_timestamp_and_passes_a_bare_date_through() {
+        assert_eq!(date_only("2026-08-05T09:30:00"), "2026-08-05");
+        assert_eq!(date_only("2026-08-05"), "2026-08-05");
+    }
+
+    #[test]
+    fn latest_release_date_is_the_maximum_dated_issue_and_none_when_all_undated() {
+        let mut earlier = release("MARVEL", "one");
+        earlier.release_date = Some("2026-08-01".into());
+        let mut later = release("MARVEL", "two");
+        later.release_date = Some("2026-09-01".into());
+        let undated = release("MARVEL", "three");
+
+        assert_eq!(
+            latest_release_date(&[earlier, later, undated.clone()]),
+            Some("2026-09-01".to_string())
+        );
+        assert_eq!(latest_release_date(&[undated]), None);
+        assert_eq!(latest_release_date(&[]), None);
+    }
+
+    #[test]
+    fn the_detail_page_renders_first_seen_and_updated_when_percy_carries_them() {
+        let mut page = detail_page(&ProgressMap::default(), false);
+        page.first_seen = Some("2026-06-01".into());
+        page.updated_at = Some("2026-08-10".into());
+
+        let html = render(page);
+        assert!(html.contains("<dt>First tracked</dt><dd>2026-06-01</dd>"));
+        assert!(html.contains("<dt>Updated</dt><dd>2026-08-10</dd>"));
+    }
+
+    #[test]
+    fn the_detail_page_omits_first_seen_and_updated_labels_when_percy_carries_neither() {
+        // detail_page() leaves both at None: the omit-when-absent case, not a blank value.
+        let html = render(detail_page(&ProgressMap::default(), false));
+        assert!(!html.contains("<dt>First tracked</dt>"));
+        assert!(!html.contains("<dt>Updated</dt>"));
+    }
+
+    fn series_page(latest: Option<String>) -> ComicSeriesTemplate {
+        ComicSeriesTemplate {
+            account: None,
+            series_slug: "amazing-spider-man".into(),
+            series_name: "Amazing Spider-Man".into(),
+            brand: "MARVEL".into(),
+            brand_label: brand_label("MARVEL").to_string(),
+            accent: brand_accent("MARVEL").to_string(),
+            publisher: None,
+            issue_count: 2,
+            latest,
+            issues: Vec::new(),
+            comic_copyright: publisher_copyright("MARVEL").to_string(),
+        }
+    }
+
+    #[test]
+    fn the_series_page_renders_the_latest_figure_when_percy_carries_it() {
+        let html = render(series_page(Some("2026-08-01".into())));
+        assert!(html.contains(r#"<span class="cx-figure__value">2026-08-01</span>"#));
+        assert!(html.contains(r#"<span class="cx-figure__label">Latest</span>"#));
+    }
+
+    #[test]
+    fn the_series_page_omits_the_latest_figure_when_no_issue_has_a_date() {
+        // Not just an empty value -- the whole figure (value and label) is gone.
+        let html = render(series_page(None));
+        assert!(!html.contains(r#"<span class="cx-figure__label">Latest</span>"#));
     }
 
     #[test]

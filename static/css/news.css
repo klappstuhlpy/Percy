@@ -354,12 +354,27 @@
     color: var(--branding);
 }
 
-/* ── Related news (§6.2's 6b, on the comic detail page) ──────────── */
+/* ── Related news (§6.2's 6b — the comic detail and person pages) ──
 
-.cx-related-news {
+   One separator rule, not two: `comic_detail.html` and `person.html` both wrap their
+   related-news strip in this class, but the strip sits in a different place on each page
+   (mid-page on the former, trailing on the latter) so the rule and its `--trailing`
+   modifier are the same border pushed to whichever side needs it, kept together here
+   rather than duplicated (mirrored) once per page in `comics.css`/`watchlist.css`. */
+
+.nx-related {
     padding-bottom: 1.75rem;
     margin-bottom: 1.75rem;
     border-bottom: 1px solid var(--box-border);
+}
+
+.nx-related--trailing {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-top: 1.5rem;
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--box-border);
 }
 
 .nx-list--compact .nx-row {
