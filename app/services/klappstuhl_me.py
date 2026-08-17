@@ -28,18 +28,18 @@ from __future__ import annotations
 import asyncio
 import io
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Mapping, Any
+from typing import TYPE_CHECKING, Any
 
 import discord
 from klappstuhl import Client, File
 from klappstuhl.client import _bare_id
 from klappstuhl.errors import Forbidden, Unauthorized
-from klappstuhl.file import resolve_file, FileInput
+from klappstuhl.file import FileInput, resolve_file
 from klappstuhl.http import DEFAULT_BASE_URL
 from klappstuhl.models import DeleteResult, UploadResult
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     import aiohttp
 
