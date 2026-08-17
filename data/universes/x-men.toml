@@ -181,6 +181,11 @@ context = "Five young mutants held in a secretive facility must fight to escape 
 importance = { release = "recommended", chronological = "recommended" }
 
 # --- Fantastic Four (Fox, unconnected continuity) ---
+# Two of these three slugify to "fantastic-four" (9738 in 2005, 166424 in 2015). Before V45
+# the second one was silently dropped on the UNIQUE (universe, slug) collision; it now stores
+# as "fantastic-four-2015". Confirmed present in the database on 2026-08-17, so this needs no
+# curated workaround -- but note that whichever of the two is processed first keeps the bare
+# slug, and `release_progress` rows are keyed "{universe}/{slug}". Do not reorder these two.
 
 [[titles]]
 tmdb_type = "movie"

@@ -126,22 +126,24 @@ context = "Harry returns to a besieged Hogwarts for the final battle against Vol
 milestone = true
 importance = { chronological = "essential" }
 
-# --- Discovery: sweeps in anything not hand-curated above ---
-# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
-# Both blocks currently contribute 0 titles -- every film in each collection is already
-# hand-curated above -- and exist purely to future-proof a new mainline film in either
-# series without a seed edit.
-
-[[discover]]
-kind = "movie"
-# "Harry Potter Collection" -- verified via GET /collection/1241 (8 parts, all curated)
-collection = 1241
-era = "hogwarts"
-importance = "optional"
-
-[[discover]]
-kind = "movie"
-# "Fantastic Beasts Collection" -- verified via GET /collection/435259 (3 parts, all curated)
-collection = 435259
-era = "fantastic-beasts"
-importance = "optional"
+# --- No discovery: this universe is fully curated ---
+#
+# This seed carried two `[[discover]]` collection blocks (1241 "Harry Potter Collection",
+# 435259 "Fantastic Beasts Collection") until 2026-08-17. They were removed because they
+# contributed **zero titles and could never contribute one**, which reads on the page as
+# coverage that does not exist.
+#
+# Re-verified live on 2026-08-17: /collection/1241 holds exactly the 8 parts curated above
+# (671, 672, 673, 674, 675, 767, 12444, 12445) and /collection/435259 exactly the 3
+# (259316, 338952, 338953). Curation always beats discovery, so every result was dropped as
+# already-curated. Nothing was broken -- the blocks were inert by construction.
+#
+# Their stated purpose was to future-proof a new mainline film without a seed edit, and that
+# purpose does not survive contact with what is actually coming: a TMDB collection holds only
+# *films*, while the franchise's announced next release is HBO's Harry Potter television
+# series (tv 224377, 2026-12-25), which a movie collection structurally cannot see. A block
+# that covers the case that is not coming and misses the one that is buys nothing. When that
+# series -- or a genuinely new film -- ships, it gets a hand-written `[[titles]]` block with
+# a real era, story order and context, which is what a single strictly-chronological path
+# needs anyway; a discovered title would land at the bottom of the order with no context and
+# have to be curated by hand regardless.

@@ -47,6 +47,11 @@ key = "television"
 name = "Television"
 order = 450
 
+[[eras]]
+key = "new-era"
+name = "New Era (2026- )"
+order = 500
+
 # --- Original Trilogy ---
 
 [[titles]]
@@ -156,6 +161,29 @@ context = "The Resistance makes a final stand against a returned Emperor Palpati
 milestone = true
 importance = { release = "essential", chronological = "essential" }
 
+# --- New Era ---
+# Both were previously left to the discovery block below, which files everything it finds
+# under "Shorts & Specials" -- a mainline theatrical film is not a short, so they are
+# curated here instead. Curation always wins over discovery, so no exclude entry is needed.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1228710
+era = "new-era"
+story = 850
+release = 1200
+context = "Imperial warlords remain scattered after the Empire's fall, and the New Republic enlists a Mandalorian bounty hunter and his young charge."
+importance = { release = "recommended", chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1417668
+era = "new-era"
+story = 1200
+release = 1300
+context = "An original story set roughly five years after The Rise of Skywalker."
+importance = { release = "recommended", chronological = "recommended" }
+
 # --- Discovery: sweeps in everything not hand-curated above ---
 # Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
 
@@ -165,10 +193,25 @@ kind = "movie"
 company = 1
 era = "extras"
 importance = "optional"
-# Lucasfilm's company id also carries Indiana Jones, American Graffiti and various
-# unrelated documentaries from its decades-long back catalogue; this excludes the
-# non-Star Wars survivors of the date filter (checked each via GET /movie/{id}):
+#
+# What this block actually does, stated plainly so a future editor is not misled: a company
+# id sweeps a studio's *entire* output. Lucasfilm's carries Indiana Jones, Willow, Red Tails,
+# Strange Magic and a shelf of film-history documentaries -- and, for nearly every Star Wars
+# release, its making-of, its promo featurette and its Disney+ "special look". The `exclude`
+# list below is therefore a **maintained deny-list, and it is not and cannot be complete**:
+# it names what was checked on the date above, and the next thing Lucasfilm ships arrives
+# unfiltered. There is no TMDB handle that separates a franchise's releases from its
+# behind-the-scenes and marketing output -- that was checked; do not go looking for one.
+#
+# The rule the list applies, so the next addition is decidable rather than a matter of taste:
+# drop (a) anything that is not Star Wars, (b) making-of and behind-the-scenes documentaries,
+# (c) marketing promos and special looks, (d) non-narrative filler and micro-shorts, and
+# (e) episodes of a series repackaged as a film. *Keep* every real release -- the LEGO and
+# Robot Chicken specials included: those are things people watched, not things about things
+# people watched.
 min_date = "2008-01-01"
+#
+# (a) Not Star Wars at all:
 #  1692755 Ho Chi Minh: The Price of Freedom (2008) -- unrelated documentary
 #  1507542 Irving Thalberg: Hollywood's Boy Wonder (2008) -- unrelated documentary
 #  1507007 Tin Pan Alley: Soundtrack of America (2008) -- unrelated documentary
@@ -185,9 +228,32 @@ min_date = "2008-01-01"
 #  1168918 The Making of Indiana Jones and the Dial of Destiny (2023) -- Indiana Jones
 #  1199447 Timeless Heroes: Indiana Jones and Harrison Ford (2023) -- Indiana Jones
 #  1076708 Music by John Williams (2024) -- career-spanning documentary, not Star Wars-specific
+#  933962  More Than Robots (2022-03-14) -- ILM/FIRST Robotics documentary, no Star Wars content
+# (b) Making-of / behind-the-scenes:
+#  388885  Secrets of the Force Awakens: A Cinematic Journey (2016-04-16)
+#  507052  The Force of Sound (2018-02-20) -- The Last Jedi's sound design
+#  513696  Balance of the Force (2018-03-12) -- The Last Jedi bonus featurette
+#  510714  The Director and the Jedi (2018-03-12) -- Rian Johnson on set
+#  680382  The Skywalker Legacy (2020-03-18) -- The Rise of Skywalker's making-of
+#  877181  Under the Helmet: The Legacy of Boba Fett (2021-11-11)
+#  1015606 Obi-Wan Kenobi: A Jedi's Return (2022-09-07)
+# (c) Marketing:
+#  1022100 Andor: A Disney+ Day Special Look (2022-09-08)
+#  1728377 Disney+ Insider: The Mandalorian and Grogu (2026-05-22) -- Disneyland Resort promo
+# (d) Non-narrative filler and micro-shorts -- nothing a watch order can place:
+#  825647  Star Wars Biomes (2021-05-03) -- 18 minutes of ambient location footage, no story
+#  1044343 Zen - Grogu and Dust Bunnies (2022-11-11) -- 3-minute vignette
+#  1183093 Star Wars: Squadrons - Hunted (2020-09-14) -- 7-minute video-game tie-in promo
+# (e) Series episodes repackaged as a film:
+#  1728666 Star Wars Rebels: Heroes of Mandalore (2017-09-02) -- Rebels season 4, already in the TV sweep
 exclude = [
     1692755, 1507542, 1507007, 1505495, 1504010, 1403210, 139282, 217,
     1505987, 72431, 302429, 1076366, 335977, 1168918, 1199447, 1076708,
+    933962,
+    388885, 507052, 513696, 510714, 680382, 877181, 1015606,
+    1022100, 1728377,
+    825647, 1044343, 1183093,
+    1728666,
 ]
 
 [[discover]]
@@ -199,6 +265,29 @@ company = 1
 era = "television"
 importance = "optional"
 min_date = "2008-01-01"
-# Non-Star Wars survivor of the date filter, verified via GET /tv/111837:
-#  111837 Willow (2022) -- the Willow franchise's Disney+ series, not Star Wars
-exclude = [111837]
+# The same deny-list caveat and the same (a)-(e) rule as the movie block above apply here:
+# a company id is a studio sweep, so this list is maintained rather than complete.
+# Verified each via GET /tv/{id} on 2026-08-17.
+# (a) Not Star Wars at all:
+#  111837 Willow (2022-11-30) -- the Willow franchise's Disney+ series
+#  201285 LIGHT & MAGIC (2022-07-27) -- an ILM company documentary
+# (b) Making-of / behind-the-scenes:
+#  101978 Disney Gallery / Star Wars: The Mandalorian (2020-05-04)
+#  198109 Disney Gallery / Star Wars: The Book of Boba Fett (2022-05-04)
+# (c) Marketing:
+#  321564 Star Wars: The Mandalorian and Grogu | A Special Look (2026-05-04)
+# (f) Formats that are not releases -- a watch order has nowhere to put a news show:
+#  117748 This Week! in Star Wars (2020-01-30) -- weekly news round-up
+#  96101  Jedi Temple Challenge (2020-06-10) -- children's game show
+# (d) Non-narrative filler:
+#  135211 Star Wars Galaxy of Sounds (2021-09-29) -- clip collage cut to sound
+#  124734 Star Wars Vehicle Flythroughs (2021-05-03) -- camera tours of ships
+# Kept on purpose: Blips, Roll Out, Galactic Pals and Fun with Nubs are short, but they are
+# original animation with stories in them, which is the line rule (d) draws.
+exclude = [
+    111837, 201285,
+    101978, 198109,
+    321564,
+    117748, 96101,
+    135211, 124734,
+]
