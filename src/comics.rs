@@ -511,10 +511,10 @@ fn date_only(value: &str) -> String {
     value.split('T').next().unwrap_or(value).to_string()
 }
 
-/// The most recent issue's release date across a series' issues, for the header figure —
-/// `GET /comics/series/{slug}` carries no `latest` field of its own (only the `/comics/series`
-/// index's summary rows do), so this page derives it from the dates already on the page
-/// rather than needing one. Absent issues without a date don't count; an all-undated series
+/// The most recent issue's release date across a series' issues, for the header figure.
+/// See `ComicSeriesTemplate::latest`'s doc comment for why this duplicates, rather than
+/// reuses, the index card's `ComicSeriesSummary.latest` — same computation, same row set,
+/// so the two can never disagree. Issues without a date don't count; an all-undated series
 /// (nothing solicited yet) has no "latest" to show.
 fn latest_release_date(issues: &[ComicRelease]) -> Option<String> {
     issues
@@ -1197,6 +1197,40 @@ mod tests {
         // Not just an empty value -- the whole figure (value and label) is gone.
         let html = render(series_page(None));
         assert!(!html.contains(r#"<span class="cx-figure__label">Latest</span>"#));
+    }
+
+    fn series_summary(latest: Option<String>) -> percy_client::ComicSeriesSummary {
+        percy_client::ComicSeriesSummary {
+            series_slug: "amazing-spider-man".into(),
+            series_name: "Amazing Spider-Man".into(),
+            brand: "MARVEL".into(),
+            issue_count: 12,
+            latest,
+        }
+    }
+
+    #[test]
+    fn the_series_index_card_shows_the_latest_issue_date_when_percy_carries_it() {
+        let html = render(ComicSeriesIndexTemplate {
+            account: None,
+            series: vec![series_summary(Some("2026-08-01".into()))],
+            comic_copyright: String::new(),
+        });
+        assert!(html.contains("12 issues"));
+        assert!(html.contains("Latest 2026-08-01"));
+    }
+
+    #[test]
+    fn the_series_index_card_omits_the_latest_label_when_percy_carries_no_date() {
+        // series_summary(None) is the real shape of a series with no dated issue yet --
+        // not just a blank value, the "Latest" text itself must not appear.
+        let html = render(ComicSeriesIndexTemplate {
+            account: None,
+            series: vec![series_summary(None)],
+            comic_copyright: String::new(),
+        });
+        assert!(html.contains("12 issues"));
+        assert!(!html.contains("Latest"));
     }
 
     #[test]

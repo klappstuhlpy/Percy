@@ -1237,10 +1237,15 @@ pub(crate) struct ComicSeriesTemplate {
     pub(crate) accent: String,
     pub(crate) publisher: Option<String>,
     pub(crate) issue_count: i64,
-    /// The most recent issue's release date, derived from `issues` (which already
-    /// carries every issue's own date) rather than a second payload field — this page
-    /// gets its issues from `GET /comics/series/{slug}`, whose response has no `latest`
-    /// of its own (that field lives only on the `/comics/series` index summary row).
+    /// The most recent issue's release date. `GET /comics/series/{slug}` carries no
+    /// `latest` field of its own (only the `/comics/series` index's `ComicSeriesSummary`
+    /// row does, rendered on `comic_series_index.html`) — this is derived in
+    /// `latest_release_date()` from the same `issues` this page already fetches. It
+    /// cannot disagree with the index card's figure: both are `MAX(release_date)` over
+    /// the identical row set for this series+brand, one computed in SQL, one in Rust
+    /// over the exact rows this endpoint returned. Kept alongside the index's, not
+    /// instead of it, so a reader on one series' page isn't sent back to the index for
+    /// a fact about the page they're already on.
     pub(crate) latest: Option<String>,
     /// Already in reading order as Percy returned them — never re-sorted.
     pub(crate) issues: Vec<ComicCard>,
