@@ -513,8 +513,11 @@ fn date_only(value: &str) -> String {
 
 /// The most recent issue's release date across a series' issues, for the header figure.
 /// See `ComicSeriesTemplate::latest`'s doc comment for why this duplicates, rather than
-/// reuses, the index card's `ComicSeriesSummary.latest` — same computation, same row set,
-/// so the two can never disagree. Issues without a date don't count; an all-undated series
+/// reuses, the index card's `ComicSeriesSummary.latest` — and for the two reasons the two
+/// figures CAN legitimately disagree (an unscoped `brand` merging publishers on a colliding
+/// slug, and the index's 300s cache lagging this endpoint's live read). This figure is
+/// authoritative only for exactly the issues this page renders below it; the index's is
+/// authoritative per brand. Issues without a date don't count; an all-undated series
 /// (nothing solicited yet) has no "latest" to show.
 fn latest_release_date(issues: &[ComicRelease]) -> Option<String> {
     issues

@@ -1240,12 +1240,27 @@ pub(crate) struct ComicSeriesTemplate {
     /// The most recent issue's release date. `GET /comics/series/{slug}` carries no
     /// `latest` field of its own (only the `/comics/series` index's `ComicSeriesSummary`
     /// row does, rendered on `comic_series_index.html`) — this is derived in
-    /// `latest_release_date()` from the same `issues` this page already fetches. It
-    /// cannot disagree with the index card's figure: both are `MAX(release_date)` over
-    /// the identical row set for this series+brand, one computed in SQL, one in Rust
-    /// over the exact rows this endpoint returned. Kept alongside the index's, not
-    /// instead of it, so a reader on one series' page isn't sent back to the index for
-    /// a fact about the page they're already on.
+    /// `latest_release_date()` from the same `issues` this page already fetches.
+    ///
+    /// This figure and the index card's CAN legitimately disagree, in two ways:
+    /// 1. `GET /comics/series/{slug}` takes an *optional* `brand`. Reached without one
+    ///    (as `subject_href` in `releases.rs` does — it links here with no `?brand=`),
+    ///    a series slug that collides across publishers pulls in every brand's issues,
+    ///    while the index's `latest` is computed `GROUP BY series_slug, brand` and stays
+    ///    strictly per-brand. On a colliding slug this figure can be a different
+    ///    publisher's issue than the index shows.
+    /// 2. The index endpoint sits behind a 300s `Strategy.TIMED` cache; this detail
+    ///    endpoint queries live. For up to five minutes after a new issue is tracked,
+    ///    this figure can legitimately be newer than the still-cached index card.
+    ///
+    /// The index's figure is authoritative for "what's newest for this brand's series"
+    /// (per-brand, cache-bounded); this page's figure is authoritative for "what's newest
+    /// among exactly the issues rendered below it" on *this* page — which is what earns it
+    /// a place here: the grid below is reading order, not date order, so a reader can't
+    /// find the newest issue by eye. Kept alongside the index's, not instead of it, so a
+    /// reader on one series' page isn't sent back to the index for a fact about the page
+    /// they're already on. Do not "unify" the two into one shared figure — they answer
+    /// different questions and are not meant to be equal.
     pub(crate) latest: Option<String>,
     /// Already in reading order as Percy returned them — never re-sorted.
     pub(crate) issues: Vec<ComicCard>,
