@@ -17,6 +17,8 @@
 //! the two lists, never a wider query. It leads the page when it is non-empty and is absent
 //! entirely otherwise, because an empty "Following" box is worse than no box.
 
+use std::collections::BTreeMap;
+
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Response},
@@ -26,7 +28,7 @@ use serde::Deserialize;
 
 use crate::{
     session::Session,
-    templates::{ChipRow, ReleaseCardRow, ReleasesTemplate},
+    templates::{ChipRow, MonthGroup, ReleaseCardRow, ReleasesTemplate},
     view::Viewer,
     AppState,
 };
@@ -111,6 +113,83 @@ fn sort_cards(cards: &mut [ReleaseCard], sort: Sort) {
     }
 }
 
+/// The terminal bucket for a card with no parseable release date — an announced-but-
+/// undated title, not a dropped one.
+const UNDATED_LABEL: &str = "Date to be announced";
+
+const MONTH_NAMES: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// The sortable `"YYYY-MM"` key and its display label ("August 2026") for an ISO
+/// `YYYY-MM-DD` release date. `None` if `date` doesn't parse that way — defensive, since
+/// every date Percy hands back does; an unparseable one falls into the same terminal
+/// bucket as no date at all rather than panicking the page.
+fn month_key(date: &str) -> Option<(String, String)> {
+    let year = date.get(0..4)?;
+    let month: usize = date.get(5..7)?.parse().ok()?;
+    let name = MONTH_NAMES.get(month.checked_sub(1)?)?;
+    Some((format!("{year}-{month:02}"), format!("{name} {year}")))
+}
+
+/// Bucket `cards` into month groups for the roadmap.
+///
+/// Months come out newest-first unless `oldest_first` (the "Oldest" sort control is the
+/// only thing that flips it). A card with no parseable release date lands in the
+/// terminal [`UNDATED_LABEL`] bucket, which is **always last** regardless of direction —
+/// an unreleased film isn't "older" than anything, it just has no date yet. A month with
+/// no cards in it is never constructed, so "omit an empty month" needs no separate check
+/// downstream: there is nothing to omit.
+///
+/// Grouping never reorders cards *within* a bucket — they arrive already ordered by
+/// `sort_cards` and keep that relative order, which is what lets `Sort::Name` still read
+/// alphabetically inside each month instead of being re-shuffled here.
+fn group_by_month(cards: Vec<ReleaseCardRow>, oldest_first: bool) -> Vec<MonthGroup> {
+    let mut dated: BTreeMap<String, MonthGroup> = BTreeMap::new();
+    let mut undated = Vec::new();
+
+    for card in cards {
+        match card.release_date.as_deref().and_then(month_key) {
+            Some((key, label)) => {
+                dated
+                    .entry(key)
+                    .or_insert_with(|| MonthGroup {
+                        label,
+                        cards: Vec::new(),
+                    })
+                    .cards
+                    .push(card);
+            }
+            None => undated.push(card),
+        }
+    }
+
+    // BTreeMap already yields ascending (oldest-first) key order; newest-first is the
+    // default, so that's the branch that has to do work.
+    let mut groups: Vec<MonthGroup> = dated.into_values().collect();
+    if !oldest_first {
+        groups.reverse();
+    }
+    if !undated.is_empty() {
+        groups.push(MonthGroup {
+            label: UNDATED_LABEL.to_string(),
+            cards: undated,
+        });
+    }
+    groups
+}
+
 /// `GET /releases` — the overview.
 pub async fn releases_page(
     State(app): State<AppState>,
@@ -153,14 +232,19 @@ pub async fn releases_page(
     let progress = overview.progress;
     let row = |card: &ReleaseCard| card_row(card, &progress, signed_in);
 
+    // The "Oldest" control is the only thing that reverses month order; "Newest" and
+    // "Name" both read newest-month-first, since a roadmap defaults to what's coming up.
+    let oldest_first = sort == Sort::DateAsc;
+    let group = |cards: &[ReleaseCard]| group_by_month(cards.iter().map(row).collect(), oldest_first);
+
     ReleasesTemplate {
         days,
         sort: sort.as_str(),
         window_start: overview.window.start,
         window_end: overview.window.end,
-        followed: overview.followed.iter().map(row).collect(),
-        comics: overview.comics.iter().map(row).collect(),
-        titles: overview.titles.iter().map(row).collect(),
+        followed: group(&overview.followed),
+        comics: group(&overview.comics),
+        titles: group(&overview.titles),
         ticker,
         signed_in,
         account,
@@ -328,6 +412,10 @@ mod tests {
         cards.iter().map(|c| c.name.as_str()).collect()
     }
 
+    fn row_names(cards: &[ReleaseCardRow]) -> Vec<&str> {
+        cards.iter().map(|c| c.name.as_str()).collect()
+    }
+
     #[test]
     fn sort_parses_the_three_values_and_falls_back_to_date_on_anything_else() {
         assert_eq!(Sort::parse(Some("date")), Sort::Date);
@@ -406,6 +494,61 @@ mod tests {
     }
 
     #[test]
+    fn an_undated_card_lands_in_the_terminal_bucket_not_first() {
+        // A naive `Option<String>` sort key would put `None` *before* `Some` (the derived
+        // `Ord` for `Option` sorts `None` least), so a grouping bug that reused that
+        // ordering directly would land "Undated" first rather than last. Two distinct
+        // months are also here so the bucketing itself is doing real work, not just
+        // separating one dated card from one undated one.
+        let cards = vec![
+            row(&card_named("Undated", None)),
+            row(&card_named("September", Some("2026-09-05"))),
+            row(&card_named("July", Some("2026-07-10"))),
+        ];
+        let groups = group_by_month(cards, false);
+
+        assert_eq!(groups.len(), 3, "two dated months plus the terminal bucket");
+        assert_eq!(groups[0].label, "September 2026");
+        assert_eq!(groups[1].label, "July 2026");
+        assert_eq!(groups[2].label, UNDATED_LABEL);
+        assert_eq!(row_names(&groups[2].cards), ["Undated"]);
+    }
+
+    #[test]
+    fn cards_bucket_by_month_newest_first_and_keep_their_order_within_a_bucket() {
+        let cards = vec![
+            row(&card_named("Late July", Some("2026-07-20"))),
+            row(&card_named("Early July", Some("2026-07-01"))),
+            row(&card_named("August", Some("2026-08-05"))),
+        ];
+        let groups = group_by_month(cards, false);
+
+        assert_eq!(groups.len(), 2, "the two July cards share one bucket, not two");
+        assert_eq!(groups[0].label, "August 2026");
+        assert_eq!(groups[1].label, "July 2026");
+        // Grouping must not re-sort within a bucket — the cards arrive pre-sorted by
+        // `sort_cards` and keep that order verbatim.
+        assert_eq!(row_names(&groups[1].cards), ["Late July", "Early July"]);
+    }
+
+    #[test]
+    fn the_oldest_first_direction_reverses_month_order_but_never_the_terminal_bucket() {
+        let cards = vec![
+            row(&card_named("July", Some("2026-07-01"))),
+            row(&card_named("August", Some("2026-08-01"))),
+            row(&card_named("TBA", None)),
+        ];
+        let groups = group_by_month(cards, true);
+
+        assert_eq!(groups[0].label, "July 2026");
+        assert_eq!(groups[1].label, "August 2026");
+        assert_eq!(
+            groups[2].label, UNDATED_LABEL,
+            "the terminal bucket stays last in either direction"
+        );
+    }
+
+    #[test]
     fn a_comic_keeps_its_absolute_cover_and_a_title_gets_the_tmdb_prefix() {
         assert_eq!(row(&comic()).cover_url.unwrap(), "https://cdn.example/asm1.jpg");
         assert_eq!(
@@ -451,6 +594,13 @@ mod tests {
         template.render().expect("the releases template renders")
     }
 
+    /// Wraps a flat list of cards into month groups through the real grouping function,
+    /// so template tests exercise the same path production does rather than a stubbed
+    /// shape — grouping-specific behaviour has its own dedicated tests below.
+    fn grouped(cards: Vec<ReleaseCard>) -> Vec<MonthGroup> {
+        group_by_month(cards.iter().map(row).collect(), false)
+    }
+
     fn page(followed: Vec<ReleaseCard>, unavailable: bool, signed_in: bool) -> ReleasesTemplate {
         ReleasesTemplate {
             account: None,
@@ -458,9 +608,17 @@ mod tests {
             sort: Sort::Date.as_str(),
             window_start: "2026-07-28".into(),
             window_end: "2026-08-11".into(),
-            followed: followed.iter().map(row).collect(),
-            comics: if unavailable { Vec::new() } else { vec![row(&comic())] },
-            titles: if unavailable { Vec::new() } else { vec![row(&title())] },
+            followed: grouped(followed),
+            comics: if unavailable {
+                Vec::new()
+            } else {
+                grouped(vec![comic()])
+            },
+            titles: if unavailable {
+                Vec::new()
+            } else {
+                grouped(vec![title()])
+            },
             ticker: Vec::new(),
             signed_in,
             unavailable,
@@ -570,7 +728,10 @@ mod tests {
     fn a_card_is_one_element_holding_the_link_the_toggle_and_the_chips() {
         let mut template = page(Vec::new(), false, true);
         // A signed-in row, so the toggle is the real <form> rather than the sign-in link.
-        template.comics = vec![card_row(&comic(), &ProgressMap::default(), true)];
+        template.comics = vec![MonthGroup {
+            label: "August 2026".into(),
+            cards: vec![card_row(&comic(), &ProgressMap::default(), true)],
+        }];
         let html = render(template);
         let comics = html.find("id=\"comics\"").expect("the Comics section is rendered");
         let titles = html.find("id=\"titles\"").expect("the Film & TV section is rendered");
@@ -588,6 +749,45 @@ mod tests {
 
         // The old shape — a bare cell wrapping card + orphaned furniture — is gone.
         assert!(!html.contains("rx-cell"));
+    }
+
+    #[test]
+    fn a_card_without_a_poster_renders_no_image_and_reserves_no_placeholder_hole() {
+        let mut without_poster = title();
+        without_poster.cover_url = None;
+        let mut template = page(Vec::new(), false, false);
+        // The comics section's own card keeps its cover in `page()`'s default fixture —
+        // zero it out so the only `<img class="cx-card__cover">` candidate left is the
+        // poster-less title this test is actually about.
+        template.comics = Vec::new();
+        template.titles = vec![MonthGroup {
+            label: "August 2026".into(),
+            cards: vec![row(&without_poster)],
+        }];
+        let html = render(template);
+
+        // Same rule as the news image row: no reserved box shaped like a missing poster,
+        // just no image element at all.
+        assert!(!html.contains("cx-card__cover--placeholder"));
+        assert!(!html.contains("<img class=\"cx-card__cover\""));
+    }
+
+    #[test]
+    fn the_roadmap_headings_one_per_month_and_an_empty_month_is_never_rendered() {
+        let mut template = page(Vec::new(), false, false);
+        // The comics section's own default fixture would add a third heading — zero it
+        // out so the count below is only about the titles timeline under test.
+        template.comics = Vec::new();
+        template.titles = group_by_month(
+            vec![row(&title()), row(&card_named("Later", Some("2026-09-01")))],
+            false,
+        );
+        let html = render(template);
+
+        assert!(html.contains("August 2026"));
+        assert!(html.contains("September 2026"));
+        // Exactly the two real buckets — nothing for the months with nothing in them.
+        assert_eq!(html.matches("rx-month__label").count(), 2);
     }
 
     #[test]

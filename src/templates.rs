@@ -893,11 +893,11 @@ pub(crate) struct ReleasesTemplate {
     /// The window's ends, as Percy reported them (ISO `YYYY-MM-DD`).
     pub(crate) window_start: String,
     pub(crate) window_end: String,
-    /// The cards the viewer's subscriptions matched. Empty signed out, and the section
-    /// is omitted rather than shown empty — see `releases.rs`.
-    pub(crate) followed: Vec<ReleaseCardRow>,
-    pub(crate) comics: Vec<ReleaseCardRow>,
-    pub(crate) titles: Vec<ReleaseCardRow>,
+    /// The cards the viewer's subscriptions matched, grouped into month buckets. Empty
+    /// signed out, and the section is omitted rather than shown empty — see `releases.rs`.
+    pub(crate) followed: Vec<MonthGroup>,
+    pub(crate) comics: Vec<MonthGroup>,
+    pub(crate) titles: Vec<MonthGroup>,
     /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
     pub(crate) ticker: Vec<TickerItem>,
     /// A signed-out visitor gets a one-line invitation instead of the `Following` section.
@@ -928,6 +928,17 @@ pub(crate) struct ReleaseCardRow {
     pub(crate) chips: Vec<ChipRow>,
     /// The read/watched control, keyed by the card's own `key`.
     pub(crate) toggle: ProgressToggle,
+}
+
+/// One month's cards on the release roadmap, or the terminal "Date to be announced"
+/// bucket for a title Percy knows about but has no date for yet. Grouping and ordering
+/// happen in `releases.rs::group_by_month`, never in the template — this is only the
+/// shape it hands to Askama. An empty month is never constructed, so the template never
+/// has to guard against one.
+pub(crate) struct MonthGroup {
+    /// "August 2026", or the terminal bucket's own label.
+    pub(crate) label: String,
+    pub(crate) cards: Vec<ReleaseCardRow>,
 }
 
 // -- Progress ------------------------------------------------------------------

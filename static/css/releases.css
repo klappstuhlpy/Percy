@@ -129,6 +129,25 @@
     color: var(--rx-accent);
 }
 
+/* ── Month timeline ──────────────────────────────────────────────── */
+
+/* Grouping, ordering and the terminal "Date to be announced" bucket are all decided in
+   releases.rs::group_by_month — this only lays out whatever it hands back. A month with
+   nothing in it is never constructed there, so there's no empty-state rule to write
+   here either. */
+.rx-month + .rx-month {
+    margin-top: 2rem;
+}
+
+.rx-month__label {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
 /* ── Cards ───────────────────────────────────────────────────────── */
 
 /* One grid child per item. The card is `.cx-card--stretch` (comics.css): the cover and
