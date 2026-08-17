@@ -1285,6 +1285,29 @@ async def test_discovery_stops_at_the_page_cap() -> None:
     assert report.discovered == DISCOVER_PAGE_CAP  # one result per page
 
 
+async def test_discovery_warns_when_the_page_cap_truncates_a_block(caplog: pytest.LogCaptureFixture) -> None:
+    # Finding 3: a capped block is truncated silently otherwise, and since min_date/max_date
+    # apply only after the crawl while TMDB sorts release-date ascending, a capped block with a
+    # min_date set would fetch only the oldest pages and discard nearly all of them -- with no
+    # signal at all. The warning is what lets an operator notice before that happens.
+    seed = _seed((), discover=(DiscoverSeed(kind='movie', company=420),))
+    tmdb = FakeTMDBClient(
+        movies={num: {'title': f'M{num}', 'runtime': 100} for num in range(1, 100)},
+        discover={('movie', 420): [[_movie(page, f'20{page:02d}-01-01')] for page in range(1, 60)]},
+    )
+    repo = FakeWatchlistRepository()
+    ingest = WatchlistIngest(tmdb, repo)  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.WARNING, logger='app.services.watchlist.ingest'):
+        await ingest.sync(seed, regions=('US',))
+
+    logged = [record.getMessage() for record in caplog.records]
+    assert any(
+        'mcu' in message and 'company=420' in message and '59' in message and str(DISCOVER_PAGE_CAP) in message
+        for message in logged
+    )
+
+
 async def test_discovery_deduplicates_across_overlapping_blocks() -> None:
     # A keyword and a company query legitimately cover much of the same franchise; the same
     # film must not be seeded twice (and must not consume two order slots).

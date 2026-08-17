@@ -561,7 +561,7 @@ class WatchlistIngest:
         for block in seed.discover:
             source, source_id = block.source
             try:
-                found.append((block, await self._discover_block(block)))
+                found.append((block, await self._discover_block(seed.slug, block)))
             except HTTPClientError as exc:
                 any_failed = True
                 log.warning(
@@ -576,11 +576,18 @@ class WatchlistIngest:
         )
         return titles, any_failed
 
-    async def _discover_block(self, block: DiscoverSeed) -> list[Mapping[str, Any]]:
+    async def _discover_block(self, universe: str, block: DiscoverSeed) -> list[Mapping[str, Any]]:
         """Fetches one block's raw TMDB results, stopping at the last page or :data:`DISCOVER_PAGE_CAP`.
 
         A collection is one request whose ``parts`` array *is* the result list -- TMDB does not
         page it, and a collection is small by construction.
+
+        A block whose ``total_pages`` exceeds the cap is truncated silently otherwise -- and
+        since :func:`discovered_titles` applies ``min_date``/``max_date`` only after the crawl
+        while TMDB sorts results release-date ascending, a capped block with a ``min_date`` set
+        would fetch only the oldest pages and then discard nearly all of them. Not reachable by
+        today's seeds (the largest block is 6 pages), but a single ``log.warning`` here is what
+        lets an operator reading sync output notice it before a franchise grows into it.
         """
         source, source_id = block.source
         if source == 'collection':
@@ -588,6 +595,7 @@ class WatchlistIngest:
             return list(payload.get('parts') or [])
 
         results: list[Mapping[str, Any]] = []
+        total_pages = 0
         for page in range(1, DISCOVER_PAGE_CAP + 1):
             payload = await self._client.discover(
                 block.kind,
@@ -596,8 +604,15 @@ class WatchlistIngest:
                 page=page,
             )
             results.extend(payload.get('results') or [])
-            if page >= (payload.get('total_pages') or 0):
+            total_pages = payload.get('total_pages') or 0
+            if page >= total_pages:
                 break
+        else:
+            log.warning(
+                '%s: discovery block %s (%s=%s) has %d pages, past the %d-page cap -- only the '
+                'oldest %d pages were fetched, the rest were dropped.',
+                universe, block.kind, source, source_id, total_pages, DISCOVER_PAGE_CAP, DISCOVER_PAGE_CAP,
+            )
         return results
 
     async def refresh_release_dates(self, rows: Iterable[Mapping[str, Any]]) -> int:
