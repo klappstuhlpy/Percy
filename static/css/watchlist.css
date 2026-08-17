@@ -482,10 +482,13 @@
 }
 
 /* ── Person page ─────────────────────────────────────────────────────
-   A filmography reuses the watch-order row wholesale; only the portrait
-   header and the poster column are new. The importance marker is switched
-   off here — a credit has no importance, and an inherited dot would read
-   as one. */
+   A filmography row builds on the shared `.wl-entry` shape; only the
+   portrait header below and the poster column here are new. That poster
+   rule (`.wl-person-entry__poster`) is in turn reused as-is by the
+   watch-order row (see watch_order.html), so a filmography and a universe
+   order share one poster look rather than two. The importance marker is
+   switched off here — a credit has no importance, and an inherited dot
+   would read as one. */
 
 .wl-person {
     display: grid;
