@@ -392,7 +392,7 @@ pub async fn guild_sentinel_update(
             obj.remove("channel_id");
         }
     }
-    if !patch.as_object().map_or(true, |m| m.is_empty()) {
+    if !patch.as_object().is_none_or(|m| m.is_empty()) {
         if let Err(e) = percy.patch_sentinel(guild_id, &patch).await {
             tracing::error!(error = %e, "Failed to update sentinel config");
             return json_or_redirect(&headers, false, "Failed to save sentinel settings.", &redirect_url);
