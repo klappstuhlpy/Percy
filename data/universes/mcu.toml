@@ -419,6 +419,15 @@ importance = { complete = "recommended", essentials = "essential" }
 
 [[titles]]
 tmdb_type = "movie"
+tmdb_id = 969681
+era = "phase6"
+story = 3650
+release = 3650
+context = "Peter Parker's fourth solo film, and his first after the events of No Way Home erased him from the world's memory."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
 tmdb_id = 1003596
 era = "phase6"
 story = 3700
@@ -427,8 +436,94 @@ context = "The Avengers face a new, universe-spanning threat that draws together
 milestone = true
 importance = { complete = "essential", essentials = "essential" }
 
-# --- Discovery: sweeps in everything not hand-curated above ---
-# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1003598
+era = "phase6"
+story = 3800
+release = 3800
+context = "The announced conclusion of the Multiverse Saga, following directly from Doomsday."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+# The two 2028 films below sit in Phase 6 because Marvel has not announced a Phase 7: the era
+# is named "Phase 6 (2025-)" with an open end for exactly this reason. They, Brand New Day and
+# Secret Wars were all previously filed under "Shorts & Specials" -- the discovery sweep's era,
+# because a company query cannot know a film is mainline -- and that was the actual defect. If
+# a Phase 7 is ever announced, add the era and move whichever of these belong to it; do not
+# guess the split now.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1293690
+era = "phase6"
+story = 3900
+release = 3900
+context = "Marvel Studios' first X-Men film, dated but still untitled and uncast at the time of writing."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1386618
+era = "phase6"
+story = 4000
+release = 4000
+context = "A third Black Panther film, dated but with no confirmed title or plot."
+importance = { complete = "recommended", essentials = "optional" }
+
+# Announced with no release date, so it sorts last within Phase 6 -- and so it has to be
+# curated at all: the discovery sweep drops undated results, having nothing to order them by.
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1737233
+era = "phase6"
+story = 4100
+release = 4100
+context = "A sequel to Shang-Chi and the Legend of the Ten Rings, announced without a release date."
+importance = { complete = "optional", essentials = "optional" }
+
+# --- Television: curated only where the discovery block below cannot reach ---
+# Both of these carry no "marvel cinematic universe (mcu)" TMDB keyword, so the keyword query
+# never returns them. Ordered above every discovered title (base 10000) on purpose: a curated
+# order below that would hoist them to the top of the era, ahead of the date-ordered spine the
+# discovery block produces, and there is no order number that interleaves into a sequence
+# renumbered on every sync. Importance is left at "optional" to match every discovered sibling
+# -- these blocks exist to fix coverage, not to re-rank the television era.
+
+[[titles]]
+tmdb_type = "tv"
+tmdb_id = 138503
+era = "television"
+story = 20000
+release = 20000
+context = "An animated series retelling Peter Parker's first year as Spider-Man in a timeline of its own."
+importance = { complete = "optional", essentials = "optional", television = "optional" }
+
+[[titles]]
+tmdb_type = "tv"
+tmdb_id = 331074
+era = "television"
+story = 20100
+release = 20100
+context = "An in-universe news web series presented as broadcasts from the Daily Bugle."
+importance = { complete = "optional", essentials = "optional", television = "optional" }
+
+# --- Discovery: everything above is curated; these two queries fill in the long tail ---
+# Verified live against TMDB on 2026-08-17 (v4 read token from .env, never committed).
+#
+# Read this before adding to either block. A TMDB company or keyword query returns a studio's
+# *entire* catalogued output, and Marvel Studios' output includes its own promotional material:
+# "Marvel Studios Assembled" making-ofs, "Legends" recap episodes, anniversary documentaries,
+# LEGO tie-ins, preschool spin-off shorts, and individual animated shorts double-filed as
+# movies. A watch order is for releases, so all of that is denied below by id.
+#
+# **There is no clean TMDB handle that separates a franchise's releases from its behind-the-
+# scenes output.** That was checked: no genre, keyword, company or date filter draws the line
+# (the documentaries carry the same company id, and several BTS rows are not even tagged
+# Documentary -- 1010823 "Magnum Opus" is an animated short). So `exclude` is a **maintained
+# deny-list, and it will never be complete**: every new making-of Marvel ships will sweep in on
+# the next sync until someone adds its id here. Treat it as a chore with each sync, not as a
+# guarantee this file already gives you. It is not exhaustive and cannot be made exhaustive.
 
 [[discover]]
 kind = "movie"
@@ -439,21 +534,73 @@ importance = "optional"
 # Iron Man's release: excludes the pre-MCU Marvel-licensed films (2007 Sony/Fox/animated
 # titles) this company id also carries from Marvel's pre-Marvel Studios licensing days.
 min_date = "2008-01-01"
-# Confirmed non-MCU survivors of the date filter (checked each via GET /movie/{id}):
-#  13056  Punisher: War Zone (2008) -- Lionsgate/Marvel Knights, not an MCU film
-#  15257  Hulk Vs. Wolverine (2009) -- Lionsgate/Marvel Animation, pre-MCU
-#  101907 Hulk Vs. Thor (2009) -- Lionsgate/Marvel Animation, pre-MCU
-#  14613  Next Avengers: Heroes of Tomorrow (2008) -- Lionsgate/Marvel Animation, pre-MCU
-#  1275606 Marvel Studios Assembled: The Making of X-Men '97 (2024) -- about a Marvel
-#          Animation show, not an MCU release
-#  717082 Stan Lee (2023) -- biographical documentary, not an MCU release
-exclude = [13056, 15257, 101907, 14613, 1275606, 717082]
+# Every id below was confirmed by GET /movie/{id} on 2026-08-17; the title and date the API
+# returned are what the comment says. Grouped by why it is denied, so a future editor can see
+# which category a new arrival belongs to -- and can see that each category is open-ended.
+exclude = [
+  # Marvel-licensed, pre-Marvel-Studios films the min_date could not filter out
+  13056,    # Punisher: War Zone (2008) -- Lionsgate/Marvel Knights
+  15257,    # Hulk vs. Wolverine (2009) -- Lionsgate/Marvel Animation
+  101907,   # Hulk vs. Thor (2009) -- Lionsgate/Marvel Animation
+  14613,    # Next Avengers: Heroes of Tomorrow (2008) -- Lionsgate/Marvel Animation
+  # "Marvel Studios Assembled" making-ofs. One ships per production, so this list grows.
+  936643,   # ... The Making of Hawkeye (2022)
+  939356,   # ... The Making of Eternals (2022)
+  964943,   # ... The Making of Moon Knight (2022)
+  980017,   # ... The Making of Doctor Strange in the Multiverse of Madness (2022)
+  1001912,  # ... The Making of Ms. Marvel (2022)
+  1015595,  # ... The Making of Thor: Love and Thunder (2022)
+  1026208,  # ... The Making of She-Hulk: Attorney at Law (2022)
+  1076032,  # ... The Making of Black Panther: Wakanda Forever (2023)
+  1127361,  # ... The Making of Ant-Man and the Wasp: Quantumania (2023)
+  1165487,  # ... The Making of the Guardians of the Galaxy Vol. 3 (2023)
+  1165500,  # ... The Making of Secret Invasion (2023)
+  1192825,  # ... The Making of Loki Season 2 (2023)
+  1220337,  # ... The Making of Echo (2024)
+  1235525,  # ... The Making of The Marvels (2024)
+  1275606,  # ... The Making of X-Men '97 (2024) -- and X-Men '97 is not MCU canon either
+  1386628,  # ... The Making of Deadpool & Wolverine (2024)
+  1387507,  # ... The Making of Agatha All Along (2024)
+  # Documentaries and promotional specials about the MCU rather than part of it
+  259910,   # Marvel Studios: Assembling a Universe (2014)
+  379040,   # Marvel's Captain America: 75 Heroic Years (2016)
+  647375,   # Marvel Studios: Expanding the Universe (2019)
+  877188,   # Marvel Studios' 2021 Disney+ Day Special (2021)
+  979160,   # A Fan's Guide to Ms. Marvel (2022)
+  1036996,  # Director by Night (2022) -- about Sam Raimi's Multiverse of Madness shoot
+  717082,   # Stan Lee (2023) -- biographical documentary
+  # LEGO tie-ins: a separate, non-canon comedic continuity
+  1154598,  # LEGO Marvel Avengers: Code Red (2023)
+  1359227,  # LEGO Marvel Avengers: Mission Demolition (2024)
+  # Episodes of the preschool spin-off "Marvel's Spidey and His Amazing Friends", not MCU
+  1564058,  # Spidey and Iron Man: Avengers Team Up! (2025)
+  1750432,  # Spidey and the Avengers: Halloween Team-Up! (2026)
+  # The five "I Am Groot" shorts, each double-filed as a movie -- they duplicate tv:232125,
+  # which is the series and is already in the catalogue. Note 1010823 carries no Documentary
+  # genre: a genre filter would not have caught it, which is the whole argument above.
+  1010818,  # Groot's First Steps (2022)
+  1010819,  # The Little Guy (2022)
+  1010820,  # Groot's Pursuit (2022)
+  1010821,  # Groot Takes a Bath (2022)
+  1010823,  # Magnum Opus (2022)
+]
 
 [[discover]]
 kind = "tv"
 # "marvel cinematic universe (mcu)" keyword -- verified via GET /keyword/180547
-# Covers the Marvel Television era (Agents of S.H.I.E.L.D., Agent Carter, Inhumans, the
-# Netflix Defenders shows, Runaways, Cloak & Dagger, Helstrom) and every Disney+ series.
+# What it returns is whatever TMDB contributors have tagged, which is most of the Marvel
+# Television era (Agents of S.H.I.E.L.D., Agent Carter, Inhumans, the Netflix Defenders shows,
+# Runaways, Cloak & Dagger, Helstrom) and most of the Disney+ slate -- but it is a
+# community-maintained tag, not a manifest. It misses shows (Your Friendly Neighborhood
+# Spider-Man and The Daily Bugle are curated above because of it) and it admits documentary
+# series. Do not read this block as coverage of "every" MCU show.
 keyword = 180547
 era = "television"
 importance = "optional"
+# Verified by GET /tv/{id} on 2026-08-17. Same deny-list discipline as the movie block: these
+# are shows *about* the MCU, and more of them will arrive.
+exclude = [
+  118924,  # Marvel Studios Assembled (2021) -- the making-of series itself
+  114695,  # Marvel Studios Legends (2021) -- clip-compilation recaps
+  220597,  # MPower (2023) -- documentary series on Marvel's women characters
+]
