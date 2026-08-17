@@ -148,6 +148,17 @@
     color: var(--text-muted);
 }
 
+/* A timeline reads on one vertical axis, not a wrapping multi-column grid — within a
+   month the entries stack, full width, one after another, so the month heading is a
+   spine the page hangs off rather than a label over what would otherwise still look
+   like the old three flat grids. `.cx-grid` (comics.css) still supplies everything else
+   (the card's own look, the row gap); this only collapses it to one column. Capped so a
+   full-width row on a wide viewport doesn't stretch a poster-sized card edge to edge. */
+.rx-grid {
+    grid-template-columns: 1fr;
+    max-width: 640px;
+}
+
 /* ── Cards ───────────────────────────────────────────────────────── */
 
 /* One grid child per item. The card is `.cx-card--stretch` (comics.css): the cover and
