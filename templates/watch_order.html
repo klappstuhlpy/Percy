@@ -6,9 +6,9 @@
 
 {% block title %}{{ universe.name }} Watch Order | Percy{% endblock %}
 
-{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ stats.total }} titles, {{ stats.runtime / 60 }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
+{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ stats.total }} titles, {{ stats.hours }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
 {% block og_title %}{{ universe.name }} Watch Order{% endblock %}
-{% block og_description %}{{ stats.total }} titles in {{ sort_label }}, {{ stats.runtime / 60 }} hours total — with runtimes, importance and streaming availability.{% endblock %}
+{% block og_description %}{{ stats.total }} titles in {{ sort_label }}, {{ stats.hours }} hours total — with runtimes, importance and streaming availability.{% endblock %}
 {% block og_url %}{{ crate::config::public_base_url() }}/watchlist/{{ universe.slug }}{% endblock %}
 
 {% block css %}
@@ -49,7 +49,7 @@
                         <span class="wl-figure__label">Titles</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ stats.runtime / 60 }}h</span>
+                        <span class="wl-figure__value">{{ stats.hours }}h</span>
                         <span class="wl-figure__label">Runtime</span>
                     </span>
                     <span class="wl-figure">
