@@ -6,9 +6,9 @@
 
 {% block title %}{{ universe.name }} Watch Order | Percy{% endblock %}
 
-{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ total }} titles, {{ hours }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
+{% block meta_description %}{{ universe.name }} in {{ sort_label }} — {{ stats.total }} titles, {{ stats.runtime / 60 }} hours, with runtimes, what's essential and where to stream each one.{% endblock %}
 {% block og_title %}{{ universe.name }} Watch Order{% endblock %}
-{% block og_description %}{{ total }} titles in {{ sort_label }}, {{ hours }} hours total — with runtimes, importance and streaming availability.{% endblock %}
+{% block og_description %}{{ stats.total }} titles in {{ sort_label }}, {{ stats.runtime / 60 }} hours total — with runtimes, importance and streaming availability.{% endblock %}
 {% block og_url %}{{ crate::config::public_base_url() }}/watchlist/{{ universe.slug }}{% endblock %}
 
 {% block css %}
@@ -38,25 +38,38 @@
                 {% when None %}
                 {% endmatch %}
 
+                {# Every figure is Percy's own (`/watchlist/universes/{slug}/stats`), fetched
+                   alongside the page rather than after it, and counted over exactly the rows
+                   the list below renders as entries -- series containers excluded on both
+                   sides. `recommended`/`optional` come from the same call, so showing them
+                   costs nothing the header was not already paying for. #}
                 <div class="wl-figures">
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ total }}</span>
+                        <span class="wl-figure__value">{{ stats.total }}</span>
                         <span class="wl-figure__label">Titles</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ hours }}h</span>
+                        <span class="wl-figure__value">{{ stats.runtime / 60 }}h</span>
                         <span class="wl-figure__label">Runtime</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ essential }}</span>
+                        <span class="wl-figure__value">{{ stats.essential }}</span>
                         <span class="wl-figure__label">Essential</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ movies }}</span>
+                        <span class="wl-figure__value">{{ stats.recommended }}</span>
+                        <span class="wl-figure__label">Recommended</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.optional }}</span>
+                        <span class="wl-figure__label">Optional</span>
+                    </span>
+                    <span class="wl-figure">
+                        <span class="wl-figure__value">{{ stats.movies }}</span>
                         <span class="wl-figure__label">Films</span>
                     </span>
                     <span class="wl-figure">
-                        <span class="wl-figure__value">{{ shows }}</span>
+                        <span class="wl-figure__value">{{ stats.shows }}</span>
                         <span class="wl-figure__label">Series</span>
                     </span>
                 </div>
@@ -110,16 +123,19 @@
             {% if !era.label.is_empty() %}
             <div class="wl-era">
                 <h2 class="wl-era__title">{{ era.label }}</h2>
-                <span class="wl-era__count">{{ era.rows.len() }}</span>
+                <span class="wl-era__count">{{ era.entries }}</span>
                 <span class="wl-era__rule" aria-hidden="true"></span>
             </div>
             {% endif %}
             <ol class="wl-entries">
                 {% for row in era.rows %}
                 {# `data-entry` + a programmatic-only tabindex is what j/k moves between;
-                   the focus ring is base.css's own :focus-visible. #}
-                <li class="wl-entry{% match row.importance %}{% when Some with (importance) %} wl-entry--{{ importance }}{% when None %}{% endmatch %}{% if row.milestone %} wl-entry--milestone{% endif %}"
-                    data-entry tabindex="-1">
+                   the focus ring is base.css's own :focus-visible. A series container
+                   deliberately carries *neither* -- it is a heading for the seasons below it
+                   with nothing to toggle, so j/k must not stop on it and `w` must not post a
+                   mark for it (progress.js reads both off `[data-entry]`). #}
+                <li class="wl-entry{% if row.container %} wl-entry--series{% endif %}{% match row.importance %}{% when Some with (importance) %} wl-entry--{{ importance }}{% when None %}{% endmatch %}{% if row.milestone %} wl-entry--milestone{% endif %}"
+                    {% if !row.container %}data-entry tabindex="-1"{% endif %}>
                     {# Same poster convention as person.html's `credit_row` -- same classes,
                        same placeholder, so the two surfaces read as one product. #}
                     {% match row.poster_url %}
@@ -130,7 +146,13 @@
                     {% endmatch %}
                     <div>
                         <div class="wl-entry__head">
+                            {% if row.container %}
+                            {# The series' own slot says what the row is, in place of the
+                               number it does not have: its seasons are numbered instead. #}
+                            <span class="wl-tag wl-tag--series">Series</span>
+                            {% else %}
                             <span class="wl-entry__index">{{ row.number }}</span>
+                            {% endif %}
                             <a class="wl-entry__title" href="/watchlist/{{ universe.slug }}/{{ row.slug }}">{{ row.title }}</a>
                             {% match row.year %}
                             {% when Some with (year) %}
@@ -171,7 +193,7 @@
                         <span class="wl-tag wl-tag--rank">{{ importance }}</span>
                         {% when None %}
                         {% endmatch %}
-                        {% if row.kind_class != "movie" %}
+                        {% if !row.container && row.kind_class != "movie" %}
                         <span class="wl-tag wl-tag--kind">{{ row.kind_label }}</span>
                         {% endif %}
                         {% if !row.providers.is_empty() %}
@@ -182,7 +204,9 @@
                             {% endfor %}
                         </span>
                         {% endif %}
+                        {% if !row.container %}
                         {% call progress::toggle(row.toggle) %}
+                        {% endif %}
                     </div>
                 </li>
                 {% endfor %}

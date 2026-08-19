@@ -279,6 +279,31 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--wl-accent) 22%, transparent);
 }
 
+/* ── Series headers ──────────────────────────────────────────────────
+   A show `V45` exploded into per-season entries keeps its row, but as a *header* for the
+   seasons under it: not watchable, not counted, no toggle and no number (see
+   `container_ids`). So it drops the importance marker -- a dot on a row Percy's "N
+   essential" figure never counted would claim a rank the header does not have -- and
+   loses the divider above the season it introduces, which is what visually binds the
+   group without indenting anything. */
+
+.wl-entry--series::before {
+    content: none;
+}
+
+.wl-entry--series {
+    padding-bottom: 0.35rem;
+}
+
+.wl-entry--series + .wl-entry {
+    border-top: 0;
+}
+
+/* Scoped through `.wl` to outrank the shared `.wl .wl-entry__title` weight below. */
+.wl .wl-entry--series .wl-entry__title {
+    font-weight: 700;
+}
+
 /* ── Entry content ───────────────────────────────────────────────── */
 
 .wl-entry__head {
@@ -365,6 +390,11 @@
     border-radius: 3px;
 }
 
+/* Sits in the index column of a series header, where an entry's number would be. */
+.wl-tag--series {
+    color: var(--wl-accent);
+}
+
 /* ── Streaming ───────────────────────────────────────────────────── */
 
 .wl-providers {
@@ -409,11 +439,61 @@
     border-color: var(--wl-accent);
 }
 
+/* The universe's key art behind its card, on exactly the terms `.wl-head--art` uses on the
+   order page: a modifier that is only present when there *is* art, so a universe with none
+   renders the plain card above -- no reserved band, no empty box. The scrim is the page's own
+   `--background` token, so the heading keeps the contrast it has everywhere else in either
+   theme, whatever the photo underneath looks like. */
+.wl .wl-card--art {
+    position: relative;
+    overflow: hidden;
+}
+
+.wl-card__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.5;
+}
+
+.wl-card--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--background) 72%, transparent) 0%,
+        var(--background) 72%
+    );
+}
+
+.wl-card__content {
+    position: relative;
+    z-index: 2;
+}
+
 .wl-card__name {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 700;
     letter-spacing: -0.01em;
+}
+
+/* A wordmark arrives at whatever size TMDB holds and in whatever single colour the studio
+   chose -- often white, which would vanish against the light theme's scrim. The drop shadow
+   is `--foreground`, the one colour guaranteed to contrast with `--background` in both
+   themes, so the mark stays legible either way without a second palette. */
+.wl-card__logo {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 220px);
+    max-height: 2.75rem;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--foreground) 40%, transparent));
 }
 
 .wl-card__tagline {

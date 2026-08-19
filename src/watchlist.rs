@@ -14,7 +14,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{PercyError, ProgressMap, WatchCredit, WatchPersonCredit, WatchTitle, WatchUniverse};
+use percy_client::{PercyError, ProgressMap, WatchCredit, WatchPersonCredit, WatchStats, WatchTitle, WatchUniverse};
 use serde::Deserialize;
 
 use crate::{
@@ -130,14 +130,16 @@ pub async fn watch_order(
         _ => "story",
     };
 
-    // The marks go out with the order, not after it: a public catalogue page must not pay
-    // a second round trip for its decoration.
-    let (fetched, marks) = match &app.percy {
+    // All three go out together: neither the marks nor the header's figures may cost a
+    // public catalogue page a serial round trip.
+    let (fetched, stats, marks) = match &app.percy {
         Some(percy) => tokio::join!(
             percy.get_watch_universe(&slug, query.path.as_deref(), &region, sort),
+            percy.get_watch_universe_stats(&slug, query.path.as_deref()),
             progress::fetch(&app, &session, "title")
         ),
         None => (
+            Err(PercyError::Api("percy is not configured".into())),
             Err(PercyError::Api("percy is not configured".into())),
             ProgressMap::default(),
         ),
@@ -161,29 +163,19 @@ pub async fn watch_order(
             region,
             sort: sort.to_string(),
             sort_label: sort_label(sort).to_string(),
-            total: 0,
-            hours: 0,
-            essential: 0,
-            movies: 0,
-            shows: 0,
+            stats: WatchStats::default(),
         }
         .into_response();
     };
 
-    let total = page.titles.len();
-    let runtime: i64 = page.titles.iter().map(|title| title.runtime).sum();
-    let essential = page
-        .titles
-        .iter()
-        .filter(|title| title.importance.as_deref() == Some("essential"))
-        .count();
-    let movies = page.titles.iter().filter(|title| title.kind == "movie").count();
-    let shows = page.titles.iter().filter(|title| title.kind == "tv").count();
-
+    // Which rows are series containers rather than entries. Derived once, here, because
+    // it is a property of the whole payload — the template can only see one row.
+    let containers = container_ids(&page.titles);
     let path = page.path.clone().unwrap_or_default();
     let eras = group_into_eras(
         &page.titles,
         &page.sort,
+        &containers,
         &Marks {
             marks: &marks,
             signed_in: session.is_some(),
@@ -193,13 +185,16 @@ pub async fn watch_order(
             here: &order_href(&page.universe.slug, &path, &page.region, &page.sort),
         },
     );
-    // Counted over the keys actually rendered, so a mark for a title this path leaves
-    // out can never push the count past the list. Signed out there is no bar at all.
+    // Counted over the keys actually rendered *as entries*, so a mark for a title this
+    // path leaves out can never push the count past the list, and a container — which has
+    // no toggle on the page — can never inflate the denominator past what Percy counted.
+    // Signed out there is no bar at all.
     let (done, seen) = progress::summary(
         &marks,
         "title",
         eras.iter()
             .flat_map(|era| era.rows.iter())
+            .filter(|row| !row.container)
             .map(|row| row.toggle.release_key.as_str()),
     );
 
@@ -213,11 +208,12 @@ pub async fn watch_order(
         sort_label: sort_label(&page.sort).to_string(),
         sort: page.sort,
         universe: page.universe,
-        total,
-        hours: runtime / 60,
-        essential,
-        movies,
-        shows,
+        // Percy's figures, not ours — it serves all five importance/kind numbers from one
+        // endpoint and excludes containers, which is the same definition of "an entry" the
+        // list above renders. A failed second call falls back to the same arithmetic over
+        // the rows already in hand, because a header that says 0 next to 144 rows is worse
+        // than a header nobody had to fetch twice.
+        stats: stats.unwrap_or_else(|_| derive_stats(&page.titles, &containers)),
     }
     .into_response()
 }
@@ -738,6 +734,53 @@ fn provider_groups(title: &WatchTitle) -> Vec<ProviderGroup> {
         .collect()
 }
 
+/// The ids of the rows that are series **containers** rather than watch entries.
+///
+/// `V45` explodes a multi-season show into one row per season *plus* the series row, and the
+/// series row is then a container — the migration's own words: "it keeps its identity, its
+/// aggregate runtime/episodes, its series-level cast and its trailer, and the seasons are
+/// what a reader watches and marks". Percy's whole read side agrees: `list_universes`,
+/// `universe_stats` and `titles_releasing_between` all exclude a row another row names as
+/// its `parent_id`. The universe *page* payload still returns them, so rendering them as
+/// entries here would put the list 15 rows above the figures in its own header (live MCU:
+/// 159 rows, 39 seasons under 15 containers, 144 counted entries).
+///
+/// A row is a container exactly when another row in **this** payload names its `id` — the
+/// relation itself, never a title-string prefix, which would mis-group any show whose real
+/// name starts with another's. A single-season show is never exploded, so it has no children
+/// and stays an ordinary entry reading "Hawkeye", not "Hawkeye: Season 1".
+fn container_ids(titles: &[WatchTitle]) -> Vec<i64> {
+    let mut containers: Vec<i64> = Vec::new();
+    for parent in titles.iter().filter_map(|title| title.parent_id) {
+        if !containers.contains(&parent) {
+            containers.push(parent);
+        }
+    }
+    containers
+}
+
+/// The header's figures, over the same rows the list renders as entries.
+///
+/// Only reached when Percy answered the page but not `/stats` — it is the same arithmetic
+/// `app/services/watchlist/payload.py::universe_stats` does, container exclusion included,
+/// so the two sources can only ever agree.
+fn derive_stats(titles: &[WatchTitle], containers: &[i64]) -> WatchStats {
+    let entries = || titles.iter().filter(|title| !containers.contains(&title.id));
+    let importance = |name: &str| entries().filter(|t| t.importance.as_deref() == Some(name)).count() as i64;
+    let runtime: i64 = entries().map(|title| title.runtime).sum();
+    WatchStats {
+        total: entries().count() as i64,
+        movies: entries().filter(|title| title.kind == "movie").count() as i64,
+        shows: entries().filter(|title| title.kind == "tv").count() as i64,
+        runtime,
+        hours: (runtime as f64 / 6.0).round() / 10.0,
+        essential: importance("essential"),
+        recommended: importance("recommended"),
+        optional: importance("optional"),
+        ..WatchStats::default()
+    }
+}
+
 /// Groups the already-ordered titles into sections.
 ///
 /// Eras are a *release-order* concept: the MCU phases are contiguous only when the
@@ -748,33 +791,41 @@ fn provider_groups(title: &WatchTitle) -> Vec<ProviderGroup> {
 ///
 /// In release order the walk starts a new section whenever the era key changes, which
 /// is also what keeps a universe that genuinely revisits an era honest.
-fn group_into_eras(titles: &[WatchTitle], sort: &str, marks: &Marks<'_>) -> Vec<OrderEra> {
+fn group_into_eras(titles: &[WatchTitle], sort: &str, containers: &[i64], marks: &Marks<'_>) -> Vec<OrderEra> {
+    // A container consumes no position: the numbers down the left of the list have to count
+    // what a reader watches, which is the same set Percy's `total` counts.
+    let mut position = 0usize;
+    let mut rows: Vec<OrderRow> = Vec::with_capacity(titles.len());
+    for title in titles {
+        let container = containers.contains(&title.id);
+        position += usize::from(!container);
+        rows.push(order_row(title, position, container, marks));
+    }
+
     if sort != "release" {
         return vec![OrderEra {
             key: String::new(),
             label: String::new(),
-            rows: titles
-                .iter()
-                .enumerate()
-                .map(|(index, title)| order_row(title, index + 1, marks))
-                .collect(),
+            entries: rows.iter().filter(|row| !row.container).count(),
+            rows,
         }];
     }
 
     let mut sections: Vec<OrderEra> = Vec::new();
-    for (index, title) in titles.iter().enumerate() {
+    for (title, mut row) in titles.iter().zip(rows) {
         let key = title.era.clone().unwrap_or_default();
         if sections.last().map(|section| section.key != key).unwrap_or(true) {
             sections.push(OrderEra {
                 label: era_label(&key),
                 key,
                 rows: Vec::new(),
+                entries: 0,
             });
         }
         if let Some(section) = sections.last_mut() {
             // No era chip here: the section heading right above already says it.
-            let mut row = order_row(title, index + 1, marks);
             row.era = None;
+            section.entries += usize::from(!row.container);
             section.rows.push(row);
         }
     }
@@ -822,13 +873,16 @@ fn title_key(universe: &str, slug: &str) -> String {
     format!("{universe}/{slug}")
 }
 
-fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow {
+fn order_row(title: &WatchTitle, position: usize, container: bool, marks: &Marks<'_>) -> OrderRow {
     let (kind_class, kind_label) = match title.kind.as_str() {
         "tv" => ("tv", "TV"),
         "special" => ("special", "SPEC"),
         _ => ("movie", "FILM"),
     };
     OrderRow {
+        // Built for every row, rendered only for entries: `watch_order.html` calls the
+        // toggle macro in the entry branch alone, and a container's key never reaches the
+        // progress summary either.
         toggle: progress::toggle(
             marks.marks,
             marks.signed_in,
@@ -836,8 +890,13 @@ fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow
             &title_key(marks.universe, &title.slug),
             marks.here,
         ),
-        position,
-        number: format!("{position:02}"),
+        container,
+        position: if container { 0 } else { position },
+        number: if container {
+            String::new()
+        } else {
+            format!("{position:02}")
+        },
         kind_class: kind_class.to_string(),
         kind_label: kind_label.to_string(),
         slug: title.slug.clone(),
@@ -854,10 +913,15 @@ fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow
         runtime_label: runtime_label(title),
         rating: title.tmdb_rating.map(|rating| format!("{rating:.1}")),
         era: title.era.as_deref().map(era_label),
-        importance: title.importance.clone(),
+        // Rank and landmark belong to entries. A container can still carry a curated
+        // `importance` row of its own, but drawing its marker and badge on a heading Percy
+        // does not count would announce a rank the "N essential" figure never counted.
+        importance: (!container).then(|| title.importance.clone()).flatten(),
         instruction: title.instruction.clone(),
         studio: title.sub_universe.clone(),
-        milestone: title.milestone,
+        milestone: !container && title.milestone,
+        // Kept on a heading: TMDB answers "where can I stream this" per series, so for an
+        // exploded show the container is often where the only answer lives.
         providers: providers(title),
     }
 }
@@ -908,7 +972,7 @@ fn providers(title: &WatchTitle) -> Vec<OrderProvider> {
 mod tests {
     use super::*;
     use crate::templates::NewsRow;
-    use percy_client::{WatchProvider, WatchTrailer};
+    use percy_client::{WatchProvider, WatchTrailer, WatchUniverseSummary};
 
     /// A signed-out page with nothing marked — what most of these tests are about, since
     /// the grouping rules are identical either way.
@@ -942,7 +1006,7 @@ mod tests {
             title("b", Some("phase1")),
             title("c", Some("phase2")),
         ];
-        let sections = group_into_eras(&titles, "release", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "release", &[], &marks(&unmarked(), false));
 
         assert_eq!(sections.len(), 2);
         assert_eq!(sections[0].label, "Phase 1");
@@ -959,7 +1023,7 @@ mod tests {
             title("b", Some("phase3")),
             title("c", Some("phase1")),
         ];
-        let sections = group_into_eras(&titles, "story", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "story", &[], &marks(&unmarked(), false));
 
         // One section: the MCU story order revisits phases constantly, and a heading
         // per switch would repeat "Phase 1" three times for these three films.
@@ -976,7 +1040,7 @@ mod tests {
             title("b", Some("phase2")),
             title("c", Some("phase1")),
         ];
-        let sections = group_into_eras(&titles, "release", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "release", &[], &marks(&unmarked(), false));
 
         // Three sections, not two: hoisting "c" up to the first Phase 1 block would
         // silently reorder the watch order the curation defined.
@@ -989,6 +1053,7 @@ mod tests {
         let sections = group_into_eras(
             &[title("a", None), title("b", None)],
             "release",
+            &[],
             &marks(&unmarked(), false),
         );
         assert_eq!(sections.len(), 1);
@@ -1007,14 +1072,14 @@ mod tests {
         let mut show = title("loki", None);
         show.kind = "tv".into();
 
-        let film_row = order_row(&title("iron-man", None), 3, &marks(&unmarked(), false));
+        let film_row = order_row(&title("iron-man", None), 3, false, &marks(&unmarked(), false));
         assert_eq!(film_row.number, "03");
         assert_eq!(
             (film_row.kind_class.as_str(), film_row.kind_label.as_str()),
             ("movie", "FILM")
         );
 
-        let show_row = order_row(&show, 12, &marks(&unmarked(), false));
+        let show_row = order_row(&show, 12, false, &marks(&unmarked(), false));
         assert_eq!(show_row.number, "12");
         assert_eq!(
             (show_row.kind_class.as_str(), show_row.kind_label.as_str()),
@@ -1582,9 +1647,11 @@ mod tests {
     /// agree — which rows carry a toggle and which keys the summary counts.
     fn order_page(titles: &[WatchTitle], map: &ProgressMap, signed_in: bool) -> WatchOrderTemplate {
         let here = order_href("mcu", "complete", "US", "story");
+        let containers = container_ids(titles);
         let eras = group_into_eras(
             titles,
             "story",
+            &containers,
             &Marks {
                 marks: map,
                 signed_in,
@@ -1597,6 +1664,7 @@ mod tests {
             "title",
             eras.iter()
                 .flat_map(|era| era.rows.iter())
+                .filter(|row| !row.container)
                 .map(|row| row.toggle.release_key.as_str()),
         );
         WatchOrderTemplate {
@@ -1613,11 +1681,10 @@ mod tests {
             region: "US".into(),
             sort: "story".into(),
             sort_label: sort_label("story").to_string(),
-            total: titles.len(),
-            hours: 2,
-            essential: 0,
-            movies: titles.len(),
-            shows: 0,
+            // Percy's `/stats` shape, derived over the same rows Percy derives it over — the
+            // point of the container tests below is that this number and the rendered list
+            // cannot disagree.
+            stats: derive_stats(titles, &containers),
         }
     }
 
@@ -1701,6 +1768,214 @@ mod tests {
         let out = render_title(title_page(detail_title(), Vec::new()));
         assert!(!out.contains("/account/progress"));
         assert!(out.contains("Sign in to track"));
+    }
+
+    // -- The universe index --------------------------------------------------
+
+    fn summary(logo: Option<&str>, backdrop: Option<&str>) -> WatchUniverseSummary {
+        WatchUniverseSummary {
+            slug: "mcu".into(),
+            name: "Marvel Cinematic Universe".into(),
+            accent: "#E62429".into(),
+            logo_url: logo.map(str::to_string),
+            backdrop_url: backdrop.map(str::to_string),
+            title_count: 144,
+            total_runtime: 22_000,
+            ..WatchUniverseSummary::default()
+        }
+    }
+
+    fn render_index(universes: Vec<WatchUniverseSummary>) -> String {
+        use askama::Template;
+        WatchlistTemplate {
+            account: None,
+            universes,
+            ticker: Vec::new(),
+        }
+        .render()
+        .expect("the watchlist index renders")
+    }
+
+    /// The contents of a card's `<h2>`, so an assertion about the heading cannot be
+    /// satisfied by the name appearing anywhere else on the page.
+    fn heading(html: &str) -> &str {
+        html.split_once("wl-card__name")
+            .and_then(|(_, rest)| rest.split_once("</h2>"))
+            .expect("the card renders a heading")
+            .0
+    }
+
+    #[test]
+    fn the_index_renders_the_art_percy_has_and_nothing_where_it_has_none() {
+        // Today's real state: every seed's art columns are empty. The card must then be the
+        // plain card it has always been -- no modifier, no backdrop layer, no image element
+        // reserving a band -- with the name carrying the heading as text.
+        let bare = render_index(vec![summary(None, None)]);
+        assert!(!bare.contains("wl-card--art"), "no scrim without a photo to scrim");
+        assert!(!bare.contains("wl-card__backdrop"));
+        assert!(!bare.contains("wl-card__logo"));
+        // ...and the name is what the heading itself carries, not something the card only
+        // mentions elsewhere: a tile with neither art nor a name is a blank tile.
+        assert!(heading(&bare).contains("Marvel Cinematic Universe"));
+
+        let art = render_index(vec![summary(Some("/logo.png"), Some("/backdrop.jpg"))]);
+        assert!(art.contains("wl-card--art"));
+        assert!(art.contains("url('/backdrop.jpg')"));
+        // The wordmark *is* the heading, so the name is its alt text rather than beside it.
+        assert!(art.contains(r#"alt="Marvel Cinematic Universe""#));
+        assert!(art.contains(r#"aria-hidden="true""#));
+    }
+
+    // -- Series containers (`V45`) -----------------------------------------
+
+    /// A multi-season show as `V45` stores it and the universe payload returns it: the series
+    /// container first, then one row per season naming the series' `id` as its parent. Order
+    /// matches Percy's (`ORDER BY … COALESCE(season_number, -1), id`).
+    fn exploded(id: i64, slug: &str, seasons: i64) -> Vec<WatchTitle> {
+        let mut rows = vec![WatchTitle {
+            id,
+            kind: "tv".into(),
+            episodes: Some(seasons * 8),
+            runtime: seasons * 400,
+            ..title(slug, None)
+        }];
+        rows.extend((1..=seasons).map(|number| WatchTitle {
+            id: id * 100 + number,
+            parent_id: Some(id),
+            season_number: Some(number),
+            season_name: Some(format!("Season {number}")),
+            kind: "tv".into(),
+            episodes: Some(8),
+            runtime: 400,
+            ..title(&format!("{slug}-season-{number}"), None)
+        }));
+        rows
+    }
+
+    /// Film, then a two-season show exploded into a container + its seasons, then a
+    /// single-season show — which `V45` never explodes, so it has no children.
+    fn with_a_container() -> Vec<WatchTitle> {
+        let mut titles = vec![WatchTitle {
+            id: 1,
+            kind: "movie".into(),
+            importance: Some("essential".into()),
+            ..title("iron-man", None)
+        }];
+        titles.extend(exploded(2, "daredevil", 2));
+        titles.push(WatchTitle {
+            id: 5,
+            kind: "tv".into(),
+            ..title("hawkeye", None)
+        });
+        titles
+    }
+
+    #[test]
+    fn a_container_is_a_heading_and_its_seasons_are_the_entries() {
+        let titles = with_a_container();
+        let containers = container_ids(&titles);
+        assert_eq!(containers, vec![2], "only the row its seasons name as parent");
+
+        let rows = &group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false))[0].rows;
+        assert_eq!(rows.len(), 5, "every payload row still renders");
+
+        // The container: a heading, so no number and no position of its own...
+        let series = rows.iter().find(|row| row.slug == "daredevil").unwrap();
+        assert!(series.container);
+        assert_eq!(series.number, "");
+        assert_eq!(series.position, 0);
+
+        // ...and the numbers down the left count only what a reader watches, so the season
+        // after the one film is 02 rather than 03.
+        let numbers: Vec<&str> = rows.iter().map(|row| row.number.as_str()).collect();
+        assert_eq!(numbers, ["01", "", "02", "03", "04"]);
+
+        // A single-season show is not a container and reads as itself.
+        let single = rows.iter().find(|row| row.slug == "hawkeye").unwrap();
+        assert!(!single.container);
+        assert_eq!(single.number, "04");
+    }
+
+    #[test]
+    fn the_figures_count_exactly_the_rows_rendered_as_entries() {
+        // The whole point of the container rule: Percy's `/stats` excludes containers, so a
+        // page that rendered them as entries would print 5 next to 4 watchable rows.
+        let titles = with_a_container();
+        let containers = container_ids(&titles);
+        let eras = group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false));
+        let entries = eras
+            .iter()
+            .flat_map(|era| era.rows.iter())
+            .filter(|row| !row.container)
+            .count();
+
+        let stats = derive_stats(&titles, &containers);
+        assert_eq!(stats.total, 4);
+        assert_eq!(stats.total as usize, entries, "the header and the list must agree");
+        assert_eq!(eras[0].entries, entries, "and so must the section's own badge");
+        // The container's runtime is its seasons' sum, so counting it would double the show.
+        assert_eq!(stats.runtime, 126 + 400 + 400 + 126);
+        assert_eq!(stats.movies, 1);
+        assert_eq!(stats.shows, 3, "two seasons and the unexploded show");
+        assert_eq!(stats.essential, 1);
+    }
+
+    #[test]
+    fn watching_every_entry_reaches_the_end_of_the_bar() {
+        // A container in the denominator would strand a completist at 4 of 5 forever.
+        let map = crate::progress::tests::map(
+            "title",
+            &[
+                "mcu/iron-man",
+                "mcu/daredevil-season-1",
+                "mcu/daredevil-season-2",
+                "mcu/hawkeye",
+            ],
+        );
+        let html = render_order(order_page(&with_a_container(), &map, true));
+
+        assert!(html.contains("4 of 4 watched"), "{html}");
+        assert!(html.contains("width: 100%"));
+    }
+
+    #[test]
+    fn a_container_carries_no_data_entry_and_no_toggle() {
+        // progress.js drives j/k and `w` off `[data-entry]` and `form[data-progress]`: a
+        // heading with either would be a stop with nothing to toggle, and a `w` there would
+        // post a mark for a row Percy does not count.
+        let html = render_order(order_page(&with_a_container(), &unmarked(), true));
+
+        assert_eq!(
+            html.matches("data-entry").count(),
+            4,
+            "one per entry, none for the series"
+        );
+        assert_eq!(html.matches("data-progress").count(), 4);
+        assert!(
+            !html.contains(r#"value="mcu/daredevil""#),
+            "no mark is keyed to the series"
+        );
+
+        // The heading is still there, and still a link to the series' own page — that is
+        // where its series-level cast and trailer live.
+        assert!(html.contains("wl-entry--series"));
+        assert!(html.contains(r#"href="/watchlist/mcu/daredevil""#));
+        assert!(html.contains(">Series<"));
+    }
+
+    #[test]
+    fn a_container_shows_no_rank_marker_it_was_never_counted_under() {
+        let mut titles = with_a_container();
+        titles[1].importance = Some("essential".into());
+        titles[1].milestone = true;
+        let containers = container_ids(&titles);
+        let rows = &group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false))[0].rows;
+
+        let series = rows.iter().find(|row| row.slug == "daredevil").unwrap();
+        assert!(series.importance.is_none(), "a rank the essential figure never counted");
+        assert!(!series.milestone);
+        // The film's own rank is untouched.
+        assert_eq!(rows[0].importance.as_deref(), Some("essential"));
     }
 
     #[test]

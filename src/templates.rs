@@ -713,11 +713,10 @@ pub(crate) struct WatchOrderTemplate {
     pub(crate) sort: String,
     /// `story order` / `release order`, for prose in the meta description.
     pub(crate) sort_label: String,
-    pub(crate) total: usize,
-    pub(crate) hours: i64,
-    pub(crate) essential: usize,
-    pub(crate) movies: usize,
-    pub(crate) shows: usize,
+    /// Percy's own totals for this path (`GET /watchlist/universes/{slug}/stats`), never
+    /// counted here — see `watchlist::watch_order`. They exclude series *container* rows,
+    /// which is why the rendered list excludes them from its numbering too.
+    pub(crate) stats: WatchStats,
 }
 
 /// One era heading and the titles under it.
@@ -725,11 +724,21 @@ pub(crate) struct OrderEra {
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) rows: Vec<OrderRow>,
+    /// How many of `rows` are watchable entries — the section's count badge. Not
+    /// `rows.len()`: a series container is a heading among the rows, not an entry.
+    pub(crate) entries: usize,
 }
 
 /// One row of a watch order, with everything the template needs precomputed.
 pub(crate) struct OrderRow {
-    /// Position in the whole order (1-based), not within the era.
+    /// A series that `V45` exploded into per-season entries: a group *header* for the
+    /// seasons beneath it, not something a reader watches. It carries no position, no
+    /// `data-entry` (so `j`/`k` never land on it), no toggle and no place in the count —
+    /// exactly what the migration's own note says a container is. A single-season show is
+    /// never exploded, so it stays an ordinary entry and still reads as "Hawkeye".
+    pub(crate) container: bool,
+    /// Position among the *entries* (1-based), not within the era, and not counting
+    /// containers. Zero on a container.
     pub(crate) position: usize,
     /// `position` zero-padded to two digits, as the row's index column shows it.
     pub(crate) number: String,
