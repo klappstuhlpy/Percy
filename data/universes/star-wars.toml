@@ -28,6 +28,11 @@ name = "Prequel Trilogy (1999-2005)"
 order = 200
 
 [[eras]]
+key = "clone-wars"
+name = "The Clone Wars (2008)"
+order = 220
+
+[[eras]]
 key = "anthology"
 name = "Anthology Films (2016-2018)"
 order = 250
@@ -110,6 +115,49 @@ release = 600
 context = "Anakin Skywalker's fall to the dark side and Palpatine's rise complete the Republic's transformation into the Empire."
 milestone = true
 importance = { release = "essential", chronological = "essential" }
+
+# --- The Clone Wars (theatrical) ---
+# GET /movie/12180 -> "Star Wars: The Clone Wars", 2008-08-05, 98 minutes, Lucasfilm Ltd. /
+# Lucasfilm Animation / Warner Bros. Pictures (verified 2026-08-19). It was previously left to
+# the movie discovery block, which files everything it finds under "Shorts & Specials" -- a
+# 98-minute theatrical feature is not a short, and that mislabelling is the whole defect.
+# Curation always wins over discovery, so no exclude entry is needed.
+#
+# Why its own era rather than an existing one: "Prequel Trilogy (1999-2005)" is a trilogy and
+# this is not part of it, "Anthology Films (2016-2018)" is the wrong decade, and "Television"
+# would repeat the original error in the other direction -- this ran in cinemas. So it gets a
+# one-title era named for what it is. The `tv 4194` series it leads into stays in "Television",
+# where the TV sweep puts it; splitting the pair across two eras is correct, because an era is
+# a label on a release and these two releases are of different kinds.
+#
+# Ordering: the film is set between Attack of the Clones (story 200) and Revenge of the Sith
+# (story 300), so story = 250. It reached theaters in 2008, after Revenge of the Sith
+# (release 600) and before The Force Awakens (release 700), so release = 650. Both paths order
+# titles globally by their story/release number, not era-first, so these two numbers -- not the
+# era's order -- are what actually place it on the page.
+#
+# **Slug trap, recorded here so it is not re-derived.** This film and `tv 4194` both slugify to
+# "star-wars-the-clone-wars", and `slug_candidates` in app/services/watchlist/ingest.py is
+# [slug, slug-{year}, slug-{tmdb_id}]. Whichever row is processed first keeps the bare slug and
+# the other falls to the year candidate -- but the film is 2008-08-05 and the series' first air
+# date is 2008-10-03, so the loser lands on "star-wars-the-clone-wars-2008", **a year suffix
+# that discriminates nothing to a reader**. This is not fixable in a seed: `_parse_titles` in
+# app/services/watchlist/seeds.py recognises no `slug` key, and `movie_row`/`tv_row` derive the
+# slug from the TMDB title unconditionally. Do not invent seed syntax for it; a separate change
+# owns that code. What matters here is that the assignment must not move: curated titles are
+# processed before discovered ones, so curating the film below keeps it first and keeps the
+# film on the bare slug and the series on "-2008" exactly as before this edit -- and
+# `release_progress` rows are keyed "{universe}/{slug}", so a swap would silently re-point a
+# reader's watched-marks at the other title. Do not reorder this block relative to the TV block.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 12180
+era = "clone-wars"
+story = 250
+release = 650
+context = "Anakin Skywalker takes on a Padawan, Ahsoka Tano, on a rescue mission that opens the Clone Wars and leads directly into the animated series."
+importance = { release = "optional", chronological = "recommended" }
 
 # --- Anthology ---
 
