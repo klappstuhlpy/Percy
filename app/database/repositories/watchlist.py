@@ -342,11 +342,13 @@ class WatchlistRepository(BaseRepository):
             for row in rows:
                 await conn.execute(
                     """
-                    INSERT INTO watch_providers (title_id, region, provider_id, provider_name, logo_path, offer)
-                    VALUES ($1, $2, $3, $4, $5, $6);
+                    INSERT INTO watch_providers (
+                        title_id, region, provider_id, provider_name, logo_path, offer, link
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7);
                     """,
                     title_id, region, row['provider_id'], row['provider_name'],
-                    row.get('logo_path'), row.get('offer', 'flatrate'),
+                    row.get('logo_path'), row.get('offer', 'flatrate'), row.get('link'),
                 )
 
     async def prune_titles(self, universe: str, keep_ids: Sequence[int]) -> int:

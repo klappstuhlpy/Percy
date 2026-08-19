@@ -353,11 +353,17 @@ def provider_rows(payload: Mapping[str, Any], region: str) -> list[dict[str, Any
 
     Emits one row per provider per bucket (``flatrate``, ``rent``, ``buy``); a region absent
     from the payload (not subscribed to by anyone TMDB tracks there) yields ``[]``.
+
+    ``link`` is TMDB's own per-*region* watch link, copied onto every row of that region: TMDB's
+    terms ask for it wherever the provider logos appear, so it travels with the logos rather than
+    in a table of its own (see ``V46``). A region that carries a link but no offers yields no rows
+    and so keeps no link -- which is the right answer, since there is no logo to attribute.
     """
     region_data = (payload.get('results') or {}).get(region)
     if not region_data:
         return []
 
+    link = region_data.get('link')
     rows: list[dict[str, Any]] = []
     for offer in _PROVIDER_BUCKETS:
         rows.extend(
@@ -366,6 +372,7 @@ def provider_rows(payload: Mapping[str, Any], region: str) -> list[dict[str, Any
                 'provider_name': provider['provider_name'],
                 'logo_path': provider.get('logo_path'),
                 'offer': offer,
+                'link': link,
             }
             for provider in region_data.get(offer) or []
         )

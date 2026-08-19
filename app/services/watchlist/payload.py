@@ -143,6 +143,7 @@ def title_payload(
             'provider_name': provider['provider_name'],
             'logo_path': provider['logo_path'],
             'offer': provider['offer'],
+            'link': provider['link'],
         }
         for provider in providers
     ]

@@ -104,11 +104,13 @@ TITLES = [
     ),
 ]
 
+#: ``list_providers`` rows. ``link`` (``V46``) is TMDB's per-region watch link, the same on every
+#: row of one title+region because that is the grain TMDB publishes it at.
 PROVIDERS = [
     {'title_id': 1, 'region': 'DE', 'provider_id': 337, 'provider_name': 'Disney Plus',
-     'logo_path': '/d.jpg', 'offer': 'flatrate'},
+     'logo_path': '/d.jpg', 'offer': 'flatrate', 'link': 'https://www.themoviedb.org/movie/1726/watch?locale=DE'},
     {'title_id': 1, 'region': 'DE', 'provider_id': 3, 'provider_name': 'Google Play',
-     'logo_path': None, 'offer': 'rent'},
+     'logo_path': None, 'offer': 'rent', 'link': 'https://www.themoviedb.org/movie/1726/watch?locale=DE'},
 ]
 
 PEOPLE = [
@@ -144,6 +146,17 @@ def test_title_payload_is_json_safe() -> None:
     assert isinstance(payload['tmdb_rating'], float)
     assert [p['provider_name'] for p in payload['providers']] == ['Disney Plus', 'Google Play']
     assert 'title_id' not in payload['providers'][0]  # regrouping key is not echoed back
+
+
+def test_title_payload_carries_the_provider_attribution_link() -> None:
+    # V46: TMDB's terms ask for their watch link wherever the provider logos are shown, and the
+    # watch-order page shows them -- so every provider entry has to carry it, on every surface
+    # that renders a logo (the title detail page reuses this same shaping).
+    payload = title_payload(TITLES[0], providers=PROVIDERS)
+    assert [p['link'] for p in payload['providers']] == [
+        'https://www.themoviedb.org/movie/1726/watch?locale=DE',
+        'https://www.themoviedb.org/movie/1726/watch?locale=DE',
+    ]
 
 
 def test_title_payload_tolerates_missing_rating_and_importance() -> None:

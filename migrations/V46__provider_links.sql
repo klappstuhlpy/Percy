@@ -1,0 +1,35 @@
+-- Revises: V45
+-- Creation Date: 2026-08-19 00:00:00.000000+00:00 UTC
+-- Reason: provider links
+
+-- TMDB's ``watch/providers`` response has always handed us a ``link`` per region alongside the
+-- provider buckets, and ``provider_rows`` has always thrown it away. TMDB's terms ask for that
+-- link wherever the provider logos are shown, and the watch-order page shows them -- so this is
+-- a compliance gap closed with data we already fetch. No new upstream call.
+--
+-- The grain: ``link`` is a property of ``(title, region)``, not of a provider, so the normalised
+-- home for it is a ``watch_provider_links (title_id, region, link)`` row. It goes on the provider
+-- row anyway, and deliberately:
+--
+--   * The read path is already exactly one query per page (``list_providers``, batched over every
+--     title id). A second table means a second query and a second grouping pass in
+--     ``universe_payload`` for one short string -- or a join whose only job is to re-attach a
+--     value that is constant within the group we just built.
+--   * The write path is already atomic per ``(title_id, region)``: ``replace_providers`` deletes
+--     and re-inserts that exact tuple in one transaction. A per-region column therefore has the
+--     same lifetime as the rows beside it, with no second delete to keep in step and no way for
+--     the link to outlive the offers it points at.
+--   * The consumer wants it per row. The page renders one anchor per provider logo, so the
+--     denormalised shape is the shape the renderer reads -- ``providers[].link`` needs no lookup.
+--
+-- The cost is a ~77-character URL repeated across the (typically fewer than ten) provider rows of
+-- one title in one region. That is the trade taken: duplication measured in kilobytes across the
+-- whole catalogue, against a query and a payload fork.
+--
+-- Nullable, with no backfill. A region TMDB tracks always carries a link, but a row written
+-- before this migration has none and there is nothing to derive it from -- the URL embeds TMDB's
+-- own title slug, so guessing it would mean inventing an attribution link rather than echoing the
+-- one we were given. NULL is the honest "not re-synced yet", and the next ``watchlist sync``
+-- replaces those rows wholesale.
+ALTER TABLE watch_providers
+    ADD COLUMN IF NOT EXISTS link TEXT;

@@ -903,6 +903,41 @@ def test_provider_rows_flattens_all_buckets() -> None:
     assert rows[0]['provider_id'] == 8
 
 
+def test_provider_rows_keep_the_regions_attribution_link() -> None:
+    # V46: TMDB hands over one ``link`` per region and this function used to drop it, while the
+    # page it feeds shows the provider logos the link is the required attribution for. It is the
+    # region's property, so every row of that region carries the same one.
+    payload = {
+        'results': {
+            'US': {
+                'link': 'https://www.themoviedb.org/movie/1726/watch?locale=US',
+                'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg'}],
+                'rent': [{'provider_id': 2, 'provider_name': 'Apple TV', 'logo_path': None}],
+            },
+            'GB': {
+                'link': 'https://www.themoviedb.org/movie/1726/watch?locale=GB',
+                'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg'}],
+            },
+        },
+    }
+
+    assert [row['link'] for row in provider_rows(payload, 'US')] == [
+        'https://www.themoviedb.org/movie/1726/watch?locale=US',
+        'https://www.themoviedb.org/movie/1726/watch?locale=US',
+    ]
+    assert [row['link'] for row in provider_rows(payload, 'GB')] == [
+        'https://www.themoviedb.org/movie/1726/watch?locale=GB',
+    ]
+
+
+def test_provider_rows_tolerate_a_region_with_no_link() -> None:
+    # Every region TMDB returns carries a link today (76/76 on movie 299536, checked live), but a
+    # missing one must not cost the offers -- the column is nullable for exactly this.
+    rows = provider_rows(
+        {'results': {'US': {'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix'}]}}}, 'US')
+    assert rows[0]['link'] is None
+
+
 # -- WatchlistIngest.sync -----------------------------------------------------------------------
 
 
@@ -1068,6 +1103,7 @@ async def test_sync_records_provider_rows_and_report_count() -> None:
     providers_payload = {
         'results': {
             'US': {
+                'link': 'https://www.themoviedb.org/movie/1/watch?locale=US',
                 'flatrate': [{'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg'}],
                 'rent': [],
                 'buy': [],
@@ -1085,7 +1121,8 @@ async def test_sync_records_provider_rows_and_report_count() -> None:
 
     title_id = repo.pruned_with[0]
     assert repo.providers[(title_id, 'US')] == [
-        {'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg', 'offer': 'flatrate'},
+        {'provider_id': 8, 'provider_name': 'Netflix', 'logo_path': '/n.jpg', 'offer': 'flatrate',
+         'link': 'https://www.themoviedb.org/movie/1/watch?locale=US'},
     ]
     assert repo.providers[(title_id, 'GB')] == []  # GB has no providers in the payload
     assert report.providers_written == 1
