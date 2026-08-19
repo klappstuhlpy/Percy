@@ -47,11 +47,6 @@ key = "new-mutants"
 name = "The New Mutants"
 order = 300
 
-[[eras]]
-key = "extras"
-name = "Shorts & Specials"
-order = 350
-
 # --- Original trilogy ---
 
 [[titles]]
@@ -214,18 +209,34 @@ release = 1000
 context = "A rebooted origin sends four young scientists to an alternate dimension, where an accident grants them their powers."
 importance = { release = "optional", chronological = "optional" }
 
-# --- Discovery: sweeps in anything not hand-curated above ---
-# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
-
-[[discover]]
-kind = "movie"
-# "X-Men Collection" -- verified via GET /collection/748 (its 7 parts are all already
-# hand-curated above: X-Men, X2, The Last Stand, First Class, Days of Future Past,
-# Apocalypse, Dark Phoenix). Kept as a future-proof: a new mainline entry added to this
-# TMDB collection is swept in automatically without a seed edit.
-collection = 748
-era = "extras"
-importance = "optional"
+# --- No movie discovery: the mainline films are fully curated ---
+#
+# This seed carried a `[[discover]]` collection block (748, "X-Men Collection") until
+# 2026-08-19. It was removed because it contributed **zero titles and could never contribute
+# one**, which reads on the page as coverage that does not exist. A block that silently
+# contributes nothing is worse than no block.
+#
+# Re-verified live on 2026-08-19: GET /collection/748 -> "X-Men Collection", exactly 7 parts,
+# and all seven are hand-curated above -- 36657 X-Men (2000-07-13), 36658 X2 (2003-04-27),
+# 36668 The Last Stand (2006-05-24), 49538 First Class (2011-06-01), 127585 Days of Future
+# Past (2014-05-15), 246655 Apocalypse (2016-05-18), 320288 Dark Phoenix (2019-06-05).
+# Curation always beats discovery, so every result was dropped as already-curated. Nothing
+# was broken -- the block was inert by construction.
+#
+# Its stated purpose was to future-proof a new mainline entry added to the collection, and
+# unlike the Wizarding World's collection blocks there is not even an argument to have about
+# what is coming: the Fox X-Men line is closed. The mutants Marvel Studios is now making sit
+# in `mcu.toml` under Phase 6 (movie 1293690, the untitled X-Men film), a different studio,
+# a different continuity and a different seed -- nothing TMDB would add to collection 748.
+# If a genuinely new Fox-continuity film ever ships it gets a hand-written `[[titles]]` block
+# with a real era, story order and context, which both of this universe's paths need anyway;
+# a discovered title would land at the bottom of the order with no context and have to be
+# curated by hand regardless.
+#
+# The `extras` era ("Shorts & Specials", order 350) went with the block: it was declared for
+# that block alone and nothing else referenced it. An era is only ever emitted for titles that
+# carry it, so a leftover key rendered nothing -- but it read as a section this universe has,
+# and it does not have one.
 
 # No TV discovery block: Legion (2017) and The Gifted (2017) are this era's only shows,
 # and their shared production company (Marvel Television, id 38679) is dominated by
