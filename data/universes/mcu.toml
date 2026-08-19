@@ -462,6 +462,45 @@ release = 3900
 context = "Marvel Studios' first X-Men film, dated but still untitled and uncast at the time of writing."
 importance = { complete = "recommended", essentials = "recommended" }
 
+# --- Correction to this file's own history, so its git log cannot mislead the next editor ---
+# The commit that curated Phase 6 above states that Ghost Rider, Armor Wars, Blade and Nova
+# stay out because "none has a TMDB entry". That is **false for two of the four**, and a
+# published commit message cannot be amended, so the truth is recorded here where someone
+# editing this file will actually read it. Re-checked on 2026-08-19 against the complete
+# company=420 movie sweep this file's discovery block runs (104 results over 6 pages):
+#
+#  * Ghost Rider -- movie 1738010. GET /movie/1738010 -> "Ghost Rider", 2028-07-28, genres
+#    Fantasy/Action, companies Marvel Studios + Kevin Feige Productions. It exists, the sweep
+#    returns it, and it was therefore landing in "Shorts & Specials" as optional -- exactly the
+#    defect the Phase 6 pass above was written to remove. Curated immediately below.
+#  * Nova -- movie 1731190. GET /movie/1731190 -> "Nova", no release date, genre Science
+#    Fiction, companies Marvel Studios + Kevin Feige Productions. It exists too, but being
+#    undated the sweep drops it, so it was absent rather than misfiled. Curated below the
+#    Shang-Chi sequel, for the same reason that one had to be curated at all.
+#  * Armor Wars -- GET /search/movie?query=Armor%20Wars returns 0 results and nothing in the
+#    company=420 sweep matches. Genuinely absent. Do not invent an id for it.
+#  * Blade -- the only Blade films TMDB holds are the New Line trilogy (36647, 36586, 36648).
+#    No Marvel Studios entry exists and none is in the sweep. Genuinely absent.
+#
+# One further sweep row is named here because it will otherwise be re-investigated: 1751518
+# "Nova Corps" is returned by discover/movie under company=420, but GET /movie/1751518 answers
+# 404. An id discovery lists and the detail endpoint denies could not be verified, so it is not
+# written here -- leave it out until it resolves.
+#
+# Ghost Rider is dated 2028-07-28, which falls between the untitled X-Men film (2028-05-05) and
+# Black Panther 3 (2028-12-13), so it takes the 3950 slot between them rather than a slot after
+# the undated Shang-Chi sequel -- that one sorts last within Phase 6 precisely because it has no
+# date, and a dated film sorting behind it would break the rule stated at its block.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1738010
+era = "phase6"
+story = 3950
+release = 3950
+context = "A Ghost Rider film announced for mid-2028, with no title beyond the character's name and no plot released."
+importance = { complete = "recommended", essentials = "optional" }
+
 [[titles]]
 tmdb_type = "movie"
 tmdb_id = 1386618
@@ -480,6 +519,18 @@ era = "phase6"
 story = 4100
 release = 4100
 context = "A sequel to Shang-Chi and the Legend of the Ten Rings, announced without a release date."
+importance = { complete = "optional", essentials = "optional" }
+
+# Undated for the same reason and dropped by the sweep for the same reason -- see the correction
+# comment above for the live payload. It sorts after the Shang-Chi sequel only because two
+# undated films need a stable relative order, not because anything is known about either date.
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1731190
+era = "phase6"
+story = 4200
+release = 4200
+context = "A Nova film announced without a release date, title or cast."
 importance = { complete = "optional", essentials = "optional" }
 
 # --- Television: curated only where the discovery block below cannot reach ---
