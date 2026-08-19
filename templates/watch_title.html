@@ -8,7 +8,7 @@
 
 {% block meta_description %}{% if title.is_empty() %}This title couldn't be loaded right now.{% else %}{{ title }} in the {{ universe.name }} watch order — where it fits, runtime, cast and where to stream it.{% endif %}{% endblock %}
 {% block og_title %}{{ title }}{% endblock %}
-{% block og_description %}{% match context %}{% when Some with (why) %}{{ why }}{% when None %}Position {{ position }} of {{ total }} in the {{ universe.name }} {{ sort_label }}.{% endmatch %}{% endblock %}
+{% block og_description %}{% match context %}{% when Some with (why) %}{{ why }}{% when None %}{% match position %}{% when Some with (place) %}Position {{ place }} of {{ total }} in the {{ universe.name }} {{ sort_label }}.{% when None %}{{ seasons.len() }} seasons in the {{ universe.name }} {{ sort_label }}.{% endmatch %}{% endmatch %}{% endblock %}
 {% block og_url %}{{ crate::config::public_base_url() }}/watchlist/{{ universe.slug }}/{{ slug }}{% endblock %}
 
 {% block css %}
@@ -66,7 +66,12 @@
                        signed-out state ("Sign in to track"), so the follow action only
                        appears when there is a session to act on. #}
                     <div class="wl-actions">
+                        {# A series `V45` split per season is a heading, not a row anybody
+                           watches: no count on any surface looks at its key, so a mark made
+                           here would go nowhere. Its seasons carry the toggles instead. #}
+                        {% if seasons.is_empty() %}
                         {% call progress::toggle(toggle) %}
+                        {% endif %}
                         {% if signed_in %}
                         <a class="wl-action" href="/account/subscriptions">Subscribe to {{ universe.short_name }}</a>
                         {% endif %}
@@ -107,14 +112,41 @@
             <div class="wl-facts__row"><dt>Studio</dt><dd>{{ value }}</dd></div>
             {% when None %}
             {% endmatch %}
+            {# `V45`'s season context. Both halves are optional and the row collapses on
+               either: a film has neither, a season Percy could not attach has only a name. #}
+            {% match season_label %}
+            {% when Some with (label) %}
+            <div class="wl-facts__row">
+                <dt>Season</dt>
+                <dd>{{ label }}{% match parent %}{% when Some with (series) %} of <a href="/watchlist/{{ universe.slug }}/{{ series.slug }}{{ link_query }}">{{ series.title }}</a>{% when None %}{% endmatch %}</dd>
+            </div>
+            {% when None %}
+            {% endmatch %}
         </dl>
+
+        {# §9's attribution, the same line `person.html` carries and this page never did.
+           Absent, not empty, when Percy holds no id for the row. #}
+        {% match tmdb_url %}
+        {% when Some with (url) %}
+        <p class="wl-facts__tmdb"><a href="{{ url }}" target="_blank" rel="noopener">View on TMDB</a></p>
+        {% when None %}
+        {% endmatch %}
 
         {# ── 3. Where it fits — the section a static reference site can't do ── #}
         <section class="wl-fits">
             <h2 class="wl-section__title">Where it fits</h2>
             <p class="wl-fits__rail">
-                <span class="wl-fits__position">{{ position }}</span>
+                {% match position %}
+                {% when Some with (place) %}
+                <span class="wl-fits__position">{{ place }}</span>
                 <span class="wl-fits__of">of {{ total }}</span>
+                {% when None %}
+                {# Percy's figures never count a container, so drawing it a place would claim
+                   a number the order it links to does not hold. The `Series` tag stands where
+                   the number would, exactly as it does on the order page's own heading row. #}
+                <span class="wl-tag wl-tag--series">Series</span>
+                <span class="wl-fits__of">Its {{ seasons.len() }} seasons are the entries</span>
+                {% endmatch %}
                 <a class="wl-fits__order" href="{{ order_href }}">
                     {{ universe.name }} · {{ sort_label }}{% match path_name %}{% when Some with (name) %} · {{ name }} path{% when None %}{% endmatch %}
                 </a>
@@ -181,6 +213,35 @@
                 {% endmatch %}
             </div>
         </section>
+
+        {# ── 3b. Seasons — the entries this heading stands over ──────────
+           Rendered only for a container, so a film and a single-season show never see it.
+           A season poster falls back to the show's during ingest, so either every row here
+           has art or none does — which is why a missing one is simply left out rather than
+           given a placeholder that would jag a list nothing else can straighten. #}
+        {% if !seasons.is_empty() %}
+        <section class="wl-seasons">
+            <h2 class="wl-section__title">Seasons <span class="wl-cast__count">{{ seasons.len() }}</span></h2>
+            <ul class="wl-seasonlist">
+                {% for season in seasons %}
+                <li class="wl-season">
+                    {% match season.poster_url %}
+                    {% when Some with (poster) %}
+                    <img class="wl-season__poster" src="{{ poster }}" alt="" loading="lazy" width="46" height="69">
+                    {% when None %}
+                    {% endmatch %}
+                    <span class="wl-season__text">
+                        <a class="wl-season__name" href="/watchlist/{{ universe.slug }}/{{ season.slug }}{{ link_query }}">{{ season.label }}</a>
+                        {% if !season.meta.is_empty() %}
+                        <span class="wl-season__meta">{{ season.meta }}</span>
+                        {% endif %}
+                    </span>
+                    {% call progress::toggle(season.toggle) %}
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
 
         {# ── 4. Streaming — a plain GET form, no fetch, no JS ─────────── #}
         <section class="wl-watch" id="where-to-watch">

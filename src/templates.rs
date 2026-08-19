@@ -807,7 +807,12 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) studio: Option<String>,
     pub(crate) era: Option<String>,
     // -- Where it fits --
-    pub(crate) position: i64,
+    /// 1-based place among the ordering's **entries**, or `None` for a series container —
+    /// which `V45` made a heading over its seasons rather than a row anybody watches, and
+    /// which Percy's own figures never count. See `watchlist::place`.
+    pub(crate) position: Option<i64>,
+    /// How many entries that ordering holds — containers excluded, so this is the same
+    /// number the order page's header renders.
     pub(crate) total: i64,
     /// The curated path whose importance this title carries, humanised.
     pub(crate) path_name: Option<String>,
@@ -824,6 +829,14 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) next: Option<TitleNeighbour>,
     /// The title whose credits scene this entry really is, when it is one.
     pub(crate) credits_of: Option<TitleNeighbour>,
+    // -- Season context (`V45`): exactly one of the two is ever populated --
+    /// TMDB's own name for the season this entry is (`Season 2`, `Specials`).
+    pub(crate) season_label: Option<String>,
+    /// The series this entry is a season of, linked from the fact panel.
+    pub(crate) parent: Option<TitleNeighbour>,
+    /// The seasons under this entry, in season order — non-empty exactly when this row is
+    /// the container, in which case the seasons carry the marks it does not.
+    pub(crate) seasons: Vec<SeasonRow>,
     // -- Streaming --
     pub(crate) region: String,
     pub(crate) regions: Vec<RegionOption>,
@@ -843,6 +856,24 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) spoiler: Option<String>,
     /// Signed out, the action row collapses to one "Sign in to track" link.
     pub(crate) signed_in: bool,
+    /// `https://www.themoviedb.org/{movie|tv}/{id}` — the attribution link §9 requires on a
+    /// page showing TMDB data, which `person.html` has always carried and this one never
+    /// did. Absent when Percy holds no id (the empty state).
+    pub(crate) tmdb_url: Option<String>,
+}
+
+/// One season under a series container, on that series' own page.
+pub(crate) struct SeasonRow {
+    pub(crate) slug: String,
+    /// TMDB's own name for the season — `Season 2`, or `Specials`.
+    pub(crate) label: String,
+    pub(crate) poster_url: Option<String>,
+    /// `8 episodes · 6h 40m · 2015` — only the halves Percy actually has, and empty when it
+    /// has neither, so the line is absent rather than a stray separator.
+    pub(crate) meta: String,
+    /// The season's own watched control. The seasons are what a reader watches, so this is
+    /// where the mark belongs — the container heading them offers none.
+    pub(crate) toggle: ProgressToggle,
 }
 
 /// A neighbouring title, or the one this entry plays the credits of.

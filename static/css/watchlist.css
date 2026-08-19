@@ -843,7 +843,23 @@
     color: var(--text-muted);
 }
 
+/* The TMDB attribution link §9 requires, on the same terms `.wl-person__tmdb` states it:
+   quiet, under the facts it attributes, never competing with our own marks. */
+.wl-facts__tmdb {
+    margin: -0.5rem 0 1.5rem;
+    font-size: 0.72rem;
+}
+
+.wl-facts__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-facts__tmdb a:hover {
+    color: var(--foreground);
+}
+
 .wl-fits,
+.wl-seasons,
 .wl-watch,
 .wl-credits,
 .wl-related-news,
@@ -966,6 +982,66 @@
     font-size: 0.78rem;
     color: var(--text-muted);
 }
+
+/* ── Seasons ─────────────────────────────────────────────────
+   Only a series container renders these: they are the entries it heads, so each carries the
+   watched control the heading itself does not. Deliberately a list rather than the cast's
+   card grid -- a season is read left to right (which one, how long, watched) and the toggle
+   has to sit at the end of that line, not under a poster. */
+
+.wl-seasonlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-season {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-season__poster {
+    flex: none;
+    width: 46px;
+    height: 69px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border-radius: 4px;
+}
+
+/* Takes the free space so the toggle sits flush right on every row, whatever the label. */
+.wl-season__text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    gap: 0.15rem;
+}
+
+.wl .wl-season__name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-season__name:hover {
+    color: var(--wl-accent);
+}
+
+.wl-season__meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 
 /* ── Streaming ───────────────────────────────────────────────────── */
 
