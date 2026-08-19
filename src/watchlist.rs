@@ -1273,18 +1273,21 @@ mod tests {
                 provider_name: "Disney Plus".into(),
                 logo_path: Some("/d.jpg".into()),
                 offer: "flatrate".into(),
+                link: None,
             },
             WatchProvider {
                 provider_id: 337,
                 provider_name: "Disney Plus".into(),
                 logo_path: Some("/d.jpg".into()),
                 offer: "rent".into(),
+                link: None,
             },
             WatchProvider {
                 provider_id: 3,
                 provider_name: "Google Play".into(),
                 logo_path: Some("/g.jpg".into()),
                 offer: "rent".into(),
+                link: None,
             },
         ];
 
@@ -1322,18 +1325,21 @@ mod tests {
                     provider_name: "Disney Plus".into(),
                     logo_path: Some("/d.jpg".into()),
                     offer: "flatrate".into(),
+                    link: None,
                 },
                 WatchProvider {
                     provider_id: 337,
                     provider_name: "Disney Plus".into(),
                     logo_path: Some("/d.jpg".into()),
                     offer: "rent".into(),
+                    link: None,
                 },
                 WatchProvider {
                     provider_id: 3,
                     provider_name: "Google Play".into(),
                     logo_path: Some("/g.jpg".into()),
                     offer: "rent".into(),
+                    link: None,
                 },
             ],
             trailer: Some(WatchTrailer {
