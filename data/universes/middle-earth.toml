@@ -3,6 +3,16 @@ name = "Middle-earth"
 short_name = "Middle-earth"
 tagline = "Peter Jackson's Hobbit and Lord of the Rings trilogies, plus the Third Age prequel War of the Rohirrim."
 accent = "#C9A227"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# No single TMDB collection spans the two trilogies plus War of the Rohirrim, so the art is
+# taken from the Lord of the Rings side and chosen to stand for all of it.
+# GET /collection/119/images -> backdrops: the One Ring on the map -- the one symbol both
+# Jackson trilogies share, and it happens to sit on this universe's gold accent.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/bccR2CGTWVVSZAG0yqmy3DIvhTX.jpg"
+# GET /movie/122/images?include_image_language=en -> logos: the gold "The Lord of the Rings"
+# treatment. Middle-earth Enterprises' own mark (company 194237) exists only as flat black
+# and flat white, each of which is invisible on one of the two themes.
+logo_url = "https://image.tmdb.org/t/p/w500/l2uvD5DO7sLNMMWxKDth5Lh7zlx.png"
 published = true
 sort_order = 60
 

@@ -3,6 +3,15 @@ name = "Marvel Cinematic Universe"
 short_name = "MCU"
 tagline = "Six phases, from a cave workshop to a multiverse-spanning threat."
 accent = "#E62429"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# GET /collection/86311/images (The Avengers Collection) -> backdrops: the textless glowing
+# Avengers mark. The alternatives are six-face montages, and a header scrim needs the frame
+# underneath it to be quiet.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/irDiLpzsJVFRg6FAbOL7IVvYrpl.jpg"
+# GET /company/7505/images (Marvel Entertainment) -> logos. Marvel *Studios*' own logos
+# (company 420) all set "STUDIOS" in black, which disappears against the dark theme; this
+# one is white on the red brick and reads on both.
+logo_url = "https://image.tmdb.org/t/p/w500/837VMM4wOkODc1idNxGT0KQJlej.png"
 published = true
 sort_order = 0
 

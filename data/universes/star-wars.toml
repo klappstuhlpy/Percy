@@ -3,6 +3,13 @@ name = "Star Wars"
 short_name = "Star Wars"
 tagline = "Nine chapters of the Skywalker saga, plus the anthology films that stand beside them."
 accent = "#FFE81F"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# GET /collection/10/images -> backdrops: the textless Star Destroyer over a planet, the
+# calmest wide frame in the set -- the cast montages are far too busy to sit under a header.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/d8duYyyC9J5T825Hg7grmaabfxQ.jpg"
+# GET /movie/11/images?include_image_language=en -> logos: the gold wordmark with no
+# subtitle. The white and outline-only variants vanish against the light theme.
+logo_url = "https://image.tmdb.org/t/p/w500/uuYGkf8rGl7nJ92jaXt7f9plL4p.png"
 published = true
 sort_order = 20
 

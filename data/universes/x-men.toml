@@ -3,6 +3,14 @@ name = "X-Men"
 short_name = "X-Men"
 tagline = "Fox's mutant saga, the Deadpool and New Mutants spin-offs, and the Fox Fantastic Four films."
 accent = "#003DA5"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# Collection 748 covers only the X-Men films proper, not Deadpool, New Mutants or the Fox
+# Fantastic Four -- but its key art is the franchise's, which is all this field needs.
+# GET /collection/748/images -> backdrops: the brushed-steel X, textless and nearly flat.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/s6SCVr5Q3LnYDK9k9pZtP69CTTM.jpg"
+# GET /movie/36657/images?include_image_language=en -> logos: the silver X-MEN wordmark. Its
+# metallic gradient carries both light and dark values, so it reads on either theme.
+logo_url = "https://image.tmdb.org/t/p/w500/bfUbOGdmttSCvar958KkUJlEOiQ.png"
 published = true
 sort_order = 30
 

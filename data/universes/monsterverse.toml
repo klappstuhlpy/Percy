@@ -3,6 +3,15 @@ name = "MonsterVerse"
 short_name = "MonsterVerse"
 tagline = "Godzilla and Kong's shared universe, from the 2014 reboot to Monarch's global conspiracy."
 accent = "#D64520"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# TMDB has no MonsterVerse collection (/search/collection returns none), so both come from
+# the crossover film that names the shared universe best.
+# GET /movie/399566/images (Godzilla vs. Kong) -> backdrops: the two titans in mist over the
+# city, the softest frame available -- the rest are saturated fire that fights the scrim.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/wWqTMWkEw6HouLd1zPZbZWxtAPr.jpg"
+# GET /movie/399566/images?include_image_language=en -> logos: the teal-and-orange wordmark,
+# which reads on both themes where the all-white variant only works on the dark one.
+logo_url = "https://image.tmdb.org/t/p/w500/cJ8K9ZqLaO2omRB4v0OkmtT9kXL.png"
 published = true
 sort_order = 50
 

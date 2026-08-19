@@ -3,6 +3,16 @@ name = "Wizarding World"
 short_name = "Wizarding World"
 tagline = "Harry Potter's seven years at Hogwarts, framed by Newt Scamander's Fantastic Beasts."
 accent = "#740001"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# GET /collection/1241/images (Harry Potter Collection) -> backdrops: Hogwarts at night,
+# textless and with no faces in it, so it stands for the whole Wizarding World rather than
+# for one trio.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg"
+# GET /movie/671/images?include_image_language=en -> logos: the gold Harry Potter treatment.
+# TMDB carries no "Wizarding World" mark at all -- /search/company returns nothing and the
+# Fantastic Beasts logos are the film's own title only -- and gold is the sole variant here
+# legible on both themes (the dark-blue and white ones each fail on one).
+logo_url = "https://image.tmdb.org/t/p/w500/n7Pj4doQ1yfElCiGTGFTvzoQkpf.png"
 published = true
 sort_order = 40
 
