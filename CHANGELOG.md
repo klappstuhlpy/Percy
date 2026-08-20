@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-20
+
 ### Added
 
 - Personal release subscriptions: `/subscribe` follows a comic series, creator, character, film universe or person, and Percy DMs you a digest when something you follow lands.
@@ -21,6 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Film and TV release dates are re-checked against TMDB every night, so a digest arrives on the day something is actually out.
 - Timeout duration validation helper for the internal API.
 - `codeimage`, `chart`, and `mdpdf` render commands via klappstuhl.me integration.
+- A multi-season show is now one entry **per season** in a watch order, so "watch Daredevil season 2 here" is an instruction rather than a suggestion. The series itself becomes a heading over its seasons; the seasons are what you mark.
+- Every universe has key art — a backdrop behind its header and a wordmark on its tile.
+- Streaming rows now carry TMDB's own watch link for the region, which is the attribution their terms ask for wherever provider logos appear.
+- Ghost Rider, Nova, Spider-Man: Brand New Day, Avengers: Secret Wars, the untitled X-Men film, Black Panther 3, the Shang-Chi sequel, Your Friendly Neighborhood Spider-Man and The Daily Bugle are all in the MCU order; The Mandalorian and Grogu and Star Wars: Starfighter are in the Star Wars one.
+
+### Changed
+
+- Watch orders no longer count behind-the-scenes material. Assembled making-ofs, Legends recaps, anniversary documentaries, LEGO tie-ins, preschool spin-offs, promo featurettes and "special look" clips are excluded by name, and Star Wars no longer sweeps in ILM documentaries or a robotics film. A watch order is for releases.
+- Mainline films that were filed under "Shorts & Specials" now sit in the phase or era they belong to, including the 2008 Clone Wars feature, which is a theatrical film rather than a special.
+- Two discovery queries that could never return anything — the Wizarding World's collections and the X-Men's — were removed rather than left looking like coverage that does not exist.
+
+### Fixed
+
+- Following an actor or a character now matches multi-season shows again. Splitting a series into seasons left the cast on the series row while only the seasons could announce a release, so those follows quietly stopped matching anything.
+- Two titles that had been silently dropped for years are back: Star Wars: The Clone Wars and 2015's Fantastic Four. A title whose name collides with another is now disambiguated instead of skipped.
 
 ### Removed
 
