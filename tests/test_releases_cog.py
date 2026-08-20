@@ -36,9 +36,10 @@ from app.cogs.releases.ui import (
     encode_subject,
     subject_choice,
 )
-from app.services.releases import Releasable, build_digest
+from app.services.releases import Releasable, Subject, build_digest
 
 DATE = datetime.date(2026, 8, 5)
+NOW = datetime.datetime.combine(DATE, datetime.time.min)
 
 
 def releasable(name: str, *, media: str = 'comic', url: str | None = None) -> Releasable:
@@ -675,3 +676,85 @@ async def test_the_refresh_window_is_the_next_thirty_days(monkeypatch: pytest.Mo
     start, end = bot.db.watchlist.titles_releasing_between.await_args.args
     assert end - start == cog_module.REFRESH_HORIZON == datetime.timedelta(days=30)
     assert start == discord.utils.utcnow().date()
+
+
+# -- Gathering releasables: where a season's credits come from ----------------
+
+
+SERIES_ID, FILM_ID = 147, 900
+
+
+def watch_row(row_id: int, slug: str, **kwargs: Any) -> dict[str, Any]:
+    """One ``titles_releasing_between`` row -- exactly the columns that query selects."""
+    row: dict[str, Any] = {
+        'id': row_id, 'universe': 'mcu', 'slug': slug, 'title': slug, 'release_date': DATE,
+        'poster_path': None, 'sub_universe': None, 'tmdb_type': 'tv', 'tmdb_id': 1,
+        'season_number': None, 'parent_id': None,
+    }
+    row.update(kwargs)
+    return row
+
+
+def credit_row(title_id: int, slug: str, character: str) -> dict[str, Any]:
+    return {'title_id': title_id, 'role': 'cast', 'slug': slug, 'character_name': character}
+
+
+def gather_bot(titles: list[dict[str, Any]], credits: list[dict[str, Any]]) -> MagicMock:
+    """A bot whose comic half is empty and whose ``list_credits`` behaves like the real query:
+    it answers only for the ids it was actually asked for, so a lookup on the wrong id gets
+    nothing back rather than the fixture's whole table."""
+    bot = MagicMock(name='Bot')
+    bot.db.releases.recent_comic_releases = AsyncMock(return_value=[])
+    bot.db.releases.credits_for_releases = AsyncMock(return_value=[])
+    bot.db.releases.characters_for_releases = AsyncMock(return_value=[])
+    bot.db.watchlist.titles_releasing_between = AsyncMock(return_value=titles)
+    bot.db.watchlist.list_credits = AsyncMock(
+        side_effect=lambda ids: [row for row in credits if row['title_id'] in set(ids)])
+    return bot
+
+
+async def test_a_season_carries_its_series_person_subjects() -> None:
+    """V45 made a multi-season show one row per season plus a container, and the container is
+    the only row that holds credits -- while the season is the only row that can dispatch. Look
+    credits up by the season's own id and a subscriber following an actor is simply never told.
+    """
+    bot = gather_bot(
+        [watch_row(385, 'shield-s1', season_number=1, parent_id=SERIES_ID),
+         watch_row(FILM_ID, 'no-way-home', tmdb_type='movie')],
+        [credit_row(SERIES_ID, 'clark-gregg', 'Phil Coulson'), credit_row(FILM_ID, 'tom-holland', 'Peter Parker')],
+    )
+
+    items = {item.key: item for item in await cog_with(bot).gather_releasables(NOW)}
+
+    season = items['mcu/shield-s1']
+    assert Subject.of('title', 'person', 'clark-gregg') in season.subjects
+    assert Subject.of('title', 'character', 'Phil Coulson') in season.subjects
+
+
+async def test_a_film_keeps_its_own_credits() -> None:
+    """The regression risk: a film and a single-season show have no ``parent_id`` at all."""
+    bot = gather_bot(
+        [watch_row(385, 'shield-s1', season_number=1, parent_id=SERIES_ID),
+         watch_row(FILM_ID, 'no-way-home', tmdb_type='movie')],
+        [credit_row(SERIES_ID, 'clark-gregg', 'Phil Coulson'), credit_row(FILM_ID, 'tom-holland', 'Peter Parker')],
+    )
+
+    film = {item.key: item for item in await cog_with(bot).gather_releasables(NOW)}['mcu/no-way-home']
+
+    assert Subject.of('title', 'person', 'tom-holland') in film.subjects
+    assert Subject.of('title', 'person', 'clark-gregg') not in film.subjects
+
+
+async def test_credits_for_the_whole_window_are_one_query() -> None:
+    """Two seasons of one show and a film are still a single batched lookup."""
+    bot = gather_bot(
+        [watch_row(385, 'shield-s1', season_number=1, parent_id=SERIES_ID),
+         watch_row(386, 'shield-s2', season_number=2, parent_id=SERIES_ID),
+         watch_row(FILM_ID, 'no-way-home', tmdb_type='movie')],
+        [credit_row(SERIES_ID, 'clark-gregg', 'Phil Coulson')],
+    )
+
+    await cog_with(bot).gather_releasables(NOW)
+
+    bot.db.watchlist.list_credits.assert_awaited_once()
+    assert bot.db.watchlist.list_credits.await_args.args[0] == [SERIES_ID, SERIES_ID, FILM_ID]

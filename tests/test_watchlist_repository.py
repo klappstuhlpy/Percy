@@ -237,6 +237,9 @@ async def test_titles_releasing_between_skips_container_rows(mock_db: MagicMock)
     query, *params = mock_db.fetch.await_args.args
     assert 'NOT EXISTS (SELECT 1 FROM watch_titles c WHERE c.parent_id = t.id)' in query
     assert 't.season_number' in query  # the nightly re-check needs it to pick the right air date
+    # A season holds no credits of its own, so the dispatcher looks them up on the series --
+    # without this column every multi-season show dispatches with no person/character subjects.
+    assert 't.parent_id' in query
     assert params == [datetime.date(2026, 8, 1), datetime.date(2026, 8, 8)]
 
 

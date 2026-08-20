@@ -506,9 +506,17 @@ async def _overview_entries(bot: Bot, days: int) -> tuple[datetime.date, datetim
     ]
 
     title_rows = await bot.db.watchlist.titles_releasing_between(start, end)
-    credits = group_rows(await bot.db.watchlist.list_credits([row['id'] for row in title_rows]), 'title_id')
+    # Credits are series-level: a season row carries none of its own, and a season is the only
+    # row of a multi-season show that reaches this window, so the lookup follows ``parent_id``
+    # exactly as ``routers/watchlist.py`` does. Otherwise such a card would offer no
+    # ``person``/``character`` subjects and never land in a subscriber's ``followed`` list.
+    credits = group_rows(
+        await bot.db.watchlist.list_credits([row['parent_id'] or row['id'] for row in title_rows]), 'title_id')
     universe_names = {row['slug']: row['name'] for row in await bot.db.watchlist.list_universes()}
-    titles = [title_entry(row, credits.get(row['id'], ()), universe_names=universe_names) for row in title_rows]
+    titles = [
+        title_entry(row, credits.get(row['parent_id'] or row['id'], ()), universe_names=universe_names)
+        for row in title_rows
+    ]
 
     return start, end, comics, titles
 

@@ -144,11 +144,18 @@ class WatchlistRepository(BaseRepository):
         "Daredevil" and "Daredevil: Season 1" on the same day. ``season_number`` rides along so
         the nightly re-check knows to compare a season's air date rather than the show's
         ``first_air_date``.
+
+        ``parent_id`` rides along for the credits lookup: TMDB's ``credits`` for a show is
+        series-level, so the ingest writes it once against the container and a season carries
+        none of its own. Since a season is the only row of a multi-season show that can reach
+        the dispatcher, looking its credits up by ``parent_id or id`` (as
+        ``routers/watchlist.py`` already does) is what keeps a ``person``/``character``
+        subscription matching such a show at all.
         """
         return await self.fetch(
             f"""
             SELECT t.id, t.universe, t.slug, t.title, t.release_date, t.poster_path,
-                   t.sub_universe, t.tmdb_type, t.tmdb_id, t.season_number
+                   t.sub_universe, t.tmdb_type, t.tmdb_id, t.season_number, t.parent_id
             FROM watch_titles t
             WHERE t.release_date BETWEEN $1 AND $2 AND {_NOT_A_CONTAINER}
             ORDER BY t.release_date, t.id;

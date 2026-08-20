@@ -357,8 +357,14 @@ class Releases(Cog):
 
         today = now.date()
         titles = await self.bot.db.watchlist.titles_releasing_between(today, today)
-        credits = _group_by(await self.bot.db.watchlist.list_credits([row['id'] for row in titles]), 'title_id')
-        items += [title_releasable(row, credits.get(row['id'], ())) for row in titles]
+        # A season carries no credits of its own (TMDB's ``credits`` is series-level, so the
+        # ingest writes it against the series row), and a season is the only row of a
+        # multi-season show the dispatcher ever sees -- so credits are looked up on the series,
+        # exactly as ``routers/watchlist.py`` does. Without it a ``person``/``character``
+        # subscriber is silently never told about any multi-season show.
+        credits = _group_by(
+            await self.bot.db.watchlist.list_credits([row['parent_id'] or row['id'] for row in titles]), 'title_id')
+        items += [title_releasable(row, credits.get(row['parent_id'] or row['id'], ())) for row in titles]
         return items
 
     async def gather_news(self, now: datetime.datetime) -> list[Releasable]:
