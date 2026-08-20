@@ -1,0 +1,254 @@
+slug = "x-men"
+name = "X-Men"
+short_name = "X-Men"
+tagline = "Fox's mutant saga, the Deadpool and New Mutants spin-offs, and the Fox Fantastic Four films."
+accent = "#003DA5"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# Collection 748 covers only the X-Men films proper, not Deadpool, New Mutants or the Fox
+# Fantastic Four -- but its key art is the franchise's, which is all this field needs.
+# GET /collection/748/images -> backdrops: the brushed-steel X, textless and nearly flat.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/s6SCVr5Q3LnYDK9k9pZtP69CTTM.jpg"
+# GET /movie/36657/images?include_image_language=en -> logos: the silver X-MEN wordmark. Its
+# metallic gradient carries both light and dark values, so it reads on either theme.
+logo_url = "https://image.tmdb.org/t/p/w500/bfUbOGdmttSCvar958KkUJlEOiQ.png"
+published = true
+sort_order = 30
+
+[[paths]]
+slug = "release"
+name = "Release Order"
+description = "How the films reached theaters, 2000 to 2020."
+default = true
+
+[[paths]]
+slug = "chronological"
+name = "Chronological Order"
+description = "The mutant timeline in in-universe order; the Fantastic Four films sit in their own, unconnected continuity."
+
+[[eras]]
+key = "fantastic-four"
+name = "Fantastic Four"
+order = 50
+
+[[eras]]
+key = "original-trilogy"
+name = "Original Trilogy (2000-2006)"
+order = 100
+
+[[eras]]
+key = "wolverine"
+name = "Wolverine Solo Films"
+order = 150
+
+[[eras]]
+key = "first-class"
+name = "First Class Era (2011-2019)"
+order = 200
+
+[[eras]]
+key = "deadpool"
+name = "Deadpool"
+order = 250
+
+[[eras]]
+key = "new-mutants"
+name = "The New Mutants"
+order = 300
+
+# --- Original trilogy ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 36657
+era = "original-trilogy"
+story = 600
+release = 100
+context = "Professor Xavier's students face Magneto's plot to forcibly mutate the world's leaders at a UN summit."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 36658
+era = "original-trilogy"
+story = 700
+release = 200
+context = "William Stryker's assault on the X-Mansion forces an uneasy alliance between the X-Men and Magneto's Brotherhood."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 36668
+era = "original-trilogy"
+story = 800
+release = 400
+context = "A mutant 'cure' divides the X-Men just as Jean Grey returns transformed into the destructive Phoenix."
+importance = { release = "recommended", chronological = "recommended" }
+
+# --- Wolverine solo films ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 2080
+era = "wolverine"
+story = 100
+release = 600
+context = "Logan's origin story traces his relationship with half-brother Victor Creed through the Weapon X program."
+importance = { release = "recommended", chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 76170
+era = "wolverine"
+story = 900
+release = 800
+context = "Summoned to Japan, Logan is stripped of his healing factor and forced to fight for real for the first time in decades."
+importance = { release = "recommended", chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 263115
+era = "wolverine"
+story = 1300
+release = 1300
+context = "An aging, ailing Logan cares for Professor Xavier in 2029 and protects a young mutant with a familiar power set."
+importance = { release = "essential", chronological = "essential" }
+
+# --- First Class era ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 49538
+era = "first-class"
+story = 200
+release = 700
+context = "Young Charles Xavier and Erik Lehnsherr form the first X-Men to stop Sebastian Shaw from engineering the Cuban Missile Crisis."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 127585
+era = "first-class"
+story = 400
+release = 900
+context = "Wolverine's consciousness is sent to his younger self to prevent an assassination that leads to a dystopian future."
+milestone = true
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 246655
+era = "first-class"
+story = 300
+release = 1200
+context = "The First Class team faces En Sabah Nur, an ancient mutant who awakens believing himself the destined ruler of the world."
+importance = { release = "recommended", chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 320288
+era = "first-class"
+story = 500
+release = 1500
+context = "A space mission accident unlocks a cosmic force within Jean Grey that puts her fellow X-Men in danger."
+importance = { release = "optional", chronological = "optional" }
+
+# --- Deadpool ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 293660
+era = "deadpool"
+story = 1000
+release = 1100
+context = "Wade Wilson survives a black-ops experiment that scars him and grants him a healing factor, then hunts the man responsible."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 383498
+era = "deadpool"
+story = 1100
+release = 1400
+context = "Deadpool assembles a team of mutants, X-Force, to protect a troubled young mutant from a time-traveling soldier."
+importance = { release = "recommended", chronological = "recommended" }
+
+# --- The New Mutants ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 340102
+era = "new-mutants"
+story = 1200
+release = 1600
+context = "Five young mutants held in a secretive facility must fight to escape their pasts made manifest."
+importance = { release = "recommended", chronological = "recommended" }
+
+# --- Fantastic Four (Fox, unconnected continuity) ---
+# Two of these three slugify to "fantastic-four" (9738 in 2005, 166424 in 2015). Before V45
+# the second one was silently dropped on the UNIQUE (universe, slug) collision; it now stores
+# as "fantastic-four-2015". Confirmed present in the database on 2026-08-17, so this needs no
+# curated workaround -- but note that whichever of the two is processed first keeps the bare
+# slug, and `release_progress` rows are keyed "{universe}/{slug}". Do not reorder these two.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 9738
+era = "fantastic-four"
+story = 1400
+release = 300
+context = "Four astronauts are exposed to cosmic radiation that grants them extraordinary powers, and a rival gains his own."
+importance = { release = "essential", chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1979
+era = "fantastic-four"
+story = 1500
+release = 500
+context = "The Fantastic Four face a mysterious herald whose arrival precedes the planet-devouring Galactus."
+importance = { release = "optional", chronological = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 166424
+era = "fantastic-four"
+story = 1600
+release = 1000
+context = "A rebooted origin sends four young scientists to an alternate dimension, where an accident grants them their powers."
+importance = { release = "optional", chronological = "optional" }
+
+# --- No movie discovery: the mainline films are fully curated ---
+#
+# This seed carried a `[[discover]]` collection block (748, "X-Men Collection") until
+# 2026-08-19. It was removed because it contributed **zero titles and could never contribute
+# one**, which reads on the page as coverage that does not exist. A block that silently
+# contributes nothing is worse than no block.
+#
+# Re-verified live on 2026-08-19: GET /collection/748 -> "X-Men Collection", exactly 7 parts,
+# and all seven are hand-curated above -- 36657 X-Men (2000-07-13), 36658 X2 (2003-04-27),
+# 36668 The Last Stand (2006-05-24), 49538 First Class (2011-06-01), 127585 Days of Future
+# Past (2014-05-15), 246655 Apocalypse (2016-05-18), 320288 Dark Phoenix (2019-06-05).
+# Curation always beats discovery, so every result was dropped as already-curated. Nothing
+# was broken -- the block was inert by construction.
+#
+# Its stated purpose was to future-proof a new mainline entry added to the collection, and
+# unlike the Wizarding World's collection blocks there is not even an argument to have about
+# what is coming: the Fox X-Men line is closed. The mutants Marvel Studios is now making sit
+# in `mcu.toml` under Phase 6 (movie 1293690, the untitled X-Men film), a different studio,
+# a different continuity and a different seed -- nothing TMDB would add to collection 748.
+# If a genuinely new Fox-continuity film ever ships it gets a hand-written `[[titles]]` block
+# with a real era, story order and context, which both of this universe's paths need anyway;
+# a discovered title would land at the bottom of the order with no context and have to be
+# curated by hand regardless.
+#
+# The `extras` era ("Shorts & Specials", order 350) went with the block: it was declared for
+# that block alone and nothing else referenced it. An era is only ever emitted for titles that
+# carry it, so a leftover key rendered nothing -- but it read as a section this universe has,
+# and it does not have one.
+
+# No TV discovery block: Legion (2017) and The Gifted (2017) are this era's only shows,
+# and their shared production company (Marvel Television, id 38679) is dominated by
+# ~16 unrelated MCU-era shows (Agents of S.H.I.E.L.D., Daredevil, Jessica Jones, etc.)
+# that a company- or keyword-based discover block would drag in. No clean TMDB handle
+# exists for the Fox X-Men TV corner specifically, so it is left uncurated -- see the
+# report's concerns section.

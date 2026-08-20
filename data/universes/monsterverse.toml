@@ -1,0 +1,104 @@
+slug = "monsterverse"
+name = "MonsterVerse"
+short_name = "MonsterVerse"
+tagline = "Godzilla and Kong's shared universe, from the 2014 reboot to Monarch's global conspiracy."
+accent = "#D64520"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# TMDB has no MonsterVerse collection (/search/collection returns none), so both come from
+# the crossover film that names the shared universe best.
+# GET /movie/399566/images (Godzilla vs. Kong) -> backdrops: the two titans in mist over the
+# city, the softest frame available -- the rest are saturated fire that fights the scrim.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/wWqTMWkEw6HouLd1zPZbZWxtAPr.jpg"
+# GET /movie/399566/images?include_image_language=en -> logos: the teal-and-orange wordmark,
+# which reads on both themes where the all-white variant only works on the dark one.
+logo_url = "https://image.tmdb.org/t/p/w500/cJ8K9ZqLaO2omRB4v0OkmtT9kXL.png"
+published = true
+sort_order = 50
+
+[[paths]]
+slug = "complete"
+name = "Complete Chronology"
+description = "Every MonsterVerse film and series in release order."
+default = true
+
+[[eras]]
+key = "godzilla-kong"
+name = "Films"
+order = 100
+
+[[eras]]
+key = "television"
+name = "Television"
+order = 200
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 124905
+era = "godzilla-kong"
+story = 100
+release = 100
+context = "Scientists and soldiers race to stop two ancient MUTO creatures as Godzilla rises to restore nature's balance."
+importance = { complete = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 293167
+era = "godzilla-kong"
+story = 200
+release = 200
+context = "A team of explorers and soldiers are stranded on a mysterious island ruled by a giant ape."
+importance = { complete = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 373571
+era = "godzilla-kong"
+story = 300
+release = 300
+context = "Monarch's scientists race to stop an ancient three-headed dragon from waking every Titan on Earth."
+importance = { complete = "essential" }
+
+[[titles]]
+tmdb_type = "tv"
+tmdb_id = 202411
+era = "television"
+story = 350
+release = 350
+context = "Two generations of one family uncover Monarch's buried secrets in the years bridging Godzilla's first attack and the Titans' return."
+importance = { complete = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 399566
+era = "godzilla-kong"
+story = 400
+release = 400
+context = "Kong and Godzilla are pitted against each other while a hidden threat within Apex Cybernetics manipulates them both."
+importance = { complete = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 823464
+era = "godzilla-kong"
+story = 500
+release = 500
+context = "Kong and Godzilla team up to face a colossal undiscovered threat hidden within Hollow Earth."
+importance = { complete = "recommended" }
+
+# --- Discovery: sweeps in anything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+
+[[discover]]
+kind = "movie"
+# "monsterverse" -- verified via GET /keyword/380322. Sweeps in the upcoming
+# Godzilla x Kong: Supernova (2027) once it carries a release date.
+keyword = 380322
+era = "godzilla-kong"
+importance = "optional"
+
+[[discover]]
+kind = "tv"
+# Same keyword, TV side -- sweeps in the animated Skull Island (2023) series.
+keyword = 380322
+era = "television"
+importance = "optional"

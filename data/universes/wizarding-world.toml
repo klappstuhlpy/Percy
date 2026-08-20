@@ -1,0 +1,159 @@
+slug = "wizarding-world"
+name = "Wizarding World"
+short_name = "Wizarding World"
+tagline = "Harry Potter's seven years at Hogwarts, framed by Newt Scamander's Fantastic Beasts."
+accent = "#740001"
+# Key art. Both URLs were fetched and verified 200 before being written here.
+# GET /collection/1241/images (Harry Potter Collection) -> backdrops: Hogwarts at night,
+# textless and with no faces in it, so it stands for the whole Wizarding World rather than
+# for one trio.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg"
+# GET /movie/671/images?include_image_language=en -> logos: the gold Harry Potter treatment.
+# TMDB carries no "Wizarding World" mark at all -- /search/company returns nothing and the
+# Fantastic Beasts logos are the film's own title only -- and gold is the sole variant here
+# legible on both themes (the dark-blue and white ones each fail on one).
+logo_url = "https://image.tmdb.org/t/p/w500/n7Pj4doQ1yfElCiGTGFTvzoQkpf.png"
+published = true
+sort_order = 40
+
+[[paths]]
+slug = "chronological"
+name = "Chronological Order"
+description = "Every film in the order its story takes place, Fantastic Beasts first."
+default = true
+
+[[eras]]
+key = "fantastic-beasts"
+name = "Fantastic Beasts (1926-1932)"
+order = 100
+
+[[eras]]
+key = "hogwarts"
+name = "Harry Potter (1991-1998)"
+order = 200
+
+# --- Fantastic Beasts ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 259316
+era = "fantastic-beasts"
+story = 100
+release = 900
+context = "Magizoologist Newt Scamander arrives in 1920s New York with a case of magical creatures that escape into the city."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 338952
+era = "fantastic-beasts"
+story = 200
+release = 1000
+context = "Newt is drawn into the fight against the dark wizard Gellert Grindelwald, who is gathering followers to his cause."
+importance = { chronological = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 338953
+era = "fantastic-beasts"
+story = 300
+release = 1100
+context = "Albus Dumbledore enlists Newt and his allies to stop Grindelwald from seizing control of the wizarding world."
+importance = { chronological = "optional" }
+
+# --- Harry Potter ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 671
+era = "hogwarts"
+story = 400
+release = 100
+context = "An orphaned boy discovers he is a wizard and begins his first year at Hogwarts School of Witchcraft and Wizardry."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 672
+era = "hogwarts"
+story = 500
+release = 200
+context = "Harry's second year is disrupted by a monster loose in Hogwarts and warnings written in blood on the walls."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 673
+era = "hogwarts"
+story = 600
+release = 300
+context = "An escaped prisoner believed to be hunting Harry forces Hogwarts to bring in Dementors for protection."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 674
+era = "hogwarts"
+story = 700
+release = 400
+context = "Harry is mysteriously entered into the perilous Triwizard Tournament against three older, more experienced students."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 675
+era = "hogwarts"
+story = 800
+release = 500
+context = "Harry forms a secret student group to teach real defense against the dark arts as the Ministry denies Voldemort's return."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 767
+era = "hogwarts"
+story = 900
+release = 600
+context = "Harry uncovers Voldemort's past through memories while Dumbledore searches for a way to destroy his Horcruxes."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 12444
+era = "hogwarts"
+story = 1000
+release = 700
+context = "Harry, Ron and Hermione abandon Hogwarts to hunt down Voldemort's remaining Horcruxes."
+importance = { chronological = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 12445
+era = "hogwarts"
+story = 1100
+release = 800
+context = "Harry returns to a besieged Hogwarts for the final battle against Voldemort and his followers."
+milestone = true
+importance = { chronological = "essential" }
+
+# --- No discovery: this universe is fully curated ---
+#
+# This seed carried two `[[discover]]` collection blocks (1241 "Harry Potter Collection",
+# 435259 "Fantastic Beasts Collection") until 2026-08-17. They were removed because they
+# contributed **zero titles and could never contribute one**, which reads on the page as
+# coverage that does not exist.
+#
+# Re-verified live on 2026-08-17: /collection/1241 holds exactly the 8 parts curated above
+# (671, 672, 673, 674, 675, 767, 12444, 12445) and /collection/435259 exactly the 3
+# (259316, 338952, 338953). Curation always beats discovery, so every result was dropped as
+# already-curated. Nothing was broken -- the blocks were inert by construction.
+#
+# Their stated purpose was to future-proof a new mainline film without a seed edit, and that
+# purpose does not survive contact with what is actually coming: a TMDB collection holds only
+# *films*, while the franchise's announced next release is HBO's Harry Potter television
+# series (tv 224377, 2026-12-25), which a movie collection structurally cannot see. A block
+# that covers the case that is not coming and misses the one that is buys nothing. When that
+# series -- or a genuinely new film -- ships, it gets a hand-written `[[titles]]` block with
+# a real era, story order and context, which is what a single strictly-chronological path
+# needs anyway; a discovered title would land at the bottom of the order with no context and
+# have to be curated by hand regardless.

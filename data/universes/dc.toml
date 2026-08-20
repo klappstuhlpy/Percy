@@ -1,0 +1,285 @@
+slug = "dc"
+name = "DC"
+short_name = "DC"
+tagline = "From the DCEU's Man of Steel to James Gunn's DCU reboot, plus the standalone Elseworlds."
+accent = "#0078F2"
+# Key art. Both images were fetched, opened and looked at before being written here.
+# TMDB has no collection spanning the DCEU, the DCU reboot and the Elseworlds films, so the
+# backdrop comes from one of them: GET /movie/49521/images?include_image_language=null
+# (Man of Steel) -> backdrops: one figure crossing an empty arctic plain, flat grey sky above
+# and a pinpoint sun on the horizon -- nothing else in the frame. The Justice League frames
+# tried first are six-hero ensembles with a Darkseid face looming behind them, which is the
+# one thing a scrim cannot quiet, and this page uses the image twice: once behind the index
+# tile and once full-width as the order page's hero.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/j2MlEEpA3wgwQiJB6p1UHC50oiw.jpg"
+# GET /company/429/images -> logos: the DC Comics swoosh -- "DC" inside a blue-and-white
+# orbit with "COMICS" set beside it -- blue with a white outline, so it reads on both themes.
+# The flat-black roundels in the same set only work on the light one.
+logo_url = "https://image.tmdb.org/t/p/w500/14atNOcJv74Jid3xfHRu4URJBQX.png"
+published = true
+sort_order = 10
+
+[[paths]]
+slug = "dceu"
+name = "DCEU"
+description = "The shared universe that ran from Man of Steel to Aquaman and the Lost Kingdom."
+default = true
+
+[[paths]]
+slug = "dcu"
+name = "DCU"
+description = "James Gunn and Peter Safran's rebooted DC Universe, starting fresh with Superman."
+
+[[paths]]
+slug = "elseworlds"
+name = "Elseworlds"
+description = "Standalone Batman and Joker stories outside DC's shared continuities."
+
+[[eras]]
+key = "elseworlds"
+name = "Elseworlds (2005-2022)"
+order = 50
+
+[[eras]]
+key = "dceu"
+name = "DCEU (2013-2023)"
+order = 100
+
+[[eras]]
+key = "dcu"
+name = "DCU (2025-)"
+order = 200
+
+# --- Elseworlds ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 272
+era = "elseworlds"
+story = 100
+release = 100
+context = "Bruce Wayne trains with the League of Shadows before returning to Gotham to begin his war on crime as Batman."
+importance = { elseworlds = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 155
+era = "elseworlds"
+story = 200
+release = 200
+context = "Batman, Lieutenant Gordon and District Attorney Harvey Dent take on the Joker's escalating campaign of chaos in Gotham."
+importance = { elseworlds = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 49026
+era = "elseworlds"
+story = 300
+release = 300
+context = "Eight years after Harvey Dent's death, a masked mercenary named Bane forces Bruce Wayne back into the cowl."
+importance = { elseworlds = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 475557
+era = "elseworlds"
+story = 400
+release = 400
+context = "Failed comedian Arthur Fleck's decline into violence becomes the origin of Gotham's most infamous criminal."
+importance = { elseworlds = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 414906
+era = "elseworlds"
+story = 500
+release = 500
+context = "A younger, more isolated Batman investigates a serial killer targeting Gotham's corrupt elite."
+importance = { elseworlds = "essential" }
+
+# --- DCEU ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 49521
+era = "dceu"
+story = 1000
+release = 1000
+context = "A young Clark Kent embraces his Kryptonian heritage and reveals himself to the world as Superman."
+importance = { dceu = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 209112
+era = "dceu"
+story = 1100
+release = 1100
+context = "Batman confronts Superman over the collateral damage of his battles, while Lex Luthor engineers their conflict."
+importance = { dceu = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 297761
+era = "dceu"
+story = 1200
+release = 1200
+context = "Amanda Waller assembles a team of imprisoned supervillains for a black-ops mission too dangerous for anyone else."
+importance = { dceu = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 297762
+era = "dceu"
+story = 1300
+release = 1300
+context = "Diana Prince leaves the hidden island of Themyscira to fight in the war to end all wars."
+importance = { dceu = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 141052
+era = "dceu"
+story = 1400
+release = 1400
+context = "Batman and Wonder Woman recruit a team of metahumans to stop Steppenwolf before he claims Earth for Darkseid."
+importance = { dceu = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 297802
+era = "dceu"
+story = 1500
+release = 1500
+context = "Arthur Curry claims his birthright as king of Atlantis to stop his half-brother from uniting the seven seas against the surface world."
+importance = { dceu = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 287947
+era = "dceu"
+story = 1600
+release = 1600
+context = "Foster kid Billy Batson gains the power to transform into an adult superhero by speaking a wizard's name."
+importance = { dceu = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 495764
+era = "dceu"
+story = 1700
+release = 1700
+context = "Harley Quinn allies with a group of Gotham women to protect a young pickpocket from crime lord Roman Sionis."
+importance = { dceu = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 464052
+era = "dceu"
+story = 1800
+release = 1800
+context = "Diana Prince faces a wish-granting stone that pits her against a con man and a former friend turned rival."
+importance = { dceu = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 791373
+era = "dceu"
+story = 1900
+release = 1900
+context = "The director's full cut of the Justice League's formation against Steppenwolf and Darkseid's forces, released after fan campaigns for the original vision."
+milestone = true
+importance = { dceu = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 436969
+era = "dceu"
+story = 2000
+release = 2000
+context = "A new, more disposable iteration of Task Force X is dropped onto the island nation of Corto Maltese."
+importance = { dceu = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 436270
+era = "dceu"
+story = 2100
+release = 2100
+context = "An ancient champion imprisoned for 5,000 years is freed to confront the Justice Society and reclaim Kahndaq."
+importance = { dceu = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 594767
+era = "dceu"
+story = 2200
+release = 2200
+context = "Billy Batson and his foster siblings face the vengeful daughters of Atlas, come to reclaim their stolen powers."
+importance = { dceu = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 298618
+era = "dceu"
+story = 2300
+release = 2300
+context = "Barry Allen's attempt to alter the past unravels the multiverse and resets the DCEU's continuity."
+milestone = true
+importance = { dceu = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 565770
+era = "dceu"
+story = 2400
+release = 2400
+context = "College graduate Jaime Reyes bonds with an alien scarab that gives him a living suit of armor."
+importance = { dceu = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 572802
+era = "dceu"
+story = 2500
+release = 2500
+context = "Arthur Curry teams up with his imprisoned half-brother to stop a vengeful warlord wielding an ancient black trident, in the DCEU's closing chapter."
+importance = { dceu = "optional" }
+
+# --- DCU ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1061474
+era = "dcu"
+story = 3000
+release = 3000
+context = "A younger Superman balances his Kryptonian heritage with his human upbringing as journalist Clark Kent, opening the rebooted DC Universe."
+milestone = true
+importance = { dcu = "essential" }
+
+# --- Discovery: sweeps in everything not hand-curated above ---
+# Verified live against TMDB on 2026-08-14 (v4 read token from .env, never committed).
+
+[[discover]]
+kind = "movie"
+# "dc extended universe (dceu)" -- verified via GET /keyword/229266
+keyword = 229266
+era = "dceu"
+importance = "optional"
+
+[[discover]]
+kind = "movie"
+# "dc universe (dcu)" -- verified via GET /keyword/312528
+keyword = 312528
+era = "dcu"
+importance = "optional"
+# Nothing DCU-tagged predates the reboot's own launch.
+min_date = "2025-01-01"
+
+[[discover]]
+kind = "tv"
+# Same keyword, TV side -- covers Creature Commandos, Peacemaker (season 2 onward is
+# canon per Gunn's DCU, season 1 predates it but TMDB tags the whole show) and Lanterns.
+keyword = 312528
+era = "dcu"
+importance = "optional"

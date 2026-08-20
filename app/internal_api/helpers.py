@@ -26,6 +26,21 @@ def validate_timeout_duration(duration: int | None) -> datetime.timedelta:
     return datetime.timedelta(seconds=duration)
 
 
+def naive_utc(value: datetime.datetime | None) -> datetime.datetime:
+    """Coerces a client timestamp to naive UTC, defaulting to now.
+
+    Both progress tables (``watch_progress``, ``release_progress``) store a naive ``TIMESTAMP``
+    and asyncpg's encoder raises ``TypeError`` on an aware value, while clients send ISO strings
+    with a ``Z`` offset -- so the conversion happens once, here, for every handler that takes a
+    client-supplied ``updated_at``.
+    """
+    if value is None:
+        return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    if value.tzinfo is not None:
+        return value.astimezone(datetime.UTC).replace(tzinfo=None)
+    return value
+
+
 def resolve_channel(guild: discord.Guild, channel_id: int | None) -> dict | None:
     if channel_id is None:
         return None

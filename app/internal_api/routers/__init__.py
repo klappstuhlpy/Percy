@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .analytics import router as analytics_router
 from .backup import router as backup_router
+from .comics import router as comics_router
 from .content import router as content_router
 from .economy import router as economy_router
 from .gallery import router as gallery_router
@@ -11,10 +12,13 @@ from .leveling import router as leveling_router
 from .members import router as members_router
 from .moderation import router as moderation_router
 from .music import router as music_router
+from .news import router as news_router
 from .profile import router as profile_router
+from .releases import router as releases_router
 from .stats import router as stats_router
 from .subscriptions import router as subscriptions_router
 from .users import router as users_router
+from .watchlist import router as watchlist_router
 from .webhooks import router as webhooks_router
 
 ALL_ROUTERS = [
@@ -33,4 +37,8 @@ ALL_ROUTERS = [
     backup_router,
     subscriptions_router,
     gallery_router,
+    watchlist_router,
+    comics_router,
+    releases_router,
+    news_router,
 ]

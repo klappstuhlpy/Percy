@@ -40,7 +40,7 @@ from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
 from app.services import AIService, CommandRouter, ModelTier, RouteCommand
-from app.services.klappstuhl_me import KlappstuhlInternalClient, KlappstuhlClient
+from app.services.klappstuhl_me import KlappstuhlClient, KlappstuhlInternalClient
 from app.utils import (
     GUILD_FEATURES,
     AnsiColor,

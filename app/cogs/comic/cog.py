@@ -26,6 +26,7 @@ from app.core import (
     make_notice,
     store_true,
 )
+from app.services.comics import ComicIngest
 from app.utils import cache, truncate
 from app.utils.lock import lock, lock_arg, lock_from
 from app.utils.tasks import Scheduler, scheduled_coroutine
@@ -70,6 +71,7 @@ class Comics(Cog):
         comic_cache: ComicCache
         inventory_scheduler: Scheduler
         locg_client: LOCGClient
+        ingest: ComicIngest
         _current_feed: ComicFeed | None
         __event: asyncio.Event
         __dispatching_task: asyncio.Task | None
@@ -81,6 +83,7 @@ class Comics(Cog):
         self.parser: Parser = Parser()
         self.comic_cache: ComicCache = ComicCache()
         self.inventory_scheduler: Scheduler = Scheduler(self)
+        self.ingest: ComicIngest = ComicIngest(self.bot.db.releases)
 
         self._current_feed: ComicFeed | None = None
 
@@ -135,6 +138,12 @@ class Comics(Cog):
                 log.warning('Error refreshing comic cache for %s: %s', brand.name, e)
             else:
                 log.debug('Fetched %s inventory.', brand.name)
+                if data:
+                    # Write-through to the archive (V40). Best-effort by design: the cache the
+                    # Discord feed renders from is already set above, so a database problem
+                    # costs us the persisted copy, never the feed. ComicIngest never raises.
+                    report = await self.ingest.ingest(brand.name, data)
+                    log.debug('Comic ingest %s', report)
 
     @refresh_inventories.after_task  # type: ignore[arg-type]
     async def after_refresh_inventories(self) -> None:

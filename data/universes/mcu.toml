@@ -1,0 +1,670 @@
+slug = "mcu"
+name = "Marvel Cinematic Universe"
+short_name = "MCU"
+tagline = "Six phases, from a cave workshop to a multiverse-spanning threat."
+accent = "#E62429"
+# Key art. Both images were fetched, opened and looked at before being written here.
+# GET /collection/86311/images (The Avengers Collection) -> backdrops: the textless glowing
+# Avengers mark, blue on blue. The alternatives are six-face montages, and a header scrim
+# needs the frame underneath it to be quiet.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/irDiLpzsJVFRg6FAbOL7IVvYrpl.jpg"
+# GET /movie/24428/images?include_image_language=en -> logos: the small Marvel Studios brick
+# above the metallic Avengers wordmark, 39% of its pixels fully transparent. The studios'
+# own marks both fail here: Marvel Entertainment's (company 7505) has *no* transparency at
+# all -- it is a solid red rectangle that stamps itself onto the backdrop instead of sitting
+# in it -- and Marvel Studios' (company 420) knocks "MARVEL" out of the brick and sets
+# "STUDIOS" in flat black, so both halves go dark-on-dark. This one's brushed-metal gradient
+# carries light and dark values at once, so it reads on either theme.
+logo_url = "https://image.tmdb.org/t/p/w500/4EMGTG2x75JXCBNDoG2zCjXZoI0.png"
+published = true
+sort_order = 0
+
+[[paths]]
+slug = "complete"
+name = "Complete Chronology"
+description = "Every MCU release in in-universe order, theatrical films first."
+default = true
+
+[[paths]]
+slug = "essentials"
+name = "Essentials"
+description = "The spine of the Infinity Saga and the Multiverse Saga that followed it."
+
+[[paths]]
+slug = "television"
+name = "Television"
+description = "The series: the Marvel Television era, the Netflix run and the Disney+ shows."
+
+[[eras]]
+key = "phase1"
+name = "Phase 1 (2008-2012)"
+order = 100
+
+[[eras]]
+key = "phase2"
+name = "Phase 2 (2013-2015)"
+order = 200
+
+[[eras]]
+key = "phase3"
+name = "Phase 3 (2016-2019)"
+order = 300
+
+[[eras]]
+key = "phase4"
+name = "Phase 4 (2021-2022)"
+order = 400
+
+[[eras]]
+key = "phase5"
+name = "Phase 5 (2023-2025)"
+order = 500
+
+[[eras]]
+key = "phase6"
+name = "Phase 6 (2025-)"
+order = 600
+
+[[eras]]
+key = "extras"
+name = "Shorts & Specials"
+order = 650
+
+[[eras]]
+key = "television"
+name = "Television"
+order = 700
+
+# --- Phase 1 ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1726
+era = "phase1"
+story = 300
+release = 100
+context = "Tony Stark builds the first Iron Man suit after a weapons-deal ambush, then reveals his identity to the public."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1724
+era = "phase1"
+story = 500
+release = 200
+context = "Bruce Banner searches for a cure while evading the military hunting the Hulk; a Stark Industries cameo loosely ties it to the wider world."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 10138
+era = "phase1"
+story = 400
+release = 300
+context = "Tony Stark battles the fallout of publicly revealing he is Iron Man while a rival weapons developer targets Stark Industries."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 10195
+era = "phase1"
+story = 600
+release = 400
+context = "Thor is exiled to Earth and must prove himself worthy of his hammer while his brother Loki seizes the throne of Asgard."
+importance = { complete = "essential", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1771
+era = "phase1"
+story = 100
+release = 500
+context = "Steve Rogers becomes a super-soldier during WWII and pursues HYDRA's plot around the Tesseract, the first Infinity Stone to appear on screen."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 24428
+era = "phase1"
+story = 700
+release = 600
+context = "Loki steals the Tesseract, and Nick Fury assembles Earth's first team of heroes to stop him."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+# --- Phase 2 ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 68721
+era = "phase2"
+story = 800
+release = 700
+context = "Tony Stark deals with the psychological fallout of the Battle of New York while a terrorist calling himself the Mandarin targets him directly."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 76338
+era = "phase2"
+story = 900
+release = 800
+context = "Thor fights the ancient Dark Elves to protect Earth and Asgard from the Aether, later identified as the Reality Stone."
+importance = { complete = "recommended", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 100402
+era = "phase2"
+story = 1000
+release = 900
+context = "Steve Rogers uncovers that HYDRA has secretly controlled S.H.I.E.L.D. from within, forcing the agency's public collapse."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 118340
+era = "phase2"
+story = 1100
+release = 1000
+context = "A group of outlaws fights to stop Ronan the Accuser from claiming the Power Stone, introducing the cosmic side of the MCU."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 99861
+era = "phase2"
+story = 1300
+release = 1100
+context = "Tony Stark's attempt to build a peacekeeping AI backfires, creating the villain Ultron and forcing the team to find new allies."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 102899
+era = "phase2"
+story = 1400
+release = 1200
+context = "Scott Lang is recruited by Hank Pym to master the Ant-Man suit and stop a former protege from weaponizing shrinking technology."
+instruction = "Watch post-credits scene before Civil War"
+importance = { complete = "recommended", essentials = "optional" }
+
+# --- Phase 3 ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 271110
+era = "phase3"
+story = 1500
+release = 1300
+context = "A UN accord to oversee the Avengers splits the team into opposing factions after a mission goes wrong."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 284054
+era = "phase3"
+story = 1700
+release = 1800
+context = "T'Challa returns home to Wakanda to claim the throne and defend it from a challenger with a personal grudge against his family."
+importance = { complete = "essential", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 315635
+era = "phase3"
+story = 1800
+release = 1600
+context = "Peter Parker balances high school with his first solo mission as Spider-Man, mentored from a distance by Tony Stark."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 284052
+era = "phase3"
+story = 1900
+release = 1400
+context = "Neurosurgeon Stephen Strange learns the mystic arts and becomes the new guardian of the Time Stone."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 284053
+era = "phase3"
+story = 2000
+release = 1700
+context = "Thor is stripped of his hammer and forced into gladiatorial combat while his estranged sister Hela threatens to destroy Asgard."
+importance = { complete = "essential", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 363088
+era = "phase3"
+story = 2100
+release = 2000
+context = "Scott Lang helps Hope van Dyne and Hank Pym attempt a rescue from deep within the Quantum Realm."
+instruction = "Watch post-credits scene before Endgame"
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 299536
+era = "phase3"
+story = 2200
+release = 1900
+context = "Thanos begins collecting the Infinity Stones, forcing the Avengers and their allies into their largest battle yet."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 299534
+era = "phase3"
+story = 2300
+release = 2200
+context = "The surviving Avengers attempt to reverse Thanos's snap and undo its consequences."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 283995
+era = "phase3"
+story = 1200
+release = 1500
+context = "Peter Quill meets his father, Ego, while the Guardians navigate new alliances and old rivalries."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 299537
+era = "phase3"
+story = 200
+release = 2100
+context = "Carol Danvers uncovers a buried human past while caught in a war between two alien factions."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 429617
+era = "phase3"
+story = 2400
+release = 2300
+context = "Peter Parker travels to Europe on a school trip and is recruited by Nick Fury to face a new threat while adjusting to a world without Tony Stark."
+instruction = "Watch post-credits scene before No Way Home"
+spoiler = "Mysterio frames Spider-Man publicly and exposes Peter's identity to the world."
+importance = { complete = "recommended", essentials = "recommended" }
+
+# --- Phase 4 ---
+
+# Released in Phase 4 but set immediately after Captain America: Civil War.
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 497698
+era = "phase4"
+story = 1600
+release = 2400
+context = "Natasha Romanoff confronts her past in the Red Room while reuniting with the family she was placed with as a Soviet sleeper agent."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 566525
+era = "phase4"
+story = 2500
+release = 2500
+context = "Shang-Chi confronts his father, the leader of the Ten Rings organization, and the ancient power the rings hold."
+importance = { complete = "recommended", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 524434
+era = "phase4"
+story = 2600
+release = 2600
+context = "A team of ancient, immortal beings reveals itself to stop a threat tied to the origins of the universe."
+importance = { complete = "optional", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 634649
+era = "phase4"
+story = 2700
+release = 2700
+context = "Peter Parker asks Doctor Strange for help erasing the world's memory of his identity, tearing open the multiverse instead."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 453395
+era = "phase4"
+story = 2800
+release = 2800
+context = "Doctor Strange and America Chavez travel across the multiverse while being hunted by a powerful, corrupted sorceress."
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 505642
+era = "phase4"
+story = 2900
+release = 3000
+context = "Wakanda mourns T'Challa while defending itself from Namor and the underwater nation of Talokan."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 616037
+era = "phase4"
+story = 3000
+release = 2900
+context = "Thor reunites with Jane Foster, who has become worthy of Mjolnir, to stop a god-killer targeting Asgardians."
+importance = { complete = "recommended", essentials = "optional" }
+
+# --- Phase 5 ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 640146
+era = "phase5"
+story = 3100
+release = 3100
+context = "The Lang-Pym family is pulled into the Quantum Realm and encounters Kang the Conqueror."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 447365
+era = "phase5"
+story = 3200
+release = 3200
+context = "The Guardians fight to save Rocket's life while confronting the scientist who created him, closing out the team's story."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 609681
+era = "phase5"
+story = 3300
+release = 3300
+context = "Carol Danvers, Kamala Khan, and Monica Rambeau are entangled by a power that randomly swaps their locations, forcing them to team up."
+importance = { complete = "optional", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 533535
+era = "phase5"
+story = 3350
+release = 3350
+context = "Wade Wilson is pulled out of retirement by the Time Variance Authority and forced to work with a Wolverine from another timeline."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 822119
+era = "phase5"
+story = 3400
+release = 3400
+context = "Sam Wilson, the new Captain America, investigates a conspiracy tied to a newly discovered metal and a resurfacing old enemy."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 986056
+era = "phase5"
+story = 3500
+release = 3500
+context = "A group of morally grey operatives is forced together on a mission and ends up forming a new team."
+spoiler = "The team publicly reveals itself as the New Avengers by the end."
+importance = { complete = "essential", essentials = "essential" }
+
+# --- Phase 6 ---
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 617126
+era = "phase6"
+story = 3600
+release = 3600
+context = "Earth's First Family defends their retro-futuristic world from Galactus and his herald, the Silver Surfer."
+importance = { complete = "recommended", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 969681
+era = "phase6"
+story = 3650
+release = 3650
+context = "Peter Parker's fourth solo film, and his first after the events of No Way Home erased him from the world's memory."
+importance = { complete = "recommended", essentials = "recommended" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1003596
+era = "phase6"
+story = 3700
+release = 3700
+context = "The Avengers face a new, universe-spanning threat that draws together heroes from across the MCU's expanding multiverse."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1003598
+era = "phase6"
+story = 3800
+release = 3800
+context = "The announced conclusion of the Multiverse Saga, following directly from Doomsday."
+milestone = true
+importance = { complete = "essential", essentials = "essential" }
+
+# The two 2028 films below sit in Phase 6 because Marvel has not announced a Phase 7: the era
+# is named "Phase 6 (2025-)" with an open end for exactly this reason. They, Brand New Day and
+# Secret Wars were all previously filed under "Shorts & Specials" -- the discovery sweep's era,
+# because a company query cannot know a film is mainline -- and that was the actual defect. If
+# a Phase 7 is ever announced, add the era and move whichever of these belong to it; do not
+# guess the split now.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1293690
+era = "phase6"
+story = 3900
+release = 3900
+context = "Marvel Studios' first X-Men film, dated but still untitled and uncast at the time of writing."
+importance = { complete = "recommended", essentials = "recommended" }
+
+# --- Correction to this file's own history, so its git log cannot mislead the next editor ---
+# The commit that curated Phase 6 above states that Ghost Rider, Armor Wars, Blade and Nova
+# stay out because "none has a TMDB entry". That is **false for two of the four**, and a
+# published commit message cannot be amended, so the truth is recorded here where someone
+# editing this file will actually read it. Re-checked on 2026-08-19 against the complete
+# company=420 movie sweep this file's discovery block runs (104 results over 6 pages):
+#
+#  * Ghost Rider -- movie 1738010. GET /movie/1738010 -> "Ghost Rider", 2028-07-28, genres
+#    Fantasy/Action, companies Marvel Studios + Kevin Feige Productions. It exists, the sweep
+#    returns it, and it was therefore landing in "Shorts & Specials" as optional -- exactly the
+#    defect the Phase 6 pass above was written to remove. Curated immediately below.
+#  * Nova -- movie 1731190. GET /movie/1731190 -> "Nova", no release date, genre Science
+#    Fiction, companies Marvel Studios + Kevin Feige Productions. It exists too, but being
+#    undated the sweep drops it, so it was absent rather than misfiled. Curated below the
+#    Shang-Chi sequel, for the same reason that one had to be curated at all.
+#  * Armor Wars -- GET /search/movie?query=Armor%20Wars returns 0 results and nothing in the
+#    company=420 sweep matches. Genuinely absent. Do not invent an id for it.
+#  * Blade -- the only Blade films TMDB holds are the New Line trilogy (36647, 36586, 36648).
+#    No Marvel Studios entry exists and none is in the sweep. Genuinely absent.
+#
+# One further sweep row is named here because it will otherwise be re-investigated: 1751518
+# "Nova Corps" is returned by discover/movie under company=420, but GET /movie/1751518 answers
+# 404. An id discovery lists and the detail endpoint denies could not be verified, so it is not
+# written here -- leave it out until it resolves.
+#
+# Ghost Rider is dated 2028-07-28, which falls between the untitled X-Men film (2028-05-05) and
+# Black Panther 3 (2028-12-13), so it takes the 3950 slot between them rather than a slot after
+# the undated Shang-Chi sequel -- that one sorts last within Phase 6 precisely because it has no
+# date, and a dated film sorting behind it would break the rule stated at its block.
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1738010
+era = "phase6"
+story = 3950
+release = 3950
+context = "A Ghost Rider film announced for mid-2028, with no title beyond the character's name and no plot released."
+importance = { complete = "recommended", essentials = "optional" }
+
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1386618
+era = "phase6"
+story = 4000
+release = 4000
+context = "A third Black Panther film, dated but with no confirmed title or plot."
+importance = { complete = "recommended", essentials = "optional" }
+
+# Announced with no release date, so it sorts last within Phase 6 -- and so it has to be
+# curated at all: the discovery sweep drops undated results, having nothing to order them by.
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1737233
+era = "phase6"
+story = 4100
+release = 4100
+context = "A sequel to Shang-Chi and the Legend of the Ten Rings, announced without a release date."
+importance = { complete = "optional", essentials = "optional" }
+
+# Undated for the same reason and dropped by the sweep for the same reason -- see the correction
+# comment above for the live payload. It sorts after the Shang-Chi sequel only because two
+# undated films need a stable relative order, not because anything is known about either date.
+[[titles]]
+tmdb_type = "movie"
+tmdb_id = 1731190
+era = "phase6"
+story = 4200
+release = 4200
+context = "A Nova film announced without a release date, title or cast."
+importance = { complete = "optional", essentials = "optional" }
+
+# --- Television: curated only where the discovery block below cannot reach ---
+# Both of these carry no "marvel cinematic universe (mcu)" TMDB keyword, so the keyword query
+# never returns them. Ordered above every discovered title (base 10000) on purpose: a curated
+# order below that would hoist them to the top of the era, ahead of the date-ordered spine the
+# discovery block produces, and there is no order number that interleaves into a sequence
+# renumbered on every sync. Importance is left at "optional" to match every discovered sibling
+# -- these blocks exist to fix coverage, not to re-rank the television era.
+
+[[titles]]
+tmdb_type = "tv"
+tmdb_id = 138503
+era = "television"
+story = 20000
+release = 20000
+context = "An animated series retelling Peter Parker's first year as Spider-Man in a timeline of its own."
+importance = { complete = "optional", essentials = "optional", television = "optional" }
+
+[[titles]]
+tmdb_type = "tv"
+tmdb_id = 331074
+era = "television"
+story = 20100
+release = 20100
+context = "An in-universe news web series presented as broadcasts from the Daily Bugle."
+importance = { complete = "optional", essentials = "optional", television = "optional" }
+
+# --- Discovery: everything above is curated; these two queries fill in the long tail ---
+# Verified live against TMDB on 2026-08-17 (v4 read token from .env, never committed).
+#
+# Read this before adding to either block. A TMDB company or keyword query returns a studio's
+# *entire* catalogued output, and Marvel Studios' output includes its own promotional material:
+# "Marvel Studios Assembled" making-ofs, "Legends" recap episodes, anniversary documentaries,
+# LEGO tie-ins, preschool spin-off shorts, and individual animated shorts double-filed as
+# movies. A watch order is for releases, so all of that is denied below by id.
+#
+# **There is no clean TMDB handle that separates a franchise's releases from its behind-the-
+# scenes output.** That was checked: no genre, keyword, company or date filter draws the line
+# (the documentaries carry the same company id, and several BTS rows are not even tagged
+# Documentary -- 1010823 "Magnum Opus" is an animated short). So `exclude` is a **maintained
+# deny-list, and it will never be complete**: every new making-of Marvel ships will sweep in on
+# the next sync until someone adds its id here. Treat it as a chore with each sync, not as a
+# guarantee this file already gives you. It is not exhaustive and cannot be made exhaustive.
+
+[[discover]]
+kind = "movie"
+# Marvel Studios -- verified via GET /company/420 -> name "Marvel Studios"
+company = 420
+era = "extras"
+importance = "optional"
+# Iron Man's release: excludes the pre-MCU Marvel-licensed films (2007 Sony/Fox/animated
+# titles) this company id also carries from Marvel's pre-Marvel Studios licensing days.
+min_date = "2008-01-01"
+# Every id below was confirmed by GET /movie/{id} on 2026-08-17; the title and date the API
+# returned are what the comment says. Grouped by why it is denied, so a future editor can see
+# which category a new arrival belongs to -- and can see that each category is open-ended.
+exclude = [
+  # Marvel-licensed, pre-Marvel-Studios films the min_date could not filter out
+  13056,    # Punisher: War Zone (2008) -- Lionsgate/Marvel Knights
+  15257,    # Hulk vs. Wolverine (2009) -- Lionsgate/Marvel Animation
+  101907,   # Hulk vs. Thor (2009) -- Lionsgate/Marvel Animation
+  14613,    # Next Avengers: Heroes of Tomorrow (2008) -- Lionsgate/Marvel Animation
+  # "Marvel Studios Assembled" making-ofs. One ships per production, so this list grows.
+  936643,   # ... The Making of Hawkeye (2022)
+  939356,   # ... The Making of Eternals (2022)
+  964943,   # ... The Making of Moon Knight (2022)
+  980017,   # ... The Making of Doctor Strange in the Multiverse of Madness (2022)
+  1001912,  # ... The Making of Ms. Marvel (2022)
+  1015595,  # ... The Making of Thor: Love and Thunder (2022)
+  1026208,  # ... The Making of She-Hulk: Attorney at Law (2022)
+  1076032,  # ... The Making of Black Panther: Wakanda Forever (2023)
+  1127361,  # ... The Making of Ant-Man and the Wasp: Quantumania (2023)
+  1165487,  # ... The Making of the Guardians of the Galaxy Vol. 3 (2023)
+  1165500,  # ... The Making of Secret Invasion (2023)
+  1192825,  # ... The Making of Loki Season 2 (2023)
+  1220337,  # ... The Making of Echo (2024)
+  1235525,  # ... The Making of The Marvels (2024)
+  1275606,  # ... The Making of X-Men '97 (2024) -- and X-Men '97 is not MCU canon either
+  1386628,  # ... The Making of Deadpool & Wolverine (2024)
+  1387507,  # ... The Making of Agatha All Along (2024)
+  # Documentaries and promotional specials about the MCU rather than part of it
+  259910,   # Marvel Studios: Assembling a Universe (2014)
+  379040,   # Marvel's Captain America: 75 Heroic Years (2016)
+  647375,   # Marvel Studios: Expanding the Universe (2019)
+  877188,   # Marvel Studios' 2021 Disney+ Day Special (2021)
+  979160,   # A Fan's Guide to Ms. Marvel (2022)
+  1036996,  # Director by Night (2022) -- about Sam Raimi's Multiverse of Madness shoot
+  717082,   # Stan Lee (2023) -- biographical documentary
+  # LEGO tie-ins: a separate, non-canon comedic continuity
+  1154598,  # LEGO Marvel Avengers: Code Red (2023)
+  1359227,  # LEGO Marvel Avengers: Mission Demolition (2024)
+  # Episodes of the preschool spin-off "Marvel's Spidey and His Amazing Friends", not MCU
+  1564058,  # Spidey and Iron Man: Avengers Team Up! (2025)
+  1750432,  # Spidey and the Avengers: Halloween Team-Up! (2026)
+  # The five "I Am Groot" shorts, each double-filed as a movie -- they duplicate tv:232125,
+  # which is the series and is already in the catalogue. Note 1010823 carries no Documentary
+  # genre: a genre filter would not have caught it, which is the whole argument above.
+  1010818,  # Groot's First Steps (2022)
+  1010819,  # The Little Guy (2022)
+  1010820,  # Groot's Pursuit (2022)
+  1010821,  # Groot Takes a Bath (2022)
+  1010823,  # Magnum Opus (2022)
+]
+
+[[discover]]
+kind = "tv"
+# "marvel cinematic universe (mcu)" keyword -- verified via GET /keyword/180547
+# What it returns is whatever TMDB contributors have tagged, which is most of the Marvel
+# Television era (Agents of S.H.I.E.L.D., Agent Carter, Inhumans, the Netflix Defenders shows,
+# Runaways, Cloak & Dagger, Helstrom) and most of the Disney+ slate -- but it is a
+# community-maintained tag, not a manifest. It misses shows (Your Friendly Neighborhood
+# Spider-Man and The Daily Bugle are curated above because of it) and it admits documentary
+# series. Do not read this block as coverage of "every" MCU show.
+keyword = 180547
+era = "television"
+importance = "optional"
+# Verified by GET /tv/{id} on 2026-08-17. Same deny-list discipline as the movie block: these
+# are shows *about* the MCU, and more of them will arrive.
+exclude = [
+  118924,  # Marvel Studios Assembled (2021) -- the making-of series itself
+  114695,  # Marvel Studios Legends (2021) -- clip-compilation recaps
+  220597,  # MPower (2023) -- documentary series on Marvel's women characters
+]

@@ -91,3 +91,38 @@ async def test_ignore_kwargs_excludes_keyword_only_args() -> None:
     await service.check(1, flag=False)  # keyword-only arg ignored in the key
 
     assert calls == [(1, True)]  # second call served from cache
+
+
+async def test_timed_strategy_returns_the_cached_value_not_the_internal_pair() -> None:
+    """``ExpiringCache`` stores ``(value, inserted_at)``; a cache hit must unwrap it.
+
+    Before this was fixed, the second call returned the raw tuple, so an awaited cached
+    coroutine raised ``TypeError: object tuple can't be used in 'await' expression``.
+    """
+    calls: list[int] = []
+
+    class Service:
+        @cache.cache(maxsize=60, strategy=cache.Strategy.TIMED)
+        async def get(self, guild_id: int) -> str:
+            calls.append(guild_id)
+            return f"val-{guild_id}"
+
+    service = Service()
+    assert await service.get(1) == "val-1"
+    assert await service.get(1) == "val-1"  # served from the cache, still unwrapped
+    assert calls == [1]
+
+
+async def test_timed_strategy_invalidate_passes_the_value_to_the_action() -> None:
+    seen: list[str] = []
+
+    class Service:
+        @cache.cache(maxsize=60, strategy=cache.Strategy.TIMED, action=seen.append)
+        async def get(self, guild_id: int) -> str:
+            return f"val-{guild_id}"
+
+    service = Service()
+    await service.get(1)
+    assert Service.get.invalidate(1) is True
+    assert seen == ["val-1"]
+    assert Service.get.invalidate(1) is False  # already gone

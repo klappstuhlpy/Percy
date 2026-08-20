@@ -7,14 +7,22 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, ClassVar
 
+import aiohttp
 import asyncpg
 import click
 import discord
 
+import config
+from app.clients.base import HTTPClientError
+from app.clients.news import NewsClient
+from app.clients.tmdb import TMDBClient
 from app.core import Bot
-from app.database import MigrationRunner
+from app.database import Database, MigrationRunner
 from app.database.migrations import MIGRATIONS_TABLE, Migration, MigrationError
-from config import DatabaseConfig, logs_path
+from app.services.comics import ComicIngest
+from app.services.news import NewsIngest, load_vocabulary, seed_sources
+from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
+from config import DatabaseConfig, locg_api_url, logs_path
 
 try:
     import uvloop  # type: ignore[import-not-found]
@@ -26,16 +34,25 @@ else:
 
 __all__ = (
     'RemoveNoise',
+    'comics',
+    'comics_backfill',
     'db',
     'history',
     'init',
     'main',
     'migrate',
+    'news',
+    'news_poll',
+    'news_sources',
     'run_bot',
     'setup_logging',
     'status',
     'upgrade',
     'verify',
+    'watchlist',
+    'watchlist_lint',
+    'watchlist_search',
+    'watchlist_sync',
 )
 
 
@@ -378,6 +395,296 @@ def reseal(version: int | None, reseal_all: bool, dry_run: bool) -> None:
         click.secho(f'Dry run — {changed} migration(s) would be resealed. Re-run without --dry-run to apply.', fg='yellow')
     else:
         click.secho(f'Resealed {changed} migration(s). `db verify` should now be clean.', fg='green', bold=True)
+
+
+class _NullBot:
+    """Minimal stand-in so :class:`Database` can be constructed outside a running bot.
+
+    ``Database`` only ever touches ``self.bot`` to call ``.close()`` if the connection pool
+    fails to build; the watchlist repository never touches ``bot`` at all. Building a real
+    ``app.core.Bot`` here would pull in the Discord gateway/cog loader for no reason.
+    """
+
+    async def close(self) -> None:
+        pass
+
+
+@main.group('comics', short_help='Comic catalogue archive', options_metavar='[options]')
+def comics() -> None:
+    """Fills the ``comic_*`` archive (V40) from the same sources the bot's 6 h refresh uses.
+
+    The bot ingests on every refresh, so this is only needed to populate the archive without
+    waiting for one — a fresh database, or a backfill after downtime.
+    """
+
+
+@comics.command('backfill')
+@click.option(
+    '--brand', '-b', type=click.Choice(('marvel', 'dc', 'manga', 'all')), default='all',
+    help='Only this brand. Defaults to all three.',
+)
+def comics_backfill(brand: str) -> None:
+    """Fetches the current release list for each brand and upserts it into the archive."""
+    try:
+        asyncio.run(_run_backfill(brand))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while backfilling comics. Check your database connection.')
+        raise SystemExit(1) from None
+
+
+async def _run_backfill(brand: str) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, ingests, closes both.
+
+    Deliberately mirrors :func:`_run_sync`. The fetch is the fragile part (a self-hosted
+    locg-api, a scraped manga page), so a brand that fails is reported and skipped rather than
+    aborting the other two.
+    """
+    # Imported here rather than at module scope: this pulls in the comic cog's Discord-facing
+    # models, which no other CLI command needs.
+    from app.cogs.comic.client import LOCGClient, Parser
+
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        ingest = ComicIngest(db.releases)
+        client = LOCGClient(session, base_url=locg_api_url)
+
+        sources: list[tuple[str, Callable[[], Awaitable[list[Any]]]]] = [
+            ('MARVEL', lambda: client.fetch_comics('marvel')),
+            ('DC', lambda: client.fetch_comics('dc')),
+            ('MANGA', Parser.bs4_viz),
+        ]
+        for name, fetch in sources:
+            if brand != 'all' and name != brand.upper():
+                continue
+            try:
+                data = await fetch()
+            except (HTTPClientError, aiohttp.ClientError, OSError) as exc:
+                click.secho(f'{name}: fetch failed ({exc}).', fg='red')
+                continue
+            if not data:
+                click.secho(f'{name}: nothing returned.', fg='yellow')
+                continue
+            click.echo(str(await ingest.ingest(name, data)))
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
+
+
+@main.group('watchlist', short_help='Universe watchlist seed ingest', options_metavar='[options]')
+def watchlist() -> None:
+    """Turns hand-curated TOML seed files (``data/universes/*.toml``) plus TMDB metadata into
+    ``watch_*`` table rows. See ``app/services/watchlist/`` for the seed format and ingest logic.
+    """
+
+
+def _seed_paths(universe: str | None) -> list[Path]:
+    """Every seed file in ``data/universes/``, optionally filtered to one filename stem."""
+    directory = config.data_path / 'universes'
+    paths = sorted(directory.glob('*.toml'))
+    if universe is not None:
+        paths = [p for p in paths if p.stem == universe]
+    return paths
+
+
+_universe_option = click.option(
+    '--universe', '-u', default=None, help='Only this universe (matches the seed filename stem, e.g. "mcu").',
+)
+
+
+@watchlist.command('lint')
+@_universe_option
+def watchlist_lint(universe: str | None) -> None:
+    """Validates every seed file. No network, no database."""
+    paths = _seed_paths(universe)
+    if not paths:
+        click.secho('No seed files found in data/universes/.', fg='green')
+        return
+
+    any_invalid = False
+    for path in paths:
+        try:
+            seed = load_seed(path)
+        except SeedError as exc:
+            any_invalid = True
+            click.secho(f'{path.name}: {len(exc.problems)} problem(s):', fg='red', bold=True)
+            for problem in exc.problems:
+                click.secho(f'  ! {problem}', fg='red')
+        else:
+            click.secho(f'{path.name}: OK ({seed.slug}, {len(seed.titles)} title(s)).', fg='green')
+
+    if any_invalid:
+        raise SystemExit(1)
+
+
+@watchlist.command('sync')
+@_universe_option
+@click.option('--dry-run', is_flag=True, help='Fetch from TMDB but write nothing; report what would change.')
+def watchlist_sync(universe: str | None, dry_run: bool) -> None:
+    """Fetches TMDB metadata for every seed and upserts it into the watchlist tables."""
+    if config.tmdb.token is None:
+        click.secho('TMDB_API_TOKEN is not set — refusing to sync.', fg='red')
+        raise SystemExit(1)
+
+    paths = _seed_paths(universe)
+    if not paths:
+        click.secho('No seed files found in data/universes/.', fg='green')
+        return
+
+    seeds: list[UniverseSeed] = []
+    for path in paths:
+        try:
+            seeds.append(load_seed(path))
+        except SeedError as exc:
+            click.secho(f'{path.name}: {len(exc.problems)} problem(s):', fg='red', bold=True)
+            for problem in exc.problems:
+                click.secho(f'  ! {problem}', fg='red')
+            raise SystemExit(1) from None
+
+    try:
+        asyncio.run(_run_sync(seeds, dry_run=dry_run))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while syncing the watchlist. Check your database connection.')
+        raise SystemExit(1) from None
+
+
+async def _run_sync(seeds: list[UniverseSeed], *, dry_run: bool) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, syncs, closes both."""
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        client = TMDBClient(session)
+        ingest = WatchlistIngest(client, db.watchlist)
+        for seed in seeds:
+            report = await ingest.sync(seed, regions=config.tmdb.regions, dry_run=dry_run)
+            click.echo(report.summary())
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
+
+
+@watchlist.command('search')
+@click.argument('kind', type=click.Choice(('movie', 'tv')))
+@click.argument('query')
+def watchlist_search(kind: str, query: str) -> None:
+    """Searches TMDB for a title — a curation helper for finding ``tmdb_id`` values."""
+    if config.tmdb.token is None:
+        click.secho('TMDB_API_TOKEN is not set — refusing to search.', fg='red')
+        raise SystemExit(1)
+
+    asyncio.run(_run_search(kind, query))
+
+
+async def _run_search(kind: str, query: str) -> None:
+    async with aiohttp.ClientSession() as session:
+        client = TMDBClient(session)
+        try:
+            data = await client.search(kind, query)
+        except HTTPClientError:
+            _fail('TMDB search failed.')
+            raise SystemExit(1) from None
+
+    results = data.get('results', [])
+    if not results:
+        click.secho('No results.', fg='yellow')
+        return
+
+    for result in results:
+        title = result.get('title') or result.get('name') or '?'
+        date = result.get('release_date') or result.get('first_air_date') or ''
+        year = date[:4] if date else '?'
+        click.echo(f'{result.get("id")} · {title} · {year}')
+
+
+@main.group('news', short_help='News feed polling', options_metavar='[options]')
+def news() -> None:
+    """Polls the RSS/Atom sources in ``news_sources`` (V43) into ``news_items``/``news_subjects``.
+
+    The bot polls on its own 15-minute loop, so this exists for the same reason
+    ``comics backfill`` does: a fresh database stays empty until a background task has run, and
+    an operator debugging a source should not have to wait for the next tick.
+    """
+
+
+@news.command('poll')
+@click.option('--source', '-s', default=None, help='Only this source slug. Defaults to every enabled source.')
+def news_poll(source: str | None) -> None:
+    """Runs one polling pass now: fetch, parse, upsert and tag every story."""
+    try:
+        asyncio.run(_run_news_poll(source))
+    except (RuntimeError, asyncpg.PostgresError, OSError):
+        _fail('An error occurred while polling news. Check your database connection.')
+        raise SystemExit(1) from None
+
+
+async def _run_news_poll(source: str | None) -> None:
+    """Opens the same DB pool the bot uses plus one aiohttp session, polls, closes both.
+
+    The cadence rule (``due_sources``) is deliberately **not** applied: an operator asking for a
+    run is the cadence, and a CLI that silently did nothing because a feed was polled twenty
+    minutes ago is a CLI nobody can debug with. The per-source politeness budget still holds in
+    the loop that actually runs unattended.
+    """
+    session = aiohttp.ClientSession()
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        added = await seed_sources(db.news)
+        if added:
+            click.secho(f'Seeded {len(added)} source(s): {", ".join(added)}.', fg='green')
+
+        if source is None:
+            sources = await db.news.list_sources()
+        else:
+            row = await db.news.get_source(source)
+            if row is None:
+                _fail(f'No such news source: {source!r}.')
+                raise SystemExit(1)
+            sources = [row]
+
+        if not sources:
+            click.secho('No enabled news sources.', fg='yellow')
+            return
+
+        index = await load_vocabulary(db.releases, db.watchlist)
+        report = await NewsIngest(NewsClient(session), db.news, index).run(sources)
+        click.echo(str(report))
+    finally:
+        if db is not None:
+            await db.close()
+        await session.close()
+
+
+@news.command('sources')
+def news_sources() -> None:
+    """Lists every configured source with the outcome of its last poll."""
+    asyncio.run(_run_news_sources())
+
+
+async def _run_news_sources() -> None:
+    """Prints the sources table, disabled rows included -- a dead feed has to be *visible*."""
+    db: Database | None = None
+    try:
+        db = await Database(_NullBot(), loop=asyncio.get_running_loop()).wait()  # type: ignore[arg-type]
+        rows = await db.news.list_sources(enabled_only=False)
+    finally:
+        if db is not None:
+            await db.close()
+
+    if not rows:
+        click.secho('No news sources — run `news poll` once to seed the built-in list.', fg='yellow')
+        return
+
+    for row in rows:
+        state = click.style('enabled', fg='green') if row['enabled'] else click.style('disabled', fg='red')
+        fetched = row['last_fetched'].strftime('%Y-%m-%d %H:%M') if row['last_fetched'] else 'never'
+        status = row['last_status'] or '—'
+        colour = 'green' if status == '200' else 'yellow'
+        click.echo(f'{row["slug"]:<24} {state} · {fetched} · {click.style(status, fg=colour)}')
 
 
 if __name__ == '__main__':
