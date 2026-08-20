@@ -35,22 +35,45 @@
         {% else %}
         <div class="wl-grid">
             {% for universe in universes %}
-            <a class="wl-card" href="/watchlist/{{ universe.slug }}" style="--wl-accent: {{ universe.accent }}">
-                <h2 class="wl-card__name">{{ universe.name }}</h2>
-                {% match universe.tagline %}
-                {% when Some with (tagline) %}
-                <p class="wl-card__tagline">{{ tagline }}</p>
+            {# The `--art` modifier is what adds the backdrop layer and its scrim, and it is
+               only ever present when there is a backdrop to composite -- exactly the rule
+               `wl-head--art` on the order page and `nx-row--with-image` on /news follow, so a
+               universe with no key art gets today's card unchanged rather than a reserved
+               empty band. Same for the logo: the `<h2>` is always there, carrying the name as
+               text when there is no wordmark to put in it. #}
+            <a class="wl-card{% if universe.backdrop_url.is_some() %} wl-card--art{% endif %}"
+               href="/watchlist/{{ universe.slug }}" style="--wl-accent: {{ universe.accent }}">
+                {% match universe.backdrop_url %}
+                {% when Some with (backdrop) %}
+                <span class="wl-card__backdrop" aria-hidden="true" style="background-image: url('{{ backdrop }}')"></span>
                 {% when None %}
                 {% endmatch %}
-                <div class="wl-card__figures">
-                    <span class="wl-figure">
-                        <span class="wl-figure__value">{{ universe.title_count }}</span>
-                        <span class="wl-figure__label">Titles</span>
-                    </span>
-                    <span class="wl-figure">
-                        <span class="wl-figure__value">{{ universe.total_runtime / 60 }}h</span>
-                        <span class="wl-figure__label">Runtime</span>
-                    </span>
+                <div class="wl-card__content">
+                    <h2 class="wl-card__name">
+                        {% match universe.logo_url %}
+                        {% when Some with (logo) %}
+                        {# The wordmark *is* the heading, so the name is its alt text rather
+                           than repeated beside it. #}
+                        <img class="wl-card__logo" src="{{ logo }}" alt="{{ universe.name }}" loading="lazy">
+                        {% when None %}
+                        {{ universe.name }}
+                        {% endmatch %}
+                    </h2>
+                    {% match universe.tagline %}
+                    {% when Some with (tagline) %}
+                    <p class="wl-card__tagline">{{ tagline }}</p>
+                    {% when None %}
+                    {% endmatch %}
+                    <div class="wl-card__figures">
+                        <span class="wl-figure">
+                            <span class="wl-figure__value">{{ universe.title_count }}</span>
+                            <span class="wl-figure__label">Titles</span>
+                        </span>
+                        <span class="wl-figure">
+                            <span class="wl-figure__value">{{ universe.total_runtime / 60 }}h</span>
+                            <span class="wl-figure__label">Runtime</span>
+                        </span>
+                    </div>
                 </div>
             </a>
             {% endfor %}

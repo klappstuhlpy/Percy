@@ -37,6 +37,51 @@
     margin-bottom: 2rem;
 }
 
+/* The universe's own key art behind the header -- absent entirely without art, so a
+   universe with none renders exactly like `.wl-head` alone. `.wl-head__backdrop` is
+   the photo layer; the scrim is `::before` on the modifier so it composites above the
+   image but stays out of `.wl-head`'s own box (a pseudo-element, not an element, so it
+   is invisible to assistive tech without an `aria-hidden` of its own). Content moves to
+   `.wl-head__content` for the stacking context. */
+.wl-head--art {
+    position: relative;
+    padding: 2rem 1.75rem;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.wl-head__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.55;
+}
+
+/* The scrim is `var(--background)` itself -- the page's own background token, not a
+   new colour -- so wherever it reaches full strength the heading sits on exactly the
+   contrast it has everywhere else on the page, in both themes, regardless of what the
+   photo underneath looks like. It is closest to full strength on the text side and
+   fades toward the far edge, so the art still reads as art. */
+.wl-head--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        100deg,
+        var(--background) 0%,
+        color-mix(in srgb, var(--background) 82%, transparent) 55%,
+        color-mix(in srgb, var(--background) 58%, transparent) 100%
+    );
+}
+
+.wl-head__content {
+    position: relative;
+    z-index: 2;
+}
+
 .wl-head__eyebrow {
     display: block;
     margin-bottom: 0.5rem;
@@ -191,7 +236,9 @@
 .wl-entry {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    /* poster (or its placeholder) | content | tags/toggle -- the rail marker below sits
+       in `.wl-entries`' own left padding, so adding this column does not move it. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
     gap: 0.75rem 1rem;
     padding: 0.85rem 0;
@@ -230,6 +277,31 @@
 
 .wl-entry--milestone::before {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--wl-accent) 22%, transparent);
+}
+
+/* ── Series headers ──────────────────────────────────────────────────
+   A show `V45` exploded into per-season entries keeps its row, but as a *header* for the
+   seasons under it: not watchable, not counted, no toggle and no number (see
+   `container_ids`). So it drops the importance marker -- a dot on a row Percy's "N
+   essential" figure never counted would claim a rank the header does not have -- and
+   loses the divider above the season it introduces, which is what visually binds the
+   group without indenting anything. */
+
+.wl-entry--series::before {
+    content: none;
+}
+
+.wl-entry--series {
+    padding-bottom: 0.35rem;
+}
+
+.wl-entry--series + .wl-entry {
+    border-top: 0;
+}
+
+/* Scoped through `.wl` to outrank the shared `.wl .wl-entry__title` weight below. */
+.wl .wl-entry--series .wl-entry__title {
+    font-weight: 700;
 }
 
 /* ── Entry content ───────────────────────────────────────────────── */
@@ -318,6 +390,11 @@
     border-radius: 3px;
 }
 
+/* Sits in the index column of a series header, where an entry's number would be. */
+.wl-tag--series {
+    color: var(--wl-accent);
+}
+
 /* ── Streaming ───────────────────────────────────────────────────── */
 
 .wl-providers {
@@ -362,11 +439,61 @@
     border-color: var(--wl-accent);
 }
 
+/* The universe's key art behind its card, on exactly the terms `.wl-head--art` uses on the
+   order page: a modifier that is only present when there *is* art, so a universe with none
+   renders the plain card above -- no reserved band, no empty box. The scrim is the page's own
+   `--background` token, so the heading keeps the contrast it has everywhere else in either
+   theme, whatever the photo underneath looks like. */
+.wl .wl-card--art {
+    position: relative;
+    overflow: hidden;
+}
+
+.wl-card__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.5;
+}
+
+.wl-card--art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--background) 72%, transparent) 0%,
+        var(--background) 72%
+    );
+}
+
+.wl-card__content {
+    position: relative;
+    z-index: 2;
+}
+
 .wl-card__name {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 700;
     letter-spacing: -0.01em;
+}
+
+/* A wordmark arrives at whatever size TMDB holds and in whatever single colour the studio
+   chose -- often white, which would vanish against the light theme's scrim. The drop shadow
+   is `--foreground`, the one colour guaranteed to contrast with `--background` in both
+   themes, so the mark stays legible either way without a second palette. */
+.wl-card__logo {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 220px);
+    max-height: 2.75rem;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--foreground) 40%, transparent));
 }
 
 .wl-card__tagline {
@@ -409,15 +536,22 @@
 
 @media (max-width: 640px) {
     .wl-entry {
-        grid-template-columns: minmax(0, 1fr);
+        /* Poster stays beside the title; the side row (tags/toggle) drops to a full-width
+           row beneath rather than fighting the title for a third narrow column. */
+        grid-template-columns: auto minmax(0, 1fr);
     }
 
     .wl-entry__side {
+        grid-column: 1 / -1;
         justify-content: flex-start;
     }
 
     .wl-controls {
         gap: 1rem;
+    }
+
+    .wl-head--art {
+        padding: 1.5rem 1.25rem;
     }
 }
 
@@ -428,10 +562,13 @@
 }
 
 /* ── Person page ─────────────────────────────────────────────────────
-   A filmography reuses the watch-order row wholesale; only the portrait
-   header and the poster column are new. The importance marker is switched
-   off here — a credit has no importance, and an inherited dot would read
-   as one. */
+   A filmography row builds on the shared `.wl-entry` shape; only the
+   portrait header below and the poster column here are new. That poster
+   rule (`.wl-person-entry__poster`) is in turn reused as-is by the
+   watch-order row (see watch_order.html), so a filmography and a universe
+   order share one poster look rather than two. The importance marker is
+   switched off here — a credit has no importance, and an inherited dot
+   would read as one. */
 
 .wl-person {
     display: grid;
@@ -487,11 +624,73 @@
     text-decoration: underline;
 }
 
+/* The character a cast row's title is credited under -- muted, since the film title and
+   the role noun above it already carry the visual weight of the row. */
+.wl-person-entry__character {
+    color: var(--text-muted);
+}
+
+/* The universes a person spans, listed in the header as links rather than left as the
+   bare figure count below -- same inline "· "-separated run as `.wl-entry__meta`. */
+.wl-person__universes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.6rem 0 0;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+.wl-person__universes > * + *::before {
+    content: '·';
+    margin-right: 0.6rem;
+    color: var(--text-muted);
+}
+
+.wl-person__universe {
+    color: var(--wl-accent);
+    text-decoration: none;
+}
+
+.wl-person__universe:hover {
+    text-decoration: underline;
+}
+
+/* The TMDB attribution link §9 requires on any page showing TMDB data. */
+.wl-person__tmdb {
+    margin: 0.75rem 0 0;
+    font-size: 0.72rem;
+}
+
+.wl-person__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-person__tmdb a:hover {
+    color: var(--foreground);
+}
+
 @media (max-width: 640px) {
     .wl-person {
         grid-template-columns: minmax(0, 1fr);
         gap: 1rem;
     }
+}
+
+/* ── Related news (§6.2's 6b, reusing the row markup comic_detail.html shares
+   through templates/news_strip.html) ──────────────────────────────────── */
+
+/* The section's own separator is `.nx-related.nx-related--trailing` in `news.css` —
+   the same rule `comic_detail.html` uses, mirrored to the other border side, so it is
+   not duplicated here. Only the heading style below is specific to this page. */
+
+.wl-person__news-title {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 /* ── Title detail page (/watchlist/:universe/:slug) ───────────────────
@@ -644,7 +843,23 @@
     color: var(--text-muted);
 }
 
+/* The TMDB attribution link §9 requires, on the same terms `.wl-person__tmdb` states it:
+   quiet, under the facts it attributes, never competing with our own marks. */
+.wl-facts__tmdb {
+    margin: -0.5rem 0 1.5rem;
+    font-size: 0.72rem;
+}
+
+.wl-facts__tmdb a {
+    color: var(--text-muted);
+}
+
+.wl-facts__tmdb a:hover {
+    color: var(--foreground);
+}
+
 .wl-fits,
+.wl-seasons,
 .wl-watch,
 .wl-credits,
 .wl-related-news,
@@ -767,6 +982,66 @@
     font-size: 0.78rem;
     color: var(--text-muted);
 }
+
+/* ── Seasons ─────────────────────────────────────────────────
+   Only a series container renders these: they are the entries it heads, so each carries the
+   watched control the heading itself does not. Deliberately a list rather than the cast's
+   card grid -- a season is read left to right (which one, how long, watched) and the toggle
+   has to sit at the end of that line, not under a poster. */
+
+.wl-seasonlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wl-season {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--box);
+    border: 1px solid var(--box-border);
+    border-radius: 8px;
+}
+
+.wl-season__poster {
+    flex: none;
+    width: 46px;
+    height: 69px;
+    object-fit: cover;
+    background: var(--box-shade);
+    border-radius: 4px;
+}
+
+/* Takes the free space so the toggle sits flush right on every row, whatever the label. */
+.wl-season__text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    gap: 0.15rem;
+}
+
+.wl .wl-season__name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--foreground);
+    text-decoration: none;
+}
+
+.wl .wl-season__name:hover {
+    color: var(--wl-accent);
+}
+
+.wl-season__meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 
 /* ── Streaming ───────────────────────────────────────────────────── */
 

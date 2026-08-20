@@ -100,43 +100,60 @@
            are marked in place — a second section would be a different feature. #}
         <ol class="nx-list">
             {% for row in rows %}
-            <li class="nx-row{% if row.followed %} nx-row--followed{% endif %}">
-                <h2 class="nx-row__headline">
-                    {# Links out to the original, always: we are showing someone else's
-                       headline, not hosting their article. #}
-                    <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
-                </h2>
-                <p class="nx-row__meta">
-                    <span class="nx-row__source">{{ row.source_name }}</span>
-                    {% match row.published %}
-                    {% when Some with (date) %}
-                    <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
-                    {% when None %}
-                    {% endmatch %}
-                    {% if row.followed %}
-                    <span class="nx-row__followed">Following</span>
-                    {% endif %}
-                </p>
-                {% match row.excerpt %}
-                {% when Some with (text) %}
-                <p class="nx-row__excerpt">{{ text }}</p>
+            <li class="nx-row{% if row.followed %} nx-row--followed{% endif %}{% if row.image_url.is_some() %} nx-row--with-image{% endif %}">
+                {# The feed's own image, hotlinked from the URL it published (§9, narrowed
+                   2026-08-06) — never rehosted, never proxied, never cached by us. `alt=""`
+                   because it is decorative: the headline carries the meaning. Explicit
+                   width/height reserve the box before the image loads, and
+                   `referrerpolicy="no-referrer"` keeps our readers' page URLs off a third
+                   party's asset host. An item with no image renders no `<img>` at all — the
+                   `nx-row--with-image` modifier is what adds the side-by-side layout, so a
+                   text-only card simply keeps today's block shape instead of leaving a gap
+                   where a fixed image column would be. #}
+                {% match row.image_url %}
+                {% when Some with (src) %}
+                <img class="nx-row__image" src="{{ src }}" alt="" loading="lazy" decoding="async"
+                     width="112" height="112" referrerpolicy="no-referrer">
                 {% when None %}
                 {% endmatch %}
-                {% if !row.chips.is_empty() %}
-                <ul class="nx-chips" aria-label="Tagged">
-                    {% for chip in row.chips %}
-                    <li>
-                        {# A chip with nowhere to go is a label, not a dead link. #}
-                        {% match chip.href %}
-                        {% when Some with (href) %}
-                        <a class="nx-chip nx-chip--link" href="{{ href }}">{{ chip.label }}</a>
+                <div class="nx-row__body">
+                    <h2 class="nx-row__headline">
+                        {# Links out to the original, always: we are showing someone else's
+                           headline, not hosting their article. #}
+                        <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
+                    </h2>
+                    <p class="nx-row__meta">
+                        <span class="nx-row__source">{{ row.source_name }}</span>
+                        {% match row.published %}
+                        {% when Some with (date) %}
+                        <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
                         {% when None %}
-                        <span class="nx-chip">{{ chip.label }}</span>
                         {% endmatch %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
+                        {% if row.followed %}
+                        <span class="nx-row__followed">Following</span>
+                        {% endif %}
+                    </p>
+                    {% match row.excerpt %}
+                    {% when Some with (text) %}
+                    <p class="nx-row__excerpt">{{ text }}</p>
+                    {% when None %}
+                    {% endmatch %}
+                    {% if !row.chips.is_empty() %}
+                    <ul class="nx-chips" aria-label="Tagged">
+                        {% for chip in row.chips %}
+                        <li>
+                            {# A chip with nowhere to go is a label, not a dead link. #}
+                            {% match chip.href %}
+                            {% when Some with (href) %}
+                            <a class="nx-chip nx-chip--link" href="{{ href }}">{{ chip.label }}</a>
+                            {% when None %}
+                            <span class="nx-chip">{{ chip.label }}</span>
+                            {% endmatch %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
             </li>
             {% endfor %}
         </ol>

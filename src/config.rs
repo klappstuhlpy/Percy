@@ -249,6 +249,18 @@ impl Config {
     }
 }
 
+/// Resolves the config file path: `$DASHBOARD_CONFIG`, else
+/// `<config-dir>/percy-dashboard/config.json`.
+fn config_path() -> anyhow::Result<PathBuf> {
+    if let Ok(explicit) = std::env::var("DASHBOARD_CONFIG") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let mut path = dirs::config_dir().context("could not find a config directory for the current user")?;
+    path.push("percy-dashboard");
+    path.push("config.json");
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,16 +296,4 @@ mod tests {
         assert_eq!(config_with_base("http://127.0.0.1:8091").cookie_domain(), None);
         assert_eq!(config_with_base("http://localhost:8091").cookie_domain(), None);
     }
-}
-
-/// Resolves the config file path: `$DASHBOARD_CONFIG`, else
-/// `<config-dir>/percy-dashboard/config.json`.
-fn config_path() -> anyhow::Result<PathBuf> {
-    if let Ok(explicit) = std::env::var("DASHBOARD_CONFIG") {
-        return Ok(PathBuf::from(explicit));
-    }
-    let mut path = dirs::config_dir().context("could not find a config directory for the current user")?;
-    path.push("percy-dashboard");
-    path.push("config.json");
-    Ok(path)
 }

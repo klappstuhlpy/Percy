@@ -73,10 +73,14 @@
 }
 
 /* WCAG 2.2.2: auto-moving content lasting over five seconds must be pausable. Hover
-   covers the pointer, :focus-within covers the keyboard — and every headline is a
-   real link, so tabbing into the strip stops it before the first one moves away. */
+   covers the pointer; :has(:focus-visible) covers the keyboard — deliberately not
+   :focus-within, which also matches a mouse click. A click focuses the clicked
+   headline, and restoring the page from the bfcache (Back button) restores that
+   focus too, so :focus-within would keep the strip paused forever until the reader
+   clicked elsewhere. :focus-visible only matches keyboard focus, so a mouse click
+   never pauses it and a bfcache restore never leaves it stuck. */
 .nx-ticker:hover .nx-ticker__track,
-.nx-ticker:focus-within .nx-ticker__track {
+.nx-ticker:has(:focus-visible) .nx-ticker__track {
     animation-play-state: paused;
 }
 
@@ -225,6 +229,33 @@
     padding-left: 0.75rem;
 }
 
+/* A story's own image (§9, narrowed 2026-08-06): hotlinked, never rehosted. The flex
+   layout only applies to rows carrying this modifier — a text-only row is never given
+   it, so it stays the plain block shape above and never reserves a gap for an image
+   that isn't there. */
+.nx-row--with-image {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.nx-row__image {
+    flex: none;
+    width: 112px;
+    height: 112px;
+    border-radius: 8px;
+    /* A hotlinked asset arrives at whatever size the feed chose; object-fit crops it
+       to the reserved box instead of distorting it. */
+    object-fit: cover;
+    background: var(--box-shade);
+    border: 1px solid var(--box-border);
+}
+
+.nx-row__body {
+    min-width: 0;
+    flex: 1;
+}
+
 .nx-row__headline {
     margin: 0;
     font-size: 0.98rem;
@@ -323,12 +354,27 @@
     color: var(--branding);
 }
 
-/* ── Related news (§6.2's 6b, on the comic detail page) ──────────── */
+/* ── Related news (§6.2's 6b — the comic detail and person pages) ──
 
-.cx-related-news {
+   One separator rule, not two: `comic_detail.html` and `person.html` both wrap their
+   related-news strip in this class, but the strip sits in a different place on each page
+   (mid-page on the former, trailing on the latter) so the rule and its `--trailing`
+   modifier are the same border pushed to whichever side needs it, kept together here
+   rather than duplicated (mirrored) once per page in `comics.css`/`watchlist.css`. */
+
+.nx-related {
     padding-bottom: 1.75rem;
     margin-bottom: 1.75rem;
     border-bottom: 1px solid var(--box-border);
+}
+
+.nx-related--trailing {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-top: 1.5rem;
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--box-border);
 }
 
 .nx-list--compact .nx-row {
@@ -359,6 +405,11 @@
 
     .nx-field--grow {
         min-width: 0;
+    }
+
+    .nx-row__image {
+        width: 72px;
+        height: 72px;
     }
 }
 

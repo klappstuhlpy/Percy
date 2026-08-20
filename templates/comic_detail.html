@@ -3,6 +3,7 @@
 {% block nav_comics_active %} active{% endblock %}
 
 {% import "progress_toggle.html" as progress %}
+{% import "news_strip.html" as news_strip %}
 
 {% block title %}{% if title.is_empty() %}Comic unavailable{% else %}{{ title }}{% match issue_label %}{% when Some with (issue) %} {{ issue }}{% when None %}{% endmatch %}{% endif %} | Percy{% endblock %}
 
@@ -91,6 +92,24 @@
             </div>
             {% when None %}
             {% endmatch %}
+            {% match source_url %}
+            {% when Some with (url) %}
+            <div class="cx-facts__row">
+                <dt>Source</dt>
+                <dd><a href="{{ url }}" target="_blank" rel="noopener">View original listing</a></dd>
+            </div>
+            {% when None %}
+            {% endmatch %}
+            {% match first_seen %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>First tracked</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
+            {% match updated_at %}
+            {% when Some with (date) %}
+            <div class="cx-facts__row"><dt>Updated</dt><dd>{{ date }}</dd></div>
+            {% when None %}
+            {% endmatch %}
         </dl>
 
         {% if previous.is_some() || next.is_some() || !more_from_series.is_empty() %}
@@ -149,7 +168,11 @@
             {% for group in credit_groups %}
             <div class="cx-creators__group">
                 <span class="cx-creators__role">{{ group.role }}</span>
-                <span class="cx-creators__names">{{ group.names.join(", ") }}</span>
+                <span class="cx-creators__names">
+                    {% for credit in group.credits %}
+                    <a href="{{ credit.href }}">{{ credit.name }}</a>{% if !loop.last %}, {% endif %}
+                    {% endfor %}
+                </span>
             </div>
             {% endfor %}
         </section>
@@ -161,7 +184,7 @@
             <ul class="cx-characters__list">
                 {% for character in characters %}
                 <li class="cx-character">
-                    {{ character.name }}
+                    <a href="{{ character.href }}">{{ character.name }}</a>
                     {% match character.kind %}
                     {% when Some with (kind) %}
                     <span class="cx-character__kind">{{ kind }}</span>
@@ -176,25 +199,9 @@
         {# §6.2's 6b: absent rather than empty when nothing has been written about the
            series. Headline + source + date, linking out — §9 permits nothing more. #}
         {% if !related_news.is_empty() %}
-        <section class="cx-related-news nx">
+        <section class="nx-related nx">
             <h2 class="cx-section__title">Related news</h2>
-            <ul class="nx-list nx-list--compact">
-                {% for row in related_news %}
-                <li class="nx-row">
-                    <h3 class="nx-row__headline">
-                        <a href="{{ row.url }}" rel="noopener nofollow ugc">{{ row.headline }}</a>
-                    </h3>
-                    <p class="nx-row__meta">
-                        <span class="nx-row__source">{{ row.source_name }}</span>
-                        {% match row.published %}
-                        {% when Some with (date) %}
-                        <time class="nx-row__date" datetime="{{ row.published_iso.as_deref().unwrap_or(date) }}">{{ date }}</time>
-                        {% when None %}
-                        {% endmatch %}
-                    </p>
-                </li>
-                {% endfor %}
-            </ul>
+            {% call news_strip::list(related_news) %}
             <a class="nx-more" href="{{ related_news_href }}">All news for this series →</a>
         </section>
         {% endif %}

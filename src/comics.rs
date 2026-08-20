@@ -9,15 +9,15 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{ComicBrowseQuery, ComicCredit, ComicRelease, PercyError, ProgressMap};
+use percy_client::{ComicBrowseQuery, ComicCharacter, ComicCredit, ComicRelease, PercyError, ProgressMap};
 use serde::Deserialize;
 
 use crate::{
     progress,
     session::Session,
     templates::{
-        BrandTab, ComicBrowseTemplate, ComicCard, ComicDetailTemplate, ComicSeriesIndexTemplate, ComicSeriesTemplate,
-        CreditGroup,
+        BrandTab, CharacterLink, ComicBrowseTemplate, ComicCard, ComicDetailTemplate, ComicSeriesIndexTemplate,
+        ComicSeriesTemplate, CreditGroup, CreditLink, FilterChip,
     },
     view::Viewer,
     AppState,
@@ -55,6 +55,12 @@ pub struct ComicBrowseParams {
     search: Option<String>,
     #[serde(default)]
     page: Option<i64>,
+    #[serde(default)]
+    creator: Option<String>,
+    #[serde(default)]
+    character: Option<String>,
+    #[serde(default)]
+    series: Option<String>,
 }
 
 /// `GET /comics` — the release browser.
@@ -66,6 +72,16 @@ pub async fn comic_browse(
     let brand = params.brand.filter(|b| !b.is_empty());
     let search = params.search.unwrap_or_default();
     let page = params.page.filter(|p| *p > 0).unwrap_or(1);
+    let creator = params.creator.filter(|v| !v.is_empty());
+    let character = params.character.filter(|v| !v.is_empty());
+    let series = params.series.filter(|v| !v.is_empty());
+    let filters = BrowseFilters {
+        brand: brand.as_deref(),
+        search: &search,
+        creator: creator.as_deref(),
+        character: character.as_deref(),
+        series: series.as_deref(),
+    };
 
     let discord_id = session.as_ref().map(|s| s.discord_user_id.clone());
     // All three calls go out together: neither the ticker nor the read marks may add a
@@ -75,6 +91,9 @@ pub async fn comic_browse(
             let query = ComicBrowseQuery {
                 brand: brand.as_deref(),
                 search: (!search.is_empty()).then_some(search.as_str()),
+                creator: creator.as_deref(),
+                character: character.as_deref(),
+                series: series.as_deref(),
                 page: Some(page),
                 per_page: Some(PER_PAGE),
                 ..Default::default()
@@ -96,9 +115,10 @@ pub async fn comic_browse(
 
     let (prev_page, next_page) = adjacent_pages(page, data.total_pages);
     // A JS-off mark bounces back to *this* filtered page, not to a bare `/comics` that
-    // has lost the brand, the search and the page the visitor was reading. Built by the
-    // same helper as the pagination links, so the two can never disagree.
-    let here = browse_href(brand.as_deref(), &search, page);
+    // has lost the brand, the search, the creator/character/series filters and the page
+    // the visitor was reading. Built by the same helper as the pagination links, so the
+    // two can never disagree.
+    let here = browse_href(&filters, page);
     let signed_in = session.is_some();
 
     ComicBrowseTemplate {
@@ -125,15 +145,25 @@ pub async fn comic_browse(
                 let value = (!value.is_empty()).then_some(value);
                 BrandTab {
                     label: label.to_string(),
-                    href: browse_href(value, &search, 1),
+                    href: browse_href(
+                        &BrowseFilters {
+                            brand: value,
+                            ..filters
+                        },
+                        1,
+                    ),
                     active: brand.as_deref() == value,
                 }
             })
             .collect(),
-        prev_href: prev_page.map(|p| browse_href(brand.as_deref(), &search, p)),
-        next_href: next_page.map(|p| browse_href(brand.as_deref(), &search, p)),
+        prev_href: prev_page.map(|p| browse_href(&filters, p)),
+        next_href: next_page.map(|p| browse_href(&filters, p)),
+        filter_chips: filter_chips(&filters),
         brand,
         search,
+        creator,
+        character,
+        series,
         total: data.total,
         page,
         total_pages: data.total_pages,
@@ -200,6 +230,7 @@ pub async fn comic_series_detail(
                 accent: brand_accent("").to_string(),
                 publisher: None,
                 issue_count: 0,
+                latest: None,
                 issues: Vec::new(),
                 comic_copyright: String::new(),
             };
@@ -215,6 +246,7 @@ pub async fn comic_series_detail(
         accent: brand_accent(&page.brand).to_string(),
         publisher: page.publisher,
         issue_count: page.issue_count,
+        latest: latest_release_date(&page.issues),
         issues: page.issues.iter().map(comic_card).collect(),
         comic_copyright: publisher_copyright(&page.brand).to_string(),
         brand: page.brand,
@@ -268,7 +300,10 @@ pub async fn comic_detail(
                 more_from_series: Vec::new(),
                 credit_groups: Vec::new(),
                 characters: Vec::new(),
+                source_url: None,
                 description: None,
+                first_seen: None,
+                updated_at: None,
                 related_news: Vec::new(),
                 related_news_href: String::new(),
                 comic_copyright: String::new(),
@@ -306,7 +341,15 @@ pub async fn comic_detail(
         previous: detail.series.previous.as_ref().map(comic_card),
         next: detail.series.next.as_ref().map(comic_card),
         more_from_series: detail.series.more_from_series.iter().map(comic_card).collect(),
-        credit_groups: group_credits_by_role(&release.credits),
+        credit_groups: group_credits_by_role(&release.credits, &release.brand),
+        characters: release
+            .characters
+            .iter()
+            .map(|character| character_link(character, &release.brand))
+            .collect(),
+        source_url: release.url.clone(),
+        first_seen: release.first_seen.as_deref().map(date_only),
+        updated_at: release.updated_at.as_deref().map(date_only),
         related_news,
         related_news_href: crate::news::subject_news_href("comic", "series", &series_subject),
         comic_copyright: publisher_copyright(&release.brand).to_string(),
@@ -320,7 +363,6 @@ pub async fn comic_detail(
         publisher: release.publisher,
         series_name: release.series_name,
         series_slug: release.series_slug,
-        characters: release.characters,
         description: release.description,
     }
     .into_response()
@@ -400,8 +442,10 @@ fn price_label(price: Option<f64>) -> Option<String> {
 
 /// Groups a release's credits by role, preserving the order roles first
 /// appear in — so "Writer" doesn't jump around the page between releases
-/// depending on how League of Comic Geeks ordered its own credit list.
-fn group_credits_by_role(credits: &[ComicCredit]) -> Vec<CreditGroup> {
+/// depending on how League of Comic Geeks ordered its own credit list. Each
+/// credit becomes its own link to the browse page filtered to that name and
+/// this release's brand.
+fn group_credits_by_role(credits: &[ComicCredit], brand: &str) -> Vec<CreditGroup> {
     let mut groups: Vec<CreditGroup> = Vec::new();
     for credit in credits {
         let name = credit.name.trim();
@@ -413,15 +457,41 @@ fn group_credits_by_role(credits: &[ComicCredit]) -> Vec<CreditGroup> {
         } else {
             credit.role.trim().to_string()
         };
+        let link = CreditLink {
+            name: name.to_string(),
+            href: creator_href(name, brand),
+        };
         match groups.iter_mut().find(|group| group.role == role) {
-            Some(group) => group.names.push(name.to_string()),
+            Some(group) => group.credits.push(link),
             None => groups.push(CreditGroup {
                 role,
-                names: vec![name.to_string()],
+                credits: vec![link],
             }),
         }
     }
     groups
+}
+
+/// A character, shaped for the detail page's linked list — same name/kind Percy
+/// sent, plus a link to the browse page filtered to that character and brand.
+fn character_link(character: &ComicCharacter, brand: &str) -> CharacterLink {
+    CharacterLink {
+        name: character.name.clone(),
+        kind: character.kind.clone(),
+        href: character_href(&character.name, brand),
+    }
+}
+
+/// `/comics?creator={urlencoded name}&brand={brand}` — where a credit on the detail
+/// page links to.
+fn creator_href(name: &str, brand: &str) -> String {
+    format!("/comics?creator={}&brand={}", encode_query_value(name), brand)
+}
+
+/// `/comics?character={urlencoded name}&brand={brand}` — where a character on the
+/// detail page links to.
+fn character_href(name: &str, brand: &str) -> String {
+    format!("/comics?character={}&brand={}", encode_query_value(name), brand)
 }
 
 /// The previous/next page numbers relative to `page`, or `None` at either
@@ -431,6 +501,30 @@ fn adjacent_pages(page: i64, total_pages: i64) -> (Option<i64>, Option<i64>) {
     let prev = (page > 1).then_some(page - 1);
     let next = (total_pages > 0 && page < total_pages).then_some(page + 1);
     (prev, next)
+}
+
+/// The date half of a full ISO timestamp — `2026-08-05T09:30:00` becomes `2026-08-05`.
+/// `ComicRelease.first_seen`/`updated_at` are `TIMESTAMP` columns, unlike `release_date`
+/// (a plain `date`), so they carry a time component a reader has no use for. Same trim
+/// `news.rs::published_date` already applies to a story's `published_at`.
+fn date_only(value: &str) -> String {
+    value.split('T').next().unwrap_or(value).to_string()
+}
+
+/// The most recent issue's release date across a series' issues, for the header figure.
+/// See `ComicSeriesTemplate::latest`'s doc comment for why this duplicates, rather than
+/// reuses, the index card's `ComicSeriesSummary.latest` — and for the two reasons the two
+/// figures CAN legitimately disagree (an unscoped `brand` merging publishers on a colliding
+/// slug, and the index's 300s cache lagging this endpoint's live read). This figure is
+/// authoritative only for exactly the issues this page renders below it; the index's is
+/// authoritative per brand. Issues without a date don't count; an all-undated series
+/// (nothing solicited yet) has no "latest" to show.
+fn latest_release_date(issues: &[ComicRelease]) -> Option<String> {
+    issues
+        .iter()
+        .filter_map(|issue| issue.release_date.as_deref())
+        .max()
+        .map(str::to_string)
 }
 
 /// The string Percy files a comic's read mark under, and the only way one is built.
@@ -477,16 +571,37 @@ pub(crate) fn encode_query_value(value: &str) -> String {
     out
 }
 
+/// Every filter the browse page carries between the brand tabs, the search box, the
+/// filter chips and the pager — one bag so those four controls can never disagree
+/// about what is currently active.
+#[derive(Debug, Clone, Copy, Default)]
+struct BrowseFilters<'a> {
+    brand: Option<&'a str>,
+    search: &'a str,
+    creator: Option<&'a str>,
+    character: Option<&'a str>,
+    series: Option<&'a str>,
+}
+
 /// Builds a `/comics` href carrying the given filters, omitting whatever is
 /// at its default so a plain "next page, no filters" link stays `?page=2`
 /// instead of `?brand=&search=&page=2`.
-fn browse_href(brand: Option<&str>, search: &str, page: i64) -> String {
+fn browse_href(filters: &BrowseFilters<'_>, page: i64) -> String {
     let mut params = Vec::new();
-    if let Some(brand) = brand {
+    if let Some(brand) = filters.brand {
         params.push(format!("brand={brand}"));
     }
-    if !search.is_empty() {
-        params.push(format!("search={}", encode_query_value(search)));
+    if !filters.search.is_empty() {
+        params.push(format!("search={}", encode_query_value(filters.search)));
+    }
+    if let Some(creator) = filters.creator {
+        params.push(format!("creator={}", encode_query_value(creator)));
+    }
+    if let Some(character) = filters.character {
+        params.push(format!("character={}", encode_query_value(character)));
+    }
+    if let Some(series) = filters.series {
+        params.push(format!("series={}", encode_query_value(series)));
     }
     if page > 1 {
         params.push(format!("page={page}"));
@@ -496,6 +611,51 @@ fn browse_href(brand: Option<&str>, search: &str, page: i64) -> String {
     } else {
         format!("/comics?{}", params.join("&"))
     }
+}
+
+/// The removable chips shown above the grid for whichever of `creator`/`character`/
+/// `series` are active. Each chip's × drops just that one filter and resets to page
+/// 1 (the result set changed, so the visitor's old page number no longer means
+/// anything) while keeping everything else -- brand, search, and the other filters.
+fn filter_chips(filters: &BrowseFilters<'_>) -> Vec<FilterChip> {
+    let mut chips = Vec::new();
+    if let Some(value) = filters.creator {
+        chips.push(FilterChip {
+            label: format!("Creator: {value}"),
+            remove_href: browse_href(
+                &BrowseFilters {
+                    creator: None,
+                    ..*filters
+                },
+                1,
+            ),
+        });
+    }
+    if let Some(value) = filters.character {
+        chips.push(FilterChip {
+            label: format!("Character: {value}"),
+            remove_href: browse_href(
+                &BrowseFilters {
+                    character: None,
+                    ..*filters
+                },
+                1,
+            ),
+        });
+    }
+    if let Some(value) = filters.series {
+        chips.push(FilterChip {
+            label: format!("Series: {value}"),
+            remove_href: browse_href(
+                &BrowseFilters {
+                    series: None,
+                    ..*filters
+                },
+                1,
+            ),
+        });
+    }
+    chips
 }
 
 #[cfg(test)]
@@ -585,13 +745,13 @@ mod tests {
                 role: "Writer".into(),
             },
         ];
-        let groups = group_credits_by_role(&credits);
+        let groups = group_credits_by_role(&credits, "MARVEL");
 
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].role, "Writer");
-        assert_eq!(groups[0].names, vec!["Jonathan Hickman", "Jason Aaron"]);
+        assert_eq!(names(&groups[0]), vec!["Jonathan Hickman", "Jason Aaron"]);
         assert_eq!(groups[1].role, "Artist");
-        assert_eq!(groups[1].names, vec!["Esad Ribic"]);
+        assert_eq!(names(&groups[1]), vec!["Esad Ribic"]);
     }
 
     #[test]
@@ -606,11 +766,38 @@ mod tests {
                 role: "  ".into(),
             },
         ];
-        let groups = group_credits_by_role(&credits);
+        let groups = group_credits_by_role(&credits, "MARVEL");
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].role, "Contributor");
-        assert_eq!(groups[0].names, vec!["Someone"]);
+        assert_eq!(names(&groups[0]), vec!["Someone"]);
+    }
+
+    #[test]
+    fn group_credits_by_role_links_each_credit_to_the_filtered_browse_page() {
+        let credits = vec![ComicCredit {
+            name: "Jim Lee".into(),
+            role: "Artist".into(),
+        }];
+        let groups = group_credits_by_role(&credits, "DC");
+        assert_eq!(groups[0].credits[0].href, "/comics?creator=Jim+Lee&brand=DC");
+    }
+
+    #[test]
+    fn character_link_urlencodes_the_name_and_keeps_the_brand() {
+        let character = ComicCharacter {
+            name: "Doctor Doom & Sons".into(),
+            kind: Some("Villain".into()),
+        };
+        let link = character_link(&character, "MARVEL");
+        assert_eq!(link.href, "/comics?character=Doctor+Doom+%26+Sons&brand=MARVEL");
+        assert_eq!(link.kind, Some("Villain".to_string()));
+    }
+
+    /// Test-only helper: pulls the plain names back out of a `CreditGroup` so the
+    /// existing assertions don't have to know about `CreditLink`'s `href`.
+    fn names(group: &CreditGroup) -> Vec<&str> {
+        group.credits.iter().map(|c| c.name.as_str()).collect()
     }
 
     #[test]
@@ -643,10 +830,69 @@ mod tests {
 
     #[test]
     fn browse_href_omits_defaults_and_keeps_page_only_past_one() {
-        assert_eq!(browse_href(None, "", 1), "/comics");
-        assert_eq!(browse_href(Some("MARVEL"), "", 1), "/comics?brand=MARVEL");
-        assert_eq!(browse_href(None, "spider man", 2), "/comics?search=spider+man&page=2");
-        assert_eq!(browse_href(Some("DC"), "bat", 3), "/comics?brand=DC&search=bat&page=3");
+        assert_eq!(browse_href(&BrowseFilters::default(), 1), "/comics");
+        assert_eq!(
+            browse_href(
+                &BrowseFilters {
+                    brand: Some("MARVEL"),
+                    ..Default::default()
+                },
+                1
+            ),
+            "/comics?brand=MARVEL"
+        );
+        assert_eq!(
+            browse_href(
+                &BrowseFilters {
+                    search: "spider man",
+                    ..Default::default()
+                },
+                2
+            ),
+            "/comics?search=spider+man&page=2"
+        );
+        assert_eq!(
+            browse_href(
+                &BrowseFilters {
+                    brand: Some("DC"),
+                    search: "bat",
+                    ..Default::default()
+                },
+                3
+            ),
+            "/comics?brand=DC&search=bat&page=3"
+        );
+    }
+
+    #[test]
+    fn browse_href_carries_creator_character_and_series_filters() {
+        let filters = BrowseFilters {
+            brand: Some("DC"),
+            creator: Some("Jim Lee"),
+            character: Some("Batman"),
+            series: Some("batman"),
+            ..Default::default()
+        };
+        assert_eq!(
+            browse_href(&filters, 1),
+            "/comics?brand=DC&creator=Jim+Lee&character=Batman&series=batman"
+        );
+    }
+
+    #[test]
+    fn filter_chips_are_present_only_for_active_filters_and_each_drops_just_its_own() {
+        let filters = BrowseFilters {
+            brand: Some("DC"),
+            creator: Some("Jim Lee"),
+            ..Default::default()
+        };
+        let chips = filter_chips(&filters);
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].label, "Creator: Jim Lee");
+        // Removing the chip keeps the brand but drops the creator and resets to page 1.
+        assert_eq!(chips[0].remove_href, "/comics?brand=DC");
+
+        assert!(filter_chips(&BrowseFilters::default()).is_empty());
     }
 
     #[test]
@@ -689,7 +935,12 @@ mod tests {
         brand: Option<&str>,
         search: &str,
     ) -> ComicBrowseTemplate {
-        let here = browse_href(brand, search, 2);
+        let filters = BrowseFilters {
+            brand,
+            search,
+            ..Default::default()
+        };
+        let here = browse_href(&filters, 2);
         ComicBrowseTemplate {
             account: None,
             items: releases
@@ -710,6 +961,10 @@ mod tests {
             ticker: Vec::new(),
             brand: brand.map(str::to_string),
             search: search.to_string(),
+            creator: None,
+            character: None,
+            series: None,
+            filter_chips: Vec::new(),
             total: releases.len() as i64,
             page: 2,
             total_pages: 3,
@@ -748,7 +1003,10 @@ mod tests {
             more_from_series: Vec::new(),
             credit_groups: Vec::new(),
             characters: Vec::new(),
+            source_url: None,
             description: None,
+            first_seen: None,
+            updated_at: None,
             related_news: Vec::new(),
             related_news_href: String::new(),
             comic_copyright: publisher_copyright(&source.brand).to_string(),
@@ -828,5 +1086,178 @@ mod tests {
         let out = render(detail_page(&ProgressMap::default(), false));
         assert!(!out.contains("/account/progress"));
         assert!(out.contains("Sign in to track"));
+    }
+
+    #[test]
+    fn the_detail_page_links_every_credit_and_character_and_the_source() {
+        let mut page = detail_page(&ProgressMap::default(), false);
+        page.credit_groups = group_credits_by_role(
+            &[
+                ComicCredit {
+                    name: "Jonathan Hickman".into(),
+                    role: "Writer".into(),
+                },
+                ComicCredit {
+                    name: "Jason Aaron".into(),
+                    role: "Writer".into(),
+                },
+            ],
+            "MARVEL",
+        );
+        page.characters = vec![character_link(
+            &ComicCharacter {
+                name: "Doctor Doom".into(),
+                kind: Some("Villain".into()),
+            },
+            "MARVEL",
+        )];
+        page.source_url = Some("https://leagueofcomicgeeks.com/comic/123/amazing-spider-man-1".into());
+
+        let html = render(page);
+
+        // Every creator in a group is its own link, not one joined string. Askama HTML-escapes
+        // the `&` between query params, so the rendered attribute carries `&amp;`.
+        assert!(html.contains(r#"<a href="/comics?creator=Jonathan+Hickman&amp;brand=MARVEL">Jonathan Hickman</a>"#));
+        assert!(html.contains(r#"<a href="/comics?creator=Jason+Aaron&amp;brand=MARVEL">Jason Aaron</a>"#));
+        assert!(html.contains(r#"<a href="/comics?character=Doctor+Doom&amp;brand=MARVEL">Doctor Doom</a>"#));
+        assert!(html.contains(
+            r#"<a href="https://leagueofcomicgeeks.com/comic/123/amazing-spider-man-1" target="_blank" rel="noopener">View original listing</a>"#
+        ));
+    }
+
+    #[test]
+    fn the_detail_page_omits_the_source_row_when_percy_carries_no_url() {
+        let html = render(detail_page(&ProgressMap::default(), false));
+        assert!(!html.contains("<dt>Source</dt>"));
+    }
+
+    #[test]
+    fn date_only_trims_a_timestamp_and_passes_a_bare_date_through() {
+        assert_eq!(date_only("2026-08-05T09:30:00"), "2026-08-05");
+        assert_eq!(date_only("2026-08-05"), "2026-08-05");
+    }
+
+    #[test]
+    fn latest_release_date_is_the_maximum_dated_issue_and_none_when_all_undated() {
+        let mut earlier = release("MARVEL", "one");
+        earlier.release_date = Some("2026-08-01".into());
+        let mut later = release("MARVEL", "two");
+        later.release_date = Some("2026-09-01".into());
+        let undated = release("MARVEL", "three");
+
+        assert_eq!(
+            latest_release_date(&[earlier, later, undated.clone()]),
+            Some("2026-09-01".to_string())
+        );
+        assert_eq!(latest_release_date(&[undated]), None);
+        assert_eq!(latest_release_date(&[]), None);
+    }
+
+    #[test]
+    fn the_detail_page_renders_first_seen_and_updated_when_percy_carries_them() {
+        let mut page = detail_page(&ProgressMap::default(), false);
+        page.first_seen = Some("2026-06-01".into());
+        page.updated_at = Some("2026-08-10".into());
+
+        let html = render(page);
+        assert!(html.contains("<dt>First tracked</dt><dd>2026-06-01</dd>"));
+        assert!(html.contains("<dt>Updated</dt><dd>2026-08-10</dd>"));
+    }
+
+    #[test]
+    fn the_detail_page_omits_first_seen_and_updated_labels_when_percy_carries_neither() {
+        // detail_page() leaves both at None: the omit-when-absent case, not a blank value.
+        let html = render(detail_page(&ProgressMap::default(), false));
+        assert!(!html.contains("<dt>First tracked</dt>"));
+        assert!(!html.contains("<dt>Updated</dt>"));
+    }
+
+    fn series_page(latest: Option<String>) -> ComicSeriesTemplate {
+        ComicSeriesTemplate {
+            account: None,
+            series_slug: "amazing-spider-man".into(),
+            series_name: "Amazing Spider-Man".into(),
+            brand: "MARVEL".into(),
+            brand_label: brand_label("MARVEL").to_string(),
+            accent: brand_accent("MARVEL").to_string(),
+            publisher: None,
+            issue_count: 2,
+            latest,
+            issues: Vec::new(),
+            comic_copyright: publisher_copyright("MARVEL").to_string(),
+        }
+    }
+
+    #[test]
+    fn the_series_page_renders_the_latest_figure_when_percy_carries_it() {
+        let html = render(series_page(Some("2026-08-01".into())));
+        assert!(html.contains(r#"<span class="cx-figure__value">2026-08-01</span>"#));
+        assert!(html.contains(r#"<span class="cx-figure__label">Latest</span>"#));
+    }
+
+    #[test]
+    fn the_series_page_omits_the_latest_figure_when_no_issue_has_a_date() {
+        // Not just an empty value -- the whole figure (value and label) is gone.
+        let html = render(series_page(None));
+        assert!(!html.contains(r#"<span class="cx-figure__label">Latest</span>"#));
+    }
+
+    fn series_summary(latest: Option<String>) -> percy_client::ComicSeriesSummary {
+        percy_client::ComicSeriesSummary {
+            series_slug: "amazing-spider-man".into(),
+            series_name: "Amazing Spider-Man".into(),
+            brand: "MARVEL".into(),
+            issue_count: 12,
+            latest,
+        }
+    }
+
+    #[test]
+    fn the_series_index_card_shows_the_latest_issue_date_when_percy_carries_it() {
+        let html = render(ComicSeriesIndexTemplate {
+            account: None,
+            series: vec![series_summary(Some("2026-08-01".into()))],
+            comic_copyright: String::new(),
+        });
+        assert!(html.contains("12 issues"));
+        assert!(html.contains("Latest 2026-08-01"));
+    }
+
+    #[test]
+    fn the_series_index_card_omits_the_latest_label_when_percy_carries_no_date() {
+        // series_summary(None) is the real shape of a series with no dated issue yet --
+        // not just a blank value, the "Latest" text itself must not appear.
+        let html = render(ComicSeriesIndexTemplate {
+            account: None,
+            series: vec![series_summary(None)],
+            comic_copyright: String::new(),
+        });
+        assert!(html.contains("12 issues"));
+        assert!(!html.contains("Latest"));
+    }
+
+    #[test]
+    fn the_browse_page_shows_a_removable_chip_for_each_active_filter() {
+        let filters = BrowseFilters {
+            brand: Some("MARVEL"),
+            creator: Some("Jim Lee"),
+            ..Default::default()
+        };
+        let mut page = browse_page(&[], &ProgressMap::default(), false, Some("MARVEL"), "");
+        page.creator = Some("Jim Lee".to_string());
+        page.filter_chips = filter_chips(&filters);
+
+        let html = render(page);
+        assert!(html.contains(r#"<span class="cx-filter-chip">"#));
+        assert!(html.contains("Creator: Jim Lee"));
+        assert!(html.contains(r#"class="cx-filter-chip__remove" href="/comics?brand=MARVEL""#));
+        // The hidden field keeps the filter alive across a fresh search submit.
+        assert!(html.contains(r#"<input type="hidden" name="creator" value="Jim Lee">"#));
+    }
+
+    #[test]
+    fn the_browse_page_shows_no_chip_row_with_no_active_filters() {
+        let html = render(browse_page(&[], &ProgressMap::default(), false, None, ""));
+        assert!(!html.contains("cx-filters"));
     }
 }

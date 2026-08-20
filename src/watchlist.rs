@@ -14,20 +14,24 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percy_client::{PercyError, ProgressMap, WatchCredit, WatchPersonCredit, WatchTitle, WatchUniverse};
+use percy_client::{PercyError, ProgressMap, WatchCredit, WatchPersonCredit, WatchStats, WatchTitle, WatchUniverse};
 use serde::Deserialize;
 
 use crate::{
     progress,
     session::Session,
     templates::{
-        OrderEra, OrderProvider, OrderRow, PersonCreditRow, PersonTemplate, ProgressSummary, ProviderGroup,
-        RegionOption, TitleCredit, TitleNeighbour, TrailerView, WatchOrderTemplate, WatchTitleTemplate,
-        WatchlistTemplate,
+        OrderEra, OrderProvider, OrderRow, PersonCreditRow, PersonRoleGroup, PersonTemplate, PersonUniverseLink,
+        ProgressSummary, ProviderGroup, RegionOption, SeasonRow, TitleCredit, TitleNeighbour, TrailerView,
+        WatchOrderTemplate, WatchTitleTemplate, WatchlistTemplate,
     },
     view::Viewer,
     AppState,
 };
+
+/// Role order a person's filmography is grouped and rendered in — cast first, since
+/// that is what most visitors came for, then the behind-the-camera credits.
+const ROLE_ORDER: [&str; 4] = ["cast", "director", "writer", "creator"];
 
 /// TMDB image CDN. Sizes are fixed buckets, not arbitrary dimensions.
 const TMDB_IMAGE_BASE: &str = "https://image.tmdb.org/t/p";
@@ -126,14 +130,16 @@ pub async fn watch_order(
         _ => "story",
     };
 
-    // The marks go out with the order, not after it: a public catalogue page must not pay
-    // a second round trip for its decoration.
-    let (fetched, marks) = match &app.percy {
+    // All three go out together: neither the marks nor the header's figures may cost a
+    // public catalogue page a serial round trip.
+    let (fetched, stats, marks) = match &app.percy {
         Some(percy) => tokio::join!(
             percy.get_watch_universe(&slug, query.path.as_deref(), &region, sort),
+            percy.get_watch_universe_stats(&slug, query.path.as_deref()),
             progress::fetch(&app, &session, "title")
         ),
         None => (
+            Err(PercyError::Api("percy is not configured".into())),
             Err(PercyError::Api("percy is not configured".into())),
             ProgressMap::default(),
         ),
@@ -157,29 +163,19 @@ pub async fn watch_order(
             region,
             sort: sort.to_string(),
             sort_label: sort_label(sort).to_string(),
-            total: 0,
-            hours: 0,
-            essential: 0,
-            movies: 0,
-            shows: 0,
+            stats: WatchStats::default(),
         }
         .into_response();
     };
 
-    let total = page.titles.len();
-    let runtime: i64 = page.titles.iter().map(|title| title.runtime).sum();
-    let essential = page
-        .titles
-        .iter()
-        .filter(|title| title.importance.as_deref() == Some("essential"))
-        .count();
-    let movies = page.titles.iter().filter(|title| title.kind == "movie").count();
-    let shows = page.titles.iter().filter(|title| title.kind == "tv").count();
-
+    // Which rows are series containers rather than entries. Derived once, here, because
+    // it is a property of the whole payload — the template can only see one row.
+    let containers = container_ids(&page.titles);
     let path = page.path.clone().unwrap_or_default();
     let eras = group_into_eras(
         &page.titles,
         &page.sort,
+        &containers,
         &Marks {
             marks: &marks,
             signed_in: session.is_some(),
@@ -189,13 +185,16 @@ pub async fn watch_order(
             here: &order_href(&page.universe.slug, &path, &page.region, &page.sort),
         },
     );
-    // Counted over the keys actually rendered, so a mark for a title this path leaves
-    // out can never push the count past the list. Signed out there is no bar at all.
+    // Counted over the keys actually rendered *as entries*, so a mark for a title this
+    // path leaves out can never push the count past the list, and a container — which has
+    // no toggle on the page — can never inflate the denominator past what Percy counted.
+    // Signed out there is no bar at all.
     let (done, seen) = progress::summary(
         &marks,
         "title",
         eras.iter()
             .flat_map(|era| era.rows.iter())
+            .filter(|row| !row.container)
             .map(|row| row.toggle.release_key.as_str()),
     );
 
@@ -209,11 +208,12 @@ pub async fn watch_order(
         sort_label: sort_label(&page.sort).to_string(),
         sort: page.sort,
         universe: page.universe,
-        total,
-        hours: runtime / 60,
-        essential,
-        movies,
-        shows,
+        // Percy's figures, not ours — it serves all five importance/kind numbers from one
+        // endpoint and excludes containers, which is the same definition of "an entry" the
+        // list above renders. A failed second call falls back to the same arithmetic over
+        // the rows already in hand, because a header that says 0 next to 144 rows is worse
+        // than a header nobody had to fetch twice.
+        stats: stats.unwrap_or_else(|_| derive_stats(&page.titles, &containers)),
     }
     .into_response()
 }
@@ -224,9 +224,9 @@ pub async fn watch_order(
 /// a real 404 so a crawler never indexes an invented URL, while a Percy that is down keeps
 /// its 200 and a stated empty state, because the title probably exists.
 ///
-/// Two calls go out together — the detail itself and the universe's related news — so the
-/// news strip never costs the page a round trip, and a news outage costs it a section rather
-/// than the page.
+/// Everything goes out together — the detail, the ordering it sits in, the universe's related
+/// news and the visitor's marks — so no decoration costs the page a serial round trip, and a
+/// failure in any one of them costs a section rather than the page.
 pub async fn watch_title(
     State(app): State<AppState>,
     session: Option<Session>,
@@ -239,13 +239,19 @@ pub async fn watch_title(
         _ => "story",
     };
 
-    let (fetched, related_news, marks) = match &app.percy {
+    let (fetched, ordering, related_news, marks) = match &app.percy {
         Some(percy) => tokio::join!(
             percy.get_watch_title(&universe, &slug, &region, sort),
+            // The ordering itself, because Percy's detail payload counts and walks *rows*
+            // rather than entries — see `place`. Deliberately `None` for the path: that is
+            // what `get_title` passes internally, so this is the same default path in the
+            // same order, off the same 300 s cache, rather than a second opinion.
+            percy.get_watch_universe(&universe, None, &region, sort),
             crate::news::related(&app, "title", "universe", &universe),
             progress::fetch(&app, &session, "title")
         ),
         None => (
+            Err(PercyError::Api("percy is not configured".into())),
             Err(PercyError::Api("percy is not configured".into())),
             Vec::new(),
             ProgressMap::default(),
@@ -287,18 +293,45 @@ pub async fn watch_title(
     let path = detail.path.clone().unwrap_or_default();
     let path_name = detail.path.as_deref().filter(|slug| !slug.is_empty()).map(path_label);
     let (cast, crew): (Vec<_>, Vec<_>) = detail.credits.iter().partition(|credit| credit.role == "cast");
+    // This page, in the ordering it was reached in — where a JS-off mark bounces back to,
+    // whether it was made on this title or on one of its seasons.
+    let here = format!("/watchlist/{}/{}{link_query}", detail.universe.slug, title.slug);
+    let placing = ordering
+        .ok()
+        .and_then(|page| place(&page.titles, title.id))
+        // Percy's own numbers, and only when the ordering did not arrive: they count the
+        // containers, but a strip that is off by the container count still tells a reader
+        // roughly where they are, and a blank one tells them nothing.
+        .unwrap_or_else(|| Placing {
+            position: Some(detail.position),
+            total: detail.total,
+            previous: detail.previous.as_ref().map(neighbour),
+            next: detail.next.as_ref().map(neighbour),
+        });
+    let season_marks = Marks {
+        marks: &marks,
+        signed_in,
+        universe: &detail.universe.slug,
+        here: &here,
+    };
 
     WatchTitleTemplate {
         account: viewer(&session),
         // Percy's own universe slug and the title's own slug: the same pair the order
         // row files its mark under, so the two surfaces mark one row rather than two.
+        // Rendered only when this row is an entry: a container's mark would be filed under
+        // a key no count on any surface looks at.
         toggle: progress::toggle(
             &marks,
             signed_in,
             "title",
             &title_key(&detail.universe.slug, &title.slug),
-            &format!("/watchlist/{}/{}{link_query}", detail.universe.slug, title.slug),
+            &here,
         ),
+        season_label: non_empty(title.season_name.as_deref()),
+        parent: detail.parent.as_ref().map(neighbour),
+        seasons: detail.seasons.iter().map(|s| season_row(s, &season_marks)).collect(),
+        tmdb_url: tmdb_url(&title),
         year: year_of(title.release_date.as_deref()),
         kind_label: kind_noun(&title.kind).to_string(),
         backdrop_url: title
@@ -317,16 +350,16 @@ pub async fn watch_title(
         release_date: non_empty(title.release_date.as_deref()),
         studio: non_empty(title.sub_universe.as_deref()),
         era: title.era.as_deref().filter(|key| !key.is_empty()).map(era_label),
-        position: detail.position,
-        total: detail.total,
+        position: placing.position,
+        total: placing.total,
         importance: non_empty(title.importance.as_deref()),
         instruction: non_empty(title.instruction.as_deref()),
         milestone: title.milestone,
         sort_label: sort_label(&detail.sort).to_string(),
         order_href: order_href(&detail.universe.slug, &path, &region, &detail.sort),
         link_query: format!("?sort={}&region={region}", detail.sort),
-        previous: detail.previous.as_ref().map(neighbour),
-        next: detail.next.as_ref().map(neighbour),
+        previous: placing.previous,
+        next: placing.next,
         credits_of: detail.credits_of.as_ref().map(neighbour),
         regions: region_options(&region),
         provider_groups: provider_groups(&title),
@@ -380,8 +413,11 @@ fn empty_title_page(account: Option<Viewer>) -> WatchTitleTemplate {
         release_date: None,
         studio: None,
         era: None,
-        position: 0,
+        position: None,
         total: 0,
+        season_label: None,
+        parent: None,
+        seasons: Vec::new(),
         path_name: None,
         importance: None,
         instruction: None,
@@ -403,6 +439,7 @@ fn empty_title_page(account: Option<Viewer>) -> WatchTitleTemplate {
         trailer: None,
         spoiler: None,
         signed_in: false,
+        tmdb_url: None,
     }
 }
 
@@ -412,9 +449,12 @@ fn empty_title_page(account: Option<Viewer>) -> WatchTitleTemplate {
 /// that is down is a 200 empty state. A page that answered 200 to any invented name
 /// would get indexed as a real person.
 pub async fn person_page(State(app): State<AppState>, session: Option<Session>, Path(slug): Path<String>) -> Response {
-    let fetched = match &app.percy {
-        Some(percy) => percy.get_watch_person(&slug).await,
-        None => Err(PercyError::Api("percy is not configured".into())),
+    let (fetched, related_news) = match &app.percy {
+        Some(percy) => tokio::join!(
+            percy.get_watch_person(&slug),
+            crate::news::related(&app, "title", "person", &slug)
+        ),
+        None => (Err(PercyError::Api("percy is not configured".into())), Vec::new()),
     };
 
     let page = match fetched {
@@ -427,9 +467,12 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
                 photo_url: None,
                 roles: String::new(),
                 credit_count: 0,
-                universes: 0,
+                universe_links: Vec::new(),
                 upcoming: Vec::new(),
-                filmography: Vec::new(),
+                role_groups: Vec::new(),
+                related_news: Vec::new(),
+                related_news_href: String::new(),
+                tmdb_person_id: None,
             };
             return (status_for(&error), body).into_response();
         }
@@ -441,14 +484,10 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
         .iter()
         .partition(|credit| is_upcoming(credit.title.release_date.as_deref(), &today));
 
-    let mut universes: Vec<&str> = page.credits.iter().map(|c| c.title.universe.as_str()).collect();
-    universes.sort_unstable();
-    universes.dedup();
-
+    // A person with no id gets no TMDB link rather than one pointing at `/0`.
     PersonTemplate {
         account: viewer(&session),
         name: page.person.name,
-        slug: page.person.slug,
         photo_url: page
             .person
             .profile_path
@@ -456,11 +495,66 @@ pub async fn person_page(State(app): State<AppState>, session: Option<Session>, 
             .map(|path| format!("{TMDB_IMAGE_BASE}/w185{path}")),
         roles: role_summary(&page.credits),
         credit_count: page.credits.len(),
-        universes: universes.len(),
+        universe_links: universe_links(&page.credits),
         upcoming: upcoming.into_iter().map(person_row).collect(),
-        filmography: filmography.into_iter().map(person_row).collect(),
+        role_groups: group_by_role(&filmography),
+        related_news,
+        related_news_href: crate::news::subject_news_href("title", "person", &page.person.slug),
+        tmdb_person_id: (page.person.tmdb_person_id != 0).then_some(page.person.tmdb_person_id),
+        slug: page.person.slug,
     }
     .into_response()
+}
+
+/// The universes a person spans, deduplicated in the order they first appear in the
+/// credits — never alphabetical, never by count, so the header reads in the same order
+/// as the filmography below it.
+fn universe_links(credits: &[WatchPersonCredit]) -> Vec<PersonUniverseLink> {
+    let mut links: Vec<PersonUniverseLink> = Vec::new();
+    for credit in credits {
+        if links.iter().any(|link| link.slug == credit.title.universe) {
+            continue;
+        }
+        links.push(PersonUniverseLink {
+            slug: credit.title.universe.clone(),
+            name: credit.universe_name.clone(),
+        });
+    }
+    links
+}
+
+/// Splits the (already-released) filmography into one section per role present, in
+/// `ROLE_ORDER`, preserving Percy's newest-first ordering within each.
+fn group_by_role(filmography: &[&WatchPersonCredit]) -> Vec<PersonRoleGroup> {
+    ROLE_ORDER
+        .into_iter()
+        .filter_map(|role| {
+            let rows: Vec<PersonCreditRow> = filmography
+                .iter()
+                .filter(|credit| credit.role == role)
+                .map(|credit| person_row(credit))
+                .collect();
+            if rows.is_empty() {
+                None
+            } else {
+                Some(PersonRoleGroup {
+                    role_label: role_section_label(role).to_string(),
+                    rows,
+                })
+            }
+        })
+        .collect()
+}
+
+/// The heading for a role's filmography section.
+fn role_section_label(role: &str) -> &'static str {
+    match role {
+        "cast" => "Cast",
+        "director" => "Director",
+        "writer" => "Writer",
+        "creator" => "Creator",
+        _ => "Credited",
+    }
 }
 
 /// Today as `YYYY-MM-DD`, matching the format TMDB release dates come in.
@@ -524,13 +618,10 @@ fn person_row(credit: &WatchPersonCredit) -> PersonCreditRow {
             .and_then(|date| date.get(..4))
             .map(str::to_string),
         kind_label: kind_label.to_string(),
-        // The character is the interesting half of an acting credit; the bare role is
-        // all there is for crew, and for an actor TMDB left uncredited.
-        role_label: credit
-            .character_name
-            .clone()
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| role_noun(&credit.role).to_string()),
+        role_label: role_noun(&credit.role).to_string(),
+        // The character is the interesting half of an acting credit; crew and an actor
+        // TMDB left uncredited get nothing here, so the row falls back to `role_label`.
+        character: credit.character_name.clone().filter(|name| !name.is_empty()),
         poster_url: title
             .poster_path
             .as_deref()
@@ -629,6 +720,92 @@ fn neighbour(title: &WatchTitle) -> TitleNeighbour {
     }
 }
 
+/// Where a title sits among the **entries** of its ordering, and which entries flank it.
+struct Placing {
+    /// `None` for a series container — it heads its seasons rather than holding a place
+    /// among them, so there is no number to draw.
+    position: Option<i64>,
+    total: i64,
+    previous: Option<TitleNeighbour>,
+    next: Option<TitleNeighbour>,
+}
+
+/// Re-numbers the detail page over the rows a reader can actually watch.
+///
+/// Percy's `/watchlist/titles/{universe}/{slug}` numbers `position`/`total` over *every* row
+/// of the universe page — `index + 1` and `len(titles)` — and hands back the raw adjacent
+/// rows as `previous`/`next`. `/watchlist/universes/{slug}/stats`, which is what the order
+/// page's header renders, excludes any row another row names as its `parent_id`. So the two
+/// disagreed by exactly the container count (live MCU: 159 rows against 144 entries) and a
+/// detail page could read "5 of 5" under a header that said 4, while "Next" could land a
+/// reader on a heading with nothing to watch and nothing to mark.
+///
+/// Counted here over the same definition of "an entry" the order page's rows, its progress
+/// bar and Percy's own figures all use, so the four cannot disagree. `None` only when the
+/// title is not in the ordering at all, which leaves the caller on Percy's numbers.
+fn place(titles: &[WatchTitle], id: i64) -> Option<Placing> {
+    let containers = container_ids(titles);
+    let entry = |title: &&WatchTitle| !containers.contains(&title.id);
+    let here = titles.iter().position(|title| title.id == id)?;
+    Some(Placing {
+        position: entry(&&titles[here]).then(|| titles[..here].iter().filter(entry).count() as i64 + 1),
+        total: titles.iter().filter(entry).count() as i64,
+        // A container's neighbours are the entries either side of the group it heads: the
+        // last entry before it, and its own first season.
+        previous: titles[..here].iter().rev().find(entry).map(neighbour),
+        next: titles[here + 1..].iter().find(entry).map(neighbour),
+    })
+}
+
+/// One season under a series container, with the mark the container itself does not carry.
+fn season_row(season: &WatchTitle, marks: &Marks<'_>) -> SeasonRow {
+    SeasonRow {
+        // TMDB's own name (`Season 2`, `Specials`) rather than the row's full title, which
+        // repeats the series name this list already sits under.
+        label: non_empty(season.season_name.as_deref()).unwrap_or_else(|| season.title.clone()),
+        poster_url: season
+            .poster_path
+            .as_deref()
+            .map(|path| format!("{TMDB_IMAGE_BASE}/w92{path}")),
+        // Joined here rather than in the template: a season that has aired nothing yet has
+        // no runtime *and* no year, and stitching them template-side leaves a bare "·".
+        meta: [
+            runtime_label(season),
+            year_of(season.release_date.as_deref()).unwrap_or_default(),
+        ]
+        .iter()
+        .filter(|part| !part.is_empty())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" · "),
+        toggle: progress::toggle(
+            marks.marks,
+            marks.signed_in,
+            "title",
+            &title_key(marks.universe, &season.slug),
+            marks.here,
+        ),
+        slug: season.slug.clone(),
+    }
+}
+
+/// `https://www.themoviedb.org/{movie|tv}/{id}` — the outbound attribution §9 asks for on any
+/// page showing TMDB data, which `person.html` has always carried and this page never did.
+///
+/// A season borrows its series' `tmdb_id`/`tmdb_type` (TMDB issues no id of its own for one),
+/// so it deep-links to the season page TMDB does publish rather than dropping the reader on
+/// the series and leaving them to find it.
+fn tmdb_url(title: &WatchTitle) -> Option<String> {
+    if title.tmdb_id <= 0 || title.tmdb_type.is_empty() {
+        return None;
+    }
+    let base = format!("https://www.themoviedb.org/{}/{}", title.tmdb_type, title.tmdb_id);
+    Some(match title.season_number {
+        Some(number) if title.tmdb_type == "tv" => format!("{base}/season/{number}"),
+        _ => base,
+    })
+}
+
 fn title_credit(credit: &WatchCredit) -> TitleCredit {
     TitleCredit {
         name: credit.name.clone(),
@@ -680,6 +857,53 @@ fn provider_groups(title: &WatchTitle) -> Vec<ProviderGroup> {
         .collect()
 }
 
+/// The ids of the rows that are series **containers** rather than watch entries.
+///
+/// `V45` explodes a multi-season show into one row per season *plus* the series row, and the
+/// series row is then a container — the migration's own words: "it keeps its identity, its
+/// aggregate runtime/episodes, its series-level cast and its trailer, and the seasons are
+/// what a reader watches and marks". Percy's whole read side agrees: `list_universes`,
+/// `universe_stats` and `titles_releasing_between` all exclude a row another row names as
+/// its `parent_id`. The universe *page* payload still returns them, so rendering them as
+/// entries here would put the list 15 rows above the figures in its own header (live MCU:
+/// 159 rows, 39 seasons under 15 containers, 144 counted entries).
+///
+/// A row is a container exactly when another row in **this** payload names its `id` — the
+/// relation itself, never a title-string prefix, which would mis-group any show whose real
+/// name starts with another's. A single-season show is never exploded, so it has no children
+/// and stays an ordinary entry reading "Hawkeye", not "Hawkeye: Season 1".
+fn container_ids(titles: &[WatchTitle]) -> Vec<i64> {
+    let mut containers: Vec<i64> = Vec::new();
+    for parent in titles.iter().filter_map(|title| title.parent_id) {
+        if !containers.contains(&parent) {
+            containers.push(parent);
+        }
+    }
+    containers
+}
+
+/// The header's figures, over the same rows the list renders as entries.
+///
+/// Only reached when Percy answered the page but not `/stats` — it is the same arithmetic
+/// `app/services/watchlist/payload.py::universe_stats` does, container exclusion included,
+/// so the two sources can only ever agree.
+fn derive_stats(titles: &[WatchTitle], containers: &[i64]) -> WatchStats {
+    let entries = || titles.iter().filter(|title| !containers.contains(&title.id));
+    let importance = |name: &str| entries().filter(|t| t.importance.as_deref() == Some(name)).count() as i64;
+    let runtime: i64 = entries().map(|title| title.runtime).sum();
+    WatchStats {
+        total: entries().count() as i64,
+        movies: entries().filter(|title| title.kind == "movie").count() as i64,
+        shows: entries().filter(|title| title.kind == "tv").count() as i64,
+        runtime,
+        hours: (runtime as f64 / 6.0).round() / 10.0,
+        essential: importance("essential"),
+        recommended: importance("recommended"),
+        optional: importance("optional"),
+        ..WatchStats::default()
+    }
+}
+
 /// Groups the already-ordered titles into sections.
 ///
 /// Eras are a *release-order* concept: the MCU phases are contiguous only when the
@@ -690,33 +914,41 @@ fn provider_groups(title: &WatchTitle) -> Vec<ProviderGroup> {
 ///
 /// In release order the walk starts a new section whenever the era key changes, which
 /// is also what keeps a universe that genuinely revisits an era honest.
-fn group_into_eras(titles: &[WatchTitle], sort: &str, marks: &Marks<'_>) -> Vec<OrderEra> {
+fn group_into_eras(titles: &[WatchTitle], sort: &str, containers: &[i64], marks: &Marks<'_>) -> Vec<OrderEra> {
+    // A container consumes no position: the numbers down the left of the list have to count
+    // what a reader watches, which is the same set Percy's `total` counts.
+    let mut position = 0usize;
+    let mut rows: Vec<OrderRow> = Vec::with_capacity(titles.len());
+    for title in titles {
+        let container = containers.contains(&title.id);
+        position += usize::from(!container);
+        rows.push(order_row(title, position, container, marks));
+    }
+
     if sort != "release" {
         return vec![OrderEra {
             key: String::new(),
             label: String::new(),
-            rows: titles
-                .iter()
-                .enumerate()
-                .map(|(index, title)| order_row(title, index + 1, marks))
-                .collect(),
+            entries: rows.iter().filter(|row| !row.container).count(),
+            rows,
         }];
     }
 
     let mut sections: Vec<OrderEra> = Vec::new();
-    for (index, title) in titles.iter().enumerate() {
+    for (title, mut row) in titles.iter().zip(rows) {
         let key = title.era.clone().unwrap_or_default();
         if sections.last().map(|section| section.key != key).unwrap_or(true) {
             sections.push(OrderEra {
                 label: era_label(&key),
                 key,
                 rows: Vec::new(),
+                entries: 0,
             });
         }
         if let Some(section) = sections.last_mut() {
             // No era chip here: the section heading right above already says it.
-            let mut row = order_row(title, index + 1, marks);
             row.era = None;
+            section.entries += usize::from(!row.container);
             section.rows.push(row);
         }
     }
@@ -764,13 +996,16 @@ fn title_key(universe: &str, slug: &str) -> String {
     format!("{universe}/{slug}")
 }
 
-fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow {
+fn order_row(title: &WatchTitle, position: usize, container: bool, marks: &Marks<'_>) -> OrderRow {
     let (kind_class, kind_label) = match title.kind.as_str() {
         "tv" => ("tv", "TV"),
         "special" => ("special", "SPEC"),
         _ => ("movie", "FILM"),
     };
     OrderRow {
+        // Built for every row, rendered only for entries: `watch_order.html` calls the
+        // toggle macro in the entry branch alone, and a container's key never reaches the
+        // progress summary either.
         toggle: progress::toggle(
             marks.marks,
             marks.signed_in,
@@ -778,8 +1013,13 @@ fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow
             &title_key(marks.universe, &title.slug),
             marks.here,
         ),
-        position,
-        number: format!("{position:02}"),
+        container,
+        position: if container { 0 } else { position },
+        number: if container {
+            String::new()
+        } else {
+            format!("{position:02}")
+        },
         kind_class: kind_class.to_string(),
         kind_label: kind_label.to_string(),
         slug: title.slug.clone(),
@@ -789,13 +1029,22 @@ fn order_row(title: &WatchTitle, position: usize, marks: &Marks<'_>) -> OrderRow
             .as_deref()
             .and_then(|date| date.get(..4))
             .map(str::to_string),
+        poster_url: title
+            .poster_path
+            .as_deref()
+            .map(|path| format!("{TMDB_IMAGE_BASE}/w154{path}")),
         runtime_label: runtime_label(title),
         rating: title.tmdb_rating.map(|rating| format!("{rating:.1}")),
         era: title.era.as_deref().map(era_label),
-        importance: title.importance.clone(),
+        // Rank and landmark belong to entries. A container can still carry a curated
+        // `importance` row of its own, but drawing its marker and badge on a heading Percy
+        // does not count would announce a rank the "N essential" figure never counted.
+        importance: (!container).then(|| title.importance.clone()).flatten(),
         instruction: title.instruction.clone(),
         studio: title.sub_universe.clone(),
-        milestone: title.milestone,
+        milestone: !container && title.milestone,
+        // Kept on a heading: TMDB answers "where can I stream this" per series, so for an
+        // exploded show the container is often where the only answer lives.
         providers: providers(title),
     }
 }
@@ -846,7 +1095,7 @@ fn providers(title: &WatchTitle) -> Vec<OrderProvider> {
 mod tests {
     use super::*;
     use crate::templates::NewsRow;
-    use percy_client::{WatchProvider, WatchTrailer};
+    use percy_client::{WatchProvider, WatchTrailer, WatchUniverseSummary};
 
     /// A signed-out page with nothing marked — what most of these tests are about, since
     /// the grouping rules are identical either way.
@@ -880,7 +1129,7 @@ mod tests {
             title("b", Some("phase1")),
             title("c", Some("phase2")),
         ];
-        let sections = group_into_eras(&titles, "release", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "release", &[], &marks(&unmarked(), false));
 
         assert_eq!(sections.len(), 2);
         assert_eq!(sections[0].label, "Phase 1");
@@ -897,7 +1146,7 @@ mod tests {
             title("b", Some("phase3")),
             title("c", Some("phase1")),
         ];
-        let sections = group_into_eras(&titles, "story", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "story", &[], &marks(&unmarked(), false));
 
         // One section: the MCU story order revisits phases constantly, and a heading
         // per switch would repeat "Phase 1" three times for these three films.
@@ -914,7 +1163,7 @@ mod tests {
             title("b", Some("phase2")),
             title("c", Some("phase1")),
         ];
-        let sections = group_into_eras(&titles, "release", &marks(&unmarked(), false));
+        let sections = group_into_eras(&titles, "release", &[], &marks(&unmarked(), false));
 
         // Three sections, not two: hoisting "c" up to the first Phase 1 block would
         // silently reorder the watch order the curation defined.
@@ -927,6 +1176,7 @@ mod tests {
         let sections = group_into_eras(
             &[title("a", None), title("b", None)],
             "release",
+            &[],
             &marks(&unmarked(), false),
         );
         assert_eq!(sections.len(), 1);
@@ -945,14 +1195,14 @@ mod tests {
         let mut show = title("loki", None);
         show.kind = "tv".into();
 
-        let film_row = order_row(&title("iron-man", None), 3, &marks(&unmarked(), false));
+        let film_row = order_row(&title("iron-man", None), 3, false, &marks(&unmarked(), false));
         assert_eq!(film_row.number, "03");
         assert_eq!(
             (film_row.kind_class.as_str(), film_row.kind_label.as_str()),
             ("movie", "FILM")
         );
 
-        let show_row = order_row(&show, 12, &marks(&unmarked(), false));
+        let show_row = order_row(&show, 12, false, &marks(&unmarked(), false));
         assert_eq!(show_row.number, "12");
         assert_eq!(
             (show_row.kind_class.as_str(), show_row.kind_label.as_str()),
@@ -1030,20 +1280,56 @@ mod tests {
     }
 
     #[test]
-    fn a_row_shows_the_character_for_acting_and_the_role_for_crew() {
-        assert_eq!(
-            person_row(&credit("cast", Some("Tony Stark"), None)).role_label,
-            "Tony Stark"
-        );
-        assert_eq!(person_row(&credit("director", None, None)).role_label, "Director");
+    fn a_row_keeps_the_role_noun_and_the_character_separate() {
+        let acted = person_row(&credit("cast", Some("Tony Stark"), None));
+        assert_eq!(acted.role_label, "Actor");
+        assert_eq!(acted.character.as_deref(), Some("Tony Stark"));
+
+        let directed = person_row(&credit("director", None, None));
+        assert_eq!(directed.role_label, "Director");
+        assert_eq!(directed.character, None);
+
         // An uncredited actor has no character: the role noun is all there is to say.
-        assert_eq!(person_row(&credit("cast", Some(""), None)).role_label, "Actor");
+        assert_eq!(person_row(&credit("cast", Some(""), None)).character, None);
     }
 
     #[test]
-    fn the_person_page_renders_both_sections() {
+    fn universe_links_dedupe_in_first_appearance_order() {
+        let mut second = credit("cast", None, None);
+        second.universe_name = "DC Extended Universe".into();
+        second.title.universe = "dceu".into();
+
+        let mut repeat = credit("director", None, None);
+        repeat.title.universe = "dceu".into();
+        repeat.universe_name = "DC Extended Universe".into();
+
+        let credits = vec![credit("cast", None, None), second, repeat];
+        let links = universe_links(&credits);
+
+        assert_eq!(links.len(), 2, "the repeated dceu credit is not a second link");
+        assert_eq!(links[0].slug, "mcu");
+        assert_eq!(links[1].slug, "dceu");
+    }
+
+    #[test]
+    fn filmography_groups_by_role_in_a_fixed_order_with_only_present_roles() {
+        let cast = credit("cast", Some("Tony Stark"), Some("2008-05-02"));
+        let directed = credit("director", None, Some("2012-05-04"));
+        let refs = vec![&cast, &directed];
+
+        let groups = group_by_role(&refs);
+
+        assert_eq!(groups.len(), 2, "no writer or creator credits, no section for them");
+        assert_eq!(groups[0].role_label, "Cast");
+        assert_eq!(groups[0].rows.len(), 1);
+        assert_eq!(groups[1].role_label, "Director");
+    }
+
+    #[test]
+    fn the_person_page_renders_role_grouped_sections() {
         use askama::Template;
 
+        let cast_credit = credit("cast", Some("Tony Stark"), Some("2008-05-02"));
         let page = PersonTemplate {
             account: None,
             name: "Robert Downey Jr.".into(),
@@ -1051,17 +1337,54 @@ mod tests {
             photo_url: Some("https://image.tmdb.org/t/p/w185/rdj.jpg".into()),
             roles: "Actor".into(),
             credit_count: 2,
-            universes: 1,
+            universe_links: vec![PersonUniverseLink {
+                slug: "mcu".into(),
+                name: "Marvel Cinematic Universe".into(),
+            }],
             upcoming: vec![person_row(&credit("cast", Some("Doctor Doom"), None))],
-            filmography: vec![person_row(&credit("cast", Some("Tony Stark"), Some("2008-05-02")))],
+            role_groups: group_by_role(&[&cast_credit]),
+            related_news: Vec::new(),
+            related_news_href: String::new(),
+            tmdb_person_id: Some(3223),
         };
         let html = page.render().expect("the person template renders");
 
         assert!(html.contains("Coming up"));
-        assert!(html.contains("Filmography"));
+        assert!(html.contains("Cast"));
         assert!(html.contains("Doctor Doom"), "the macro body reaches the loop variable");
+        assert!(
+            html.contains("as Tony Stark"),
+            "a cast row shows the character it played"
+        );
         assert!(html.contains("href=\"/watchlist/mcu/iron-man\""));
+        assert!(
+            html.contains("href=\"/watchlist/mcu\""),
+            "the header links the universe"
+        );
         assert!(html.contains("2008"), "a released title keeps its year");
+        assert!(html.contains("https://www.themoviedb.org/person/3223"));
+    }
+
+    #[test]
+    fn a_person_with_no_tmdb_id_gets_no_attribution_link() {
+        use askama::Template;
+
+        let page = PersonTemplate {
+            account: None,
+            name: "unknown".into(),
+            slug: "unknown".into(),
+            photo_url: None,
+            roles: String::new(),
+            credit_count: 0,
+            universe_links: Vec::new(),
+            upcoming: Vec::new(),
+            role_groups: Vec::new(),
+            related_news: Vec::new(),
+            related_news_href: String::new(),
+            tmdb_person_id: None,
+        };
+        let html = page.render().expect("the empty-state person template renders");
+        assert!(!html.contains("themoviedb.org/person"));
     }
 
     #[test]
@@ -1073,18 +1396,21 @@ mod tests {
                 provider_name: "Disney Plus".into(),
                 logo_path: Some("/d.jpg".into()),
                 offer: "flatrate".into(),
+                link: None,
             },
             WatchProvider {
                 provider_id: 337,
                 provider_name: "Disney Plus".into(),
                 logo_path: Some("/d.jpg".into()),
                 offer: "rent".into(),
+                link: None,
             },
             WatchProvider {
                 provider_id: 3,
                 provider_name: "Google Play".into(),
                 logo_path: Some("/g.jpg".into()),
                 offer: "rent".into(),
+                link: None,
             },
         ];
 
@@ -1099,6 +1425,8 @@ mod tests {
     fn detail_title() -> WatchTitle {
         WatchTitle {
             universe: "mcu".into(),
+            tmdb_type: "movie".into(),
+            tmdb_id: 1726,
             slug: "iron-man".into(),
             title: "Iron Man".into(),
             kind: "movie".into(),
@@ -1122,18 +1450,21 @@ mod tests {
                     provider_name: "Disney Plus".into(),
                     logo_path: Some("/d.jpg".into()),
                     offer: "flatrate".into(),
+                    link: None,
                 },
                 WatchProvider {
                     provider_id: 337,
                     provider_name: "Disney Plus".into(),
                     logo_path: Some("/d.jpg".into()),
                     offer: "rent".into(),
+                    link: None,
                 },
                 WatchProvider {
                     provider_id: 3,
                     provider_name: "Google Play".into(),
                     logo_path: Some("/g.jpg".into()),
                     offer: "rent".into(),
+                    link: None,
                 },
             ],
             trailer: Some(WatchTrailer {
@@ -1203,8 +1534,12 @@ mod tests {
             release_date: non_empty(source.release_date.as_deref()),
             studio: non_empty(source.sub_universe.as_deref()),
             era: source.era.as_deref().map(era_label),
-            position: 3,
+            position: Some(3),
             total: 42,
+            season_label: non_empty(source.season_name.as_deref()),
+            parent: None,
+            seasons: Vec::new(),
+            tmdb_url: tmdb_url(&source),
             path_name: Some(path_label("complete")),
             importance: non_empty(source.importance.as_deref()),
             instruction: non_empty(source.instruction.as_deref()),
@@ -1249,6 +1584,7 @@ mod tests {
             url: "https://example.test/story".into(),
             headline: headline.into(),
             excerpt: None,
+            image_url: None,
             source_name: "Marvel.com".into(),
             published: Some("2026-08-01".into()),
             published_iso: Some("2026-08-01T09:00:00".into()),
@@ -1305,6 +1641,177 @@ mod tests {
         assert!(!html.contains("wl-spoiler\" open"));
         // §9: TMDB's notice is mandatory wherever their data is shown.
         assert!(html.contains("TMDB"));
+    }
+
+    /// A film, a two-season show `V45` exploded into a container plus its seasons, and one
+    /// more film — the smallest ordering in which counting *rows* and counting *entries*
+    /// give different answers (5 rows, 4 entries).
+    fn seasoned_universe() -> Vec<WatchTitle> {
+        let row = |id: i64, slug: &str, parent: Option<i64>, season: Option<i64>| WatchTitle {
+            id,
+            universe: "mcu".into(),
+            tmdb_type: if season.is_some() { "tv" } else { "movie" }.into(),
+            tmdb_id: 1234,
+            slug: slug.into(),
+            title: slug.into(),
+            kind: if season.is_some() { "tv" } else { "movie" }.into(),
+            parent_id: parent,
+            season_number: season,
+            season_name: season.map(|number| format!("Season {number}")),
+            ..WatchTitle::default()
+        };
+        vec![
+            row(1, "iron-man", None, None),
+            row(2, "daredevil", None, None),
+            row(3, "daredevil-season-1", Some(2), Some(1)),
+            row(4, "daredevil-season-2", Some(2), Some(2)),
+            row(5, "the-avengers", None, None),
+        ]
+    }
+
+    #[test]
+    fn the_position_strip_counts_entries_rather_than_rows() {
+        let titles = seasoned_universe();
+
+        // Percy's own payload would call the last film "5 of 5"; the header it links to
+        // counts 4, because the container is not an entry.
+        let last = place(&titles, 5).expect("the film is in the ordering");
+        assert_eq!(last.position, Some(4));
+        assert_eq!(last.total, 4);
+
+        let first_season = place(&titles, 3).expect("the season is in the ordering");
+        assert_eq!(first_season.position, Some(2), "a season is an entry and holds a place");
+        assert_eq!(first_season.total, 4);
+    }
+
+    #[test]
+    fn a_container_has_no_place_among_the_entries_it_heads() {
+        let titles = seasoned_universe();
+        let placing = place(&titles, 2).expect("the container is in the ordering");
+
+        assert_eq!(placing.position, None, "a heading holds no place in what it heads");
+        assert_eq!(placing.total, 4, "and it is not counted in the total either");
+        // Its neighbours are the entries either side of the group: the film before it, and
+        // its own first season.
+        assert_eq!(placing.previous.map(|item| item.slug), Some("iron-man".to_string()));
+        assert_eq!(
+            placing.next.map(|item| item.slug),
+            Some("daredevil-season-1".to_string())
+        );
+    }
+
+    #[test]
+    fn walking_previous_and_next_never_stops_on_a_container() {
+        let titles = seasoned_universe();
+
+        // Percy's raw neighbour for the film before the show is the container itself.
+        let before = place(&titles, 1).expect("the film is in the ordering");
+        assert_eq!(
+            before.next.map(|item| item.slug),
+            Some("daredevil-season-1".to_string())
+        );
+        assert!(before.previous.is_none(), "the first entry has nothing before it");
+
+        // ...and walking back off the film after the show skips it in the other direction.
+        let after = place(&titles, 5).expect("the film is in the ordering");
+        assert_eq!(
+            after.previous.map(|item| item.slug),
+            Some("daredevil-season-2".to_string())
+        );
+        assert!(after.next.is_none());
+    }
+
+    #[test]
+    fn a_title_missing_from_the_ordering_leaves_the_caller_on_percys_numbers() {
+        assert!(place(&seasoned_universe(), 99).is_none());
+    }
+
+    /// The container's own page: a heading over its seasons, matching the treatment its row
+    /// gets on the order page — no number, no rank, and no mark of its own.
+    #[test]
+    fn a_series_page_renders_its_seasons_and_offers_no_mark_of_its_own() {
+        let titles = seasoned_universe();
+        let map = unmarked();
+        let marks = Marks {
+            marks: &map,
+            signed_in: true,
+            universe: "mcu",
+            here: "/watchlist/mcu/daredevil?sort=story&region=US",
+        };
+        let placing = place(&titles, 2).expect("the container is in the ordering");
+        let mut page = title_page_as(titles[1].clone(), Vec::new(), &map, true);
+        page.position = placing.position;
+        page.total = placing.total;
+        page.seasons = titles[2..4].iter().map(|row| season_row(row, &marks)).collect();
+        let html = render_title(page);
+
+        assert!(
+            !html.contains("wl-fits__position"),
+            "a heading is drawn no place number"
+        );
+        assert!(
+            html.contains("wl-tag--series"),
+            "the order page's Series tag stands there instead"
+        );
+        assert!(html.contains("Its 2 seasons are the entries"));
+        assert!(html.contains("href=\"/watchlist/mcu/daredevil-season-2?sort=story&amp;region=US\""));
+        assert!(html.contains("Season 1") && html.contains("Season 2"));
+        // One control per season and none for the heading: a mark filed under a container's
+        // key is counted by nothing on any surface.
+        assert_eq!(
+            html.matches("data-progress").count(),
+            2,
+            "the seasons carry the toggles the container does not"
+        );
+    }
+
+    /// A season TMDB has dated and counted, and one it has not — the optional halves have to
+    /// collapse to nothing rather than to a stray separator.
+    #[test]
+    fn a_season_line_carries_only_the_facts_percy_has() {
+        let mut aired = seasoned_universe()[2].clone();
+        aired.episodes = Some(13);
+        aired.runtime = 700;
+        aired.release_date = Some("2015-04-10".into());
+        let map = unmarked();
+        let marks = Marks {
+            marks: &map,
+            signed_in: false,
+            universe: "mcu",
+            here: "/watchlist/mcu/daredevil",
+        };
+
+        assert_eq!(season_row(&aired, &marks).meta, "13 episodes · 11h 40m · 2015");
+        // Nothing announced yet: no runtime, no air date, and so no line at all.
+        assert_eq!(season_row(&seasoned_universe()[3], &marks).meta, "");
+    }
+
+    #[test]
+    fn a_season_names_the_series_it_belongs_to_and_links_it() {
+        let titles = seasoned_universe();
+        let mut page = title_page(titles[3].clone(), Vec::new());
+        page.parent = Some(neighbour(&titles[1]));
+        let html = render_title(page);
+
+        assert!(html.contains("<dt>Season</dt>"));
+        assert!(html.contains("Season 2 of"));
+        assert!(html.contains("href=\"/watchlist/mcu/daredevil?sort=story&amp;region=US\""));
+        // A season borrows its series' TMDB id, so the attribution deep-links to the season
+        // TMDB does publish rather than dropping the reader on the series.
+        assert!(html.contains("https://www.themoviedb.org/tv/1234/season/2"));
+    }
+
+    #[test]
+    fn a_film_links_out_to_tmdb_and_a_row_without_an_id_does_not() {
+        let html = render_title(title_page(detail_title(), Vec::new()));
+        assert!(html.contains("href=\"https://www.themoviedb.org/movie/1726\""));
+        assert!(!html.contains("/season/"), "a film has no season to deep-link");
+        assert!(html.contains("rel=\"noopener\""));
+
+        let mut unknown = detail_title();
+        unknown.tmdb_id = 0;
+        let html = render_title(title_page(unknown, Vec::new()));
+        assert!(!html.contains("View on TMDB"), "absent, not an empty attribution line");
     }
 
     #[test]
@@ -1446,9 +1953,11 @@ mod tests {
     /// agree — which rows carry a toggle and which keys the summary counts.
     fn order_page(titles: &[WatchTitle], map: &ProgressMap, signed_in: bool) -> WatchOrderTemplate {
         let here = order_href("mcu", "complete", "US", "story");
+        let containers = container_ids(titles);
         let eras = group_into_eras(
             titles,
             "story",
+            &containers,
             &Marks {
                 marks: map,
                 signed_in,
@@ -1461,6 +1970,7 @@ mod tests {
             "title",
             eras.iter()
                 .flat_map(|era| era.rows.iter())
+                .filter(|row| !row.container)
                 .map(|row| row.toggle.release_key.as_str()),
         );
         WatchOrderTemplate {
@@ -1477,11 +1987,10 @@ mod tests {
             region: "US".into(),
             sort: "story".into(),
             sort_label: sort_label("story").to_string(),
-            total: titles.len(),
-            hours: 2,
-            essential: 0,
-            movies: titles.len(),
-            shows: 0,
+            // Percy's `/stats` shape, derived over the same rows Percy derives it over — the
+            // point of the container tests below is that this number and the rendered list
+            // cannot disagree.
+            stats: derive_stats(titles, &containers),
         }
     }
 
@@ -1565,6 +2074,214 @@ mod tests {
         let out = render_title(title_page(detail_title(), Vec::new()));
         assert!(!out.contains("/account/progress"));
         assert!(out.contains("Sign in to track"));
+    }
+
+    // -- The universe index --------------------------------------------------
+
+    fn summary(logo: Option<&str>, backdrop: Option<&str>) -> WatchUniverseSummary {
+        WatchUniverseSummary {
+            slug: "mcu".into(),
+            name: "Marvel Cinematic Universe".into(),
+            accent: "#E62429".into(),
+            logo_url: logo.map(str::to_string),
+            backdrop_url: backdrop.map(str::to_string),
+            title_count: 144,
+            total_runtime: 22_000,
+            ..WatchUniverseSummary::default()
+        }
+    }
+
+    fn render_index(universes: Vec<WatchUniverseSummary>) -> String {
+        use askama::Template;
+        WatchlistTemplate {
+            account: None,
+            universes,
+            ticker: Vec::new(),
+        }
+        .render()
+        .expect("the watchlist index renders")
+    }
+
+    /// The contents of a card's `<h2>`, so an assertion about the heading cannot be
+    /// satisfied by the name appearing anywhere else on the page.
+    fn heading(html: &str) -> &str {
+        html.split_once("wl-card__name")
+            .and_then(|(_, rest)| rest.split_once("</h2>"))
+            .expect("the card renders a heading")
+            .0
+    }
+
+    #[test]
+    fn the_index_renders_the_art_percy_has_and_nothing_where_it_has_none() {
+        // Today's real state: every seed's art columns are empty. The card must then be the
+        // plain card it has always been -- no modifier, no backdrop layer, no image element
+        // reserving a band -- with the name carrying the heading as text.
+        let bare = render_index(vec![summary(None, None)]);
+        assert!(!bare.contains("wl-card--art"), "no scrim without a photo to scrim");
+        assert!(!bare.contains("wl-card__backdrop"));
+        assert!(!bare.contains("wl-card__logo"));
+        // ...and the name is what the heading itself carries, not something the card only
+        // mentions elsewhere: a tile with neither art nor a name is a blank tile.
+        assert!(heading(&bare).contains("Marvel Cinematic Universe"));
+
+        let art = render_index(vec![summary(Some("/logo.png"), Some("/backdrop.jpg"))]);
+        assert!(art.contains("wl-card--art"));
+        assert!(art.contains("url('/backdrop.jpg')"));
+        // The wordmark *is* the heading, so the name is its alt text rather than beside it.
+        assert!(art.contains(r#"alt="Marvel Cinematic Universe""#));
+        assert!(art.contains(r#"aria-hidden="true""#));
+    }
+
+    // -- Series containers (`V45`) -----------------------------------------
+
+    /// A multi-season show as `V45` stores it and the universe payload returns it: the series
+    /// container first, then one row per season naming the series' `id` as its parent. Order
+    /// matches Percy's (`ORDER BY … COALESCE(season_number, -1), id`).
+    fn exploded(id: i64, slug: &str, seasons: i64) -> Vec<WatchTitle> {
+        let mut rows = vec![WatchTitle {
+            id,
+            kind: "tv".into(),
+            episodes: Some(seasons * 8),
+            runtime: seasons * 400,
+            ..title(slug, None)
+        }];
+        rows.extend((1..=seasons).map(|number| WatchTitle {
+            id: id * 100 + number,
+            parent_id: Some(id),
+            season_number: Some(number),
+            season_name: Some(format!("Season {number}")),
+            kind: "tv".into(),
+            episodes: Some(8),
+            runtime: 400,
+            ..title(&format!("{slug}-season-{number}"), None)
+        }));
+        rows
+    }
+
+    /// Film, then a two-season show exploded into a container + its seasons, then a
+    /// single-season show — which `V45` never explodes, so it has no children.
+    fn with_a_container() -> Vec<WatchTitle> {
+        let mut titles = vec![WatchTitle {
+            id: 1,
+            kind: "movie".into(),
+            importance: Some("essential".into()),
+            ..title("iron-man", None)
+        }];
+        titles.extend(exploded(2, "daredevil", 2));
+        titles.push(WatchTitle {
+            id: 5,
+            kind: "tv".into(),
+            ..title("hawkeye", None)
+        });
+        titles
+    }
+
+    #[test]
+    fn a_container_is_a_heading_and_its_seasons_are_the_entries() {
+        let titles = with_a_container();
+        let containers = container_ids(&titles);
+        assert_eq!(containers, vec![2], "only the row its seasons name as parent");
+
+        let rows = &group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false))[0].rows;
+        assert_eq!(rows.len(), 5, "every payload row still renders");
+
+        // The container: a heading, so no number and no position of its own...
+        let series = rows.iter().find(|row| row.slug == "daredevil").unwrap();
+        assert!(series.container);
+        assert_eq!(series.number, "");
+        assert_eq!(series.position, 0);
+
+        // ...and the numbers down the left count only what a reader watches, so the season
+        // after the one film is 02 rather than 03.
+        let numbers: Vec<&str> = rows.iter().map(|row| row.number.as_str()).collect();
+        assert_eq!(numbers, ["01", "", "02", "03", "04"]);
+
+        // A single-season show is not a container and reads as itself.
+        let single = rows.iter().find(|row| row.slug == "hawkeye").unwrap();
+        assert!(!single.container);
+        assert_eq!(single.number, "04");
+    }
+
+    #[test]
+    fn the_figures_count_exactly_the_rows_rendered_as_entries() {
+        // The whole point of the container rule: Percy's `/stats` excludes containers, so a
+        // page that rendered them as entries would print 5 next to 4 watchable rows.
+        let titles = with_a_container();
+        let containers = container_ids(&titles);
+        let eras = group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false));
+        let entries = eras
+            .iter()
+            .flat_map(|era| era.rows.iter())
+            .filter(|row| !row.container)
+            .count();
+
+        let stats = derive_stats(&titles, &containers);
+        assert_eq!(stats.total, 4);
+        assert_eq!(stats.total as usize, entries, "the header and the list must agree");
+        assert_eq!(eras[0].entries, entries, "and so must the section's own badge");
+        // The container's runtime is its seasons' sum, so counting it would double the show.
+        assert_eq!(stats.runtime, 126 + 400 + 400 + 126);
+        assert_eq!(stats.movies, 1);
+        assert_eq!(stats.shows, 3, "two seasons and the unexploded show");
+        assert_eq!(stats.essential, 1);
+    }
+
+    #[test]
+    fn watching_every_entry_reaches_the_end_of_the_bar() {
+        // A container in the denominator would strand a completist at 4 of 5 forever.
+        let map = crate::progress::tests::map(
+            "title",
+            &[
+                "mcu/iron-man",
+                "mcu/daredevil-season-1",
+                "mcu/daredevil-season-2",
+                "mcu/hawkeye",
+            ],
+        );
+        let html = render_order(order_page(&with_a_container(), &map, true));
+
+        assert!(html.contains("4 of 4 watched"), "{html}");
+        assert!(html.contains("width: 100%"));
+    }
+
+    #[test]
+    fn a_container_carries_no_data_entry_and_no_toggle() {
+        // progress.js drives j/k and `w` off `[data-entry]` and `form[data-progress]`: a
+        // heading with either would be a stop with nothing to toggle, and a `w` there would
+        // post a mark for a row Percy does not count.
+        let html = render_order(order_page(&with_a_container(), &unmarked(), true));
+
+        assert_eq!(
+            html.matches("data-entry").count(),
+            4,
+            "one per entry, none for the series"
+        );
+        assert_eq!(html.matches("data-progress").count(), 4);
+        assert!(
+            !html.contains(r#"value="mcu/daredevil""#),
+            "no mark is keyed to the series"
+        );
+
+        // The heading is still there, and still a link to the series' own page — that is
+        // where its series-level cast and trailer live.
+        assert!(html.contains("wl-entry--series"));
+        assert!(html.contains(r#"href="/watchlist/mcu/daredevil""#));
+        assert!(html.contains(">Series<"));
+    }
+
+    #[test]
+    fn a_container_shows_no_rank_marker_it_was_never_counted_under() {
+        let mut titles = with_a_container();
+        titles[1].importance = Some("essential".into());
+        titles[1].milestone = true;
+        let containers = container_ids(&titles);
+        let rows = &group_into_eras(&titles, "story", &containers, &marks(&unmarked(), false))[0].rows;
+
+        let series = rows.iter().find(|row| row.slug == "daredevil").unwrap();
+        assert!(series.importance.is_none(), "a rank the essential figure never counted");
+        assert!(!series.milestone);
+        // The film's own rank is untouched.
+        assert_eq!(rows[0].importance.as_deref(), Some("essential"));
     }
 
     #[test]

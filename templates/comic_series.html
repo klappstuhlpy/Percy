@@ -33,6 +33,14 @@
                 </span>
                 {% when None %}
                 {% endmatch %}
+                {% match latest %}
+                {% when Some with (date) %}
+                <span class="cx-figure">
+                    <span class="cx-figure__value">{{ date }}</span>
+                    <span class="cx-figure__label">Latest</span>
+                </span>
+                {% when None %}
+                {% endmatch %}
             </div>
         </header>
 

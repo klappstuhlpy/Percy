@@ -43,10 +43,36 @@
                 <input type="hidden" name="brand" value="{{ value }}">
                 {% when None %}
                 {% endmatch %}
+                {% match creator %}
+                {% when Some with (value) %}
+                <input type="hidden" name="creator" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match character %}
+                {% when Some with (value) %}
+                <input type="hidden" name="character" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
+                {% match series %}
+                {% when Some with (value) %}
+                <input type="hidden" name="series" value="{{ value }}">
+                {% when None %}
+                {% endmatch %}
                 <input type="search" name="search" value="{{ search }}" placeholder="Search titles…" aria-label="Search titles">
                 <button type="submit" class="cx-search__submit">Search</button>
             </form>
         </nav>
+
+        {% if !filter_chips.is_empty() %}
+        <div class="cx-filters" aria-label="Active filters">
+            {% for chip in filter_chips %}
+            <span class="cx-filter-chip">
+                {{ chip.label }}
+                <a class="cx-filter-chip__remove" href="{{ chip.remove_href }}" aria-label="Remove filter: {{ chip.label }}">×</a>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <p class="cx-total">{{ total }} release{% if total != 1 %}s{% endif %}</p>
 
@@ -61,11 +87,12 @@
         {% else %}
         <div class="cx-grid">
             {% for item in items %}
-            {# The toggle is a sibling of the card, not a child: the card is one big <a>
-               and a form may not nest inside a link. `data-entry` + a programmatic-only
-               tabindex is what j/k moves between — see progress.js. #}
-            <div class="pg-cell" data-entry tabindex="-1">
-            <a class="cx-card" href="/comics/{{ item.brand }}/{{ item.slug }}">
+            {# The toggle is a sibling of the anchor, not a child — a form may not nest
+               inside a link — so the *card* is the container and the anchor is a
+               stretched link inside it (see comics.css). `data-entry` + a
+               programmatic-only tabindex is what j/k moves between — see progress.js. #}
+            <div class="cx-card cx-card--stretch" data-entry tabindex="-1">
+            <a class="cx-card__link" href="/comics/{{ item.brand }}/{{ item.slug }}">
                 {% match item.cover_url %}
                 {% when Some with (cover) %}
                 <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
@@ -102,7 +129,7 @@
             </a>
             {% match item.toggle %}
             {% when Some with (mark) %}
-            {% call progress::toggle(mark) %}
+            <div class="cx-card__aside">{% call progress::toggle(mark) %}</div>
             {% when None %}
             {% endmatch %}
             </div>

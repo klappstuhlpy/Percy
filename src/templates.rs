@@ -643,12 +643,36 @@ pub(crate) struct PersonTemplate {
     /// `Actor · Director` — the distinct roles they are credited with.
     pub(crate) roles: String,
     pub(crate) credit_count: usize,
-    /// How many universes they appear in.
-    pub(crate) universes: usize,
-    /// Undated or still-ahead titles — the "what's next" the page opens with.
+    /// The universes they appear in, deduplicated in the order they first appear in the
+    /// credits — never re-sorted, so the first title Percy lists is also the first link.
+    pub(crate) universe_links: Vec<PersonUniverseLink>,
+    /// Undated or still-ahead titles — the "what's next" the page opens with, unsplit by
+    /// role since it is a short, mixed list.
     pub(crate) upcoming: Vec<PersonCreditRow>,
-    /// Everything already out, newest first (Percy's order, never re-sorted here).
-    pub(crate) filmography: Vec<PersonCreditRow>,
+    /// Everything already out, grouped by role (cast, director, writer, creator, in that
+    /// order) and present only for a role this person actually has a credit under.
+    pub(crate) role_groups: Vec<PersonRoleGroup>,
+    /// §6.2's related-news strip for this person. Empty means the section is absent, not
+    /// an empty box — same rule as `ComicDetailTemplate::related_news`.
+    pub(crate) related_news: Vec<NewsRow>,
+    /// Everything tagged with this person, on `/news`.
+    pub(crate) related_news_href: String,
+    /// `https://www.themoviedb.org/person/{id}` — the attribution §9 requires on any page
+    /// showing TMDB data. Absent when Percy has no id for the person (the error page).
+    pub(crate) tmdb_person_id: Option<i64>,
+}
+
+/// One universe this person has a credit in, linked from the page header.
+pub(crate) struct PersonUniverseLink {
+    pub(crate) slug: String,
+    pub(crate) name: String,
+}
+
+/// One role's section of a person's filmography — "Cast", "Director", "Writer",
+/// "Creator" — rendered only when the person has at least one credit under it.
+pub(crate) struct PersonRoleGroup {
+    pub(crate) role_label: String,
+    pub(crate) rows: Vec<PersonCreditRow>,
 }
 
 /// One row of a person's filmography.
@@ -662,8 +686,11 @@ pub(crate) struct PersonCreditRow {
     pub(crate) year: Option<String>,
     /// `FILM` / `TV` / `SPEC`.
     pub(crate) kind_label: String,
-    /// The character for an acting credit, else the role noun.
+    /// The role noun — "Actor" / "Director" / "Writer" / "Creator".
     pub(crate) role_label: String,
+    /// The character played, for a cast credit TMDB actually credited. `None` for crew
+    /// and for an uncredited actor — the row then falls back to `role_label` alone.
+    pub(crate) character: Option<String>,
     pub(crate) poster_url: Option<String>,
 }
 
@@ -686,11 +713,10 @@ pub(crate) struct WatchOrderTemplate {
     pub(crate) sort: String,
     /// `story order` / `release order`, for prose in the meta description.
     pub(crate) sort_label: String,
-    pub(crate) total: usize,
-    pub(crate) hours: i64,
-    pub(crate) essential: usize,
-    pub(crate) movies: usize,
-    pub(crate) shows: usize,
+    /// Percy's own totals for this path (`GET /watchlist/universes/{slug}/stats`), never
+    /// counted here — see `watchlist::watch_order`. They exclude series *container* rows,
+    /// which is why the rendered list excludes them from its numbering too.
+    pub(crate) stats: WatchStats,
 }
 
 /// One era heading and the titles under it.
@@ -698,11 +724,21 @@ pub(crate) struct OrderEra {
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) rows: Vec<OrderRow>,
+    /// How many of `rows` are watchable entries — the section's count badge. Not
+    /// `rows.len()`: a series container is a heading among the rows, not an entry.
+    pub(crate) entries: usize,
 }
 
 /// One row of a watch order, with everything the template needs precomputed.
 pub(crate) struct OrderRow {
-    /// Position in the whole order (1-based), not within the era.
+    /// A series that `V45` exploded into per-season entries: a group *header* for the
+    /// seasons beneath it, not something a reader watches. It carries no position, no
+    /// `data-entry` (so `j`/`k` never land on it), no toggle and no place in the count —
+    /// exactly what the migration's own note says a container is. A single-season show is
+    /// never exploded, so it stays an ordinary entry and still reads as "Hawkeye".
+    pub(crate) container: bool,
+    /// Position among the *entries* (1-based), not within the era, and not counting
+    /// containers. Zero on a container.
     pub(crate) position: usize,
     /// `position` zero-padded to two digits, as the row's index column shows it.
     pub(crate) number: String,
@@ -713,6 +749,7 @@ pub(crate) struct OrderRow {
     pub(crate) slug: String,
     pub(crate) title: String,
     pub(crate) year: Option<String>,
+    pub(crate) poster_url: Option<String>,
     pub(crate) runtime_label: String,
     /// The row era, shown as a chip in story order (where era headings are absent).
     pub(crate) era: Option<String>,
@@ -770,7 +807,12 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) studio: Option<String>,
     pub(crate) era: Option<String>,
     // -- Where it fits --
-    pub(crate) position: i64,
+    /// 1-based place among the ordering's **entries**, or `None` for a series container —
+    /// which `V45` made a heading over its seasons rather than a row anybody watches, and
+    /// which Percy's own figures never count. See `watchlist::place`.
+    pub(crate) position: Option<i64>,
+    /// How many entries that ordering holds — containers excluded, so this is the same
+    /// number the order page's header renders.
     pub(crate) total: i64,
     /// The curated path whose importance this title carries, humanised.
     pub(crate) path_name: Option<String>,
@@ -787,6 +829,14 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) next: Option<TitleNeighbour>,
     /// The title whose credits scene this entry really is, when it is one.
     pub(crate) credits_of: Option<TitleNeighbour>,
+    // -- Season context (`V45`): exactly one of the two is ever populated --
+    /// TMDB's own name for the season this entry is (`Season 2`, `Specials`).
+    pub(crate) season_label: Option<String>,
+    /// The series this entry is a season of, linked from the fact panel.
+    pub(crate) parent: Option<TitleNeighbour>,
+    /// The seasons under this entry, in season order — non-empty exactly when this row is
+    /// the container, in which case the seasons carry the marks it does not.
+    pub(crate) seasons: Vec<SeasonRow>,
     // -- Streaming --
     pub(crate) region: String,
     pub(crate) regions: Vec<RegionOption>,
@@ -806,6 +856,24 @@ pub(crate) struct WatchTitleTemplate {
     pub(crate) spoiler: Option<String>,
     /// Signed out, the action row collapses to one "Sign in to track" link.
     pub(crate) signed_in: bool,
+    /// `https://www.themoviedb.org/{movie|tv}/{id}` — the attribution link §9 requires on a
+    /// page showing TMDB data, which `person.html` has always carried and this one never
+    /// did. Absent when Percy holds no id (the empty state).
+    pub(crate) tmdb_url: Option<String>,
+}
+
+/// One season under a series container, on that series' own page.
+pub(crate) struct SeasonRow {
+    pub(crate) slug: String,
+    /// TMDB's own name for the season — `Season 2`, or `Specials`.
+    pub(crate) label: String,
+    pub(crate) poster_url: Option<String>,
+    /// `8 episodes · 6h 40m · 2015` — only the halves Percy actually has, and empty when it
+    /// has neither, so the line is absent rather than a stray separator.
+    pub(crate) meta: String,
+    /// The season's own watched control. The seasons are what a reader watches, so this is
+    /// where the mark belongs — the container heading them offers none.
+    pub(crate) toggle: ProgressToggle,
 }
 
 /// A neighbouring title, or the one this entry plays the credits of.
@@ -859,14 +927,17 @@ pub(crate) struct ReleasesTemplate {
     pub(crate) account: Option<Viewer>,
     /// Half-width of the window, in days — the `days` control's current value.
     pub(crate) days: u32,
+    /// The sort control's current value (`date`, `date_asc` or `name`) — echoed into the
+    /// window form's hidden field so choosing a window never resets the sort.
+    pub(crate) sort: &'static str,
     /// The window's ends, as Percy reported them (ISO `YYYY-MM-DD`).
     pub(crate) window_start: String,
     pub(crate) window_end: String,
-    /// The cards the viewer's subscriptions matched. Empty signed out, and the section
-    /// is omitted rather than shown empty — see `releases.rs`.
-    pub(crate) followed: Vec<ReleaseCardRow>,
-    pub(crate) comics: Vec<ReleaseCardRow>,
-    pub(crate) titles: Vec<ReleaseCardRow>,
+    /// The cards the viewer's subscriptions matched, grouped into month buckets. Empty
+    /// signed out, and the section is omitted rather than shown empty — see `releases.rs`.
+    pub(crate) followed: Vec<MonthGroup>,
+    pub(crate) comics: Vec<MonthGroup>,
+    pub(crate) titles: Vec<MonthGroup>,
     /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
     pub(crate) ticker: Vec<TickerItem>,
     /// A signed-out visitor gets a one-line invitation instead of the `Following` section.
@@ -897,6 +968,17 @@ pub(crate) struct ReleaseCardRow {
     pub(crate) chips: Vec<ChipRow>,
     /// The read/watched control, keyed by the card's own `key`.
     pub(crate) toggle: ProgressToggle,
+}
+
+/// One month's cards on the release roadmap, or the terminal "Date to be announced"
+/// bucket for a title Percy knows about but has no date for yet. Grouping and ordering
+/// happen in `releases.rs::group_by_month`, never in the template — this is only the
+/// shape it hands to Askama. An empty month is never constructed, so the template never
+/// has to guard against one.
+pub(crate) struct MonthGroup {
+    /// "August 2026", or the terminal bucket's own label.
+    pub(crate) label: String,
+    pub(crate) cards: Vec<ReleaseCardRow>,
 }
 
 // -- Progress ------------------------------------------------------------------
@@ -989,14 +1071,24 @@ pub(crate) struct NewsTemplate {
     pub(crate) unavailable: bool,
 }
 
-/// One story, carrying **only** what §9 permits a page to show: the headline, a short
-/// excerpt, the link to the original and the source's name. The payload's `image_url` and
-/// `author` are deliberately absent from this struct so no template can reach them.
+/// One story, carrying what §9 permits a page to show: the headline, a short excerpt,
+/// the link to the original, the source's name and — as of the 2026-08-06 narrowing —
+/// the feed's own `image_url`, hotlinked rather than rehosted. `author` is still
+/// deliberately absent from this struct so no template can reach it; the byline stays
+/// hidden everywhere.
+///
+/// Shared with the related-news macro ([`crate::news::related`]): `image_url` rides
+/// along there too since it comes from the same [`row`](crate::news::row) mapping, but
+/// `news_strip.html` never reads the field — §9's image allowance is scoped to `/news`
+/// cards, not the compact detail-page strip.
 pub(crate) struct NewsRow {
     /// The original article. The headline links here, never to a page of ours.
     pub(crate) url: String,
     pub(crate) headline: String,
     pub(crate) excerpt: Option<String>,
+    /// The feed's own image, hotlinked straight from the URL it published — never
+    /// rehosted, never proxied, never cached by us. `None` when the feed gave none.
+    pub(crate) image_url: Option<String>,
     pub(crate) source_name: String,
     /// `YYYY-MM-DD`, and the full timestamp for `<time datetime>`.
     pub(crate) published: Option<String>,
@@ -1104,10 +1196,31 @@ pub(crate) struct BrandTab {
     pub(crate) active: bool,
 }
 
+/// One credited contributor, linked to the browse page filtered to their name.
+pub(crate) struct CreditLink {
+    pub(crate) name: String,
+    pub(crate) href: String,
+}
+
 /// One credited role and everyone credited under it on a release.
 pub(crate) struct CreditGroup {
     pub(crate) role: String,
-    pub(crate) names: Vec<String>,
+    pub(crate) credits: Vec<CreditLink>,
+}
+
+/// A character appearing in a release, linked to the browse page filtered to their name.
+pub(crate) struct CharacterLink {
+    pub(crate) name: String,
+    pub(crate) kind: Option<String>,
+    pub(crate) href: String,
+}
+
+/// One active browse filter (creator/character/series), shown as a removable chip
+/// above the grid. The × is a plain link back to the same page without that
+/// parameter -- no script required to undo a filter.
+pub(crate) struct FilterChip {
+    pub(crate) label: String,
+    pub(crate) remove_href: String,
 }
 
 /// `GET /comics` — the release browser.
@@ -1119,9 +1232,15 @@ pub(crate) struct ComicBrowseTemplate {
     pub(crate) brand_tabs: Vec<BrandTab>,
     /// The news ticker's headlines. Empty means no strip at all — see `news::ticker`.
     pub(crate) ticker: Vec<TickerItem>,
-    /// Echoed back so the search form keeps the active brand filter.
+    /// Echoed back so the search form and brand tabs keep the active filters.
     pub(crate) brand: Option<String>,
     pub(crate) search: String,
+    pub(crate) creator: Option<String>,
+    pub(crate) character: Option<String>,
+    pub(crate) series: Option<String>,
+    /// The active `creator`/`character`/`series` filters, each removable. Empty when
+    /// none are set -- the chip row is then absent, not an empty box.
+    pub(crate) filter_chips: Vec<FilterChip>,
     pub(crate) total: i64,
     pub(crate) page: i64,
     pub(crate) total_pages: i64,
@@ -1158,6 +1277,31 @@ pub(crate) struct ComicSeriesTemplate {
     pub(crate) accent: String,
     pub(crate) publisher: Option<String>,
     pub(crate) issue_count: i64,
+    /// The most recent issue's release date. `GET /comics/series/{slug}` carries no
+    /// `latest` field of its own (only the `/comics/series` index's `ComicSeriesSummary`
+    /// row does, rendered on `comic_series_index.html`) — this is derived in
+    /// `latest_release_date()` from the same `issues` this page already fetches.
+    ///
+    /// This figure and the index card's CAN legitimately disagree, in two ways:
+    /// 1. `GET /comics/series/{slug}` takes an *optional* `brand`. Reached without one
+    ///    (as `subject_href` in `releases.rs` does — it links here with no `?brand=`),
+    ///    a series slug that collides across publishers pulls in every brand's issues,
+    ///    while the index's `latest` is computed `GROUP BY series_slug, brand` and stays
+    ///    strictly per-brand. On a colliding slug this figure can be a different
+    ///    publisher's issue than the index shows.
+    /// 2. The index endpoint sits behind a 300s `Strategy.TIMED` cache; this detail
+    ///    endpoint queries live. For up to five minutes after a new issue is tracked,
+    ///    this figure can legitimately be newer than the still-cached index card.
+    ///
+    /// The index's figure is authoritative for "what's newest for this brand's series"
+    /// (per-brand, cache-bounded); this page's figure is authoritative for "what's newest
+    /// among exactly the issues rendered below it" on *this* page — which is what earns it
+    /// a place here: the grid below is reading order, not date order, so a reader can't
+    /// find the newest issue by eye. Kept alongside the index's, not instead of it, so a
+    /// reader on one series' page isn't sent back to the index for a fact about the page
+    /// they're already on. Do not "unify" the two into one shared figure — they answer
+    /// different questions and are not meant to be equal.
+    pub(crate) latest: Option<String>,
     /// Already in reading order as Percy returned them — never re-sorted.
     pub(crate) issues: Vec<ComicCard>,
     /// The publisher copyright line for the attribution partial; empty when
@@ -1195,8 +1339,19 @@ pub(crate) struct ComicDetailTemplate {
     pub(crate) next: Option<ComicCard>,
     pub(crate) more_from_series: Vec<ComicCard>,
     pub(crate) credit_groups: Vec<CreditGroup>,
-    pub(crate) characters: Vec<ComicCharacter>,
+    pub(crate) characters: Vec<CharacterLink>,
+    /// The outbound link to this issue's own listing on its source (League of Comic
+    /// Geeks / VIZ) -- distinct from the general attribution notice in the footer.
+    pub(crate) source_url: Option<String>,
     pub(crate) description: Option<String>,
+    /// When Percy first saw this release (a solicitation is tracked long before it ships).
+    /// Date-only — `ComicRelease.first_seen` is a full timestamp, trimmed the same way
+    /// `news.rs::published_date` trims a story's `published_at`.
+    pub(crate) first_seen: Option<String>,
+    /// When Percy's record for this release last changed, trimmed the same way. Rendered
+    /// independently of `first_seen` — the two rows agree on a release nothing has
+    /// touched since it was first tracked, and that agreement is itself the fact.
+    pub(crate) updated_at: Option<String>,
     /// §6.2's "6b. Related news" — the most recent stories tagged with this release's
     /// series. Empty means the section is *absent*, not an empty box.
     pub(crate) related_news: Vec<NewsRow>,

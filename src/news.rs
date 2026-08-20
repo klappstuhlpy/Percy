@@ -7,10 +7,13 @@
 //! labelled without the page ever building two lists.
 //!
 //! **§9 is a hard ceiling on what may be rendered.** A story is headline + a short excerpt +
-//! the link to the original + the source's name, and nothing else. Percy's payload also carries
-//! `image_url` and `author` — this module deliberately never puts either in a view model, so no
-//! template can reach them. The link out is `rel="noopener nofollow ugc"` for the same reason:
-//! we are quoting someone else's headline, not vouching for it.
+//! the link to the original + the source's name, and nothing else — **except**, as of the
+//! 2026-08-06 narrowing, the feed's own `image_url`: it may be rendered, hotlinked straight
+//! from the URL the feed published, never rehosted, never proxied, never cached by us.
+//! Hotlinking a syndication image the feed itself publishes is what feeds are for; rehosting
+//! it is not. `author` stays out — the byline is still never rendered, on `/news` or anywhere
+//! else. The link out is `rel="noopener nofollow ugc"` for the same reason as ever: we are
+//! quoting someone else's headline, not vouching for it.
 //!
 //! Two fragments live here rather than in the pages that show them, so the §9 rule has one home:
 //!
@@ -287,12 +290,28 @@ fn row(item: &NewsItem, followed: bool) -> NewsRow {
             .map(str::trim)
             .filter(|text| !text.is_empty())
             .map(str::to_string),
+        image_url: image_url(item),
         source_name: item.source.name.clone(),
         published: item.published_at.as_deref().map(published_date),
         published_iso: item.published_at.clone(),
         followed,
         chips: item.subjects.iter().map(chip).collect(),
     }
+}
+
+/// The feed's own image, hotlinked verbatim — or `None` when there is nothing safe to link.
+///
+/// Trimmed and required to be `http(s)`: a feed is untrusted input, and an `<img src>` is a
+/// trust boundary same as any other URL we hand the browser. A blank or non-`http(s)` value
+/// (a relative path a feed forgot to resolve, a `javascript:`/`data:` oddity) is dropped
+/// rather than rendered — the same "don't print an empty line" instinct as the excerpt, plus
+/// one guard an excerpt doesn't need because a string isn't a URL a browser will fetch.
+fn image_url(item: &NewsItem) -> Option<String> {
+    item.image_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
+        .map(str::to_string)
 }
 
 /// The date half of an ISO timestamp — `2026-08-05T09:30:00` becomes `2026-08-05`.
@@ -338,9 +357,9 @@ mod tests {
             url: format!("https://example.test/{id}"),
             headline: headline.to_string(),
             excerpt: Some("A short excerpt, as the feed gave it.".into()),
-            // Present in the payload and never rendered — §9 allows headline, excerpt,
-            // link and source, and nothing else.
+            // Rendered as a hotlinked <img> since the 2026-08-06 narrowing of §9.
             image_url: Some("https://example.test/hero.jpg".into()),
+            // Present in the payload and never rendered — §9 keeps the byline hidden.
             author: Some("Someone Bylined".into()),
             published_at: Some("2026-08-05T09:30:00".into()),
             source: NewsItemSource {
@@ -443,6 +462,21 @@ mod tests {
         assert_eq!(row.source_name, "Marvel.com");
         assert_eq!(row.published.as_deref(), Some("2026-08-05"));
         assert!(row.excerpt.is_some());
+        // The 2026-08-06 narrowing: the feed's own image rides along now, hotlinked.
+        assert_eq!(row.image_url.as_deref(), Some("https://example.test/hero.jpg"));
+    }
+
+    #[test]
+    fn an_image_url_that_is_not_http_is_dropped_rather_than_handed_to_the_browser() {
+        let mut bad = item(1, "Anything");
+        bad.image_url = Some("javascript:alert(1)".into());
+        assert_eq!(image_url(&bad), None);
+
+        bad.image_url = Some("  ".into());
+        assert_eq!(image_url(&bad), None);
+
+        bad.image_url = None;
+        assert_eq!(image_url(&bad), None);
     }
 
     #[test]
@@ -469,13 +503,36 @@ mod tests {
         // of showing it at all.
         assert!(html.contains("Marvel.com"));
         assert!(html.contains(r#"href="https://example.test/1""#));
-        // ...and nothing beyond headline + excerpt + link + source is rendered, however
-        // much of it the payload happens to carry.
-        assert!(!html.contains("hero.jpg"), "no rehosted or hotlinked image (§9)");
+        // The feed's own image is hotlinked (§9, narrowed 2026-08-06), with every
+        // required attribute: decorative alt, lazy/async loading, a reserved box so the
+        // page doesn't shift, and no-referrer so our readers' page URLs never reach a
+        // third party's asset host.
+        assert!(html.contains(r#"src="https://example.test/hero.jpg""#));
+        assert!(html.contains(r#"alt="""#));
+        assert!(html.contains(r#"loading="lazy""#));
+        assert!(html.contains(r#"decoding="async""#));
+        assert!(html.contains(r#"width="112" height="112""#));
+        assert!(html.contains(r#"referrerpolicy="no-referrer""#));
+        // ...but the byline stays hidden — §9 narrowed to allow the image, not the author.
         assert!(!html.contains("Someone Bylined"), "no byline (§9)");
         // The filters are a plain GET form, so the page works with JS off.
         assert!(html.contains(r#"<form class="nx-filters" method="get" action="/news""#));
         assert!(!html.contains("nx-row__followed"), "nothing is followed signed out");
+    }
+
+    #[test]
+    fn a_story_without_an_image_renders_no_img_tag_and_no_image_modifier_class() {
+        let mut bare = item(1, "No hero image on this one");
+        bare.image_url = None;
+        let html = render(page(rows(&[bare], 0), false, false));
+
+        assert!(
+            !html.contains("<img"),
+            "a text-only card leaves no hole for a missing image"
+        );
+        assert!(!html.contains("nx-row--with-image"));
+        // The rest of the card is unaffected — today's text-only shape, unchanged.
+        assert!(html.contains("No hero image on this one"));
     }
 
     #[test]
