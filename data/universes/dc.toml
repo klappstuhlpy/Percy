@@ -3,14 +3,18 @@ name = "DC"
 short_name = "DC"
 tagline = "From the DCEU's Man of Steel to James Gunn's DCU reboot, plus the standalone Elseworlds."
 accent = "#0078F2"
-# Key art. Both URLs were fetched and verified 200 before being written here.
+# Key art. Both images were fetched, opened and looked at before being written here.
 # TMDB has no collection spanning the DCEU, the DCU reboot and the Elseworlds films, so the
-# backdrop comes from one of them: GET /movie/791373/images (Zack Snyder's Justice League)
-# -> backdrops, chosen because it is an ensemble rather than a single hero, and dark enough
-# that the header's overlaid text still wins.
-backdrop_url = "https://image.tmdb.org/t/p/w1280/9WoLTsRgrupkvCgs3bhsl2EjLhs.jpg"
-# GET /company/429/images -> logos: the wide DC wordmark, blue with a white outline, so it
-# reads on both themes. The flat-black roundels in the same set only work on the light one.
+# backdrop comes from one of them: GET /movie/49521/images?include_image_language=null
+# (Man of Steel) -> backdrops: one figure crossing an empty arctic plain, flat grey sky above
+# and a pinpoint sun on the horizon -- nothing else in the frame. The Justice League frames
+# tried first are six-hero ensembles with a Darkseid face looming behind them, which is the
+# one thing a scrim cannot quiet, and this page uses the image twice: once behind the index
+# tile and once full-width as the order page's hero.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/j2MlEEpA3wgwQiJB6p1UHC50oiw.jpg"
+# GET /company/429/images -> logos: the DC Comics swoosh -- "DC" inside a blue-and-white
+# orbit with "COMICS" set beside it -- blue with a white outline, so it reads on both themes.
+# The flat-black roundels in the same set only work on the light one.
 logo_url = "https://image.tmdb.org/t/p/w500/14atNOcJv74Jid3xfHRu4URJBQX.png"
 published = true
 sort_order = 10

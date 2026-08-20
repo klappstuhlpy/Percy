@@ -3,10 +3,12 @@ name = "Star Wars"
 short_name = "Star Wars"
 tagline = "Nine chapters of the Skywalker saga, plus the anthology films that stand beside them."
 accent = "#FFE81F"
-# Key art. Both URLs were fetched and verified 200 before being written here.
-# GET /collection/10/images -> backdrops: the textless Star Destroyer over a planet, the
-# calmest wide frame in the set -- the cast montages are far too busy to sit under a header.
-backdrop_url = "https://image.tmdb.org/t/p/w1280/d8duYyyC9J5T825Hg7grmaabfxQ.jpg"
+# Key art. Both images were fetched, opened and looked at before being written here.
+# GET /collection/10/images -> backdrops: the textless Death Star, one lit sphere on the right
+# of an otherwise black frame, so the header's text lands on empty space. The frame this
+# replaced was labelled a Star Destroyer and is in fact the Millennium Falcon, greebled edge
+# to edge; the cast montages in the same set are busier still.
+backdrop_url = "https://image.tmdb.org/t/p/w1280/jci0IkGpJRwpTx62jDxIFXAt2Sr.jpg"
 # GET /movie/11/images?include_image_language=en -> logos: the gold wordmark with no
 # subtitle. The white and outline-only variants vanish against the light theme.
 logo_url = "https://image.tmdb.org/t/p/w500/uuYGkf8rGl7nJ92jaXt7f9plL4p.png"

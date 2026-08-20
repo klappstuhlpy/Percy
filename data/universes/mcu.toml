@@ -3,15 +3,19 @@ name = "Marvel Cinematic Universe"
 short_name = "MCU"
 tagline = "Six phases, from a cave workshop to a multiverse-spanning threat."
 accent = "#E62429"
-# Key art. Both URLs were fetched and verified 200 before being written here.
+# Key art. Both images were fetched, opened and looked at before being written here.
 # GET /collection/86311/images (The Avengers Collection) -> backdrops: the textless glowing
-# Avengers mark. The alternatives are six-face montages, and a header scrim needs the frame
-# underneath it to be quiet.
+# Avengers mark, blue on blue. The alternatives are six-face montages, and a header scrim
+# needs the frame underneath it to be quiet.
 backdrop_url = "https://image.tmdb.org/t/p/w1280/irDiLpzsJVFRg6FAbOL7IVvYrpl.jpg"
-# GET /company/7505/images (Marvel Entertainment) -> logos. Marvel *Studios*' own logos
-# (company 420) all set "STUDIOS" in black, which disappears against the dark theme; this
-# one is white on the red brick and reads on both.
-logo_url = "https://image.tmdb.org/t/p/w500/837VMM4wOkODc1idNxGT0KQJlej.png"
+# GET /movie/24428/images?include_image_language=en -> logos: the small Marvel Studios brick
+# above the metallic Avengers wordmark, 39% of its pixels fully transparent. The studios'
+# own marks both fail here: Marvel Entertainment's (company 7505) has *no* transparency at
+# all -- it is a solid red rectangle that stamps itself onto the backdrop instead of sitting
+# in it -- and Marvel Studios' (company 420) knocks "MARVEL" out of the brick and sets
+# "STUDIOS" in flat black, so both halves go dark-on-dark. This one's brushed-metal gradient
+# carries light and dark values at once, so it reads on either theme.
+logo_url = "https://image.tmdb.org/t/p/w500/4EMGTG2x75JXCBNDoG2zCjXZoI0.png"
 published = true
 sort_order = 0
 
