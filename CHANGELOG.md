@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-20
+
+### Added
+
+- A page for every film and show, with its cast and crew, where it sits in the watch order, where to stream it, and a trailer that stays a link until you click it — so nothing loads a player or sets a cookie on its own.
+- A page for every person, with their filmography grouped by the role they played and linked through to the universes they appear in.
+- Read and watched marks on every catalogue surface — the releases page, the comic archive, a watch order and any detail page — each with an unmark beside it. A watch order also shows how far through it you are, and `j`/`k`/`w` step through a list and mark without the mouse.
+- `/releases` is now a dated timeline grouped by month, with poster art and a closing bucket for titles announced without a date.
+- A news page, filterable by subject, source and search, plus a headline strip on the releases, comics and watch-order pages.
+- Comic pages carry the dates a release was first tracked and last updated, and a series shows its most recent issue.
+- Universe pages show their key art, and a season now names the series it belongs to and links back to it.
+
+### Changed
+
+- A watch order takes its figures from Percy instead of counting rows itself, so the header and the list can no longer disagree. A multi-season series renders as a heading over its seasons rather than as an entry of its own — the seasons are what you mark.
+- Hours in a watch order are the rounded figure Percy already computes, rather than a truncated division.
+
+### Fixed
+
+- The position on a title page counts entries rather than rows, so it no longer reads "5 of 5" on a page whose universe header says four. Stepping through with previous and next no longer stops on a series heading, which was never something you could watch or mark.
+- A comic series' "latest issue" on its own page and on the index can legitimately differ — one is per-brand and cached, the other is live and unscoped — and the code no longer claims otherwise.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added
