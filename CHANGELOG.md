@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-08-22
+
+### Fixed
+
+- Percy hit Discord's ceiling of 100 global slash commands, which stopped the whole
+  user-settings module from loading — `/settings` and everything beside it were gone.
+  Twelve commands that take no arguments (`beg`, `dig`, `fish`, `hunt`, `search`,
+  `work`, `weekly`, `monthly`, `prestige`, `crime`, `slut`, `cleanupleft`) are now
+  text commands only; a slash command earns its slot by having arguments to fill in.
+- One command over that ceiling can no longer take its entire module down with it:
+  the command stays text-only and says so in the log.
+- AniList being unreachable (a 403 from their API) stopped the AniList module from
+  loading at all. It now loads and only its autocomplete suggestions stay empty.
+
 ## [2.5.0] - 2026-08-20
 
 ### Added
