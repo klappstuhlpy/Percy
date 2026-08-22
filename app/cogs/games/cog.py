@@ -474,7 +474,7 @@ class Games(Cog):
             ctx.guild.id, ctx.author.id, Game.COINFLIP, game_result, wagered=bet, profit=profit
         )
 
-    @command("crime", description="Commit a crime for money. Higher risk, higher reward.", guild_only=True, hybrid=True)
+    @command("crime", description="Commit a crime for money. Higher risk, higher reward.", guild_only=True)
     @cooldown(1, Payouts.CRIME_COOLDOWN.value, commands.BucketType.member)
     async def crime(self, ctx: Context) -> None:
         """Commit a crime for money.
@@ -502,7 +502,7 @@ class Games(Cog):
                 random.choice(FAILED_CRIME_RESPONSES).format(coins=f"{Emojis.Economy.cash} **{fnumb(amount)}**")
             )
 
-    @command("slut", description="Whip it out, for a bit of cash. ;) (NSFW)", nsfw=True, guild_only=True, hybrid=True)
+    @command("slut", description="Whip it out, for a bit of cash. ;) (NSFW)", nsfw=True, guild_only=True)
     @cooldown(1, Payouts.SLUT_COODLWON.value, commands.BucketType.member)
     async def slut(self, ctx: Context) -> None:
         """Do some naughty work for cash. (NSFW)

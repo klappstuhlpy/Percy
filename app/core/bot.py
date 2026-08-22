@@ -237,7 +237,15 @@ class Bot(commands.Bot):
                 if isinstance(child, Command):
                     child.transform_flag_parameters()  # type: ignore
 
-        super().add_command(command)
+        try:
+            super().add_command(command)
+        except discord.app_commands.CommandLimitReached:
+            # The global 100-slash-command ceiling is full: keep the command as text-only
+            # instead of letting one over-the-limit command take its whole extension down.
+            self.log.warning(
+                'Slash-command limit reached; %r stays text-only. Demote a command with hybrid=False.',
+                command.qualified_name,
+            )
 
     async def setup_hook(self) -> None:
         """Prepares the bot for startup."""

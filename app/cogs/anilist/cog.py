@@ -108,8 +108,8 @@ class AniList(Cog):
                 romaji = title.get('romaji')
                 if romaji:
                     self._lookup_manga_table.append(str(romaji))
-        except (AttributeError, KeyError, aiohttp.ClientError):
-            log.exception('Failed to load AniList data')
+        except (AttributeError, KeyError, aiohttp.ClientError, DiscordException) as exc:
+            log.warning("Failed to preload AniList lookup tables (%s); autocomplete stays empty.", exc)
 
     async def cog_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CheckFailure):

@@ -1001,7 +1001,7 @@ class Music(Cog):
         )
         await ctx.send(embed=embed, delete_after=15)
 
-    @command(description="Removes all songs from users that are not in the voice channel.", hybrid=True, guild_only=True)
+    @command(description="Removes all songs from users that are not in the voice channel.", guild_only=True)
     @checks.is_author_connected()
     @checks.is_player_playing()
     async def cleanupleft(self, ctx: Context) -> None:

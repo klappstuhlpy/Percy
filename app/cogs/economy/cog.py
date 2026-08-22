@@ -455,7 +455,7 @@ class Economy(Cog):
         )
         await self._sync_achievements(ctx)
 
-    @command("weekly", description="Claim your weekly reward.", guild_only=True, hybrid=True)
+    @command("weekly", description="Claim your weekly reward.", guild_only=True)
     async def weekly(self, ctx: Context) -> None:
         """Claim your weekly reward — a bigger payout on a 7-day cooldown."""
         assert ctx.guild is not None
@@ -480,7 +480,7 @@ class Economy(Cog):
             f"You claimed your weekly {Emojis.Economy.cash} **{fnumb(amount)}**!{self._scale_suffix(scale)}"
         )
 
-    @command("monthly", description="Claim your monthly reward.", guild_only=True, hybrid=True)
+    @command("monthly", description="Claim your monthly reward.", guild_only=True)
     async def monthly(self, ctx: Context) -> None:
         """Claim your monthly reward — the biggest fixed payout, once every 30 days."""
         assert ctx.guild is not None
@@ -794,7 +794,7 @@ class Economy(Cog):
 
     # -- earning activities ----------------------------------------------
 
-    @command("fish", description="Cast a line and earn a random catch.", guild_only=True, hybrid=True)
+    @command("fish", description="Cast a line and earn a random catch.", guild_only=True)
     @cooldown(1, FISHING_COOLDOWN)
     async def fish(self, ctx: Context) -> None:
         """Go fishing for a chance at cash — outcomes range from junk to a rare pearl."""
@@ -816,7 +816,7 @@ class Economy(Cog):
             )
         await self._bump_quests(ctx, "fish")
 
-    @command("hunt", description="Head out hunting for a bigger, riskier payout.", guild_only=True, hybrid=True)
+    @command("hunt", description="Head out hunting for a bigger, riskier payout.", guild_only=True)
     @cooldown(1, HUNTING_COOLDOWN)
     async def hunt(self, ctx: Context) -> None:
         """Go hunting — higher payouts and variance than fishing, on a longer cooldown."""
@@ -838,7 +838,7 @@ class Economy(Cog):
             )
         await self._bump_quests(ctx, "hunt")
 
-    @command("beg", description="Beg for a little spare change.", guild_only=True, hybrid=True)
+    @command("beg", description="Beg for a little spare change.", guild_only=True)
     @cooldown(1, BEG_COOLDOWN)
     async def beg(self, ctx: Context) -> None:
         """Beg passers-by for spare change — quick, low stakes, occasionally lucrative."""
@@ -858,7 +858,7 @@ class Economy(Cog):
             await ctx.send_success(f'{catch.emoji} {line}{self._scale_suffix(scale)}')
         await self._bump_quests(ctx, "beg")
 
-    @command("dig", description="Dig around for buried valuables.", guild_only=True, hybrid=True)
+    @command("dig", description="Dig around for buried valuables.", guild_only=True)
     @cooldown(1, DIG_COOLDOWN)
     async def dig(self, ctx: Context) -> None:
         """Grab a shovel and dig — finds range from bottle caps to ancient relics."""
@@ -880,7 +880,7 @@ class Economy(Cog):
             )
         await self._bump_quests(ctx, "dig")
 
-    @command("search", description="Search one of three random spots for cash.", guild_only=True, hybrid=True)
+    @command("search", description="Search one of three random spots for cash.", guild_only=True)
     @cooldown(1, SEARCH_COOLDOWN)
     async def search(self, ctx: Context) -> None:
         """Pick one of three random locations to rummage through.
@@ -919,7 +919,7 @@ class Economy(Cog):
         view = SearchView(ctx.author, options, resolve)
         view.message = await ctx.send("\N{RIGHT-POINTING MAGNIFYING GLASS} **Where do you want to search?**", view=view)
 
-    @command("work", description="Work a shift at your job.", guild_only=True, hybrid=True)
+    @command("work", description="Work a shift at your job.", guild_only=True)
     @cooldown(1, WORK_COOLDOWN, commands.BucketType.member)
     async def work(self, ctx: Context) -> None:
         """Work a shift at your current job.
@@ -1261,7 +1261,7 @@ class Economy(Cog):
 
     # -- prestige ------------------------------------------------------------
 
-    @command("prestige", description="Reset your wealth for a permanent payout bonus.", guild_only=True, hybrid=True)
+    @command("prestige", description="Reset your wealth for a permanent payout bonus.", guild_only=True)
     async def prestige(self, ctx: Context) -> None:
         """Prestige: trade your entire cash & bank balance for a permanent +10% payout bonus.
 
