@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-03
+
+### Changed
+
+- Presence history and name/nickname/avatar history are now **opt-in**. Nothing is
+  recorded for your account until you switch it on from your `/settings` card.
+  Everyone starts switched off, including existing users: tracking that was on was
+  the old default, not a choice anyone made, so turn it back on if you want it.
+  Requires migration V47.
+- The privacy policy now says tracking is off until you turn it on, and describes the
+  `/settings` toggles that actually exist instead of commands that never did.
+
+### Fixed
+
+- Percy stored the avatar of a member joining a server even when they had switched
+  name and avatar history off.
+- Percy no longer downloads the avatar of every member of a server it is added to.
+
 ## [2.5.1] - 2026-08-22
 
 ### Fixed
