@@ -1199,17 +1199,14 @@ class Bot(commands.Bot):
 
         await super().close()
 
-        pending = asyncio.all_tasks()
-        with suppress(RecursionError):
-            # Wait for all tasks to complete. This usually allows for a graceful shutdown of the bot.
-            try:
-                await asyncio.wait_for(asyncio.gather(*pending), timeout=0.5)
-            except TimeoutError:
-                # If the tasks take too long to complete, cancel them.
-                for task in pending:
-                    task.cancel()
-            except asyncio.CancelledError:
-                pass
+        # Leave out the task running close(): waiting on itself never finishes, and cancelling
+        # a gather that contains it recursed until a RecursionError buried the real error.
+        pending = asyncio.all_tasks() - {asyncio.current_task()}
+        if pending:
+            # Give the remaining tasks a moment to finish, then cancel whatever is left.
+            _, unfinished = await asyncio.wait(pending, timeout=0.5)
+            for task in unfinished:
+                task.cancel()
 
     async def start(self, token: str = resolved_token, *, reconnect: bool = True) -> None:  # type: ignore
         await super().start(token, reconnect=reconnect)

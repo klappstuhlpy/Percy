@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- When Percy failed to start (a rejected Discord token, for example), shutting down
+  crashed with a `RecursionError` that hid the actual error, and the process hung
+  until Docker killed it. The real error is logged again and Percy exits.
+
 ## [2.6.0] - 2026-10-03
 
 ### Changed
