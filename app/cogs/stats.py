@@ -9,7 +9,7 @@ import textwrap
 import traceback
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
 
 import aiohttp
 import asyncpg
@@ -54,9 +54,6 @@ from app.utils import (
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
 from config import Emojis, beta, get_full_version, path
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 log = logging.getLogger(__name__)
 
@@ -288,32 +285,6 @@ class Stats(Cog):
         embed = discord.Embed(colour=helpers.Colour.lime_green(), title="New Guild")
         await self.send_guild_stats(embed, guild)
 
-        members: Sequence[discord.Member] | list[discord.Member] = await guild.chunk() if guild.chunked else guild.members
-        for member in members:
-            try:
-                if len(member.mutual_guilds) > 1:
-                    continue
-            except AttributeError:
-                continue
-            try:
-                avatar: bytes = await member.display_avatar.read()
-            except discord.HTTPException as exc:
-                if exc.status in (403, 404):
-                    continue
-                if exc.status >= 500:
-                    continue
-                log.info(
-                    "Unhandled Discord HTTPException while getting avatar for %s (%s)",
-                    member.name,
-                    member.id,
-                )
-                continue
-
-            scaled_avatar: io.BytesIO = await asyncio.to_thread(resize_to_limit, io.BytesIO(avatar))  # type: ignore
-            self._avatar_data_batch.append(
-                AvatarBatchEntry(user_id=member.id, name=member.name, image=scaled_avatar.getvalue())
-            )
-
     @Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         """Handles a new member joining the guild.
@@ -327,6 +298,9 @@ class Stats(Cog):
             return None
 
         if len(member.mutual_guilds) > 1:
+            return None
+
+        if not (await self.bot.db.get_user_config(member.id)).track_history:  # type: ignore[misc]
             return None
 
         avatar: bytes | None = await self._read_avatar(member)

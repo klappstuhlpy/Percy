@@ -301,7 +301,7 @@ class SettingsView(LayoutView):
         )
 
         container.add_item(discord.ui.Separator())
-        footer = self._status or "Tracking is on by default — toggle it off any time."
+        footer = self._status or "Tracking is off until you turn it on — toggle it any time."
         container.add_item(discord.ui.TextDisplay(f"-# {footer}"))
 
         self.add_item(container)

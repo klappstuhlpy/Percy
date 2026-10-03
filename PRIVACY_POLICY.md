@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated: 13 June 2026**
+**Last updated: 3 October 2026**
 
 This Privacy Policy explains what data the **Percy** Discord bot ("Percy", "the Bot", "we", "us") collects, why we collect it, how long we keep it, who it is shared with, and the rights you have over it. It applies to everyone who uses Percy or is a member of a Discord server ("guild") that Percy is in.
 
@@ -27,9 +27,9 @@ We only collect what a feature needs to work. Under the EU/UK GDPR, our legal ba
 | Data                                                                                             | Purpose                                                                    | Legal basis                           | Default              |
 |--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|---------------------------------------|----------------------|
 | **Discord IDs** (user, server, channel, role, message)                                           | Identify where settings, content and actions belong                        | Service necessity                     | Always (required)    |
-| **Presence history** (online/idle/dnd/offline transitions)                                       | Presence graphs and statistics                                             | Consent                               | **On — opt-out**     |
-| **Username & nickname history**                                                                  | "Name history" feature                                                     | Consent                               | **On — opt-out**     |
-| **Avatar history** (image snapshots)                                                             | "Avatar history" feature                                                   | Consent                               | **On — opt-out**     |
+| **Presence history** (online/idle/dnd/offline transitions)                                       | Presence graphs and statistics                                             | Consent                               | **Off — opt-in**     |
+| **Username & nickname history**                                                                  | "Name history" feature                                                     | Consent                               | **Off — opt-in**     |
+| **Avatar history** (image snapshots)                                                             | "Avatar history" feature                                                   | Consent                               | **Off — opt-in**     |
 | **Server configuration & moderation logs**                                                       | Run the features a server admin enables (logging, automod, leveling, etc.) | Service necessity / admin instruction | Set by server admins |
 | **Message & voice activity counts**                                                              | Leveling / XP                                                              | Service necessity (where enabled)     | Set by server admins |
 | **Content you submit to a command** (reminders, tags, playlists, giveaways, notes, poll answers) | Provide that feature                                                       | Service necessity                     | When you use it      |
@@ -37,14 +37,9 @@ We only collect what a feature needs to work. Under the EU/UK GDPR, our legal ba
 
 We **do not** sell your data, and we **do not** use it for advertising or profiling beyond the features described above.
 
-### Tracking is on by default, but you control it
+### Tracking is off until you turn it on
 
-Presence, name and avatar history tracking are **enabled by default** so the related features work out of the box. You can change this at any time, for your own account, with these commands:
-
-- `settings tracking false` — turn **all** tracking off in one go
-- `settings presence false` — turn off only presence tracking
-- `settings history false` — turn off only name/nickname/avatar history
-- `settings show` — see your current settings
+Presence, name and avatar history tracking are **disabled by default**. Nothing is recorded for your account until you switch it on yourself, and you can switch it off again at any time, with the **Presence Tracking** and **Name & Avatar History** toggles on your `settings` panel.
 
 A server administrator cannot consent to this tracking on your behalf; the choice is always yours and applies to your account across every server.
 
@@ -97,7 +92,7 @@ Regardless of where you live, you can exercise the following rights over your pe
 
 - **Access / portability** — get a copy of your stored data: `settings request-data` (Percy sends you a JSON export).
 - **Erasure** — permanently delete your stored presence, name/nickname and avatar history: `settings remove-personal-data`.
-- **Object / restrict** — stop future tracking: `settings tracking false` (or the per-type toggles).
+- **Object / restrict** — stop future tracking: switch the toggles on your `settings` panel off.
 - **Rectification** — ask us to correct inaccurate data via the contact details above.
 
 Under the GDPR you also have the right to lodge a complaint with your local data protection authority. These rights cannot be waived, and nothing in this Policy asks you to give them up.
