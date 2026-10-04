@@ -18,3 +18,4 @@ temp_channels.json
 /tests/artifacts
 SELF_HOSTING_GUIDE.md
 .playwright-mcp/
+/INTENT_REVIEW.md
