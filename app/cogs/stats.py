@@ -231,12 +231,14 @@ class Stats(Cog):
             destination = f"#{message.channel} ({message.guild})"
             guild_id = ctx.guild.id
 
+        # Log which command ran, never the text it was invoked with: arguments are message
+        # content, and message content is not written anywhere outside Discord.
         if ctx.is_interaction and ctx.interaction is not None and ctx.interaction.command:
-            content = f"/{ctx.interaction.command.qualified_name}"
+            invoked = f"/{ctx.interaction.command.qualified_name}"
         else:
-            content = message.content
+            invoked = f"{ctx.prefix or ''}{cmd_name}"
 
-        log.info("%s: %s in %s: %s", ctx.now.replace(tzinfo=None), message.author, destination, content)
+        log.info("%s: %s in %s: %s", ctx.now.replace(tzinfo=None), message.author, destination, invoked)
         self._command_data_batch.append(
             CommandBatchEntry(
                 guild=guild_id,
