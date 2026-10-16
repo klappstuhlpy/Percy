@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   log happened to be set up. The alert never quotes the spam itself.
 - Percy's command log no longer records the full text a command was typed with,
   only which command ran.
+- An error raised by a command after its arguments were read ("I currently am unable
+  to join your voice channel", for example) crashed the error handler, which then
+  posted a Python traceback into the channel. The error is shown as a normal message
+  again.
 - When Percy failed to start (a rejected Discord token, for example), shutting down
   crashed with a `RecursionError` that hid the actual error, and the process hung
   until Docker killed it. The real error is logged again and Percy exits.

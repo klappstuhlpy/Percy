@@ -884,6 +884,13 @@ class Bot(commands.Bot):
                 await ctx.send(ansi, reference=ctx.message)
             raise error
 
+        if param is None:
+            # A BadArgument raised by the command body after parsing (e.g. "unable to join
+            # your voice channel") has no parameter to point at: show the message as is
+            # instead of crashing the signature renderer on ``param.name``.
+            await ctx.send_error(str(error))
+            return
+
         builder = AnsiStringBuilder()
         builder.append('Attempted to parse command signature:').newline(2)
         builder.append((' ' * 4) + ctx.clean_prefix, color=AnsiColor.white, bold=True)
