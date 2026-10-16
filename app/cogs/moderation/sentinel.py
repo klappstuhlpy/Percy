@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from contextlib import suppress
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import asyncpg
 import discord
@@ -1033,76 +1033,71 @@ class SentinelVerifyButton(
     async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
         assert self.sentinel is not None
         assert isinstance(interaction.user, discord.Member)
-        assert isinstance(interaction.channel, discord.abc.GuildChannel)
 
         await interaction.response.defer(ephemeral=True)
-
-        captcha = await self.sentinel.bot.render.captcha()
-
-        await interaction.channel.set_permissions(
-            interaction.user,
-            reason=f"Sentinel Verification (ID: {interaction.user.id})",
-            send_messages=True,
-        )
 
         # Captcha challenge as a CV2 card. The MediaGallery only references the image by
         # ``attachment://captcha.png``, so the file itself must be uploaded alongside the
         # view or Discord rejects the body ("referenced attachment was not found").
-        captcha_view = CaptchaChallengeView(captcha.file)
-        message: discord.Message = await interaction.followup.send(
-            view=captcha_view, file=captcha.file, ephemeral=True
-        )
+        # The answer comes back through a modal on that card, never as a chat message:
+        # verification must not depend on reading message content.
+        captcha = await self.sentinel.bot.render.captcha()
+        captcha_view = CaptchaChallengeView(self.sentinel, interaction.user, text=captcha.text, file=captcha.file)
+        await interaction.followup.send(view=captcha_view, file=captcha.file, ephemeral=True)
 
-        while True:
-            try:
-                msg = await interaction.client.wait_for(
-                    "message",
-                    check=lambda m: (
-                        m.author.id == interaction.user.id
-                        and m.channel.id == interaction.channel.id
-                    ),
-                    timeout=90.0,
-                )
-            except TimeoutError:
-                captcha = await self.sentinel.bot.render.captcha()
-                captcha_view = captcha_view.prepare_retry(captcha.file)
-                await message.edit(view=captcha_view, attachments=[captcha.file])
-                return
 
-            with suppress(discord.HTTPException):
-                await msg.delete()
+class CaptchaAnswerModal(discord.ui.Modal, title="Solve the Captcha"):
+    """Collects the captcha answer for :class:`CaptchaChallengeView`."""
 
-            if msg.content != captcha.text:
-                captcha = await self.sentinel.bot.render.captcha()
-                captcha_view = captcha_view.prepare_retry(captcha.file)
-                await message.edit(view=captcha_view, attachments=[captcha.file])
-                continue
+    answer = discord.ui.TextInput(
+        label="Captcha code",
+        placeholder="The 6 characters from the image",
+        min_length=1,
+        max_length=32,
+    )
 
-            await interaction.channel.set_permissions(
-                interaction.user,
-                reason=f"Sentinel Verification (ID: {interaction.user.id})",
-                send_messages=False,
-            )
+    def __init__(self, challenge: CaptchaChallengeView) -> None:
+        super().__init__(timeout=challenge.timeout)
+        self.challenge = challenge
 
-            await self.sentinel.unblock(interaction.user)
+    async def on_submit(self, interaction: discord.Interaction, /) -> None:
+        await self.challenge.check_answer(interaction, self.answer.value)
+
+
+class CaptchaEnterButton(discord.ui.Button["CaptchaChallengeView"]):
+    """Opens the answer modal for the captcha on the same card."""
+
+    def __init__(self) -> None:
+        super().__init__(label="Enter Code", style=discord.ButtonStyle.green, emoji="\N{PENCIL}")
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        await interaction.response.send_modal(CaptchaAnswerModal(self.view))
 
 
 class CaptchaChallengeView(LayoutView):
-    """Ephemeral CV2 card shown to the user with the captcha image."""
+    """Ephemeral CV2 card with the captcha image and an **Enter Code** button.
 
-    def __init__(self, file: discord.File) -> None:
-        super().__init__(timeout=90.0)
+    The answer is typed into :class:`CaptchaAnswerModal`. A wrong answer swaps a fresh
+    captcha into the same card; the right one unblocks the member.
+    """
 
+    def __init__(self, sentinel: Sentinel, member: discord.Member, *, text: str, file: discord.File) -> None:
+        super().__init__(timeout=300.0, members=member)
+
+        self.sentinel: Sentinel = sentinel
+        self.member: discord.Member = member
+        self.text: str = text
         self.file: discord.File = file
         self.add_item(self.build_container())
 
     def build_container(self, retry: bool = False) -> discord.ui.Container:
-        """The persistent CV2 card shown to the user with the captcha image."""
+        """The CV2 card shown to the user with the captcha image."""
         container = discord.ui.Container(accent_colour=_BRAND)
         container.add_item(discord.ui.TextDisplay(
             "## Solve the Captcha\n"
-            "Type the **6 characters** shown below. Case-sensitive.\n"
-            "-# You have 90 seconds. Your answer will be deleted automatically."
+            "Press **Enter Code** and type the **6 characters** shown below. Case-sensitive.\n"
+            "-# You have 5 minutes."
         ))
 
         if retry:
@@ -1116,13 +1111,30 @@ class CaptchaChallengeView(LayoutView):
         container.add_item(
             discord.ui.MediaGallery(MediaGalleryItem(self.file))
         )
+        container.add_item(discord.ui.ActionRow(CaptchaEnterButton()))
         return container
 
-    def prepare_retry(self, file: discord.File) -> Self:
-        self.file = file
-        self.clear_items()
-        self.add_item(self.build_container(True))
-        return self
+    async def check_answer(self, interaction: discord.Interaction, answer: str) -> None:
+        """Verify ``answer``; unblock on success, otherwise show a new captcha."""
+        if answer.strip() != self.text:
+            captcha = await self.sentinel.bot.render.captcha()
+            self.text = captcha.text
+            self.file = captcha.file
+            self.clear_items()
+            self.add_item(self.build_container(retry=True))
+            await interaction.response.edit_message(view=self, attachments=[captcha.file])
+            return
+
+        self.stop()
+        await self.sentinel.unblock(self.member)
+
+        done = LayoutView(timeout=None)
+        container = discord.ui.Container(accent_colour=_SUCCESS)
+        container.add_item(discord.ui.TextDisplay(
+            f"## {Emojis.success} Verified\nYou now have access to the server."
+        ))
+        done.add_item(container)
+        await interaction.response.edit_message(view=done, attachments=[])
 
 
 class SentinelAlertResolveButton(

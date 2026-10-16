@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sentinel verification asks for the captcha in a pop-up form: press **Enter Code**
+  on the captcha card and type the characters there. Before, the answer had to be
+  typed as a chat message, so Percy opened the verification channel to the member
+  while they solved it. You now have five minutes instead of 90 seconds.
+
 ### Fixed
 
 - A raid-protection ban now posts an alert in the server's alert channel saying who
