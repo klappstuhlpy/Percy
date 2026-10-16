@@ -14,7 +14,7 @@ from config import Emojis
 from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSequence
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, MutableMapping
+    from collections.abc import AsyncIterator, MutableMapping, Sequence
 
     from app.database.base import GuildConfig, Sentinel
 
@@ -314,13 +314,26 @@ async def check_raid(
 
     members = result.members if isinstance(result, SpammerSequence) else [member]
 
+    banned: list[discord.abc.Snowflake] = []
     for user in members:
         try:
             await guild.ban(user, reason=result.reason)
         except discord.HTTPException:
-            log.info("[Moderation] Failed to ban %s (ID: %s) from server %s.", member, member.id, member.guild)
+            log.info("[Moderation] Failed to ban %s (ID: %s) from server %s.", user, user.id, guild)
         else:
-            log.info("[Moderation] Banned %s (ID: %s) from server %s.", member, member.id, member.guild)
+            banned.append(user)
+            log.info("[Moderation] Banned %s (ID: %s) from server %s.", user, user.id, guild)
+
+    if banned:
+        # Tell the moderators what happened. Never quote the message itself: the alert
+        # names who was banned, where, and why — the spam stays where it was posted.
+        await config.send_alert(raid_ban_alert(banned, result.reason, message.channel.id))
+
+
+def raid_ban_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int) -> str:
+    """The mod-alert line for an automatic raid ban (no message content, by design)."""
+    names = ", ".join(f"**{user}** (ID: `{user.id}`)" for user in users)
+    return f"Raid protection banned {names} in <#{channel_id}>. Reason: *{reason}*."
 
 
 async def mention_spam_ban(

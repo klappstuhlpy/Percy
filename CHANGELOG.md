@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A raid-protection ban now posts an alert in the server's alert channel saying who
+  was banned, in which channel and why. Before, the ban was silent unless the audit
+  log happened to be set up. The alert never quotes the spam itself.
 - When Percy failed to start (a rejected Discord token, for example), shutting down
   crashed with a `RecursionError` that hid the actual error, and the process hung
   until Docker killed it. The real error is logged again and Percy exits.
