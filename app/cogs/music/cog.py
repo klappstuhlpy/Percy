@@ -434,6 +434,12 @@ class Music(Cog):
             return
 
         if player.queue.listen_together is not MISSING:
+            # Only a track that played to its end means "load the host's next track". A
+            # track replaced because the host skipped is already handled by
+            # on_presence_update, and acting on it here would load the song twice.
+            if payload.reason != "finished":
+                return
+
             guild = player.guild
             assert guild is not None
             member = await self.bot.get_or_fetch_member(guild, player.queue.listen_together)
@@ -456,7 +462,7 @@ class Music(Cog):
                 await player.disconnect()
                 return
 
-            player.queue.reset()
+            player.queue.reset(keep_listen_together=True)
             await player.queue.put_wait(track)
             await player.play(player.queue.get())
             await player.send_track_add(track)
@@ -569,7 +575,13 @@ class Music(Cog):
                 if new_activity and new_activity.title == before_activity.title:
                     await player.pause(False)
                 else:
-                    player.queue.reset()
+                    # The track can already be playing: when a song ends on its own,
+                    # on_wavelink_track_end may have loaded the host's next one first.
+                    current = player.current
+                    if new_activity and current and current.uri == new_activity.track_url:
+                        return
+
+                    player.queue.reset(keep_listen_together=True)
 
                     if new_activity is None:
                         await player.disconnect()

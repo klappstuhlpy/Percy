@@ -41,9 +41,14 @@ class Queue(wavelink.Queue):
         self._listen_together: int = MISSING
         self._shuffle: ShuffleMode = ShuffleMode.off
 
-    def reset(self) -> None:
-        """Resets the queue and history."""
-        self._listen_together = MISSING
+    def reset(self, *, keep_listen_together: bool = False) -> None:
+        """Resets the queue and history.
+
+        ``keep_listen_together`` keeps the listen-together host: following the host to their
+        next Spotify track clears the queue, but must not end the session.
+        """
+        if not keep_listen_together:
+            self._listen_together = MISSING
         self._shuffle = ShuffleMode.off
         super().reset()
 

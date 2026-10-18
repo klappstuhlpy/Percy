@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Listen-together stopped following the host after their first track change: clearing
+  the queue for the new track also forgot whom Percy was listening along with. Percy
+  now keeps following the host track after track.
 - Raid protection never banned anyone for spamming: the message rate limits behind it
   forgot every message as soon as they recorded it, so the same text posted again and
   again, or a flood of messages from one account, never tripped them. Copy-paste
