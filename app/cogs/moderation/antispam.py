@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import time
 from operator import attrgetter
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,7 @@ from config import Emojis
 from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSequence
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, MutableMapping, Sequence
+    from collections.abc import MutableMapping, Sequence
 
     from app.database.base import GuildConfig, Sentinel
 
@@ -77,6 +78,7 @@ class SpamChecker:
         self.flagged_users: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
         self.hit_and_run = RateLimit(5, 15, key=lambda msg: msg.channel.id, tagger=lambda msg: msg.author)
         self.recently_actioned: MutableMapping[int, bool] = cache.ExpiringCache(seconds=RECENTLY_ACTIONED_SECONDS)
+        self._ban_permission_alerted_at: float | None = None
 
     def claim[U: discord.abc.Snowflake](self, users: Sequence[U], /) -> list[U]:
         """Return the users not automatically actioned recently, and mark them as actioned.
@@ -88,6 +90,14 @@ class SpamChecker:
         for user in fresh:
             self.recently_actioned[user.id] = True
         return fresh
+
+    async def alert_missing_ban_permission(self, config: GuildConfig, feature: str) -> None:
+        """Tell the moderators Percy cannot ban, at most once per :data:`RECENTLY_ACTIONED_SECONDS`."""
+        now = time.monotonic()
+        if self._ban_permission_alerted_at is not None and now - self._ban_permission_alerted_at < RECENTLY_ACTIONED_SECONDS:
+            return
+        self._ban_permission_alerted_at = now
+        await config.alert_missing_permission(feature)
 
     def get_flagged_member(self, user_id: int, /) -> FlaggedMember | None:
         """Get a flagged member."""
@@ -356,7 +366,7 @@ async def check_raid(
 
     me = guild.me
     if not me.guild_permissions.ban_members:
-        await config.alert_missing_permission("ban members for raid protection")
+        await checker.alert_missing_ban_permission(config, "ban members for raid protection")
         return
 
     banned: list[discord.abc.Snowflake] = []
@@ -412,51 +422,61 @@ def raid_ban_failed_alert(users: Sequence[discord.abc.Snowflake], reason: str, c
 
 
 async def mention_spam_ban(
-    mention_count: int,
-    guild_id: int,
+    checker: SpamChecker,
+    config: GuildConfig,
     member: discord.Member,
+    mention_count: int,
+    *,
     multiple: bool = False,
-) -> AsyncIterator[str]:
+) -> None:
     """|coro|
 
-    Ban a member for mention spamming.
-    This asynchronusly yields a result message for the performed ban on the a user.
+    Ban a member for mention spamming and tell the moderators how it went.
+
+    A member already handled in the last :data:`RECENTLY_ACTIONED_SECONDS` is skipped, so an
+    unbannable member who keeps pinging produces one alert, not one per message.
 
     Parameters
     ----------
-    mention_count: :class:`int`
-        The number of mentions the member has made.
-    guild_id: :class:`int`
-        The guild ID to ban the member from.
+    checker: :class:`SpamChecker`
+        The guild's spam checker (dedupes repeat actions on one member).
+    config: :class:`GuildConfig`
+        The guild configuration the alert goes through.
     member: :class:`discord.Member`
         The member to ban.
+    mention_count: :class:`int`
+        The number of mentions the member has made.
     multiple: :class:`bool`
         Whether the member has spammed over multiple messages.
-
-    Yields
-    ------
-    :class:`str`
-        The result message for the performed ban on the a user.
     """
+    if not checker.claim([member]):
+        return
+
     if multiple:
         reason = f"Spamming mentions over multiple messages ({mention_count} mentions)"
     else:
         reason = f"Spamming mentions ({mention_count} mentions)"
 
+    me = member.guild.me
+    if not me.guild_permissions.ban_members:
+        await checker.alert_missing_ban_permission(config, "ban members for mention-spam protection")
+        return
+
     failure = (
         f"{Emojis.warning} Could not ban **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions. "
-        "Check that I have the **Ban Members** permission and that my highest role is above theirs."
+        "Check that my highest role is above theirs."
     )
-    me = member.guild.me
-    if not me.guild_permissions.ban_members or outranks(member, me):
-        yield failure
+    if outranks(member, me):
+        await config.send_alert(failure, force=True)
         return
 
     try:
         await member.ban(reason=reason)
     except discord.HTTPException:
-        log.info("[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s", member, member.id, guild_id)
-        yield failure
+        log.info("[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s", member, member.id, member.guild.id)
+        await config.send_alert(failure, force=True)
     else:
-        yield f"{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions."
-        log.info("[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s", member, member.id, guild_id)
+        log.info("[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s", member, member.id, member.guild.id)
+        await config.send_alert(
+            f"{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions."
+        )

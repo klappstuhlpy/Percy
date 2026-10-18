@@ -15,7 +15,7 @@ from discord.ext import commands, tasks
 from app.core import Bot, Context, Flags, NoticeView, flag, store_true
 from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, IgnoreEntity, MemberID
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
-from app.core.pagination import LinePaginator, TextSource
+from app.core.pagination import LinePaginator
 from app.core.views import View
 from app.database.base import GuildConfig, Sentinel
 from app.services import ModerationAssessor, build_purge_predicate
@@ -306,10 +306,7 @@ class Moderation(Cog):
 
         checker = self._spam_check[message.guild.id]
         if checker.is_mention_spam(message, config):
-            responses = mention_spam_ban(config.mention_count, message.guild.id, author, multiple=True)
-            pages = TextSource(prefix="", suffix="").add_lines([x async for x in responses]).pages
-            for page in pages:
-                await config.send_alert(page)
+            await mention_spam_ban(checker, config, author, config.mention_count, multiple=True)
             return
 
         if len(message.mentions) <= 3:
@@ -319,10 +316,7 @@ class Moderation(Cog):
         if mention_count < config.mention_count:
             return
 
-        responses = mention_spam_ban(mention_count, message.guild.id, author)
-        pages = TextSource(prefix="", suffix="").add_lines([x async for x in responses]).pages
-        for page in pages:
-            await config.send_alert(page)
+        await mention_spam_ban(checker, config, author, mention_count)
 
     @Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:

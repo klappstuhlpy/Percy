@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from app.cogs.moderation.antispam import SpamChecker, check_raid, raid_ban_alert
+from app.cogs.moderation.antispam import SpamChecker, check_raid, mention_spam_ban, raid_ban_alert
 from app.cogs.moderation.models import SpamCheckerResult, SpammerSequence
 from app.utils.helpers import ListedRateLimit
 
@@ -82,14 +82,56 @@ async def test_failed_ban_alerts_the_moderators() -> None:
     assert config.send_alert.await_args.kwargs["force"] is True
 
 
-async def test_missing_ban_permission_is_reported_before_trying() -> None:
+def _real_checker(result: SpamCheckerResult) -> SpamChecker:
+    checker = SpamChecker()
+    checker.is_spamming = MagicMock(return_value=result)  # type: ignore[method-assign]
+    return checker
+
+
+async def test_missing_ban_permission_is_reported_once_per_raid() -> None:
     config = _config()
     guild = _guild(can_ban=False)
     message = SimpleNamespace(channel=SimpleNamespace(id=99), content="spam")
+    checker = _real_checker(SpamCheckerResult.spammer())
 
-    await check_raid(_checker(SpamCheckerResult.spammer()), config, guild, _user(7, "raider"), message)
+    for raider_id in range(5):  # five different raiders trip the limiters
+        await check_raid(checker, config, guild, _user(raider_id, "raider"), message)  # type: ignore[arg-type]
 
     guild.ban.assert_not_awaited()
+    config.alert_missing_permission.assert_awaited_once()
+
+
+def _pinger(*, can_ban: bool = True, ban: AsyncMock | None = None) -> MagicMock:
+    member = MagicMock(id=7, ban=ban or AsyncMock(), top_role=1)
+    member.__str__.return_value = "pinger"
+    member.guild.id = 1
+    member.guild.me.top_role = 5
+    member.guild.me.guild_permissions.ban_members = can_ban
+    return member
+
+
+async def test_unbannable_mention_spammer_alerts_once_and_forced() -> None:
+    config = _config()
+    response = MagicMock(status=403, reason="Forbidden")
+    member = _pinger(ban=AsyncMock(side_effect=discord.Forbidden(response, "Missing Permissions")))
+    checker = SpamChecker()
+
+    for _ in range(5):  # the member keeps pinging; every message trips the mention check
+        await mention_spam_ban(checker, config, member, 6, multiple=True)  # type: ignore[arg-type]
+
+    member.ban.assert_awaited_once()
+    config.send_alert.assert_awaited_once()
+    assert "Could not ban **pinger**" in config.send_alert.await_args.args[0]
+    assert config.send_alert.await_args.kwargs["force"] is True
+
+
+async def test_mention_spam_without_ban_permission_reports_missing_permission() -> None:
+    config = _config()
+    member = _pinger(can_ban=False)
+
+    await mention_spam_ban(SpamChecker(), config, member, 6)  # type: ignore[arg-type]
+
+    member.ban.assert_not_awaited()
     config.alert_missing_permission.assert_awaited_once()
 
 
