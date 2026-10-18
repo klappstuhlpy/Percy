@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When Percy failed to start (a rejected Discord token, for example), shutting down
   crashed with a `RecursionError` that hid the actual error, and the process hung
   until Docker killed it. The real error is logged again and Percy exits.
+- After a brief network drop, Percy could lose its connection to Lavalink without
+  noticing, and every attempt to play music failed with "I currently am unable to join
+  your voice channel" until a restart. Percy now checks the connection every 30
+  seconds and reconnects on its own.
 
 ## [2.6.0] - 2026-10-03
 

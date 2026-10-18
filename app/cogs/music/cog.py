@@ -130,11 +130,13 @@ class Music(Cog):
             # re-fire. Kick off restore immediately.
             self._restored = True
             self.bot.loop.create_task(self._restore_sessions())
+        self.lavalink_watchdog.start()
 
     async def cog_load(self) -> None:
         await self.bot.wait_until_ready()
 
     async def cog_unload(self) -> None:
+        self.lavalink_watchdog.cancel()
         self.persist_sessions.cancel()
         # Persist final state and destroy players on the Lavalink node so it
         # doesn't keep streaming audio after the bot process exits. We call
@@ -162,6 +164,39 @@ class Music(Cog):
 
     @persist_sessions.before_loop
     async def _before_persist(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(seconds=30)
+    async def lavalink_watchdog(self) -> None:
+        """Reconnect a node whose websocket died without wavelink noticing.
+
+        wavelink only reconnects when the socket reports CLOSED/CLOSING. A socket
+        error (e.g. a missed heartbeat) arrives as an ERROR message instead, which
+        crashes its keep-alive task silently: the node keeps reporting CONNECTED
+        with a session Lavalink has already expired, so every voice connect fails.
+        Same for a node that exhausted its retries while Lavalink was down.
+        """
+        for node in wavelink.Pool.nodes.values():
+            if node.status is wavelink.NodeStatus.CONNECTING:
+                continue
+
+            websocket = node._websocket
+            if websocket is None:
+                log.warning('Lavalink node %s has no websocket, reconnecting.', node.identifier)
+                with suppress(Exception):
+                    await node._connect(client=self.bot)
+                continue
+
+            task = websocket.keep_alive_task
+            if task is not None and not task.done():
+                continue
+
+            exc = task.exception() if task is not None and task.done() and not task.cancelled() else None
+            log.warning('Lavalink node %s websocket is dead, reconnecting.', node.identifier, exc_info=exc)
+            await websocket.connect()
+
+    @lavalink_watchdog.before_loop
+    async def _before_watchdog(self) -> None:
         await self.bot.wait_until_ready()
 
     async def _purge_music_channels(self) -> None:
