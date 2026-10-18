@@ -314,39 +314,42 @@ class SentinelChannelSelect(discord.ui.ChannelSelect["SentinelSetUpView"]):
         if not confirm.value:
             return
 
-        reason = (
-            f"Sentinel permission sync requested by "
-            f"{interaction.user} (ID: {interaction.user.id})"
-        )
         try:
-            if everyone_perms.read_messages:
-                overwrite = channel.overwrites_for(interaction.guild.default_role)
-                overwrite.update(read_messages=False)
-                await channel.set_permissions(
-                    interaction.guild.default_role,
-                    overwrite=overwrite, reason=reason,
-                )
-            if not role_perms.read_messages:
-                overwrite = channel.overwrites_for(role)
-                guild_perms = interaction.guild.me.guild_permissions
-                merge_perms(
-                    overwrite,
-                    guild_perms,
-                    read_messages=True,
-                    send_messages=False,
-                    add_reactions=False,
-                    use_application_commands=False,
-                    create_private_threads=False,
-                    create_public_threads=False,
-                    send_messages_in_threads=False,
-                )
-                await channel.set_permissions(
-                    role, overwrite=overwrite, reason=reason
-                )
+            await SentinelChannelSelect.apply_verification_overwrites(channel, role, interaction.user)
         except discord.HTTPException as e:
             await interaction.followup.send(
                 f"{Emojis.error} Could not edit permissions: {e}", ephemeral=True
             )
+
+    @staticmethod
+    async def apply_verification_overwrites(
+        channel: discord.TextChannel,
+        role: discord.Role,
+        invoker: discord.abc.User,
+    ) -> None:
+        """Hide the verification channel from @everyone and show it (read-only) to the lockdown role."""
+        guild = channel.guild
+        reason = f"Sentinel permission sync requested by {invoker} (ID: {invoker.id})"
+        if channel.permissions_for(guild.default_role).read_messages:
+            overwrite = channel.overwrites_for(guild.default_role)
+            overwrite.update(read_messages=False)
+            await channel.set_permissions(guild.default_role, overwrite=overwrite, reason=reason)
+
+        overwrite = channel.overwrites_for(role)
+        merge_perms(
+            overwrite,
+            guild.me.guild_permissions,
+            read_messages=True,
+            read_message_history=True,
+            send_messages=False,
+            add_reactions=False,
+            use_application_commands=False,
+            create_private_threads=False,
+            create_public_threads=False,
+            send_messages_in_threads=False,
+        )
+        if overwrite != channel.overwrites_for(role):
+            await channel.set_permissions(role, overwrite=overwrite, reason=reason)
 
     async def callback(self, interaction: discord.Interaction[Bot]) -> Any:
         assert self.view is not None
@@ -481,6 +484,11 @@ class SentinelSetUpView(LayoutView):
         )
         self.setup_role.callback = self._on_setup_role  # type: ignore[assignment]
 
+        self.sync_permissions: discord.ui.Button = discord.ui.Button(
+            label="Sync Permissions", style=discord.ButtonStyle.grey
+        )
+        self.sync_permissions.callback = self._on_sync_permissions  # type: ignore[assignment]
+
         self.setup_message: discord.ui.Button = discord.ui.Button(
             label="Deploy Message", style=discord.ButtonStyle.blurple
         )
@@ -546,10 +554,11 @@ class SentinelSetUpView(LayoutView):
         container.add_item(discord.ui.TextDisplay(
             f"### Lockdown Role\n"
             f"Assigned to every new join — strips channel access until "
-            f"captcha is solved.\n"
+            f"captcha is solved. **Sync Permissions** re-applies it to every "
+            f"channel and category, and opens only the verification channel.\n"
             f"-# Currently: {role_display}"
         ))
-        container.add_item(discord.ui.ActionRow(self.setup_role))
+        container.add_item(discord.ui.ActionRow(self.setup_role, self.sync_permissions))
 
         # --- Post-Verification Role ---
         container.add_item(discord.ui.Separator())
@@ -645,6 +654,8 @@ class SentinelSetUpView(LayoutView):
         self.channel_select.disabled = False
         self.setup_role.disabled = False
         self.starter_role_select.disabled = False
+        # Stays usable while sentinel is active: re-syncing after new channels appear is the point.
+        self.sync_permissions.disabled = role is None
 
         channel_id = self.sentinel.channel_id
         if channel_id is None:
@@ -762,6 +773,68 @@ class SentinelSetUpView(LayoutView):
 
         if interaction.message is not None:
             await interaction.message.edit(view=self)  # type: ignore[arg-type]
+
+    async def _on_sync_permissions(
+        self, interaction: discord.Interaction
+    ) -> None:
+        role = self.sentinel.role
+        if role is None:
+            await interaction.response.send_message(
+                f"{Emojis.error} Set up the lockdown role first.", ephemeral=True
+            )
+            return
+        if not interaction.app_permissions.manage_roles:
+            await interaction.response.send_message(
+                f"{Emojis.error} I need Manage Roles permission.", ephemeral=True
+            )
+            return
+
+        verify_channel = self.sentinel.channel
+        # Every channel type (categories, forums, voice, stage included), so new channels
+        # created under a category inherit the lockdown too.
+        channels = [ch for ch in self.guild.channels if ch != verify_channel]
+
+        await interaction.response.defer(ephemeral=True)
+        verify_note = (
+            f" and make {verify_channel.mention} the only channel it can see"
+            if verify_channel is not None else ""
+        )
+        confirm = ConfirmationView(
+            interaction.user, timeout=180.0, delete_after=True,
+            content=(
+                f"Hide {pluralize(len(channels)):channel} from {role.mention}{verify_note}?\n"
+                "-# Existing overwrites for other roles are left untouched."
+            ),
+        )
+        confirm.message = await interaction.followup.send(view=confirm, ephemeral=True)
+        await confirm.wait()
+        if not confirm.value:
+            return
+
+        success, failure, skipped = await sync_permissions_with_progress(
+            interaction,
+            role,
+            self.guild,
+            update_read_permissions=True,
+            channels=channels,
+            label="Syncing lockdown role across the server",
+        )
+
+        lines = [
+            f"{Emojis.success} Synced {role.mention}: {success} ok, "
+            f"{failure} failed, {skipped} skipped (missing Manage Permissions)."
+        ]
+        if verify_channel is not None:
+            try:
+                await SentinelChannelSelect.apply_verification_overwrites(verify_channel, role, interaction.user)
+            except discord.HTTPException as e:
+                lines.append(f"{Emojis.error} Could not open {verify_channel.mention}: {e}")
+            else:
+                lines.append(f"{verify_channel.mention} is visible to {role.mention} and hidden from @everyone.")
+        else:
+            lines.append("-# No verification channel set yet — pick one, it gets opened automatically.")
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
 
     async def _on_setup_message(
         self, interaction: discord.Interaction

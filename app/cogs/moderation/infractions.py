@@ -140,6 +140,12 @@ async def update_role_permissions(
                 merge_perms(overwrite, guild_perms, **permissions)
 
             merge_perms(overwrite, guild_perms, **channel_perms)
+            if overwrite == channel.overwrites_for(role):
+                # Already correct: skip the API call so a re-sync of a large server stays cheap.
+                success += 1
+                if progress is not None:
+                    await progress(index, total)
+                continue
             try:
                 await channel.set_permissions(role, overwrite=overwrite, reason=reason)
             except discord.HTTPException:

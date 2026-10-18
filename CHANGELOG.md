@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The `/moderation sentinel` menu has a **Sync Permissions** button. It hides every
+  channel and category from the lockdown role (voice, stage and forum channels
+  included) and opens only the verification channel, which @everyone can no longer
+  see. Run it again whenever you add channels; channels that are already set up
+  correctly are left alone, so a re-run is quick.
+
 ### Changed
 
 - Sentinel verification asks for the captcha in a pop-up form: press **Enter Code**
