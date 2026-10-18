@@ -56,41 +56,62 @@ class GuildsRepository(BaseRepository):
         """Removes all sentinel member rows for a guild."""
         await self.delete_where("guild_sentinel_members", ("guild_id",), (guild_id,))
 
-    async def delete_sentinel_member(self, guild_id: int, user_id: int) -> None:
-        """Removes a single sentinel member row."""
-        await self.delete_where("guild_sentinel_members", ("guild_id", "user_id"), (guild_id, user_id))
+    async def delete_sentinel_member(self, guild_id: int, user_id: int, *, only_state: str | None = None) -> bool:
+        """Removes a single sentinel member row, or only while it is still in ``only_state``.
+
+        Returns whether a row was removed.
+        """
+        status = await self.execute(
+            "DELETE FROM guild_sentinel_members WHERE guild_id = $1 AND user_id = $2 AND ($3::text IS NULL OR state::text = $3);",
+            guild_id, user_id, only_state,
+        )
+        return status == "DELETE 1"
+
+    # A member blocked again before their removal ran goes back to ``pending_add``;
+    # one already ``added`` keeps that state, since they still hold the role.
+    _HOLD_SENTINEL_MEMBER = """
+        INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2)
+        ON CONFLICT (guild_id, user_id) DO UPDATE SET state = 'pending_add'
+        WHERE guild_sentinel_members.state = 'pending_remove';
+    """
 
     async def insert_sentinel_member(self, guild_id: int, user_id: int) -> None:
-        """Inserts a sentinel member row, ignoring if it already exists."""
-        await self.execute(
-            "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            guild_id, user_id,
-        )
+        """Queues a member for the lockdown role (see ``_HOLD_SENTINEL_MEMBER``)."""
+        await self.execute(self._HOLD_SENTINEL_MEMBER, guild_id, user_id)
 
     async def insert_sentinel_members_bulk(self, guild_id: int, user_ids: list[int]) -> None:
-        """Bulk-inserts sentinel member rows in a transaction, ignoring conflicts."""
-        query = "INSERT INTO guild_sentinel_members(guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;"
+        """Queues several members for the lockdown role in one transaction."""
         async with self.acquire() as conn, conn.transaction():
-            await conn.executemany(query, [(guild_id, uid) for uid in user_ids])
-
+            await conn.executemany(self._HOLD_SENTINEL_MEMBER, [(guild_id, uid) for uid in user_ids])
 
     async def update_sentinel_member_state(
-        self, guild_id: int, user_id: int, state: str, *, connection: asyncpg.Connection | None = None
+        self, guild_id: int, user_id: int, state: str, *, only_from: str | None = None
     ) -> None:
-        """Updates the state of a single sentinel member."""
-        await (connection or self.db).execute(
-            "UPDATE guild_sentinel_members SET state = $3 WHERE guild_id = $1 AND user_id = $2;",
-            guild_id, user_id, state,
+        """Updates the state of a single sentinel member, or only while it is still ``only_from``."""
+        await self.execute(
+            "UPDATE guild_sentinel_members SET state = $3"
+            " WHERE guild_id = $1 AND user_id = $2 AND ($4::text IS NULL OR state::text = $4);",
+            guild_id, user_id, state, only_from,
         )
 
-    async def bulk_update_sentinel_member_state(
-        self, guild_id: int, from_state: str, to_state: str, *, connection: asyncpg.Connection | None = None
-    ) -> None:
-        """Bulk-updates sentinel members from one state to another."""
-        await (connection or self.db).execute(
-            "UPDATE guild_sentinel_members SET state = $3 WHERE guild_id = $1 AND state = $2;",
-            guild_id, from_state, to_state,
+    async def release_sentinel_members(self, guild_id: int) -> None:
+        """Queues the lockdown role's removal for every member of a guild still held or about to be."""
+        await self.execute(
+            "UPDATE guild_sentinel_members SET state = 'pending_remove' WHERE guild_id = $1 AND state <> 'pending_remove';",
+            guild_id,
         )
+
+    async def get_queued_sentinel_members(self, guild_id: int) -> list[asyncpg.Record]:
+        """The rows of a guild whose lockdown role still has to be given or taken away."""
+        return await self.fetch(
+            "SELECT user_id, state::text AS state FROM guild_sentinel_members WHERE guild_id = $1 AND state <> 'added';",
+            guild_id,
+        )
+
+    async def get_sentinel_queue_guild_ids(self) -> list[int]:
+        """Every guild with unfinished lockdown-role work, whatever its sentinel flag says."""
+        records = await self.fetch("SELECT DISTINCT guild_id FROM guild_sentinel_members WHERE state <> 'added';")
+        return [r["guild_id"] for r in records]
 
     async def upsert_sentinel(self, guild_id: int, fields: dict[str, Any]) -> None:
         """Ensures a sentinel row exists for a guild and updates the given columns.

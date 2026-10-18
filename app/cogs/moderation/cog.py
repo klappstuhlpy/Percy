@@ -17,7 +17,7 @@ from app.core.converter import ActionReason, BannedMember, IgnoreableEntity, Ign
 from app.core.models import BadArgument, Cog, PermissionTemplate, command, cooldown, describe, group
 from app.core.pagination import LinePaginator
 from app.core.views import View
-from app.database.base import GuildConfig, Sentinel
+from app.database.base import GuildConfig
 from app.services import ModerationAssessor, build_purge_predicate
 from app.utils import (
     checks,
@@ -114,9 +114,12 @@ class Moderation(Cog):
         self.bulk_mute_insert.start()
 
         self._sentinel_menus: dict[int, SentinelSetUpView] = {}
-        self._sentinels: dict[int, Sentinel] = {}
 
         bot.add_dynamic_items(SentinelVerifyButton, SentinelAlertMassbanButton, SentinelAlertResolveButton)
+
+    async def cog_load(self) -> None:
+        # Finish the lockdown-role work a restart interrupted, even where Sentinel is now off.
+        await self.bot.db.sentinel_roles.resume()
 
     def cog_unload(self) -> None:
         self.bulk_mute_insert.stop()
@@ -550,9 +553,11 @@ class Moderation(Cog):
             sentinel = await self.bot.db.get_guild_sentinel(channel.guild.id)  # type: ignore[arg-type]
             if sentinel is not None and sentinel.channel_id == channel.id:
                 was_active = sentinel.started_at is not None
+                # Held members can no longer verify, so they lose the lockdown role.
+                await sentinel.disable()
                 # Deleting the channel also destroys the verification message inside it,
-                # so clear both references (and deactivate) to avoid a dangling message_id.
-                await sentinel.edit(started_at=None, channel_id=None, message_id=None)
+                # so clear both references to avoid a dangling message_id.
+                await sentinel.edit(channel_id=None, message_id=None)
                 await config.send_alert(
                     "Sentinel **verification channel** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
@@ -589,7 +594,9 @@ class Moderation(Cog):
             sentinel = await self.bot.db.get_guild_sentinel(payload.guild_id)  # type: ignore[arg-type]
             if sentinel is not None and sentinel.message_id == payload.message_id:
                 was_active = sentinel.started_at is not None
-                await sentinel.edit(started_at=None, message_id=None)
+                # Held members can no longer verify, so they lose the lockdown role.
+                await sentinel.disable()
+                await sentinel.edit(message_id=None)
                 await config.send_alert(
                     "Sentinel **verification message** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
@@ -626,7 +633,9 @@ class Moderation(Cog):
             sentinel = await self.bot.db.get_guild_sentinel(payload.guild_id)  # type: ignore[arg-type]
             if sentinel is not None and sentinel.message_id in payload.message_ids:
                 was_active = sentinel.started_at is not None
-                await sentinel.edit(started_at=None, message_id=None)
+                # Held members can no longer verify, so they lose the lockdown role.
+                await sentinel.disable()
+                await sentinel.edit(message_id=None)
                 await config.send_alert(
                     "Sentinel **verification message** was deleted, so it has been "
                     + ("disabled and reset" if was_active else "reset")
@@ -1035,13 +1044,13 @@ class Moderation(Cog):
         if protection in ("all", "sentinel"):
             sentinel = await self.bot.db.get_guild_sentinel(guild_id=guild_id)
             if sentinel is not None and sentinel.started_at is not None:
+                held = sentinel.pending_members
                 await sentinel.disable()
                 warnings.append("Sentinel was previously running and has been forcibly disabled.")
-                members = sentinel.pending_members
-                if members:
+                if held:
                     warnings.append(
-                        f"There {pluralize(members):is|are!} still {pluralize(members):member} waiting in the role queue."
-                        " **The queue will be paused until sentinel is re-enabled**"
+                        f"{pluralize(held):member} still {pluralize(held):has|have!} the lockdown role;"
+                        " it is being removed in the background."
                     )
 
         if warnings:

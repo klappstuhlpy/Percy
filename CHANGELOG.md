@@ -70,6 +70,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Turning off audit logging or alerts during a raid wiped Percy's raid tracking, so an
   open alert's Ban All Raiders button found nobody. Only turning off raid protection
   or Sentinel resets it now.
+- Sentinel could stop giving and taking its lockdown role for good. A held member who
+  left or was banned (after **Ban All Raiders**, for example) stopped the role queue,
+  so later joiners were never locked and members who verified or were released kept
+  the lockdown role. Clicking anything in the setup menu, deactivating Sentinel, or a
+  restart after turning Sentinel off could also drop the queued work. Percy now skips
+  members who are gone, keeps working through the queue, and finishes interrupted
+  work after a restart even when Sentinel is off.
+- When Percy cannot give or take the lockdown role (its own role sits below it, or it
+  lost Manage Roles), it now alerts the moderators instead of only logging it, and
+  retries on the next join or verification.
+- Deleting the verification message or channel, or switching to a different lockdown
+  role, left every held member locked with no way to verify. Those members now lose
+  the old lockdown role. `moderation disable sentinel` now says how many members are
+  having it removed, instead of always reporting none.
+- A member who passed the captcha could still be treated as unverified, and kicked or
+  banned for talking, when the Sentinel settings changed while they solved it.
 - Percy's command log no longer records the full text a command was typed with,
   only which command ran.
 - An error raised by a command after its arguments were read ("I currently am unable

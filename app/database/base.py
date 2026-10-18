@@ -50,7 +50,8 @@ from app.database.repositories import (
     VotesRepository,
     WatchlistRepository,
 )
-from app.utils import BaseFlags, CancellableQueue, cache, flag_value
+from app.database.sentinel_roles import SentinelRoleQueue
+from app.utils import BaseFlags, cache, flag_value
 from app.utils.query_tracker import QueryTracker
 from app.utils.signals import CacheSignalHub
 from config import DatabaseConfig, Emojis
@@ -345,6 +346,7 @@ class Database(_Database):
         self.watchlist = WatchlistRepository(self)
         self.releases = ReleasesRepository(self)
         self.news = NewsRepository(self)
+        self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
 
@@ -407,7 +409,7 @@ class Database(_Database):
             for record in records
         }
 
-    @cache.cache(action=lambda g: g.cancel_task())
+    @cache.cache()
     async def get_guild_sentinel(self, guild_id: int | None) -> Sentinel | None:
         """|coro|
 
@@ -1313,10 +1315,10 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         The rate limit for joining the server.
     members : set[int]
         The members that have the role and are pending to be verified.
-    task : asyncio.Task
-        The task that adds and removes the role from members.
-    queue : CancellableQueue[int, tuple[int, SentinelRoleState]]
-        The queue that is being processed in the background.
+
+    The role itself is given and taken by :class:`~app.database.sentinel_roles.SentinelRoleQueue`
+    (``bot.db.sentinel_roles``), which works off ``guild_sentinel_members`` rather than this
+    instance, so dropping a cached instance never drops queued work.
 
     Behavior Overview
     ------------------
@@ -1340,15 +1342,6 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         and serving captchas and adding roles.
     """
 
-    class SentinelRoleState(enum.Enum):
-        """The state of a member in the sentinel."""
-
-        added = "added"
-        pending_add = "pending_add"
-        pending_remove = "pending_remove"
-
-    log = logging.getLogger("mod")
-
     bot: Bot
     id: int
     started_at: datetime.datetime | None
@@ -1360,42 +1353,22 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
     rate: tuple[int, int] | str | None
 
     __slots__ = (
-        "__stop_event",
         "bot",
         "bypass_action",
         "channel_id",
         "id",
         "members",
         "message_id",
-        "queue",
         "rate",
         "role_id",
         "started_at",
         "starter_role_id",
-        "task",
     )
 
     def __init__(self, members: list[Any], **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.members: set[int] = {r["user_id"] for r in members if r["state"] == "added"}
-
-        # This event is used to stop the task because we can't
-        # cancel the task gracefully without stopping the internal loop
-        self.__stop_event: asyncio.Event = asyncio.Event()
-        self.task: asyncio.Task = asyncio.create_task(self.role_loop())
-        self.task._log_destroy_pending = False  # type: ignore[attr-defined]
-
-        self.log.debug("Sentinel %r has started.", self.id)
-
-        self.queue: CancellableQueue[int, tuple[int, Sentinel.SentinelRoleState]] = CancellableQueue(
-            hook_check=self.__stop_event.is_set
-        )
-
-        for member in members:
-            state = self.SentinelRoleState(member["state"])
-            member_id = member["user_id"]
-            if state is not self.SentinelRoleState.added:
-                self.queue.put(member_id, (member_id, state))
+        # ``pending_add`` counts as held: the role is on its way, and ``disable()`` must release them.
+        self.members: set[int] = {r["user_id"] for r in members if r["state"] != "pending_remove"}
 
     def _coerce(self) -> None:
         if isinstance(self.rate, str):
@@ -1434,16 +1407,6 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         ]
         return "\n".join(f"{header}: {value}" for header, value in headers)
 
-    def cancel_task(self) -> None:
-        """Cancels the task."""
-        self.__stop_event.set()
-        try:
-            self.task.cancel()
-        except (TimeoutError, asyncio.CancelledError):
-            pass
-        finally:
-            self.__stop_event.clear()
-
     async def _update(
         self,
         key: Callable[[tuple[int, str]], str],
@@ -1454,10 +1417,8 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         """Persists the mutation but deliberately does NOT hydrate or fire a signal.
 
         ``self`` is the cached sentinel returned by ``get_guild_sentinel`` — editing in
-        place keeps the cache, the open setup menu, and the background role loop coherent.
-        Constructing a new instance would spawn a second ``role_loop`` task on every edit,
-        and firing ``sentinel_changed`` would cancel the task ``disable()`` relies on.
-        Raw-SQL mutations (the dashboard) still fire the signal to force a rebuild.
+        place keeps the cache and the open setup menu coherent. Raw-SQL mutations (the
+        dashboard) still fire the signal to force a rebuild.
         """
         table = type(self).__tablename__
         pk = type(self).__pk__
@@ -1522,14 +1483,15 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
 
         await self.update(**form)
 
-        if role_id is not MISSING:
+        if role_id is not MISSING and role_id != self.role_id:
+            # The queued rows belong to the old role: members still holding it lose it in the
+            # background, and the new role starts with an empty queue.
+            rows = await self.bot.db.guilds.get_sentinel_members(self.id)
             await self.bot.db.guilds.delete_sentinel_members(self.id)
-
             self.members.clear()
-            self.queue.cancel_all()
-            self.cancel_task()
+            if self.role_id is not None and rows:
+                self.bot.db.sentinel_roles.strip(self.id, self.role_id, (r["user_id"] for r in rows))
             self.role_id = role_id
-            self.task = asyncio.create_task(self.role_loop())
 
         if started_at is not MISSING:
             self.started_at = started_at
@@ -1543,82 +1505,6 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
             self.bypass_action = bypass_action
         if rate is not MISSING:
             self.rate = rate
-
-    async def role_loop(self) -> None:
-        """|coro|
-
-        The main loop that adds and removes the role from members.
-
-        This is a bit of a weird loop because it's not really a loop.
-        It's more of a queue that's being processed in the background.
-        """
-        while self.role_id is not None and not self.__stop_event.is_set():
-            role_id = self.role_id  # capture for narrowing inside the loop
-            member_id, action = await self.queue.get()
-
-            try:
-                if action is self.SentinelRoleState.pending_remove:
-                    await self.bot.http.remove_role(self.id, member_id, role_id, reason="Completed Sentinel verification")
-                    await self.bot.db.guilds.delete_sentinel_member(self.id, member_id)
-
-                    if self.starter_role:
-                        await self.bot.http.add_role(
-                            self.id, member_id, self.starter_role_id, reason="Completed Sentinel verification"
-                        )  # type: ignore[arg-type]
-                elif action is self.SentinelRoleState.pending_add:
-                    await self.bot.http.add_role(self.id, member_id, role_id, reason="Started Sentinel verification")
-                    await self.bot.db.guilds.update_sentinel_member_state(self.id, member_id, "added")
-            except discord.DiscordServerError:
-                self.queue.put(member_id, (member_id, action))
-            except discord.NotFound as e:
-                if e.code not in (10011, 10013):
-                    break
-                if e.code == 10011:
-                    # Unknown role, disable the sentinel.
-                    config = await self.bot.db.get_guild_config(self.id)  # type: ignore
-                    await config.send_alert(
-                        "A Role you've set up for the sentinel was not found, please review! Disabling the sentinel."
-                    )
-                    needs_migration = {}
-                    if self.role is None:
-                        needs_migration["role_id"] = None
-                    if self.starter_role is None:
-                        needs_migration["starter_role_id"] = None
-                    await self.edit(started_at=None, **needs_migration)
-                    break
-                continue
-            except Exception:
-                self.log.exception("[Sentinel] An exception happened in the role loop of guild ID %d", self.id)
-                continue
-
-    async def cleanup_loop(self, members: set[int]) -> None:
-        """|coro|
-
-        A loop that cleans up the members that are no longer in the guild.
-        Potentially this could be a bit of a performance hog, but it is what it is.
-
-        Parameters
-        ----------
-        members : set[int]
-            The members that are currently in the guild.
-        """
-        if self.role_id is None:
-            return
-
-        for member_id in members:
-            try:
-                await self.bot.http.remove_role(self.id, member_id, self.role_id)
-            except discord.HTTPException as e:
-                if e.code not in (10011, 10013):
-                    break
-                if e.code == 10011:
-                    await self.edit(role_id=None)
-                    break
-                continue
-            except Exception as exc:
-                self.log.exception(
-                    "[Sentinel] An exception happened in the role cleanup loop of guild ID %d: %r", self.id, exc
-                )
 
     @property
     def pending_members(self) -> int:
@@ -1636,16 +1522,13 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
     async def disable(self) -> None:
         """|coro|
 
-        Disables the sentinel.
-        This will remove the role from all members and clear the queue.
+        Disables the sentinel and takes the lockdown role away from every held member
+        in the background, including members whose role had not been given yet.
         """
         await self.edit(started_at=None)
-
-        async with self.bot.db.acquire(timeout=300.0) as conn, conn.transaction():
-            await self.bot.db.guilds.bulk_update_sentinel_member_state(self.id, "added", "pending_remove", connection=conn)
-            for member_id in self.members:
-                self.queue.put(member_id, (member_id, self.SentinelRoleState.pending_remove))
-            self.members.clear()
+        await self.bot.db.guilds.release_sentinel_members(self.id)
+        self.members.clear()
+        self.bot.db.sentinel_roles.wake(self.id)
 
     @property
     def role(self) -> discord.Role | None:
@@ -1714,7 +1597,7 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         """
         self.members.add(member.id)
         await self.bot.db.guilds.insert_sentinel_member(self.id, member.id)
-        self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
+        self.bot.db.sentinel_roles.wake(self.id)
 
     async def force_enable_with(self, members: Sequence[discord.Member]) -> None:
         """|coro|
@@ -1730,9 +1613,7 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         self.members.update(m.id for m in members)
         await self.edit(started_at=discord.utils.utcnow())
         await self.bot.db.guilds.insert_sentinel_members_bulk(self.id, [m.id for m in members])
-
-        for member in members:
-            self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_add))
+        self.bot.db.sentinel_roles.wake(self.id)
 
     async def unblock(self, member: discord.Member) -> None:
         """|coro|
@@ -1746,12 +1627,10 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
             The member to unblock.
         """
         self.members.discard(member.id)
-        if self.queue.is_pending(member.id):
-            await self.bot.db.guilds.delete_sentinel_member(self.id, member.id)
-            self.queue.cancel(member.id)
-        else:
-            await self.bot.db.guilds.update_sentinel_member_state(self.id, member.id, "pending_remove")
-            self.queue.put(member.id, (member.id, self.SentinelRoleState.pending_remove))
+        # Always queue the removal, even if the role was not given yet: the worker may be
+        # giving it right now, and taking away a role nobody holds is harmless.
+        await self.bot.db.guilds.update_sentinel_member_state(self.id, member.id, "pending_remove")
+        self.bot.db.sentinel_roles.wake(self.id)
 
 
 class Balance(BaseRecord, table="economy", pk=("user_id", "guild_id")):

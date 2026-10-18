@@ -504,7 +504,7 @@ class SentinelSetUpView(LayoutView):
         )
         self.toggle_flag.callback = self._on_toggle_flag  # type: ignore[assignment]
 
-        self.update_state(invalidate=False)
+        self.update_state()
         self._rebuild_layout()
 
     def _rebuild_layout(self) -> None:
@@ -603,12 +603,9 @@ class SentinelSetUpView(LayoutView):
 
         self.add_item(container)
 
-    def update_state(self, *, invalidate: bool = True) -> None:
-        if invalidate:
-            self.cog.bot.db.signals.fire(
-                "sentinel_changed", self.sentinel.id
-            )
-
+    def update_state(self) -> None:
+        # Repaint only. Every menu action edits the cached sentinel in place, so there is
+        # nothing to invalidate, and a rebuild would leave this menu on a stale instance.
         role = self.sentinel.role
         if role is not None:
             label = f'Change: "{role.name}"'
@@ -1199,7 +1196,10 @@ class CaptchaChallengeView(LayoutView):
             return
 
         self.stop()
-        await self.sentinel.unblock(self.member)
+        # The card may be minutes old: unblock on the sentinel that is cached now, or a
+        # rebuilt instance would still count the member as held and punish them for talking.
+        sentinel = await self.sentinel.bot.db.get_guild_sentinel(self.sentinel.id) or self.sentinel
+        await sentinel.unblock(self.member)
 
         done = LayoutView(timeout=None)
         container = discord.ui.Container(accent_colour=_SUCCESS)
