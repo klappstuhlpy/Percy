@@ -339,9 +339,15 @@ class Moderation(Cog):
         if config is None:
             return
 
+        # A rejoining muted member gets the mute back and is still held by Sentinel and
+        # counted for join bursts like any other joiner.
         if config.is_muted(member):
-            await config.apply_mute(member, "Member was previously muted.")
-            return
+            try:
+                await config.apply_mute(member, "Member was previously muted.")
+            except discord.Forbidden:
+                await config.alert_missing_permission("give the mute role back to a muted member who rejoined")
+            except discord.HTTPException:
+                log.exception("Could not re-apply the mute role to %s in guild %s", member.id, member.guild.id)
 
         checker = self._spam_check[member.guild.id]
 

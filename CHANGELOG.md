@@ -86,6 +86,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   having it removed, instead of always reporting none.
 - A member who passed the captcha could still be treated as unverified, and kicked or
   banned for talking, when the Sentinel settings changed while they solved it.
+- Picking an existing role as the Sentinel lockdown role only offered to hide the
+  channels that role already could not see, so it usually hid nothing and said nothing
+  about it. Percy now always offers to hide every channel and category except the
+  verification channel, and creating a new role no longer hides the verification
+  channel from it. @everyone and integration-managed roles are refused.
+- Anyone who could see a Sentinel raid alert could press **Stand Down** and release
+  every held raider. It now needs Ban Members and Manage Messages, the same as the
+  sentinel menu.
+- A member who still had the lockdown role from an earlier hold and opened the captcha
+  without finishing it could be kicked or banned for talking afterwards. Opening the
+  captcha no longer holds them again; solving it still removes the role.
+- The dashboard's Sentinel settings now follow the same rules as the Discord menu.
+  Lockdown and starter roles are checked (not @everyone, not managed, below Percy's
+  role, not the same role), and the lockdown role and verification channel cannot be
+  changed while Sentinel is running. A new lockdown role or channel is synced
+  automatically, and Percy alerts the moderators when channels could not be hidden.
+  The auto-trigger rate must be two numbers above 0, and an invalid rate can no longer
+  break moderation for the server. Clearing the rate or the starter role works.
+  Saving no longer leaves the old verification card behind, and Sentinel cannot be
+  switched on while Sentinel protection is off for the server.
+- A muted member who rejoined got the mute back but skipped Sentinel: they were never
+  held and never had to verify. They are now held like every other new member.
 - Percy's command log no longer records the full text a command was typed with,
   only which command ran.
 - An error raised by a command after its arguments were read ("I currently am unable

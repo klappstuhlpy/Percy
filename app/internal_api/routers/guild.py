@@ -1,8 +1,10 @@
 """Guild configuration, roles, channels, and sentinel endpoints."""
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import re
+from typing import TYPE_CHECKING, Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +16,10 @@ from app.utils import truncate
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_entity, resolve_role
+
+if TYPE_CHECKING:
+    from app.core import Bot
+    from app.database.base import Sentinel
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Guilds"], dependencies=[Depends(verify_token)])
 
@@ -473,16 +479,20 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
             results.append({"type": "config", "ok": True})
 
         elif op_type == "sentinel":
-            allowed = {"channel_id", "role_id", "starter_role_id", "bypass_action", "rate"}
-            updates = {k: v for k, v in data.items() if k in allowed}
+            updates = {k: v for k, v in data.items() if k in _SENTINEL_FIELDS}
             if updates:
-                await bot.db.guilds.upsert_sentinel(guild.id, updates)
+                await _apply_sentinel_settings(guild, bot, updates)
             results.append({"type": "sentinel", "ok": True})
 
         elif op_type == "sentinel_toggle":
             enabled = data.get("enabled")
             sentinel = await bot.db.get_guild_sentinel(guild.id)
             if enabled and sentinel and not sentinel.requires_setup and sentinel.started_at is None:
+                # Best effort, as before: a flags save must not fail because Sentinel cannot start.
+                problem = await _sentinel_start_problem(guild, bot, sentinel)
+                if problem is not None:
+                    results.append({"type": "sentinel_toggle", "ok": False, "error": problem})
+                    continue
                 await sentinel.enable()
             elif not enabled and sentinel and sentinel.started_at is not None:
                 await sentinel.disable()
@@ -593,25 +603,158 @@ async def get_sentinel(guild: GuildDep, bot: BotDep) -> dict | None:
     }
 
 
+_SENTINEL_FIELDS = frozenset({"channel_id", "role_id", "starter_role_id", "bypass_action", "rate"})
+_RATE_RE = re.compile(r"^(\d+)/(\d+)$")
+# Permission syncs run after the response: a large server takes minutes under Discord's rate limits.
+_background_syncs: set[asyncio.Task[None]] = set()
+
+
+def _bad_request(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+def _snowflake_or_none(value: object, field: str) -> int | None:
+    """``None`` clears the field; anything else must be a Discord id (int or numeric string)."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise _bad_request(f"{field} must be a Discord id or null")
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise _bad_request(f"{field} must be a Discord id or null") from None
+    if parsed <= 0:
+        raise _bad_request(f"{field} must be a Discord id or null")
+    return parsed
+
+
+def _parse_sentinel_rate(value: object) -> tuple[int, int] | None:
+    """``"joins/seconds"``, both above zero, as the menu's modal accepts; ``None`` removes it."""
+    if value is None:
+        return None
+    match = _RATE_RE.match(value) if isinstance(value, str) else None
+    if match is None or int(match[1]) <= 0 or int(match[2]) <= 0:
+        raise _bad_request("rate must be JOINS/SECONDS with both numbers above 0, e.g. 5/10")
+    return int(match[1]), int(match[2])
+
+
+def _check_sentinel_channel(guild: discord.Guild, channel_id: int) -> discord.TextChannel:
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        raise _bad_request("channel not found")
+    if not isinstance(channel, discord.TextChannel):
+        raise _bad_request("channel must be a text channel")
+    perms = channel.permissions_for(guild.me)
+    if not perms.send_messages or not perms.embed_links:
+        raise _bad_request(f"I need Send Messages and Embed Links in #{channel.name}")
+    return channel
+
+
+def _check_sentinel_role(guild: discord.Guild, role_id: int, *, other: int | None) -> None:
+    from app.cogs.moderation.sentinel import sentinel_role_problem
+
+    role = guild.get_role(role_id)
+    if role is None:
+        raise _bad_request("role not found")
+    problem = sentinel_role_problem(role, other=other)
+    if problem is not None:
+        raise _bad_request(problem)
+
+
+async def _get_or_create_sentinel(guild: discord.Guild, bot: Bot) -> Sentinel:
+    sentinel = await bot.db.get_guild_sentinel(guild.id)
+    if sentinel is None:
+        await bot.db.guilds.upsert_sentinel(guild.id, {})
+        sentinel = await bot.db.get_guild_sentinel(guild.id)
+    assert sentinel is not None
+    return sentinel
+
+
+def _schedule_permission_sync(sentinel: Sentinel, guild: discord.Guild) -> bool:
+    """Hide the server from the lockdown role and open the verification channel, as the menu does."""
+    from app.cogs.moderation.sentinel import sync_sentinel_permissions
+
+    if sentinel.role is None:
+        return False
+    task = asyncio.create_task(sync_sentinel_permissions(sentinel, guild.me))
+    _background_syncs.add(task)
+    task.add_done_callback(_background_syncs.discard)
+    return True
+
+
+async def _apply_sentinel_settings(guild: discord.Guild, bot: Bot, data: dict) -> dict:
+    """Validate and apply a dashboard sentinel edit with the same rules as the setup menu.
+
+    Keys absent from ``data`` are left alone; an explicit ``None`` clears the field. Changes go
+    through :meth:`Sentinel.edit` on the cached instance, so a role change strips the old role
+    from held members instead of leaving it on them.
+    """
+    sentinel = await _get_or_create_sentinel(guild, bot)
+    edits: dict[str, Any] = {}
+
+    if "bypass_action" in data:
+        if data["bypass_action"] not in ("ban", "kick"):
+            raise _bad_request("bypass_action must be ban or kick")
+        edits["bypass_action"] = data["bypass_action"]
+    if "rate" in data:
+        edits["rate"] = _parse_sentinel_rate(data["rate"])
+    for key in ("channel_id", "role_id", "starter_role_id"):
+        if key in data:
+            edits[key] = _snowflake_or_none(data[key], key)
+
+    # The dashboard sends every field on each save, so only a *different* value is a change.
+    changed = {key for key in ("channel_id", "role_id") if key in edits and edits[key] != getattr(sentinel, key)}
+    if changed and sentinel.started_at is not None:
+        what = " and ".join("lockdown role" if key == "role_id" else "verification channel" for key in sorted(changed))
+        raise _bad_request(f"stop Sentinel before changing its {what}")
+
+    if "channel_id" in changed and edits["channel_id"] is not None:
+        _check_sentinel_channel(guild, edits["channel_id"])
+
+    role_id = edits.get("role_id", sentinel.role_id)
+    starter_role_id = edits.get("starter_role_id", sentinel.starter_role_id)
+    if "role_id" in edits and role_id is not None:
+        if not guild.me.guild_permissions.manage_roles:
+            raise _bad_request("I need Manage Roles to use a lockdown role")
+        _check_sentinel_role(guild, role_id, other=starter_role_id)
+    if "starter_role_id" in edits and starter_role_id is not None:
+        _check_sentinel_role(guild, starter_role_id, other=role_id)
+
+    old_card = sentinel.message if "channel_id" in changed else None
+    if old_card is not None:
+        # The card lives in the old channel; the dashboard posts a new one in the new channel.
+        edits["message_id"] = None
+
+    await sentinel.edit(**edits)
+    if old_card is not None:
+        with contextlib.suppress(discord.HTTPException):
+            await old_card.delete()
+
+    synced = bool(changed) and _schedule_permission_sync(sentinel, guild)
+    return {"permission_sync": synced}
+
+
+async def _sentinel_start_problem(guild: discord.Guild, bot: Bot, sentinel: Sentinel) -> str | None:
+    """Why Sentinel cannot be switched on right now, or ``None``. Mirrors what the listeners need."""
+    from app.cogs.moderation.sentinel import sentinel_role_problem
+
+    config = await bot.db.get_guild_config(guild.id)
+    if config is None or not config.flags.sentinel:
+        return "turn on Sentinel protection for this server first; without it nobody is held"
+    role = sentinel.role
+    if role is None:
+        return "the lockdown role no longer exists"
+    return sentinel_role_problem(role, other=sentinel.starter_role_id)
+
+
 @router.patch("/sentinel")
 async def patch_sentinel(guild: GuildDep, bot: BotDep, body: PatchSentinelBody) -> dict:
-    data = body.model_dump(exclude_none=True)
+    # ``exclude_unset``: an explicit null clears the rate or starter role, a missing key leaves it.
+    data = body.model_dump(exclude_unset=True)
     if not data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
-
-    updates: dict[str, object] = {}
-    for key, value in data.items():
-        if key == "bypass_action" and value not in ("ban", "kick"):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bypass_action must be ban or kick")
-        if key == "rate" and not re.match(r"^\d+/\d+$", value):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="rate must be in the format X/Y")
-        updates[key] = value
-
-    if not updates:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
-
-    await bot.db.guilds.upsert_sentinel(guild.id, updates)
-    return {"ok": True}
+        raise _bad_request("no valid fields to update")
+    result = await _apply_sentinel_settings(guild, bot, data)
+    return {"ok": True, **result}
 
 
 @router.post("/sentinel/message")
@@ -622,27 +765,35 @@ async def send_sentinel_message(guild: GuildDep, bot: BotDep, body: SendSentinel
         SentinelVerifyView,
     )
 
-    channel_id = int(body.channel_id)
+    channel_id = _snowflake_or_none(body.channel_id, "channel_id")
+    if channel_id is None:
+        raise _bad_request("channel_id is required")
     title = body.title or SENTINEL_DEFAULT_MESSAGE_TITLE
     content = body.content or SENTINEL_DEFAULT_MESSAGE_BODY
 
-    channel = guild.get_channel(channel_id)
-    if channel is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="channel not found")
-    if not isinstance(channel, discord.TextChannel):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="channel must be a text channel")
+    sentinel = await _get_or_create_sentinel(guild, bot)
+    moved = channel_id != sentinel.channel_id
+    if moved and sentinel.started_at is not None:
+        raise _bad_request("stop Sentinel before changing its verification channel")
+    channel = _check_sentinel_channel(guild, channel_id)
 
     config = await bot.db.get_guild_config(guild.id)
-    sentinel = await bot.db.get_guild_sentinel(guild.id)
-
     view = SentinelVerifyView(config, sentinel, title=title, body=content)
     try:
         message = await channel.send(view=view)
     except discord.HTTPException as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"failed to send message: {e}")
 
-    await bot.db.guilds.upsert_sentinel(guild.id, {"message_id": message.id, "channel_id": channel_id})
-    return {"ok": True, "message_id": message.id}
+    # Replace the card rather than orphan it. Point at the new one first, so deleting the old
+    # one is not mistaken for someone removing the live card (which stands Sentinel down).
+    old_card = sentinel.message
+    await sentinel.edit(channel_id=channel_id, message_id=message.id)
+    if old_card is not None:
+        with contextlib.suppress(discord.HTTPException):
+            await old_card.delete()
+
+    synced = moved and _schedule_permission_sync(sentinel, guild)
+    return {"ok": True, "message_id": message.id, "permission_sync": synced}
 
 
 @router.post("/sentinel/toggle")
@@ -659,6 +810,9 @@ async def toggle_sentinel(guild: GuildDep, bot: BotDep, body: ToggleSentinelBody
             )
         if sentinel.started_at is not None:
             return {"ok": True, "status": "already_enabled"}
+        problem = await _sentinel_start_problem(guild, bot, sentinel)
+        if problem is not None:
+            raise _bad_request(problem)
         await sentinel.enable()
     else:
         if sentinel is None:

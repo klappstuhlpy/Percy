@@ -94,6 +94,15 @@ class GuildsRepository(BaseRepository):
             guild_id, user_id, state, only_from,
         )
 
+    async def release_sentinel_member(self, guild_id: int, user_id: int) -> None:
+        """Queues the lockdown role's removal for one member, adding the row if they had none
+        (a member still wearing the role from an earlier hold)."""
+        await self.execute(
+            "INSERT INTO guild_sentinel_members(guild_id, user_id, state) VALUES ($1, $2, 'pending_remove')"
+            " ON CONFLICT (guild_id, user_id) DO UPDATE SET state = 'pending_remove';",
+            guild_id, user_id,
+        )
+
     async def release_sentinel_members(self, guild_id: int) -> None:
         """Queues the lockdown role's removal for every member of a guild still held or about to be."""
         await self.execute(

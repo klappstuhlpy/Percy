@@ -9,12 +9,12 @@ import asyncpg
 import discord
 from discord.ui.media_gallery import MediaGalleryItem
 
-from app.core.models import AppBadArgument
+from app.core.models import AppBadArgument, PermissionTemplate
 from app.core.views import ConfirmationView, LayoutView
 from app.utils import checks, get_asset_url, merge_perms, pluralize
 from config import Emojis
 
-from .infractions import sync_permissions_with_progress
+from .infractions import sync_permissions_with_progress, update_role_permissions
 
 if TYPE_CHECKING:
     from app.core import Bot
@@ -32,6 +32,63 @@ SENTINEL_DEFAULT_MESSAGE_BODY: str = (
     "To access this server you must complete a quick verification.\n"
     "**Tap the button below to begin.**"
 )
+
+
+def sentinel_role_problem(role: discord.Role, *, other: int | None) -> str | None:
+    """Why ``role`` cannot be a Sentinel role (lockdown or starter), or ``None`` when it can.
+
+    ``other`` is the id of the other Sentinel role: both must differ, or verifying would take
+    the lockdown role away and hand it straight back. Shared by the setup menu and the
+    dashboard API so both enforce one rule set.
+    """
+    if role.is_default():
+        return "@everyone cannot be a Sentinel role."
+    if role.managed:
+        return f"{role.name} is managed by an integration, so I cannot assign it."
+    if role >= role.guild.me.top_role:
+        return f"{role.name} sits at or above my highest role, so I cannot assign it."
+    if other is not None and role.id == other:
+        return "The lockdown role and the starter role must be different roles."
+    return None
+
+
+def lockdown_channels(guild: discord.Guild, verify_channel: discord.abc.GuildChannel | None) -> list[discord.abc.GuildChannel]:
+    """Every channel the lockdown role must be hidden from: all of them (categories, voice and
+    forums included, so new channels inherit it) except the verification channel."""
+    return [ch for ch in guild.channels if ch != verify_channel]
+
+
+async def sync_sentinel_permissions(sentinel: Sentinel, invoker: discord.abc.User) -> None:
+    """|coro|
+
+    Hide the server from the lockdown role and open the verification channel to it, the same
+    sync the setup menu's **Sync Permissions** button runs. Used where nobody can be asked to
+    confirm (the dashboard), so failures go to the moderators as an alert.
+    """
+    role = sentinel.role
+    if role is None:
+        return
+    guild = role.guild
+    verify_channel = sentinel.channel
+    _, failed, skipped = await update_role_permissions(
+        role, guild, invoker, update_read_permissions=True, channels=lockdown_channels(guild, verify_channel)
+    )
+    problems: list[str] = []
+    if failed or skipped:
+        problems.append(f"{pluralize(failed + skipped):channel} could not be hidden from {role.mention}.")
+    if verify_channel is not None:
+        try:
+            await SentinelChannelSelect.apply_verification_overwrites(verify_channel, role, invoker)
+        except discord.HTTPException:
+            problems.append(f"{verify_channel.mention} could not be opened to {role.mention}.")
+    if problems:
+        config = await sentinel.bot.db.get_guild_config(guild.id)
+        if config is not None:
+            await config.send_alert(
+                "Sentinel permission sync was incomplete:\n" + "\n".join(f"- {p}" for p in problems)
+                + "\nGive me Manage Permissions there, or run **Sync Permissions** in the sentinel menu.",
+                force=True,
+            )
 
 
 class SentinelSetupRoleView(LayoutView):
@@ -83,10 +140,9 @@ class SentinelSetupRoleView(LayoutView):
         assert interaction.guild is not None
         assert isinstance(interaction.user, discord.Member)
         role = self._role_select.values[0]
-        if role >= interaction.guild.me.top_role:
-            await interaction.response.send_message(
-                f"{Emojis.error} That role sits above mine in the hierarchy.", ephemeral=True
-            )
+        problem = sentinel_role_problem(role, other=self.starter_role.id if self.starter_role else None)
+        if problem is not None:
+            await interaction.response.send_message(f"{Emojis.error} {problem}", ephemeral=True)
             return
 
         if role >= interaction.user.top_role:
@@ -95,59 +151,41 @@ class SentinelSetupRoleView(LayoutView):
             )
             return
 
-        if role == self.starter_role:  # type: ignore[union-attr]
-            await interaction.response.send_message(
-                f"{Emojis.error} Cannot reuse the starter role here.", ephemeral=True
+        await interaction.response.defer(ephemeral=True)
+        await self._offer_sync(interaction, role, f"Role set to {role.mention}.")
+        self.selected_role = role
+        self.stop()
+
+    async def _offer_sync(self, interaction: discord.Interaction, role: discord.Role, done: str) -> None:
+        """Offer to hide every channel but the verification one from the newly chosen role."""
+        channels = lockdown_channels(self.parent.guild, self.parent.sentinel.channel)
+        confirm = ConfirmationView(
+            interaction.user, timeout=180.0, delete_after=True,
+            content=f"Hide {pluralize(len(channels)):channel} from {role.mention}?",
+        )
+        confirm.message = await interaction.followup.send(view=confirm, ephemeral=True)
+        await confirm.wait()
+        if not confirm.value:
+            await interaction.followup.send(
+                f"{Emojis.success} {done}\n"
+                "Channel permissions were **not** synced. Use **Sync Permissions** later, or configure them by hand.",
+                ephemeral=True,
             )
             return
 
-        channels = [
-            ch
-            for ch in interaction.guild.channels
-            if isinstance(ch, discord.abc.Messageable) and not ch.permissions_for(role).read_messages  # type: ignore[arg-type]
-        ]
-
-        await interaction.response.defer(ephemeral=True)
-
-        if channels:
-            confirm = ConfirmationView(
-                interaction.user, timeout=180.0, delete_after=True,
-                content=(
-                    f"This role needs permission overrides. Sync across "
-                    f"{pluralize(len(channels)):channel}?"
-                ),
-            )
-            confirm.message = await interaction.followup.send(view=confirm, ephemeral=True)
-            await confirm.wait()
-            if not confirm.value:
-                await interaction.followup.send(
-                    f"{Emojis.success} Role set to {role.mention}.\n"
-                    "Channel permissions were **not** synced — configure manually.",
-                    ephemeral=True,
-                )
-            else:
-                success, failure, skipped = await sync_permissions_with_progress(
-                    interaction,
-                    role,
-                    self.parent.guild,
-                    update_read_permissions=True,
-                    channels=channels,  # type: ignore[arg-type]
-                    label="Syncing lockdown role across channels",
-                )
-                total = success + failure + skipped
-                await interaction.followup.send(
-                    f"{Emojis.success} Role set to {role.mention}.\n"
-                    f"Synced {total} channels: {success} ok, "
-                    f"{failure} failed, {skipped} skipped.",
-                    ephemeral=True,
-                )
-        else:
-            await interaction.followup.send(
-                f"{Emojis.success} Role set to {role.mention}", ephemeral=True
-            )
-
-        self.selected_role = role
-        self.stop()
+        success, failure, skipped = await sync_permissions_with_progress(
+            interaction,
+            role,
+            self.parent.guild,
+            update_read_permissions=True,
+            channels=channels,
+            label="Syncing lockdown role across channels",
+        )
+        await interaction.followup.send(
+            f"{Emojis.success} {done}\n"
+            f"Synced {success + failure + skipped} channels: {success} ok, {failure} failed, {skipped} skipped.",
+            ephemeral=True,
+        )
 
     async def _on_create_role(self, interaction: discord.Interaction) -> None:
         try:
@@ -160,44 +198,8 @@ class SentinelSetupRoleView(LayoutView):
 
         self.created_role = role
         self.selected_role = role
-        channels = [
-            ch for ch in self.parent.guild.channels
-            if isinstance(ch, discord.abc.Messageable)
-        ]
-
         await interaction.response.defer(ephemeral=True)
-
-        confirm = ConfirmationView(
-            interaction.user, timeout=180.0, delete_after=True,
-            content=(
-                f"New role needs permission overrides. Sync across "
-                f"{pluralize(len(channels)):channel}?"
-            ),
-        )
-        confirm.message = await interaction.followup.send(view=confirm, ephemeral=True)
-        await confirm.wait()
-        if not confirm.value:
-            await interaction.followup.send(
-                f"{Emojis.success} Created and set role to {role.mention}.\n"
-                "Channel permissions were **not** synced — configure manually.",
-                ephemeral=True,
-            )
-        else:
-            success, failure, skipped = await sync_permissions_with_progress(
-                interaction,
-                role,
-                self.parent.guild,
-                update_read_permissions=True,
-                channels=channels,
-                label="Syncing lockdown role across channels",
-            )
-            total = success + failure + skipped
-            await interaction.followup.send(
-                f"{Emojis.success} Created and set role to {role.mention}.\n"
-                f"Synced {total} channels: {success} ok, "
-                f"{failure} failed, {skipped} skipped.",
-                ephemeral=True,
-            )
+        await self._offer_sync(interaction, role, f"Created and set role to {role.mention}.")
         self.stop()
 
 
@@ -682,24 +684,14 @@ class SentinelSetUpView(LayoutView):
         assert interaction.guild is not None
         assert isinstance(interaction.user, discord.Member)
         role = self.starter_role_select.values[0]
-        if role >= interaction.guild.me.top_role:
-            await interaction.response.send_message(
-                f"{Emojis.error} That role sits above mine in the hierarchy.",
-                ephemeral=True,
-            )
+        problem = sentinel_role_problem(role, other=self.sentinel.role_id)
+        if problem is not None:
+            await interaction.response.send_message(f"{Emojis.error} {problem}", ephemeral=True)
             return
 
         if role >= interaction.user.top_role:
             await interaction.response.send_message(
                 f"{Emojis.error} That role sits above yours in the hierarchy.",
-                ephemeral=True,
-            )
-            return
-
-        if role == self.selected_role or role == self.created_role:  # type: ignore[arg-type]
-            await interaction.response.send_message(
-                f"{Emojis.error} Cannot use the same role for both "
-                f"lockdown and starter.",
                 ephemeral=True,
             )
             return
@@ -787,9 +779,7 @@ class SentinelSetUpView(LayoutView):
             return
 
         verify_channel = self.sentinel.channel
-        # Every channel type (categories, forums, voice, stage included), so new channels
-        # created under a category inherit the lockdown too.
-        channels = [ch for ch in self.guild.channels if ch != verify_channel]
+        channels = lockdown_channels(self.guild, verify_channel)
 
         await interaction.response.defer(ephemeral=True)
         verify_note = (
@@ -1088,8 +1078,11 @@ class SentinelVerifyButton(
             return False
 
         if not self.sentinel.is_blocked(interaction.user.id):
+            # Still wearing the lockdown role from an earlier hold: let them verify to lose it, but
+            # do not hold them again, or abandoning the captcha would expose a long-standing
+            # member to the bypass kick/ban they were never subject to. ``unblock`` queues the
+            # role's removal whether or not a row exists.
             if self.sentinel.has_role(interaction.user):
-                await self.sentinel.block(interaction.user)
                 return True
 
             await interaction.response.send_message(
@@ -1248,6 +1241,15 @@ class SentinelAlertResolveButton(
         self, interaction: discord.Interaction[Bot], /
     ) -> bool:
         if interaction.guild_id is None:
+            return False
+        # Standing down releases every held raider, so it takes the same permissions as the
+        # sentinel menu itself, not just the ability to see the alert.
+        missing = [perm for perm in PermissionTemplate.mod if not getattr(interaction.permissions, perm)]
+        if missing:
+            await interaction.response.send_message(
+                f"{Emojis.error} You need {', '.join(p.replace('_', ' ').title() for p in missing)} to stand down Sentinel.",
+                ephemeral=True,
+            )
             return False
         if self.sentinel is None or self.sentinel.started_at is None:
             await interaction.response.send_message(

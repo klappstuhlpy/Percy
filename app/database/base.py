@@ -1627,9 +1627,10 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
             The member to unblock.
         """
         self.members.discard(member.id)
-        # Always queue the removal, even if the role was not given yet: the worker may be
-        # giving it right now, and taking away a role nobody holds is harmless.
-        await self.bot.db.guilds.update_sentinel_member_state(self.id, member.id, "pending_remove")
+        # Always queue the removal, even if the role was not given yet (the worker may be
+        # giving it right now) or the member has no row (they still wear the role from an
+        # earlier hold): taking away a role nobody holds is harmless.
+        await self.bot.db.guilds.release_sentinel_member(self.id, member.id)
         self.bot.db.sentinel_roles.wake(self.id)
 
 
