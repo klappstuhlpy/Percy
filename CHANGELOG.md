@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Raid protection never banned anyone for spamming: the message rate limits behind it
+  forgot every message as soon as they recorded it, so the same text posted again and
+  again, or a flood of messages from one account, never tripped them. Copy-paste
+  raids and message floods are caught again.
 - A raid-protection ban now posts an alert in the server's alert channel saying who
   was banned, in which channel and why. Before, the ban was silent unless the audit
   log happened to be set up. The alert never quotes the spam itself.

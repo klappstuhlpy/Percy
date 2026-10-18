@@ -121,7 +121,9 @@ class RateLimit[V, HashableT: Hashable]:
                 return True
 
         new_tat = max(tat, now) + datetime.timedelta(seconds=self.ratio)
-        self._lookup[key] = (new_tat, tagged) if self.tagger is not None else new_tat
+        # Always store the tuple: the lookup above only reads tuples, so storing a bare
+        # datetime for untagged limits meant they forgot every message and never tripped.
+        self._lookup[key] = (new_tat, tagged)
         return False
 
 
