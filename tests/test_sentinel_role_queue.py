@@ -36,7 +36,7 @@ def _setup(
     sentinel = SimpleNamespace(
         id=1, role_id=50, starter_role_id=starter_role_id, members={uid for uid, _ in rows}, edit=AsyncMock()
     )
-    config = SimpleNamespace(send_alert=AsyncMock())
+    config = SimpleNamespace(send_alert=AsyncMock(), alert_missing_permission=AsyncMock())
     guilds = SimpleNamespace(
         get_queued_sentinel_members=AsyncMock(return_value=[{"user_id": uid, "state": st} for uid, st in rows]),
         get_sentinel_queue_guild_ids=AsyncMock(return_value=[]),
@@ -44,6 +44,7 @@ def _setup(
         update_sentinel_member_state=AsyncMock(),
     )
     bot = SimpleNamespace(
+        get_guild=MagicMock(return_value=None),
         http=SimpleNamespace(add_role=add or AsyncMock(), remove_role=remove or AsyncMock()),
         db=SimpleNamespace(
             guilds=guilds,
@@ -79,14 +80,14 @@ async def test_departed_member_is_dropped_and_the_queue_continues() -> None:
     assert sentinel.members == set()
 
 
-async def test_hierarchy_failure_alerts_once_keeps_rows_and_continues() -> None:
+async def test_one_forbidden_stops_the_pass_after_a_single_call() -> None:
     add = AsyncMock(side_effect=_forbidden())
-    queue, bot, _, config = _setup([(10, "pending_add"), (11, "pending_add")], add=add)
+    queue, bot, _, config = _setup([(10, "pending_add"), (11, "pending_add"), (12, "pending_add")], add=add)
 
-    await queue.run_once(1)
-    await queue.run_once(1)  # the next pass fails the same way
+    assert await queue.run_once(1) is False
+    await queue.run_once(1)  # the next wake probes once more
 
-    assert add.await_count == 4  # every member was tried on both passes
+    assert add.await_count == 2  # one probe per pass, not one call per queued member
     config.send_alert.assert_awaited_once()
     assert "<@&50>" in config.send_alert.await_args.args[0]
     assert config.send_alert.await_args.kwargs["force"] is True
@@ -217,3 +218,29 @@ async def test_reselecting_the_same_role_keeps_the_queue(monkeypatch: pytest.Mon
 
     sentinel.bot.db.guilds.delete_sentinel_members.assert_not_awaited()
     assert sentinel.members == {1}
+
+
+async def test_missing_manage_roles_uses_the_missing_permission_alert() -> None:
+    queue, bot, _, config = _setup([(10, "pending_add")], add=AsyncMock(side_effect=_forbidden()))
+    guild = MagicMock()
+    guild.me.guild_permissions.manage_roles = False
+    bot.get_guild.return_value = guild
+
+    await queue.run_once(1)
+
+    config.alert_missing_permission.assert_awaited_once()
+    config.send_alert.assert_not_awaited()
+
+
+async def test_a_role_change_mid_pass_stops_the_pass() -> None:
+    queue, bot, sentinel, _ = _setup([(10, "pending_add"), (11, "pending_add")])
+
+    async def add_role(*args: object, **kwargs: object) -> None:
+        sentinel.role_id = 60  # the lockdown role is switched while the first call runs
+
+    bot.http.add_role = AsyncMock(side_effect=add_role)
+
+    await queue.run_once(1)
+
+    bot.http.add_role.assert_awaited_once()
+    assert bot.http.add_role.await_args.args[2] == 50

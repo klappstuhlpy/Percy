@@ -110,28 +110,28 @@ class SentinelRoleQueue:
         if sentinel is None or sentinel.role_id is None:
             return False
 
+        # One role per pass: a lockdown role changed mid-pass belongs to ``strip`` and a fresh
+        # pass, never to the rows read for the old one.
+        role_id = sentinel.role_id
         retry = False
-        forbidden: dict[str, int] = {}
         for row in rows:
-            member_id: int = row["user_id"]
-            adding = row["state"] == "pending_add"
-            outcome = await self.apply(sentinel, member_id, adding=adding)
+            if sentinel.role_id != role_id:
+                return False
+            outcome = await self.apply(sentinel, row["user_id"], role_id, adding=row["state"] == "pending_add")
             if outcome is RoleOutcome.role_gone:
                 await self._role_gone(sentinel)
                 return False
             if outcome is RoleOutcome.forbidden:
-                verb = "give it to" if adding else "take it away from"
-                forbidden[verb] = forbidden.get(verb, 0) + 1
+                # A 403 here is about the role or Percy's permissions, not this member, so every
+                # remaining row would fail the same way: one probe per pass, then wait for a wake.
+                await self._alert_forbidden(sentinel.id, role_id, len(rows))
+                return False
             retry = retry or outcome is RoleOutcome.retry
-
-        if forbidden:
-            await self._alert_forbidden(sentinel, forbidden)
         return retry
 
-    async def apply(self, sentinel: Sentinel, member_id: int, *, adding: bool) -> RoleOutcome:
-        """Give or take the lockdown role for one member and settle their row accordingly."""
-        guild_id, role_id = sentinel.id, sentinel.role_id
-        assert role_id is not None
+    async def apply(self, sentinel: Sentinel, member_id: int, role_id: int, *, adding: bool) -> RoleOutcome:
+        """Give or take ``role_id`` for one member and settle their row accordingly."""
+        guild_id = sentinel.id
         guilds = self.bot.db.guilds
         http = self.bot.http
 
@@ -170,27 +170,35 @@ class SentinelRoleQueue:
         elif outcome is RoleOutcome.forbidden:
             await self._alert(
                 sentinel.id,
-                f"Sentinel could not give the starter role <@&{starter_id}> to verified members. "
-                "I need **Manage Roles** and a highest role above it.",
+                f"Sentinel could not give the starter role <@&{starter_id}> to verified members, "
+                "because it sits at or above my highest role. Move my role above it.",
                 cooldown="starter",
+                feature="give the Sentinel starter role",
             )
 
     async def _role_gone(self, sentinel: Sentinel) -> None:
         await self._alert(sentinel.id, "The Sentinel **lockdown role** no longer exists, so Sentinel has been disabled.")
         await sentinel.edit(started_at=None, role_id=None)
 
-    async def _alert_forbidden(self, sentinel: Sentinel, counts: dict[str, int]) -> None:
-        what = " or ".join(f"{verb} {n} member(s)" for verb, n in counts.items())
+    async def _alert_forbidden(self, guild_id: int, role_id: int, waiting: int) -> None:
         await self._alert(
-            sentinel.id,
-            f"Sentinel could not use the lockdown role <@&{sentinel.role_id}>: I could not {what}. "
-            "I need **Manage Roles** and a highest role above the lockdown role. "
-            "Fix that and I retry on the next join or verification.",
+            guild_id,
+            f"Sentinel could not give or take the lockdown role <@&{role_id}> ({waiting} member(s) waiting), "
+            "because it sits at or above my highest role. Move my role above it; "
+            "I retry on the next join or verification.",
             cooldown="lockdown",
+            feature="give or take the Sentinel lockdown role",
         )
 
-    async def _alert(self, guild_id: int, content: str, *, cooldown: str | None = None) -> None:
-        """Alert the moderators; with ``cooldown``, at most once per ``ALERT_COOLDOWN`` for that kind."""
+    async def _alert(
+        self, guild_id: int, content: str, *, cooldown: str | None = None, feature: str | None = None
+    ) -> None:
+        """Alert the moderators; with ``cooldown``, at most once per ``ALERT_COOLDOWN`` for that kind.
+
+        ``feature`` marks a 403. When Percy lacks Manage Roles outright, the project's standard
+        missing-permission alert is sent; otherwise the 403 is the role hierarchy and ``content``,
+        which explains that, is sent instead.
+        """
         if cooldown is not None:
             now = time.monotonic()
             last = self._alerted_at.get((guild_id, cooldown))
@@ -198,7 +206,11 @@ class SentinelRoleQueue:
                 return
             self._alerted_at[guild_id, cooldown] = now
         config = await self.bot.db.get_guild_config(guild_id)
-        await config.send_alert(content, force=True)
+        guild = self.bot.get_guild(guild_id)
+        if feature is not None and guild is not None and not guild.me.guild_permissions.manage_roles:
+            await config.alert_missing_permission(feature)
+        else:
+            await config.send_alert(content, force=True)
 
     def strip(self, guild_id: int, role_id: int, member_ids: Iterable[int]) -> None:
         """Take a role that is no longer the lockdown role away from members still holding it."""
@@ -207,19 +219,21 @@ class SentinelRoleQueue:
         task.add_done_callback(self._strips.discard)
 
     async def _strip(self, guild_id: int, role_id: int, member_ids: list[int]) -> None:
-        forbidden = 0
-        for member_id in member_ids:
+        for index, member_id in enumerate(member_ids):
             outcome = await attempt(
                 self.bot.http.remove_role(guild_id, member_id, role_id, reason="Sentinel lockdown role changed")
             )
             if outcome is RoleOutcome.role_gone:
                 return
-            forbidden += outcome is RoleOutcome.forbidden
-        if forbidden:
-            await self._alert(
-                guild_id,
-                f"Sentinel could not take the previous lockdown role <@&{role_id}> from {forbidden} member(s). "
-                "Remove it by hand, or give me **Manage Roles** and a highest role above it.",
-                cooldown="strip",
-            )
+            if outcome is RoleOutcome.forbidden:
+                # Same as a pass: the rest would fail identically.
+                await self._alert(
+                    guild_id,
+                    f"Sentinel could not take the previous lockdown role <@&{role_id}> from "
+                    f"{len(member_ids) - index} member(s), because it sits at or above my highest role. "
+                    "Remove it by hand, or move my role above it.",
+                    cooldown="strip",
+                    feature="take away the previous Sentinel lockdown role",
+                )
+                return
 
