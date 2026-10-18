@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 from typing import TYPE_CHECKING
 
 import discord
@@ -49,8 +48,3 @@ class SpammerSequence(SpamCheckerResult):
     def __init__(self, members: Sequence[discord.abc.Snowflake], *, reason: str = "Auto-ban for spamming") -> None:
         super().__init__(reason)
         self.members: Sequence[discord.abc.Snowflake] = members
-
-
-class MemberJoinType(enum.Enum):
-    FAST = 1
-    SUSPICOUS = 2

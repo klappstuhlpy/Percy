@@ -49,6 +49,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   They are now split across several messages.
 - The Massban button on a raid alert could ban members flagged hours earlier in a quiet
   server, because expired flags were still listed. Only current flags are used now.
+- A server with alerts on but Sentinel off got no alert at all when dozens of accounts
+  joined at once; the join-burst alert only ran while Sentinel was on. It now runs
+  whenever alerts are on and no Sentinel auto-trigger is set, and its **Ban All
+  Raiders** button bans the members that alert listed. Before, the button found
+  nobody, or banned an older group instead. Removing the auto-trigger rate no longer
+  keeps these alerts switched off until a restart.
+- Members Sentinel held when its auto-trigger fired could talk in any channel the
+  lockdown role did not cover, and join voice, without the configured kick or ban.
+  They are now treated like every other member waiting to verify.
+- Mention-spam protection now follows one rule: a member is banned when one message,
+  or all their messages within 15 seconds, mention more than the configured number of
+  users. The alert reports how many mentions they actually sent. The dashboard could
+  set a threshold of 1 or 2 (or a negative number, which banned every poster); Percy
+  now refuses anything below 3 except 0 for off, and treats a low value saved earlier
+  as 3.
+- Moderators who have Manage Messages only in some channels were auto-banned for
+  pinging or posting quickly there. They are now exempt in those channels. Threads and
+  forum posts inside an ignored channel are ignored too.
+- Turning off audit logging or alerts during a raid wiped Percy's raid tracking, so an
+  open alert's Ban All Raiders button found nobody. Only turning off raid protection
+  or Sentinel resets it now.
 - Percy's command log no longer records the full text a command was typed with,
   only which command ran.
 - An error raised by a command after its arguments were read ("I currently am unable

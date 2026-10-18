@@ -156,11 +156,27 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
     return webhook.url
 
 
+def _check_mention_count(value: object) -> int | None:
+    """``None``/``0`` turns mention-spam protection off; anything else must meet the command's floor."""
+    from app.cogs.moderation.antispam import MIN_MENTION_COUNT
+
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or (value != 0 and value < MIN_MENTION_COUNT):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"mention_count must be 0 (off) or at least {MIN_MENTION_COUNT}",
+        )
+    return value
+
+
 def _build_config_updates(data: dict, guild_config) -> dict[str, object]:
     """Extract valid config updates from a flat dict (shared by PATCH and batch)."""
     updates: dict[str, object] = {}
     for key, value in data.items():
-        if key in _ALLOWED_CONFIG_FIELDS:
+        if key == "mention_count":
+            updates[key] = _check_mention_count(value)
+        elif key in _ALLOWED_CONFIG_FIELDS:
             updates[key] = value
         elif key == "flags" and isinstance(value, dict):
             new_flags = guild_config.flags.value

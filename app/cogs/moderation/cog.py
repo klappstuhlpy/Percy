@@ -33,7 +33,7 @@ from app.utils.lock import lock
 from config import Emojis
 
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
-from .antispam import SpamChecker, check_raid, mention_spam_ban
+from .antispam import MIN_MENTION_COUNT, SpamChecker, check_raid, mention_spam_ban, mention_threshold
 from .infractions import check_member_hierarchy, default_reason, safe_reason_append, update_role_permissions
 from .lockdown import (
     build_lockdown_error_embed,
@@ -255,7 +255,7 @@ class Moderation(Cog):
     async def on_message(self, message: discord.Message) -> None:
         """|coro|
 
-        This listener is used to check if a message is spamming and if a member is a fast joiner or a suspicious joiner.
+        Runs raid protection, Sentinel bypass enforcement and mention-spam protection on a message.
 
         Parameters
         ----------
@@ -269,6 +269,8 @@ class Moderation(Cog):
             or not isinstance(author, discord.Member)
             or author.bot
             or author.guild_permissions.manage_messages
+            # A channel moderator (Manage Messages from an overwrite) is exempt where they moderate.
+            or message.channel.permissions_for(author).manage_messages
         ):
             return
 
@@ -279,10 +281,13 @@ class Moderation(Cog):
         if config is None:
             return
 
+        ignored = config.safe_automod_entity_ids
         if (
-            message.channel.id in config.safe_automod_entity_ids
-            or author.id in config.safe_automod_entity_ids
-            or any(i in config.safe_automod_entity_ids for i in author._roles)  # type: ignore[arg-type]
+            message.channel.id in ignored
+            # A thread or forum post is covered by an ignored parent channel.
+            or getattr(message.channel, "parent_id", None) in ignored
+            or author.id in ignored
+            or any(i in ignored for i in author._roles)  # type: ignore[arg-type]
         ):
             return
 
@@ -290,7 +295,9 @@ class Moderation(Cog):
         # raid/mention-spam checks below (and survives their early returns).
         self._schedule_ai_moderation(message, config)
 
-        await check_raid(self._spam_check[message.guild.id], config, message.guild, author, message)
+        checker = self._spam_check[message.guild.id]
+        if await check_raid(checker, config, message.guild, author, message):
+            return
 
         if config.flags.sentinel:
             sentinel = await self.bot.db.get_guild_sentinel(message.guild.id)  # type: ignore[arg-type]
@@ -301,30 +308,21 @@ class Moderation(Cog):
                     await coro(reason=reason)
                 return
 
-        if not config.flags.mentions or not config.mention_count:
+        threshold = mention_threshold(config) if config.flags.mentions else None
+        if threshold is None:
             return
 
-        checker = self._spam_check[message.guild.id]
-        if checker.is_mention_spam(message, config):
-            await mention_spam_ban(checker, config, author, config.mention_count, multiple=True)
-            return
-
-        if len(message.mentions) <= 3:
-            return
-
-        mention_count = sum(not m.bot and m.id != author.id for m in message.mentions)
-        if mention_count < config.mention_count:
-            return
-
-        await mention_spam_ban(checker, config, author, mention_count)
+        spam = checker.mention_spam(message, threshold)
+        if spam is not None:
+            mention_count, multiple = spam
+            await mention_spam_ban(checker, config, author, mention_count, multiple=multiple)
 
     @Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         """|coro|
 
-        This listener is used to check if a member is a fast joiner or a suspicious joiner.
-        If a member is a fast joiner, they are flagged and if they are a suspicious joiner, they are flagged as well.
-        If the guild has the `sentinel` flag enabled, the sentinel is used to check if the member is a spammer.
+        Re-applies a mute, lets Sentinel block the member or auto-enable on a burst of joins, and
+        otherwise alerts the moderators about a burst of joins (when alerts are on).
 
         Parameters
         ----------
@@ -342,22 +340,23 @@ class Moderation(Cog):
             await config.apply_mute(member, "Member was previously muted.")
             return
 
-        if not config.flags.sentinel:
-            return
-
         checker = self._spam_check[member.guild.id]
 
+        # With a Sentinel auto-trigger configured, Sentinel answers join bursts itself and the
+        # alert-only check below stays quiet; without one, that check is the only join alarm.
+        auto_sentinel = False
         if config.flags.sentinel:
             sentinel = await self.bot.db.get_guild_sentinel(member.guild.id)  # type: ignore[arg-type]
             if sentinel is not None:
+                auto_sentinel = sentinel.rate is not None and not sentinel.requires_setup
                 if sentinel.started_at is not None:
                     await sentinel.block(member)
                 elif not sentinel.requires_setup:
                     spammers = checker.check_sentinel(member, sentinel)
                     if spammers:
                         await sentinel.force_enable_with(spammers)
-                        for member in spammers:
-                            checker.flag_member(member)
+                        for spammer in spammers:
+                            checker.flag_member(spammer)
 
                         if config.flags.alerts:
                             embed = discord.Embed(
@@ -374,7 +373,7 @@ class Moderation(Cog):
                             view.add_item(SentinelAlertResolveButton(sentinel))
                             await config.send_alert(embed=embed, view=view)
 
-        if config.flags.alerts:
+        if config.flags.alerts and not auto_sentinel:
             spammers = checker.is_alertable_join_spam(member)
             if spammers:
                 view = View(timeout=None)
@@ -1010,7 +1009,10 @@ class Moderation(Cog):
         assert ctx.guild is not None
         guild_id = ctx.guild.id
         records = await self.bot.db.moderation.disable_protection(guild_id, updates)
-        self._spam_check.pop(guild_id, None)
+        # Only the protections that use the raid state reset it; turning off audit logging or
+        # alerts mid-raid must not forget the cohort an open alert's Massban button acts on.
+        if protection in ("all", "raid", "sentinel"):
+            self._spam_check.pop(guild_id, None)
 
         # Delete the freed Discord webhooks (urls captured pre-update by the repository).
         hooks: list[list[str | None]] = []
@@ -1118,16 +1120,17 @@ class Moderation(Cog):
         bot_permissions=[discord.Permissions.ban_members],  # the protection auto-bans mention spammers
         user_permissions=PermissionTemplate.mod,
     )
-    @describe(count="The maximum amount of mentions before banning.")
-    async def moderation_mentions(self, ctx: ModGuildContext, count: commands.Range[int, 3]) -> None:
+    @describe(count="Members are banned for more than this many mentions in 15 seconds (at least 3).")
+    async def moderation_mentions(self, ctx: ModGuildContext, count: commands.Range[int, MIN_MENTION_COUNT]) -> None:
         """
         Enables auto-banning accounts that spam more than 'count' mentions.
         To use this command, you must have the Ban Members permission.
 
-        The count must be greater than 3.
-        The bot will automatically ban members that spam more than the specified amount of mentions.
+        The count must be at least 3.
+        A member is banned when one message, or all their messages within 15 seconds,
+        mention more than 'count' users.
 
-        Note: This applies to only for user mentions, role mentions are not counted.
+        Note: Only user mentions count; role mentions, bots and the author themself are not counted.
         """
         assert ctx.guild is not None
         await ctx.db.moderation.set_mention_count(ctx.guild.id, count)
@@ -1137,7 +1140,7 @@ class Moderation(Cog):
     @moderation_mentions.error
     async def moderation_mentions_error(self, ctx: ModGuildContext, error: commands.BadArgument) -> None:
         if isinstance(error, commands.RangeError):
-            await ctx.send_error("Mention spam protection threshold must be greater than **3**.")
+            await ctx.send_error(f"Mention spam protection threshold must be at least **{MIN_MENTION_COUNT}**.")
 
     @moderation.command(
         "ignore",

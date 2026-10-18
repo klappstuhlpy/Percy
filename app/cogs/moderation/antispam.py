@@ -7,13 +7,12 @@ from operator import attrgetter
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands
 
 from app.core.pagination import TextSource
 from app.utils import ListedRateLimit, RateLimit, cache
 from config import Emojis
 
-from .models import FlaggedMember, MemberJoinType, SpamCheckerResult, SpammerSequence
+from .models import FlaggedMember, SpamCheckerResult, SpammerSequence
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping, Sequence
@@ -31,6 +30,21 @@ MIN_CONTENT_LENGTH = 5
 #: gives one ban and one alert per member however many limiters trip on them.
 RECENTLY_ACTIONED_SECONDS = 300.0
 
+#: The lowest mention-spam threshold: the command and the dashboard API refuse less, and a
+#: lower value stored before that check is raised to it (a reply ping must not ban anyone).
+MIN_MENTION_COUNT = 3
+
+#: Mentions a member sends within this many seconds add up towards the threshold.
+MENTION_WINDOW_SECONDS = 15.0
+
+
+def mention_threshold(config: GuildConfig) -> int | None:
+    """The guild's mention-spam threshold, or ``None`` when it is off (unset, 0 or negative)."""
+    count = config.mention_count
+    if not count or count <= 0:
+        return None
+    return max(count, MIN_MENTION_COUNT)
+
 
 class SpamChecker:
     """Per-guild raid detection state.
@@ -47,9 +61,11 @@ class SpamChecker:
        characters) per 15 s in one channel. Again a raid signal; just the members who
        sent 2 or more of the copies are returned.
 
-    Mentions: more than ``config.mention_count`` mentions per 15 s from one member
-    (:meth:`is_mention_spam`). Joins: ``sentinel.rate`` joins (auto-Sentinel) or 10 joins
-    per 5 s (alert only) (:meth:`check_sentinel`, :meth:`is_alertable_join_spam`).
+    Mentions: more than :func:`mention_threshold` mentions in one message, or over
+    :data:`MENTION_WINDOW_SECONDS` from one member (:meth:`mention_spam`). Joins:
+    ``sentinel.rate`` joins (auto-Sentinel, flags the cohort) or 10 joins per 5 s (alert
+    only, used when no auto-trigger is configured) (:meth:`check_sentinel`,
+    :meth:`is_alertable_join_spam`).
 
     Every limiter fires once per trip and then starts a fresh window. :meth:`claim` filters
     out members already handled in the last :data:`RECENTLY_ACTIONED_SECONDS`.
@@ -62,20 +78,21 @@ class SpamChecker:
         self.by_user = RateLimit(10, 12.0, key=lambda msg: msg.author.id)
         self.new_user = RateLimit(30, 35.0, key=lambda msg: msg.channel.id, tagger=attrgetter("author"), min_hits=3)
 
-        self.last_join: datetime.datetime | None = None
-        self.last_member: discord.Member | None = None
-
-        self._by_mentions: commands.CooldownMapping | None = None
-        self._by_mentions_rate: int | None = None
+        #: author id -> recent ``(timestamp, mentions)`` pairs, for :meth:`mention_spam`.
+        self._mentions: MutableMapping[int, list[tuple[float, int]]] = cache.ExpiringCache(
+            seconds=MENTION_WINDOW_SECONDS
+        )
 
         self._join_rate: tuple[int, int] | None = None
         self.auto_sentinel: ListedRateLimit | None = None
-        # Enabled if alerts are on but sentinel isn't
+        # The alert-only join check, used when no Sentinel auto-trigger is configured.
         self._default_join_spam = ListedRateLimit(10, 5, key=attrgetter("joined_at"))
 
-        self.last_created: datetime.datetime | None = None
-
+        #: Members the Sentinel auto-trigger held. Being flagged has consequences (the
+        #: hit-and-run and flagged-mention bans, no commands), so only that path flags.
         self.flagged_users: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
+        #: Members named in an alert-only join-spam alert: offered to its Massban button, nothing more.
+        self.join_spammers: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
         self.hit_and_run = RateLimit(5, 15, key=lambda msg: msg.channel.id, tagger=lambda msg: msg.author)
         self.recently_actioned: MutableMapping[int, bool] = cache.ExpiringCache(seconds=RECENTLY_ACTIONED_SECONDS)
         self._ban_permission_alerted_at: float | None = None
@@ -111,24 +128,11 @@ class SpamChecker:
         """Flag a member."""
         self.flagged_users[member.id] = FlaggedMember(member, member.joined_at or discord.utils.utcnow())
 
-    def by_mentions(self, config: GuildConfig) -> commands.CooldownMapping | None:
-        """Get the cooldown mapping for mentions.
-
-        This will return a cooldown mapping for mentions if the mention count is set, otherwise None.
-
-        Parameters
-        ----------
-        config: :class:`GuildConfig`
-            The guild configuration to check.
-        """
-        if not config.mention_count:
-            return None
-
-        mention_threshold = config.mention_count
-        if self._by_mentions_rate != mention_threshold:
-            self._by_mentions = commands.CooldownMapping.from_cooldown(mention_threshold, 15, commands.BucketType.member)
-            self._by_mentions_rate = mention_threshold
-        return self._by_mentions
+    def raid_suspects(self) -> list[FlaggedMember]:
+        """Everyone a raid alert's Massban button offers: auto-Sentinel holds and join-spam alert cohorts."""
+        suspects = dict(self.join_spammers.items())
+        suspects.update(self.flagged_users.items())
+        return list(suspects.values())
 
     @staticmethod
     def is_new(member: discord.Member) -> bool:
@@ -190,102 +194,33 @@ class SpamChecker:
 
         return None
 
-    def is_fast_join(self, member: discord.Member) -> bool:
-        """Check if a member is a fast joiner.
+    def mention_spam(self, message: discord.Message, threshold: int) -> tuple[int, bool] | None:
+        """Whether ``message`` takes its author past ``threshold`` mentions.
 
-        This will return True if the member is a fast joiner, False otherwise.
+        One message with more than ``threshold`` mentions is checked first; otherwise the
+        member's mentions over the last :data:`MENTION_WINDOW_SECONDS` are summed. Bots and
+        the author themself never count.
 
-        Parameters
-        ----------
-        member: :class:`discord.Member`
-            The member to check.
+        Returns ``(mentions, over_multiple_messages)`` on a trip, else ``None``. A trip
+        clears the member's history, so it fires once.
         """
-        joined = member.joined_at or discord.utils.utcnow()
-        if self.last_join is None:
-            self.last_join = joined
-            return False
-        is_fast = (joined - self.last_join).total_seconds() <= 2.0
-        self.last_join = joined
-        if is_fast:
-            self.flagged_users[member.id] = FlaggedMember(member, joined)
-        return is_fast
-
-    def is_suspicious_join(self, member: discord.Member) -> bool:
-        """Check if a member is suspicious.
-
-        This will return True if the member is suspicious, False otherwise.
-
-        Parameters
-        ----------
-        member: :class:`discord.Member`
-            The member to check.
-        """
-        created = member.created_at
-        if self.last_created is None:
-            self.last_created = created
-            return False
-
-        is_suspicious = abs((created - self.last_created).total_seconds()) <= 86400.0
-        self.last_created = created
-        if is_suspicious:
-            self.flagged_users[member.id] = FlaggedMember(member, member.joined_at or discord.utils.utcnow())
-        return is_suspicious
-
-    def get_join_type(self, member: discord.Member) -> MemberJoinType | None:
-        """Get the join type of member.
-
-        This will return the join type of member, if any.
-
-        Parameters
-        ----------
-        member: :class:`discord.Member`
-            The member to check.
-        """
-        joined = member.joined_at or discord.utils.utcnow()
-
-        if self.last_member is None:
-            self.last_member = member
-            self.last_join = joined
+        author_id = message.author.id
+        count = sum(not m.bot and m.id != author_id for m in message.mentions)
+        if count > threshold:
+            self._mentions.pop(author_id, None)
+            return count, False
+        if not count:
             return None
 
-        if self.last_join is not None:
-            is_fast = (joined - self.last_join).total_seconds() <= 2.0
-            self.last_join = joined
-            if is_fast:
-                self.flagged_users[member.id] = FlaggedMember(member, joined)
-                if self.last_member.id not in self.flagged_users:
-                    self.flag_member(self.last_member)
-                return MemberJoinType.FAST
-
-        is_suspicious = abs((member.created_at - self.last_member.created_at).total_seconds()) <= 86400.0
-        if is_suspicious:
-            self.flagged_users[member.id] = FlaggedMember(member, joined)
-            if self.last_member.id not in self.flagged_users:
-                self.flag_member(self.last_member)
-            return MemberJoinType.SUSPICOUS
-
+        now = message.created_at.timestamp()
+        recent = [(t, n) for t, n in self._mentions.get(author_id, []) if now - t < MENTION_WINDOW_SECONDS]
+        recent.append((now, count))
+        total = sum(n for _, n in recent)
+        if total > threshold:
+            self._mentions.pop(author_id, None)
+            return total, True
+        self._mentions[author_id] = recent
         return None
-
-    def is_mention_spam(self, message: discord.Message, config: GuildConfig) -> bool:
-        """Check if a message is mention spam.
-
-        This will return True if the message is mention spam, False otherwise.
-
-        Parameters
-        ----------
-        message: :class:`discord.Message`
-            The message to check.
-        config: :class:`GuildConfig`
-            The guild configuration to check against.
-        """
-        mapping = self.by_mentions(config)
-        if mapping is None:
-            return False
-
-        current = message.created_at.timestamp()
-        mention_bucket = mapping.get_bucket(message, current)
-        mention_count = sum(not m.bot and m.id != message.author.id for m in message.mentions)
-        return mention_bucket is not None and mention_bucket.update_rate_limit(current, tokens=mention_count) is not None
 
     def check_sentinel(self, member: discord.Member, sentinel: Sentinel) -> list[discord.Member]:
         """Check if a member is ratelimited by the sentinel.
@@ -305,6 +240,7 @@ class SpamChecker:
         rate = sentinel.rate
         if rate is None:
             self._join_rate = None
+            self.auto_sentinel = None
             return []
 
         if rate != self._join_rate:
@@ -318,15 +254,20 @@ class SpamChecker:
         return []
 
     def is_alertable_join_spam(self, member: discord.Member) -> list[discord.Member]:
-        """Check if a member is ratelimited by the join spam checker."""
-        if self.auto_sentinel is not None:
-            return []
+        """The members to alert about when ``member`` completes a burst of joins, else ``[]``.
 
-        return self._default_join_spam.is_ratelimited(member)
+        They are kept for the alert's Massban button (:meth:`raid_suspects`) but not flagged:
+        the alert asks a moderator to review, it does not decide they are raiders.
+        """
+        spammers = self._default_join_spam.is_ratelimited(member)
+        for spammer in spammers:
+            self.join_spammers[spammer.id] = FlaggedMember(spammer, spammer.joined_at or discord.utils.utcnow())
+        return spammers
 
     def remove_member(self, user: discord.abc.User) -> None:
         """Remove a member from the spam checker."""
         self.flagged_users.pop(user.id, None)
+        self.join_spammers.pop(user.id, None)
 
 
 async def check_raid(
@@ -335,10 +276,13 @@ async def check_raid(
     guild: discord.Guild,
     member: discord.Member,
     message: discord.Message,
-) -> None:
+) -> bool:
     """|coro|
 
     Check if a member is raiding the server and ban them if they are.
+
+    Returns whether ``member`` (the message's author) was banned, so the caller can stop
+    handling the message.
 
     Parameters
     ----------
@@ -354,20 +298,20 @@ async def check_raid(
         The message to check.
     """
     if not config.flags.raid:
-        return
+        return False
 
     result = checker.is_spamming(message)
     if result is None:
-        return
+        return False
 
     members = checker.claim(result.members if isinstance(result, SpammerSequence) else [member])
     if not members:
-        return
+        return False
 
     me = guild.me
     if not me.guild_permissions.ban_members:
         await checker.alert_missing_ban_permission(config, "ban members for raid protection")
-        return
+        return False
 
     banned: list[discord.abc.Snowflake] = []
     failed: list[discord.abc.Snowflake] = []
@@ -392,6 +336,7 @@ async def check_raid(
     if failed:
         for page in raid_ban_failed_alert(failed, result.reason, message.channel.id):
             await config.send_alert(page, force=True)
+    return any(user.id == member.id for user in banned)
 
 
 def outranks(user: object, me: discord.Member) -> bool:

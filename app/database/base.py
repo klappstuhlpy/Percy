@@ -1694,13 +1694,12 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
         return self.role_id is not None and member._roles.has(self.role_id)
 
     def is_bypassing(self, member: discord.Member) -> bool:
-        """Whether the member is bypassing the sentinel."""
-        if self.started_at is None:
-            return False
-        if member.joined_at is None:
-            return False
+        """Whether the member is bypassing the sentinel.
 
-        return member.joined_at >= self.started_at and self.is_blocked(member.id)
+        Every blocked member must verify first, including the cohort the auto-trigger held:
+        they joined just *before* ``started_at``, so a join-time comparison would exempt them.
+        """
+        return self.started_at is not None and self.is_blocked(member.id)
 
     async def block(self, member: discord.Member) -> None:
         """|coro|

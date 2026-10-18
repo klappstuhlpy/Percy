@@ -1345,8 +1345,8 @@ class SentinelAlertMassbanButton(
         assert interaction.guild is not None
         assert interaction.message is not None
 
-        members = self.cog._spam_check[interaction.guild_id].flagged_users
-        if not members:
+        suspects = self.cog._spam_check[interaction.guild_id].raid_suspects()
+        if not suspects:
             await interaction.response.send_message(
                 f"{Emojis.error} No raiders detected at this time.",
                 ephemeral=True,
@@ -1354,7 +1354,7 @@ class SentinelAlertMassbanButton(
             return
 
         now = interaction.created_at
-        members = sorted(members.values(), key=lambda m: m.joined_at or now)
+        members = sorted(suspects, key=lambda m: m.joined_at or now)
         fmt = "\n".join(
             f"{m.id}\tJoined: {m.joined_at}\tCreated: {m.created_at}\t{m}"
             for m in members
