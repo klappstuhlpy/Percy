@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A raid-protection ban now posts an alert in the server's alert channel saying who
   was banned, in which channel and why. Before, the ban was silent unless the audit
   log happened to be set up. The alert never quotes the spam itself.
+- Raid protection could ban members who never spammed. When a few people posted the
+  same image, sticker or "gg" in a channel, or a busy channel had many new members
+  chatting, whoever sent the message that crossed the limit was banned, and so was
+  almost every poster after them. A busy channel now only tells Percy a raid may be
+  happening: it bans just the members who sent several of those messages themselves,
+  and messages without text or with only a few characters are never compared. One raid
+  now bans each member once with one alert, instead of re-banning and re-alerting on
+  nearly every message.
+- When raid or mention-spam protection could not ban someone (Percy is missing the Ban
+  Members permission, or the member's role is above Percy's), nothing told the
+  moderators. Percy now posts an alert naming who it could not ban and what to fix.
+- Raid alerts for large raids were too long for Discord and silently never arrived.
+  They are now split across several messages.
+- The Massban button on a raid alert could ban members flagged hours earlier in a quiet
+  server, because expired flags were still listed. Only current flags are used now.
 - Percy's command log no longer records the full text a command was typed with,
   only which command ran.
 - An error raised by a command after its arguments were read ("I currently am unable

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ParamSpec, Protocol, TypeVar, cast
 from lru import LRU
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine, Generator, Hashable, MutableMapping
+    from collections.abc import Callable, Coroutine, Generator, Hashable, Iterator, MutableMapping
 
     from app.utils.constants import Coro, NCoro
 
@@ -118,10 +118,20 @@ class ExpiringCache(dict):
     def __setitem__(self, key: str, value: Any) -> None:
         super().__setitem__(key, (value, time.monotonic()))
 
+    def __len__(self) -> int:
+        self.__verify_cache_integrity()
+        return super().__len__()
+
+    def __iter__(self) -> Iterator[Any]:
+        self.__verify_cache_integrity()
+        return super().__iter__()
+
     def values(self) -> list[Any]:  # type: ignore[override]
+        self.__verify_cache_integrity()
         return [x[0] for x in super().values()]
 
     def items(self) -> list[tuple[str, Any]]:  # type: ignore[override]
+        self.__verify_cache_integrity()
         return [(x[0], x[1][0]) for x in super().items()]
 
 

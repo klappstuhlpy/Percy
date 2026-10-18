@@ -49,11 +49,17 @@ HashableT = TypeVar("HashableT", bound=Hashable)
 
 
 class RateLimit[V, HashableT: Hashable]:
-    """A rate limit implementation.
+    """A GCRA rate limit over messages, keyed by :attr:`key`.
 
-    This is a simple rate limit implementation that uses an LRU cache to store
-    the last time a key was used. This is useful for things like command
-    cooldowns.
+    It fires **once per trip**: the call that crosses the limit returns a hit and forgets
+    the burst, so the next message starts a fresh window instead of tripping again on
+    nearly every message that follows.
+
+    With a ``tagger`` the trip returns the tags (usually authors) that sent at least
+    ``min_hits`` of the messages seen for this key in the last ``per`` seconds, so a
+    shared counter can name the individuals behind a burst instead of whoever happened
+    to send the message that crossed the line. That list may be empty: the burst was
+    real, but nobody in it repeated themselves enough to be singled out.
 
     Parameters
     ----------
@@ -64,13 +70,15 @@ class RateLimit[V, HashableT: Hashable]:
     key: :class:`Callable[[discord.Message], V]`
         A callable that takes a message and returns a key.
     tagger: :class:`Callable[[discord.Message], HashableT]`
-        A callable that takes a value and returns a hashable tag.
+        A callable that takes a message and returns a hashable tag.
+    min_hits: :class:`int`
+        How many messages in the window a tag needs to be returned on a trip.
     maxsize: :class:`int`
         The maximum size of the LRU cache.
     """
 
     if TYPE_CHECKING:
-        _lookup: MutableMapping[V, datetime.datetime | tuple[datetime.datetime, set[HashableT]]]
+        _lookup: MutableMapping[V, tuple[datetime.datetime, dict[HashableT, list[datetime.datetime]]]]
 
     def __init__(
         self,
@@ -79,6 +87,7 @@ class RateLimit[V, HashableT: Hashable]:
         *,
         key: Callable[[discord.Message], V],
         tagger: Callable[[discord.Message], HashableT] | None = None,
+        min_hits: int = 1,
         maxsize: int = 256,
     ) -> None:
         self._lookup = LRU(maxsize)  # type: ignore
@@ -87,6 +96,7 @@ class RateLimit[V, HashableT: Hashable]:
         self.per = per
         self.key = key
         self.tagger = tagger
+        self.min_hits = min_hits
 
     @property
     def ratio(self) -> float:
@@ -95,35 +105,22 @@ class RateLimit[V, HashableT: Hashable]:
     def is_ratelimited(self, message: discord.Message) -> bool | list[HashableT]:
         now = message.created_at
         key = self.key(message)
-        tat = now
-        tagged = set()
-
-        value = self._lookup.get(key)
-        if value is not None and isinstance(value, tuple):
-            tat = max(value[0], now)
-            tagged = value[1] if self.tagger is not None else tagged
-
-            if value[0] < now and self.tagger is not None:
-                tagged.clear()
+        tat, hits = self._lookup.get(key, (now, {}))
+        tat = max(tat, now)
 
         if self.tagger is not None:
-            tag = self.tagger(message)
-            tagged.add(tag)
+            cutoff = now - datetime.timedelta(seconds=self.per)
+            hits = {tag: kept for tag, times in hits.items() if (kept := [t for t in times if t > cutoff])}
+            hits.setdefault(self.tagger(message), []).append(now)
 
-        diff = (tat - now).total_seconds()
-        max_interval = self.per - self.ratio
-        if diff > max_interval:
-            if self.tagger is not None:
-                copy = list(tagged)
-                tagged.clear()
-                return copy
-            else:
+        if (tat - now).total_seconds() > self.per - self.ratio:
+            # Fire once per trip: forget the burst so the next message starts a fresh window.
+            self._lookup.pop(key, None)
+            if self.tagger is None:
                 return True
+            return [tag for tag, times in hits.items() if len(times) >= self.min_hits]
 
-        new_tat = max(tat, now) + datetime.timedelta(seconds=self.ratio)
-        # Always store the tuple: the lookup above only reads tuples, so storing a bare
-        # datetime for untagged limits meant they forgot every message and never tripped.
-        self._lookup[key] = (new_tat, tagged)
+        self._lookup[key] = (tat + datetime.timedelta(seconds=self.ratio), hits)
         return False
 
 
@@ -222,8 +219,10 @@ class ListedRateLimit[V]:
         self._lookup.add(obj)
 
         if diff > max_interval:
+            # Fire once per trip: restart the window, or every join after it trips again.
             copy = list(self._lookup)
             self._lookup.clear()
+            self.tat = now
             return copy
 
         new_tat = max(tat, now) + datetime.timedelta(seconds=self.ratio)

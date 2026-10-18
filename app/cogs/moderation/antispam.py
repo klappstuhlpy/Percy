@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
+from app.core.pagination import TextSource
 from app.utils import ListedRateLimit, RateLimit, cache
 from config import Emojis
 
@@ -21,25 +22,44 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+#: Identical-content tracking ignores messages shorter than this (after stripping): attachment- and
+#: sticker-only posts have no text at all, and "gg"/"F"/"lol" waves are conversation, not spam.
+MIN_CONTENT_LENGTH = 5
+
+#: How long a member stays "already handled" after an automatic ban (or a failed one), so one raid
+#: gives one ban and one alert per member however many limiters trip on them.
+RECENTLY_ACTIONED_SECONDS = 300.0
+
+
 class SpamChecker:
-    """This spam checker does a few things.
+    """Per-guild raid detection state.
 
-    1) It checks if a user has spammed more than 10 times in 12 seconds
-    2) It checks if the content has been spammed 15 times in 17 seconds.
-    3) It checks if new users have spammed 30 times in 35 seconds.
-    4) It checks if 'fast joiners' have spammed 10 times in 12 seconds.
-    5) It checks if a member spammed `config.mention_count * 2` mentions in 12 seconds.
-    6) It checks if a member hits and runs 10 times in 12 seconds.
+    Message limiters (checked in :meth:`is_spamming`, in this order):
 
-    The second case is meant to catch alternating spambots while the first one
-    just catches regular singular spambots.
-    From experience, these values aren't reached unless someone is actively spamming.
+    1) Hit-and-run: 5 messages per 15 s in one channel from members flagged as raiders
+       (see :meth:`flag_member`); every flagged member who posted in that burst is returned.
+    2) New users: 30 messages per 35 s in one channel from accounts younger than 90 days
+       that joined in the last 7 days. This only says a raid is happening in the channel;
+       just the new members who sent 3 or more of those messages are returned.
+    3) Per user: 10 messages per 12 s from one member.
+    4) Identical content: 5 copies of the same text (at least :data:`MIN_CONTENT_LENGTH`
+       characters) per 15 s in one channel. Again a raid signal; just the members who
+       sent 2 or more of the copies are returned.
+
+    Mentions: more than ``config.mention_count`` mentions per 15 s from one member
+    (:meth:`is_mention_spam`). Joins: ``sentinel.rate`` joins (auto-Sentinel) or 10 joins
+    per 5 s (alert only) (:meth:`check_sentinel`, :meth:`is_alertable_join_spam`).
+
+    Every limiter fires once per trip and then starts a fresh window. :meth:`claim` filters
+    out members already handled in the last :data:`RECENTLY_ACTIONED_SECONDS`.
     """
 
     def __init__(self) -> None:
-        self.by_content = RateLimit(5, 15.0, key=lambda msg: (msg.channel.id, msg.content))
+        self.by_content = RateLimit(
+            5, 15.0, key=lambda msg: (msg.channel.id, msg.content), tagger=attrgetter("author"), min_hits=2
+        )
         self.by_user = RateLimit(10, 12.0, key=lambda msg: msg.author.id)
-        self.new_user = RateLimit(30, 35.0, key=lambda msg: msg.channel.id)
+        self.new_user = RateLimit(30, 35.0, key=lambda msg: msg.channel.id, tagger=attrgetter("author"), min_hits=3)
 
         self.last_join: datetime.datetime | None = None
         self.last_member: discord.Member | None = None
@@ -56,6 +76,18 @@ class SpamChecker:
 
         self.flagged_users: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
         self.hit_and_run = RateLimit(5, 15, key=lambda msg: msg.channel.id, tagger=lambda msg: msg.author)
+        self.recently_actioned: MutableMapping[int, bool] = cache.ExpiringCache(seconds=RECENTLY_ACTIONED_SECONDS)
+
+    def claim[U: discord.abc.Snowflake](self, users: Sequence[U], /) -> list[U]:
+        """Return the users not automatically actioned recently, and mark them as actioned.
+
+        Call this right before banning, so a member who keeps tripping limiters during one
+        raid is banned (and reported) once.
+        """
+        fresh = [user for user in users if user.id not in self.recently_actioned]
+        for user in fresh:
+            self.recently_actioned[user.id] = True
+        return fresh
 
     def get_flagged_member(self, user_id: int, /) -> FlaggedMember | None:
         """Get a flagged member."""
@@ -131,14 +163,20 @@ class SpamChecker:
             ):
                 return SpamCheckerResult.flagged_mention()
 
-        if self.is_new(message.author) and self.new_user.is_ratelimited(message):  # type: ignore[arg-type]
-            return SpamCheckerResult.spammer()
+        # The shared limiters only signal a raid; they ban the members who sent the burst, never the
+        # bystander whose message happened to cross the line.
+        if self.is_new(message.author):  # type: ignore[arg-type]
+            spammers = self.new_user.is_ratelimited(message)
+            if spammers:
+                return SpammerSequence(spammers)  # type: ignore[arg-type]
 
         if self.by_user.is_ratelimited(message):
-            return SpamCheckerResult.spammer()
+            return SpammerSequence([message.author])
 
-        if self.by_content.is_ratelimited(message):
-            return SpamCheckerResult.spammer()
+        if len(message.content.strip()) >= MIN_CONTENT_LENGTH:
+            spammers = self.by_content.is_ratelimited(message)
+            if spammers:
+                return SpammerSequence(spammers)  # type: ignore[arg-type]
 
         return None
 
@@ -312,28 +350,65 @@ async def check_raid(
     if result is None:
         return
 
-    members = result.members if isinstance(result, SpammerSequence) else [member]
+    members = checker.claim(result.members if isinstance(result, SpammerSequence) else [member])
+    if not members:
+        return
+
+    me = guild.me
+    if not me.guild_permissions.ban_members:
+        await config.alert_missing_permission("ban members for raid protection")
+        return
 
     banned: list[discord.abc.Snowflake] = []
+    failed: list[discord.abc.Snowflake] = []
     for user in members:
+        if outranks(user, me):
+            failed.append(user)
+            continue
         try:
             await guild.ban(user, reason=result.reason)
         except discord.HTTPException:
+            failed.append(user)
             log.info("[Moderation] Failed to ban %s (ID: %s) from server %s.", user, user.id, guild)
         else:
             banned.append(user)
             log.info("[Moderation] Banned %s (ID: %s) from server %s.", user, user.id, guild)
 
+    # Tell the moderators what happened. Never quote the message itself: the alert
+    # names who was banned, where, and why — the spam stays where it was posted.
     if banned:
-        # Tell the moderators what happened. Never quote the message itself: the alert
-        # names who was banned, where, and why — the spam stays where it was posted.
-        await config.send_alert(raid_ban_alert(banned, result.reason, message.channel.id))
+        for page in raid_ban_alert(banned, result.reason, message.channel.id):
+            await config.send_alert(page)
+    if failed:
+        for page in raid_ban_failed_alert(failed, result.reason, message.channel.id):
+            await config.send_alert(page, force=True)
 
 
-def raid_ban_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int) -> str:
-    """The mod-alert line for an automatic raid ban (no message content, by design)."""
-    names = ", ".join(f"**{user}** (ID: `{user.id}`)" for user in users)
-    return f"Raid protection banned {names} in <#{channel_id}>. Reason: *{reason}*."
+def outranks(user: object, me: discord.Member) -> bool:
+    """Whether ``user``'s top role keeps Percy (``me``) from banning them."""
+    top_role = getattr(user, "top_role", None)
+    return top_role is not None and top_role >= me.top_role
+
+
+def _alert_pages(header: str, users: Sequence[discord.abc.Snowflake], footer: str) -> list[str]:
+    # send_alert prefixes an emoji, so leave headroom under Discord's 2000-character limit.
+    source = TextSource(prefix=None, suffix=None, max_size=1900)
+    source.add_lines([header, *(f"- **{user}** (ID: `{user.id}`)" for user in users), footer])
+    return source.pages
+
+
+def raid_ban_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int) -> list[str]:
+    """The mod-alert pages for an automatic raid ban (no message content, by design)."""
+    return _alert_pages(f"Raid protection banned these members in <#{channel_id}>:", users, f"Reason: *{reason}*.")
+
+
+def raid_ban_failed_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int) -> list[str]:
+    """The mod-alert pages for raiders Percy could not ban."""
+    return _alert_pages(
+        f"{Emojis.warning} Raid protection could **not** ban these members in <#{channel_id}> ({reason}):",
+        users,
+        "Check that I have the **Ban Members** permission and that my highest role is above theirs.",
+    )
 
 
 async def mention_spam_ban(
@@ -368,10 +443,20 @@ async def mention_spam_ban(
     else:
         reason = f"Spamming mentions ({mention_count} mentions)"
 
+    failure = (
+        f"{Emojis.warning} Could not ban **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions. "
+        "Check that I have the **Ban Members** permission and that my highest role is above theirs."
+    )
+    me = member.guild.me
+    if not me.guild_permissions.ban_members or outranks(member, me):
+        yield failure
+        return
+
     try:
         await member.ban(reason=reason)
     except discord.HTTPException:
         log.info("[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s", member, member.id, guild_id)
+        yield failure
     else:
         yield f"{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions."
         log.info("[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s", member, member.id, guild_id)

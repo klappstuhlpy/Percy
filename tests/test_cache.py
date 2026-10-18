@@ -126,3 +126,18 @@ async def test_timed_strategy_invalidate_passes_the_value_to_the_action() -> Non
     assert Service.get.invalidate(1) is True
     assert seen == ["val-1"]
     assert Service.get.invalidate(1) is False  # already gone
+
+
+def test_expiring_cache_never_lists_expired_entries(monkeypatch) -> None:
+    """Massban reads ``values()``; an entry flagged hours ago must not show up there."""
+    now = [1000.0]
+    monkeypatch.setattr(cache.time, "monotonic", lambda: now[0])
+    flagged = cache.ExpiringCache(seconds=60.0)
+    flagged[1] = "old raider"
+    now[0] += 61.0
+    flagged[2] = "new raider"
+
+    assert flagged.values() == ["new raider"]
+    assert flagged.items() == [(2, "new raider")]
+    assert len(flagged) == 1
+    assert list(flagged) == [2]
