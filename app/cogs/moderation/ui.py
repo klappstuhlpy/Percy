@@ -403,7 +403,10 @@ class MuteRoleSetUpView(LayoutView):
         if muted > 0:
             confirm = ConfirmationView(
                 interaction.user, timeout=180.0, delete_after=True,
-                content=f"{Emojis.warning} Unbind the mute role and unmute {pluralize(muted):member}?",
+                content=(
+                    f"{Emojis.warning} Unbind the mute role and stop tracking {pluralize(muted):muted member}? "
+                    "They keep the role until you remove it."
+                ),
             )
             await interaction.response.send_message(view=confirm, ephemeral=True)
             confirm.message = await interaction.original_response()

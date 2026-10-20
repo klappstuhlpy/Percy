@@ -253,6 +253,8 @@ async def bulk_member_action(
             if body.action == 'unban':
                 user = await bot.fetch_user(uid_int)
                 await guild.unban(user, reason=reason)
+                # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
+                await bot.timers.delete_member_timer('tempban', guild.id, uid_int)
             else:
                 member = guild.get_member(uid_int)
                 if member is None:
@@ -266,6 +268,7 @@ async def bulk_member_action(
                     await member.kick(reason=reason)
                 elif body.action == 'ban':
                     await member.ban(reason=reason)
+                    await bot.timers.delete_member_timer('tempban', guild.id, uid_int)
                 elif body.action == 'softban':
                     await member.ban(reason=reason, delete_message_seconds=86400)
                     await guild.unban(member, reason=reason)

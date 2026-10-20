@@ -161,6 +161,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   says why, and the server owner can always mute. A mute role level with Percy's own
   top role is now refused with a clear message instead of failing with a permission
   error. `slowmode` no longer reports a successful change as an error.
+- An old tempban or tempmute could undo a newer action. Unbanning someone early
+  (by command or from the dashboard) left their tempban timer running, so if they
+  were banned for good later, the old timer lifted that ban on its original date. The
+  same happened to an indefinite mute applied after a tempmute whose role had been
+  removed by hand. Any ban, unban, mute or unmute now cancels the old timer.
+- A tempban or tempmute that could not end on time (Discord outage, missing
+  permission) used to stay in place for good with no trace. Percy now retries it for
+  about a day and tells your alert channel when a permission is missing. After the
+  mute role is changed with **Merge**, a tempmute also takes the new role away when
+  it ends, instead of leaving the member muted.
+- Members muted in the last few seconds before Percy restarted could leave and rejoin
+  without the mute role. Pending mutes are now saved before Percy shuts down.
+- `mute`, `unmute`, `tempmute` and `selfmute` say the mute role no longer exists
+  instead of failing with an error when it was deleted. `tempmute` only needs Percy
+  to have Manage Roles, like `mute`. A `tempban` DM no longer names the moderator, and
+  if the ban then fails the member is told to disregard it. Unbinding the mute role
+  now says plainly that muted members keep the role.
 
 ## [2.6.0] - 2026-10-03
 

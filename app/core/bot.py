@@ -1199,12 +1199,14 @@ class Bot(commands.Bot):
 
     async def close(self) -> None:
         """Closes this bot and it's aiohttp ClientSession."""
+        # Cogs unload inside super().close(), and their cog_unload may still write (the pending
+        # muted members), so the session and pool close only after it.
+        await super().close()
+
         if hasattr(self, 'session'):
             await self.session.close()
         if hasattr(self, 'db'):
             await self.db.close()
-
-        await super().close()
 
         # Leave out the task running close(): waiting on itself never finishes, and cancelling
         # a gather that contains it recursed until a RecursionError buried the real error.

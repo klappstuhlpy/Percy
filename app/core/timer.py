@@ -203,18 +203,24 @@ class TimerManager:
     async def delete_member_timer(self, event: str, guild_id: int, member_id: int) -> bool:
         """|coro|
 
-        Deletes an active member-scoped moderation timer, resetting the dispatch loop if
-        the cancelled timer was the next one due. Returns whether a timer was removed.
+        Deletes every member-scoped moderation timer of ``event`` for ``member_id`` (persisted
+        and sub-minute in-memory ones), resetting the dispatch loop if a cancelled timer was the
+        next one due. Returns whether a timer was removed.
 
-        Note: only persisted timers are matched; sub-minute in-memory timers are ignored.
+        This is the one place a ban, unban or mute cancels the expiry of an older one, so a
+        stale ``tempban``/``tempmute`` can never fire later and undo the newer action.
         """
-        timer_id = await self.bot.db.timers.delete_member_timer(event, guild_id, member_id)
-        if timer_id is None:
-            return False
-
-        if self._loaded_timer and self._loaded_timer.id == timer_id:
+        timer_ids = await self.bot.db.timers.delete_member_timer(event, guild_id, member_id)
+        if self._loaded_timer and self._loaded_timer.id in timer_ids:
             self.reset_task()
-        return True
+
+        short = [
+            key for key, timer in self._short_timers.items()
+            if timer.event == event and timer[0] == guild_id and timer[2] == member_id
+        ]
+        for key in short:
+            del self._short_timers[key]
+        return bool(timer_ids or short)
 
     async def delete_guild_timers(self, event: str, guild_id: int) -> None:
         """|coro|
@@ -238,7 +244,9 @@ class TimerManager:
             The timer to dispatch.
         """
         if timer.is_short_dispatch:
-            del self._short_timers[timer.id]
+            # A cancelled short timer is already gone from the map; its sleeping task must not fire it.
+            if self._short_timers.pop(timer.id, None) is None:
+                return
         else:
             await self.db.timers.delete_timer(timer.id)
 

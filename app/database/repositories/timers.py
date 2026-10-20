@@ -84,8 +84,12 @@ class TimersRepository(BaseRepository):
         """
         return await self.fetchrow(query, event, str(guild_id), str(member_id))
 
-    async def delete_member_timer(self, event: str, guild_id: int, member_id: int) -> int | None:
-        """Deletes the active ``event`` timer targeting ``member_id`` in ``guild_id``, returning its id."""
+    async def delete_member_timer(self, event: str, guild_id: int, member_id: int) -> list[int]:
+        """Deletes every ``event`` timer targeting ``member_id`` in ``guild_id``, returning their ids.
+
+        Every row goes, not only the first: a stale timer left beside a newer one would otherwise
+        still fire and undo the newer action.
+        """
         query = """
             DELETE FROM timers
             WHERE event = $1
@@ -93,7 +97,7 @@ class TimersRepository(BaseRepository):
               AND metadata #>> '{args,2}' = $3
             RETURNING id;
         """
-        return await self.fetchval(query, event, str(guild_id), str(member_id))
+        return [r['id'] for r in await self.fetch(query, event, str(guild_id), str(member_id))]
 
     async def delete_guild_timers(self, event: str, guild_id: int) -> list[int]:
         """Deletes every ``event`` timer whose first positional arg is ``guild_id``, returning their ids."""

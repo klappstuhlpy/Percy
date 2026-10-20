@@ -154,6 +154,9 @@ async def _apply_mute(bot, guild: discord.Guild, member: discord.Member, body: M
     if member.get_role(role_id) is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is already muted')
 
+    # Not muted right now, so a tempmute timer left over (role removed by hand) is stale and
+    # would end this mute early.
+    await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
     await member.add_roles(role, reason=body.reason)
 
     if body.duration is None:
@@ -175,8 +178,7 @@ async def _lift_mute(bot, guild: discord.Guild, member: discord.Member, reason: 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not muted')
 
     await member.remove_roles(discord.Object(id=role_id), reason=reason)
-    with suppress(Exception):
-        await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
+    await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +467,8 @@ async def member_action(
             await guild.unban(user, reason=body.reason)
         except discord.HTTPException as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
+        await bot.timers.delete_member_timer('tempban', guild.id, user_id)
     else:
         member = guild.get_member(user_id)
         if member is None:
@@ -481,6 +485,8 @@ async def member_action(
                 await member.kick(reason=body.reason)
             elif body.action == 'ban':
                 await member.ban(reason=body.reason, delete_message_seconds=delete_days * 86400)
+                # A permanent ban replaces any tempban, so its expiry must not lift this one later.
+                await bot.timers.delete_member_timer('tempban', guild.id, user_id)
             elif body.action == 'softban':
                 # Ban-then-unban: kicks the member and wipes their recent messages.
                 await member.ban(reason=body.reason, delete_message_seconds=(delete_days or 1) * 86400)

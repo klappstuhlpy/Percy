@@ -36,21 +36,22 @@ async def test_fetch_member_timer_matches_guild_and_target(mock_db: MagicMock) -
     assert params == ["tempmute", "100", "200"]
 
 
-async def test_delete_member_timer_returns_id_and_passes_args(mock_db: MagicMock) -> None:
-    mock_db.fetchval.return_value = 42
+async def test_delete_member_timer_deletes_every_match_and_returns_ids(mock_db: MagicMock) -> None:
+    mock_db.fetch.return_value = [{"id": 42}, {"id": 43}]
     repo = make_repo(mock_db)
 
     result = await repo.delete_member_timer("tempban", 7, 9)
 
-    assert result == 42
-    query, *params = mock_db.fetchval.await_args.args
+    assert result == [42, 43]
+    query, *params = mock_db.fetch.await_args.args
     assert "DELETE FROM timers" in query
+    assert "LIMIT" not in query  # a stale timer beside a newer one must go too
     assert "RETURNING id" in query
     assert params == ["tempban", "7", "9"]
 
 
-async def test_delete_member_timer_returns_none_when_absent(mock_db: MagicMock) -> None:
-    mock_db.fetchval.return_value = None
+async def test_delete_member_timer_returns_empty_when_absent(mock_db: MagicMock) -> None:
+    mock_db.fetch.return_value = []
     repo = make_repo(mock_db)
 
-    assert await repo.delete_member_timer("tempmute", 1, 2) is None
+    assert await repo.delete_member_timer("tempmute", 1, 2) == []

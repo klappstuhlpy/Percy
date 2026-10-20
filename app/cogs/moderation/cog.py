@@ -34,7 +34,15 @@ from config import Emojis
 
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from .antispam import MIN_MENTION_COUNT, SpamChecker, check_raid, mention_spam_ban, mention_threshold
-from .infractions import check_member_hierarchy, default_reason, safe_reason_append, update_role_permissions
+from .infractions import (
+    check_member_hierarchy,
+    default_reason,
+    mute_role_error,
+    retry_expiry_timer,
+    safe_reason_append,
+    timer_origin,
+    update_role_permissions,
+)
 from .lockdown import (
     build_lockdown_error_embed,
     end_lockdown,
@@ -120,8 +128,14 @@ class Moderation(Cog):
         # Finish the lockdown-role work a restart interrupted, even where Sentinel is now off.
         await self.bot.db.sentinel_roles.resume()
 
-    def cog_unload(self) -> None:
-        self.bulk_mute_insert.stop()
+    async def cog_unload(self) -> None:
+        self.bulk_mute_insert.cancel()
+        # Mutes are only batched in memory; without this final write a member muted in the last
+        # few seconds before a reload or shutdown could leave and rejoin without the role.
+        try:
+            await self.bulk_mute_insert()
+        except Exception:
+            log.exception("Could not save the pending muted members on unload")
 
     async def cog_before_invoke(self, ctx: commands.Context) -> None:
         guild_ctx = cast("ModGuildContext", ctx)
@@ -1538,6 +1552,8 @@ class Moderation(Cog):
             return
 
         await ctx.guild.ban(member, reason=reason)
+        # A permanent ban replaces any tempban, so its expiry must not lift this one later.
+        await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
         self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Successfully banned `{member}`.")
 
@@ -1596,6 +1612,8 @@ class Moderation(Cog):
                     await ctx.guild.ban(member, reason=reason)
                 except discord.HTTPException:
                     failed += 1
+                else:
+                    await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
                 if i % 5 == 0:
                     await progress.update(f"Banning members... ({i}/{total_members})")
 
@@ -1666,6 +1684,8 @@ class Moderation(Cog):
             reason = default_reason(ctx.author)
 
         await ctx.guild.unban(member.user, reason=reason)
+        # An early unban ends the tempban; its timer must not lift a later ban.
+        await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.user.id)
         self.bot.dispatch("mod_action", ctx.guild.id, "unban", member.user.id, ctx.author.id, reason)
         if member.reason:
             await ctx.send_success(
@@ -1733,12 +1753,26 @@ class Moderation(Cog):
 
         until = f"until {discord.utils.format_dt(duration.dt, 'F')}"
 
-        with suppress(discord.HTTPException, AttributeError):
-            await member.send(f"{Emojis.info} You have been banned from {ctx.guild.name} {until}. Reason: {reason}")  # type: ignore[union-attr]
+        # The DM has to go out before the ban (no shared server afterwards), but without the
+        # moderator's name the audit-log reason carries.
+        shown = reason.removeprefix(f"{ctx.author} (ID: {ctx.author.id}): ")
+        note = "" if shown == default_reason(ctx.author) else f" Reason: {shown}"
+        dm: discord.Message | None = None
+        if isinstance(member, discord.Member):
+            with suppress(discord.HTTPException):
+                dm = await member.send(f"{Emojis.info} You have been banned from {ctx.guild.name} {until}.{note}")
 
         reason = safe_reason_append(reason, until)
         zone = await self.bot.db.get_user_timezone(ctx.author.id)
-        await ctx.guild.ban(member, reason=reason)
+        try:
+            await ctx.guild.ban(member, reason=reason)
+        except discord.HTTPException:
+            if dm is not None:
+                with suppress(discord.HTTPException):
+                    await dm.edit(content=f"{Emojis.info} The ban from {ctx.guild.name} did not go through. Disregard it.")
+            raise
+        # Not banned until now, so any tempban timer left over is stale and would end this one early.
+        await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
         self.bot.dispatch("mod_action", ctx.guild.id, "tempban", member.id, ctx.author.id, reason)
         await self.bot.timers.create(
             duration.dt,
@@ -1757,7 +1791,8 @@ class Moderation(Cog):
         guild_id, mod_id, member_id = timer.args
 
         guild = self.bot.get_guild(guild_id)
-        if guild is None:
+        if guild is None or guild.unavailable:
+            await retry_expiry_timer(self.bot, timer, "guild unavailable")
             return
 
         moderator = await self.bot.get_or_fetch_member(guild, mod_id)
@@ -1771,8 +1806,16 @@ class Moderation(Cog):
         else:
             moderator = f"{moderator} (ID: {mod_id})"
 
-        reason = f"Automatic unban from timer made on {timer.created} by {moderator}."
-        await guild.unban(discord.Object(id=member_id), reason=reason)
+        reason = f"Automatic unban from timer made on {timer_origin(timer)} by {moderator}."
+        try:
+            await guild.unban(discord.Object(id=member_id), reason=reason)
+        except discord.NotFound:
+            return  # already unbanned
+        except discord.HTTPException as exc:
+            if isinstance(exc, discord.Forbidden) and not timer.kwargs.get("attempt"):  # alert once, not per retry
+                config = await self.bot.db.get_guild_config(guild_id)
+                await config.alert_missing_permission(f"lift the expired tempban of user ID {member_id}")
+            await retry_expiry_timer(self.bot, timer, str(exc))
 
     # MUTE
 
@@ -1812,8 +1855,8 @@ class Moderation(Cog):
         role_id = ctx.guild_config.mute_role_id
         role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
-            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
+        if error := mute_role_error(ctx.guild, role_id):
+            await ctx.send_error(error)
             return
 
         failed = 0
@@ -1829,6 +1872,9 @@ class Moderation(Cog):
                 if member._roles.has(role_id):
                     skipped.append(str(member))
                     continue
+                # Not muted right now, so a tempmute timer left over (role removed by hand) is stale
+                # and would end this indefinite mute.
+                await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
                 try:
                     await member.add_roles(role, reason=reason)
                 except discord.HTTPException:
@@ -1883,8 +1929,8 @@ class Moderation(Cog):
         role_id = ctx.guild_config.mute_role_id
         role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
-            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
+        if error := mute_role_error(ctx.guild, role_id):
+            await ctx.send_error(error)
             return
 
         failed = 0
@@ -1897,15 +1943,12 @@ class Moderation(Cog):
                 if error := check_member_hierarchy(ctx, member, action="unmute", check_bot=False):
                     blocked.append(f"`{member}`: {error}")
                     continue
-                timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
-
                 try:
                     await member.remove_roles(role, reason=reason)
                 except discord.HTTPException:
                     failed += 1
                 else:
-                    if timer is not None:
-                        await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
+                    await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
                     self.bot.dispatch("mod_action", ctx.guild.id, "unmute", member.id, ctx.author.id, reason)
 
                 if progress is not None and (i == total or i % 5 == 0):
@@ -1921,7 +1964,7 @@ class Moderation(Cog):
         description="Temporarily mutes a member for the specified duration.",
         guild_only=True,
         hybrid=True,
-        bot_permissions=PermissionTemplate.sup,
+        bot_permissions=[discord.Permissions.manage_roles],
         user_permissions=PermissionTemplate.sup,
     )
     @checks.requires_timer()
@@ -1973,10 +2016,12 @@ class Moderation(Cog):
                 await ctx.send_error(f"{member} is already muted. Unmute them first to apply a temporary mute.")
             return
 
-        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
-            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
+        if error := mute_role_error(ctx.guild, role_id):
+            await ctx.send_error(error)
             return
 
+        # The member is not muted, so any tempmute timer left over is stale and would end this one early.
+        await self.bot.timers.delete_member_timer("tempmute", ctx.guild.id, member.id)
         await member.add_roles(discord.Object(id=role_id), reason=reason)
         self.bot.dispatch("mod_action", ctx.guild.id, "tempmute", member.id, ctx.author.id, reason)
 
@@ -1999,11 +2044,28 @@ class Moderation(Cog):
         guild_id, mod_id, member_id, role_id = timer.args
 
         guild = self.bot.get_guild(guild_id)
-        if guild is None:
+        if guild is None or guild.unavailable:
+            await retry_expiry_timer(self.bot, timer, "guild unavailable")
             return
 
-        member = await self.bot.get_or_fetch_member(guild, member_id)
-        if member is None or not member._roles.has(role_id):
+        member = guild.get_member(member_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(member_id)
+            except discord.NotFound:
+                member = None
+            except discord.HTTPException as exc:
+                await retry_expiry_timer(self.bot, timer, str(exc))
+                return
+
+        # The role the mute was made with, plus the current mute role should it have been rebound
+        # (a merge hands the new role to everyone muted) -- the mute ends on both.
+        config = await self.bot.db.get_guild_config(guild_id)
+        role_ids = {role_id}
+        if config is not None and config.mute_role_id is not None:
+            role_ids.add(config.mute_role_id)
+        held = [discord.Object(id=r) for r in role_ids if member is not None and member._roles.has(r)]
+        if member is None or not held:
             self._mute_data_batch[guild_id].append((member_id, False))
             return
 
@@ -2019,14 +2081,20 @@ class Moderation(Cog):
             else:
                 moderator = f"{moderator} (ID: {mod_id})"
 
-            reason = f"Automatic unmute from timer made on {timer.created} by {moderator}."
+            reason = f"Automatic unmute from timer made on {timer_origin(timer)} by {moderator}."
         else:
-            reason = f"Expiring self-mute made on {timer.created} by {member}"
+            reason = f"Expiring self-mute made on {timer_origin(timer)} by {member}"
 
         try:
-            await member.remove_roles(discord.Object(id=role_id), reason=reason)
-        except discord.HTTPException:
+            await member.remove_roles(*held, reason=reason)
+        except discord.NotFound:
+            # The member left or the role is gone in the meantime -- either way they are not muted anymore.
             self._mute_data_batch[guild_id].append((member_id, False))
+        except discord.HTTPException as exc:
+            # Still muted: keep them tracked so a rejoin cannot shake the role off, and try again later.
+            if isinstance(exc, discord.Forbidden) and config is not None and not timer.kwargs.get("attempt"):
+                await config.alert_missing_permission(f"lift the expired mute of {member}")
+            await retry_expiry_timer(self.bot, timer, str(exc))
 
     @command(
         "muterole",
@@ -2073,8 +2141,8 @@ class Moderation(Cog):
             await ctx.send_error('You are already muted.')
             return
 
-        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
-            await ctx.send_error('My highest role must be above the mute role before I can mute you.')
+        if error := mute_role_error(ctx.guild, role_id):
+            await ctx.send_error(error)
             return
 
         created_at = ctx.message.created_at
@@ -2091,6 +2159,7 @@ class Moderation(Cog):
             return
 
         reason = f'Self-mute for {ctx.author} (ID: {ctx.author.id}) for {delta}'
+        await self.bot.timers.delete_member_timer('tempmute', ctx.guild.id, ctx.author.id)
         await ctx.author.add_roles(discord.Object(id=role_id), reason=reason)
         await self.bot.timers.create(
             duration.dt,

@@ -8,6 +8,8 @@ reaching back into the cog.
 
 from __future__ import annotations
 
+import datetime
+import logging
 import time
 from contextlib import suppress
 from typing import TYPE_CHECKING
@@ -21,9 +23,12 @@ from config import Emojis
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
 
-    from app.core import Context
+    from app.core import Bot, Context
+    from app.core.timer import Timer
 
     ProgressCallback = Callable[[int, int], Awaitable[None]]
+
+log = logging.getLogger(__name__)
 
 
 def check_member_hierarchy(
@@ -52,6 +57,60 @@ def safe_reason_append(base: str, to_append: str) -> str:
 def default_reason(author: discord.abc.User | discord.Member) -> str:
     """Return the standard audit-log reason for a moderation action performed by ``author``."""
     return f"Action done by {author} (ID: {author.id})"
+
+
+def mute_role_error(guild: discord.Guild, role_id: int) -> str | None:
+    """Why Percy cannot hand out or take away the mute role ``role_id`` right now, else ``None``."""
+    role = guild.get_role(role_id)
+    if role is None:
+        return "The mute role no longer exists. Set up a new one with `muterole`."
+    if guild.me.top_role <= role:
+        return "My highest role must be above the mute role before I can mute or unmute anyone."
+    return None
+
+
+#: How many times an expiry timer (tempban/tempmute) is retried before it is given up.
+TIMER_MAX_RETRIES = 10
+TIMER_RETRY_BASE = datetime.timedelta(minutes=5)
+TIMER_RETRY_CAP = datetime.timedelta(hours=6)
+
+
+def timer_retry_delay(attempt: int) -> datetime.timedelta | None:
+    """The wait before retry number ``attempt + 1`` of a failed expiry, or ``None`` to give up.
+
+    Doubles from 5 minutes up to 6 hours, so ten retries cover a Discord outage of about a day.
+    """
+    if attempt >= TIMER_MAX_RETRIES:
+        return None
+    return min(TIMER_RETRY_BASE * 2**attempt, TIMER_RETRY_CAP)
+
+
+def timer_origin(timer: Timer) -> str:
+    """When the moderator originally set ``timer``, surviving any retries."""
+    return timer.kwargs.get("origin") or str(timer.created)
+
+
+async def retry_expiry_timer(bot: Bot, timer: Timer, why: str) -> None:
+    """Re-arm a tempban/tempmute expiry that could not run, so the punishment still ends.
+
+    :meth:`TimerManager.call` deletes the row before dispatching, so an expiry that fails
+    without this is lost for good and a temporary ban or mute silently becomes permanent.
+    """
+    attempt = int(timer.kwargs.get("attempt", 0))
+    delay = timer_retry_delay(attempt)
+    if delay is None:
+        log.warning("Giving up on %s timer %s with args %s after %d retries: %s", timer.event, timer.id, timer.args, attempt, why)
+        return
+
+    log.info("Retrying %s timer %s in %s: %s", timer.event, timer.id, delay, why)
+    await bot.timers.create(
+        discord.utils.utcnow() + delay,
+        timer.event,
+        *timer.args,
+        attempt=attempt + 1,
+        origin=timer_origin(timer),
+        timezone=timer.timezone,
+    )
 
 
 async def update_role_permissions(
