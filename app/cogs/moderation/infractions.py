@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.utils import merge_perms
+from app.utils.checks import hierarchy_error
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -30,30 +31,15 @@ def check_member_hierarchy(
     member: discord.abc.Snowflake | discord.Member,
     *,
     action: str,
-    check_owner: bool = True,
+    check_bot: bool = True,
 ) -> str | None:
-    """Return an error message if a moderation ``action`` cannot target ``member``, else ``None``.
+    """Return an error message if ``ctx.author`` cannot ``action`` ``member``, else ``None``.
 
-    Centralises the self / server-owner / role-hierarchy guards shared by the ban, kick and mute
-    commands. ``check_owner`` is disabled for mutes, which historically skipped the owner guard.
-    The ``isinstance`` guard mirrors the ban family, where ``member`` may be a bare snowflake
-    (banning by ID); for the always-resolved mute case it is simply always true.
+    A thin command-side wrapper over :func:`app.utils.checks.hierarchy_error`, the one
+    hierarchy rule every moderation path shares.
     """
     assert ctx.guild is not None
-    if ctx.author.id == member.id:
-        return f"You cannot {action} yourself."
-
-    if check_owner and member.id == ctx.guild.owner_id:
-        return f"You cannot {action} the server owner."
-
-    if isinstance(member, discord.Member):
-        if ctx.author.top_role < member.top_role:
-            return f"You cannot {action} a member with a role equal to or higher than yours."
-
-        if ctx.guild.me.top_role < member.top_role:
-            return f"I cannot {action} a member with a role equal to or higher than mine."
-
-    return None
+    return hierarchy_error(ctx.author, member, ctx.guild.me, action=action, check_bot=check_bot)  # type: ignore[arg-type]
 
 
 def safe_reason_append(base: str, to_append: str) -> str:

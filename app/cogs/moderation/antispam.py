@@ -10,6 +10,7 @@ import discord
 
 from app.core.pagination import TextSource
 from app.utils import ListedRateLimit, RateLimit, cache
+from app.utils.checks import hierarchy_error
 from config import Emojis
 
 from .models import FlaggedMember, SpamCheckerResult, SpammerSequence
@@ -340,9 +341,8 @@ async def check_raid(
 
 
 def outranks(user: object, me: discord.Member) -> bool:
-    """Whether ``user``'s top role keeps Percy (``me``) from banning them."""
-    top_role = getattr(user, "top_role", None)
-    return top_role is not None and top_role >= me.top_role
+    """Whether the shared hierarchy rule keeps Percy (``me``) from banning ``user``."""
+    return hierarchy_error(None, user, me, action="ban") is not None  # type: ignore[arg-type]
 
 
 def _alert_pages(header: str, users: Sequence[discord.abc.Snowflake], footer: str) -> list[str]:

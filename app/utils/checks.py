@@ -97,6 +97,46 @@ def requires_timer() -> Callable[[T], T]:
     return commands.check(predicate)
 
 
+def hierarchy_error(
+    actor: discord.Member | None,
+    target: discord.Member | discord.abc.Snowflake,
+    me: discord.Member,
+    *,
+    action: str,
+    check_bot: bool = True,
+) -> str | None:
+    """Return why ``actor`` may not ``action`` ``target``, or ``None`` when it is allowed.
+
+    The single hierarchy rule for every moderation path (commands, the sentinel massban
+    button, automatic bans, the dashboard). ``me`` is Percy's own member in the guild.
+
+    - Nobody may target themselves, Percy, or the server owner.
+    - ``actor`` must strictly outrank ``target`` (equal top roles are refused), unless
+      ``actor`` is the server owner. Pass ``actor=None`` for an automatic action.
+    - Percy must strictly outrank ``target`` (skip with ``check_bot=False`` for actions
+      that never touch the target's roles or membership, such as a warning).
+
+    A ``target`` without a ``top_role`` (a bare ID, a user who is not in the server) only
+    gets the identity checks: there is no hierarchy to compare.
+    """
+    owner_id = me.guild.owner_id
+    if actor is not None and actor.id == target.id:
+        return f"You cannot {action} yourself."
+    if target.id == me.id:
+        return f"I cannot {action} myself."
+    if target.id == owner_id:
+        return f"You cannot {action} the server owner."
+
+    top_role = getattr(target, "top_role", None)
+    if top_role is None:
+        return None
+    if actor is not None and actor.id != owner_id and actor.top_role <= top_role:
+        return f"You cannot {action} a member with a role equal to or higher than yours."
+    if check_bot and me.top_role <= top_role:
+        return f"I cannot {action} a member with a role equal to or higher than mine."
+    return None
+
+
 def can_mute() -> Callable[[T], T]:
     """Check if the author can mute someone in the current context and adds support for the :class:`ModGuildContext`."""
 
@@ -108,7 +148,10 @@ def can_mute() -> Callable[[T], T]:
         if config.mute_role is None:
             await ctx.send_error("The mute role has not been set up.")
             return False
-        return ctx.author.top_role > config.mute_role
+        if ctx.author.id != ctx.guild.owner_id and ctx.author.top_role <= config.mute_role:
+            await ctx.send_error("Your highest role must be above the mute role to use this command.")
+            return False
+        return True
 
     return commands.check(predicate)
 

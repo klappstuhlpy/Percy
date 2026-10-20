@@ -120,3 +120,20 @@ def test_require_all_versus_any() -> None:
     assert require_all.predicate(only_embed) is False
     assert require_all.predicate(both) is True
     assert require_any.predicate(only_embed) is True
+
+
+def test_require_any_never_turns_the_pinned_guard_into_a_match() -> None:
+    # What the cog passes by default: pins spared, filters OR-ed. A message matching no filter stays.
+    plan = build_purge_predicate(embeds=True, files=True, delete_pinned=False, require="any")
+
+    assert plan.predicate(FakeMessage(content="innocent")) is False
+    assert plan.predicate(FakeMessage(embeds=[object()])) is True
+    assert plan.predicate(FakeMessage(embeds=[object()], pinned=True)) is False
+
+
+def test_no_filters_still_prompts_when_pins_are_spared() -> None:
+    plan = build_purge_predicate(delete_pinned=False)
+
+    assert plan.require_prompt is True
+    assert plan.predicate(FakeMessage()) is True
+    assert plan.predicate(FakeMessage(pinned=True)) is False

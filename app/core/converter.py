@@ -152,32 +152,32 @@ class IgnoreEntity(commands.Converter[str]):
         return await commands.run_converters(ctx, IgnoreableEntity, argument, ctx.current_parameter)
 
 
-def can_execute_action(ctx: Context, user: discord.Member, target: discord.Member) -> bool:
-    return user.id == ctx.bot.owner_id or user == ctx.guild.owner or user.top_role > target.top_role
-
-
 class MemberID(commands.Converter[discord.Member], app_commands.Transformer):
     """
     A Converter that resolves member ids by checking if the id is a valid (fetchable)
     member or pass a fake member object that takes an id parameter.
+
+    It only resolves: the commands using it run the shared hierarchy check
+    (``check_member_hierarchy``) themselves, so prefix and slash invocations get the same rule.
     """
 
     async def convert(self, ctx: Context, argument: str) -> discord.Member:
         try:
-            m = await commands.MemberConverter().convert(ctx, argument)
+            return await commands.MemberConverter().convert(ctx, argument)
         except commands.BadArgument:
             try:
                 member_id = int(argument, base=10)
             except ValueError:
                 raise commands.BadArgument(f"{argument!r} is not a valid member or member ID.") from None
-            else:
-                m = await ctx.bot.get_or_fetch_member(ctx.guild, member_id)
-                if m is None:
-                    return type("_Hackban", (), {"id": member_id, "__str__": lambda s: f"Member ID {s.id}"})()
 
-        if not can_execute_action(ctx, ctx.author, m):  # type: ignore[arg-type]
-            raise commands.BadArgument("You cannot do this action on this user due to role hierarchy.")
+        m = await ctx.bot.get_or_fetch_member(ctx.guild, member_id)
+        if m is None:
+            return type("_Hackban", (), {"id": member_id, "__str__": lambda s: f"Member ID {s.id}"})()
         return m
+
+    async def transform(self, interaction: discord.Interaction, value: Any) -> discord.Member | discord.User:
+        # The user option arrives already resolved: a Member, or a User who is not in the server.
+        return value
 
     @property
     def type(self) -> Literal[AppCommandOptionType.user]:

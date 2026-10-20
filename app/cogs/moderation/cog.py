@@ -723,7 +723,7 @@ class Moderation(Cog):
             await ctx.channel.edit(slowmode_delay=slowmode_delay, reason=reason)  # type: ignore[union-attr]
             if slowmode_delay > 0:
                 fmt = timetools.human_timedelta(duration.dt, source=ctx.message.created_at, accuracy=2)
-                await ctx.send_error(f"Configured slowmode to {fmt}", ephemeral=True)
+                await ctx.send_success(f"Configured slowmode to {fmt}", ephemeral=True)
             else:
                 await ctx.send_success("Disabled slowmode", ephemeral=True)
 
@@ -1276,6 +1276,13 @@ class Moderation(Cog):
                     ctx.channel.purge(limit=search, before=before, after=after, check=predicate),  # type: ignore[arg-type]
                     timeout=100,  # type: ignore[union-attr]
                 )
+            except TimeoutError:
+                # Messages older than 14 days are deleted one by one, so a deep search can outrun the timeout.
+                await ctx.send_error(
+                    "The purge timed out before it finished; some messages may already have been removed. "
+                    "Try a smaller search or narrow it with `--after`."
+                )
+                return
             except discord.Forbidden:
                 await ctx.send_error("I do not have permissions to delete messages.")
                 return
@@ -1488,6 +1495,10 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
+        if not isinstance(member, discord.Member):
+            await ctx.send_error(f"`{member}` is not a member of this server.")
+            return
+
         if error := check_member_hierarchy(ctx, member, action="kick"):
             await ctx.send_error(error)
             return
@@ -1555,9 +1566,24 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
+        if not members:
+            raise commands.BadArgument("No members were passed to ban.")
+
+        blocked: list[str] = []
+        allowed: list[MaybeMember] = []
+        for member in members:
+            if error := check_member_hierarchy(ctx, member, action="ban"):
+                blocked.append(f"`{member}`: {error}")
+            else:
+                allowed.append(member)
+
+        if blocked:
+            await ctx.send_error("Skipping these members:\n" + "\n".join(blocked))
+
+        members = allowed
         total_members = len(members)
         if total_members == 0:
-            raise commands.BadArgument("No members were passed to ban.")
+            return
 
         confirm = await ctx.confirm(f"{Emojis.warning} This will ban **{pluralize(total_members):member}**. Are you sure?")
         if not confirm:
@@ -1600,6 +1626,11 @@ class Moderation(Cog):
         assert ctx.guild is not None
         if reason is None:
             reason = default_reason(ctx.author)
+
+        # A softban of a non-member would only unban them, letting a Kick Members moderator lift any ban.
+        if not isinstance(member, discord.Member):
+            await ctx.send_error(f"`{member}` is not a member of this server.")
+            return
 
         if error := check_member_hierarchy(ctx, member, action="soft-ban"):
             await ctx.send_error(error)
@@ -1789,8 +1820,12 @@ class Moderation(Cog):
         skipped: list[str] = []
         # Only surface a progress card for sizeable batches; small mutes are instant.
         tracker = ctx.progress(f"Muting {total} members...") if total >= 5 else nullcontext()
+        blocked: list[str] = []
         async with tracker as progress:
             for i, member in enumerate(members, 1):
+                if error := check_member_hierarchy(ctx, member, action="mute"):
+                    blocked.append(f"`{member}`: {error}")
+                    continue
                 if member._roles.has(role_id):
                     skipped.append(str(member))
                     continue
@@ -1804,7 +1839,9 @@ class Moderation(Cog):
                 if progress is not None and (i == total or i % 5 == 0):
                     await progress.tick(i, total, "Muting")
 
-        message = f"Muted [`{total - failed - len(skipped)}`/`{total}`] members."
+        message = f"Muted [`{total - failed - len(skipped) - len(blocked)}`/`{total}`] members."
+        if blocked:
+            message += "\nNot muted:\n" + "\n".join(blocked)
         if skipped:
             message += f"\nAlready muted (skipped): {human_join([f'`{m}`' for m in skipped], final='and')}."
         await ctx.send_success(message)
@@ -1856,12 +1893,11 @@ class Moderation(Cog):
         tracker = ctx.progress(f"Unmuting {total} members...") if total >= 5 else nullcontext()
         async with tracker as progress:
             for i, member in enumerate(members, 1):
-                timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
-                # A self-mute stores the same id for both the moderator and the target (args[1] == args[2]).
-                is_selfmute = timer is not None and timer.args[1] == member.id
-                if is_selfmute and member.id == ctx.author.id:
-                    blocked.append(str(member))
+                # The self check also keeps a self-muted member from lifting their own self-mute.
+                if error := check_member_hierarchy(ctx, member, action="unmute"):
+                    blocked.append(f"`{member}`: {error}")
                     continue
+                timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
 
                 try:
                     await member.remove_roles(role, reason=reason)
@@ -1877,9 +1913,7 @@ class Moderation(Cog):
 
         message = f"Unmuted [`{total - failed - len(blocked)}`/`{total}`] members."
         if blocked:
-            message += (
-                f"\nYou cannot remove your own self-mute: {human_join([f'`{m}`' for m in blocked], final='and')}."
-            )
+            message += "\nNot unmuted:\n" + "\n".join(blocked)
         await ctx.send_success(message)
 
     @command(
@@ -1922,7 +1956,7 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if error := check_member_hierarchy(ctx, member, action="mute", check_owner=False):
+        if error := check_member_hierarchy(ctx, member, action="mute"):
             await ctx.send_error(error)
             return
 

@@ -1363,7 +1363,24 @@ class SentinelAlertMassbanButton(
             return
 
         now = interaction.created_at
-        members = sorted(suspects, key=lambda m: m.joined_at or now)
+        # Percy bans with its own authority, so hold the clicker to the same hierarchy rule as the ban command.
+        # A suspect only carries an id; compare against the live member while they are still in the server.
+        guild = interaction.guild
+        moderator = cast("discord.Member", interaction.user)
+        members = sorted(
+            (
+                m for m in suspects
+                if checks.hierarchy_error(moderator, guild.get_member(m.id) or m, guild.me, action="ban") is None
+            ),
+            key=lambda m: m.joined_at or now,
+        )
+        skipped = len(suspects) - len(members)
+        if not members:
+            await interaction.response.send_message(
+                f"{Emojis.error} Every detected raider outranks you or me, so I cannot ban any of them.",
+                ephemeral=True,
+            )
+            return
         fmt = "\n".join(
             f"{m.id}\tJoined: {m.joined_at}\tCreated: {m.created_at}\t{m}"
             for m in members
@@ -1398,4 +1415,5 @@ class SentinelAlertMassbanButton(
 
         await interaction.followup.send(
             f"{Emojis.success} Banned **{count}/{len(members)}** raiders."
+            + (f" Skipped **{skipped}** who outrank you or me." if skipped else "")
         )

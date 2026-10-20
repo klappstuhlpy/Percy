@@ -11,6 +11,7 @@ from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.core.pagination import LinePaginator
 from app.utils import get_asset_url, helpers
+from app.utils.checks import hierarchy_error
 from config import Emojis
 
 
@@ -123,8 +124,9 @@ class ModLog(Cog):
         if member.bot:
             await ctx.send_error('You cannot warn a bot.')
             return
-        if member.id == ctx.author.id:
-            await ctx.send_error('You cannot warn yourself.')
+        # A warning never touches the member's roles, so only the moderator has to outrank them.
+        if error := hierarchy_error(ctx.author, member, ctx.guild.me, action='warn', check_bot=False):  # type: ignore[arg-type]
+            await ctx.send_error(error)
             return
 
         case = await self.record_case(ctx.guild.id, CaseType.WARN.value, member.id, ctx.author.id, reason)

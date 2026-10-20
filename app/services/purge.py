@@ -114,9 +114,6 @@ def build_purge_predicate(
     if suffix:
         predicates.append(lambda m: m.content.endswith(suffix))
 
-    if not delete_pinned:
-        predicates.append(lambda m: not m.pinned)
-
     require_prompt = False
     if not predicates:
         require_prompt = True
@@ -124,7 +121,10 @@ def build_purge_predicate(
 
     op = all if require == "all" else any
 
+    # The pinned guard is never one of the criteria: under ``any`` it would match nearly every message.
     def predicate(m: PurgeMessage) -> bool:
+        if not delete_pinned and m.pinned:
+            return False
         return op(p(m) for p in predicates)
 
     return PurgePlan(predicate=predicate, require_prompt=require_prompt)

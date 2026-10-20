@@ -138,6 +138,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locked the voice channel's text chat. The lockdown summary counts the channels you
   asked for ("2/3 channels"), not the failures, and the dashboard answers a malformed
   channel id with a clear error instead of a server error.
+- `purge --require any` deleted every unpinned message in range, whatever filters you
+  gave it, because "not pinned" was counted as one of the filters. It now deletes only
+  messages matching one of your filters, and a `purge` with no filters asks for
+  confirmation again. A purge that runs out of time now says so instead of failing
+  with an error.
+- `/kick`, `/softban` and `/tempban` always failed as slash commands, and banning by
+  ID (`ban`, `tempban`, `multiban`) failed for everyone except the server owner. Both
+  work again. `kick` and `softban` refuse someone who is not in the server, so a
+  softban can no longer be used to lift an existing ban.
+- Every moderation action now follows the same hierarchy rule: you cannot act on
+  yourself, Percy or the server owner, and both you and Percy must have a strictly
+  higher top role than the member (the server owner may act on anyone below Percy).
+  Before, `mute`, `unmute` and `warn` checked no hierarchy at all, so a helper could
+  mute a senior moderator or mute Percy, members with the same top role could act on
+  each other, and the raid alert's **Ban All Raiders** button banned raiders who
+  outranked the person clicking it. Members you cannot act on are listed as skipped.
+- `mute` did nothing at all when your top role was not above the mute role. It now
+  says why, and the server owner can always mute. `slowmode` no longer reports a
+  successful change as an error.
 
 ## [2.6.0] - 2026-10-03
 
