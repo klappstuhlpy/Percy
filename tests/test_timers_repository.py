@@ -36,6 +36,17 @@ async def test_fetch_member_timer_matches_guild_and_target(mock_db: MagicMock) -
     assert params == ["tempmute", "100", "200"]
 
 
+async def test_drop_lockdown_channels_narrows_the_guilds_lockdown_timers(mock_db: MagicMock) -> None:
+    mock_db.fetch.return_value = [{"id": 5}]
+    repo = make_repo(mock_db)
+
+    assert await repo.drop_lockdown_channels(7, [10, 20]) == [5]
+    query, *params = mock_db.fetch.await_args.args
+    assert "event = 'lockdown'" in query and "metadata #>> '{args,0}' = $1" in query
+    assert "DELETE FROM timers" in query and "jsonb_set" in query  # emptied timers go, the rest narrow
+    assert params == ["7", [10, 20]]
+
+
 async def test_delete_member_timer_deletes_every_match_and_returns_ids(mock_db: MagicMock) -> None:
     mock_db.fetch.return_value = [{"id": 42}, {"id": 43}]
     repo = make_repo(mock_db)

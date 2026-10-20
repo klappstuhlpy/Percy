@@ -7,21 +7,28 @@ the :class:`Moderation` cog, and the final muted-member flush on unload.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 from collections import defaultdict
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
+from app.cogs.moderation import cog as cog_module
 from app.cogs.moderation.cog import Moderation
 from app.cogs.moderation.infractions import (
     TIMER_MAX_RETRIES,
+    TIMER_RETRY_BASE,
     mute_role_error,
     retry_expiry_timer,
     timer_retry_delay,
 )
 from app.core.timer import TimerManager
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def _http(status: int) -> discord.HTTPException:
@@ -154,9 +161,17 @@ def _guild(**kwargs: object) -> MagicMock:
 
 
 async def test_tempban_expiry_retries_when_guild_unavailable() -> None:
-    cog = _cog(None)
+    cog = _cog(_guild(unavailable=True))
     await Moderation.on_tempban_timer_complete(cog, _timer("tempban", 1, 2, 3))  # type: ignore[arg-type]
     cog.bot.timers.create.assert_awaited_once()
+
+
+async def test_expiry_is_dropped_once_percy_left_the_guild() -> None:
+    cog = _cog(None)  # after ready, an outage keeps the guild cached; missing means Percy left
+    await Moderation.on_tempban_timer_complete(cog, _timer("tempban", 1, 2, 3))  # type: ignore[arg-type]
+    await Moderation.on_tempmute_timer_complete(cog, _timer("tempmute", 1, 2, 3, 40))  # type: ignore[arg-type]
+    await Moderation.on_lockdown_timer_complete(cog, _timer("lockdown", 1, 2, 5, [10]))  # type: ignore[arg-type]
+    cog.bot.timers.create.assert_not_awaited()
 
 
 async def test_tempban_expiry_retries_on_server_error() -> None:
@@ -232,4 +247,82 @@ async def test_unload_flushes_pending_mutes() -> None:
     await Moderation.cog_unload(cog)  # type: ignore[arg-type]
 
     cog.bulk_mute_insert.cancel.assert_called_once()
+    cog._sentinel_resume.cancel.assert_called_once()
     flush.assert_awaited_once()
+
+
+async def test_unload_survives_a_cog_load_that_never_ran() -> None:
+    flush = AsyncMock()
+    cog = SimpleNamespace(bulk_mute_insert=MagicMock(cancel=MagicMock(), side_effect=flush), _sentinel_resume=None)
+    await Moderation.cog_unload(cog)  # type: ignore[arg-type]
+    flush.assert_awaited_once()
+
+
+# -- lockdown timers ----------------------------------------------------------------------------
+
+
+async def test_drop_lockdown_channels_narrows_and_cancels_short_timers() -> None:
+    manager = _manager([])
+    manager.bot.db.timers.drop_lockdown_channels = AsyncMock(return_value=[8])
+    manager._loaded_timer = SimpleNamespace(id=8)  # narrowed in the db, so its in-memory args are stale
+    manager._short_timers = {
+        -1: _ShortTimer(-1, "lockdown", 1, 2, 5, [10, 11]),  # type: ignore[arg-type]  narrowed
+        -2: _ShortTimer(-2, "lockdown", 1, 2, 5, [10]),  # type: ignore[arg-type]  emptied -> cancelled
+        -3: _ShortTimer(-3, "lockdown", 9, 2, 5, [10]),  # type: ignore[arg-type]  another guild
+    }
+
+    await manager.drop_lockdown_channels(1, [10])
+
+    assert set(manager._short_timers) == {-1, -3}
+    assert manager._short_timers[-1][3] == [11] and manager._short_timers[-3][3] == [10]
+    manager.reset_task.assert_called_once()
+
+
+async def test_lockdown_expiry_retries_only_failed_channels_and_alerts_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    failed = MagicMock(id=11, mention="<#11>")
+    monkeypatch.setattr(cog_module, "end_lockdown", AsyncMock(return_value=[failed]))
+    cog = _cog(_guild(get_channel_or_thread=MagicMock(return_value=None)))
+    config = cog.bot.db.get_guild_config.return_value
+
+    await Moderation.on_lockdown_timer_complete(cog, _timer("lockdown", 1, 2, 5, [10, 11]))  # type: ignore[arg-type]
+    _, event, *args = cog.bot.timers.create.await_args.args
+    assert (event, args) == ("lockdown", [1, 2, 5, [11]])
+    config.alert_missing_permission.assert_awaited_once()
+
+    await Moderation.on_lockdown_timer_complete(cog, _timer("lockdown", 1, 2, 5, [11], attempt=1))  # type: ignore[arg-type]
+    config.alert_missing_permission.assert_awaited_once()  # not again per retry
+    assert cog.bot.timers.create.await_count == 2
+
+
+async def test_lockdown_end_retries_failed_channels(monkeypatch: pytest.MonkeyPatch) -> None:
+    failed = MagicMock(id=11, mention="<#11>")
+    monkeypatch.setattr(cog_module, "end_lockdown", AsyncMock(return_value=[failed]))
+    cog = _cog(None)
+    cog.bot.db.moderation.get_lockdowns = AsyncMock(return_value=[object()])
+    ctx = MagicMock()
+    ctx.guild.id, ctx.author.id, ctx.channel.id = 1, 2, 5
+    ctx.message.created_at = discord.utils.utcnow()
+    ctx.send_info = AsyncMock()
+
+    await Moderation.lockdown_end.callback(cog, ctx)  # type: ignore[arg-type]
+
+    when, event, *args = cog.bot.timers.create.await_args.args
+    assert (when, event, args) == (TIMER_RETRY_BASE, "lockdown", [1, 2, 5, [11]])
+    assert cog.bot.timers.create.await_args.kwargs["attempt"] == 1  # the moderator was told here, no alert
+    ctx.send_info.assert_awaited_once()
+
+
+async def test_idle_wait_holds_no_pooled_connection() -> None:
+    manager = _manager([])
+    manager.db = MagicMock(acquire=MagicMock(side_effect=AssertionError("held a connection")))
+    manager._TimerManager__event = asyncio.Event()  # type: ignore[attr-defined]
+    loaded = object()
+    manager.load_next_timer = AsyncMock(side_effect=[None, loaded])
+
+    waiting = asyncio.create_task(manager.wait())
+    await asyncio.sleep(0)
+    assert not waiting.done()  # idle, and shutdown's pool.close() has no connection to wait for
+
+    manager._TimerManager__event.set()  # type: ignore[attr-defined]
+    assert await waiting is loaded
+    manager.db.acquire.assert_not_called()

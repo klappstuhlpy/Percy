@@ -99,10 +99,34 @@ class TimersRepository(BaseRepository):
         """
         return [r['id'] for r in await self.fetch(query, event, str(guild_id), str(member_id))]
 
-    async def delete_guild_timers(self, event: str, guild_id: int) -> list[int]:
-        """Deletes every ``event`` timer whose first positional arg is ``guild_id``, returning their ids."""
-        query = "DELETE FROM timers WHERE event = $1 AND metadata #>> '{args,0}' = $2 RETURNING id;"
-        return [r['id'] for r in await self.fetch(query, event, str(guild_id))]
+    async def drop_lockdown_channels(self, guild_id: int, channel_ids: list[int]) -> list[int]:
+        """Takes ``channel_ids`` out of the guild's pending ``lockdown`` timers, returning the ids touched.
+
+        A lockdown timer stores ``[guild_id, mod_id, channel_id, channel_ids]``. A timer left with
+        no channels is deleted; the rest keep only the channels their lockdown still covers.
+        """
+        query = """
+            WITH hit AS (
+                SELECT id,
+                       COALESCE(
+                           (SELECT jsonb_agg(c) FROM jsonb_array_elements(metadata #> '{args,3}') c
+                            WHERE (c #>> '{}')::bigint <> ALL ($2::bigint[])),
+                           '[]'::jsonb
+                       ) AS rest
+                FROM timers
+                WHERE event = 'lockdown'
+                  AND metadata #>> '{args,0}' = $1
+                  AND EXISTS (SELECT 1 FROM jsonb_array_elements(metadata #> '{args,3}') c
+                              WHERE (c #>> '{}')::bigint = ANY ($2::bigint[]))
+            ), gone AS (
+                DELETE FROM timers t USING hit WHERE t.id = hit.id AND hit.rest = '[]'::jsonb
+            ), kept AS (
+                UPDATE timers t SET metadata = jsonb_set(t.metadata, '{args,3}', hit.rest)
+                FROM hit WHERE t.id = hit.id AND hit.rest <> '[]'::jsonb
+            )
+            SELECT id FROM hit;
+        """
+        return [r['id'] for r in await self.fetch(query, str(guild_id), channel_ids)]
 
     async def get_next_due(
             self, days: int = 7, *, connection: asyncpg.Connection | None = None

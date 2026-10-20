@@ -36,6 +36,7 @@ from config import Emojis
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
 from .antispam import SpamChecker, check_raid, mention_spam_ban, mention_threshold
 from .infractions import (
+    TIMER_RETRY_BASE,
     check_member_hierarchy,
     default_reason,
     mute_role_error,
@@ -123,6 +124,7 @@ class Moderation(Cog):
         self.bulk_mute_insert.start()
 
         self._sentinel_menus: dict[int, SentinelSetUpView] = {}
+        self._sentinel_resume: asyncio.Task[None] | None = None  # set by cog_load, which may never run
 
         bot.add_dynamic_items(SentinelVerifyButton, SentinelAlertMassbanButton, SentinelAlertResolveButton)
 
@@ -132,7 +134,8 @@ class Moderation(Cog):
         self._sentinel_resume = asyncio.create_task(self.bot.db.sentinel_roles.resume())
 
     async def cog_unload(self) -> None:
-        self._sentinel_resume.cancel()
+        if self._sentinel_resume is not None:
+            self._sentinel_resume.cancel()
         self.bulk_mute_insert.cancel()
         # Mutes are only batched in memory; without this final write a member muted in the last
         # few seconds before a reload or shutdown could leave and rejoin without the role.
@@ -1489,12 +1492,23 @@ class Moderation(Cog):
 
             failures = await end_lockdown(self.bot, ctx.guild, reason=reason, progress=on_progress)
 
-        # Every lockdown is over, so a pending `lockdown for` timer must not end a later one early.
-        await self.bot.timers.delete_guild_timers("lockdown", ctx.guild.id)
+        # end_lockdown took the restored channels out of every pending `lockdown for` timer.
         if failures:
+            # Retry the failed ones on their own, quietly: the moderator is told right here.
+            await self.bot.timers.create(
+                TIMER_RETRY_BASE,
+                "lockdown",
+                ctx.guild.id,
+                ctx.author.id,
+                ctx.channel.id,
+                [c.id for c in failures],
+                attempt=1,
+                created=ctx.message.created_at,
+            )
             await ctx.send_info(
                 f"Lockdown ended. Failed to edit {human_join([c.mention for c in failures], final='and')}; "
-                "they are still locked. Give the bot Manage Roles there and run this command again."
+                "they are still locked. I will retry on my own, or give the bot Manage Roles there and run "
+                "this command again."
             )
         else:
             await ctx.send_success("Lockdown successfully ended.")
@@ -1506,25 +1520,30 @@ class Moderation(Cog):
 
         guild = self.bot.get_guild(guild_id)
         if guild is None or guild.unavailable:
+            await retry_expiry_timer(self.bot, timer, "guild unavailable")
             return
 
         member = await self.bot.get_or_fetch_member(guild, mod_id)
         moderator = f"Mod ID {mod_id}" if member is None else f"{member} (ID: {mod_id})"
 
-        reason = f"Automatic lockdown ended from timer made on {timer.created} by {moderator}"
+        reason = f"Automatic lockdown ended from timer made on {timer_origin(timer)} by {moderator}"
         failures = await end_lockdown(self.bot, guild, channel_ids=channel_ids, reason=reason)
         if failures:
-            # Failed channels stay locked (their saved permissions are kept), so a moderator must hear of it.
-            config = await self.bot.db.get_guild_config(guild_id)
-            mentions = human_join([c.mention for c in failures], final="and")
-            await config.alert_missing_permission(f"end the timed lockdown of {mentions}")
+            # Failed channels stay locked (their saved permissions are kept): tell a moderator once, retry them.
+            if not timer.kwargs.get("attempt"):
+                config = await self.bot.db.get_guild_config(guild_id)
+                mentions = human_join([c.mention for c in failures], final="and")
+                await config.alert_missing_permission(f"end the timed lockdown of {mentions}")
+            failed = [guild_id, mod_id, channel_id, [c.id for c in failures]]
+            await retry_expiry_timer(self.bot, timer, "lockdown channels failed to unlock", args=failed)
 
         channel = guild.get_channel_or_thread(channel_id)
         if channel is not None:
             assert isinstance(channel, discord.abc.Messageable)
             if failures:
-                formatted = [c.mention for c in failures]
-                await channel.send(f"{Emojis.info} Lockdown ended. Failed to edit {human_join(formatted, final='and')}.")
+                if not timer.kwargs.get("attempt"):  # once, not per retry
+                    formatted = human_join([c.mention for c in failures], final="and")
+                    await channel.send(f"{Emojis.info} Lockdown ended. Failed to edit {formatted}; retrying on my own.")
             else:
                 valid = [f"<#{c}>" for c in channel_ids]
                 await channel.send(f"{Emojis.success} Lockdown successfully ended for {human_join(valid, final='and')}.")

@@ -1105,12 +1105,13 @@ def _channel_ids(raw: list[int | str]) -> list[int]:
     """Parses the body's channel ids, 400ing on an empty list or a non-numeric id."""
     if not raw:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids is required')
+    bad = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids must be channel ids')
     try:
         ids = [int(c) for c in raw]
     except ValueError:
-        ids = [0]
+        raise bad from None
     if not all(0 < i < 2**63 for i in ids):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids must be channel ids')
+        raise bad
     return ids
 
 

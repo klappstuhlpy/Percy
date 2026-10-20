@@ -12,7 +12,7 @@ import datetime
 import logging
 import time
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
@@ -115,12 +115,20 @@ def timer_origin(timer: Timer) -> str:
     return timer.kwargs.get("origin") or str(timer.created)
 
 
-async def retry_expiry_timer(bot: Bot, timer: Timer, why: str) -> None:
-    """Re-arm a tempban/tempmute expiry that could not run, so the punishment still ends.
+async def retry_expiry_timer(bot: Bot, timer: Timer, why: str, *, args: Sequence[Any] | None = None) -> None:
+    """Re-arm a tempban/tempmute/lockdown expiry that could not run, so the punishment still ends.
 
     :meth:`TimerManager.call` deletes the row before dispatching, so an expiry that fails
     without this is lost for good and a temporary ban or mute silently becomes permanent.
+    ``args`` replaces the timer's own (a lockdown retries only its failed channels).
+
+    Nothing is re-armed once Percy has left the guild (``args[0]``): after ready, an outage
+    keeps the guild cached as unavailable, so a missing guild is gone for good.
     """
+    if bot.get_guild(timer.args[0]) is None:
+        log.info("Dropping %s timer %s: no longer in guild %s", timer.event, timer.id, timer.args[0])
+        return
+
     attempt = int(timer.kwargs.get("attempt", 0))
     delay = timer_retry_delay(attempt)
     if delay is None:
@@ -131,7 +139,7 @@ async def retry_expiry_timer(bot: Bot, timer: Timer, why: str) -> None:
     await bot.timers.create(
         discord.utils.utcnow() + delay,
         timer.event,
-        *timer.args,
+        *(timer.args if args is None else args),
         attempt=attempt + 1,
         origin=timer_origin(timer),
         timezone=timer.timezone,

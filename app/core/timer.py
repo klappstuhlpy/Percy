@@ -222,16 +222,29 @@ class TimerManager:
             del self._short_timers[key]
         return bool(timer_ids or short)
 
-    async def delete_guild_timers(self, event: str, guild_id: int) -> None:
+    async def drop_lockdown_channels(self, guild_id: int, channel_ids: list[int]) -> None:
         """|coro|
 
-        Deletes every persisted ``event`` timer of a guild (``args[0]`` is the guild id),
-        resetting the dispatch loop if one of them was the next one due.
+        Takes channels whose lockdown has ended out of every pending ``lockdown`` timer of the
+        guild (persisted and sub-minute in-memory ones), deleting a timer left with none. A
+        timer must only ever end the lockdown it started, never a later re-lock of a channel.
         """
-        # ponytail: sub-minute in-memory timers are not cancelled; track them per guild if that ever matters.
-        timer_ids = await self.bot.db.timers.delete_guild_timers(event, guild_id)
+        if not channel_ids:
+            return
+        timer_ids = await self.bot.db.timers.drop_lockdown_channels(guild_id, channel_ids)
+        # The loaded timer holds its args in memory, so a narrowed one must be reloaded too.
         if self._loaded_timer and self._loaded_timer.id in timer_ids:
             self.reset_task()
+
+        ended = set(channel_ids)
+        for key, timer in list(self._short_timers.items()):
+            if timer.event != "lockdown" or timer[0] != guild_id:
+                continue
+            rest = [c for c in timer[3] if c not in ended]
+            if rest:
+                timer.args = [*timer.args[:3], rest]
+            else:
+                del self._short_timers[key]
 
     async def call(self, timer: Timer) -> None:
         """|coro|
@@ -369,19 +382,20 @@ class TimerManager:
         :class:`Timer`
             The timer that was loaded.
         """
-        async with (connection or self.db).acquire(timeout=500.0) as con:
-            timer = await self.load_next_timer(connection=con, days=days)
-            if timer is not None:
-                log.debug("Loaded timer %r to fire at %s.", timer.id, timer.expires)
-                self.__event.set()
-                return timer
+        # No pooled connection is held across the idle wait: one parked there for days kept a pool
+        # slot busy and made pool.close() at shutdown wait for it. Clearing before the query means
+        # a timer created while it runs still wakes the wait below.
+        self.__event.clear()
+        timer = await self.load_next_timer(connection=connection, days=days)
+        if timer is not None:
+            log.debug("Loaded timer %r to fire at %s.", timer.id, timer.expires)
+            return timer
 
-            self.__event.clear()
-            self._loaded_timer = None
-            log.debug("No timers to load, waiting for new timers to be created.")
-            await self.__event.wait()
+        self._loaded_timer = None
+        log.debug("No timers to load, waiting for new timers to be created.")
+        await self.__event.wait()
 
-            return await self.load_next_timer(connection=con, days=days)  # type: ignore
+        return await self.load_next_timer(connection=connection, days=days)  # type: ignore
 
     async def start_short_timer(self, seconds: float, timer: Timer) -> None:
         """Simply sleeps until the timer expires."""

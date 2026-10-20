@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Picking a new lockdown role on the dashboard while Percy was still loading the
   member list could let through a role members already wear. Percy now asks you to
   try again in a minute.
+- A `lockdown for` shorter than a minute still ended on time after `lockdown end`,
+  and unlocking one of its channels on the dashboard left the timer pending, so it
+  could later end a new lockdown of that channel early. A timed lockdown now only
+  ever ends the channels it still covers.
+- When `lockdown end` or a timed lockdown could not unlock some channels, those
+  channels stayed locked until someone tried again. Percy now retries them by
+  itself, and a timed lockdown that ends while Discord has the server unavailable
+  is retried instead of dropped.
+- Shutting Percy down could hang while it waited on a database connection the
+  timer loop kept open.
 
 ## [2.7.0] - 2026-10-20
 

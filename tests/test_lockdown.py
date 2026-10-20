@@ -30,6 +30,7 @@ def _bot(rows: list[tuple[int, int, int]]) -> MagicMock:
     bot.db.moderation.get_lockdowns = AsyncMock(return_value=rows)
     bot.db.moderation.remove_lockdowns = AsyncMock()
     bot.db.moderation.add_lockdowns = AsyncMock()
+    bot.timers.drop_lockdown_channels = AsyncMock()
     return bot
 
 
@@ -48,6 +49,8 @@ async def test_end_lockdown_keeps_rows_of_failed_channels() -> None:
     uncached.set_permissions.assert_awaited_once()
     guild.fetch_channels.assert_awaited_once()
     bot.db.moderation.remove_lockdowns.assert_awaited_once_with(99, [1, 3, 4])
+    # Restored channels leave their timers; the failed one keeps its timer for a retry.
+    bot.timers.drop_lockdown_channels.assert_awaited_once_with(99, [1, 3, 4])
 
 
 async def test_end_lockdown_deletes_nothing_when_every_restore_fails() -> None:
@@ -58,6 +61,7 @@ async def test_end_lockdown_deletes_nothing_when_every_restore_fails() -> None:
 
     assert await end_lockdown(bot, guild) == [failing]
     bot.db.moderation.remove_lockdowns.assert_not_awaited()
+    bot.timers.drop_lockdown_channels.assert_not_awaited()
 
 
 async def test_lock_channels_denies_connect_and_speak_on_voice() -> None:

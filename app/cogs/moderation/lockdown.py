@@ -124,6 +124,7 @@ async def end_lockdown(
     A channel's saved overwrites are the only copy of its pre-lockdown permissions, so its
     row is deleted only once the restore succeeded (or the channel no longer exists). A
     failed channel keeps its row and stays listed as locked, so ending again retries it.
+    Restored channels are also taken out of the guild's pending lockdown timers.
 
     ``progress`` is an optional ``async (done, total)`` callback invoked after each
     channel's overwrites are restored, used to surface live progress to the caller.
@@ -159,6 +160,9 @@ async def end_lockdown(
     finally:
         if done:
             await bot.db.moderation.remove_lockdowns(guild.id, done)
+            # Those channels are no longer locked, so a pending `lockdown for` timer must not end
+            # a later re-lock of them; channels that failed stay on their timer for a retry.
+            await bot.timers.drop_lockdown_channels(guild.id, done)
 
     return failures
 
