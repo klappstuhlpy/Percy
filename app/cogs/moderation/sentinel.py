@@ -63,7 +63,9 @@ async def sync_sentinel_permissions(sentinel: Sentinel, invoker: discord.abc.Use
 
     Hide the server from the lockdown role and open the verification channel to it, the same
     sync the setup menu's **Sync Permissions** button runs. Used where nobody can be asked to
-    confirm (the dashboard), so failures go to the moderators as an alert.
+    confirm (the dashboard), so failures go to the moderators as an alert, and the
+    verification channel is never hidden from @everyone here: the caller reports that step
+    instead, since picking a busy channel by mistake would hide it from the whole server.
     """
     role = sentinel.role
     if role is None:
@@ -78,7 +80,9 @@ async def sync_sentinel_permissions(sentinel: Sentinel, invoker: discord.abc.Use
         problems.append(f"{pluralize(failed + skipped):channel} could not be hidden from {role.mention}.")
     if verify_channel is not None:
         try:
-            await SentinelChannelSelect.apply_verification_overwrites(verify_channel, role, invoker)
+            await SentinelChannelSelect.apply_verification_overwrites(
+                verify_channel, role, invoker, hide_from_everyone=False
+            )
         except discord.HTTPException:
             problems.append(f"{verify_channel.mention} could not be opened to {role.mention}.")
     if problems:
@@ -328,11 +332,14 @@ class SentinelChannelSelect(discord.ui.ChannelSelect["SentinelSetUpView"]):
         channel: discord.TextChannel,
         role: discord.Role,
         invoker: discord.abc.User,
+        *,
+        hide_from_everyone: bool = True,
     ) -> None:
-        """Hide the verification channel from @everyone and show it (read-only) to the lockdown role."""
+        """Show the verification channel (read-only) to the lockdown role and, unless told not
+        to, hide it from @everyone."""
         guild = channel.guild
         reason = f"Sentinel permission sync requested by {invoker} (ID: {invoker.id})"
-        if channel.permissions_for(guild.default_role).read_messages:
+        if hide_from_everyone and channel.permissions_for(guild.default_role).read_messages:
             overwrite = channel.overwrites_for(guild.default_role)
             overwrite.update(read_messages=False)
             await channel.set_permissions(guild.default_role, overwrite=overwrite, reason=reason)

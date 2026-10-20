@@ -102,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   role, not the same role), and the lockdown role and verification channel cannot be
   changed while Sentinel is running. A new lockdown role or channel is synced
   automatically, and Percy alerts the moderators when channels could not be hidden.
+  Because that sync does not ask first, the dashboard refuses a lockdown role that
+  members already have, and it never hides the verification channel from @everyone
+  itself: it tells you when that channel is still public.
   The auto-trigger rate must be two numbers above 0, and an invalid rate can no longer
   break moderation for the server. Clearing the rate or the starter role works.
   Saving no longer leaves the old verification card behind, and Sentinel cannot be

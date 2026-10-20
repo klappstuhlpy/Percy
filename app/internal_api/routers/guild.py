@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,8 @@ from ..helpers import resolve_channel, resolve_entity, resolve_role
 if TYPE_CHECKING:
     from app.core import Bot
     from app.database.base import Sentinel
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Guilds"], dependencies=[Depends(verify_token)])
 
@@ -650,7 +653,11 @@ def _check_sentinel_channel(guild: discord.Guild, channel_id: int) -> discord.Te
     return channel
 
 
-def _check_sentinel_role(guild: discord.Guild, role_id: int, *, other: int | None) -> None:
+def _check_sentinel_role(
+    guild: discord.Guild, role_id: int, *, other: int | None, held: set[int] | None = None
+) -> None:
+    """``held`` is given for the lockdown role: the dashboard syncs it without asking, so it must
+    not be a role anyone outside Sentinel's hold already wears, or they would lose every channel."""
     from app.cogs.moderation.sentinel import sentinel_role_problem
 
     role = guild.get_role(role_id)
@@ -659,6 +666,13 @@ def _check_sentinel_role(guild: discord.Guild, role_id: int, *, other: int | Non
     problem = sentinel_role_problem(role, other=other)
     if problem is not None:
         raise _bad_request(problem)
+    if held is not None:
+        holders = sum(1 for member in role.members if member.id not in held)
+        if holders:
+            raise _bad_request(
+                f"{holders} member(s) already have {role.name}, and the lockdown role is hidden from every channel. "
+                "Pick a role only Sentinel uses, or set it up from the Discord menu, which asks before syncing."
+            )
 
 
 async def _get_or_create_sentinel(guild: discord.Guild, bot: Bot) -> Sentinel:
@@ -676,7 +690,13 @@ def _schedule_permission_sync(sentinel: Sentinel, guild: discord.Guild) -> bool:
 
     if sentinel.role is None:
         return False
-    task = asyncio.create_task(sync_sentinel_permissions(sentinel, guild.me))
+    async def run() -> None:
+        try:
+            await sync_sentinel_permissions(sentinel, guild.me)
+        except Exception:
+            log.exception("Sentinel permission sync failed in guild %s", guild.id)
+
+    task = asyncio.create_task(run())
     _background_syncs.add(task)
     task.add_done_callback(_background_syncs.discard)
     return True
@@ -716,7 +736,7 @@ async def _apply_sentinel_settings(guild: discord.Guild, bot: Bot, data: dict) -
     if "role_id" in edits and role_id is not None:
         if not guild.me.guild_permissions.manage_roles:
             raise _bad_request("I need Manage Roles to use a lockdown role")
-        _check_sentinel_role(guild, role_id, other=starter_role_id)
+        _check_sentinel_role(guild, role_id, other=starter_role_id, held=sentinel.members if "role_id" in changed else None)
     if "starter_role_id" in edits and starter_role_id is not None:
         _check_sentinel_role(guild, starter_role_id, other=role_id)
 
@@ -731,7 +751,19 @@ async def _apply_sentinel_settings(guild: discord.Guild, bot: Bot, data: dict) -
             await old_card.delete()
 
     synced = bool(changed) and _schedule_permission_sync(sentinel, guild)
-    return {"permission_sync": synced}
+    return {"permission_sync": synced, "warnings": _verification_warnings(guild, edits.get("channel_id", sentinel.channel_id))}
+
+
+def _verification_warnings(guild: discord.Guild, channel_id: int | None) -> list[str]:
+    """What the dashboard sync deliberately leaves to a human: hiding the verification channel
+    from @everyone. Done unasked, picking #general by mistake would hide it from the server."""
+    channel = guild.get_channel(channel_id) if channel_id else None
+    if channel is None or not channel.permissions_for(guild.default_role).read_messages:
+        return []
+    return [
+        f"#{channel.name} is still visible to @everyone. Hide it from @everyone, or run Sync Permissions "
+        "in the Discord sentinel menu, so only members waiting to verify see it."
+    ]
 
 
 async def _sentinel_start_problem(guild: discord.Guild, bot: Bot, sentinel: Sentinel) -> str | None:
@@ -793,7 +825,12 @@ async def send_sentinel_message(guild: GuildDep, bot: BotDep, body: SendSentinel
             await old_card.delete()
 
     synced = moved and _schedule_permission_sync(sentinel, guild)
-    return {"ok": True, "message_id": message.id, "permission_sync": synced}
+    return {
+        "ok": True,
+        "message_id": message.id,
+        "permission_sync": synced,
+        "warnings": _verification_warnings(guild, channel_id),
+    }
 
 
 @router.post("/sentinel/toggle")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -25,6 +26,7 @@ class _Role:
         self.managed = managed
         self._default = default
         self.guild: Any = None
+        self.members: list[Any] = []
 
     def is_default(self) -> bool:
         return self._default
@@ -37,6 +39,7 @@ def _guild(*roles: _Role, top: int = 10, manage_roles: bool = True, channels: di
     guild = SimpleNamespace(
         id=1,
         me=SimpleNamespace(top_role=_Role(999, top), guild_permissions=SimpleNamespace(manage_roles=manage_roles)),
+        default_role=_Role(0, 0, default=True),
         get_role={r.id: r for r in roles}.get,
         get_channel=(channels or {}).get,
         channels=list((channels or {}).values()),
@@ -46,10 +49,12 @@ def _guild(*roles: _Role, top: int = 10, manage_roles: bool = True, channels: di
     return guild
 
 
-def _text_channel(channel_id: int, *, can_send: bool = True) -> Any:
+def _text_channel(channel_id: int, *, can_send: bool = True, public: bool = False) -> Any:
     channel = MagicMock(spec=discord.TextChannel, id=channel_id)
     channel.name = f"ch-{channel_id}"
-    channel.permissions_for.return_value = SimpleNamespace(send_messages=can_send, embed_links=can_send)
+    channel.permissions_for.return_value = SimpleNamespace(
+        send_messages=can_send, embed_links=can_send, read_messages=public
+    )
     return channel
 
 
@@ -182,7 +187,7 @@ async def test_a_new_lockdown_role_is_synced(monkeypatch: pytest.MonkeyPatch) ->
 
     result = await api._apply_sentinel_settings(_guild(role), _bot(sentinel), {"role_id": 1})
 
-    assert result == {"permission_sync": True}
+    assert result == {"permission_sync": True, "warnings": []}
     schedule.assert_called_once()
 
 
@@ -196,6 +201,63 @@ async def test_moving_the_channel_retires_the_old_card(monkeypatch: pytest.Monke
 
     sentinel.edit.assert_awaited_once_with(channel_id=9, message_id=None)
     old_card.delete.assert_awaited_once()
+
+
+async def test_a_role_members_already_wear_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dashboard syncs the lockdown role unasked: a role like "Members" would lock everyone out."""
+    schedule = MagicMock(return_value=True)
+    monkeypatch.setattr(api, "_schedule_permission_sync", schedule)
+    role = _Role(1, 2)
+    role.members = [SimpleNamespace(id=5), SimpleNamespace(id=6)]
+
+    with pytest.raises(HTTPException) as exc:
+        await api._apply_sentinel_settings(_guild(role), _bot(_sentinel()), {"role_id": 1})
+    assert exc.value.status_code == 400
+    assert "2 member(s) already have" in exc.value.detail
+    schedule.assert_not_called()
+
+    # Members Sentinel itself holds wear it by design, and an unchanged role is not re-checked.
+    held = _sentinel(members={5, 6})
+    await api._apply_sentinel_settings(_guild(role), _bot(held), {"role_id": 1})
+    schedule.assert_called_once()
+    worn = _sentinel(role_id=1, members=set())
+    await api._apply_sentinel_settings(_guild(role), _bot(worn), {"role_id": 1, "bypass_action": "ban"})
+
+
+async def test_a_public_verification_channel_is_reported_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hiding a channel from @everyone is left to a human: the response says so instead."""
+    monkeypatch.setattr(api, "_schedule_permission_sync", MagicMock(return_value=True))
+    guild = _guild(channels={9: _text_channel(9, public=True)})
+
+    result = await api._apply_sentinel_settings(guild, _bot(_sentinel()), {"channel_id": 9})
+
+    assert len(result["warnings"]) == 1
+    assert "visible to @everyone" in result["warnings"][0]
+
+
+async def test_the_dashboard_sync_never_hides_the_channel_from_everyone(monkeypatch: pytest.MonkeyPatch) -> None:
+    role = _Role(1, 2)
+    monkeypatch.setattr(ui, "update_role_permissions", AsyncMock(return_value=(1, 0, 0)))
+    channel = _text_channel(9, public=True)
+    channel.guild = _guild(role)
+    channel.overwrites_for.side_effect = lambda _: discord.PermissionOverwrite()
+    channel.guild.me.guild_permissions = discord.Permissions.all()
+    sentinel = SimpleNamespace(role=role, channel=channel, bot=MagicMock())
+
+    await ui.sync_sentinel_permissions(sentinel, SimpleNamespace(id=1))  # type: ignore[arg-type]
+
+    targets = [call.args[0] for call in channel.set_permissions.await_args_list]
+    assert targets == [role]  # the lockdown role is opened; @everyone is left alone
+
+
+async def test_a_failing_background_sync_is_logged(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ui, "sync_sentinel_permissions", AsyncMock(side_effect=RuntimeError("boom")))
+    sentinel = SimpleNamespace(role=object())
+
+    assert api._schedule_permission_sync(sentinel, _guild()) is True  # type: ignore[arg-type]
+    await asyncio.gather(*api._background_syncs)
+
+    assert "Sentinel permission sync failed" in caplog.text
 
 
 async def test_a_channel_percy_cannot_post_in_is_rejected() -> None:
