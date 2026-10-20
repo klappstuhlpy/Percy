@@ -148,15 +148,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   work again. `kick` and `softban` refuse someone who is not in the server, so a
   softban can no longer be used to lift an existing ban.
 - Every moderation action now follows the same hierarchy rule: you cannot act on
-  yourself, Percy or the server owner, and both you and Percy must have a strictly
-  higher top role than the member (the server owner may act on anyone below Percy).
-  Before, `mute`, `unmute` and `warn` checked no hierarchy at all, so a helper could
-  mute a senior moderator or mute Percy, members with the same top role could act on
-  each other, and the raid alert's **Ban All Raiders** button banned raiders who
-  outranked the person clicking it. Members you cannot act on are listed as skipped.
+  yourself, Percy or the server owner, and your top role must be strictly higher than
+  the member's (the server owner is exempt). Bans and kicks also need Percy's top role
+  above the member's; mutes only need the mute role below Percy's top role, so a
+  low-ranked Percy can still mute. Before, `mute`, `unmute` and `warn` checked no
+  hierarchy at all, so a helper could mute a senior moderator or mute Percy, members
+  with the same top role could act on each other, and the raid alert's **Ban All
+  Raiders** button banned raiders who outranked the person clicking it. A muted
+  moderator can no longer unmute themselves. Members you cannot act on are listed as
+  skipped.
 - `mute` did nothing at all when your top role was not above the mute role. It now
-  says why, and the server owner can always mute. `slowmode` no longer reports a
-  successful change as an error.
+  says why, and the server owner can always mute. A mute role level with Percy's own
+  top role is now refused with a clear message instead of failing with a permission
+  error. `slowmode` no longer reports a successful change as an error.
 
 ## [2.6.0] - 2026-10-03
 

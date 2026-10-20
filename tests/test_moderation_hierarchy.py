@@ -82,3 +82,26 @@ async def test_member_id_bans_by_id_without_touching_hierarchy(monkeypatch: pyte
 
     assert target.id == 123456789012345678
     assert not hasattr(target, "top_role")
+
+
+def test_mute_hierarchy_ignores_percys_rank_but_not_the_moderators() -> None:
+    from app.cogs.moderation.infractions import check_member_hierarchy
+
+    # Percy (top role 50) sits below the target (60): a mute only needs Percy above the mute role.
+    ctx = SimpleNamespace(author=_member(10, 90), guild=SimpleNamespace(me=_me(50)))
+    assert check_member_hierarchy(ctx, _member(11, 60), action="mute", check_bot=False) is None  # type: ignore[arg-type]
+
+    ctx.author = _member(10, 60)
+    assert check_member_hierarchy(ctx, _member(11, 60), action="mute", check_bot=False) is not None  # type: ignore[arg-type]
+    assert check_member_hierarchy(ctx, ctx.author, action="unmute", check_bot=False) is not None  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("name", ["_mute", "_unmute", "tempmute"])
+def test_mute_commands_skip_percys_rank_check(name: str) -> None:
+    import inspect
+
+    from app.cogs.moderation.cog import Moderation
+
+    source = inspect.getsource(getattr(Moderation, name).callback)
+    assert "check_member_hierarchy(" in source
+    assert "check_bot=False" in source

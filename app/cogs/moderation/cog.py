@@ -1812,8 +1812,8 @@ class Moderation(Cog):
         role_id = ctx.guild_config.mute_role_id
         role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
-            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
+            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
             return
 
         failed = 0
@@ -1823,7 +1823,7 @@ class Moderation(Cog):
         blocked: list[str] = []
         async with tracker as progress:
             for i, member in enumerate(members, 1):
-                if error := check_member_hierarchy(ctx, member, action="mute"):
+                if error := check_member_hierarchy(ctx, member, action="mute", check_bot=False):
                     blocked.append(f"`{member}`: {error}")
                     continue
                 if member._roles.has(role_id):
@@ -1883,8 +1883,8 @@ class Moderation(Cog):
         role_id = ctx.guild_config.mute_role_id
         role = discord.Object(id=role_id)
 
-        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
-            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
+            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
             return
 
         failed = 0
@@ -1894,7 +1894,7 @@ class Moderation(Cog):
         async with tracker as progress:
             for i, member in enumerate(members, 1):
                 # The self check also keeps a self-muted member from lifting their own self-mute.
-                if error := check_member_hierarchy(ctx, member, action="unmute"):
+                if error := check_member_hierarchy(ctx, member, action="unmute", check_bot=False):
                     blocked.append(f"`{member}`: {error}")
                     continue
                 timer = await self.bot.timers.fetch_member_timer("tempmute", ctx.guild.id, member.id)
@@ -1956,7 +1956,7 @@ class Moderation(Cog):
         if reason is None:
             reason = default_reason(ctx.author)
 
-        if error := check_member_hierarchy(ctx, member, action="mute"):
+        if error := check_member_hierarchy(ctx, member, action="mute", check_bot=False):
             await ctx.send_error(error)
             return
 
@@ -1973,8 +1973,8 @@ class Moderation(Cog):
                 await ctx.send_error(f"{member} is already muted. Unmute them first to apply a temporary mute.")
             return
 
-        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
-            await ctx.send_error("I cannot mute a member with a role equal to or higher than the mute role.")
+        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
+            await ctx.send_error("My highest role must be above the mute role before I can mute or unmute anyone.")
             return
 
         await member.add_roles(discord.Object(id=role_id), reason=reason)
@@ -2073,8 +2073,8 @@ class Moderation(Cog):
             await ctx.send_error('You are already muted.')
             return
 
-        if ctx.guild.me.top_role < ctx.guild.get_role(role_id):
-            await ctx.send_error('I cannot mute you with a role equal to or higher than the mute role.')
+        if ctx.guild.me.top_role <= ctx.guild.get_role(role_id):
+            await ctx.send_error('My highest role must be above the mute role before I can mute you.')
             return
 
         created_at = ctx.message.created_at
