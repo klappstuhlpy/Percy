@@ -22,6 +22,14 @@
                     <span class="dash-sidebar-guild-sub">Server dashboard</span>
                 </div>
             </div>
+            {# Rendered here, not injected, so the sidebar keeps its height between page loads.
+               It stays invisible (space reserved) until command_palette.js wires it up, so a
+               JS-off page never shows a launcher that does nothing. #}
+            <button type="button" id="cmdk-trigger" class="cmdk-trigger cmdk-trigger--pending" tabindex="-1" aria-hidden="true">
+                <span class="cmdk-trigger-glyph" aria-hidden="true">⌕</span>
+                <span class="cmdk-trigger-text">Search</span>
+                <kbd class="cmdk-trigger-kbd">⌘K</kbd>
+            </button>
         </div>
         <button type="button" class="dash-sidebar-toggle" aria-expanded="false" aria-controls="dash-sidebar"><span>Menu</span></button>
         <nav class="dash-nav" aria-label="Dashboard sections">

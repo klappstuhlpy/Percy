@@ -304,21 +304,17 @@
         }
     });
 
-    // A discoverable launcher in the sidebar, injected so no template needs to know about it.
-    function injectTrigger() {
-        var top = document.querySelector('.dash-sidebar-top');
-        if (!top || document.getElementById('cmdk-trigger')) return;
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.id = 'cmdk-trigger';
-        btn.className = 'cmdk-trigger';
-        btn.innerHTML = '<span class="cmdk-trigger-glyph" aria-hidden="true">⌕</span>' +
-            '<span class="cmdk-trigger-text">Search</span>' +
-            '<kbd class="cmdk-trigger-kbd">⌘K</kbd>';
+    // The sidebar launcher is server-rendered (dashboard_layout.html) so the sidebar never
+    // reflows on navigation; it ships invisible and is revealed once it actually works.
+    function wireTrigger() {
+        var btn = document.getElementById('cmdk-trigger');
+        if (!btn) return;
         btn.addEventListener('click', open);
-        top.appendChild(btn);
+        btn.removeAttribute('tabindex');
+        btn.removeAttribute('aria-hidden');
+        btn.classList.remove('cmdk-trigger--pending');
     }
 
-    if (document.readyState !== 'loading') injectTrigger();
-    else document.addEventListener('DOMContentLoaded', injectTrigger);
+    if (document.readyState !== 'loading') wireTrigger();
+    else document.addEventListener('DOMContentLoaded', wireTrigger);
 })();

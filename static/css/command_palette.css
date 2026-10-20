@@ -3,6 +3,9 @@
    from base.css so it tracks the light/dark theme automatically. */
 
 /* -- Sidebar launcher ------------------------------------------------------ */
+/* Keeps its space while command_palette.js has not wired it up yet (or JS is off). */
+.cmdk-trigger--pending { visibility: hidden; }
+
 .cmdk-trigger {
     display: flex;
     align-items: center;
