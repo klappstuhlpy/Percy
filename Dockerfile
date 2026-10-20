@@ -58,6 +58,16 @@ FROM python:${PYTHON_BASE} AS final
 
 ENV VENV_PATH="/app/.venv"
 ENV PATH="$VENV_PATH/bin:$PATH"
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+# The locale must exist in the image that runs the bot, not only in the builder:
+# app/utils/formats.py formats numbers with en_US grouping.
+RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y locales \
+    && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

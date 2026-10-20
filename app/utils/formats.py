@@ -19,7 +19,9 @@ try:
 except locale.Error:
     # If it fails, fall back to 'C' locale or log the issue
     locale.setlocale(locale.LC_ALL, "C")
-    logging.warning("WARNING: Locale 'en_US.UTF-8' not supported, falling back to 'C'.")
+    # A module logger, never ``logging.warning``: the root-level helper runs ``basicConfig()`` at
+    # import time, which adds a second console handler and doubles every log line.
+    logging.getLogger(__name__).warning("Locale 'en_US.UTF-8' not supported, falling back to 'C'.")
 
 
 class SentinelConstant:  # Exists for type hinting purposes
