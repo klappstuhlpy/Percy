@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.utils.checks import hierarchy_error
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import resolve_moderator, role_error, validate_mute_duration, validate_timeout_duration
+from ..helpers import parse_id, resolve_moderator, role_error, validate_mute_duration, validate_timeout_duration
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Members"], dependencies=[Depends(verify_token)])
 
@@ -477,7 +477,7 @@ async def member_action(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'action must be one of: {", ".join(sorted(ACTIONS))}',
         )
-    moderator = resolve_moderator(guild, body.moderator_id, ACTION_PERMISSIONS[body.action])
+    moderator = await resolve_moderator(guild, body.moderator_id, ACTION_PERMISSIONS[body.action])
     if body.action == 'mute':
         # Before the role goes on, so a bad duration never leaves a permanent mute behind.
         validate_mute_duration(body.duration)
@@ -487,8 +487,16 @@ async def member_action(
     if member is None and body.action not in ('unban', 'purge'):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
     target = member if member is not None else discord.Object(id=user_id)
-    if error := hierarchy_error(moderator, target, guild.me, action=body.action, check_bot=body.action in HIERARCHY_ACTIONS):
+    # Purging your own messages is harmless, so self is the one target the rank rule lets through.
+    own_purge = body.action == 'purge' and user_id == moderator.id
+    if not own_purge and (
+        error := hierarchy_error(moderator, target, guild.me, action=body.action, check_bot=body.action in HIERARCHY_ACTIONS)
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
+    if body.action == 'timeout' and member is not None and member.guild_permissions.administrator:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail='Discord does not allow timing out administrators'
+        )
 
     delete_days = max(0, min(7, body.delete_message_days))
     extra: dict = {}
@@ -536,7 +544,7 @@ async def member_action(
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='cannot warn a bot')
                 # A warning is only a case plus a courtesy DM — closed DMs are not an error.
                 with suppress(discord.HTTPException):
-                    note = f': {body.reason}' if body.reason else '.'
+                    note = f': {body.reason[:1500]}' if body.reason else '.'
                     await member.send(f'\N{WARNING SIGN} You were warned in **{guild.name}**{note}')
     except discord.Forbidden:
         raise HTTPException(
@@ -589,10 +597,15 @@ async def member_roles(
     # ponytail: optional until the deployed dashboard sends it; make it required after that deploy.
     moderator = None
     if body.moderator_id not in (None, ''):
-        moderator = resolve_moderator(guild, body.moderator_id, 'manage_roles')
+        moderator = await resolve_moderator(guild, body.moderator_id, 'manage_roles')
 
-    roles_to_add = [r for r in guild.roles if str(r.id) in body.add]
-    roles_to_remove = [r for r in guild.roles if str(r.id) in body.remove]
+    add_ids = {parse_id(rid, 'add') for rid in body.add}
+    remove_ids = {parse_id(rid, 'remove') for rid in body.remove}
+    unknown = (add_ids | remove_ids) - {r.id for r in guild.roles}
+    if unknown:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'unknown role id: {min(unknown)}')
+    roles_to_add = [r for r in guild.roles if r.id in add_ids]
+    roles_to_remove = [r for r in guild.roles if r.id in remove_ids]
     # Every role must pass, or nothing changes.
     for role in (*roles_to_add, *roles_to_remove):
         if error := role_error(role, moderator):

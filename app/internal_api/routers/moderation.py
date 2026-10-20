@@ -206,7 +206,7 @@ async def patch_case(
     if not reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='reason is required')
     if body.moderator_id not in (None, ''):
-        resolve_moderator(guild, body.moderator_id, 'manage_guild')
+        await resolve_moderator(guild, body.moderator_id, 'manage_guild')
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
     if cog is not None:
@@ -234,7 +234,7 @@ async def delete_case(
     from app.cogs.modlog.models import ModerationCase
 
     if moderator_id:
-        resolve_moderator(guild, moderator_id, 'manage_guild')
+        await resolve_moderator(guild, moderator_id, 'manage_guild')
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
     if cog is not None:
@@ -271,7 +271,7 @@ async def bulk_member_action(
 
     timeout_for = validate_timeout_duration(body.duration) if body.action == 'timeout' else None
 
-    moderator = resolve_moderator(guild, body.moderator_id, BULK_PERMISSIONS[body.action])
+    moderator = await resolve_moderator(guild, body.moderator_id, BULK_PERMISSIONS[body.action])
     moderator_id = moderator.id
     user_ids = [parse_id(uid, 'user_ids') for uid in body.user_ids]
     reason = body.reason or None

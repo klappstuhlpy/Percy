@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from app.utils import get_asset_url, truncate
+from app.utils.checks import hierarchy_error
 from config import Emojis
 
 if TYPE_CHECKING:
@@ -148,14 +149,10 @@ class AIModerationButton(
             if allow_absent:
                 return discord.Object(id=self.target_id), None
             return None, f'That member is no longer in the server, so you can\'t {action} them.'
-        if member.id == moderator.id:
-            return None, f'You can\'t {action} yourself.'
-        if member.id == guild.owner_id:
-            return None, f'You can\'t {action} the server owner.'
-        if moderator.id != guild.owner_id and moderator.top_role <= member.top_role:
-            return None, f'You can\'t {action} someone with a role equal to or higher than yours.'
-        if guild.me.top_role <= member.top_role:
-            return None, f'I can\'t {action} someone with a role equal to or higher than mine.'
+        # warn never touches the target's roles or membership, so Percy's own rank is not in play.
+        error = hierarchy_error(moderator, member, guild.me, action=action, check_bot=action != 'warn')
+        if error:
+            return None, error
         return member, None
 
     def _action_reason(self, interaction: discord.Interaction, moderator: discord.Member) -> str:

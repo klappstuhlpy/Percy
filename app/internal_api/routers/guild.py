@@ -471,6 +471,13 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
     if not body.operations:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="operations must be a non-empty array")
 
+    # A bad config value answers 400 before anything is applied, not after earlier operations were.
+    if any(op.type == "config" for op in body.operations):
+        guild_config = await bot.db.get_guild_config(guild.id)
+        for op in body.operations:
+            if op.type == "config":
+                _build_config_updates(op.data, guild_config)
+
     results: list[dict] = []
 
     for op in body.operations:

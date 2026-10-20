@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is retried instead of dropped.
 - Shutting Percy down could hang while it waited on a database connection the
   timer loop kept open.
+- The AI moderation flag buttons now follow the same role rules as the commands, and
+  Warn no longer requires Percy to outrank the member, as with the `warn` command.
+- Long lists of skipped members from `multiban`, `multimute` and `multiunmute` are now
+  cut off with an "and N more" count instead of failing to send past 2000 characters.
+- A warning with a very long reason no longer fails to reach the member by DM, whether
+  it was given by command or from the dashboard.
+- On the dashboard, a moderator who was not cached by Percy (common in large servers)
+  was refused with "not a member"; Percy now looks them up first.
+- On the dashboard, a role change with a malformed or unknown role id now fails with a
+  clear error instead of silently ignoring that role.
+- On the dashboard, you can purge your own messages again.
+- Timing out an administrator from the dashboard now says Discord does not allow it,
+  rather than claiming Percy lacks permissions.
+- A dashboard save with an invalid config value (such as a bad mention count) now fails
+  before anything is applied, instead of after earlier changes were already saved.
 
 ## [2.7.0] - 2026-10-20
 

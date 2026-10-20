@@ -77,6 +77,7 @@ def _setup(*, mod_top: int = 5, target_top: int = 3, me_top: int = 10, **perms: 
     members = {ME: me, MOD: moderator, TARGET: target}
     guild.get_member = MagicMock(side_effect=members.get)
     guild.unban = AsyncMock()
+    guild.fetch_member = AsyncMock(side_effect=discord.NotFound(MagicMock(status=404), 'unknown member'))
     return guild, moderator, target
 
 
@@ -328,3 +329,53 @@ def test_mention_count_bounds(value: int, ok: bool) -> None:
     else:
         with pytest.raises(HTTPException):
             guild_api._check_mention_count(value)
+
+
+# -- task 4 polish ---------------------------------------------------------------
+
+
+async def test_an_uncached_moderator_is_fetched_not_refused() -> None:
+    guild, moderator, target = _setup(kick_members=True)
+    guild.get_member = MagicMock(side_effect={ME: guild.me, TARGET: target}.get)  # moderator not cached
+    guild.fetch_member = AsyncMock(return_value=moderator)
+    assert (await _act(guild, _bot(), 'kick'))['ok']
+    guild.fetch_member.assert_awaited_once_with(MOD)
+
+
+async def test_purging_your_own_messages_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    guild, _, _ = _setup(manage_messages=True)
+    monkeypatch.setattr(api, '_purge_member_messages', AsyncMock(return_value=2))
+    result = await _act(guild, _bot(), 'purge', user_id=MOD)
+    assert result['deleted'] == 2
+
+
+async def test_timing_out_an_administrator_says_why() -> None:
+    guild, _, target = _setup(moderate_members=True)
+    target.guild_permissions = discord.Permissions(administrator=True)
+    with pytest.raises(HTTPException) as exc:
+        await _act(guild, _bot(), 'timeout', duration=3600)
+    assert _status(exc) == 400
+    assert 'administrators' in exc.value.detail
+    target.timeout.assert_not_awaited()
+
+
+@pytest.mark.parametrize('bad', ['abc', '0', '999999999999'])
+async def test_roles_patch_rejects_malformed_or_unknown_ids(bad: str) -> None:
+    guild, _, target = _setup(manage_roles=True)
+    with pytest.raises(HTTPException) as exc:
+        await _roles(guild, add=[str(_role_at(guild, 1).id), bad])
+    assert _status(exc) == 400
+    target.add_roles.assert_not_awaited()
+
+
+async def test_a_bad_config_value_in_a_batch_applies_nothing() -> None:
+    guild = MagicMock()
+    config = SimpleNamespace(flags=SimpleNamespace(value=0), update=AsyncMock())
+    bot = SimpleNamespace(db=SimpleNamespace(get_guild_config=AsyncMock(return_value=config)))
+    body = guild_api.BatchGuildConfigBody.model_validate(
+        {'operations': [{'type': 'config', 'data': {'prefixes': ['!']}}, {'type': 'config', 'data': {'mention_count': 2}}]}
+    )
+    with pytest.raises(HTTPException) as exc:
+        await guild_api.batch_guild_config(guild, bot, body)  # type: ignore[arg-type]
+    assert _status(exc) == 400
+    config.update.assert_not_awaited()

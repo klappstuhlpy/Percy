@@ -82,3 +82,16 @@ def test_embed_handles_empty_content() -> None:
     assert fields['Message'] == '*no text content*'
     # Empty reason falls back to a default rather than rendering blank.
     assert fields['Reason']
+
+
+def test_target_rules_come_from_the_shared_hierarchy_check() -> None:
+    from types import SimpleNamespace
+
+    button = AIModerationButton('warn', 4, 1, 1)
+    me = SimpleNamespace(id=2, top_role=1)
+    target = SimpleNamespace(id=4, top_role=5)
+    moderator = SimpleNamespace(id=3, top_role=9)
+    guild = SimpleNamespace(owner_id=1, me=me, get_member=lambda _: target)
+    me.guild = guild
+    assert button._resolve_target(guild, moderator, 'warn')[0] is target  # type: ignore[arg-type]  # warn ignores Percy's rank
+    assert 'higher than mine' in button._resolve_target(guild, moderator, 'kick')[1]  # type: ignore[arg-type,operator]

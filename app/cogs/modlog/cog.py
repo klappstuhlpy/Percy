@@ -10,7 +10,7 @@ from app.cogs.modlog.ui import build_case_embed
 from app.core import Bot, Cog
 from app.core.models import Context, PermissionTemplate, command, describe, group
 from app.core.pagination import LinePaginator
-from app.utils import get_asset_url, helpers
+from app.utils import get_asset_url, helpers, truncate
 from app.utils.checks import hierarchy_error
 from config import Emojis
 
@@ -132,7 +132,7 @@ class ModLog(Cog):
         case = await self.record_case(ctx.guild.id, CaseType.WARN.value, member.id, ctx.author.id, reason)
 
         with suppress(discord.HTTPException):
-            note = f': {reason}' if reason else '.'
+            note = f': {truncate(reason, 1500)}' if reason else '.'
             await member.send(f'{Emojis.warning} You were warned in **{ctx.guild.name}**{note}')
 
         await ctx.send_success(f'Warned {member.mention} • **Case #{case.index}**.')

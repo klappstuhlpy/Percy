@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
 
+import discord
 from fastapi import HTTPException, status
-
-if TYPE_CHECKING:
-    import discord
 
 # Discord caps a timeout at 28 days; anything under a minute is not worth a round trip.
 MIN_TIMEOUT_SECONDS = 60
@@ -64,7 +61,7 @@ def parse_timestamp(value: str | None, name: str) -> datetime.datetime | None:
         ) from None
 
 
-def resolve_moderator(guild: discord.Guild, moderator_id: object, permission: str) -> discord.Member:
+async def resolve_moderator(guild: discord.Guild, moderator_id: object, permission: str) -> discord.Member:
     """The acting moderator as a member of ``guild``, refused unless they hold ``permission``.
 
     The bearer token only proves the caller is the dashboard; this is what proves the person
@@ -72,7 +69,18 @@ def resolve_moderator(guild: discord.Guild, moderator_id: object, permission: st
     """
     if moderator_id is None or moderator_id == '':
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='moderator_id is required')
-    moderator = guild.get_member(parse_id(moderator_id, 'moderator_id'))
+    uid = parse_id(moderator_id, 'moderator_id')
+    moderator = guild.get_member(uid)
+    if moderator is None:
+        # Not cached (large guild, chunking gaps): ask Discord before refusing a real moderator.
+        try:
+            moderator = await guild.fetch_member(uid)
+        except discord.NotFound:
+            moderator = None
+        except discord.HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail='could not look up the moderator, try again'
+            ) from None
     if moderator is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='you are not a member of this server')
     if not getattr(moderator.guild_permissions, permission):

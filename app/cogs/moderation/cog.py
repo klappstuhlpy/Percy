@@ -30,6 +30,7 @@ from app.utils import (
     timetools,
 )
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
+from app.utils.formats import join_lines_limited, truncate
 from app.utils.lock import lock
 from config import Emojis
 
@@ -1658,7 +1659,7 @@ class Moderation(Cog):
                 allowed.append(member)
 
         if blocked:
-            await ctx.send_error("Skipping these members:\n" + "\n".join(blocked))
+            await ctx.send_error("Skipping these members:\n" + join_lines_limited(blocked))
 
         members = allowed
         total_members = len(members)
@@ -1959,7 +1960,7 @@ class Moderation(Cog):
 
         message = f"Muted [`{total - failed - len(skipped) - len(blocked)}`/`{total}`] members."
         if blocked:
-            message += "\nNot muted:\n" + "\n".join(blocked)
+            message += "\nNot muted:\n" + join_lines_limited(blocked)
         if skipped:
             message += f"\nAlready muted (skipped): {human_join([f'`{m}`' for m in skipped], final='and')}."
         await ctx.send_success(message)
@@ -2028,7 +2029,7 @@ class Moderation(Cog):
 
         message = f"Unmuted [`{total - failed - len(blocked)}`/`{total}`] members."
         if blocked:
-            message += "\nNot unmuted:\n" + "\n".join(blocked)
+            message += "\nNot unmuted:\n" + join_lines_limited(blocked)
         await ctx.send_success(message)
 
     @command(

@@ -297,6 +297,19 @@ def truncate(text: str, length: int) -> str:
     return text
 
 
+def join_lines_limited(lines: list[str], limit: int = 1500) -> str:
+    """Join ``lines`` with newlines, cutting at ``limit`` characters with a ``… and N more`` count."""
+    out: list[str] = []
+    used = 0
+    for i, line in enumerate(lines):
+        if used + len(line) + 1 > limit:
+            out.append(f"… and {len(lines) - i} more")
+            break
+        out.append(line)
+        used += len(line) + 1
+    return "\n".join(out)
+
+
 def WrapList(list_: list, length: int) -> list[list]:
     """Wrap a list into sublists of a certain length."""
 

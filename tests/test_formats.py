@@ -255,3 +255,11 @@ class TestPlayerStamp:
         assert result.endswith('01:00')
         assert '▰' in result
         assert '▱' in result
+
+
+def test_join_lines_limited_truncates_with_a_count() -> None:
+    lines = [f"`member{i}`: {'x' * 50}" for i in range(100)]
+    out = formats.join_lines_limited(lines, 500)
+    assert len(out) <= 520  # the limit covers the listed lines; the "and N more" note rides on top
+    assert out.endswith(f"… and {100 - (len(out.splitlines()) - 1)} more")
+    assert formats.join_lines_limited(["a", "b"]) == "a\nb"
