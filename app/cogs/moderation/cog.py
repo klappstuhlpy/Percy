@@ -29,11 +29,12 @@ from app.utils import (
     resolve_entity_id,
     timetools,
 )
+from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 from app.utils.lock import lock
 from config import Emojis
 
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
-from .antispam import MAX_MENTION_COUNT, MIN_MENTION_COUNT, SpamChecker, check_raid, mention_spam_ban, mention_threshold
+from .antispam import SpamChecker, check_raid, mention_spam_ban, mention_threshold
 from .infractions import (
     check_member_hierarchy,
     default_reason,
@@ -423,6 +424,14 @@ class Moderation(Cog):
         checker.remove_member(payload.user)
 
     @Cog.listener()
+    async def on_sentinel_disabled(self, guild_id: int, released: list[int]) -> None:
+        """Sentinel ended (menu, Stand Down, dashboard or a deleted channel/message): the members
+        it held or flagged are no longer raiders, so hit-and-run and flagged-mention bans skip them."""
+        checker = self._spam_check.get(guild_id)
+        if checker is not None:
+            checker.forget_raid(released)
+
+    @Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         """|coro|
 
@@ -721,7 +730,7 @@ class Moderation(Cog):
         tell the moderators (once per member and window) when Percy cannot do it."""
         action = "ban" if bypass_action == "ban" else "kick"
         checker = self._spam_check[member.guild.id]
-        if member.id in checker.recently_actioned:
+        if member.id in checker.bypass_failed:
             return  # already failed and reported: do not call Discord again on every message
         removed = False
         if getattr(member.guild.me.guild_permissions, f"{action}_members"):
@@ -731,7 +740,9 @@ class Moderation(Cog):
             except discord.HTTPException:
                 pass
         if not removed:
-            checker.claim([member])  # a bypasser who keeps talking gets one attempt and one alert per window
+            # A bypasser who keeps talking gets one attempt and one alert per window, but stays
+            # fair game for raid and mention-spam bans (their own dedupe is recently_actioned).
+            checker.bypass_failed[member.id] = True
             await config.send_alert(
                 f"{Emojis.warning} Could not {action} **{member}** (ID: `{member.id}`) for bypassing Sentinel. "
                 f"Check that I have the **{'Ban' if action == 'ban' else 'Kick'} Members** permission and that "

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- After Percy lost the **Ban Members** permission, got it back and lost it again,
+  the second loss went unreported for up to five minutes. Every loss is reported
+  again once Percy has had the permission back.
+- A member who got past Sentinel and whom Percy could not kick or ban was then
+  skipped by raid and mention-spam protection for five minutes, and their failed
+  raid ban was never reported. Those checks now handle them as usual.
+- Ending Sentinel any way other than **Stand Down** (Deactivate in the menu, the
+  dashboard, or deleting the verification channel or message) left the released
+  members marked as raiders, so chatting freely could still get them banned. Every
+  way of ending Sentinel now clears the mark, for everyone Sentinel flagged.
+- When raid or mention-spam protection tripped on the server owner, the alert asked
+  you to check Percy's role position. It now says the server owner can never be
+  banned.
+
 ## [2.7.0] - 2026-10-20
 
 ### Added

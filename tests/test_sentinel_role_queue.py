@@ -171,7 +171,7 @@ def _sentinel(rows: list[dict], monkeypatch: pytest.MonkeyPatch) -> Sentinel:
         get_sentinel_members=AsyncMock(return_value=rows),
         delete_sentinel_members=AsyncMock(),
     )
-    bot = SimpleNamespace(db=SimpleNamespace(guilds=guilds, sentinel_roles=MagicMock()))
+    bot = SimpleNamespace(db=SimpleNamespace(guilds=guilds, sentinel_roles=MagicMock()), dispatch=MagicMock())
     record = {
         "id": 1, "started_at": None, "channel_id": 2, "role_id": 50, "starter_role_id": None,
         "message_id": 3, "bypass_action": "kick", "rate": None,
@@ -196,6 +196,8 @@ async def test_disable_releases_everyone_and_wakes_the_worker(monkeypatch: pytes
     sentinel.bot.db.guilds.release_sentinel_members.assert_awaited_once_with(1)
     sentinel.bot.db.sentinel_roles.wake.assert_called_once_with(1)
     assert sentinel.members == set()
+    # Whatever path ended Sentinel, the raid state hears which members were let go.
+    sentinel.bot.dispatch.assert_called_once_with("sentinel_disabled", 1, [1])
 
 
 async def test_changing_the_role_strips_the_old_one(monkeypatch: pytest.MonkeyPatch) -> None:

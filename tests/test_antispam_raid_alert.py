@@ -9,7 +9,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from app.cogs.moderation.antispam import SpamChecker, check_raid, mention_spam_ban, raid_ban_alert
+from app.cogs.moderation.antispam import (
+    SpamChecker,
+    check_raid,
+    mention_spam_ban,
+    raid_ban_alert,
+    raid_ban_failed_alert,
+)
 from app.cogs.moderation.models import SpamCheckerResult, SpammerSequence
 from app.utils.helpers import ListedRateLimit
 
@@ -40,7 +46,11 @@ def _guild(*, ban: AsyncMock | None = None, can_ban: bool = True) -> MagicMock:
 
 
 def _checker(result: SpamCheckerResult | None) -> MagicMock:
-    return MagicMock(is_spamming=MagicMock(return_value=result), claim=lambda users: list(users))
+    return MagicMock(
+        is_spamming=MagicMock(return_value=result),
+        claim=lambda users: list(users),
+        can_ban=lambda me: me.guild_permissions.ban_members,
+    )
 
 
 def test_alert_names_users_channel_and_reason() -> None:
@@ -251,5 +261,44 @@ def test_join_burst_alerts_once_per_batch() -> None:
     batches = [batch for batch in (limit.is_ratelimited(m) for m in joins) if batch]
 
     # Before the fix every join after the first trip tripped again, one member per alert.
-    assert all(len(batch) > 1 for batch in batches)
-    assert sum(len(batch) for batch in batches) <= 30
+    # 10 joins per 5 s: the 11th trips with its whole batch and the window restarts, so 30 joins
+    # at once give two alerts of 11, and the 8 left over have not tripped a third.
+    assert [len(batch) for batch in batches] == [11, 11]
+
+
+async def test_regaining_ban_permission_rearms_the_missing_permission_alert() -> None:
+    config = _config()
+    message = SimpleNamespace(channel=SimpleNamespace(id=99), content="spam")
+    checker = _real_checker(SpamCheckerResult.spammer())
+
+    await check_raid(checker, config, _guild(can_ban=False), _user(1, "raider"), message)  # type: ignore[arg-type]
+    await check_raid(checker, config, _guild(can_ban=True), _user(2, "raider"), message)  # type: ignore[arg-type]
+    await check_raid(checker, config, _guild(can_ban=False), _user(3, "raider"), message)  # type: ignore[arg-type]
+
+    # Lost, regained, lost again inside one throttle window: the second loss is news too.
+    assert config.alert_missing_permission.await_count == 2
+
+
+def test_failed_raid_ban_of_the_owner_says_the_owner_cannot_be_banned() -> None:
+    owner_only = "\n".join(raid_ban_failed_alert([_user(1, "owner")], "spam", 9, owner_id=1))
+    assert "server owner can never be banned" in owner_only
+    assert "highest role" not in owner_only
+
+    mixed = "\n".join(raid_ban_failed_alert([_user(1, "owner"), _user(2, "mod")], "spam", 9, owner_id=1))
+    assert "server owner can never be banned" in mixed and "highest role" in mixed
+
+    other = "\n".join(raid_ban_failed_alert([_user(2, "mod")], "spam", 9, owner_id=1))
+    assert "owner" not in other and "highest role" in other
+
+
+async def test_mention_spamming_owner_is_named_as_unbannable() -> None:
+    config = _config()
+    member = _pinger()
+    member.guild.owner_id = member.id
+    member.guild.me.guild = member.guild
+
+    await mention_spam_ban(SpamChecker(), config, member, 6)  # type: ignore[arg-type]
+
+    member.ban.assert_not_awaited()
+    text = config.send_alert.await_args.args[0]
+    assert "server owner can never be banned" in text and "highest role" not in text

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import config
 from app.services import ModelTier, build_dashboard_assistant_system
 from app.utils import truncate
+from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_entity, resolve_role
@@ -167,8 +168,6 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
 
 def _check_mention_count(value: object) -> int | None:
     """``None``/``0`` turns mention-spam protection off; anything else must be in the command's range."""
-    from app.cogs.moderation.antispam import MAX_MENTION_COUNT, MIN_MENTION_COUNT
-
     if value is None:
         return None
     if (

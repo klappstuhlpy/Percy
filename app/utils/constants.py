@@ -21,6 +21,15 @@ type AsyncCallableDecorator[P, R] = Callable[
 URL_REGEX = re.compile(r'https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|%[0-9a-fA-F][0-9a-fA-F])+')
 
 
+# MODERATION
+
+#: The lowest mention-spam threshold: the command and the dashboard API refuse less, and a
+#: lower value stored before that check is raised to it (a reply ping must not ban anyone).
+MIN_MENTION_COUNT = 3
+#: The highest threshold accepted: a higher one is protection in name only (and overflows the column).
+MAX_MENTION_COUNT = 100
+
+
 # DATA
 def get_colour_dict() -> dict[str, str]:
     """Return the combined CSS4 + XKCD colour dictionary, built once on first access.

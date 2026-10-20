@@ -61,8 +61,9 @@ def lockdown_channels(guild: discord.Guild, verify_channel: discord.abc.GuildCha
 
 
 def forget_raid_suspects(bot: Bot, guild_id: int, user_ids: Iterable[int]) -> None:
-    """Drop released members from the raid state, so a member who verified (or was let go by
-    Stand Down) is no longer treated as a raider or offered by the Ban All Raiders button."""
+    """Drop released members from the raid state, so a member who verified is no longer treated
+    as a raider or offered by the Ban All Raiders button. (Ending Sentinel does this for everyone
+    through ``Sentinel.disable``'s ``sentinel_disabled`` event.)"""
     cog = cast("Moderation | None", bot.get_cog("Moderation"))
     checker = cog._spam_check.get(guild_id) if cog is not None else None
     if checker is None:
@@ -1302,9 +1303,7 @@ class SentinelAlertResolveButton(
         else:
             await interaction.response.defer()
 
-        released = list(self.sentinel.members)
-        await self.sentinel.disable()
-        forget_raid_suspects(interaction.client, self.sentinel.id, released)
+        await self.sentinel.disable()  # also tells the raid state to forget everyone it held
         await interaction.followup.send(
             f"{Emojis.success} Sentinel stood down.", ephemeral=True
         )

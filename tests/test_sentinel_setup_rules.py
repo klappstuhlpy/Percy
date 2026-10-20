@@ -392,19 +392,31 @@ async def test_passing_the_captcha_clears_the_raider_mark() -> None:
     assert checker.is_flagged(6)  # only the member who verified
 
 
-async def test_stand_down_clears_the_raider_mark_of_everyone_released() -> None:
-    checker = _flagged_checker(5, 6, 7)
+async def test_stand_down_disables_sentinel() -> None:
     sentinel = _sentinel(started_at=discord.utils.utcnow(), id=1, members={5, 6}, pending_members=0, disable=AsyncMock())
     interaction = _interaction(ban_members=True, manage_messages=True)
-    interaction.client.get_cog.return_value = SimpleNamespace(_spam_check={1: checker})
     interaction.response.defer = AsyncMock()
     interaction.followup.send = AsyncMock()
     interaction.message.edit = AsyncMock()
 
     await ui.SentinelAlertResolveButton(sentinel).callback(interaction)
 
-    sentinel.disable.assert_awaited_once()
-    assert [checker.is_flagged(i) for i in (5, 6, 7)] == [False, False, True]
+    sentinel.disable.assert_awaited_once()  # disable() itself dispatches sentinel_disabled
+
+
+async def test_ending_sentinel_forgets_every_raider_it_flagged() -> None:
+    # Whatever ended it (Stand Down, the menu, the dashboard, a deleted channel), nobody Sentinel
+    # flagged is a raider any more, held or not; alert-only suspects lose just the released ids.
+    from app.cogs.moderation.cog import Moderation
+
+    checker = _flagged_checker(5, 6, 7)
+    cog = SimpleNamespace(_spam_check={1: checker})
+
+    await Moderation.on_sentinel_disabled(cog, 1, [5, 6])  # type: ignore[arg-type]
+
+    assert [checker.is_flagged(i) for i in (5, 6, 7)] == [False, False, False]
+    assert sorted(checker.join_spammers) == [7]
+    await Moderation.on_sentinel_disabled(cog, 2, [5])  # type: ignore[arg-type]  # no checker: harmless
 
 
 def test_forgetting_suspects_without_the_moderation_cog_is_harmless() -> None:

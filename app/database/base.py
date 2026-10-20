@@ -1524,11 +1524,16 @@ class Sentinel(BaseRecord, table="guild_sentinel", pk="id"):
 
         Disables the sentinel and takes the lockdown role away from every held member
         in the background, including members whose role had not been given yet.
+
+        Dispatches ``sentinel_disabled(guild_id, released_ids)`` so the raid state forgets the
+        released members, whichever path (menu, Stand Down, dashboard, a deleted channel) ended it.
         """
+        released = list(self.members)
         await self.edit(started_at=None)
         await self.bot.db.guilds.release_sentinel_members(self.id)
         self.members.clear()
         self.bot.db.sentinel_roles.wake(self.id)
+        self.bot.dispatch("sentinel_disabled", self.id, released)
 
     @property
     def role(self) -> discord.Role | None:

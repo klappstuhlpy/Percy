@@ -211,3 +211,52 @@ async def test_channel_moderators_are_exempt_where_they_moderate() -> None:
     await Moderation.on_message(cog, _message(channel, _author()))
 
     cog.bot.db.get_guild_config.assert_not_awaited()
+
+
+async def test_join_burst_stays_quiet_while_an_auto_trigger_waits_unstarted() -> None:
+    # A rate is configured but Sentinel has not started: the auto-trigger owns join bursts, so a
+    # burst below its rate stays quiet rather than also raising the alert-only check.
+    config = _join_config(sentinel=True)
+    sentinel = MagicMock(started_at=None, rate=(20, 5), requires_setup=False, force_enable_with=AsyncMock())
+    cog = _cog(config, sentinel)
+
+    now = discord.utils.utcnow()
+    for i in range(11):  # enough to trip the alert-only check (10 per 5 s), not the 20 per 5 s trigger
+        await Moderation.on_member_join(cog, _Member(i, joined_at=now + datetime.timedelta(seconds=1)))  # type: ignore[arg-type]
+
+    sentinel.force_enable_with.assert_not_awaited()
+    config.send_alert.assert_not_awaited()
+
+
+# -- Sentinel bypass removal --------------------------------------------------------------------
+
+
+def _bypasser() -> MagicMock:
+    response = MagicMock(status=403, reason="Forbidden")
+    member = MagicMock(id=7, ban=AsyncMock(side_effect=discord.Forbidden(response, "Missing Permissions")))
+    member.guild.id = GUILD.id
+    member.guild.me.guild_permissions.ban_members = True
+    return member
+
+
+async def test_a_bypasser_percy_cannot_remove_is_tried_and_reported_once() -> None:
+    config = SimpleNamespace(send_alert=AsyncMock())
+    cog = _cog(config)
+    member = _bypasser()
+
+    for _ in range(3):  # the bypasser keeps talking
+        await Moderation._remove_sentinel_bypasser(cog, config, member, "ban", "Bypassing")  # type: ignore[arg-type]
+
+    member.ban.assert_awaited_once()
+    config.send_alert.assert_awaited_once()
+
+
+async def test_a_failed_bypass_removal_does_not_exempt_the_member_from_raid_bans() -> None:
+    config = SimpleNamespace(send_alert=AsyncMock())
+    cog = _cog(config)
+    member = _bypasser()
+
+    await Moderation._remove_sentinel_bypasser(cog, config, member, "ban", "Bypassing")  # type: ignore[arg-type]
+
+    # Raid and mention-spam handling still get their own attempt (and their own failure alert).
+    assert cog._spam_check[GUILD.id].claim([member]) == [member]

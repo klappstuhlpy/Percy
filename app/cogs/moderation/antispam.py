@@ -11,12 +11,13 @@ import discord
 from app.core.pagination import TextSource
 from app.utils import ListedRateLimit, RateLimit, cache
 from app.utils.checks import hierarchy_error
+from app.utils.constants import MIN_MENTION_COUNT
 from config import Emojis
 
 from .models import FlaggedMember, SpamCheckerResult, SpammerSequence
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping, Sequence
+    from collections.abc import Iterable, MutableMapping, Sequence
 
     from app.database.base import GuildConfig, Sentinel
 
@@ -30,12 +31,6 @@ MIN_CONTENT_LENGTH = 5
 #: How long a member stays "already handled" after an automatic ban (or a failed one), so one raid
 #: gives one ban and one alert per member however many limiters trip on them.
 RECENTLY_ACTIONED_SECONDS = 300.0
-
-#: The lowest mention-spam threshold: the command and the dashboard API refuse less, and a
-#: lower value stored before that check is raised to it (a reply ping must not ban anyone).
-MIN_MENTION_COUNT = 3
-#: The highest threshold accepted: a higher one is protection in name only (and overflows the column).
-MAX_MENTION_COUNT = 100
 
 #: Mentions a member sends within this many seconds add up towards the threshold.
 MENTION_WINDOW_SECONDS = 15.0
@@ -98,6 +93,9 @@ class SpamChecker:
         self.join_spammers: MutableMapping[int, FlaggedMember] = cache.ExpiringCache(seconds=2700.0)
         self.hit_and_run = RateLimit(5, 15, key=lambda msg: msg.channel.id, tagger=lambda msg: msg.author)
         self.recently_actioned: MutableMapping[int, bool] = cache.ExpiringCache(seconds=RECENTLY_ACTIONED_SECONDS)
+        #: Sentinel bypassers Percy failed to remove: one attempt and one alert per window. Kept apart
+        #: from :attr:`recently_actioned` so a failed bypass removal never exempts them from raid bans.
+        self.bypass_failed: MutableMapping[int, bool] = cache.ExpiringCache(seconds=RECENTLY_ACTIONED_SECONDS)
         self._ban_permission_alerted_at: float | None = None
 
     def claim[U: discord.abc.Snowflake](self, users: Sequence[U], /) -> list[U]:
@@ -110,6 +108,14 @@ class SpamChecker:
         for user in fresh:
             self.recently_actioned[user.id] = True
         return fresh
+
+    def can_ban(self, me: discord.Member) -> bool:
+        """Whether Percy holds Ban Members. Having it again re-arms :meth:`alert_missing_ban_permission`,
+        so losing it later is reported straight away instead of inside the old throttle window."""
+        if me.guild_permissions.ban_members:
+            self._ban_permission_alerted_at = None
+            return True
+        return False
 
     async def alert_missing_ban_permission(self, config: GuildConfig, feature: str) -> None:
         """Tell the moderators Percy cannot ban, at most once per :data:`RECENTLY_ACTIONED_SECONDS`."""
@@ -272,6 +278,13 @@ class SpamChecker:
         self.flagged_users.pop(user.id, None)
         self.join_spammers.pop(user.id, None)
 
+    def forget_raid(self, released: Iterable[int]) -> None:
+        """Sentinel ended: nobody it flagged is a raider any more, and the released members
+        are no longer offered by a Massban button either."""
+        self.flagged_users.clear()
+        for user_id in released:
+            self.join_spammers.pop(user_id, None)
+
 
 async def check_raid(
     checker: SpamChecker,
@@ -312,7 +325,7 @@ async def check_raid(
         return False
 
     me = guild.me
-    if not me.guild_permissions.ban_members:
+    if not checker.can_ban(me):
         await checker.alert_missing_ban_permission(config, "ban members for raid protection")
         return False
 
@@ -338,7 +351,7 @@ async def check_raid(
         for page in raid_ban_alert(banned, result.reason, message.channel.id):
             await config.send_alert(page)
     if failed:
-        for page in raid_ban_failed_alert(failed, result.reason, message.channel.id):
+        for page in raid_ban_failed_alert(failed, result.reason, message.channel.id, owner_id=guild.owner_id):
             await config.send_alert(page, force=True)
     return any(user.id == member.id for user in banned)
 
@@ -360,12 +373,20 @@ def raid_ban_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_
     return _alert_pages(f"Raid protection banned these members in <#{channel_id}>:", users, f"Reason: *{reason}*.")
 
 
-def raid_ban_failed_alert(users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int) -> list[str]:
+def raid_ban_failed_alert(
+    users: Sequence[discord.abc.Snowflake], reason: str, channel_id: int, *, owner_id: int | None = None
+) -> list[str]:
     """The mod-alert pages for raiders Percy could not ban."""
+    footer = "Check that I have the **Ban Members** permission and that my highest role is above theirs."
+    if any(user.id == owner_id for user in users):
+        if len(users) == 1:
+            footer = "The server owner can never be banned."
+        else:
+            footer = f"The server owner can never be banned. For the others: {footer}"
     return _alert_pages(
         f"{Emojis.warning} Raid protection could **not** ban these members in <#{channel_id}> ({reason}):",
         users,
-        "Check that I have the **Ban Members** permission and that my highest role is above theirs.",
+        footer,
     )
 
 
@@ -406,13 +427,17 @@ async def mention_spam_ban(
         reason = f"Spamming mentions ({mention_count} mentions)"
 
     me = member.guild.me
-    if not me.guild_permissions.ban_members:
+    if not checker.can_ban(me):
         await checker.alert_missing_ban_permission(config, "ban members for mention-spam protection")
         return
 
     failure = (
         f"{Emojis.warning} Could not ban **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions. "
-        "Check that my highest role is above theirs."
+        + (
+            "The server owner can never be banned."
+            if member.id == member.guild.owner_id
+            else "Check that my highest role is above theirs."
+        )
     )
     if outranks(member, me):
         await config.send_alert(failure, force=True)
