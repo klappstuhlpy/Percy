@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.cogs.moderation import sentinel as ui
+from app.cogs.moderation.antispam import SpamChecker
 from app.cogs.moderation.cog import Moderation
 from app.database.base import Sentinel
 from app.internal_api.routers import guild as api
@@ -362,6 +363,54 @@ async def test_unblock_queues_removal_even_without_a_row() -> None:
     bot.db.guilds.release_sentinel_member.assert_awaited_once_with(1, 5)
     bot.db.sentinel_roles.wake.assert_called_once_with(1)
     assert sentinel.members == set()
+
+
+def _flagged_checker(*user_ids: int) -> SpamChecker:
+    checker = SpamChecker()
+    for user_id in user_ids:
+        member = MagicMock(id=user_id, joined_at=discord.utils.utcnow())
+        checker.flag_member(member)
+        checker.join_spammers[user_id] = checker.flagged_users[user_id]
+    return checker
+
+
+async def test_passing_the_captcha_clears_the_raider_mark() -> None:
+    checker = _flagged_checker(5, 6)
+    sentinel = MagicMock(id=1, unblock=AsyncMock())
+    sentinel.bot.db.get_guild_sentinel = AsyncMock(return_value=sentinel)
+    sentinel.bot.get_cog.return_value = SimpleNamespace(_spam_check={1: checker})
+    view = object.__new__(ui.CaptchaChallengeView)
+    view.sentinel, view.member, view.text = sentinel, SimpleNamespace(id=5), "abc123"
+    view.stop = MagicMock()  # type: ignore[method-assign]
+    interaction = MagicMock()
+    interaction.response.edit_message = AsyncMock()
+
+    await view.check_answer(interaction, "abc123")
+
+    sentinel.unblock.assert_awaited_once()
+    assert not checker.is_flagged(5) and 5 not in checker.join_spammers
+    assert checker.is_flagged(6)  # only the member who verified
+
+
+async def test_stand_down_clears_the_raider_mark_of_everyone_released() -> None:
+    checker = _flagged_checker(5, 6, 7)
+    sentinel = _sentinel(started_at=discord.utils.utcnow(), id=1, members={5, 6}, pending_members=0, disable=AsyncMock())
+    interaction = _interaction(ban_members=True, manage_messages=True)
+    interaction.client.get_cog.return_value = SimpleNamespace(_spam_check={1: checker})
+    interaction.response.defer = AsyncMock()
+    interaction.followup.send = AsyncMock()
+    interaction.message.edit = AsyncMock()
+
+    await ui.SentinelAlertResolveButton(sentinel).callback(interaction)
+
+    sentinel.disable.assert_awaited_once()
+    assert [checker.is_flagged(i) for i in (5, 6, 7)] == [False, False, True]
+
+
+def test_forgetting_suspects_without_the_moderation_cog_is_harmless() -> None:
+    bot = MagicMock()
+    bot.get_cog.return_value = None
+    ui.forget_raid_suspects(bot, 1, [5])  # must not raise
 
 
 # -- rejoin while muted (#15) -------------------------------------------------------------------

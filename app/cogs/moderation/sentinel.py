@@ -17,6 +17,8 @@ from config import Emojis
 from .infractions import sync_permissions_with_progress, update_role_permissions
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from app.core import Bot
     from app.database.base import GuildConfig, Sentinel
 
@@ -56,6 +58,17 @@ def lockdown_channels(guild: discord.Guild, verify_channel: discord.abc.GuildCha
     """Every channel the lockdown role must be hidden from: all of them (categories, voice and
     forums included, so new channels inherit it) except the verification channel."""
     return [ch for ch in guild.channels if ch != verify_channel]
+
+
+def forget_raid_suspects(bot: Bot, guild_id: int, user_ids: Iterable[int]) -> None:
+    """Drop released members from the raid state, so a member who verified (or was let go by
+    Stand Down) is no longer treated as a raider or offered by the Ban All Raiders button."""
+    cog = cast("Moderation | None", bot.get_cog("Moderation"))
+    checker = cog._spam_check.get(guild_id) if cog is not None else None
+    if checker is None:
+        return
+    for user_id in user_ids:
+        checker.remove_member(discord.Object(id=user_id))
 
 
 async def sync_sentinel_permissions(sentinel: Sentinel, invoker: discord.abc.User) -> None:
@@ -1200,6 +1213,7 @@ class CaptchaChallengeView(LayoutView):
         # rebuilt instance would still count the member as held and punish them for talking.
         sentinel = await self.sentinel.bot.db.get_guild_sentinel(self.sentinel.id) or self.sentinel
         await sentinel.unblock(self.member)
+        forget_raid_suspects(sentinel.bot, sentinel.id, [self.member.id])
 
         done = LayoutView(timeout=None)
         container = discord.ui.Container(accent_colour=_SUCCESS)
@@ -1288,7 +1302,9 @@ class SentinelAlertResolveButton(
         else:
             await interaction.response.defer()
 
+        released = list(self.sentinel.members)
         await self.sentinel.disable()
+        forget_raid_suspects(interaction.client, self.sentinel.id, released)
         await interaction.followup.send(
             f"{Emojis.success} Sentinel stood down.", ephemeral=True
         )

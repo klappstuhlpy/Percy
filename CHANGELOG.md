@@ -61,9 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mention-spam protection now follows one rule: a member is banned when one message,
   or all their messages within 15 seconds, mention more than the configured number of
   users. The alert reports how many mentions they actually sent. The dashboard could
-  set a threshold of 1 or 2 (or a negative number, which banned every poster); Percy
-  now refuses anything below 3 except 0 for off, and treats a low value saved earlier
-  as 3.
+  set a threshold of 1 or 2 (or a negative number, which banned every poster), and a
+  number above 100 failed with an internal error. The threshold is now 3 to 100, on
+  the dashboard and with `moderation mentions` (0 turns it off on the dashboard), and
+  a low value saved earlier is treated as 3.
 - Moderators who have Manage Messages only in some channels were auto-banned for
   pinging or posting quickly there. They are now exempt in those channels. Threads and
   forum posts inside an ignored channel are ignored too.
@@ -97,6 +98,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A member who still had the lockdown role from an earlier hold and opened the captcha
   without finishing it could be kicked or banned for talking afterwards. Opening the
   captcha no longer holds them again; solving it still removes the role.
+- A member Sentinel held during a join burst stayed marked as a raider for up to 45
+  minutes after passing the captcha or being released with **Stand Down**, so raid
+  protection could still ban them for mentioning someone, Percy ignored their
+  commands, and **Ban All Raiders** still offered them. Verifying or being released
+  now clears that mark.
+- When Percy could not kick or ban a member who bypassed Sentinel, it tried again on
+  every message they sent. It now tries once every few minutes, and not at all when it
+  lacks the Kick or Ban Members permission; the alert still tells your moderators what
+  to fix.
 - The dashboard's Sentinel settings now follow the same rules as the Discord menu.
   Lockdown and starter roles are checked (not @everyone, not managed, below Percy's
   role, not the same role), and the lockdown role and verification channel cannot be
@@ -165,7 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (by command or from the dashboard) left their tempban timer running, so if they
   were banned for good later, the old timer lifted that ban on its original date. The
   same happened to an indefinite mute applied after a tempmute whose role had been
-  removed by hand. Any ban, unban, mute or unmute now cancels the old timer.
+  removed by hand. Banning, unbanning, muting or unmuting by command or from the
+  dashboard now cancels the old timer.
 - A tempban or tempmute that could not end on time (Discord outage, missing
   permission) used to stay in place for good with no trace. Percy now retries it for
   about a day and tells your alert channel when a permission is missing. After the
@@ -173,8 +184,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it ends, instead of leaving the member muted.
 - Members muted in the last few seconds before Percy restarted could leave and rejoin
   without the mute role. Pending mutes are now saved before Percy shuts down.
-- `mute`, `unmute`, `tempmute` and `selfmute` say the mute role no longer exists
-  instead of failing with an error when it was deleted. `tempmute` only needs Percy
+- When the mute role was deleted while Percy was offline, `mute`, `unmute`, `tempmute`
+  and `selfmute` now say it no longer exists and to set up a new one with `muterole`,
+  instead of failing with an error or saying it was never set up. `tempmute` only needs Percy
   to have Manage Roles, like `mute`. A `tempban` DM no longer names the moderator, and
   if the ban then fails the member is told to disregard it. Unbinding the mute role
   now says plainly that muted members keep the role.
@@ -191,7 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A warning or reason longer than about 1,000 characters broke that case: its modlog
   post never appeared and `case N` failed every time. The reason is now shortened in
   the case card. Deleting the newest case no longer hands its number to the next one,
-  so old modlog posts never point at the wrong case.
+  so old modlog posts never point at the wrong case. Requires migration V48.
 - The dashboard let anyone with Manage Server use every moderation action, whatever
   their own permissions and rank. Someone without Ban Members could ban an
   Administrator ranked above them, kick themselves, or give themselves any role below
@@ -210,8 +222,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A bulk action with a malformed id failed halfway, after some members had already
   been banned or kicked, without saying who. Every id is now checked first. Purging
   the messages of someone who has left the server now works too.
-- The mention-spam threshold now accepts 3 to 100, on the dashboard and with
-  `moderation mentions`; a larger number failed with an internal error.
 
 ## [2.6.0] - 2026-10-03
 

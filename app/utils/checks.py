@@ -146,7 +146,11 @@ def can_mute() -> Callable[[T], T]:
 
         config = await ctx.bot.db.get_guild_config(guild_id=ctx.guild.id)
         if config.mute_role is None:
-            await ctx.send_error("The mute role has not been set up.")
+            await ctx.send_error(
+                "The mute role no longer exists. Set up a new one with `muterole`."
+                if config.mute_role_id
+                else "The mute role has not been set up."
+            )
             return False
         if ctx.author.id != ctx.guild.owner_id and ctx.author.top_role <= config.mute_role:
             await ctx.send_error("Your highest role must be above the mute role to use this command.")

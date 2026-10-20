@@ -267,7 +267,7 @@ class SpamChecker:
             self.join_spammers[spammer.id] = FlaggedMember(spammer, spammer.joined_at or discord.utils.utcnow())
         return spammers
 
-    def remove_member(self, user: discord.abc.User) -> None:
+    def remove_member(self, user: discord.abc.Snowflake) -> None:
         """Remove a member from the spam checker."""
         self.flagged_users.pop(user.id, None)
         self.join_spammers.pop(user.id, None)

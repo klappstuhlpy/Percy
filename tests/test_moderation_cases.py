@@ -118,6 +118,34 @@ async def test_sentinel_bypass_failure_alerts_once_and_records_nothing() -> None
     config.send_alert.assert_awaited_once()
     assert "Could not ban" in config.send_alert.await_args.args[0]
     assert _dispatched(cog.bot) == []
+    member.ban.assert_awaited_once()  # one attempt, not one Discord call per message
+
+
+async def test_sentinel_bypass_without_the_permission_alerts_without_calling_discord() -> None:
+    cog, config, member = _sentinel_cog(), _config(), _bypasser()
+    member.guild.me.guild_permissions.kick_members = False
+
+    for _ in range(3):
+        await Moderation._remove_sentinel_bypasser(cog, config, member, "kick", "Bypassing sentinel")  # type: ignore[arg-type]
+
+    member.kick.assert_not_awaited()
+    config.send_alert.assert_awaited_once()
+    assert "Kick Members" in config.send_alert.await_args.args[0]
+
+
+async def test_mute_check_says_a_deleted_mute_role_no_longer_exists() -> None:
+    from app.utils import checks
+
+    def command() -> None: ...
+
+    checks.can_mute()(command)
+    predicate = command.__commands_checks__[0]  # type: ignore[attr-defined]
+
+    for role_id, expected in ((42, "no longer exists"), (None, "has not been set up")):
+        ctx = MagicMock(send_error=AsyncMock())
+        ctx.bot.db.get_guild_config = AsyncMock(return_value=SimpleNamespace(mute_role=None, mute_role_id=role_id))
+        assert await predicate(ctx) is False
+        assert expected in ctx.send_error.await_args.args[0]
 
 
 # -- timer expiry -------------------------------------------------------------------------------

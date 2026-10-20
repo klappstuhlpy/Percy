@@ -720,11 +720,18 @@ class Moderation(Cog):
         """Ban or kick a member who got past Sentinel, record the case under Percy's name, and
         tell the moderators (once per member and window) when Percy cannot do it."""
         action = "ban" if bypass_action == "ban" else "kick"
-        try:
-            await (member.ban if action == "ban" else member.kick)(reason=reason)
-        except discord.HTTPException:
-            if not self._spam_check[member.guild.id].claim([member]):
-                return  # already reported: a bypasser who keeps talking must not raise one alert per message
+        checker = self._spam_check[member.guild.id]
+        if member.id in checker.recently_actioned:
+            return  # already failed and reported: do not call Discord again on every message
+        removed = False
+        if getattr(member.guild.me.guild_permissions, f"{action}_members"):
+            try:
+                await (member.ban if action == "ban" else member.kick)(reason=reason)
+                removed = True
+            except discord.HTTPException:
+                pass
+        if not removed:
+            checker.claim([member])  # a bypasser who keeps talking gets one attempt and one alert per window
             await config.send_alert(
                 f"{Emojis.warning} Could not {action} **{member}** (ID: `{member.id}`) for bypassing Sentinel. "
                 f"Check that I have the **{'Ban' if action == 'ban' else 'Kick'} Members** permission and that "
