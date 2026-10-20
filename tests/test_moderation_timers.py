@@ -303,8 +303,12 @@ async def test_lockdown_end_retries_failed_channels(monkeypatch: pytest.MonkeyPa
     ctx.guild.id, ctx.author.id, ctx.channel.id = 1, 2, 5
     ctx.message.created_at = discord.utils.utcnow()
     ctx.send_info = AsyncMock()
+    cog.bot.timers.drop_lockdown_channels = AsyncMock()
 
     await Moderation.lockdown_end.callback(cog, ctx)  # type: ignore[arg-type]
+
+    # Off the original `lockdown for` / an earlier retry first, so retries never stack.
+    cog.bot.timers.drop_lockdown_channels.assert_awaited_once_with(1, [11])
 
     when, event, *args = cog.bot.timers.create.await_args.args
     assert (when, event, args) == (TIMER_RETRY_BASE, "lockdown", [1, 2, 5, [11]])
@@ -316,7 +320,7 @@ async def test_idle_wait_holds_no_pooled_connection() -> None:
     manager = _manager([])
     manager.db = MagicMock(acquire=MagicMock(side_effect=AssertionError("held a connection")))
     manager._TimerManager__event = asyncio.Event()  # type: ignore[attr-defined]
-    loaded = object()
+    loaded = SimpleNamespace(id=1, expires=None)
     manager.load_next_timer = AsyncMock(side_effect=[None, loaded])
 
     waiting = asyncio.create_task(manager.wait())
@@ -326,3 +330,46 @@ async def test_idle_wait_holds_no_pooled_connection() -> None:
     manager._TimerManager__event.set()  # type: ignore[attr-defined]
     assert await waiting is loaded
     manager.db.acquire.assert_not_called()
+
+
+async def test_wait_goes_back_to_waiting_when_the_waking_timer_is_gone() -> None:
+    manager = _manager([])
+    event = manager._TimerManager__event = asyncio.Event()  # type: ignore[attr-defined]
+    loaded = SimpleNamespace(id=1, expires=None)
+    manager.load_next_timer = AsyncMock(side_effect=[None, None, loaded])
+
+    waiting = asyncio.create_task(manager.wait())
+    await asyncio.sleep(0)
+    event.set()  # woken, but that timer was deleted before the reload
+    await asyncio.sleep(0)
+    assert not waiting.done()  # waiting again rather than handing None to the loop
+
+    event.set()
+    assert await waiting is loaded
+
+
+async def test_wait_requeries_when_a_timer_is_created_during_the_query() -> None:
+    manager = _manager([])
+    event = manager._TimerManager__event = asyncio.Event()  # type: ignore[attr-defined]
+    later, sooner = SimpleNamespace(id=1, expires=None), SimpleNamespace(id=2, expires=None)
+
+    async def load(**_: object) -> object:
+        if manager.load_next_timer.await_count == 1:
+            event.set()  # a sooner timer is created after the query's snapshot
+            return later
+        return sooner
+
+    manager.load_next_timer = AsyncMock(side_effect=load)
+    assert await manager.wait() is sooner
+
+
+async def test_dispatch_loop_restarts_after_an_unexpected_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = _manager([])
+    manager.db = MagicMock(wait=AsyncMock())
+    manager.bot.is_closed.return_value = False
+    manager.wait = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    await manager.dispatch_timers()  # logged, not raised
+
+    manager.reset_task.assert_called_once()

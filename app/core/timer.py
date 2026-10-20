@@ -383,19 +383,22 @@ class TimerManager:
             The timer that was loaded.
         """
         # No pooled connection is held across the idle wait: one parked there for days kept a pool
-        # slot busy and made pool.close() at shutdown wait for it. Clearing before the query means
-        # a timer created while it runs still wakes the wait below.
-        self.__event.clear()
-        timer = await self.load_next_timer(connection=connection, days=days)
-        if timer is not None:
-            log.debug("Loaded timer %r to fire at %s.", timer.id, timer.expires)
-            return timer
+        # slot busy and made pool.close() at shutdown wait for it.
+        self._loaded_timer = None  # the previous one has fired; nothing is loaded while we query
+        while True:
+            # Cleared before the query, so a timer created while it runs (possibly sooner than
+            # the one it returns) sets the event and is picked up by querying again.
+            self.__event.clear()
+            timer = await self.load_next_timer(connection=connection, days=days)
+            if self.__event.is_set():
+                continue
+            if timer is not None:
+                log.debug("Loaded timer %r to fire at %s.", timer.id, timer.expires)
+                return timer
 
-        self._loaded_timer = None
-        log.debug("No timers to load, waiting for new timers to be created.")
-        await self.__event.wait()
-
-        return await self.load_next_timer(connection=connection, days=days)  # type: ignore
+            # Also reached when the timer that woke us was deleted again before the reload.
+            log.debug("No timers to load, waiting for new timers to be created.")
+            await self.__event.wait()
 
     async def start_short_timer(self, seconds: float, timer: Timer) -> None:
         """Simply sleeps until the timer expires."""
@@ -434,6 +437,11 @@ class TimerManager:
         except asyncio.CancelledError:
             raise
         except (OSError, discord.ConnectionClosed, asyncpg.PostgresConnectionError):
+            self.reset_task()
+        except Exception:
+            # A dead loop stops every timer (tempbans, mutes, lockdowns, reminders) until a restart.
+            log.exception("Timer dispatch loop failed; restarting it in 5 seconds")
+            await asyncio.sleep(5)
             self.reset_task()
 
     def reset_task(self) -> None:

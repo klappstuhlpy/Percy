@@ -1494,14 +1494,18 @@ class Moderation(Cog):
 
         # end_lockdown took the restored channels out of every pending `lockdown for` timer.
         if failures:
-            # Retry the failed ones on their own, quietly: the moderator is told right here.
+            # Retry the failed ones on their own, quietly: the moderator is told right here. They
+            # move off any timer already covering them (the original `lockdown for`, an earlier
+            # retry), so exactly one retry chain exists however often this is run.
+            failed_ids = [c.id for c in failures]
+            await self.bot.timers.drop_lockdown_channels(ctx.guild.id, failed_ids)
             await self.bot.timers.create(
                 TIMER_RETRY_BASE,
                 "lockdown",
                 ctx.guild.id,
                 ctx.author.id,
                 ctx.channel.id,
-                [c.id for c in failures],
+                failed_ids,
                 attempt=1,
                 created=ctx.message.created_at,
             )
