@@ -71,6 +71,8 @@ async def lock_channels(
             create_private_threads=False,
             send_messages_in_threads=False,
         )
+        if isinstance(channel, discord.VoiceChannel):
+            overwrites.update(connect=False, speak=False)
 
         try:
             await channel.set_permissions(guild.default_role, overwrite=overwrites, reason=reason)
@@ -117,42 +119,48 @@ async def end_lockdown(
     reason: str | None = None,
     progress: ProgressCallback | None = None,
 ) -> list[discord.abc.GuildChannel]:
-    """Ends a lockdown in the given guild.
+    """Ends a lockdown in the given guild and returns the channels that could not be restored.
+
+    A channel's saved overwrites are the only copy of its pre-lockdown permissions, so its
+    row is deleted only once the restore succeeded (or the channel no longer exists). A
+    failed channel keeps its row and stays listed as locked, so ending again retries it.
 
     ``progress`` is an optional ``async (done, total)`` callback invoked after each
     channel's overwrites are restored, used to surface live progress to the caller.
     """
     channel_fallback: dict[int, discord.abc.GuildChannel] | None = None
     default_role = guild.default_role
-    failures = []
+    failures: list[discord.abc.GuildChannel] = []
+    done: list[int] = []
 
     lockdowns = await get_lockdown_information(bot, guild.id, channel_ids=channel_ids)
     total = len(lockdowns)
-    for index, (channel_id, permissions) in enumerate(lockdowns.items(), start=1):
-        channel = guild.get_channel(channel_id)
-        if channel is None:
-            if channel_fallback is None:
-                channel_fallback = {c.id: c for c in await guild.fetch_channels()}
+    try:
+        for index, (channel_id, permissions) in enumerate(lockdowns.items(), start=1):
+            channel = guild.get_channel(channel_id)
+            if channel is None:
+                if channel_fallback is None:
+                    channel_fallback = {c.id: c for c in await guild.fetch_channels()}
                 channel = channel_fallback.get(channel_id)
-                if channel is None:
-                    continue
-            continue
 
-        try:
-            await channel.set_permissions(default_role, overwrite=permissions, reason=reason)
-        except discord.HTTPException:
-            failures.append(channel)
+            if channel is None:
+                # The channel was deleted: there is nothing left to restore.
+                done.append(channel_id)
+            else:
+                try:
+                    await channel.set_permissions(default_role, overwrite=permissions, reason=reason)
+                except discord.HTTPException:
+                    failures.append(channel)
+                else:
+                    done.append(channel_id)
 
-        if progress is not None:
-            await progress(index, total)
+            if progress is not None:
+                await progress(index, total)
+    finally:
+        if done:
+            await bot.db.moderation.remove_lockdowns(guild.id, done)
 
     return failures
-
-
-async def is_cooldown_active(bot: Bot, guild: discord.Guild, channel: discord.abc.GuildChannel) -> bool:
-    """Checks if the given channel is currently in a lockdown."""
-    record = await bot.db.moderation.get_lockdown(guild.id, channel.id)
-    return bool(record)
 
 
 def is_potential_lockout(me: discord.Member, channel: discord.Thread | discord.VoiceChannel | discord.TextChannel) -> bool:

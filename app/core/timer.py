@@ -216,6 +216,17 @@ class TimerManager:
             self.reset_task()
         return True
 
+    async def delete_guild_timers(self, event: str, guild_id: int) -> None:
+        """|coro|
+
+        Deletes every persisted ``event`` timer of a guild (``args[0]`` is the guild id),
+        resetting the dispatch loop if one of them was the next one due.
+        """
+        # ponytail: sub-minute in-memory timers are not cancelled; track them per guild if that ever matters.
+        timer_ids = await self.bot.db.timers.delete_guild_timers(event, guild_id)
+        if self._loaded_timer and self._loaded_timer.id in timer_ids:
+            self.reset_task()
+
     async def call(self, timer: Timer) -> None:
         """|coro|
 

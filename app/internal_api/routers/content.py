@@ -1101,14 +1101,24 @@ async def get_lockdowns(guild: GuildDep, bot: BotDep) -> dict:
     return {'entries': entries}
 
 
+def _channel_ids(raw: list[int | str]) -> list[int]:
+    """Parses the body's channel ids, 400ing on an empty list or a non-numeric id."""
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids is required')
+    try:
+        ids = [int(c) for c in raw]
+    except ValueError:
+        ids = [0]
+    if not all(0 < i < 2**63 for i in ids):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids must be channel ids')
+    return ids
+
+
 @router.post("/lockdowns/lock")
 async def lock_channels(guild: GuildDep, bot: BotDep, body: LockChannelsBody) -> dict:
-    if not body.channel_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids is required')
-
     channels = []
-    for cid in body.channel_ids:
-        channel = guild.get_channel(int(cid))
+    for cid in _channel_ids(body.channel_ids):
+        channel = guild.get_channel(cid)
         if channel is not None and isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
             channels.append(channel)
 
@@ -1122,14 +1132,9 @@ async def lock_channels(guild: GuildDep, bot: BotDep, body: LockChannelsBody) ->
 
 @router.post("/lockdowns/unlock")
 async def unlock_channels(guild: GuildDep, bot: BotDep, body: UnlockChannelsBody) -> dict:
-    if not body.channel_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='channel_ids is required')
-
-    ids = [int(c) for c in body.channel_ids]
     from app.cogs.moderation.lockdown import end_lockdown
-    failures = await end_lockdown(bot, guild, channel_ids=ids, reason='Unlocked via dashboard')
-    # Clear the lockdown bookkeeping so the channels no longer show as locked.
-    await bot.db.moderation.remove_lockdowns(guild.id, ids)
+    # end_lockdown drops the bookkeeping of restored channels only, so a failed one stays listed for a retry.
+    failures = await end_lockdown(bot, guild, channel_ids=_channel_ids(body.channel_ids), reason='Unlocked via dashboard')
     return {'ok': True, 'failures': len(failures)}
 
 

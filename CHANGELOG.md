@@ -124,6 +124,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   noticing, and every attempt to play music failed with "I currently am unable to join
   your voice channel" until a restart. Percy now checks the connection every 30
   seconds and reconnects on its own.
+- `lockdown end` only worked when run from inside a locked channel, so ending a
+  lockdown from a mod channel said "There is no active lockdown". It now ends every
+  lockdown in the server from anywhere, and also cancels a pending `lockdown for`
+  timer, which used to end a later lockdown of the same channels early.
+- A channel Percy could not unlock (from the command, the timer or the dashboard) lost
+  its saved permissions and vanished from the locked list, so it stayed read-only for
+  good. It now stays listed as locked with its original permissions kept, ending the
+  lockdown again retries it, and a timed lockdown that fails to unlock a channel
+  alerts the moderators. A locked channel missing from Percy's cache is unlocked too,
+  instead of being skipped.
+- Locking a voice channel now stops people joining and speaking in it; before it only
+  locked the voice channel's text chat. The lockdown summary counts the channels you
+  asked for ("2/3 channels"), not the failures, and the dashboard answers a malformed
+  channel id with a clear error instead of a server error.
 
 ## [2.6.0] - 2026-10-03
 

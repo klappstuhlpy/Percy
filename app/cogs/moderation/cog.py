@@ -38,7 +38,6 @@ from .infractions import check_member_hierarchy, default_reason, safe_reason_app
 from .lockdown import (
     build_lockdown_error_embed,
     end_lockdown,
-    is_cooldown_active,
     is_potential_lockout,
     start_lockdown,
 )
@@ -1325,7 +1324,7 @@ class Moderation(Cog):
 
             confirm = await ctx.confirm(
                 f"{Emojis.warning} This will potentially lock the bot from sending messages.\n"
-                "Would you like to resolve the permission issue?"
+                "Lock it down anyway?"
             )
             if not confirm:
                 return
@@ -1333,7 +1332,7 @@ class Moderation(Cog):
         success, failures = await start_lockdown(ctx, channels)
         if failures:
             message = (
-                f"Successfully locked down `{len(success)}`/`{len(failures)}` channels.\n"
+                f"Successfully locked down `{len(success)}`/`{len(channels)}` channels.\n"
                 f"Failed channels: {', '.join(c.mention for c in failures)}\n\n"
                 f"Give the bot Manage Roles permissions in those channels and try again."
             )
@@ -1370,7 +1369,7 @@ class Moderation(Cog):
 
             confirm = await ctx.confirm(
                 f"{Emojis.warning} This will potentially lock the bot from sending messages.\n"
-                "Would you like to resolve the permission issue?"
+                "Lock it down anyway?"
             )
             if not confirm:
                 return
@@ -1392,7 +1391,7 @@ class Moderation(Cog):
 
         if failures:
             message = (
-                f"Successfully locked down `{len(success)}`/`{len(failures)}` channels until {formatted_time}.\n"
+                f"Successfully locked down `{len(success)}`/`{len(channels)}` channels until {formatted_time}.\n"
                 f"Failed channels: {', '.join(c.mention for c in failures)}\n"
                 f"Give the bot Manage Roles permissions in {pluralize(len(failures)):channel|those channels} and try "
                 f"the lockdown command on the failed **{pluralize(len(failures)):channel}** again."
@@ -1415,7 +1414,7 @@ class Moderation(Cog):
         The bot must also have Manage Members permissions.
         """
         assert ctx.guild is not None
-        if not await is_cooldown_active(self.bot, ctx.guild, ctx.channel):  # type: ignore[arg-type]
+        if not await self.bot.db.moderation.get_lockdowns(ctx.guild.id):
             await ctx.send_error("There is no active lockdown.")
             return
 
@@ -1428,9 +1427,13 @@ class Moderation(Cog):
 
             failures = await end_lockdown(self.bot, ctx.guild, reason=reason, progress=on_progress)
 
-        await ctx.db.moderation.clear_lockdowns(ctx.guild.id)
+        # Every lockdown is over, so a pending `lockdown for` timer must not end a later one early.
+        await self.bot.timers.delete_guild_timers("lockdown", ctx.guild.id)
         if failures:
-            await ctx.send_info(f"Lockdown ended. Failed to edit {human_join([c.mention for c in failures], final='and')}")
+            await ctx.send_info(
+                f"Lockdown ended. Failed to edit {human_join([c.mention for c in failures], final='and')}; "
+                "they are still locked. Give the bot Manage Roles there and run this command again."
+            )
         else:
             await ctx.send_success("Lockdown successfully ended.")
 
@@ -1448,8 +1451,11 @@ class Moderation(Cog):
 
         reason = f"Automatic lockdown ended from timer made on {timer.created} by {moderator}"
         failures = await end_lockdown(self.bot, guild, channel_ids=channel_ids, reason=reason)
-
-        await self.bot.db.moderation.remove_lockdowns(guild_id, channel_ids)
+        if failures:
+            # Failed channels stay locked (their saved permissions are kept), so a moderator must hear of it.
+            config = await self.bot.db.get_guild_config(guild_id)
+            mentions = human_join([c.mention for c in failures], final="and")
+            await config.alert_missing_permission(f"end the timed lockdown of {mentions}")
 
         channel = guild.get_channel_or_thread(channel_id)
         if channel is not None:

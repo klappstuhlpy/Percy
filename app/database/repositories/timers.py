@@ -95,6 +95,11 @@ class TimersRepository(BaseRepository):
         """
         return await self.fetchval(query, event, str(guild_id), str(member_id))
 
+    async def delete_guild_timers(self, event: str, guild_id: int) -> list[int]:
+        """Deletes every ``event`` timer whose first positional arg is ``guild_id``, returning their ids."""
+        query = "DELETE FROM timers WHERE event = $1 AND metadata #>> '{args,0}' = $2 RETURNING id;"
+        return [r['id'] for r in await self.fetch(query, event, str(guild_id))]
+
     async def get_next_due(
             self, days: int = 7, *, connection: asyncpg.Connection | None = None
     ) -> asyncpg.Record | None:
