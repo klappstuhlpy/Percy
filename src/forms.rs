@@ -60,6 +60,24 @@ pub fn json_or_redirect(headers: &HeaderMap, ok: bool, msg: &str, redirect: &str
     }
 }
 
+/// A successful save that Percy attached advice to (e.g. "#verify is still visible to
+/// @everyone"): the AJAX body carries it as `warning` so the page can show it.
+pub fn saved_with_warnings(headers: &HeaderMap, msg: &str, warnings: &[String], redirect: &str) -> Response {
+    if warnings.is_empty() || !is_ajax(headers) {
+        return json_or_redirect(headers, true, msg, redirect);
+    }
+    Json(serde_json::json!({"ok": true, "message": msg, "warning": warnings.join(" ")})).into_response()
+}
+
+/// The mention-spam threshold field: empty or `0` turns the protection off (`null`), any
+/// other number is forwarded for Percy to validate (it accepts 3–100 and says so otherwise).
+fn mention_count_value(raw: &str) -> serde_json::Value {
+    match raw.trim().parse::<u64>() {
+        Ok(n) if n > 0 => serde_json::Value::from(n),
+        _ => serde_json::Value::Null,
+    }
+}
+
 /// Maps a config form section + fields to the JSON patch Percy's internal API expects.
 pub fn build_patch(section: &str, fields: &HashMap<String, String>) -> serde_json::Value {
     match section {
@@ -85,11 +103,7 @@ pub fn build_patch(section: &str, fields: &HashMap<String, String>) -> serde_jso
                 patch.insert("mute_role_id".into(), parse_id_or_null(v));
             }
             if let Some(v) = fields.get("mention_count") {
-                let n: Option<u32> = v.parse().ok().filter(|&n| n > 0);
-                patch.insert(
-                    "mention_count".into(),
-                    n.map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
-                );
+                patch.insert("mention_count".into(), mention_count_value(v));
             }
             if let Some(v) = fields.get("mod_log_channel_id") {
                 patch.insert("mod_log_channel_id".into(), parse_id_or_null(v));
@@ -172,5 +186,21 @@ fn parse_id_or_null(s: &str) -> serde_json::Value {
         s.parse::<u64>()
             .map(serde_json::Value::from)
             .unwrap_or(serde_json::Value::Null)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mention_count_off_or_forwarded() {
+        assert_eq!(mention_count_value(""), serde_json::Value::Null);
+        assert_eq!(mention_count_value("0"), serde_json::Value::Null);
+        assert_eq!(mention_count_value("abc"), serde_json::Value::Null);
+        assert_eq!(mention_count_value(" 5 "), serde_json::json!(5));
+        // Out of range is Percy's to refuse with a message, not ours to silently turn off.
+        assert_eq!(mention_count_value("2"), serde_json::json!(2));
+        assert_eq!(mention_count_value("5000000000"), serde_json::json!(5_000_000_000u64));
     }
 }

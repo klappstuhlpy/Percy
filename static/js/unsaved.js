@@ -97,6 +97,7 @@
 
         setBusy(true);
         let reload = false;
+        const warnings = [];
         try {
             for (const section of dirty) {
                 if (section.beforeSave && !(await section.beforeSave())) return;
@@ -114,8 +115,15 @@
                 }
                 section.baseline = snapshot(section);
                 reload = reload || section.reload;
+                // Saved, but Percy has advice (e.g. a channel still visible to @everyone): show it and
+                // skip the reload, which would wipe the toast before it can be read.
+                if (result.warning) warnings.push(result.warning);
             }
-            showToast('success', dirty.length === 1 ? 'Settings saved.' : `Saved ${dirty.length} sections.`);
+            const saved = dirty.length === 1 ? 'Settings saved.' : `Saved ${dirty.length} sections.`;
+            // Toasts stack on one spot, so the advice rides in the same toast as the confirmation.
+            if (warnings.length) showToast('warning', `${saved} ${warnings.join(' ')}`);
+            else showToast('success', saved);
+            if (warnings.length) reload = false;
             refresh();
             // Some sections change what the page renders (feature flags gate whole cards),
             // so they ask for a reload once everything is safely persisted.

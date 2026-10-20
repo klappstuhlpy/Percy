@@ -407,7 +407,7 @@
                         {% if guild.flags.mentions && guild.mention_count.is_none() %}<span class="gk-required-tag">REQUIRED</span>{%
                         endif %}
                     </label>
-                    <span class="config-description">Auto-mute after this many mentions in one message</span>
+                    <span class="config-description">Ban members who send more than this many mentions within 15 seconds (3–100, 0 or empty turns it off)</span>
                     <input type="number" name="mention_count" id="mention_count" class="config-input" min="0" max="100"
                            placeholder="Off"
                            value="{% match guild.mention_count %}{% when Some with (n) %}{{ n }}{% when None %}{% endmatch %}">

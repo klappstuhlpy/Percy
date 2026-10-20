@@ -125,7 +125,8 @@ pub struct MemberRolesBody {
     remove: Vec<String>,
 }
 
-/// `PATCH /dashboard/guild/:guild_id/members/:user_id/roles`
+/// `PATCH /dashboard/guild/:guild_id/members/:user_id/roles` — sent as the signed-in user, so
+/// Percy can refuse roles at or above their own top role.
 pub async fn guild_member_roles(
     State(app): State<AppState>,
     session: Session,
@@ -136,7 +137,11 @@ pub async fn guild_member_roles(
         Ok(percy) => percy,
         Err(response) => return response,
     };
-    ok_or_err(percy.member_roles(guild_id, &user_id, &body.add, &body.remove).await)
+    ok_or_err(
+        percy
+            .member_roles(guild_id, &user_id, &body.add, &body.remove, &session.discord_user_id)
+            .await,
+    )
 }
 
 // ── Polls ───────────────────────────────────────────────────────────────────

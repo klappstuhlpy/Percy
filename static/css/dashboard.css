@@ -1194,6 +1194,9 @@ select.config-select[multiple] {
 .toast-error {
     border-left: 3px solid var(--error-text);
 }
+.toast-warning {
+    border-left: 3px solid var(--warning-text);
+}
 
 /* -- Sentinel status -- */
 

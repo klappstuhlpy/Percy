@@ -17,7 +17,7 @@ use serde::Deserialize;
 
 use crate::{
     errors::percy_message,
-    forms::{build_patch, build_sentinel_patch, json_or_redirect, ConfigForm, AI_FLAG_NAMES},
+    forms::{build_patch, build_sentinel_patch, json_or_redirect, saved_with_warnings, ConfigForm, AI_FLAG_NAMES},
     guilds::user_can_manage,
     session::Session,
     AppState,
@@ -217,10 +217,18 @@ pub async fn guild_config_update(
         }
 
         match percy.batch_guild_config(guild_id, &ops).await {
-            Ok(_) => json_or_redirect(&headers, true, "Settings saved.", &redirect_url),
+            Ok(resp) => {
+                // A refused step (Sentinel cannot start yet) does not fail the save, but the user is told why.
+                let warnings: Vec<String> = resp
+                    .results
+                    .into_iter()
+                    .flat_map(|r| r.error.filter(|_| !r.ok).into_iter().chain(r.warnings))
+                    .collect();
+                saved_with_warnings(&headers, "Settings saved.", &warnings, &redirect_url)
+            }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to batch-update guild config");
-                json_or_redirect(&headers, false, "Failed to save settings.", &redirect_url)
+                json_or_redirect(&headers, false, &percy_message(&e), &redirect_url)
             }
         }
     } else {
@@ -228,7 +236,7 @@ pub async fn guild_config_update(
             Ok(()) => json_or_redirect(&headers, true, "Settings saved.", &redirect_url),
             Err(e) => {
                 tracing::error!(error = %e, "Failed to update guild config");
-                json_or_redirect(&headers, false, "Failed to save settings.", &redirect_url)
+                json_or_redirect(&headers, false, &percy_message(&e), &redirect_url)
             }
         }
     }
@@ -377,11 +385,15 @@ pub async fn guild_sentinel_update(
     let channel_id = form.get("channel_id").and_then(|s| s.parse::<u64>().ok());
     let sent_starter = starter_title.is_some() && starter_content.is_some() && channel_id.is_some();
 
+    let mut warnings = Vec::new();
     if let (Some(title), Some(content), Some(ch_id)) = (starter_title, starter_content, channel_id) {
-        if let Err(e) = percy.send_sentinel_message(guild_id, ch_id, title, content).await {
-            tracing::error!(error = %e, "Failed to send sentinel starter message");
-            let msg = format!("Could not send the verification message: {}", percy_message(&e));
-            return json_or_redirect(&headers, false, &msg, &redirect_url);
+        match percy.send_sentinel_message(guild_id, ch_id, title, content).await {
+            Ok((_, sent)) => warnings = sent,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to send sentinel starter message");
+                let msg = format!("Could not send the verification message: {}", percy_message(&e));
+                return json_or_redirect(&headers, false, &msg, &redirect_url);
+            }
         }
     }
 
@@ -393,9 +405,14 @@ pub async fn guild_sentinel_update(
         }
     }
     if !patch.as_object().is_none_or(|m| m.is_empty()) {
-        if let Err(e) = percy.patch_sentinel(guild_id, &patch).await {
-            tracing::error!(error = %e, "Failed to update sentinel config");
-            return json_or_redirect(&headers, false, "Failed to save sentinel settings.", &redirect_url);
+        match percy.patch_sentinel(guild_id, &patch).await {
+            // Both calls report the same channel; the later answer is the current one.
+            Ok(saved) => warnings = saved,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to update sentinel config");
+                let msg = format!("Could not save the sentinel settings: {}", percy_message(&e));
+                return json_or_redirect(&headers, false, &msg, &redirect_url);
+            }
         }
     }
 
@@ -404,5 +421,5 @@ pub async fn guild_sentinel_update(
         tracing::debug!(error = %e, "Sentinel not ready to enable (expected if setup incomplete)");
     }
 
-    json_or_redirect(&headers, true, "Sentinel settings saved.", &redirect_url)
+    saved_with_warnings(&headers, "Sentinel settings saved.", &warnings, &redirect_url)
 }
