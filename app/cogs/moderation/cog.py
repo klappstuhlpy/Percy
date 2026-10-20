@@ -33,7 +33,7 @@ from app.utils.lock import lock
 from config import Emojis
 
 from .ai_alert import AIModerationButton, build_ai_moderation_embed, build_ai_moderation_view
-from .antispam import MIN_MENTION_COUNT, SpamChecker, check_raid, mention_spam_ban, mention_threshold
+from .antispam import MAX_MENTION_COUNT, MIN_MENTION_COUNT, SpamChecker, check_raid, mention_spam_ban, mention_threshold
 from .infractions import (
     check_member_hierarchy,
     default_reason,
@@ -1167,13 +1167,13 @@ class Moderation(Cog):
         bot_permissions=[discord.Permissions.ban_members],  # the protection auto-bans mention spammers
         user_permissions=PermissionTemplate.mod,
     )
-    @describe(count="Members are banned for more than this many mentions in 15 seconds (at least 3).")
-    async def moderation_mentions(self, ctx: ModGuildContext, count: commands.Range[int, MIN_MENTION_COUNT]) -> None:
+    @describe(count="Members are banned for more than this many mentions in 15 seconds (3 to 100).")
+    async def moderation_mentions(self, ctx: ModGuildContext, count: commands.Range[int, MIN_MENTION_COUNT, MAX_MENTION_COUNT]) -> None:
         """
         Enables auto-banning accounts that spam more than 'count' mentions.
         To use this command, you must have the Ban Members permission.
 
-        The count must be at least 3.
+        The count must be between 3 and 100.
         A member is banned when one message, or all their messages within 15 seconds,
         mention more than 'count' users.
 
@@ -1187,7 +1187,9 @@ class Moderation(Cog):
     @moderation_mentions.error
     async def moderation_mentions_error(self, ctx: ModGuildContext, error: commands.BadArgument) -> None:
         if isinstance(error, commands.RangeError):
-            await ctx.send_error(f"Mention spam protection threshold must be at least **{MIN_MENTION_COUNT}**.")
+            await ctx.send_error(
+                f"Mention spam protection threshold must be between **{MIN_MENTION_COUNT}** and **{MAX_MENTION_COUNT}**."
+            )
 
     @moderation.command(
         "ignore",

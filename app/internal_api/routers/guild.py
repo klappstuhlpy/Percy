@@ -166,15 +166,19 @@ async def _rotate_log_webhook(bot, guild, old_url: str | None, channel_id: int |
 
 
 def _check_mention_count(value: object) -> int | None:
-    """``None``/``0`` turns mention-spam protection off; anything else must meet the command's floor."""
-    from app.cogs.moderation.antispam import MIN_MENTION_COUNT
+    """``None``/``0`` turns mention-spam protection off; anything else must be in the command's range."""
+    from app.cogs.moderation.antispam import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int) or (value != 0 and value < MIN_MENTION_COUNT):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or (value != 0 and not MIN_MENTION_COUNT <= value <= MAX_MENTION_COUNT)
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"mention_count must be 0 (off) or at least {MIN_MENTION_COUNT}",
+            detail=f"mention_count must be 0 (off) or between {MIN_MENTION_COUNT} and {MAX_MENTION_COUNT}",
         )
     return value
 
@@ -483,9 +487,8 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
 
         elif op_type == "sentinel":
             updates = {k: v for k, v in data.items() if k in _SENTINEL_FIELDS}
-            if updates:
-                await _apply_sentinel_settings(guild, bot, updates)
-            results.append({"type": "sentinel", "ok": True})
+            applied = await _apply_sentinel_settings(guild, bot, updates) if updates else {}
+            results.append({"type": "sentinel", "ok": True, "warnings": applied.get("warnings", [])})
 
         elif op_type == "sentinel_toggle":
             enabled = data.get("enabled")

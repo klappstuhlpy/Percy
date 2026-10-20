@@ -34,6 +34,8 @@ RECENTLY_ACTIONED_SECONDS = 300.0
 #: The lowest mention-spam threshold: the command and the dashboard API refuse less, and a
 #: lower value stored before that check is raised to it (a reply ping must not ban anyone).
 MIN_MENTION_COUNT = 3
+#: The highest threshold accepted: a higher one is protection in name only (and overflows the column).
+MAX_MENTION_COUNT = 100
 
 #: Mentions a member sends within this many seconds add up towards the threshold.
 MENTION_WINDOW_SECONDS = 15.0

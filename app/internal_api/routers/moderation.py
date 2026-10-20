@@ -4,23 +4,37 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
+import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from app.utils.checks import hierarchy_error
+
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import validate_timeout_duration
+from ..helpers import parse_id, parse_timestamp, resolve_moderator, role_error, validate_timeout_duration
 
 if TYPE_CHECKING:
-    import discord
-
     from app.cogs.modlog.cog import ModLog
     from app.cogs.modlog.models import ModerationCase
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Moderation"], dependencies=[Depends(verify_token)])
 
-BULK_ACTIONS = frozenset({'kick', 'ban', 'unban', 'softban', 'timeout', 'warn', 'add_roles', 'remove_roles'})
+# Each bulk action and the permission the acting moderator needs, as for the single-member actions.
+BULK_PERMISSIONS: dict[str, str] = {
+    'kick': 'kick_members',
+    'ban': 'ban_members',
+    'unban': 'ban_members',
+    'softban': 'ban_members',
+    'timeout': 'moderate_members',
+    'warn': 'kick_members',
+    'add_roles': 'manage_roles',
+    'remove_roles': 'manage_roles',
+}
+BULK_ACTIONS = frozenset(BULK_PERMISSIONS)
 # Actions refused when the target outranks Percy.
 BULK_HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout'})
+# Role edits follow Discord's role rule (``role_error``), not the member hierarchy.
+BULK_ROLE_ACTIONS = frozenset({'add_roles', 'remove_roles'})
 # Actions that leave a modlog case behind (role edits are config, not moderation).
 BULK_CASE_ACTIONS = frozenset({'kick', 'ban', 'unban', 'softban', 'timeout', 'warn'})
 
@@ -39,6 +53,8 @@ class CreateCaseBody(BaseModel):
 
 class PatchCaseBody(BaseModel):
     reason: str
+    #: The dashboard user editing the case; when present they need Manage Server.
+    moderator_id: str | int | None = None
 
 
 class BulkActionBody(BaseModel):
@@ -102,8 +118,8 @@ async def get_cases(
         'action': action or None,
         'moderator_id': moderator_id,
         'target_id': target_id,
-        'after': datetime.datetime.fromisoformat(after) if after else None,
-        'before': datetime.datetime.fromisoformat(before) if before else None,
+        'after': parse_timestamp(after, 'after'),
+        'before': parse_timestamp(before, 'before'),
         'limit': limit,
         'offset': offset,
     }
@@ -128,10 +144,15 @@ async def get_recent_cases(
     guild: GuildDep,
     since: str = Query(...),
 ) -> dict:
-    """Cases created since a timestamp (for event polling/streaming)."""
+    """Cases created strictly after a timestamp (for event polling/streaming).
+
+    The poller passes the newest ``created_at`` it already has, so that case is not repeated.
+    """
     from app.cogs.modlog.models import ModerationCase
 
-    since_dt = datetime.datetime.fromisoformat(since)
+    since_dt = parse_timestamp(since, 'since')
+    if since_dt is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='since is required')
     records = await bot.db.cases.get_recent_cases(guild.id, since=since_dt)
 
     cases = [_case_payload(guild, ModerationCase.from_record(record), bot) for record in records]
@@ -158,7 +179,7 @@ async def create_case(
     if not target_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='target_id is required')
 
-    moderator_id = int(body.moderator_id) if body.moderator_id else None
+    moderator_id = parse_id(body.moderator_id, 'moderator_id') if body.moderator_id else None
     reason = body.reason or None
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
@@ -184,6 +205,8 @@ async def patch_case(
     reason = body.reason.strip()
     if not reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='reason is required')
+    if body.moderator_id not in (None, ''):
+        resolve_moderator(guild, body.moderator_id, 'manage_guild')
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
     if cog is not None:
@@ -202,9 +225,16 @@ async def delete_case(
     case_index: int,
     bot: BotDep,
     guild: GuildDep,
+    moderator_id: str | None = Query(default=None),
 ) -> dict:
-    """Close (delete) a case and remove its modlog channel post."""
+    """Close (delete) a case and remove its modlog channel post.
+
+    With ``moderator_id`` the deleting dashboard user must hold Manage Server.
+    """
     from app.cogs.modlog.models import ModerationCase
+
+    if moderator_id:
+        resolve_moderator(guild, moderator_id, 'manage_guild')
 
     cog: ModLog | None = bot.get_cog('ModLog')  # type: ignore[assignment]
     if cog is not None:
@@ -224,7 +254,11 @@ async def bulk_member_action(
     guild: GuildDep,
     body: BulkActionBody,
 ) -> dict:
-    """Apply a moderation action to multiple members at once."""
+    """Apply a moderation action to multiple members at once.
+
+    ``moderator_id`` is required and checked once (permission) and per member (hierarchy). Every
+    id is parsed before anything happens, so a malformed one never leaves the batch half done.
+    """
     if not body.user_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='user_ids is required')
     if body.action not in BULK_ACTIONS:
@@ -237,22 +271,27 @@ async def bulk_member_action(
 
     timeout_for = validate_timeout_duration(body.duration) if body.action == 'timeout' else None
 
-    bot_member = guild.me
-    moderator_id = int(body.moderator_id) if body.moderator_id else None
+    moderator = resolve_moderator(guild, body.moderator_id, BULK_PERMISSIONS[body.action])
+    moderator_id = moderator.id
+    user_ids = [parse_id(uid, 'user_ids') for uid in body.user_ids]
     reason = body.reason or None
-    role_ids = [str(rid) for rid in body.role_ids]
+    role_ids = {parse_id(rid, 'role_ids') for rid in body.role_ids}
 
-    roles = [r for r in guild.roles if str(r.id) in role_ids] if role_ids else []
+    roles = [r for r in guild.roles if r.id in role_ids]
+    for role in roles:
+        if error := role_error(role, moderator):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
 
     successes: list[str | int] = []
     failures: list[dict] = []
 
-    for uid in body.user_ids:
-        uid_int = int(uid)
+    for uid, uid_int in zip(body.user_ids, user_ids, strict=True):
         try:
             if body.action == 'unban':
-                user = await bot.fetch_user(uid_int)
-                await guild.unban(user, reason=reason)
+                if error := hierarchy_error(moderator, discord.Object(id=uid_int), guild.me, action='unban'):
+                    failures.append({'user_id': uid, 'error': error})
+                    continue
+                await guild.unban(discord.Object(id=uid_int), reason=reason)
                 # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
                 await bot.timers.delete_member_timer('tempban', guild.id, uid_int)
             else:
@@ -260,8 +299,12 @@ async def bulk_member_action(
                 if member is None:
                     failures.append({'user_id': uid, 'error': 'member not found'})
                     continue
-                if body.action in BULK_HIERARCHY_ACTIONS and member.top_role >= bot_member.top_role:
-                    failures.append({'user_id': uid, 'error': 'higher role hierarchy'})
+                if body.action not in BULK_ROLE_ACTIONS and (
+                    error := hierarchy_error(
+                        moderator, member, guild.me, action=body.action, check_bot=body.action in BULK_HIERARCHY_ACTIONS
+                    )
+                ):
+                    failures.append({'user_id': uid, 'error': error})
                     continue
 
                 if body.action == 'kick':

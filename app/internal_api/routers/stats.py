@@ -69,7 +69,7 @@ async def get_guild_overview(bot: BotDep, guild: GuildDep) -> dict:
     guild_config = await bot.db.get_guild_config(guild.id)
     command_summary = await bot.db.stats.get_command_summary(guild.id)
     since = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=7)
-    recent_cases = len(await bot.db.moderation.get_recent_cases(guild.id, since=since))
+    recent_cases = len(await bot.db.cases.get_recent_cases(guild.id, since=since))
 
     online = sum(1 for m in guild.members if m.status.name != 'offline')
     bots = sum(1 for m in guild.members if m.bot)

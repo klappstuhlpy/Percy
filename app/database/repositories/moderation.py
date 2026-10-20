@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from app.database.repositories.base import BaseRepository
+from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
     import datetime
@@ -396,10 +397,10 @@ class CasesRepository(BaseRepository):
             args.append(target_id)
             clauses.append(f'target_id = ${len(args)}')
         if after is not None:
-            args.append(after)
+            args.append(ensure_utc(after).replace(tzinfo=None))
             clauses.append(f'created_at >= ${len(args)}')
         if before is not None:
-            args.append(before)
+            args.append(ensure_utc(before).replace(tzinfo=None))
             clauses.append(f'created_at <= ${len(args)}')
 
         where = ' AND '.join(clauses)
@@ -436,10 +437,10 @@ class CasesRepository(BaseRepository):
             args.append(target_id)
             clauses.append(f'target_id = ${len(args)}')
         if after is not None:
-            args.append(after)
+            args.append(ensure_utc(after).replace(tzinfo=None))
             clauses.append(f'created_at >= ${len(args)}')
         if before is not None:
-            args.append(before)
+            args.append(ensure_utc(before).replace(tzinfo=None))
             clauses.append(f'created_at <= ${len(args)}')
 
         where = ' AND '.join(clauses)
@@ -447,13 +448,18 @@ class CasesRepository(BaseRepository):
         return await self.fetchval(query, *args)
 
     async def get_recent_cases(self, guild_id: int, *, since: datetime.datetime) -> list[asyncpg.Record]:
-        """Fetches cases created since a timestamp, oldest first (for event streaming)."""
+        """Fetches cases created strictly after a timestamp, oldest first (for event streaming).
+
+        Strictly after, because a poller passes the newest ``created_at`` it already has and must
+        not be handed that case again. ``created_at`` is a naive UTC ``TIMESTAMP``, so an aware
+        ``since`` (a client's ``...Z``) is converted rather than left for asyncpg to reject.
+        """
         query = """
             SELECT * FROM mod_cases
-            WHERE guild_id = $1 AND created_at >= $2
+            WHERE guild_id = $1 AND created_at > $2
             ORDER BY created_at ASC;
         """
-        return await self.fetch(query, guild_id, since)
+        return await self.fetch(query, guild_id, ensure_utc(since).replace(tzinfo=None))
 
     # -- modlog config ----------------------------------------------------
 

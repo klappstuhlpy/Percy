@@ -192,6 +192,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   post never appeared and `case N` failed every time. The reason is now shortened in
   the case card. Deleting the newest case no longer hands its number to the next one,
   so old modlog posts never point at the wrong case.
+- The dashboard let anyone with Manage Server use every moderation action, whatever
+  their own permissions and rank. Someone without Ban Members could ban an
+  Administrator ranked above them, kick themselves, or give themselves any role below
+  Percy's, including an admin role. Dashboard actions now need the same permission as
+  the matching command (Ban Members to ban, Manage Roles to mute or change roles, and
+  so on) and follow the same hierarchy rule, and the dashboard only lets you give or
+  take roles below your own top role. Roles managed by an integration and @everyone
+  are refused with a clear message instead of an internal error.
+- A dashboard mute with a duration out of range applied the mute and then failed,
+  leaving a permanent mute with no case; a zero or negative duration lifted the mute
+  again within seconds. Durations must now be between one minute and a year, checked
+  before anything changes. Dashboard tempmutes are no longer mistaken for self-mutes.
+- New cases never appeared live on the dashboard's audit log page, and the server
+  overview's recent-case count failed to load. Both work now, and the live feed no
+  longer repeats the last case on every refresh.
+- A bulk action with a malformed id failed halfway, after some members had already
+  been banned or kicked, without saying who. Every id is now checked first. Purging
+  the messages of someone who has left the server now works too.
+- The mention-spam threshold now accepts 3 to 100, on the dashboard and with
+  `moderation mentions`; a larger number failed with an internal error.
 
 ## [2.6.0] - 2026-10-03
 

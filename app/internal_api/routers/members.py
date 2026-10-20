@@ -10,8 +10,10 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from app.utils.checks import hierarchy_error
+
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import validate_timeout_duration
+from ..helpers import resolve_moderator, role_error, validate_mute_duration, validate_timeout_duration
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Members"], dependencies=[Depends(verify_token)])
 
@@ -24,11 +26,24 @@ MAX_SCAN_CONCURRENCY = 5
 # Discord refuses to bulk-delete messages older than two weeks.
 BULK_DELETE_MAX_AGE = datetime.timedelta(days=14)
 
-ACTIONS = frozenset(
-    {'kick', 'ban', 'unban', 'softban', 'warn', 'mute', 'unmute', 'timeout', 'untimeout', 'purge'}
-)
-# Actions that move a member down the hierarchy — refused when the target outranks Percy.
-HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'mute', 'timeout'})
+# Each action and the permission the acting moderator needs for it -- the same one the matching
+# command requires (warn mirrors the ``warn`` command's Kick Members).
+ACTION_PERMISSIONS: dict[str, str] = {
+    'kick': 'kick_members',
+    'ban': 'ban_members',
+    'unban': 'ban_members',
+    'softban': 'ban_members',
+    'warn': 'kick_members',
+    'mute': 'manage_roles',
+    'unmute': 'manage_roles',
+    'timeout': 'moderate_members',
+    'untimeout': 'moderate_members',
+    'purge': 'manage_messages',
+}
+ACTIONS = frozenset(ACTION_PERMISSIONS)
+# Actions Discord only lets Percy perform on a member it outranks. Every action also requires the
+# moderator to outrank the member; a mute only needs the mute role below Percy, not the member.
+HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout'})
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +67,9 @@ class MemberActionBody(BaseModel):
 class MemberRolesBody(BaseModel):
     add: list[str] = []
     remove: list[str] = []
+    #: The dashboard user making the change. Optional until every dashboard sends it; when
+    #: present they need Manage Roles and may only touch roles below their own top role.
+    moderator_id: str | int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +149,9 @@ async def _purge_member_messages(guild: discord.Guild, user_id: int, limit: int,
     return deleted
 
 
-async def _apply_mute(bot, guild: discord.Guild, member: discord.Member, body: MemberActionBody) -> str:
+async def _apply_mute(
+    bot, guild: discord.Guild, member: discord.Member, moderator: discord.Member, body: MemberActionBody
+) -> str:
     """Adds the configured mute role, arming an expiry timer when a duration is given.
 
     Returns the action recorded on the case (``mute`` or ``tempmute``).
@@ -151,6 +171,9 @@ async def _apply_mute(bot, guild: discord.Guild, member: discord.Member, body: M
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='the mute role is equal to or above my highest role',
         )
+    if moderator.id != guild.owner_id and moderator.top_role <= role:
+        # As the mute command's check: a moderator may not hand out a role they could not give.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='your highest role must be above the mute role')
     if member.get_role(role_id) is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is already muted')
 
@@ -162,9 +185,8 @@ async def _apply_mute(bot, guild: discord.Guild, member: discord.Member, body: M
     if body.duration is None:
         return 'mute'
 
-    moderator_id = int(body.moderator_id) if body.moderator_id else member.id
     expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=body.duration)
-    await bot.timers.create(expires, 'tempmute', guild.id, moderator_id, member.id, role_id)
+    await bot.timers.create(expires, 'tempmute', guild.id, moderator.id, member.id, role_id)
     return 'tempmute'
 
 
@@ -446,14 +468,27 @@ async def member_action(
     Every action that changes a member's standing is recorded as a modlog case through the
     same ``mod_action`` dispatch the in-Discord commands use, so dashboard and bot actions
     land in one history.
-    """
-    moderator_id = int(body.moderator_id) if body.moderator_id else None
 
+    ``moderator_id`` is required: the acting moderator must hold the permission the matching
+    command requires and outrank the member, by the same rule the commands use.
+    """
     if body.action not in ACTIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'action must be one of: {", ".join(sorted(ACTIONS))}',
         )
+    moderator = resolve_moderator(guild, body.moderator_id, ACTION_PERMISSIONS[body.action])
+    if body.action == 'mute':
+        # Before the role goes on, so a bad duration never leaves a permanent mute behind.
+        validate_mute_duration(body.duration)
+
+    # Unban and purge work on an id (the user may have left); the rest need the member.
+    member = guild.get_member(user_id)
+    if member is None and body.action not in ('unban', 'purge'):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
+    target = member if member is not None else discord.Object(id=user_id)
+    if error := hierarchy_error(moderator, target, guild.me, action=body.action, check_bot=body.action in HIERARCHY_ACTIONS):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
 
     delete_days = max(0, min(7, body.delete_message_days))
     extra: dict = {}
@@ -461,26 +496,15 @@ async def member_action(
     # tempmute), so actions set this rather than assuming body.action.
     case_action = body.action
 
-    if body.action == 'unban':
-        try:
-            user = await bot.fetch_user(user_id)
-            await guild.unban(user, reason=body.reason)
-        except discord.HTTPException as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
-        await bot.timers.delete_member_timer('tempban', guild.id, user_id)
-    else:
-        member = guild.get_member(user_id)
-        if member is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
-
-        if body.action in HIERARCHY_ACTIONS and member.top_role >= guild.me.top_role:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail='cannot moderate a member with equal or higher role',
-            )
-
-        try:
+    try:
+        if body.action == 'unban':
+            await guild.unban(discord.Object(id=user_id), reason=body.reason)
+            # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
+            await bot.timers.delete_member_timer('tempban', guild.id, user_id)
+        elif body.action == 'purge':
+            extra['deleted'] = await _purge_member_messages(guild, user_id, max(1, min(500, body.limit)), body.reason)
+        else:
+            assert member is not None
             if body.action == 'kick':
                 await member.kick(reason=body.reason)
             elif body.action == 'ban':
@@ -504,7 +528,7 @@ async def member_action(
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not timed out')
                 await member.timeout(None, reason=body.reason)
             elif body.action == 'mute':
-                case_action = await _apply_mute(bot, guild, member, body)
+                case_action = await _apply_mute(bot, guild, member, moderator, body)
             elif body.action == 'unmute':
                 await _lift_mute(bot, guild, member, body.reason)
             elif body.action == 'warn':
@@ -514,21 +538,17 @@ async def member_action(
                 with suppress(discord.HTTPException):
                     note = f': {body.reason}' if body.reason else '.'
                     await member.send(f'\N{WARNING SIGN} You were warned in **{guild.name}**{note}')
-            elif body.action == 'purge':
-                extra['deleted'] = await _purge_member_messages(
-                    guild, user_id, max(1, min(500, body.limit)), body.reason
-                )
-        except discord.Forbidden:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'I am missing the permissions to {body.action} this member',
-            )
-        except discord.HTTPException as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except discord.Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f'I am missing the permissions to {body.action} this member',
+        ) from None
+    except discord.HTTPException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     # Purging messages is a cleanup, not a standing change — it gets no case.
     if body.action != 'purge':
-        bot.dispatch('mod_action', guild.id, case_action, user_id, moderator_id, body.reason)
+        bot.dispatch('mod_action', guild.id, case_action, user_id, moderator.id, body.reason)
 
     return {'ok': True, 'action': case_action, **extra}
 
@@ -566,17 +586,30 @@ async def member_roles(
     if not body.add and not body.remove:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='must specify add or remove')
 
-    reason = 'Dashboard role update'
+    # ponytail: optional until the deployed dashboard sends it; make it required after that deploy.
+    moderator = None
+    if body.moderator_id not in (None, ''):
+        moderator = resolve_moderator(guild, body.moderator_id, 'manage_roles')
 
-    if body.add:
-        roles_to_add = [r for r in guild.roles if str(r.id) in body.add]
+    roles_to_add = [r for r in guild.roles if str(r.id) in body.add]
+    roles_to_remove = [r for r in guild.roles if str(r.id) in body.remove]
+    # Every role must pass, or nothing changes.
+    for role in (*roles_to_add, *roles_to_remove):
+        if error := role_error(role, moderator):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
+
+    reason = f'Dashboard role update by {moderator} ({moderator.id})' if moderator else 'Dashboard role update'
+    try:
         if roles_to_add:
             await member.add_roles(*roles_to_add, reason=reason)
-
-    if body.remove:
-        roles_to_remove = [r for r in guild.roles if str(r.id) in body.remove]
         if roles_to_remove:
             await member.remove_roles(*roles_to_remove, reason=reason)
+    except discord.Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="I am missing the permissions to change this member's roles"
+        ) from None
+    except discord.HTTPException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     return {'ok': True}
 
