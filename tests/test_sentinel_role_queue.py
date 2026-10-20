@@ -11,8 +11,9 @@ import discord
 
 # app.database cannot be imported first (circular), so load app.core before it.
 import app.core  # pyright: ignore[reportUnusedImport]
+from app.database import sentinel_roles
 from app.database.base import Sentinel
-from app.database.sentinel_roles import RoleOutcome, SentinelRoleQueue, attempt
+from app.database.sentinel_roles import PassResult, RoleOutcome, SentinelRoleQueue, attempt
 
 if TYPE_CHECKING:
     import pytest
@@ -44,6 +45,7 @@ def _setup(
         update_sentinel_member_state=AsyncMock(),
     )
     bot = SimpleNamespace(
+        wait_until_ready=AsyncMock(),
         get_guild=MagicMock(return_value=None),
         http=SimpleNamespace(add_role=add or AsyncMock(), remove_role=remove or AsyncMock()),
         db=SimpleNamespace(
@@ -71,9 +73,7 @@ async def test_departed_member_is_dropped_and_the_queue_continues() -> None:
     remove = AsyncMock(side_effect=[_not_found(10007), None])
     queue, bot, sentinel, _ = _setup([(10, "pending_remove"), (11, "pending_remove")], remove=remove)
 
-    retry = await queue.run_once(1)
-
-    assert retry is False
+    assert await queue.run_once(1) is PassResult.done
     assert remove.await_count == 2
     deleted = [c.args[1] for c in bot.db.guilds.delete_sentinel_member.await_args_list]
     assert deleted == [10, 11]
@@ -84,8 +84,8 @@ async def test_one_forbidden_stops_the_pass_after_a_single_call() -> None:
     add = AsyncMock(side_effect=_forbidden())
     queue, bot, _, config = _setup([(10, "pending_add"), (11, "pending_add"), (12, "pending_add")], add=add)
 
-    assert await queue.run_once(1) is False
-    await queue.run_once(1)  # the next wake probes once more
+    assert await queue.run_once(1) is PassResult.blocked
+    await queue.run_once(1)  # the next retry probes once more
 
     assert add.await_count == 2  # one probe per pass, not one call per queued member
     config.send_alert.assert_awaited_once()
@@ -117,7 +117,7 @@ async def test_unknown_role_disables_the_sentinel_and_stops() -> None:
 async def test_server_error_asks_for_a_retry() -> None:
     queue, *_ = _setup([(10, "pending_add")], add=AsyncMock(side_effect=_server_error()))
 
-    assert await queue.run_once(1) is True
+    assert await queue.run_once(1) is PassResult.retry
 
 
 async def test_verified_member_gets_the_starter_role() -> None:
@@ -134,12 +134,12 @@ async def test_worker_runs_another_pass_when_woken_mid_pass_then_exits() -> None
     queue, *_ = _setup([])
     passes = 0
 
-    async def run_once(guild_id: int) -> bool:
+    async def run_once(guild_id: int) -> PassResult:
         nonlocal passes
         passes += 1
         if passes == 1:
             queue.wake(guild_id)  # new work arrives while the first pass runs
-        return False
+        return PassResult.done
 
     queue.run_once = run_once  # type: ignore[method-assign]
     queue.wake(1)
@@ -158,7 +158,52 @@ async def test_resume_wakes_every_guild_with_unfinished_rows() -> None:
 
     await queue.resume()
 
+    bot.wait_until_ready.assert_awaited_once()  # alerts need the guild cache resume would race
     assert [c.args[0] for c in queue.wake.call_args_list] == [1, 2]
+
+
+async def test_cog_load_does_not_wait_for_the_bot_to_be_ready() -> None:
+    from app.cogs.moderation.cog import Moderation
+
+    never_ready = asyncio.Event()
+    queue, bot, _, _ = _setup([])
+    bot.wait_until_ready = never_ready.wait
+    cog = SimpleNamespace(bot=SimpleNamespace(db=SimpleNamespace(sentinel_roles=queue)))
+
+    await asyncio.wait_for(Moderation.cog_load(cog), 1)  # type: ignore[arg-type]
+
+    assert not cog._sentinel_resume.done()
+    cog._sentinel_resume.cancel()
+
+
+async def test_a_blocked_queue_retries_on_its_own_then_waits_for_a_wake(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sentinel_roles, "BLOCKED_BACKOFF", (0.0, 0.0))
+    queue, *_ = _setup([])
+    passes = 0
+
+    async def run_once(guild_id: int) -> PassResult:
+        nonlocal passes
+        passes += 1
+        return PassResult.blocked
+
+    queue.run_once = run_once  # type: ignore[method-assign]
+    queue.wake(1)
+    await asyncio.wait_for(queue._tasks[1], 1)
+
+    assert passes == 3  # the first pass and one per backoff step, then the worker exits
+
+
+async def test_an_internal_error_alerts_and_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sentinel_roles, "BLOCKED_BACKOFF", (0.0,))
+    queue, bot, _, config = _setup([(10, "pending_add")])
+    bot.db.guilds.get_queued_sentinel_members.side_effect = [RuntimeError("db down"), []]
+
+    queue.wake(1)
+    await asyncio.wait_for(queue._tasks[1], 1)
+
+    assert bot.db.guilds.get_queued_sentinel_members.await_count == 2  # retried after the error
+    config.send_alert.assert_awaited_once()
+    assert "error on my side" in config.send_alert.await_args.args[0]
 
 
 # -- Sentinel record ---------------------------------------------------------

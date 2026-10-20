@@ -128,9 +128,11 @@ class Moderation(Cog):
 
     async def cog_load(self) -> None:
         # Finish the lockdown-role work a restart interrupted, even where Sentinel is now off.
-        await self.bot.db.sentinel_roles.resume()
+        # A task, not awaited: resume() waits for the bot to be ready, which cog_load runs before.
+        self._sentinel_resume = asyncio.create_task(self.bot.db.sentinel_roles.resume())
 
     async def cog_unload(self) -> None:
+        self._sentinel_resume.cancel()
         self.bulk_mute_insert.cancel()
         # Mutes are only batched in memory; without this final write a member muted in the last
         # few seconds before a reload or shutdown could leave and rejoin without the role.

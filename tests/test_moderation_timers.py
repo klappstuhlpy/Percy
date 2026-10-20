@@ -225,7 +225,9 @@ async def test_tempmute_expiry_member_gone_is_untracked() -> None:
 
 async def test_unload_flushes_pending_mutes() -> None:
     flush = AsyncMock()
-    cog = SimpleNamespace(bulk_mute_insert=MagicMock(cancel=MagicMock(), side_effect=flush))
+    cog = SimpleNamespace(
+        bulk_mute_insert=MagicMock(cancel=MagicMock(), side_effect=flush), _sentinel_resume=MagicMock()
+    )
 
     await Moderation.cog_unload(cog)  # type: ignore[arg-type]
 

@@ -11,6 +11,7 @@ whatever a restart interrupted, whether or not the sentinel flag is still on.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import enum
 import logging
 import time
@@ -30,6 +31,10 @@ UNKNOWN_ROLE = 10011
 
 RETRY_DELAY = 30.0
 """Seconds to wait before another pass after Discord answered with a server error."""
+
+BLOCKED_BACKOFF = (120.0, 300.0, 600.0, 1200.0, 1800.0)
+"""Seconds before each retry of a pass a 403 or an internal error stopped (about an hour in all).
+A wake retries sooner; once these run out, only a wake does."""
 
 ALERT_COOLDOWN = 600.0
 """At most one hierarchy/permission alert per guild in this many seconds."""
@@ -62,6 +67,14 @@ async def attempt(call: Awaitable[object]) -> RoleOutcome:
     return RoleOutcome.done
 
 
+class PassResult(enum.Enum):
+    """How one pass over the queue ended, and therefore when the worker tries again."""
+
+    done = "done"  # nothing left that can be done right now
+    retry = "retry"  # a server error: again after ``RETRY_DELAY``
+    blocked = "blocked"  # a 403 or an internal error: again after a ``BLOCKED_BACKOFF`` step or a wake
+
+
 class SentinelRoleQueue:
     """Drains ``guild_sentinel_members`` for every guild, one task per guild with work."""
 
@@ -80,35 +93,55 @@ class SentinelRoleQueue:
             self._tasks[guild_id] = asyncio.create_task(self._drain(guild_id))
 
     async def resume(self) -> None:
-        """Start a worker for every guild a restart left with unfinished rows."""
-        for guild_id in await self.bot.db.guilds.get_sentinel_queue_guild_ids():
+        """Start a worker for every guild a restart left with unfinished rows.
+
+        Waits for the bot to be ready first: before that the guild cache is empty, so an alert
+        falling back to the system channel would find no guild and be dropped.
+        """
+        await self.bot.wait_until_ready()
+        try:
+            guild_ids = await self.bot.db.guilds.get_sentinel_queue_guild_ids()
+        except Exception:
+            log.exception("[Sentinel] Could not read which role queues a restart left unfinished")
+            return
+        for guild_id in guild_ids:
             self.wake(guild_id)
 
     async def _drain(self, guild_id: int) -> None:
         event = self._wake[guild_id]
+        blocked = 0
         while True:
             # Cleared *before* reading the rows: work queued while a pass runs sets it again,
             # so the worker cannot exit between that write and the next pass.
             event.clear()
             try:
-                retry = await self.run_once(guild_id)
+                result = await self.run_once(guild_id)
             except Exception:
-                log.exception("[Sentinel] The role queue of guild ID %d stopped", guild_id)
-                return
-            if retry:
+                log.exception("[Sentinel] A pass over the role queue of guild ID %d failed", guild_id)
+                await self._alert_error(guild_id)
+                result = PassResult.blocked
+            if result is PassResult.retry:
                 await asyncio.sleep(RETRY_DELAY)
                 continue
+            if result is PassResult.blocked and blocked < len(BLOCKED_BACKOFF):
+                # Held members must not wait for a join or a restart once an admin fixes the role.
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(event.wait(), BLOCKED_BACKOFF[blocked])
+                blocked += 1
+                continue
+            if result is PassResult.done:
+                blocked = 0
             if not event.is_set():
                 return
 
-    async def run_once(self, guild_id: int) -> bool:
-        """Work through every unfinished row once. Returns whether a pass should be retried."""
+    async def run_once(self, guild_id: int) -> PassResult:
+        """Work through every unfinished row once."""
         rows = await self.bot.db.guilds.get_queued_sentinel_members(guild_id)
         if not rows:
-            return False
+            return PassResult.done
         sentinel = await self.bot.db.get_guild_sentinel(guild_id)
         if sentinel is None or sentinel.role_id is None:
-            return False
+            return PassResult.done
 
         # One role per pass: a lockdown role changed mid-pass belongs to ``strip`` and a fresh
         # pass, never to the rows read for the old one.
@@ -116,18 +149,18 @@ class SentinelRoleQueue:
         retry = False
         for row in rows:
             if sentinel.role_id != role_id:
-                return False
+                return PassResult.done
             outcome = await self.apply(sentinel, row["user_id"], role_id, adding=row["state"] == "pending_add")
             if outcome is RoleOutcome.role_gone:
                 await self._role_gone(sentinel)
-                return False
+                return PassResult.done
             if outcome is RoleOutcome.forbidden:
                 # A 403 here is about the role or Percy's permissions, not this member, so every
-                # remaining row would fail the same way: one probe per pass, then wait for a wake.
+                # remaining row would fail the same way: one probe per pass, then back off.
                 await self._alert_forbidden(sentinel.id, role_id, len(rows))
-                return False
+                return PassResult.blocked
             retry = retry or outcome is RoleOutcome.retry
-        return retry
+        return PassResult.retry if retry else PassResult.done
 
     async def apply(self, sentinel: Sentinel, member_id: int, role_id: int, *, adding: bool) -> RoleOutcome:
         """Give or take ``role_id`` for one member and settle their row accordingly."""
@@ -185,10 +218,22 @@ class SentinelRoleQueue:
             guild_id,
             f"Sentinel could not give or take the lockdown role <@&{role_id}> ({waiting} member(s) waiting), "
             "because it sits at or above my highest role. Move my role above it; "
-            "I retry on the next join or verification.",
+            "I retry by myself for about an hour, and on every join or verification.",
             cooldown="lockdown",
             feature="give or take the Sentinel lockdown role",
         )
+
+    async def _alert_error(self, guild_id: int) -> None:
+        try:
+            await self._alert(
+                guild_id,
+                "Sentinel could not give or take the lockdown role because of an error on my side. "
+                "I retry by myself for about an hour, and on every join or verification.",
+                cooldown="error",
+            )
+        except Exception:
+            # The database being down is the likely cause, and the config lookup needs it too.
+            log.exception("[Sentinel] Could not alert guild ID %d about its role queue", guild_id)
 
     async def _alert(
         self, guild_id: int, content: str, *, cooldown: str | None = None, feature: str | None = None

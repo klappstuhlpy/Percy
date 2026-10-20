@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When raid or mention-spam protection tripped on the server owner, the alert asked
   you to check Percy's role position. It now says the server owner can never be
   banned.
+- When Sentinel could not give or take the lockdown role because the role sat above
+  Percy's, held members stayed stuck until the next join, verification or restart,
+  even after you fixed the role. Percy now retries by itself for about an hour.
+  An error on Percy's side there is now reported to your moderators and retried
+  the same way, instead of quietly stopping the queue.
+- Lockdown-role problems Sentinel ran into right after a restart are reported again;
+  before, the alert could be dropped while Percy was still starting up.
+- On the dashboard, saving only the Sentinel rate or bypass action failed when the
+  unchanged lockdown or starter role had been moved above Percy's role since. The
+  save now goes through and the problem is shown as a warning.
+- A dashboard save with an invalid Sentinel setting failed as a whole even though
+  the settings saved before it in the same request had already been applied. The
+  Sentinel part is now reported as failed on its own.
+- Picking a new lockdown role on the dashboard while Percy was still loading the
+  member list could let through a role members already wear. Percy now asks you to
+  try again in a minute.
 
 ## [2.7.0] - 2026-10-20
 

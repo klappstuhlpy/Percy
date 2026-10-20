@@ -36,9 +36,12 @@ class _Role:
         return self.position >= other.position
 
 
-def _guild(*roles: _Role, top: int = 10, manage_roles: bool = True, channels: dict[int, Any] | None = None) -> Any:
+def _guild(
+    *roles: _Role, top: int = 10, manage_roles: bool = True, channels: dict[int, Any] | None = None, chunked: bool = True
+) -> Any:
     guild = SimpleNamespace(
         id=1,
+        chunked=chunked,
         me=SimpleNamespace(top_role=_Role(999, top), guild_permissions=SimpleNamespace(manage_roles=manage_roles)),
         default_role=_Role(0, 0, default=True),
         get_role={r.id: r for r in roles}.get,
@@ -270,11 +273,48 @@ async def test_a_channel_percy_cannot_post_in_is_rejected() -> None:
 
 
 async def test_batch_sentinel_op_validates_like_patch() -> None:
-    body = api.BatchGuildConfigBody.model_validate({"operations": [{"type": "sentinel", "data": {"rate": "abc"}}]})
+    # A bad sentinel op is reported in its result, like sentinel_toggle, not as a 400 after the
+    # ops before it were already applied.
+    body = api.BatchGuildConfigBody.model_validate(
+        {"operations": [{"type": "sentinel", "data": {"rate": "abc"}}, {"type": "sentinel_toggle", "data": {}}]}
+    )
+    sentinel = _sentinel()
+
+    result = await api.batch_guild_config(_guild(), _bot(sentinel), body)  # type: ignore[arg-type]
+
+    first, second = result["results"]
+    assert first["ok"] is False and "JOINS/SECONDS" in first["error"]
+    assert second["ok"] is True  # the batch carries on
+    sentinel.edit.assert_not_awaited()
+
+
+async def test_an_unchanged_role_now_above_percy_is_a_warning_not_a_400() -> None:
+    """The dashboard resends the role on every save; saving the rate must not fail on it."""
+    lockdown, starter = _Role(1, 50), _Role(2, 60)  # both dragged above Percy (top 10) since
+    sentinel = _sentinel(role_id=1, starter_role_id=2)
+
+    result = await api._apply_sentinel_settings(
+        _guild(lockdown, starter), _bot(sentinel), {"role_id": 1, "starter_role_id": 2, "rate": "5/10"}
+    )
+
+    sentinel.edit.assert_awaited_once_with(rate=(5, 10), role_id=1, starter_role_id=2)
+    assert len(result["warnings"]) == 2
+    assert all("highest role" in w for w in result["warnings"])
+
+    # A *changed* starter role is still refused.
+    with pytest.raises(HTTPException):
+        await api._apply_sentinel_settings(_guild(lockdown, starter), _bot(_sentinel(role_id=1)), {"starter_role_id": 2})
+
+
+async def test_a_new_lockdown_role_is_refused_while_the_member_list_is_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without every member cached, role.members could miss the people who wear the role."""
+    schedule = MagicMock(return_value=True)
+    monkeypatch.setattr(api, "_schedule_permission_sync", schedule)
 
     with pytest.raises(HTTPException) as exc:
-        await api.batch_guild_config(_guild(), _bot(_sentinel()), body)  # type: ignore[arg-type]
-    assert exc.value.status_code == 400
+        await api._apply_sentinel_settings(_guild(_Role(1, 2), chunked=False), _bot(_sentinel()), {"role_id": 1})
+    assert "member list" in exc.value.detail
+    schedule.assert_not_called()
 
 
 async def test_enabling_requires_the_sentinel_flag() -> None:

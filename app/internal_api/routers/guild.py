@@ -486,7 +486,12 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
 
         elif op_type == "sentinel":
             updates = {k: v for k, v in data.items() if k in _SENTINEL_FIELDS}
-            applied = await _apply_sentinel_settings(guild, bot, updates) if updates else {}
+            try:
+                applied = await _apply_sentinel_settings(guild, bot, updates) if updates else {}
+            except HTTPException as e:
+                # Reported like sentinel_toggle, so the ops already applied are not answered with a 400.
+                results.append({"type": "sentinel", "ok": False, "error": e.detail})
+                continue
             results.append({"type": "sentinel", "ok": True, "warnings": applied.get("warnings", [])})
 
         elif op_type == "sentinel_toggle":
@@ -655,11 +660,7 @@ def _check_sentinel_channel(guild: discord.Guild, channel_id: int) -> discord.Te
     return channel
 
 
-def _check_sentinel_role(
-    guild: discord.Guild, role_id: int, *, other: int | None, held: set[int] | None = None
-) -> None:
-    """``held`` is given for the lockdown role: the dashboard syncs it without asking, so it must
-    not be a role anyone outside Sentinel's hold already wears, or they would lose every channel."""
+def _check_sentinel_role(guild: discord.Guild, role_id: int, *, other: int | None) -> None:
     from app.cogs.moderation.sentinel import sentinel_role_problem
 
     role = guild.get_role(role_id)
@@ -668,13 +669,37 @@ def _check_sentinel_role(
     problem = sentinel_role_problem(role, other=other)
     if problem is not None:
         raise _bad_request(problem)
-    if held is not None:
-        holders = sum(1 for member in role.members if member.id not in held)
-        if holders:
-            raise _bad_request(
-                f"{holders} member(s) already have {role.name}, and the lockdown role is hidden from every channel. "
-                "Pick a role only Sentinel uses, or set it up from the Discord menu, which asks before syncing."
-            )
+
+
+def _check_lockdown_role_unworn(guild: discord.Guild, role_id: int, held: set[int]) -> None:
+    """The dashboard syncs the lockdown role without asking, so it must not be a role anyone
+    outside Sentinel's hold already wears, or they would lose every channel."""
+    if not guild.chunked:
+        # ``role.members`` only knows cached members: an incomplete cache would wave the role through.
+        raise _bad_request(
+            "I have not loaded this server's member list yet, so I cannot check who already has that role. "
+            "Try again in a minute, or set it up from the Discord menu, which asks before syncing."
+        )
+    role = guild.get_role(role_id)
+    holders = sum(1 for member in role.members if member.id not in held) if role is not None else 0
+    if holders:
+        raise _bad_request(
+            f"{holders} member(s) already have {role.name}, and the lockdown role is hidden from every channel. "
+            "Pick a role only Sentinel uses, or set it up from the Discord menu, which asks before syncing."
+        )
+
+
+def _stale_role_warning(guild: discord.Guild, role_id: int, *, other: int | None, what: str) -> list[str]:
+    """An unchanged role is not re-validated (saving the rate must not fail on it), only reported."""
+    from app.cogs.moderation.sentinel import sentinel_role_problem
+
+    role = guild.get_role(role_id)
+    if role is None:
+        return [f"The Sentinel {what} no longer exists. Pick another one."]
+    if what == "lockdown role" and not guild.me.guild_permissions.manage_roles:
+        return ["I need Manage Roles to give and take the Sentinel lockdown role."]
+    problem = sentinel_role_problem(role, other=other)
+    return [] if problem is None else [f"The Sentinel {what} needs attention: {problem}"]
 
 
 async def _get_or_create_sentinel(guild: discord.Guild, bot: Bot) -> Sentinel:
@@ -735,12 +760,21 @@ async def _apply_sentinel_settings(guild: discord.Guild, bot: Bot, data: dict) -
 
     role_id = edits.get("role_id", sentinel.role_id)
     starter_role_id = edits.get("starter_role_id", sentinel.starter_role_id)
-    if "role_id" in edits and role_id is not None:
+    # Only a changed role is validated: a role dragged above Percy since must not make saving the
+    # rate or bypass action fail. A problem with an unchanged role is a warning instead.
+    role_warnings: list[str] = []
+    if "role_id" in changed and role_id is not None:
         if not guild.me.guild_permissions.manage_roles:
             raise _bad_request("I need Manage Roles to use a lockdown role")
-        _check_sentinel_role(guild, role_id, other=starter_role_id, held=sentinel.members if "role_id" in changed else None)
-    if "starter_role_id" in edits and starter_role_id is not None:
+        _check_sentinel_role(guild, role_id, other=starter_role_id)
+        _check_lockdown_role_unworn(guild, role_id, sentinel.members)
+    elif "role_id" in edits and role_id is not None:
+        role_warnings += _stale_role_warning(guild, role_id, other=starter_role_id, what="lockdown role")
+    starter_changed = "starter_role_id" in edits and starter_role_id != sentinel.starter_role_id
+    if starter_changed and starter_role_id is not None:
         _check_sentinel_role(guild, starter_role_id, other=role_id)
+    elif "starter_role_id" in edits and starter_role_id is not None:
+        role_warnings += _stale_role_warning(guild, starter_role_id, other=role_id, what="starter role")
 
     old_card = sentinel.message if "channel_id" in changed else None
     if old_card is not None:
@@ -753,7 +787,8 @@ async def _apply_sentinel_settings(guild: discord.Guild, bot: Bot, data: dict) -
             await old_card.delete()
 
     synced = bool(changed) and _schedule_permission_sync(sentinel, guild)
-    return {"permission_sync": synced, "warnings": _verification_warnings(guild, edits.get("channel_id", sentinel.channel_id))}
+    warnings = role_warnings + _verification_warnings(guild, edits.get("channel_id", sentinel.channel_id))
+    return {"permission_sync": synced, "warnings": warnings}
 
 
 def _verification_warnings(guild: discord.Guild, channel_id: int | None) -> list[str]:
