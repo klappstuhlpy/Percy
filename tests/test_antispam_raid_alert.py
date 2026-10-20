@@ -28,7 +28,9 @@ def _user(user_id: int, name: str) -> _User:
 
 
 def _config(*, raid: bool = True) -> SimpleNamespace:
-    return SimpleNamespace(flags=SimpleNamespace(raid=raid), send_alert=AsyncMock(), alert_missing_permission=AsyncMock())
+    return SimpleNamespace(
+        flags=SimpleNamespace(raid=raid), send_alert=AsyncMock(), alert_missing_permission=AsyncMock(), bot=MagicMock()
+    )
 
 
 def _guild(*, ban: AsyncMock | None = None, can_ban: bool = True) -> MagicMock:

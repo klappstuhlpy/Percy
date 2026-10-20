@@ -1412,6 +1412,9 @@ class SentinelAlertMassbanButton(
                 pass
             else:
                 count += 1
+                interaction.client.dispatch(
+                    "mod_action", interaction.guild.id, "ban", member.id, interaction.user.id, reason
+                )
 
         await interaction.followup.send(
             f"{Emojis.success} Banned **{count}/{len(members)}** raiders."

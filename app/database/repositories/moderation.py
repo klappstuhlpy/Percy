@@ -307,11 +307,21 @@ class CasesRepository(BaseRepository):
         A transaction-scoped advisory lock serializes index allocation per guild so
         concurrent moderation actions can't collide on the ``(guild_id, case_index)``
         uniqueness constraint.
+
+        The index comes from ``modlog_config.last_case_index`` (the highest number ever handed
+        out) or the live maximum, whichever is higher, so deleting the newest case never hands its
+        number to the next one, and guilds that predate the column continue from their history.
         """
         query = """
+            WITH allocated AS (
+                INSERT INTO modlog_config (guild_id, last_case_index)
+                VALUES ($1, (SELECT COALESCE(MAX(case_index), 0) FROM mod_cases WHERE guild_id = $1) + 1)
+                ON CONFLICT (guild_id) DO UPDATE
+                    SET last_case_index = GREATEST(modlog_config.last_case_index + 1, EXCLUDED.last_case_index)
+                RETURNING last_case_index
+            )
             INSERT INTO mod_cases (guild_id, case_index, action, target_id, moderator_id, reason)
-            SELECT $1, COALESCE(MAX(case_index), 0) + 1, $2, $3, $4, $5
-            FROM mod_cases WHERE guild_id = $1
+            SELECT $1, last_case_index, $2, $3, $4, $5 FROM allocated
             RETURNING *;
         """
         async with self.acquire() as con, con.transaction():

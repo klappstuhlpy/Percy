@@ -270,8 +270,13 @@ async def bulk_member_action(
                     await member.ban(reason=reason)
                     await bot.timers.delete_member_timer('tempban', guild.id, uid_int)
                 elif body.action == 'softban':
-                    await member.ban(reason=reason, delete_message_seconds=86400)
-                    await guild.unban(member, reason=reason)
+                    from app.cogs.moderation.infractions import softban
+
+                    if not await softban(bot, guild, member, reason=reason):
+                        # The ban stands: record it as one and report it apart from a plain failure.
+                        bot.dispatch('mod_action', guild.id, 'ban', uid_int, moderator_id, reason)
+                        failures.append({'user_id': uid, 'error': 'banned, but lifting the ban failed: still banned'})
+                        continue
                 elif body.action == 'timeout':
                     await member.timeout(timeout_for, reason=reason)
                 elif body.action == 'warn':

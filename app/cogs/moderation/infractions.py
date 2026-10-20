@@ -69,6 +69,31 @@ def mute_role_error(guild: discord.Guild, role_id: int) -> str | None:
     return None
 
 
+async def softban(
+    bot: Bot,
+    guild: discord.Guild,
+    member: discord.abc.Snowflake,
+    *,
+    reason: str | None,
+    delete_message_seconds: int = 86400,
+) -> bool:
+    """Ban ``member`` and lift the ban again: a kick that also wipes their recent messages.
+
+    A failed ban raises as usual. Returns ``False`` when the ban went through but lifting it
+    did not, so the member is still banned: the caller must record and report a ban then, not
+    a failure, or a ban stands that nobody knows about. Any tempban timer is cancelled in that
+    case, since its expiry would otherwise lift this ban.
+    """
+    await guild.ban(member, reason=reason, delete_message_seconds=delete_message_seconds)
+    try:
+        await guild.unban(member, reason=reason)
+    except discord.HTTPException:
+        log.warning("Softban of %s in guild %s: banned, but the unban failed", member.id, guild.id)
+        await bot.timers.delete_member_timer("tempban", guild.id, member.id)
+        return False
+    return True
+
+
 #: How many times an expiry timer (tempban/tempmute) is retried before it is given up.
 TIMER_MAX_RETRIES = 10
 TIMER_RETRY_BASE = datetime.timedelta(minutes=5)

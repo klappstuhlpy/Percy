@@ -327,6 +327,7 @@ async def check_raid(
             log.info("[Moderation] Failed to ban %s (ID: %s) from server %s.", user, user.id, guild)
         else:
             banned.append(user)
+            config.bot.dispatch("mod_action", guild.id, "ban", user.id, me.id, result.reason)
             log.info("[Moderation] Banned %s (ID: %s) from server %s.", user, user.id, guild)
 
     # Tell the moderators what happened. Never quote the message itself: the alert
@@ -421,6 +422,7 @@ async def mention_spam_ban(
         log.info("[Mention Spam] Failed to ban member %s (ID: %s) in guild ID %s", member, member.id, member.guild.id)
         await config.send_alert(failure, force=True)
     else:
+        config.bot.dispatch("mod_action", member.guild.id, "ban", member.id, me.id, reason)
         log.info("[Mention Spam] Member %s (ID: %s) has been banned from guild ID %s", member, member.id, member.guild.id)
         await config.send_alert(
             f"{Emojis.info} Banned **{member}** (ID: `{member.id}`) for spamming `{mention_count}` mentions."

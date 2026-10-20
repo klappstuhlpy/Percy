@@ -178,6 +178,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to have Manage Roles, like `mute`. A `tempban` DM no longer names the moderator, and
   if the ban then fails the member is told to disregard it. Unbinding the mute role
   now says plainly that muted members keep the role.
+- Many moderation actions left no case, so `cases <user>` showed a clean record for
+  members who had been banned. Bans from `multiban` and the Sentinel **Ban All
+  Raiders** button, automatic raid and mention-spam bans, kicks and bans for bypassing
+  Sentinel, and tempbans and tempmutes ending on their own are now all recorded.
+  Automatic ones are filed under Percy's name with the reason it acted on. When Percy
+  cannot kick or ban a member who bypassed Sentinel, your alert channel is told once
+  instead of the failure going unnoticed.
+- A softban whose second step (lifting the ban) failed reported failure while the
+  member stayed banned, with no case. Percy now says the member is still banned, by
+  command and on the dashboard, and records the ban.
+- A warning or reason longer than about 1,000 characters broke that case: its modlog
+  post never appeared and `case N` failed every time. The reason is now shortened in
+  the case card. Deleting the newest case no longer hands its number to the next one,
+  so old modlog posts never point at the wrong case.
 
 ## [2.6.0] - 2026-10-03
 

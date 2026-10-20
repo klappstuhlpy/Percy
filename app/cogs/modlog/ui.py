@@ -12,6 +12,15 @@ if TYPE_CHECKING:
 
 __all__ = ('build_case_embed',)
 
+#: Discord's limit on an embed field value; a longer reason would make the whole embed a 400.
+FIELD_LIMIT = 1024
+
+
+def _shown_reason(reason: str | None) -> str:
+    if not reason:
+        return '*No reason provided.*'
+    return reason if len(reason) <= FIELD_LIMIT else reason[: FIELD_LIMIT - 1] + '\N{HORIZONTAL ELLIPSIS}'
+
 
 def _format_user(bot: Bot, user_id: int | None) -> str:
     if user_id is None:
@@ -34,6 +43,6 @@ def build_case_embed(bot: Bot, case: ModerationCase) -> discord.Embed:
     )
     embed.add_field(name='User', value=_format_user(bot, case.target_id), inline=True)
     embed.add_field(name='Moderator', value=_format_user(bot, case.moderator_id), inline=True)
-    embed.add_field(name='Reason', value=case.reason or '*No reason provided.*', inline=False)
+    embed.add_field(name='Reason', value=_shown_reason(case.reason), inline=False)
     embed.set_footer(text=f'Case ID: {case.id}')
     return embed

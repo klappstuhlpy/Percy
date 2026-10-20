@@ -40,6 +40,7 @@ from .infractions import (
     mute_role_error,
     retry_expiry_timer,
     safe_reason_append,
+    softban,
     timer_origin,
     update_role_permissions,
 )
@@ -318,10 +319,9 @@ class Moderation(Cog):
         if config.flags.sentinel:
             sentinel = await self.bot.db.get_guild_sentinel(message.guild.id)  # type: ignore[arg-type]
             if sentinel is not None and sentinel.is_bypassing(author) and message.channel.id != sentinel.channel_id:
-                reason = "Bypassing sentinel by messaging early"
-                coro = author.ban if sentinel.bypass_action == "ban" else author.kick
-                with suppress(discord.HTTPException):
-                    await coro(reason=reason)
+                await self._remove_sentinel_bypasser(
+                    config, author, sentinel.bypass_action, "Bypassing sentinel by messaging early"
+                )
                 return
 
         threshold = mention_threshold(config) if config.flags.mentions else None
@@ -710,10 +710,29 @@ class Moderation(Cog):
         sentinel = await self.bot.db.get_guild_sentinel(member.guild.id)  # type: ignore[arg-type]
         # Joined VC and is bypassing sentinel
         if sentinel is not None and sentinel.is_bypassing(member):
-            reason = "Bypassing sentinel by joining a voice channel early"
-            coro = member.ban if sentinel.bypass_action == "ban" else member.kick
-            with suppress(discord.HTTPException):
-                await coro(reason=reason)
+            await self._remove_sentinel_bypasser(
+                config, member, sentinel.bypass_action, "Bypassing sentinel by joining a voice channel early"
+            )
+
+    async def _remove_sentinel_bypasser(
+        self, config: GuildConfig, member: discord.Member, bypass_action: str, reason: str
+    ) -> None:
+        """Ban or kick a member who got past Sentinel, record the case under Percy's name, and
+        tell the moderators (once per member and window) when Percy cannot do it."""
+        action = "ban" if bypass_action == "ban" else "kick"
+        try:
+            await (member.ban if action == "ban" else member.kick)(reason=reason)
+        except discord.HTTPException:
+            if not self._spam_check[member.guild.id].claim([member]):
+                return  # already reported: a bypasser who keeps talking must not raise one alert per message
+            await config.send_alert(
+                f"{Emojis.warning} Could not {action} **{member}** (ID: `{member.id}`) for bypassing Sentinel. "
+                f"Check that I have the **{'Ban' if action == 'ban' else 'Kick'} Members** permission and that "
+                "my highest role is above theirs.",
+                force=True,
+            )
+            return
+        self.bot.dispatch("mod_action", member.guild.id, action, member.id, member.guild.me.id, reason)
 
     @command(
         "slowmode",
@@ -1614,6 +1633,7 @@ class Moderation(Cog):
                     failed += 1
                 else:
                     await self.bot.timers.delete_member_timer("tempban", ctx.guild.id, member.id)
+                    self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
                 if i % 5 == 0:
                     await progress.update(f"Banning members... ({i}/{total_members})")
 
@@ -1654,8 +1674,13 @@ class Moderation(Cog):
             await ctx.send_error(error)
             return
 
-        await ctx.guild.ban(member, reason=reason)
-        await ctx.guild.unban(member, reason=reason)
+        if not await softban(self.bot, ctx.guild, member, reason=reason):
+            self.bot.dispatch("mod_action", ctx.guild.id, "ban", member.id, ctx.author.id, reason)
+            await ctx.send_warning(
+                f"Banned **{member}**, but lifting the ban again failed, so they are still banned. "
+                "Use `unban` to let them back in."
+            )
+            return
         self.bot.dispatch("mod_action", ctx.guild.id, "softban", member.id, ctx.author.id, reason)
         await ctx.send_success(f"Successfully soft-banned **{member}**.")
 
@@ -1810,12 +1835,14 @@ class Moderation(Cog):
         try:
             await guild.unban(discord.Object(id=member_id), reason=reason)
         except discord.NotFound:
-            return  # already unbanned
+            return  # already unbanned -- whoever did it recorded that case
         except discord.HTTPException as exc:
             if isinstance(exc, discord.Forbidden) and not timer.kwargs.get("attempt"):  # alert once, not per retry
                 config = await self.bot.db.get_guild_config(guild_id)
                 await config.alert_missing_permission(f"lift the expired tempban of user ID {member_id}")
             await retry_expiry_timer(self.bot, timer, str(exc))
+        else:
+            self.bot.dispatch("mod_action", guild_id, "unban", member_id, guild.me.id, reason)
 
     # MUTE
 
@@ -2095,6 +2122,9 @@ class Moderation(Cog):
             if isinstance(exc, discord.Forbidden) and config is not None and not timer.kwargs.get("attempt"):
                 await config.alert_missing_permission(f"lift the expired mute of {member}")
             await retry_expiry_timer(self.bot, timer, str(exc))
+        else:
+            if mod_id != member_id:  # a self-mute was never a case, so its end is not one either
+                self.bot.dispatch("mod_action", guild_id, "unmute", member_id, guild.me.id, reason)
 
     @command(
         "muterole",

@@ -120,7 +120,7 @@ def test_members_held_by_the_auto_trigger_count_as_bypassing() -> None:
 
 
 async def test_check_raid_reports_whether_the_author_was_banned() -> None:
-    config = SimpleNamespace(flags=SimpleNamespace(raid=True), send_alert=AsyncMock())
+    config = SimpleNamespace(flags=SimpleNamespace(raid=True), send_alert=AsyncMock(), bot=MagicMock())
     guild = MagicMock(ban=AsyncMock())
     guild.me.guild_permissions.ban_members = True
     author, other = _Member(1), _Member(2)

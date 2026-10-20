@@ -488,9 +488,13 @@ async def member_action(
                 # A permanent ban replaces any tempban, so its expiry must not lift this one later.
                 await bot.timers.delete_member_timer('tempban', guild.id, user_id)
             elif body.action == 'softban':
-                # Ban-then-unban: kicks the member and wipes their recent messages.
-                await member.ban(reason=body.reason, delete_message_seconds=(delete_days or 1) * 86400)
-                await guild.unban(member, reason=body.reason)
+                from app.cogs.moderation.infractions import softban
+
+                wipe = (delete_days or 1) * 86400
+                if not await softban(bot, guild, member, reason=body.reason, delete_message_seconds=wipe):
+                    # The ban stands: record what happened, not a softban, and say so instead of failing.
+                    case_action = 'ban'
+                    extra['warning'] = 'banned, but lifting the ban again failed, so the member is still banned'
             elif body.action == 'timeout':
                 delta = validate_timeout_duration(body.duration)
                 await member.timeout(delta, reason=body.reason)
