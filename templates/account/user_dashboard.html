@@ -1,0 +1,333 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}My Profile — {{ guild_name }} | Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/account/user_dashboard.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container user-dash-container">
+    <a href="/dashboard" class="overview-back">&larr; All servers</a>
+
+    {# ─── Profile Header ─────────────────────────────────────────── #}
+    <div class="user-dash-header dash-rise">
+        <img class="user-dash-avatar" src="{{ profile.avatar_url }}?size=128" alt="" width="80" height="80">
+        <div class="user-dash-info">
+            <h1 style="color: {% if profile.top_role_color != 0 %}{{ profile.top_role_color_hex() }}{% else %}inherit{% endif %};">{{ profile.display_name }}</h1>
+            <div class="user-dash-username">{{ profile.name }}</div>
+            <div class="user-dash-meta">
+                {% match profile.joined_at %}
+                {% when Some with (ts) %}
+                <span>Joined <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+                {% when None %}
+                {% endmatch %}
+                {% match profile.join_position %}
+                {% when Some with (pos) %}
+                <span>Join #{{ pos }} / {{ profile.member_count }}</span>
+                {% when None %}
+                {% endmatch %}
+                {% match profile.boosting_since %}
+                {% when Some with (ts) %}
+                <span class="user-dash-boost">Boosting since <time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+                {% when None %}
+                {% endmatch %}
+            </div>
+        </div>
+    </div>
+
+    {# ─── Settings ───────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:1">
+        <h2>Settings</h2>
+        <p class="config-section-description">Your personal bot preferences. These apply everywhere Percy is, not just this server.</p>
+        <form class="user-dash-settings" id="user-settings-form">
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-timezone">Timezone</label>
+                    <span class="setting-hint">Used for reminders, time conversions, and scheduled commands.</span>
+                </div>
+                <input type="text" id="setting-timezone" name="timezone" class="setting-input"
+                       value="{% match settings.timezone %}{% when Some with (tz) %}{{ tz }}{% when None %}{% endmatch %}"
+                       placeholder="e.g. Europe/Berlin" autocomplete="off" list="tz-suggestions">
+                <datalist id="tz-suggestions">
+                    <option value="America/New_York">
+                    <option value="America/Chicago">
+                    <option value="America/Denver">
+                    <option value="America/Los_Angeles">
+                    <option value="America/Toronto">
+                    <option value="America/Sao_Paulo">
+                    <option value="Europe/London">
+                    <option value="Europe/Berlin">
+                    <option value="Europe/Paris">
+                    <option value="Europe/Amsterdam">
+                    <option value="Europe/Rome">
+                    <option value="Europe/Madrid">
+                    <option value="Europe/Warsaw">
+                    <option value="Europe/Moscow">
+                    <option value="Europe/Istanbul">
+                    <option value="Asia/Tokyo">
+                    <option value="Asia/Shanghai">
+                    <option value="Asia/Kolkata">
+                    <option value="Australia/Sydney">
+                    <option value="Australia/Brisbane">
+                </datalist>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-presence">Track Presence</label>
+                    <span class="setting-hint">Record your online/idle/dnd/offline status over time.</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="setting-presence" name="track_presence"{% if settings.track_presence %} checked{% endif %}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-history">Track Name &amp; Avatar History</label>
+                    <span class="setting-hint">Keep a log of your username, nickname, and avatar changes.</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="setting-history" name="track_history"{% if settings.track_history %} checked{% endif %}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+        </form>
+    </section>
+
+    {# ─── Roles ──────────────────────────────────────────────────── #}
+    {% if !profile.roles.is_empty() %}
+    <section class="config-section dash-rise" style="--i:2">
+        <h2>Your Roles</h2>
+        <div class="user-dash-roles">
+            {% for role in profile.roles %}
+            <span class="role-chip" style="border-color: {{ role.color_hex() }}; color: {% if role.color != 0 %}{{ role.color_hex() }}{% else %}var(--foreground){% endif %};">{{ role.name }}</span>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─── Leveling ───────────────────────────────────────────────── #}
+    {% match profile.leveling %}
+    {% when Some with (lvl) %}
+    <section class="config-section dash-rise" style="--i:3">
+        <h2>Leveling</h2>
+        <div class="user-dash-stat-grid">
+            <div class="metric-tile">
+                <span class="tile-label">Level</span>
+                <span class="tile-value">{{ lvl.level }}</span>
+            </div>
+            <div class="metric-tile">
+                <span class="tile-label">XP</span>
+                <span class="tile-value">{{ lvl.xp }}</span>
+            </div>
+            <div class="metric-tile">
+                <span class="tile-label">Messages</span>
+                <span class="tile-value">{{ lvl.messages }}</span>
+            </div>
+            <div class="metric-tile">
+                <span class="tile-label">Rank</span>
+                <span class="tile-value">#{{ lvl.rank }}</span>
+            </div>
+        </div>
+    </section>
+
+    {# ─── Rank card (always shown; Customize only when the server allows it) ─────── #}
+    <section class="config-section dash-rise" style="--i:3">
+        <h2>Rank card</h2>
+        <p class="config-section-description">How your card looks when anyone runs <code>/level</code>. Your choice applies on every server that allows customizing; &ldquo;Server default&rdquo; follows this server's style.</p>
+        <figure class="rank-card-preview">
+            <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png?{% for field in card_fields %}{% if !field.current.is_empty() %}{{ field.key }}={{ field.current }}&amp;{% endif %}{% endfor %}" alt="Your rank card" width="1154" height="360">
+        </figure>
+        {% if !card_fields.is_empty() %}
+        <button type="button" id="rank-card-customize" class="button primary small">Customize</button>
+        <dialog id="rank-card-dialog" class="rank-card-dialog">
+            <div class="rank-card-editor">
+                <form class="rank-card-controls" id="rank-card-form" onsubmit="return false">
+                    {% for field in card_fields %}
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <label for="card-{{ field.key }}">{{ field.label }}</label>
+                        </div>
+                        <select id="card-{{ field.key }}" name="{{ field.key }}" class="config-select">
+                            <option value=""{% if field.current.is_empty() %} selected{% endif %}>{{ field.default_label }}</option>
+                            {% for opt in field.options %}
+                            <option value="{{ opt.value }}"{% if opt.value == field.current %} selected{% endif %}>{{ opt.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endfor %}
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <label>Custom background image</label>
+                            <span class="setting-hint">Coming soon &mdash; uploads need image moderation first.</span>
+                        </div>
+                        <span class="badge-soon">Soon</span>
+                    </div>
+                </form>
+                <figure class="rank-card-preview">
+                    <img id="rank-card-live" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
+                    <figcaption id="rank-card-status">Your saved card.</figcaption>
+                </figure>
+            </div>
+            <div class="rank-card-dialog-footer">
+                <button type="button" id="rank-card-cancel" class="button small">Cancel</button>
+                <button type="button" id="rank-card-save" class="button primary small">Save</button>
+            </div>
+        </dialog>
+        {% endif %}
+    </section>
+    {% when None %}
+    {% endmatch %}
+
+    {# ─── Economy ────────────────────────────────────────────────── #}
+    {% match profile.economy %}
+    {% when Some with (eco) %}
+    <section class="config-section dash-rise" style="--i:4">
+        <h2>Economy</h2>
+        <div class="user-dash-stat-grid">
+            <div class="metric-tile">
+                <span class="tile-label">Cash</span>
+                <span class="tile-value">{{ eco.cash }}</span>
+            </div>
+            <div class="metric-tile">
+                <span class="tile-label">Bank</span>
+                <span class="tile-value">{{ eco.bank }}</span>
+            </div>
+            <div class="metric-tile">
+                <span class="tile-label">Net Worth</span>
+                <span class="tile-value">{{ eco.total }}</span>
+            </div>
+        </div>
+    </section>
+    {% when None %}
+    {% endmatch %}
+
+    {# ─── Your Tags ──────────────────────────────────────────────── #}
+    {% if !profile.owned_tags.is_empty() %}
+    <section class="config-section dash-rise" style="--i:4">
+        <h2>Your Tags <span class="section-count">({{ profile.owned_tags.len() }})</span></h2>
+        <p class="config-section-description">Tags you own in this server.</p>
+        <div class="user-tags-list">
+            {% for tag in profile.owned_tags %}
+            <span class="user-tag-chip" title="{{ tag.uses }} uses">
+                <span class="user-tag-name">{{ tag.name }}</span>
+                <span class="user-tag-uses">{{ tag.uses }}</span>
+            </span>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─── Command Usage ──────────────────────────────────────────── #}
+    {% match profile.command_stats %}
+    {% when Some with (stats) %}
+    {% if stats.total_commands > 0 %}
+    <section class="config-section dash-rise" style="--i:5">
+        <h2>Command Usage</h2>
+        <div class="user-dash-stat-grid">
+            <div class="metric-tile">
+                <span class="tile-label">Total Commands</span>
+                <span class="tile-value">{{ stats.total_commands }}</span>
+            </div>
+            {% match stats.first_command_at %}
+            {% when Some with (ts) %}
+            <div class="metric-tile">
+                <span class="tile-label">First Used</span>
+                <span class="tile-value"><time class="js-ts" datetime="{{ ts }}">{{ ts }}</time></span>
+            </div>
+            {% when None %}
+            {% endmatch %}
+        </div>
+        {% if !stats.top_commands.is_empty() %}
+        <div class="user-dash-top-commands">
+            <h3>Most Used</h3>
+            <ul class="top-commands-list">
+                {% for cmd in stats.top_commands %}
+                <li>
+                    <span class="cmd-name">{{ cmd.command }}</span>
+                    <span class="cmd-uses">{{ cmd.uses }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+    {% when None %}
+    {% endmatch %}
+
+    {# ─── Presence History ───────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:6" id="presence-section" hidden>
+        <h2>Presence History</h2>
+        <p class="config-section-description">Your online status over the last 30 days. Recorded only while presence tracking is enabled.</p>
+        <div id="presence-chart" class="presence-chart"></div>
+    </section>
+
+    {# ─── Name &amp; Nickname History ──────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:7" id="names-section" hidden>
+        <h2>Name &amp; Nickname History</h2>
+        <p class="config-section-description">Username and nickname changes Percy has logged. Recorded only while name/avatar history is enabled.</p>
+        <div class="history-columns">
+            <div class="history-column">
+                <h3>Usernames</h3>
+                <ul class="history-list" id="username-history"></ul>
+            </div>
+            <div class="history-column">
+                <h3>Nicknames</h3>
+                <ul class="history-list" id="nickname-history"></ul>
+            </div>
+        </div>
+    </section>
+
+    {# ─── Avatar History ─────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:8" id="avatars-section" hidden>
+        <h2>Avatar History</h2>
+        <p class="config-section-description">Past avatars Percy has snapshotted, newest first.</p>
+        <div class="avatar-gallery" id="avatar-history"></div>
+    </section>
+
+    {# ─── Reminders ──────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:8">
+        <h2>Your Reminders <span class="section-count">({{ reminders.len() }})</span></h2>
+        <p class="config-section-description">Reminders you set with <code>/reminder</code>, on every server. Cancel one and Percy won't send it.</p>
+        {% if reminders.is_empty() %}
+        <p class="text-muted">No reminders running.</p>
+        {% else %}
+        <ul class="reminder-list">
+            {% for r in reminders %}
+            <li class="reminder-item">
+                <div class="reminder-body">
+                    <span class="reminder-message">{% if r.message.is_empty() %}<span class="text-muted">(no message)</span>{% else %}{{ r.message }}{% endif %}</span>
+                    <span class="reminder-meta"><time class="js-ts" datetime="{{ r.expires }}">{{ r.expires }}</time>{% match r.repeats %}{% when Some with (rep) %} · repeats {{ rep }}{% when None %}{% endmatch %}{% if r.shared_with > 0 %} · shared with {{ r.shared_with }}{% endif %}</span>
+                </div>
+                <button class="button small reminder-cancel-btn" data-id="{{ r.id }}">Cancel</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+
+    {# ─── Your Data ──────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:9">
+        <h2>Your Data</h2>
+        <p class="config-section-description">Manage your stored data — download or delete your history across all servers.</p>
+        <div class="data-actions">
+            <a class="button small primary outline" href="/account">Manage on Account page &rarr;</a>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block body_end %}
+<script>
+const GUILD_ID = '{{ guild_id }}';
+</script>
+<script src="/static/js/common/common.js"></script>
+<script src="/static/js/common/unsaved.js"></script>
+<script src="/static/js/common/confirm.js"></script>
+<script src="/static/js/account/user_dashboard.js"></script>
+{% endblock %}

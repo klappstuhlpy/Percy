@@ -1,0 +1,132 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Export and restore this server's portable configuration, and share it as a template.</p>{% endblock %}
+
+{% block page_css %}
+<style>
+    .backup-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .import-result {
+        margin-top: 0.75rem;
+        padding: 0.75rem 0.9rem;
+        border: 1px solid var(--box-border);
+        border-radius: 8px;
+        background: var(--box-shade);
+        font-size: 0.85rem;
+    }
+    .import-result:empty { display: none; }
+    .import-result ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+    .template-card {
+        border: 1px solid var(--box-border);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        background: var(--box-shade);
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+    .template-card h3 { margin: 0; font-size: 0.98rem; }
+    .template-slug { font-size: 0.75rem; color: var(--text-muted); }
+    .template-desc { font-size: 0.85rem; }
+    .template-actions { display: flex; gap: 0.5rem; margin-top: auto; padding-top: 0.4rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>A backup is a <strong>portable, ID-free</strong> snapshot of this server's configuration: guild settings, autoresponders, and tags. Channel/role-bound features (comics, temp channels, log channels) are deliberately excluded so a backup restores cleanly into any server.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Import is <strong>additive</strong>: existing tags and triggers are skipped, never overwritten</li>
+                <li>Preview always runs first (a dry run) so you can see the counts before applying</li>
+                <li>Publish a backup as a <strong>template</strong> to let other servers apply the same setup</li>
+            </ul>
+        </div>
+    </div>
+
+    <section class="config-section">
+        <div class="section-header"><h2>Export</h2></div>
+        <p class="config-section-description">Download a JSON snapshot of this server's portable configuration.</p>
+        <a href="/dashboard/guild/{{ guild_id }}/backup/export.json" class="button primary small" download>Download backup</a>
+    </section>
+
+    <section class="config-section">
+        <div class="section-header"><h2>Import / Restore</h2></div>
+        <p class="config-section-description">Paste a backup JSON blob (or load a <code>.json</code> file), preview what would change, then restore.</p>
+        <input type="file" id="import-file" accept="application/json,.json" class="config-input">
+        <textarea id="import-json" class="config-input resize-v" rows="6" placeholder='{"kind":"percy.backup", …}'></textarea>
+        <div class="modal-actions" style="margin-top:0.75rem;">
+            <button type="button" class="button small" id="import-preview">Preview</button>
+            <button type="button" class="button primary small" id="import-apply" disabled>Restore</button>
+        </div>
+        <div class="import-result" id="import-result"></div>
+    </section>
+
+    <section class="config-section">
+        <div class="section-header"><h2>Publish a template</h2></div>
+        <p class="config-section-description">Share this server's current setup under a slug. Public templates appear in the gallery for any server to apply.</p>
+        <div class="modal-form">
+            <label class="config-label" for="tpl_slug">Slug</label>
+            <input type="text" id="tpl_slug" class="config-input" placeholder="gaming-starter" maxlength="50">
+            <label class="config-label" for="tpl_name">Name</label>
+            <input type="text" id="tpl_name" class="config-input" placeholder="Gaming Starter Kit" maxlength="100">
+            <label class="config-label" for="tpl_desc">Description <span class="text-muted">(optional)</span></label>
+            <textarea id="tpl_desc" class="config-input resize-v" rows="2" maxlength="500"></textarea>
+            <label class="config-toggle">
+                <div><span class="config-label">Public (list in the gallery)</span></div>
+                <input type="checkbox" id="tpl_public">
+            </label>
+        </div>
+        <div class="modal-actions" style="margin-top:0.75rem;">
+            <button type="button" class="button primary small" id="tpl-publish">Publish</button>
+        </div>
+    </section>
+
+    <section class="config-section">
+        <div class="section-header"><h2>Your templates</h2></div>
+        {% if own_templates.is_empty() %}
+        <p class="empty-state">You haven't published any templates from this server yet.</p>
+        {% else %}
+        <div class="backup-grid">
+            {% for t in own_templates %}
+            <div class="template-card">
+                <h3>{{ t.name }}</h3>
+                <span class="template-slug">{{ t.slug }} · {{ t.downloads }} uses{% match t.public %}{% when Some with (p) %}{% if p %} · public{% else %} · private{% endif %}{% when None %}{% endmatch %}</span>
+                {% match t.description %}{% when Some with (d) %}<p class="template-desc">{{ d }}</p>{% when None %}{% endmatch %}
+                <div class="template-actions">
+                    <button class="button small tpl-apply" data-slug="{{ t.slug }}">Apply here</button>
+                    <button class="button small danger tpl-delete" data-slug="{{ t.slug }}">Delete</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="config-section">
+        <div class="section-header"><h2>Template gallery</h2></div>
+        {% if public_templates.is_empty() %}
+        <p class="empty-state">No public templates yet.</p>
+        {% else %}
+        <div class="backup-grid">
+            {% for t in public_templates %}
+            <div class="template-card">
+                <h3>{{ t.name }}</h3>
+                <span class="template-slug">{{ t.slug }} · {{ t.downloads }} uses</span>
+                {% match t.description %}{% when Some with (d) %}<p class="template-desc">{{ d }}</p>{% when None %}{% endmatch %}
+                <div class="template-actions">
+                    <button class="button small tpl-apply" data-slug="{{ t.slug }}">Apply here</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/guild/backup.js"></script>
+{% endblock %}

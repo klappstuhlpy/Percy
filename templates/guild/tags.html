@@ -1,0 +1,164 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Browse, preview, export and import this server's tags.</p>{% endblock %}
+
+{% block header_actions %}
+<div class="tags-toolbar-actions">
+    <button class="button small" id="tags-export-all-btn">Export All</button>
+    <button class="button small" id="tags-export-selected-btn" disabled>Export Selected</button>
+    <button class="button small" id="tags-import-btn">Import CSV</button>
+    <button class="button primary small" id="tag-new-btn">New tag</button>
+    <input type="file" id="tags-import-input" accept=".csv,text/csv" hidden>
+</div>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Custom <strong>tags</strong> are reusable snippets members recall by name in chat. Preview a tag's rendered content, export a selection (or all) to CSV, and import tags from a CSV file.</p>
+            <ul class="dash-pageinfo-tips">
+                <li>Import is admin-only; uploads are malware-scanned and validated before any tag is created</li>
+                <li>CSV format is <code>name,content</code> — exactly what "Export" produces</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Summary Tiles ───────────────────────────────────────────── #}
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Total Tags</span>
+            <span class="tile-value">{{ tags.total }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Total Uses</span>
+            <span class="tile-value">{{ tags.total_uses }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Top Creators</span>
+            <span class="tile-value">{{ tags.top_creators.len() }}</span>
+            <span class="tile-sub">Unique authors</span>
+        </div>
+    </div>
+
+    {# ─── All Tags ────────────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>All Tags</h2>
+        <p class="config-section-description">Every tag in the server. Select rows to export, or preview and delete individual tags.</p>
+
+        {% if tags.tags.is_empty() %}
+        <div class="empty-state">
+            <h3>No tags</h3>
+            <p>Tags created with the /tag command will appear here, or import some with "Import CSV".</p>
+        </div>
+        {% else %}
+        <input type="search" class="config-input tags-search" id="tags-search" placeholder="Search tags…" autocomplete="off">
+        <div class="data-table-wrap">
+            <table class="data-table sortable" id="tags-table">
+                <thead>
+                    <tr>
+                        <th class="tags-check-col"><input type="checkbox" id="tags-select-all" title="Select all"></th>
+                        <th data-sort="text">Name</th>
+                        <th data-sort="text">Owner</th>
+                        <th class="numeric" data-sort="number">Uses</th>
+                        <th data-sort="date">Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tag in tags.tags %}
+                    <tr data-name="{{ tag.name }}">
+                        <td class="tags-check-col"><input type="checkbox" class="tag-check" value="{{ tag.name }}"></td>
+                        <td data-label="Name"><strong>{{ tag.name }}</strong></td>
+                        <td data-label="Owner">{{ tag.owner_name.as_deref().unwrap_or("Unknown") }}</td>
+                        <td class="numeric" data-label="Uses">{{ tag.uses }}</td>
+                        <td class="member-joined" data-label="Created"><time class="js-ts">{{ tag.created_at.as_deref().unwrap_or("—") }}</time></td>
+                        <td class="nowrap">
+                            <button class="button small tag-view-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">View</button>
+                            <button class="button small tag-edit-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">Edit</button>
+                            <button class="button small danger tag-delete-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </section>
+
+    {# ─── Top Creators ────────────────────────────────────────────── #}
+    {% if !tags.top_creators.is_empty() %}
+    <section class="config-section">
+        <h2>Top Creators</h2>
+        <p class="config-section-description">Members who have created the most tags.</p>
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Member</th>
+                        <th class="numeric">Tags Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for creator in tags.top_creators %}
+                    <tr>
+                        <td data-label="Rank"><span class="leaderboard-rank{% if loop.index == 1 %} gold{% else if loop.index == 2 %} silver{% else if loop.index == 3 %} bronze{% endif %}">{{ loop.index }}</span></td>
+                        <td data-label="Member">{{ creator.username }}</td>
+                        <td class="numeric" data-label="Tags Created">{{ creator.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+<!-- Tag Preview Modal -->
+<div class="modal-overlay" id="tag-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3 id="tag-modal-title">Tag</h3>
+        <div class="tag-preview-meta" id="tag-modal-meta"></div>
+        <div class="discord-markdown" id="tag-modal-content"></div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="tag-modal-close">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Import Result Modal -->
+<div class="modal-overlay" id="import-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3>Import Result</h3>
+        <div id="import-result-body"></div>
+        <div class="modal-actions">
+            <button type="button" class="button primary small" id="import-modal-close">Done</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="tag-edit-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3 id="tag-edit-title">New tag</h3>
+        <div class="modal-form">
+            <label class="config-label" for="tag-edit-name">Name</label>
+            <input type="text" id="tag-edit-name" class="config-input" maxlength="100" placeholder="rules" autocomplete="off">
+            <span class="config-description" id="tag-edit-name-hint">Members recall it with <code>/tag &lt;name&gt;</code>. You will be its owner.</span>
+            <label class="config-label" for="tag-edit-content">Content</label>
+            <textarea id="tag-edit-content" class="config-input resize-v" rows="6" maxlength="2000" placeholder="What Percy posts when someone uses the tag. Markdown works."></textarea>
+            <span class="config-description"><span id="tag-edit-count">0</span> / 2000</span>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="tag-edit-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="tag-edit-save">Create tag</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/guild/tags.js"></script>
+{% endblock %}

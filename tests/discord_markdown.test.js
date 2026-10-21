@@ -1,5 +1,5 @@
 const test = require('node:test'); const assert = require('node:assert');
-const { render } = require('../static/js/discord_markdown.js');
+const { render } = require('../static/js/common/discord_markdown.js');
 test('escapes html', () => assert.ok(!render('<img src=x onerror=1>').includes('<img src=x')));
 test('bold italic underline strike', () => assert.equal(render('**a** *b* __c__ ~~d~~'),
   '<strong>a</strong> <em>b</em> <u>c</u> <s>d</s>'));

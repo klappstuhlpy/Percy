@@ -1,0 +1,109 @@
+{% extends "layout/layout.html" %}
+
+{% block title %}Account | Percy{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/account/user_dashboard.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container user-dash-container">
+    <a href="/dashboard" class="overview-back">&larr; My Servers</a>
+
+    {# ─── Account Header ────────────────────────────────────────── #}
+    <div class="user-dash-header dash-rise">
+        <img class="user-dash-avatar" src="/account/discord/avatar" alt="" width="80" height="80">
+        <div class="user-dash-info">
+            <h1>{{ username }}</h1>
+            <div class="user-dash-username">{{ discord_id }}</div>
+        </div>
+    </div>
+
+    {# ─── Settings ───────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:1">
+        <h2>Global Settings</h2>
+        <p class="config-section-description">Your personal bot preferences. These apply everywhere Percy is, across all servers.</p>
+        <form class="user-dash-settings" id="account-settings-form">
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-timezone">Timezone</label>
+                    <span class="setting-hint">Used for reminders, time conversions, and scheduled commands.</span>
+                </div>
+                <input type="text" id="setting-timezone" name="timezone" class="setting-input"
+                       value="{% match settings.timezone %}{% when Some with (tz) %}{{ tz }}{% when None %}{% endmatch %}"
+                       placeholder="e.g. Europe/Berlin" autocomplete="off" list="tz-suggestions">
+                <datalist id="tz-suggestions">
+                    <option value="America/New_York">
+                    <option value="America/Chicago">
+                    <option value="America/Denver">
+                    <option value="America/Los_Angeles">
+                    <option value="America/Toronto">
+                    <option value="America/Sao_Paulo">
+                    <option value="Europe/London">
+                    <option value="Europe/Berlin">
+                    <option value="Europe/Paris">
+                    <option value="Europe/Amsterdam">
+                    <option value="Europe/Rome">
+                    <option value="Europe/Madrid">
+                    <option value="Europe/Warsaw">
+                    <option value="Europe/Moscow">
+                    <option value="Europe/Istanbul">
+                    <option value="Asia/Tokyo">
+                    <option value="Asia/Shanghai">
+                    <option value="Asia/Kolkata">
+                    <option value="Australia/Sydney">
+                    <option value="Australia/Brisbane">
+                </datalist>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-presence">Track Presence</label>
+                    <span class="setting-hint">Record your online/idle/dnd/offline status over time.</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="setting-presence" name="track_presence"{% if settings.track_presence %} checked{% endif %}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label for="setting-history">Track Name &amp; Avatar History</label>
+                    <span class="setting-hint">Keep a log of your username, nickname, and avatar changes.</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="setting-history" name="track_history"{% if settings.track_history %} checked{% endif %}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+        </form>
+    </section>
+
+    {# ─── Subscriptions ──────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:2">
+        <h2>Subscriptions</h2>
+        <p class="config-section-description">What Percy DMs you about — comic series, publishers, creators, watch-order universes and the people in them.</p>
+        <div class="data-actions">
+            <a class="button small primary outline" href="/account/subscriptions">Manage subscriptions</a>
+        </div>
+    </section>
+
+    {# ─── Your Data ──────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:3">
+        <h2>Your Data</h2>
+        <p class="config-section-description">Download a copy of everything Percy has stored about you across all servers, or permanently erase your tracked history.</p>
+        <div class="data-actions">
+            <a class="button small primary outline" href="/account/data-export">Download my data</a>
+            <button type="button" class="button small danger" id="delete-data-btn">Delete my history&hellip;</button>
+        </div>
+        <p class="setting-hint">Deleting removes your stored presence, avatar and name/nickname history across all servers. This cannot be undone.</p>
+    </section>
+</div>
+{% endblock %}
+
+{% block body_end %}
+<script src="/static/js/common/common.js"></script>
+<script src="/static/js/common/unsaved.js"></script>
+<script src="/static/js/common/confirm.js"></script>
+<script src="/static/js/account/account.js"></script>
+{% endblock %}

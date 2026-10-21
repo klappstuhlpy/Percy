@@ -1,0 +1,12 @@
+pub(crate) mod actions;
+pub(crate) mod changes;
+pub(crate) mod community;
+pub(crate) mod crud;
+pub(crate) mod forms;
+pub(crate) mod guilds;
+pub(crate) mod integrations;
+pub(crate) mod leaderboard;
+pub(crate) mod moderation;
+pub(crate) mod mutations;
+pub(crate) mod notifications;
+pub(crate) mod pages;

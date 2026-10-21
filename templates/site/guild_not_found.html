@@ -1,0 +1,21 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_dashboard_active %} active{% endblock %}
+
+{% block title %}Add Percy | Dashboard{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container">
+    <a href="/dashboard" class="dashboard-back">&larr; All servers</a>
+
+    <div class="dashboard-empty">
+        <h1>Percy is not in this server</h1>
+        <p>The bot needs to be added to your server before you can manage its configuration.</p>
+        <a href="{{ invite_url }}" target="_blank" class="button primary">Invite Percy</a>
+    </div>
+</div>
+{% endblock %}

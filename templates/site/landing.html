@@ -1,0 +1,65 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_home_active %} active{% endblock %}
+
+{% block title %}Percy Dashboard{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container">
+    <section class="percy-hero dash-rise">
+        <span class="percy-hero-badge"><span class="spark" aria-hidden="true">✻</span> Discord Bot</span>
+        <h1 class="percy-hero-title">Meet <span class="branding">Percy</span></h1>
+        <p class="percy-hero-lead">
+            Percy is the Discord bot that powers leveling, economy, moderation, autoresponders,
+            temporary voice channels and more across your server — all configurable from one place.
+        </p>
+        <p class="percy-hero-sub">
+            This is the <strong>Klappstuhl.me</strong> control panel: a web dashboard for configuring
+            every part of Percy without touching a single command. Manage members, set up reward roles,
+            tune the economy, browse polls and giveaways, and watch live server stats.
+        </p>
+
+        <div class="percy-hero-actions">
+            {% match account %}
+            {% when Some with (viewer) %}
+            <a href="/dashboard" class="invite-percy-btn">Go to your dashboard</a>
+            {% when None %}
+            <a href="/login?next=/dashboard" class="invite-percy-btn">Log in to continue</a>
+            <a href="/signup?next=/dashboard" class="percy-hero-secondary">Create an account</a>
+            {% endmatch %}
+        </div>
+        {% match account %}
+        {% when None %}
+        <p class="percy-hero-note">You need to be signed in to manage your servers.</p>
+        {% when Some with (viewer) %}
+        {% endmatch %}
+    </section>
+
+    <section class="percy-feature-grid">
+        <div class="percy-feature dash-rise" style="--i:0">
+            <span class="percy-feature-glyph" aria-hidden="true">⬆</span>
+            <h3>Leveling &amp; Economy</h3>
+            <p>Configure XP curves, reward roles, multipliers, shops and lotteries — then watch the leaderboard.</p>
+        </div>
+        <div class="percy-feature dash-rise" style="--i:1">
+            <span class="percy-feature-glyph" aria-hidden="true">🛡</span>
+            <h3>Moderation &amp; Sentinel</h3>
+            <p>Kick, ban and manage members, set up the sentinel, and handle lockdowns from the browser.</p>
+        </div>
+        <div class="percy-feature dash-rise" style="--i:2">
+            <span class="percy-feature-glyph" aria-hidden="true">⚡</span>
+            <h3>Automation</h3>
+            <p>Autoresponders, comic feeds, status feeds and temporary voice channels, all point-and-click.</p>
+        </div>
+        <div class="percy-feature dash-rise" style="--i:3">
+            <span class="percy-feature-glyph" aria-hidden="true">📊</span>
+            <h3>Insights</h3>
+            <p>Browse polls, giveaways, tags and highlights, with live server and bot statistics.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "layout/dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Create and manage giveaways in this server.</p>{% endblock %}
+
+{% block header_actions %}
+<button class="button primary small" id="create-giveaway-btn">Create Giveaway</button>
+{% endblock %}
+
+{% block content %}
+
+    <div class="dash-pageinfo">
+        <span class="dash-pageinfo-icon">&#9432;</span>
+        <div class="dash-pageinfo-body">
+            <p>Create and manage <strong>giveaways</strong> in this server. Members enter through a persistent button; Percy draws winners automatically when the timer ends, and you can end or cancel one early from here.</p>
+            <ul class="dash-pageinfo-tips">
+                <li><strong>End</strong> draws the winners immediately; <strong>Cancel</strong> stops it without drawing</li>
+                <li>Entry counts update as members join</li>
+            </ul>
+        </div>
+    </div>
+
+    {# ─── Summary Tiles ───────────────────────────────────────────── #}
+    <div class="metric-tiles">
+        <div class="metric-tile">
+            <span class="tile-label">Total</span>
+            <span class="tile-value">{{ giveaways.giveaways.len() }}</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Active</span>
+            <span class="tile-value">{{ active_count }}</span>
+            <span class="tile-sub">Currently running</span>
+        </div>
+        <div class="metric-tile">
+            <span class="tile-label">Ended</span>
+            <span class="tile-value">{{ ended_count }}</span>
+        </div>
+    </div>
+
+    {# ─── Giveaways Table ─────────────────────────────────────────── #}
+    {% if giveaways.giveaways.is_empty() %}
+    <div class="empty-state">
+        <h3>No giveaways</h3>
+        <p>Click "Create Giveaway" to start one, or create it from Discord with the giveaway commands.</p>
+    </div>
+    {% else %}
+    <div class="data-table-wrap">
+        <table class="data-table sortable">
+            <thead>
+                <tr>
+                    <th data-sort="text">Title</th>
+                    <th data-sort="text">Status</th>
+                    <th class="numeric" data-sort="number">Entries</th>
+                    <th class="numeric" data-sort="number">Winners</th>
+                    <th data-sort="date">Ends At</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for giveaway in giveaways.giveaways %}
+                <tr>
+                    <td data-label="Title">
+                        <strong>{{ giveaway.title }}</strong>
+                        {% match giveaway.description %}
+                        {% when Some with (desc) %}
+                        <br><span class="text-muted fs-xs">{{ desc }}</span>
+                        {% when None %}
+                        {% endmatch %}
+                    </td>
+                    <td data-label="Status">
+                        {% if giveaway.ended %}
+                        <span class="pill ended dot">Ended</span>
+                        {% else %}
+                        <span class="pill active dot">Active</span>
+                        {% endif %}
+                    </td>
+                    <td class="numeric" data-label="Entries">{{ giveaway.entries }}</td>
+                    <td class="numeric" data-label="Winners">{{ giveaway.winners_count }}</td>
+                    <td class="member-joined" data-label="Ends At"><time class="js-ts">{{ giveaway.ends_at.as_deref().unwrap_or("—") }}</time></td>
+                    <td class="nowrap">
+                        {% if !giveaway.ended %}
+                        <button class="button small giveaway-end-btn inline-block" data-id="{{ giveaway.id }}" data-title="{{ giveaway.title }}">End</button>
+                        {% endif %}
+                        <button class="button small danger giveaway-delete-btn inline-block" data-id="{{ giveaway.id }}" data-title="{{ giveaway.title }}">Cancel</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+<!-- Create Giveaway Modal -->
+<div class="modal-overlay" id="giveaway-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3>Create Giveaway</h3>
+        <div class="modal-form">
+            <label class="config-label" for="gw_prize">Prize</label>
+            <input type="text" id="gw_prize" class="config-input" maxlength="256" placeholder="Nitro Classic">
+
+            <label class="config-label" for="gw_channel">Channel</label>
+            <select id="gw_channel" class="config-select">
+                {% for ch in channels %}
+                {% if ch.channel_type == "text" %}
+                <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+
+            <label class="config-label">Duration</label>
+            <div class="gw-duration-row">
+                <input type="number" id="gw_duration_amount" class="config-input" min="1" value="24">
+                <select id="gw_duration_unit" class="config-select">
+                    <option value="60">Minutes</option>
+                    <option value="3600" selected>Hours</option>
+                    <option value="86400">Days</option>
+                </select>
+            </div>
+
+            <label class="config-label" for="gw_winners">Winners</label>
+            <input type="number" id="gw_winners" class="config-input" min="1" max="100" value="1">
+
+            <label class="config-label" for="gw_description">Description <span class="text-muted fs-xs">(optional)</span></label>
+            <textarea id="gw_description" class="config-input" rows="3" maxlength="1000" placeholder="Details about the giveaway…"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="giveaway-modal-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="giveaway-modal-confirm">Create</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/guild/giveaways.js"></script>
+{% endblock %}

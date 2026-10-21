@@ -171,6 +171,23 @@ Two flows require the optional scan token: **poll banner upload** and **tag CSV 
 
 ---
 
+## Where things live
+
+```text
+src/
+  main.rs          boot only: config, db, serve; `pub use` flat aliases (crate::pages::… still works)
+  routes.rs        the router table, `/`, `/health`, and the router tests
+  core/            config, db, migrations, session, auth, errors, view, scan
+  guild/           the server dashboard: guilds, pages, forms, mutations, actions, crud, moderation,
+                   community, integrations, leaderboard, changes, notifications
+  account/         userpages, subscriptions, progress (signed-in account surfaces)
+  catalogue/       releases, news, comics, watchlist (public catalogue pages)
+  site.rs          public site pages (legal, changelog, commands)
+  templates/       Askama structs, split by page domain (layout, site, guild, account, catalogue)
+templates/         HTML, same five groups: layout/ site/ guild/ account/ catalogue/
+static/js|css/     common/ (shared across pages), guild/, account/, catalogue/ (css also site/)
+```
+
 ## Development
 
 ```bash

@@ -1,0 +1,196 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_releases_active %} active{% endblock %}
+
+{% import "layout/progress_toggle.html" as progress %}
+
+{# A macro, not an include: Askama renders an include against the root context, so a
+   partial could not see the loop's `card`. Same reason `subscriptions.html` uses one. #}
+{% macro card(card) %}
+{# The card is the container, not the anchor: it also holds a <form> and a list of
+   links, neither of which may nest inside an <a>. The anchor is a stretched link
+   (`cx-card__link`, see comics.css) so the whole surface still routes to `href`. #}
+<div class="cx-card cx-card--stretch rx-card rx-card--{{ card.media }}">
+    <a class="cx-card__link" href="{{ card.href }}">
+        {# An entry with no art gets no reserved space for it — same rule as the news
+           image row (news.css's `nx-row--with-image`): a placeholder box would still be
+           a hole shaped like a poster, so a poster-less card simply has no image element
+           at all and its body starts the card instead. #}
+        {% match card.cover_url %}
+        {% when Some with (cover) %}
+        <img class="cx-card__cover" src="{{ cover }}" alt="" loading="lazy" width="180" height="270">
+        {% when None %}
+        {% endmatch %}
+        <div class="cx-card__body">
+            <span class="rx-card__media">{{ card.media_label }}</span>
+            <h3 class="cx-card__title">{{ card.name }}</h3>
+            {% match card.subtitle %}
+            {% when Some with (subtitle) %}
+            <p class="cx-card__series">{{ subtitle }}</p>
+            {% when None %}
+            {% endmatch %}
+            {% match card.release_date %}
+            {% when Some with (date) %}
+            <p class="cx-card__meta"><span>{{ date }}</span></p>
+            {% when None %}
+            {% endmatch %}
+        </div>
+    </a>
+    <div class="cx-card__aside">{% call progress::toggle(card.toggle) %}</div>
+    {% if !card.chips.is_empty() %}
+    <ul class="cx-card__aside rx-chips" aria-label="Follow {{ card.name }} by">
+        {% for chip in card.chips %}
+        <li>
+            {# A chip with nowhere to go is a label, not a dead link. #}
+            {% match chip.href %}
+            {% when Some with (href) %}
+            <a class="rx-chip rx-chip--link" href="{{ href }}">{{ chip.label }}</a>
+            {% when None %}
+            <span class="rx-chip">{{ chip.label }}</span>
+            {% endmatch %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# The roadmap: one heading per month bucket, each with its own card grid underneath.
+   Bucketing, ordering and the terminal "Date to be announced" group are all decided in
+   `releases.rs::group_by_month` — a month with nothing in it is never constructed, so
+   there is nothing here to skip. #}
+{% macro timeline(groups) %}
+{% for group in groups %}
+<div class="rx-month">
+    <h3 class="rx-month__label">{{ group.label }}</h3>
+    <div class="cx-grid rx-grid">
+        {% for item in group.cards %}
+        {% call card(item) %}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% block title %}Releases | Percy{% endblock %}
+
+{% block meta_description %}What just landed and what is imminent across comics and film & TV — covers, release dates and the series, universes and publishers you can follow.{% endblock %}
+{% block og_title %}Releases — Percy{% endblock %}
+{% block og_description %}What just landed and what is imminent across comics and film & TV.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/releases{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/comics.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/releases.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/news.css" type="text/css"/>
+<link rel="stylesheet" href="/static/css/catalogue/progress.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx rx">
+    <div class="cx-page">
+        <header class="cx-head">
+            <span class="cx-head__eyebrow">Releases</span>
+            <h1 class="cx-head__title">What's out, what's next</h1>
+            <p class="cx-head__lede">
+                Comics and film &amp; TV in one place. Follow a series, a publisher or a universe and
+                Percy will DM you when something new lands.
+            </p>
+        </header>
+
+        {% include "layout/news_ticker.html" %}
+
+        {# Two plain GET forms, no JS: each carries the other's current value as a hidden
+           field, so picking a window doesn't reset the sort and picking a sort doesn't
+           reset the window. #}
+        <div class="rx-controls">
+        <form class="rx-window" method="get" action="/releases">
+            <span class="rx-window__label" id="rx-window-label">Window</span>
+            <div class="rx-seg" role="group" aria-labelledby="rx-window-label">
+                <button type="submit" class="rx-seg__opt" name="days" value="7"
+                        aria-pressed="{% if days == 7 %}true{% else %}false{% endif %}">7 days</button>
+                <button type="submit" class="rx-seg__opt" name="days" value="14"
+                        aria-pressed="{% if days == 14 %}true{% else %}false{% endif %}">14 days</button>
+                <button type="submit" class="rx-seg__opt" name="days" value="30"
+                        aria-pressed="{% if days == 30 %}true{% else %}false{% endif %}">30 days</button>
+            </div>
+            <input type="hidden" name="sort" value="{{ sort }}">
+        </form>
+
+        <form class="rx-window" method="get" action="/releases">
+            <span class="rx-window__label" id="rx-sort-label">Sort</span>
+            <div class="rx-seg" role="group" aria-labelledby="rx-sort-label">
+                <button type="submit" class="rx-seg__opt" name="sort" value="date"
+                        aria-pressed="{% if sort == "date" %}true{% else %}false{% endif %}">Newest</button>
+                <button type="submit" class="rx-seg__opt" name="sort" value="date_asc"
+                        aria-pressed="{% if sort == "date_asc" %}true{% else %}false{% endif %}">Oldest</button>
+                <button type="submit" class="rx-seg__opt" name="sort" value="name"
+                        aria-pressed="{% if sort == "name" %}true{% else %}false{% endif %}">Name</button>
+            </div>
+            <input type="hidden" name="days" value="{{ days }}">
+        </form>
+        </div>
+
+        {% if unavailable %}
+        <div class="cx-empty">
+            <p>Releases can't be loaded right now. Try again in a moment.</p>
+        </div>
+        {% else if comics.is_empty() && titles.is_empty() %}
+        <div class="cx-empty">
+            <p>Nothing landed in this window.</p>
+            <p class="rx-empty__hint">
+                Try a wider window, or browse the <a href="/comics">comic catalogue</a> and the
+                <a href="/watchlist">watch orders</a>.
+            </p>
+        </div>
+        {% else %}
+
+        {% if !followed.is_empty() %}
+        <section class="rx-section" id="following">
+            <div class="rx-section__head">
+                <h2 class="cx-section__title">Following</h2>
+                <p class="rx-section__note">From what you follow, in this window.</p>
+            </div>
+            {% call timeline(followed) %}
+        </section>
+        {% else if !signed_in %}
+        <p class="rx-signin">
+            <a href="/login?next=/releases">Sign in</a> to see what you follow at the top of this page.
+        </p>
+        {% endif %}
+
+        <section class="rx-section" id="comics">
+            <div class="rx-section__head">
+                <h2 class="cx-section__title">Comics</h2>
+                {# Comics are matched backwards, on when Percy first saw them, so this half
+                   never reaches into the forward window — saying otherwise would promise
+                   solicited books the list cannot contain. #}
+                <p class="rx-section__note">New since {{ window_start }}.</p>
+            </div>
+            {% if comics.is_empty() %}
+            <p class="rx-section__none">No new comics in this window.</p>
+            {% else %}
+            {% call timeline(comics) %}
+            {% endif %}
+        </section>
+
+        <section class="rx-section" id="titles">
+            <div class="rx-section__head">
+                <h2 class="cx-section__title">Film &amp; TV</h2>
+                <p class="rx-section__note">Released and upcoming, {{ window_start }} to {{ window_end }}.</p>
+            </div>
+            {% if titles.is_empty() %}
+            <p class="rx-section__none">No film or TV releases in this window.</p>
+            {% else %}
+            {% call timeline(titles) %}
+            {% endif %}
+        </section>
+
+        {% endif %}
+
+        {% include "catalogue/comics_attribution.html" %}
+        {% include "catalogue/watchlist_attribution.html" %}
+    </div>
+</div>
+<script src="/static/js/catalogue/progress.js" defer></script>
+{% endblock %}

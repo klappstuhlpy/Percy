@@ -1,0 +1,51 @@
+{% extends "layout/layout.html" %}
+
+{% block nav_comics_active %} active{% endblock %}
+
+{% block title %}Comic Series | Percy{% endblock %}
+
+{% block meta_description %}Every tracked comic series from Marvel, DC and manga publishers, with issue counts.{% endblock %}
+{% block og_title %}Comic Series — Percy{% endblock %}
+{% block og_description %}Every tracked comic series from Marvel, DC and manga publishers, with issue counts.{% endblock %}
+{% block og_url %}{{ crate::config::public_base_url() }}/comics/series{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="/static/css/catalogue/comics.css" type="text/css"/>
+{% endblock %}
+
+{% block body %}
+<div class="cx">
+    <div class="cx-page">
+        <header class="cx-head">
+            <span class="cx-head__eyebrow">Comics</span>
+            <h1 class="cx-head__title">Series</h1>
+            <p class="cx-head__lede">Every tracked series, across every publisher.</p>
+        </header>
+
+        {% if series.is_empty() %}
+        <div class="cx-empty">
+            <p>No series are available right now.</p>
+        </div>
+        {% else %}
+        <div class="cx-series-grid">
+            {% for entry in series %}
+            <a class="cx-series-card" href="/comics/series/{{ entry.series_slug }}?brand={{ entry.brand }}">
+                <span class="cx-series-card__brand">{{ entry.brand }}</span>
+                <h2 class="cx-series-card__name">{{ entry.series_name }}</h2>
+                <p class="cx-series-card__count">
+                    {{ entry.issue_count }} issue{% if entry.issue_count != 1 %}s{% endif %}
+                    {% match entry.latest %}
+                    {% when Some with (date) %}
+                    · Latest {{ date }}
+                    {% when None %}
+                    {% endmatch %}
+                </p>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% include "catalogue/comics_attribution.html" %}
+    </div>
+</div>
+{% endblock %}
