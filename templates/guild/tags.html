@@ -128,7 +128,7 @@
             <img class="dc-avatar" src="/static/img/logo.jpg" alt="" width="40" height="40">
             <div class="dc-body">
                 <div class="dc-header"><span class="dc-name">Percy</span><span class="dc-bot-tag">APP</span><span class="dc-time" id="tag-modal-time"></span></div>
-                <div class="dc-content discord-markdown" id="tag-modal-content"></div>
+                <div class="dc-content" id="tag-modal-content"></div>
             </div>
         </div>
         <div class="modal-actions">
@@ -170,5 +170,6 @@
 
 {% block page_js %}
 <script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/common/discord_markdown.js"></script>
 <script src="/static/js/guild/tags.js"></script>
 {% endblock %}
