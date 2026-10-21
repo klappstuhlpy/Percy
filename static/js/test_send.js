@@ -5,7 +5,7 @@
         const btn = e.target.closest('[data-test-send]');
         if (!btn) return;
         const select = document.getElementById(btn.dataset.for);
-        const saved = select && select.querySelector('option[selected]');
+        const saved = select && [...select.options].find(o => o.defaultSelected);
         if (select && select.value !== (saved ? saved.value : '')) {
             showToast('error', 'Save your changes first — the test uses the saved channel.');
             return;

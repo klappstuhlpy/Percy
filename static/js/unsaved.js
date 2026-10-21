@@ -90,6 +90,17 @@
 
     // -- Save / discard --------------------------------------------------------
 
+    // The page is not reloaded after a save, so the server-rendered defaults go stale; move them to
+    // the saved state so anything reading defaultSelected / defaultValue (e.g. test_send.js) sees it.
+    function rebaseDefaults(root) {
+        if (!root || !root.querySelectorAll) return;
+        root.querySelectorAll('option').forEach(o => { o.defaultSelected = o.selected; });
+        root.querySelectorAll('input, textarea').forEach(el => {
+            if (el.type === 'checkbox' || el.type === 'radio') el.defaultChecked = el.checked;
+            else el.defaultValue = el.value;
+        });
+    }
+
     async function saveAll() {
         if (saving) return;
         const dirty = dirtySections();
@@ -116,6 +127,7 @@
                     return;
                 }
                 section.baseline = snapshot(section);
+                rebaseDefaults(section.element);
                 reload = reload || section.reload;
                 // Saved, but Percy has advice (e.g. a channel still visible to @everyone): show it and
                 // skip the reload, which would wipe the toast before it can be read.
@@ -169,6 +181,7 @@
                     return;
                 }
                 section.baseline = snapshot(section);
+                rebaseDefaults(section.element);
                 reverted++;
             }
             if (skipped.length) {
@@ -206,6 +219,7 @@
             save: options.save,
             beforeSave: options.beforeSave || null,
             reload: !!options.reload,
+            element: options.element || null,
             baseline: null,
         };
         section.baseline = snapshot(section);
