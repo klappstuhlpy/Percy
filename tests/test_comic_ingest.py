@@ -214,3 +214,11 @@ async def test_ingest_survives_one_bad_comic() -> None:
 async def test_ingest_report_is_readable() -> None:
     report = await ComicIngest(FakeReleasesRepository()).ingest('DC', [make_comic()])
     assert str(report) == 'DC: 1 seen, 1 new, 0 updated, 0 failed'
+
+
+def test_refreshing_a_known_issue_never_rewrites_its_slug() -> None:
+    """The stored slug is the public URL; a refresh must not reset a disambiguated slug to the bare one."""
+    from app.database.repositories.releases import _RELEASE_UPDATE_COLUMNS
+
+    assert 'slug' not in _RELEASE_UPDATE_COLUMNS
+    assert {'title', 'release_date', 'cover_url'} <= set(_RELEASE_UPDATE_COLUMNS)

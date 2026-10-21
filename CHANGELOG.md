@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Every comic refresh logged a failed database query for each issue whose title clashed with
+  another issue's. The refresh tried to reset the issue's link back to the plain title each time.
+  An issue's link is now kept once it is stored, so the refresh is quiet and comic links never change.
+
 ## [2.8.0] - 2026-10-21
 
 ### Added

@@ -33,8 +33,11 @@ _RELEASE_COLUMNS = (
     'url',
 )
 
-#: Everything except the identity columns -- what an upsert of a known issue refreshes.
-_RELEASE_UPDATE_COLUMNS = tuple(c for c in _RELEASE_COLUMNS if c not in ('brand', 'external_id'))
+#: Everything except the identity columns and the slug -- what an upsert of a known issue refreshes.
+#: The slug is stored once and never rewritten: it is the public URL (``/comics/{brand}/{slug}``),
+#: and rewriting it to the bare title slug made every refresh of a disambiguated issue collide on
+#: ``UNIQUE (brand, slug)`` again, logging a failed query per issue on every ingest run.
+_RELEASE_UPDATE_COLUMNS = tuple(c for c in _RELEASE_COLUMNS if c not in ('brand', 'external_id', 'slug'))
 
 #: Hard ceiling on a single browse page, so a bad ``limit`` cannot ask for the whole archive.
 MAX_PAGE_SIZE = 100
