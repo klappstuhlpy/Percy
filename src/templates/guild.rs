@@ -457,6 +457,7 @@ pub(crate) struct NotificationsTemplate {
     pub(crate) cases: Vec<crate::notifications::CaseRow>,
     pub(crate) selected_channel: String,
     pub(crate) selected_roles: Vec<String>,
+    pub(crate) settings_ok: bool,
     pub(crate) channels: Vec<Channel>,
     pub(crate) roles: Vec<Role>,
     pub(crate) notice: String,

@@ -165,6 +165,7 @@ pub async fn guild_notifications(
     let (pending, history): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.r.status == "pending");
     let mut cases = cases.map(|c| c.cases).unwrap_or_default();
     cases.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    let settings_ok = settings.is_ok();
     let settings = settings.unwrap_or_default();
     NotificationsTemplate {
         account: Some(Viewer::from_session(&session)),
@@ -197,6 +198,7 @@ pub async fn guild_notifications(
             .collect(),
         selected_channel: settings.channel.as_ref().map(|c| c.id.clone()).unwrap_or_default(),
         selected_roles: settings.role_ids.clone(),
+        settings_ok,
         channels: channels
             .unwrap_or_default()
             .into_iter()

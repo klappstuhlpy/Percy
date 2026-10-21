@@ -5,7 +5,7 @@
 .notif-unread { background: var(--box-shade); border-color: var(--branding); }
 .notif-sev { flex: none; width: 1.2rem; text-align: center; color: var(--info-text); }
 .notif-warning .notif-sev { color: var(--warning-text); }
-.notif-error .notif-sev { color: var(--error-text); }
+.notif-critical .notif-sev { color: var(--error-text); }
 .notif-main { flex: 1; min-width: 0; }
 .notif-title { font-weight: 600; overflow-wrap: anywhere; }
 .notif-body { font-size: .88rem; color: var(--text-muted); overflow-wrap: anywhere; margin-top: .15rem; }

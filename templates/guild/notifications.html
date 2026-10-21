@@ -18,7 +18,7 @@
     <ul class="notif-list">
         {% for row in feed %}
         <li class="notif-item notif-{{ row.n.severity }}{% if row.n.unread %} notif-unread{% endif %}">
-            <span class="notif-sev" aria-hidden="true">{% if row.n.severity == "error" %}&#10006;{% else if row.n.severity == "warning" %}&#9888;{% else %}&#9432;{% endif %}</span>
+            <span class="notif-sev" aria-hidden="true">{% if row.n.severity == "critical" %}&#10006;{% else if row.n.severity == "warning" %}&#9888;{% else %}&#9432;{% endif %}</span>
             <div class="notif-main">
                 <div class="notif-title">
                     {% if row.n.unread %}<span class="notif-dot" title="Unread"></span>{% endif %}
@@ -108,8 +108,10 @@
 
 <section class="config-section" id="request-settings">
     <h2>Request settings</h2>
-    <p class="config-section-description">Requests are posted with Approve and Deny buttons in the channel below. Only the chosen roles may file one; leave it empty to follow the command permissions.</p>
-    <form id="request-settings-form">
+    <p class="config-section-description">Requests are posted with Approve and Deny buttons in the channel below. Members with the Manage Messages permission can always file one; the roles you pick here can too.</p>
+    {% if !settings_ok %}<p class="notif-notice notif-notice-err" role="status">Couldn't load these settings, so they are disabled. Reload the page to try again.</p>{% endif %}
+    <form {% if settings_ok %}id="request-settings-form"{% endif %}>
+        <fieldset class="notif-settings-fields" {% if !settings_ok %}disabled{% endif %}>
         <div class="config-grid">
             <div class="config-field">
                 <label class="config-label" for="rq-channel">Request channel</label>
@@ -127,6 +129,7 @@
                 </select>
             </div>
         </div>
+        </fieldset>
     </form>
 </section>
 
