@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-21
+
+### Added
+
+- Rank cards can be customized: pick a background theme, accent colour, progress bar and
+  name font with `/level card`, which shows a live preview and only keeps the style when you
+  press Save. The same choices are on your profile page in the dashboard. Your style applies on
+  every server that allows it.
+- Server admins can set the server's default rank card style on the dashboard's Leveling page
+  and lock it, so every card uses it and the `/level card` editor is hidden. Custom background
+  images are coming soon.
+- The dashboard's server settings page opens with a setup status: for every feature in use
+  it checks live whether Percy can post in the configured channels and give out the
+  configured roles, names the exact missing permission, and links to the fix.
+- A one-step logging setup on the dashboard's Moderation tab sends the audit, moderation,
+  message and voice logs and alerts to one channel, and can create a private `#percy-logs`
+  channel for them.
+- A change log page on the dashboard lists who changed what on the server and when, for the
+  last 90 days. Only the names of changed fields are kept.
+- The level-up message setting shows a live preview, the placeholders you can click to insert,
+  and a button that sends a test message.
+- Channel and role pickers on the dashboard mark channels Percy can't post in and roles it
+  can't give out, and long lists get a filter box.
+- Role menus, the starboard, tags and your own reminders can now be managed on the
+  dashboard: post and edit role menus, set up the starboard and see the most-starred messages,
+  create tags and edit their content, and cancel reminders from your profile page.
+
+### Changed
+
+- Every confirmation on the dashboard now says what will happen, to what, and whether it can
+  be undone. Kicking or banning five or more members at once asks you to type the number.
+- Level-up messages accept `{user}`, `{user.mention}`, `{user.display_name}`, `{level}` and
+  `{server}`. Anything else in braces is left as typed.
+- Messages Percy sends through webhooks (audit log, alerts) no longer contain Percy's custom
+  emojis, which Discord showed as `:name:` text there.
+
+### Fixed
+
+- Choosing an audit log or alert channel in a combined dashboard save stored the channel but
+  never created the webhook those logs are sent through, so nothing arrived there.
+- The changelog on the website showed only the first line of longer entries and printed
+  `**` around bold words. Entries now appear in full with bold, code and links formatted.
+
+### Security
+
+- Hardened level-up message placeholders: a message can only show the listed member and
+  server details.
+
 ## [2.8.1] - 2026-10-21
 
 ### Fixed
