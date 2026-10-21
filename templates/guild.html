@@ -43,6 +43,44 @@
 </div>
 {% endif %}
 
+{# ─── Setup status: can Percy do what this server configured? ──── #}
+{% match health %}
+{% when Some with (h) %}
+<section class="config-section health-card" aria-labelledby="health-title">
+    <h2 id="health-title">Setup status
+        {% if h.attention > 0 %}<span class="health-count">{{ h.attention }} need{% if h.attention == 1 %}s{% endif %} attention</span>
+        {% else %}<span class="health-count ok">All good</span>{% endif %}
+    </h2>
+    <p class="config-section-description">Checked live against Discord: whether Percy can post in the channels and give out the roles you configured.</p>
+    <ul class="health-list">
+        {% for f in h.features %}{% if f.status != "off" %}
+        <li class="health-item health-{{ f.status }}">
+            <span class="health-dot" aria-hidden="true"></span>
+            <div class="health-body">
+                <span class="health-label">{{ f.label }}</span>
+                <span class="health-state">{% if f.status == "ok" %}Working{% else %}Needs attention{% endif %}</span>
+                {% if !f.problems.is_empty() %}
+                <ul class="health-problems">{% for p in f.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            {% if f.status == "attention" %}<a class="button small" href="{{ self.health_fix_url(f.key) }}">Fix</a>{% endif %}
+        </li>
+        {% endif %}{% endfor %}
+    </ul>
+    <details class="health-off">
+        <summary>Not in use</summary>
+        <ul class="health-list">
+            {% for f in h.features %}{% if f.status == "off" %}
+            <li class="health-item health-off-item"><span class="health-dot" aria-hidden="true"></span>
+                <div class="health-body"><span class="health-label">{{ f.label }}</span><span class="health-state">Off</span></div>
+                <a class="button small outline" href="{{ self.health_fix_url(f.key) }}">Set up</a></li>
+            {% endif %}{% endfor %}
+        </ul>
+    </details>
+</section>
+{% when None %}
+{% endmatch %}
+
 {# ─── Tab Navigation (config sub-tabs) ─────────────────────────── #}
 <nav class="config-tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="general">General</button>
@@ -348,6 +386,34 @@
 {# ═══════════════════════════════════════════════════════════════ #}
 <div class="config-tab-panel" id="tab-moderation" role="tabpanel" hidden>
 
+    {# ─── Quick setup: every log in one channel, in one step ───────── #}
+    <section class="config-section quick-setup" id="quick-setup-logging">
+        <h2>Quick setup: logging</h2>
+        <p class="config-section-description">Send Percy's logs to one channel in one step. You can still point each log somewhere else below afterwards.</p>
+        <fieldset class="quick-setup-step">
+            <legend>1. Which logs?</legend>
+            <label class="quick-check"><input type="checkbox" name="qs_log" value="audit" checked> Audit log <span class="config-description">server changes: roles, channels, bans</span></label>
+            <label class="quick-check"><input type="checkbox" name="qs_log" value="mod" checked> Moderation log <span class="config-description">every case Percy records</span></label>
+            <label class="quick-check"><input type="checkbox" name="qs_log" value="message" checked> Message log <span class="config-description">edited and deleted messages</span></label>
+            <label class="quick-check"><input type="checkbox" name="qs_log" value="voice"> Voice log <span class="config-description">joins, leaves and moves</span></label>
+            <label class="quick-check"><input type="checkbox" name="qs_log" value="alerts" checked> Alerts <span class="config-description">raids, spam and missing permissions</span></label>
+        </fieldset>
+        <fieldset class="quick-setup-step">
+            <legend>2. Where?</legend>
+            <label class="quick-check"><input type="radio" name="qs_where" value="create" checked> Create a private <code>#percy-logs</code> channel <span class="config-description">only admins and Percy can see it</span></label>
+            <label class="quick-check"><input type="radio" name="qs_where" value="existing"> Use an existing channel</label>
+            <select id="qs-channel" class="config-select" data-needs="post" disabled aria-label="Existing log channel">
+                <option value="">Pick a channel…</option>
+                {% for ch in channels %}{% if ch.channel_type == "text" %}
+                <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                {% endif %}{% endfor %}
+            </select>
+        </fieldset>
+        <div class="quick-setup-actions">
+            <button type="button" class="button primary small" id="qs-logging-btn">Set up logging</button>
+        </div>
+    </section>
+
     <section class="config-section">
         <h2>Moderation</h2>
         <p class="config-section-description">Configure moderation channels, roles, and thresholds.</p>
@@ -361,7 +427,7 @@
                             class="gk-required-tag">REQUIRED</span>{% endif %}
                     </label>
                     <span class="config-description">Where mod actions are logged</span>
-                    <select name="audit_log_channel_id" id="audit_log_channel" class="config-select">
+                    <select name="audit_log_channel_id" id="audit_log_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
                         <option value="{{ ch.id }}" {% match guild.audit_log_channel %}{% when Some with (ref) %}{% if
@@ -378,7 +444,7 @@
                         endif %}
                     </label>
                     <span class="config-description">Channel for raid/automod alerts</span>
-                    <select name="alert_channel_id" id="alert_channel" class="config-select">
+                    <select name="alert_channel_id" id="alert_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
                         <option value="{{ ch.id }}" {% match guild.alert_channel %}{% when Some with (ref) %}{% if
@@ -391,7 +457,7 @@
                 <div class="config-field">
                     <label class="config-label" for="mute_role">Mute Role</label>
                     <span class="config-description">Role applied to muted members</span>
-                    <select name="mute_role_id" id="mute_role" class="config-select">
+                    <select name="mute_role_id" id="mute_role" data-needs="assign" class="config-select">
                         <option value="">Not set</option>
                         {% for role in roles %}
                         <option value="{{ role.id }}" {% match guild.mute_role %}{% when Some with (ref) %}{% if
@@ -419,7 +485,7 @@
                 <div class="config-field">
                     <label class="config-label" for="mod_log_channel">Mod Log Channel</label>
                     <span class="config-description">Kicks, bans, mutes and other actions</span>
-                    <select name="mod_log_channel_id" id="mod_log_channel" class="config-select">
+                    <select name="mod_log_channel_id" id="mod_log_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
                         <option value="{{ ch.id }}" {% match guild.mod_log_channel %}{% when Some with (ref) %}{% if
@@ -432,7 +498,7 @@
                 <div class="config-field">
                     <label class="config-label" for="message_log_channel">Message Log Channel</label>
                     <span class="config-description">Deleted and edited messages</span>
-                    <select name="message_log_channel_id" id="message_log_channel" class="config-select">
+                    <select name="message_log_channel_id" id="message_log_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
                         <option value="{{ ch.id }}" {% match guild.message_log_channel %}{% when Some with (ref) %}{% if
@@ -445,7 +511,7 @@
                 <div class="config-field">
                     <label class="config-label" for="voice_log_channel">Voice Log Channel</label>
                     <span class="config-description">Voice join/leave/move events</span>
-                    <select name="voice_log_channel_id" id="voice_log_channel" class="config-select">
+                    <select name="voice_log_channel_id" id="voice_log_channel" data-needs="post" class="config-select">
                         <option value="">Not set</option>
                         {% for ch in channels %}
                         <option value="{{ ch.id }}" {% match guild.voice_log_channel %}{% when Some with (ref) %}{% if
@@ -633,7 +699,7 @@
                             class="gk-required-tag">REQUIRED</span>{% endif %}
                     </label>
                     <span class="config-description">The isolated channel held members are funneled into. Changing this re-deploys the captcha message.</span>
-                    <select name="channel_id" id="gk_channel" class="config-select"
+                    <select name="channel_id" id="gk_channel" data-needs="post" class="config-select"
                             data-initial="{% match gk.channel %}{% when Some with (ref) %}{{ ref.id }}{% when None %}{% endmatch %}">
                         <option value="">Select channel...</option>
                         {% for ch in channels %}
@@ -651,7 +717,7 @@
                             class="gk-required-tag">REQUIRED</span>{% endif %}
                     </label>
                     <span class="config-description">Auto-assigned on join to strip channel visibility until captcha is solved.</span>
-                    <select name="role_id" id="gk_role" class="config-select">
+                    <select name="role_id" id="gk_role" data-needs="assign" class="config-select">
                         <option value="">Select role...</option>
                         {% for role in roles %}
                         <option value="{{ role.id }}" {% match gk.role %}{% when Some with (ref) %}{% if ref.id==
@@ -678,7 +744,7 @@
                 <div class="config-field">
                     <label class="config-label" for="gk_starter_role">Post-Verification Role</label>
                     <span class="config-description">Optional role granted once a member successfully verifies.</span>
-                    <select name="starter_role_id" id="gk_starter_role" class="config-select">
+                    <select name="starter_role_id" id="gk_starter_role" data-needs="assign" class="config-select">
                         <option value="">None</option>
                         {% for role in roles %}
                         <option value="{{ role.id }}" {% match gk.starter_role %}{% when Some with (ref) %}{% if

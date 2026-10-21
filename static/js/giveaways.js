@@ -59,7 +59,7 @@
     document.querySelectorAll('.giveaway-end-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (!confirm(`End "${btn.dataset.title}" now and draw the winners?`)) return;
+            if (!(await PercyConfirm.ask({ title: `End "${btn.dataset.title}" now?`, consequence: "Winners are drawn immediately from everyone who entered so far and announced in the channel.", undo: null, confirmLabel: "End and draw winners" }))) return;
             btn.disabled = true;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(id)}/end`, {
@@ -77,7 +77,7 @@
     document.querySelectorAll('.giveaway-delete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
-            if (!confirm(`Cancel "${btn.dataset.title}"? No winners will be drawn.`)) return;
+            if (!(await PercyConfirm.ask({ title: `Cancel "${btn.dataset.title}"?`, consequence: "The giveaway is removed and no winners are drawn.", undo: null, confirmLabel: "Cancel giveaway", danger: true }))) return;
             btn.disabled = true;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(id)}`, {

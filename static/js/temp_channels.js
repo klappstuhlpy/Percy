@@ -78,7 +78,7 @@
     document.querySelectorAll('.delete-hub-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const channelId = btn.dataset.channelId;
-            if (!confirm('Remove this temp channel hub?')) return;
+            if (!(await PercyConfirm.ask({ title: "Remove this temporary channel hub?", consequence: "Joining the hub no longer creates a channel. Temporary channels already open stay until they empty.", undo: "You can set the hub up again at any time.", confirmLabel: "Remove hub", danger: true }))) return;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(channelId)}`, {
                     method: 'DELETE',

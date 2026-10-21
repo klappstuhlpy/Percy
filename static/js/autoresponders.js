@@ -57,7 +57,7 @@
     document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const trigger = btn.dataset.trigger;
-            if (!confirm(`Delete autoresponder "${trigger}"?`)) return;
+            if (!(await PercyConfirm.ask({ title: `Delete autoresponder "${trigger}"?`, consequence: "Percy stops replying to this trigger right away.", undo: null, confirmLabel: "Delete autoresponder", danger: true }))) return;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(trigger)}`, {
                     method: 'DELETE',

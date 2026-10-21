@@ -29,8 +29,8 @@
     // Vanity delete button
     var deleteBtn = document.getElementById('vanity-delete-btn');
     if (deleteBtn) {
-        deleteBtn.addEventListener('click', function () {
-            if (!confirm('Remove your vanity URL?')) return;
+        deleteBtn.addEventListener('click', async function () {
+            if (!(await PercyConfirm.ask({ title: "Remove your vanity URL?", consequence: "The short link stops working. Anyone can claim the name afterwards.", undo: null, confirmLabel: "Remove URL", danger: true }))) return;
             fetch('/lb/' + GUILD_ID + '/vanity', {
                 method: 'DELETE',
                 headers: { 'Accept': 'application/json' }

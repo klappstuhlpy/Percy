@@ -488,7 +488,7 @@
         }
 
         root.querySelectorAll('.ap-controls .ap-btn, .ap-stop').forEach((btn) => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 const action = btn.dataset.action;
                 if (action === 'toggle') {
                     // Optimistic flip for snappy feel: re-anchor the local clock to
@@ -500,7 +500,7 @@
                     playBtn.innerHTML = paused ? ICON.play : ICON.pause;
                     send(paused ? 'pause' : 'resume');
                 } else if (action === 'stop') {
-                    if (!confirm('Stop playback and disconnect the bot?')) return;
+                    if (!(await PercyConfirm.ask({ title: "Stop the music?", consequence: "Playback stops, the queue is cleared and Percy leaves the voice channel.", undo: null, confirmLabel: "Stop and disconnect", danger: true }))) return;
                     send('stop');
                 } else if (action === 'loop') {
                     const next = (loopMode + 1) % 3; // off → track → queue → off

@@ -68,7 +68,7 @@
             var sel = document.getElementById('lockdown-select');
             var ids = Array.prototype.map.call(sel.selectedOptions, function(o) { return o.value; });
             if (!ids.length) { toast('error', 'Select at least one channel.'); return; }
-            if (!confirm('Lock ' + ids.length + ' channel(s)? @everyone will not be able to send messages.')) return;
+            if (!(await PercyConfirm.ask({ title: `Lock ${ids.length} channel${ids.length === 1 ? "" : "s"}?`, consequence: "@everyone can no longer send messages there.", undo: "Unlock them here at any time; their previous permissions are restored.", confirmLabel: "Lock channels", danger: true }))) return;
             lockBtn.disabled = true;
             try {
                 var data = await postJSON('/dashboard/guild/' + GUILD_ID + '/lockdowns/lock', { channel_ids: ids });
@@ -140,7 +140,7 @@
     }
     if (statusUnsubBtn) {
         statusUnsubBtn.addEventListener('click', async function() {
-            if (!confirm('Unsubscribe this server from the status feed?')) return;
+            if (!(await PercyConfirm.ask({ title: "Unsubscribe from the Discord status feed?", consequence: "Percy stops posting Discord outage updates in this server.", undo: "You can subscribe again at any time.", confirmLabel: "Unsubscribe" }))) return;
             try {
                 var resp = await fetch(statusFeedUrl, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
                 var data = await resp.json();
@@ -391,7 +391,7 @@
 
     if (cbResetBtn) {
         cbResetBtn.addEventListener('click', async function() {
-            if (!confirm('Reset the bot profile to defaults?')) return;
+            if (!(await PercyConfirm.ask({ title: "Reset the custom bot profile?", consequence: "Percy's name, avatar and banner in this server go back to the defaults.", undo: null, confirmLabel: "Reset profile", danger: true }))) return;
             cbResetBtn.disabled = true;
             try {
                 var resp = await fetch('/dashboard/guild/' + GUILD_ID + '/custom-bot/reset', {

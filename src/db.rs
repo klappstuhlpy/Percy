@@ -185,6 +185,93 @@ pub async fn delete_vanity(db: &Database, guild_id: &str) -> rusqlite::Result<()
     .map(|_| ())
 }
 
+/// One row of the per-server change log (see `crate::changes`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Change {
+    pub id: i64,
+    pub guild_id: String,
+    pub actor_id: String,
+    pub actor_name: String,
+    pub surface: String,
+    pub verb: String,
+    /// Comma-joined names of the fields the request carried (never their values).
+    pub fields: String,
+    pub created_at: String,
+}
+
+impl Table for Change {
+    const NAME: &'static str = "dashboard_changes";
+    const COLUMNS: &'static [&'static str] = &[
+        "id",
+        "guild_id",
+        "actor_id",
+        "actor_name",
+        "surface",
+        "verb",
+        "fields",
+        "created_at",
+    ];
+    type Id = i64;
+
+    fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            guild_id: row.get("guild_id")?,
+            actor_id: row.get("actor_id")?,
+            actor_name: row.get("actor_name")?,
+            surface: row.get("surface")?,
+            verb: row.get("verb")?,
+            fields: row.get("fields")?,
+            created_at: row.get("created_at")?,
+        })
+    }
+}
+
+/// A change about to be recorded.
+#[derive(Debug, Clone)]
+pub struct NewChange {
+    pub guild_id: String,
+    pub actor_id: String,
+    pub actor_name: String,
+    pub surface: String,
+    pub verb: String,
+    pub fields: String,
+}
+
+/// Stores a change and prunes every row older than `retention_days` (all guilds) in one
+/// transaction, so the log never outgrows its retention window.
+pub async fn record_change(db: &Database, change: NewChange, retention_days: u32) -> rusqlite::Result<()> {
+    db.call(move |conn| -> rusqlite::Result<()> {
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO dashboard_changes(guild_id, actor_id, actor_name, surface, verb, fields) VALUES (?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                change.guild_id,
+                change.actor_id,
+                change.actor_name,
+                change.surface,
+                change.verb,
+                change.fields
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM dashboard_changes WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)",
+            [format!("-{retention_days} days")],
+        )?;
+        tx.commit()
+    })
+    .await
+}
+
+/// The newest changes for a guild, newest first.
+pub async fn recent_changes(db: &Database, guild_id: &str, limit: u32) -> rusqlite::Result<Vec<Change>> {
+    db.all(
+        "SELECT * FROM dashboard_changes WHERE guild_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        boxed_params!(guild_id.to_owned(), limit),
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +345,31 @@ mod tests {
         let by_guild = vanity_for_guild(&db, "g1").await.unwrap().expect("guild resolves");
         assert_eq!(by_guild.slug, "cool");
         assert!(vanity_by_slug(&db, "missing").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn changes_are_recorded_newest_first_and_pruned_after_retention() {
+        let db = memory_db().await;
+        let change = |surface: &str| NewChange {
+            guild_id: "1".into(),
+            actor_id: "9".into(),
+            actor_name: "mod".into(),
+            surface: surface.into(),
+            verb: "Updated".into(),
+            fields: "enabled".into(),
+        };
+        record_change(&db, change("Leveling config"), 90).await.unwrap();
+        db.execute(
+            "UPDATE dashboard_changes SET created_at = '2000-01-01T00:00:00.000Z' WHERE guild_id = ?",
+            boxed_params!("1".to_owned()),
+        )
+        .await
+        .unwrap();
+        record_change(&db, change("Economy settings"), 90).await.unwrap();
+
+        let rows = recent_changes(&db, "1", 10).await.unwrap();
+        assert_eq!(rows.len(), 1, "the 2000-era row is past retention and pruned");
+        assert_eq!(rows[0].surface, "Economy settings");
+        assert!(recent_changes(&db, "2", 10).await.unwrap().is_empty());
     }
 }

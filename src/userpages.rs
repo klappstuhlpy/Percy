@@ -7,12 +7,12 @@ use crate::{
     errors::percy_message,
     guilds::{user_can_manage, user_is_member},
     session::Session,
-    templates::{AccountTemplate, OverviewTemplate, UserDashboardTemplate, UserLookupTemplate},
+    templates::{AccountTemplate, CardField, OverviewTemplate, UserDashboardTemplate, UserLookupTemplate, CARD_FIELDS},
     view::Viewer,
     AppState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Redirect, Response},
     Json,
@@ -32,10 +32,12 @@ pub async fn guild_user_self(State(app): State<AppState>, session: Session, Path
         return Redirect::to("/dashboard").into_response();
     }
 
-    let (guild, profile, settings) = tokio::join!(
+    let (guild, profile, settings, rank_card, reminders) = tokio::join!(
         percy.get_guild(guild_id),
         percy.get_member_self(guild_id, discord_id),
         percy.get_user_settings(discord_id),
+        percy.get_rank_card(discord_id, guild_id),
+        percy.get_user_reminders(discord_id),
     );
 
     let guild = match guild {
@@ -59,8 +61,74 @@ pub async fn guild_user_self(State(app): State<AppState>, session: Session, Path
         guild_icon: guild.icon_url,
         profile,
         settings,
+        card_fields: rank_card.map(|c| CardField::from_rank_card(&c)).unwrap_or_default(),
+        reminders: reminders.map(|r| r.reminders).unwrap_or_default(),
     }
     .into_response()
+}
+
+/// Only the known card fields with a non-empty value survive; Percy validates the values.
+fn card_style(input: &std::collections::HashMap<String, String>) -> std::collections::HashMap<String, String> {
+    CARD_FIELDS
+        .iter()
+        .filter_map(|(key, _)| {
+            input
+                .get(*key)
+                .filter(|v| !v.is_empty())
+                .map(|v| (key.to_string(), v.clone()))
+        })
+        .collect()
+}
+
+/// `POST /dashboard/guild/:guild_id/me/rank-card` — store the member's card style (JSON map).
+pub async fn guild_user_rank_card_update(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<std::collections::HashMap<String, String>>,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let discord_id = &session.discord_user_id;
+    if !user_is_member(&app, discord_id, guild_id).await {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match percy.put_rank_card(discord_id, &card_style(&body)).await {
+        Ok(()) => {
+            Json(serde_json::json!({"ok": true, "message": "Rank card saved. /level now shows it."})).into_response()
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /dashboard/guild/:guild_id/me/rank-card.png?theme=&accent=&bar=&font=` — the member's
+/// real card rendered in a draft style (nothing is stored). Empty values follow the server.
+pub async fn guild_user_rank_card_preview(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let discord_id = &session.discord_user_id;
+    if !user_is_member(&app, discord_id, guild_id).await {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match percy.preview_rank_card(discord_id, guild_id, &card_style(&query)).await {
+        Ok(png) => (
+            [(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "no-store")],
+            png,
+        )
+            .into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, percy_message(&e)).into_response(),
+    }
 }
 
 /// `PATCH /dashboard/guild/:guild_id/me/settings`
@@ -468,5 +536,43 @@ pub async fn guild_overview_music_control(
     match percy.music_control(guild_id, &body).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": percy_message(&e)})).into_response(),
+    }
+}
+
+#[cfg(test)]
+mod rank_card_tests {
+    use super::card_style;
+    use crate::templates::CardField;
+    use std::collections::HashMap;
+
+    #[test]
+    fn only_known_non_empty_card_fields_are_forwarded() {
+        let input: HashMap<String, String> = [("theme", "ink"), ("accent", ""), ("background_url", "x")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        assert_eq!(
+            card_style(&input),
+            HashMap::from([("theme".to_string(), "ink".to_string())])
+        );
+    }
+
+    #[test]
+    fn a_locked_server_hides_the_member_editor() {
+        let card: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "locked": true,
+            "options": {"theme": [{"value": "panel", "label": "Panel"}]},
+        }))
+        .unwrap();
+        assert!(CardField::from_rank_card(&card).is_empty());
+
+        let open: percy_client::RankCard = serde_json::from_value(serde_json::json!({
+            "guild_default": {"theme": "ink"},
+            "options": {"theme": [{"value": "panel", "label": "Panel"}, {"value": "ink", "label": "Ink"}]},
+        }))
+        .unwrap();
+        let fields = CardField::from_rank_card(&open);
+        assert_eq!(fields[0].default_label, "Server default (Ink)");
+        assert_eq!(fields[0].current, "");
     }
 }

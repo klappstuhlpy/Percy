@@ -68,6 +68,55 @@ if (configForm) {
     });
 }
 
+// ─── Level-up message: placeholders, live preview, test send ─────────────────
+// The preview mirrors Percy's substitution (app/services/level_message.py): only known
+// {placeholders} are replaced, everything else stays exactly as typed.
+(function () {
+    const input = document.getElementById('level_up_message');
+    const preview = document.getElementById('level-up-preview');
+    if (!input || !preview) return;
+    const sample = {
+        'user': 'percyfan', 'user.mention': '@percyfan', 'user.display_name': 'Percy Fan',
+        'level': '5', 'server': preview.dataset.guildName || 'this server',
+    };
+    const render = () => {
+        const text = input.value || input.placeholder;
+        preview.textContent = text.replace(/\{\{|\}\}|\{([\w.]+)\}/g, (m, name) =>
+            m === '{{' ? '{' : m === '}}' ? '}' : (name in sample ? sample[name] : m));
+    };
+    input.addEventListener('input', render);
+    render();
+
+    document.querySelectorAll('.template-var').forEach((btn) => btn.addEventListener('click', () => {
+        const at = input.selectionStart ?? input.value.length;
+        input.setRangeText(btn.dataset.insert, at, input.selectionEnd ?? at, 'end');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+    }));
+
+    const testBtn = document.getElementById('level-up-test-btn');
+    if (testBtn) testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        try {
+            const data = await postJSON('/leveling/test-message', {});
+            showToast(data.ok ? 'success' : 'error', data.ok ? data.message : (data.error || 'Could not send the test.'));
+        } catch { showToast('error', 'Network error.'); }
+        finally { testBtn.disabled = false; }
+    });
+})();
+
+// ─── Rank card style ─────────────────────────────────────────────────────────
+const cardStyleForm = document.getElementById('card-style-form');
+if (cardStyleForm) {
+    PercyUnsaved.watchForm(cardStyleForm, {
+        label: 'Rank Card Style',
+        save: (form) => postJSON('/leveling/config', {
+            card_style: Object.fromEntries([...form.querySelectorAll('select')].map((el) => [el.name, el.value || null])),
+            card_locked: form.querySelector('[name="card_locked"]').checked,
+        }),
+    });
+}
+
 // ─── Level Rewards ───────────────────────────────────────────────────────────
 document.getElementById('add-role-btn').addEventListener('click', async () => {
     const roleId = document.getElementById('add-role-select').value;
@@ -92,7 +141,7 @@ document.querySelectorAll('.lvl-role-remove').forEach(btn => {
 const presetBtn = document.getElementById('preset-roles-btn');
 if (presetBtn) {
     presetBtn.addEventListener('click', async () => {
-        if (!confirm('Are you sure? This creates 12 milestone roles (levels 5–100) with preset names and colors in your server and assigns them as level rewards.')) return;
+        if (!(await PercyConfirm.ask({ title: "Create 12 milestone roles?", consequence: "Percy creates roles for levels 5–100 with preset names and colours and makes them level rewards.", undo: "Delete the roles in Discord and remove the rewards here to undo.", confirmLabel: "Create roles" }))) return;
         presetBtn.disabled = true;
         try {
             const data = await postJSON('/leveling/roles/preset', {});

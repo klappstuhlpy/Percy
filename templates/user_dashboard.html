@@ -134,6 +134,42 @@
             </div>
         </div>
     </section>
+
+    {# ─── Rank card (hidden when the server locks the style) ─────── #}
+    {% if !card_fields.is_empty() %}
+    <section class="config-section dash-rise" style="--i:3">
+        <h2>Rank card</h2>
+        <p class="config-section-description">How your card looks when anyone runs <code>/level</code>. Your choice applies on every server that allows customizing; &ldquo;Server default&rdquo; follows this server's style.</p>
+        <div class="rank-card-editor">
+            <form class="rank-card-controls" id="rank-card-form">
+                {% for field in card_fields %}
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <label for="card-{{ field.key }}">{{ field.label }}</label>
+                    </div>
+                    <select id="card-{{ field.key }}" name="{{ field.key }}" class="config-select">
+                        <option value=""{% if field.current.is_empty() %} selected{% endif %}>{{ field.default_label }}</option>
+                        {% for opt in field.options %}
+                        <option value="{{ opt.value }}"{% if opt.value == field.current %} selected{% endif %}>{{ opt.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <label>Custom background image</label>
+                        <span class="setting-hint">Coming soon &mdash; uploads need image moderation first.</span>
+                    </div>
+                    <span class="badge-soon">Soon</span>
+                </div>
+            </form>
+            <figure class="rank-card-preview">
+                <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
+                <figcaption id="rank-card-status">Your saved card.</figcaption>
+            </figure>
+        </div>
+    </section>
+    {% endif %}
     {% when None %}
     {% endmatch %}
 
@@ -244,6 +280,27 @@
         <div class="avatar-gallery" id="avatar-history"></div>
     </section>
 
+    {# ─── Reminders ──────────────────────────────────────────────── #}
+    <section class="config-section dash-rise" style="--i:8">
+        <h2>Your Reminders <span class="section-count">({{ reminders.len() }})</span></h2>
+        <p class="config-section-description">Reminders you set with <code>/reminder</code>, on every server. Cancel one and Percy won't send it.</p>
+        {% if reminders.is_empty() %}
+        <p class="text-muted">No reminders running.</p>
+        {% else %}
+        <ul class="reminder-list">
+            {% for r in reminders %}
+            <li class="reminder-item">
+                <div class="reminder-body">
+                    <span class="reminder-message">{% if r.message.is_empty() %}<span class="text-muted">(no message)</span>{% else %}{{ r.message }}{% endif %}</span>
+                    <span class="reminder-meta"><time class="js-ts" datetime="{{ r.expires }}">{{ r.expires }}</time>{% match r.repeats %}{% when Some with (rep) %} · repeats {{ rep }}{% when None %}{% endmatch %}{% if r.shared_with > 0 %} · shared with {{ r.shared_with }}{% endif %}</span>
+                </div>
+                <button class="button small reminder-cancel-btn" data-id="{{ r.id }}">Cancel</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+
     {# ─── Your Data ──────────────────────────────────────────────── #}
     <section class="config-section dash-rise" style="--i:9">
         <h2>Your Data</h2>
@@ -261,5 +318,6 @@ const GUILD_ID = '{{ guild_id }}';
 </script>
 <script src="/static/js/common.js"></script>
 <script src="/static/js/unsaved.js"></script>
+<script src="/static/js/confirm.js"></script>
 <script src="/static/js/user_dashboard.js"></script>
 {% endblock %}

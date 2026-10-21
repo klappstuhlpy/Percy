@@ -113,7 +113,7 @@
     document.querySelectorAll('.delete-item-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const name = btn.dataset.name;
-            if (!confirm(`Delete item "${name}"?`)) return;
+            if (!(await PercyConfirm.ask({ title: `Delete shop item "${name}"?`, consequence: "The item leaves the shop. Members who already bought it keep it.", undo: null, confirmLabel: "Delete item", danger: true }))) return;
             try {
                 const r = await fetch(`${base}/items/${encodeURIComponent(name)}`, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
                 const d = await r.json();
@@ -148,7 +148,7 @@
     const cancelBtn = document.getElementById('cancel-lottery-btn');
     if (cancelBtn) {
         cancelBtn.addEventListener('click', async () => {
-            if (!confirm('Cancel the active lottery?')) return;
+            if (!(await PercyConfirm.ask({ title: "Cancel the active lottery?", consequence: "No winner is drawn.", undo: null, confirmLabel: "Cancel lottery", danger: true }))) return;
             try {
                 const r = await fetch(`${base}/lottery`, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
                 const d = await r.json();

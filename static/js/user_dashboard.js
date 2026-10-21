@@ -27,6 +27,67 @@
         });
     }
 
+    // -- Rank card ---------------------------------------------------------------
+    // The preview is the member's real card re-rendered by Percy for the draft; only the
+    // unsaved banner's Save stores it.
+    const cardForm = document.getElementById('rank-card-form');
+    const cardImg = document.getElementById('rank-card-img');
+    const cardStatus = document.getElementById('rank-card-status');
+
+    if (cardForm && cardImg) {
+        const cardStyle = () => Object.fromEntries(
+            [...cardForm.querySelectorAll('select')].map((el) => [el.name, el.value]));
+        let saved = JSON.stringify(cardStyle());
+        let timer = null;
+        const preview = () => {
+            const note = JSON.stringify(cardStyle()) === saved ? 'Your saved card.' : 'Preview only — save to keep it.';
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                cardImg.src = `/dashboard/guild/${GUILD_ID}/me/rank-card.png?${new URLSearchParams(cardStyle())}`;
+                if (cardStatus) cardStatus.textContent = note;
+            }, 600);
+        };
+        // Fires on edits and on the banner's Discard (which restores the form), so both re-render.
+        cardForm.addEventListener('change', preview);
+        cardImg.addEventListener('error', () => {
+            if (cardStatus) cardStatus.textContent = 'The preview could not be rendered right now.';
+        });
+
+        PercyUnsaved.watchForm(cardForm, {
+            label: 'Rank card',
+            save: async () => {
+                const res = await fetch(`/dashboard/guild/${GUILD_ID}/me/rank-card`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(cardStyle()),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    saved = JSON.stringify(cardStyle());
+                    if (cardStatus) cardStatus.textContent = 'Your saved card.';
+                }
+                return data;
+            },
+        });
+    }
+
+    // -- Reminders -----------------------------------------------------------------
+    document.querySelectorAll('.reminder-cancel-btn').forEach((btn) => btn.addEventListener('click', async () => {
+        const item = btn.closest('.reminder-item');
+        const text = item.querySelector('.reminder-message').textContent.trim();
+        if (!(await PercyConfirm.ask({
+            title: 'Cancel this reminder?',
+            consequence: `Percy won't remind you about "${text}"${item.querySelector('.reminder-meta').textContent.includes('repeats') ? ', and it stops repeating' : ''}.`,
+            undo: null,
+            confirmLabel: 'Cancel reminder',
+        }))) return;
+        const res = await fetch(`/dashboard/guild/${GUILD_ID}/me/reminders/${btn.dataset.id}/delete`, {
+            method: 'POST', headers: { 'Accept': 'application/json' },
+        }).then((r) => r.json()).catch(() => ({ ok: false, error: 'Network error.' }));
+        if (res.ok) { item.remove(); showToast('success', 'Reminder cancelled.'); }
+        else showToast('error', res.error || 'Could not cancel the reminder.');
+    }));
+
     // -- History (names, avatars, presence) ------------------------------------
     const esc = (s) => String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

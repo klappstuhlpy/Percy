@@ -181,7 +181,7 @@
     // ── Delete ───────────────────────────────────────────────────────────────
     document.querySelectorAll('.gallery-delete').forEach((btn) => {
         btn.addEventListener('click', async () => {
-            if (!confirm('Delete this image from the gallery?')) return;
+            if (!(await PercyConfirm.ask({ title: "Delete this image?", consequence: "It is removed from the gallery. Polls already using it as a banner lose the image.", undo: null, confirmLabel: "Delete image", danger: true }))) return;
             const id = btn.dataset.id;
             btn.disabled = true;
             try {

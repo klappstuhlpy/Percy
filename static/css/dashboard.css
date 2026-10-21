@@ -3243,3 +3243,53 @@ a.user-tag-chip:hover { border-color: var(--branding); }
     color: var(--error-text);
     border-color: var(--error-border);
 }
+
+/* ─── Setup status (guild config page) ───────────────────────────── */
+.health-card h2 { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.health-count { font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    color: var(--warning-text, #fbbf24); background: var(--warning-bg, rgba(251,191,36,0.1)); }
+.health-count.ok { color: var(--success-text, #4ade80); background: var(--success-bg, rgba(74,222,128,0.1)); }
+.health-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.health-item { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.65rem 0.8rem;
+    border: 1px solid var(--box-border); border-radius: 8px; }
+.health-item .button { margin-left: auto; flex-shrink: 0; }
+.health-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-top: 0.4rem; flex-shrink: 0; background: var(--text-muted); }
+.health-ok .health-dot { background: var(--success-text, #4ade80); }
+.health-attention { border-color: var(--warning-border, rgba(251,191,36,0.35)); }
+.health-attention .health-dot { background: var(--warning-text, #fbbf24); }
+.health-body { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.health-label { font-weight: 600; }
+.health-state { font-size: 0.78rem; color: var(--text-muted); }
+.health-problems { margin: 0.35rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; overflow-wrap: anywhere; }
+.health-off { margin-top: 0.75rem; }
+.health-off summary { cursor: pointer; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+/* ─── Message templates: placeholder chips, preview, test send ─────── */
+.template-vars { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+.template-var { font: inherit; font-family: var(--font-mono, monospace); font-size: 0.75rem; padding: 0.15em 0.55em;
+    border-radius: 999px; border: 1px solid var(--box-border); background: var(--box-shade); color: var(--foreground); cursor: pointer; }
+.template-var:hover, .template-var:focus-visible { border-color: var(--branding); }
+.template-preview { margin-top: 0.6rem; padding: 0.5rem 0.75rem; border-radius: 6px; background: var(--box-shade);
+    font-size: 0.9rem; overflow-wrap: anywhere; display: flex; gap: 0.6rem; align-items: baseline; }
+.template-preview-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); flex-shrink: 0; }
+.template-actions { margin-top: 0.6rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+.picker-warning { margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--warning-text, #fbbf24); }
+.picker-filter { margin-bottom: 0.35rem; }
+
+/* ─── Quick setup panels ─────────────────────────────────────────── */
+.quick-setup { border-color: var(--branding-dim, rgba(255,123,114,0.3)); }
+.quick-setup-step { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.4rem; }
+.quick-setup-step legend { font-weight: 600; margin-bottom: 0.4rem; }
+.quick-check { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; }
+.quick-check .config-description { font-size: 0.78rem; }
+.quick-setup-step select { max-width: 360px; margin-left: 1.6rem; }
+.quick-setup-actions { display: flex; gap: 0.75rem; }
+
+/* ─── Role menus ─────────────────────────────────────────────────── */
+.rm-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.rm-id { font-size: 0.8rem; font-weight: 400; }
+.rm-add { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
+.rm-add .config-select, .rm-add .config-input { flex: 1 1 160px; min-width: 0; }
+.rm-inline-warn { display: block; }
+.role-dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.4rem; vertical-align: middle; }

@@ -112,7 +112,7 @@
 
     document.querySelectorAll('.wh-delete').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!confirm('Delete this webhook and its delivery log?')) return;
+            if (!(await PercyConfirm.ask({ title: "Delete this webhook?", consequence: "Percy stops sending events to its URL and its delivery log is deleted.", undo: null, confirmLabel: "Delete webhook", danger: true }))) return;
             try {
                 const resp = await fetch(`${base}/${btn.dataset.id}`, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
                 const data = await resp.json();

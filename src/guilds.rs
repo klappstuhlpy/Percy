@@ -77,7 +77,7 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
 
     // Fan out the independent reads; a single degraded sub-resource doesn't abort
     // the others (join!, not try_join!) — each is handled below.
-    let (guild, channels, roles, sentinel, lockdowns, status_feed, bot_profile) = tokio::join!(
+    let (guild, channels, roles, sentinel, lockdowns, status_feed, bot_profile, health) = tokio::join!(
         percy.get_guild(guild_id),
         percy.get_guild_channels(guild_id),
         percy.get_guild_roles(guild_id),
@@ -85,6 +85,7 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
         percy.get_lockdowns(guild_id),
         percy.get_status_feed(guild_id),
         percy.get_custom_bot(guild_id),
+        percy.get_guild_health(guild_id),
     );
 
     let guild = match guild {
@@ -124,9 +125,32 @@ pub async fn guild_detail(State(app): State<AppState>, session: Session, Path(gu
             channel: None,
         }),
         bot_profile: bot_profile.unwrap_or_default(),
+        // A failed health check hides the card rather than claiming everything is fine.
+        health: health.ok(),
         degraded,
     }
     .into_response()
+}
+
+/// `GET /dashboard/guild/{id}/pickers.json` — which channels Percy can post in and which roles
+/// it can give out, for `static/js/pickers.js` to annotate the channel/role selects with.
+pub async fn guild_pickers(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    if let Err(response) = gate_and_load_guild(&app, &session, guild_id).await {
+        return response;
+    }
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+    let (channels, roles) = tokio::join!(percy.get_guild_channels(guild_id), percy.get_guild_roles(guild_id));
+    let channels: serde_json::Map<String, serde_json::Value> = channels
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| (c.id, serde_json::json!({ "can_post": c.can_post })))
+        .collect();
+    let roles: serde_json::Map<String, serde_json::Value> = roles
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| (r.id, serde_json::json!({ "assignable": r.assignable })))
+        .collect();
+    axum::Json(serde_json::json!({ "channels": channels, "roles": roles })).into_response()
 }
 
 /// `GET /dashboard/guild/{id}/members` — the members tab (initial page; live

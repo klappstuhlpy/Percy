@@ -111,7 +111,7 @@ document.getElementById('poll-save-btn').addEventListener('click', async () => {
 });
 
 async function endPoll(pollId, btn) {
-    if (!confirm('Are you sure you want to end this poll? This cannot be undone.')) return;
+    if (!(await PercyConfirm.ask({ title: "End this poll now?", consequence: "Voting closes and the results are posted.", undo: null, confirmLabel: "End poll" }))) return;
 
     btn.disabled = true;
     try {

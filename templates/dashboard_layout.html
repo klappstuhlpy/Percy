@@ -40,6 +40,7 @@
                 <a href="/dashboard/guild/{{ guild_id }}/stats" class="dash-nav-link{% if nav_active == "stats" %} active{% endif %}">Statistics</a>
                 <a href="/dashboard/guild/{{ guild_id }}/analytics" class="dash-nav-link{% if nav_active == "analytics" %} active{% endif %}">Analytics</a>
                 <a href="/dashboard/guild/{{ guild_id }}/commands" class="dash-nav-link{% if nav_active == "commands" %} active{% endif %}">Commands</a>
+                <a href="/dashboard/guild/{{ guild_id }}/changes" class="dash-nav-link{% if nav_active == "changes" %} active{% endif %}">Change Log</a>
             </div>
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Features</span>
@@ -56,6 +57,8 @@
                 <a href="/dashboard/guild/{{ guild_id }}/gallery" class="dash-nav-link{% if nav_active == "gallery" %} active{% endif %}">Image Gallery</a>
                 <a href="/dashboard/guild/{{ guild_id }}/giveaways" class="dash-nav-link{% if nav_active == "giveaways" %} active{% endif %}">Giveaways</a>
                 <a href="/dashboard/guild/{{ guild_id }}/tags" class="dash-nav-link{% if nav_active == "tags" %} active{% endif %}">Tags</a>
+                <a href="/dashboard/guild/{{ guild_id }}/role-menus" class="dash-nav-link{% if nav_active == "role-menus" %} active{% endif %}">Role Menus</a>
+                <a href="/dashboard/guild/{{ guild_id }}/starboard" class="dash-nav-link{% if nav_active == "starboard" %} active{% endif %}">Starboard</a>
                 <a href="/dashboard/guild/{{ guild_id }}/highlights" class="dash-nav-link{% if nav_active == "highlights" %} active{% endif %}">Highlights</a>
                 <a href="/dashboard/guild/{{ guild_id }}/emoji-stats" class="dash-nav-link{% if nav_active == "emoji-stats" %} active{% endif %}">Emoji Stats</a>
             </div>
@@ -88,6 +91,8 @@
 
 {% block body_end %}
 <script src="/static/js/common.js"></script>
+<script src="/static/js/confirm.js"></script>
+<script src="/static/js/pickers.js" defer></script>
 <script src="/static/js/table-sort.js"></script>
 <script src="/static/js/unsaved.js"></script>
 {% block page_js %}{% endblock %}

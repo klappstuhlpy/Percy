@@ -6,7 +6,8 @@
 <div class="tags-toolbar-actions">
     <button class="button small" id="tags-export-all-btn">Export All</button>
     <button class="button small" id="tags-export-selected-btn" disabled>Export Selected</button>
-    <button class="button primary small" id="tags-import-btn">Import CSV</button>
+    <button class="button small" id="tags-import-btn">Import CSV</button>
+    <button class="button primary small" id="tag-new-btn">New tag</button>
     <input type="file" id="tags-import-input" accept=".csv,text/csv" hidden>
 </div>
 {% endblock %}
@@ -75,6 +76,7 @@
                         <td class="member-joined" data-label="Created"><time class="js-ts">{{ tag.created_at.as_deref().unwrap_or("—") }}</time></td>
                         <td class="nowrap">
                             <button class="button small tag-view-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">View</button>
+                            <button class="button small tag-edit-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">Edit</button>
                             <button class="button small danger tag-delete-btn inline-block" data-id="{{ tag.id }}" data-name="{{ tag.name }}">Delete</button>
                         </td>
                     </tr>
@@ -132,6 +134,24 @@
         <div id="import-result-body"></div>
         <div class="modal-actions">
             <button type="button" class="button primary small" id="import-modal-close">Done</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="tag-edit-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3 id="tag-edit-title">New tag</h3>
+        <div class="modal-form">
+            <label class="config-label" for="tag-edit-name">Name</label>
+            <input type="text" id="tag-edit-name" class="config-input" maxlength="100" placeholder="rules" autocomplete="off">
+            <span class="config-description" id="tag-edit-name-hint">Members recall it with <code>/tag &lt;name&gt;</code>. You will be its owner.</span>
+            <label class="config-label" for="tag-edit-content">Content</label>
+            <textarea id="tag-edit-content" class="config-input resize-v" rows="6" maxlength="2000" placeholder="What Percy posts when someone uses the tag. Markdown works."></textarea>
+            <span class="config-description"><span id="tag-edit-count">0</span> / 2000</span>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="tag-edit-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="tag-edit-save">Create tag</button>
         </div>
     </div>
 </div>

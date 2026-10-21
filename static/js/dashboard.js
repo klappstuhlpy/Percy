@@ -18,9 +18,46 @@
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
-    const hash = location.hash.slice(1);
-    if (hash && document.getElementById('tab-' + hash)) {
-        switchTab(hash);
+    // On load and when an in-page link (e.g. a Setup status "Fix") changes the hash.
+    function syncTabWithHash(scroll) {
+        const hash = location.hash.slice(1);
+        if (hash && document.getElementById('tab-' + hash)) {
+            switchTab(hash);
+            if (scroll === true) document.querySelector('.config-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+    syncTabWithHash();
+    window.addEventListener('hashchange', () => syncTabWithHash(true));
+
+    // -- Quick setup: logging (an action, not a tracked edit: it saves on its own) --------
+    const qs = document.getElementById('quick-setup-logging');
+    if (qs) {
+        const select = document.getElementById('qs-channel');
+        qs.querySelectorAll('[name="qs_where"]').forEach(r => r.addEventListener('change', () => {
+            select.disabled = qs.querySelector('[name="qs_where"]:checked').value !== 'existing';
+        }));
+        document.getElementById('qs-logging-btn').addEventListener('click', async () => {
+            const logs = [...qs.querySelectorAll('[name="qs_log"]:checked')].map(c => c.value);
+            const create = qs.querySelector('[name="qs_where"]:checked').value === 'create';
+            if (!logs.length) { showToast('error', 'Pick at least one log.'); return; }
+            if (!create && !select.value) { showToast('error', 'Pick a channel, or let Percy create one.'); return; }
+            const names = [...qs.querySelectorAll('[name="qs_log"]:checked')]
+                .map(c => c.parentElement.firstChild.nextSibling.textContent.trim()).join(', ');
+            const where = create ? 'a new private #percy-logs channel' : select.selectedOptions[0].textContent.trim();
+            if (!(await PercyConfirm.ask({
+                title: 'Set up logging?',
+                consequence: `${names} will go to ${where}. Any channel these logs used before is replaced.`,
+                undo: 'Pick other channels below at any time.',
+                confirmLabel: 'Set up logging',
+            }))) return;
+            const res = await fetch(`/dashboard/guild/${window.PERCY_DASH.guildId}/setup/logging`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ channel_id: create ? null : select.value, logs }),
+            }).then(r => r.json()).catch(() => ({ ok: false, error: 'Network error.' }));
+            showToast(res.ok ? 'success' : 'error', res.ok ? res.message : (res.error || 'Setup failed.'));
+            if (res.ok) setTimeout(() => location.reload(), 900);
+        });
     }
 
     document.querySelectorAll('.gk-setup-link').forEach(link => {

@@ -24,11 +24,7 @@
     const deleteBtn = document.getElementById('delete-data-btn');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', async function () {
-            const ok = window.confirm(
-                'Permanently delete your stored presence, avatar and name/nickname history across ALL servers?\n\n' +
-                'This cannot be undone.'
-            );
-            if (!ok) return;
+            if (!(await PercyConfirm.ask({ title: "Delete your tracked history?", consequence: "Your stored presence, avatars and name/nickname history are deleted on every server Percy is in.", undo: null, confirmLabel: "Delete my history", danger: true }))) return;
 
             deleteBtn.disabled = true;
             const original = deleteBtn.textContent;

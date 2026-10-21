@@ -38,6 +38,16 @@
         ban:      { label: 'Ban',      verb: 'ban', danger: true, purgeDays: true, removes: true },
     };
 
+    // How each bulk action is walked back, for the confirm dialog (none = cannot be undone).
+    const BULK_UNDO = {
+        warn: "Delete the cases to remove the warnings.",
+        timeout: "Remove the timeout at any time.",
+        mute: "Unmute them at any time.",
+        unmute: "Mute them again at any time.",
+        untimeout: "Time them out again at any time.",
+        ban: "Unban them at any time; they have to rejoin themselves.",
+    };
+
     // The order the row menu offers them in: reversible first, terminal last.
     const MENU = ['warn', 'timeout', 'untimeout', 'mute', 'unmute', 'purge', 'kick', 'softban', 'ban'];
 
@@ -307,7 +317,17 @@
         if (!userIds.length) return;
 
         const action = ACTIONS[name];
-        if (!confirm(`${action.label} ${userIds.length} member(s)?`)) return;
+        const n = userIds.length;
+        const who = `${n} member${n === 1 ? "" : "s"}`;
+        if (!(await PercyConfirm.ask({
+            title: `${action.label} ${who}?`,
+            consequence: `Percy will ${action.verb} ${who}${action.removes ? " and they leave the server" : ""}. Each gets a case in the modlog.`,
+            undo: BULK_UNDO[name] || null,
+            confirmLabel: `${action.label} ${who}`,
+            danger: !!action.danger,
+            // Removing many people at once is the one mis-click that cannot be walked back.
+            typeToConfirm: action.removes && n >= 5 ? String(n) : null,
+        }))) return;
 
         const body = { user_ids: userIds, action: name };
         if (action.duration) {

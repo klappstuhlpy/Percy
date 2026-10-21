@@ -11,6 +11,7 @@
 use crate::view::Viewer;
 use askama::Template;
 use percy_client::*;
+use std::collections::HashMap;
 
 #[allow(dead_code)]
 #[derive(Template)]
@@ -54,6 +55,8 @@ pub(crate) struct GuildTemplate {
     pub(crate) lockdowns: LockdownsResponse,
     pub(crate) status_feed: StatusFeedInfo,
     pub(crate) bot_profile: CustomBotProfile,
+    /// Per-feature setup status; `None` when Percy could not be asked (the card is hidden).
+    pub(crate) health: Option<percy_client::GuildHealth>,
     /// True when the guild loaded but a sub-resource (roles/channels) failed to
     /// fetch — the page renders, but with empty pickers, so saving could clobber
     /// config. Drives a warning banner instead of a silently hollow page.
@@ -154,6 +157,70 @@ pub(crate) struct UserDashboardTemplate {
     pub(crate) guild_icon: Option<String>,
     pub(crate) profile: MemberSelf,
     pub(crate) settings: UserSettings,
+    /// The rank card pickers; empty when the server locks the style (the section is hidden).
+    pub(crate) card_fields: Vec<CardField>,
+    /// The member's running reminders (everywhere, not just this server).
+    pub(crate) reminders: Vec<percy_client::Reminder>,
+}
+
+/// One rank card picker: its stored choice (`""` = follow the server) and the presets.
+pub(crate) struct CardField {
+    pub(crate) key: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) current: String,
+    /// Text of the empty option, e.g. "Server default (Ink)".
+    pub(crate) default_label: String,
+    pub(crate) options: Vec<percy_client::CardOption>,
+}
+
+pub(crate) const CARD_FIELDS: [(&str, &str); 4] = [
+    ("theme", "Background theme"),
+    ("accent", "Accent colour"),
+    ("bar", "Progress bar"),
+    ("font", "Name font"),
+];
+
+impl CardField {
+    /// The pickers for a member's card, or none when the server has locked the style.
+    pub(crate) fn from_rank_card(card: &percy_client::RankCard) -> Vec<CardField> {
+        if card.locked {
+            return Vec::new();
+        }
+        Self::build(&card.style, &card.guild_default, &card.options, "Server default")
+    }
+
+    /// The pickers for a server's default card style (empty choice = built-in look).
+    pub(crate) fn for_server(config: &percy_client::LevelingConfig) -> Vec<CardField> {
+        Self::build(&config.card_style, &HashMap::new(), &config.card_options, "Built-in")
+    }
+
+    fn build(
+        style: &HashMap<String, String>,
+        fallback: &HashMap<String, String>,
+        options: &HashMap<String, Vec<percy_client::CardOption>>,
+        default_word: &'static str,
+    ) -> Vec<CardField> {
+        CARD_FIELDS
+            .iter()
+            .map(|(key, label)| {
+                let options = options.get(*key).cloned().unwrap_or_default();
+                let fallback = fallback.get(*key).cloned().unwrap_or_default();
+                let fallback_label = options
+                    .iter()
+                    .find(|o| o.value == fallback)
+                    .or_else(|| options.first())
+                    .map(|o| o.label.clone())
+                    .unwrap_or_default();
+                CardField {
+                    key,
+                    label,
+                    current: style.get(*key).cloned().unwrap_or_default(),
+                    default_label: format!("{default_word} ({fallback_label})"),
+                    options,
+                }
+            })
+            .collect()
+    }
 }
 
 #[allow(dead_code)]
@@ -191,6 +258,7 @@ pub(crate) struct LevelingTemplate {
     pub(crate) nav_active: &'static str,
     pub(crate) page_title: &'static str,
     pub(crate) config: LevelingConfig,
+    pub(crate) card_fields: Vec<CardField>,
     pub(crate) leaderboard: LeaderboardResponse,
     pub(crate) roles: Vec<Role>,
     pub(crate) text_channels: Vec<Channel>,
@@ -1358,4 +1426,60 @@ pub(crate) struct ComicDetailTemplate {
     /// Everything tagged with that series, on `/news`.
     pub(crate) related_news_href: String,
     pub(crate) comic_copyright: String,
+}
+
+impl GuildTemplate {
+    /// Where a health item is fixed: a tab on this page or the feature's own page.
+    pub(crate) fn health_fix_url(&self, key: &str) -> String {
+        let id = self.guild_id;
+        match key {
+            "leveling" => format!("/dashboard/guild/{id}/leveling"),
+            "music_panel" => format!("/dashboard/guild/{id}/music"),
+            "polls" => format!("/dashboard/guild/{id}/polls"),
+            "sentinel" => format!("/dashboard/guild/{id}#sentinel"),
+            _ => format!("/dashboard/guild/{id}#moderation"),
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "role_menus.html")]
+pub(crate) struct RoleMenusTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) data: percy_client::RoleMenusResponse,
+    pub(crate) channels: Vec<Channel>,
+    pub(crate) roles: Vec<Role>,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "starboard.html")]
+pub(crate) struct StarboardTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) starboard: percy_client::StarboardInfo,
+    pub(crate) selected_channel: String,
+    pub(crate) ignored: Vec<String>,
+    pub(crate) channels: Vec<Channel>,
+}
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "changes.html")]
+pub(crate) struct ChangesTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) changes: Vec<crate::db::Change>,
+    pub(crate) retention_days: u32,
 }

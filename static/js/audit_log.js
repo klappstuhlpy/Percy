@@ -59,7 +59,7 @@
     };
 
     window.closeCase = async function(idx) {
-        if (!confirm(`Close (delete) case #${idx}? This removes the case and its modlog post permanently.`)) return;
+        if (!(await PercyConfirm.ask({ title: `Delete case #${idx}?`, consequence: "The case and its post in the modlog channel are removed. The case number is never reused.", undo: null, confirmLabel: "Delete case", danger: true }))) return;
         try {
             const resp = await fetch(`/dashboard/guild/${GUILD_ID}/cases/${idx}`, { method: 'DELETE' });
             const data = await resp.json();

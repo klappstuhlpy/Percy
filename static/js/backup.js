@@ -71,7 +71,7 @@
 
     applyBtn.addEventListener('click', async () => {
         if (!previewedData) { showToast('error', 'Preview first.'); return; }
-        if (!confirm('Restore this backup into the current server? Existing tags/triggers are skipped, not overwritten.')) return;
+        if (!(await PercyConfirm.ask({ title: "Restore this backup into the server?", consequence: "Settings from the backup are added. Existing tags and triggers are kept and skipped, never overwritten.", undo: "Added items can be removed one by one afterwards.", confirmLabel: "Restore backup" }))) return;
         resultBox.innerHTML = '<p class="text-muted">Restoring…</p>';
         try {
             const res = await doImport(previewedData, false);
@@ -119,7 +119,7 @@
                 const preview = await applyTemplate(slug, true);
                 if (preview.ok === false || preview.error) { showToast('error', preview.error || 'Template not found.'); return; }
                 const summary = Object.entries(preview.plan || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || 'nothing';
-                if (!confirm(`Apply template "${slug}" to this server?\n\nWould add — ${summary}\n(existing tags/triggers are skipped)`)) return;
+                if (!(await PercyConfirm.ask({ title: `Apply template "${slug}"?`, consequence: `This adds: ${summary}. Existing tags and triggers are kept and skipped.`, undo: "Added items can be removed one by one afterwards.", confirmLabel: "Apply template" }))) return;
                 const res = await applyTemplate(slug, false);
                 if (res.ok === false || res.error) { showToast('error', res.error || 'Failed to apply.'); return; }
                 showToast('success', 'Template applied.');
@@ -131,7 +131,7 @@
     document.querySelectorAll('.tpl-delete').forEach(btn => {
         btn.addEventListener('click', async () => {
             const slug = btn.dataset.slug;
-            if (!confirm(`Delete template "${slug}"?`)) return;
+            if (!(await PercyConfirm.ask({ title: `Delete template "${slug}"?`, consequence: "Nobody can apply this template any more. Servers that already applied it keep their settings.", undo: null, confirmLabel: "Delete template", danger: true }))) return;
             try {
                 const resp = await fetch(`${base}/templates/${encodeURIComponent(slug)}`, {
                     method: 'DELETE', headers: { 'Accept': 'application/json' },

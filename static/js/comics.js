@@ -118,7 +118,7 @@
     document.querySelectorAll('.delete-feed-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const brand = btn.dataset.brand;
-            if (!confirm(`Remove "${brand}" comic feed?`)) return;
+            if (!(await PercyConfirm.ask({ title: `Remove the ${brand} comic feed?`, consequence: "Percy stops posting new releases for this brand. Earlier posts stay.", undo: "You can add the feed again at any time.", confirmLabel: "Remove feed", danger: true }))) return;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(brand)}`, {
                     method: 'DELETE',

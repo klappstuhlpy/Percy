@@ -445,6 +445,66 @@ pub async fn guild_leveling_config_update(
     }
 }
 
+/// `POST /dashboard/guild/:guild_id/leveling/test-message` — post the level-up message once,
+/// for the signed-in member, so an admin sees exactly what members will get.
+pub async fn guild_leveling_test_message(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"ok": false, "error": "Access denied."})),
+        )
+            .into_response();
+    }
+    match percy.send_level_up_test(guild_id, &session.discord_user_id).await {
+        Ok(result) => Json(serde_json::json!({"ok": true, "message": result.message})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /dashboard/guild/:guild_id/setup/logging` — the Moderation tab's one-step logging setup.
+/// Body: `{ "channel_id": "<id>" | null, "logs": ["audit", "mod", ...] }`.
+pub async fn guild_setup_logging(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let Some(percy) = &app.percy else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if !user_can_manage(&app, &session.discord_user_id, guild_id).await {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"ok": false, "error": "Access denied."})),
+        )
+            .into_response();
+    }
+    let channel_id = body["channel_id"].as_str().and_then(|s| s.parse::<u64>().ok());
+    let logs: Vec<String> = body["logs"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+        .unwrap_or_default();
+    match percy.setup_logging(guild_id, channel_id, &logs).await {
+        Ok(result) => Json(serde_json::json!({"ok": true, "message": result.message})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
 /// `POST /dashboard/guild/:guild_id/leveling/roles`
 pub async fn guild_leveling_roles(
     State(app): State<AppState>,

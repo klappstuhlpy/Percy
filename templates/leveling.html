@@ -93,7 +93,7 @@
                 <div class="config-field" id="lvl-channel-picker-field" hidden>
                     <label class="config-label" for="lvl-channel-picker">Announcement Channel</label>
                     <span class="config-description">Channel that receives level-up messages</span>
-                    <select id="lvl-channel-picker" name="level_up_channel_id" class="config-input">
+                    <select id="lvl-channel-picker" data-needs="post" name="level_up_channel_id" class="config-input">
                         {% for ch in text_channels %}
                         <option value="{{ ch.id }}">#{{ ch.name }}</option>
                         {% endfor %}
@@ -101,8 +101,21 @@
                 </div>
                 <div class="config-field grid-col-full">
                     <label class="config-label" for="level_up_message">Level-Up Message</label>
-                    <span class="config-description">Template shown on level up. Use {user} and {level}.</span>
-                    <input type="text" name="level_up_message" id="level_up_message" class="config-input" placeholder="Congrats {user}, you reached level {level}!" value="{{ config.level_up_message.as_deref().unwrap_or("") }}">
+                    <span class="config-description">What Percy posts when someone levels up. Click a placeholder to insert it.</span>
+                    <input type="text" name="level_up_message" id="level_up_message" class="config-input" placeholder="Congrats {user.mention}, you reached level {level}!" value="{{ config.level_up_message.as_deref().unwrap_or("") }}">
+                    <div class="template-vars" role="group" aria-label="Placeholders">
+                        {% for v in config.level_up_variables %}
+                        <button type="button" class="template-var" data-insert="{{ "{" }}{{ v.name }}{{ "}" }}" title="{{ v.description }}">{{ "{" }}{{ v.name }}{{ "}" }}</button>
+                        {% endfor %}
+                    </div>
+                    <div class="template-preview">
+                        <span class="template-preview-label">Preview</span>
+                        <span id="level-up-preview" data-guild-name="{{ guild_name }}">&mdash;</span>
+                    </div>
+                    <div class="template-actions">
+                        <button type="button" class="button small" id="level-up-test-btn">Send test message</button>
+                        <span class="config-description">Sends the saved message once to the level-up channel, or to your DMs if Percy replies where members talk.</span>
+                    </div>
                 </div>
             </div>
         </form>
@@ -131,6 +144,35 @@
             <span class="tile-sub">Keep lower-level roles</span>
         </div>
     </div>
+
+    {# ─── Rank card style ─────────────────────────────────────────── #}
+    <section class="config-section">
+        <h2>Rank Card Style</h2>
+        <p class="config-section-description">The look of <code>/level</code> cards on this server. Members can pick their own style with <code>/level card</code> or on their profile page, unless you lock it below.</p>
+        <form id="card-style-form">
+            <div class="config-grid">
+                {% for field in card_fields %}
+                <div class="config-field">
+                    <label class="config-label" for="card-{{ field.key }}">{{ field.label }}</label>
+                    <select id="card-{{ field.key }}" name="{{ field.key }}" class="config-select">
+                        <option value=""{% if field.current.is_empty() %} selected{% endif %}>{{ field.default_label }}</option>
+                        {% for opt in field.options %}
+                        <option value="{{ opt.value }}"{% if opt.value == field.current %} selected{% endif %}>{{ opt.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+                <label class="config-toggle">
+                    <div>
+                        <span class="config-label">Lock style for everyone</span>
+                        <span class="config-description">Every card uses the style above; members' own choices are ignored and the <code>/level card</code> editor is hidden</span>
+                    </div>
+                    <input type="checkbox" name="card_locked" {% if config.card_locked %}checked{% endif %}>
+                </label>
+            </div>
+            <p class="config-description">Custom background images are coming soon, once uploads can be moderated.</p>
+        </form>
+    </section>
 
     {# ─── Level Rewards ────────────────────────────────────────────── #}
     <section class="config-section">

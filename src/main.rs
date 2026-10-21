@@ -29,6 +29,8 @@ use crate::config::Config;
 
 mod actions;
 mod auth;
+mod changes;
+mod community;
 mod comics;
 mod config;
 mod crud;
@@ -357,6 +359,10 @@ fn build_router(state: AppState) -> Router {
             post(actions::guild_leveling_config_update),
         )
         .route(
+            "/dashboard/guild/:guild_id/leveling/test-message",
+            post(actions::guild_leveling_test_message),
+        )
+        .route(
             "/dashboard/guild/:guild_id/leveling/roles",
             post(actions::guild_leveling_roles),
         )
@@ -449,11 +455,52 @@ fn build_router(state: AppState) -> Router {
             "/dashboard/guild/:guild_id/custom-bot/reset",
             post(moderation::guild_custom_bot_reset),
         )
+        .route("/dashboard/guild/:guild_id/changes", get(changes::guild_changes))
+        .route(
+            "/dashboard/guild/:guild_id/role-menus",
+            get(community::guild_role_menus).post(community::guild_role_menu_create),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/role-menus/:menu_id",
+            post(community::guild_role_menu_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/role-menus/:menu_id/roles",
+            post(community::guild_role_menu_add_role),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/role-menus/:menu_id/roles/:role_id/delete",
+            post(community::guild_role_menu_remove_role),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/role-menus/:menu_id/delete",
+            post(community::guild_role_menu_delete),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/starboard",
+            get(community::guild_starboard).post(community::guild_starboard_update),
+        )
+        .route("/dashboard/guild/:guild_id/tags/create", post(community::guild_tag_create))
+        .route("/dashboard/guild/:guild_id/tags/:tag_id/edit", post(community::guild_tag_edit))
+        .route(
+            "/dashboard/guild/:guild_id/me/reminders/:reminder_id/delete",
+            post(community::guild_user_reminder_delete),
+        )
+        .route("/dashboard/guild/:guild_id/setup/logging", post(actions::guild_setup_logging))
+        .route("/dashboard/guild/:guild_id/pickers.json", get(guilds::guild_pickers))
         // The signed-in member's own self / history / data pages.
         .route("/dashboard/guild/:guild_id/me", get(userpages::guild_user_self))
         .route(
             "/dashboard/guild/:guild_id/me/settings",
             post(userpages::guild_user_settings_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/me/rank-card",
+            post(userpages::guild_user_rank_card_update),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/me/rank-card.png",
+            get(userpages::guild_user_rank_card_preview),
         )
         .route(
             "/dashboard/guild/:guild_id/me/history",
@@ -581,6 +628,8 @@ fn build_router(state: AppState) -> Router {
         // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a
         // `static/` dir next to the binary. The shared design system lives at /kls.
         .nest_service("/static", tower_http::services::ServeDir::new("static"))
+        // Every successful guild-scoped mutation lands in the change log (src/changes.rs).
+        .layer(axum::middleware::from_fn_with_state(state.clone(), changes::record))
         .with_state(state)
 }
 

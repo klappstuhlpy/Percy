@@ -46,7 +46,7 @@
     const resetBtn2 = document.getElementById('reset-setup-btn');
     if (resetBtn2) {
         resetBtn2.addEventListener('click', async function() {
-            if (!confirm('Remove the dedicated panel channel? The Discord channel is deleted; the panel stays enabled as a temporary panel if it\'s turned on.')) return;
+            if (!(await PercyConfirm.ask({ title: "Delete the music panel channel?", consequence: "The Discord channel is deleted. If the panel is on, it keeps working as a temporary panel.", undo: "Run setup again to create a new panel channel.", confirmLabel: "Delete channel", danger: true }))) return;
             resetBtn2.disabled = true;
             try {
                 const r = await fetch(`${base}/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: '{}' });

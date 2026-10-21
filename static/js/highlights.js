@@ -9,7 +9,7 @@
         btn.addEventListener('click', async () => {
             const userId = btn.dataset.userId;
             const username = btn.dataset.username;
-            if (!confirm(`Delete all highlights for "${username}"?`)) return;
+            if (!(await PercyConfirm.ask({ title: `Delete all highlights for ${username}?`, consequence: "They stop getting notified for every word they set up here.", undo: null, confirmLabel: "Delete highlights", danger: true }))) return;
             try {
                 const resp = await fetch(`${baseUrl}/${encodeURIComponent(userId)}`, {
                     method: 'DELETE',

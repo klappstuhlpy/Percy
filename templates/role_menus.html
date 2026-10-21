@@ -1,0 +1,132 @@
+{% extends "dashboard_layout.html" %}
+
+{% block page_subtitle %}<p>Buttons members click to give themselves roles.</p>{% endblock %}
+
+{% block header_actions %}
+<button class="button primary small" id="rm-new-btn">New role menu</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="dash-pageinfo">
+    <span class="dash-pageinfo-icon">&#9432;</span>
+    <div class="dash-pageinfo-body">
+        <p>A <strong>role menu</strong> is a message with one button per role. Clicking a button gives the role; clicking again takes it away. Changes here update the posted message right away.</p>
+        <ul class="dash-pageinfo-tips">
+            <li>Percy can only offer roles below its own highest role</li>
+            <li><strong>Single choice</strong> lets a member hold only one role from the menu at a time (e.g. colour or region roles)</li>
+            <li>Up to {{ data.max_roles }} roles per menu</li>
+        </ul>
+    </div>
+</div>
+
+{% if data.menus.is_empty() %}
+<section class="config-section">
+    <div class="empty-state">
+        <h3>No role menus yet</h3>
+        <p>Create one with "New role menu": pick a channel and a title, then add the roles to offer.</p>
+    </div>
+</section>
+{% endif %}
+
+{% for menu in data.menus %}
+<section class="config-section rm-menu" data-menu-id="{{ menu.id }}">
+    <div class="rm-head">
+        <div>
+            <h2>{{ menu.title }} <span class="text-muted rm-id">#{{ menu.id }}</span></h2>
+            <p class="config-section-description">
+                {% match menu.channel %}{% when Some with (ch) %}Posted in #{{ ch.name }}{% when None %}<span class="picker-warning">The channel was deleted.</span>{% endmatch %}
+                {% match menu.jump_url %}{% when Some with (url) %} · <a href="{{ url }}" target="_blank" rel="noopener">Open in Discord</a>{% when None %}{% endmatch %}
+            </p>
+        </div>
+        <button class="button small danger rm-delete-btn" data-title="{{ menu.title }}">Delete menu</button>
+    </div>
+
+    <form class="rm-settings" data-menu-id="{{ menu.id }}">
+        <div class="config-grid">
+            <div class="config-field">
+                <label class="config-label" for="rm-title-{{ menu.id }}">Title</label>
+                <input type="text" id="rm-title-{{ menu.id }}" name="title" class="config-input" maxlength="100" value="{{ menu.title }}" required>
+            </div>
+            <div class="config-field">
+                <label class="config-label" for="rm-desc-{{ menu.id }}">Description</label>
+                <input type="text" id="rm-desc-{{ menu.id }}" name="description" class="config-input" maxlength="1000" value="{{ menu.description.as_deref().unwrap_or("") }}" placeholder="Shown above the buttons">
+            </div>
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Single choice</span>
+                    <span class="config-description">Picking a role removes the member's other roles from this menu</span>
+                </div>
+                <input type="checkbox" name="unique" {% if menu.unique %}checked{% endif %}>
+            </label>
+        </div>
+    </form>
+
+    <div class="data-table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Role</th><th>Button</th><th></th></tr></thead>
+            <tbody>
+                {% for role in menu.roles %}
+                <tr>
+                    <td data-label="Role">
+                        {% match role.name %}
+                        {% when Some with (name) %}<span class="role-dot" style="background: #{{ "{:06x}"|format(role.color) }}"></span>@{{ name }}
+                            {% if !role.assignable %}<span class="picker-warning rm-inline-warn">Percy can't give this role out any more: move Percy's role above it.</span>{% endif %}
+                        {% when None %}<span class="picker-warning">Deleted role</span>
+                        {% endmatch %}
+                    </td>
+                    <td data-label="Button">{{ role.emoji.as_deref().unwrap_or("") }} {{ role.label.as_deref().unwrap_or("") }}</td>
+                    <td class="nowrap"><button class="button small rm-remove-btn" data-role-id="{{ role.role_id }}" data-role-name="{{ role.name.as_deref().unwrap_or("deleted role") }}">Remove</button></td>
+                </tr>
+                {% endfor %}
+                {% if menu.roles.is_empty() %}
+                <tr><td colspan="3" class="text-muted">No roles yet. Add the first one below; the menu shows nothing until then.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="rm-add">
+        <select class="config-select rm-add-role" data-needs="assign" aria-label="Role to offer">
+            <option value="">Add a role…</option>
+            {% for r in roles %}{% if !r.managed %}<option value="{{ r.id }}">@{{ r.name }}</option>{% endif %}{% endfor %}
+        </select>
+        <input type="text" class="config-input rm-add-emoji" maxlength="64" placeholder="Emoji (optional)" aria-label="Button emoji">
+        <input type="text" class="config-input rm-add-label" maxlength="80" placeholder="Button text (optional)" aria-label="Button text">
+        <button class="button small primary rm-add-btn">Add role</button>
+    </div>
+</section>
+{% endfor %}
+
+<div class="modal-overlay" id="rm-new-modal" hidden>
+    <div class="modal-card w-lg">
+        <h3>New role menu</h3>
+        <div class="modal-form">
+            <label class="config-label" for="rm-new-channel">Channel</label>
+            <select id="rm-new-channel" class="config-select" data-needs="post">
+                <option value="">Pick a channel…</option>
+                {% for ch in channels %}<option value="{{ ch.id }}">#{{ ch.name }}</option>{% endfor %}
+            </select>
+            <label class="config-label" for="rm-new-title">Title</label>
+            <input type="text" id="rm-new-title" class="config-input" maxlength="100" placeholder="Pick your roles">
+            <label class="config-label" for="rm-new-desc">Description <span class="text-muted">(optional)</span></label>
+            <input type="text" id="rm-new-desc" class="config-input" maxlength="1000" placeholder="Click a button to get or remove a role.">
+            <label class="config-toggle">
+                <div><span class="config-label">Single choice</span><span class="config-description">Members can hold only one role from this menu</span></div>
+                <input type="checkbox" id="rm-new-unique">
+            </label>
+            <p class="config-description">Percy posts the menu right away; add roles to it afterwards.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="button small" id="rm-new-cancel">Cancel</button>
+            <button type="button" class="button primary small" id="rm-new-confirm">Post menu</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>const GUILD_ID = '{{ guild_id }}';</script>
+<script src="/static/js/role_menus.js"></script>
+{% endblock %}
