@@ -96,7 +96,7 @@
                 snapshot = cardStyle();
                 cleanup();
                 cardDialog.close();
-                cardImg.src = `/dashboard/guild/${GUILD_ID}/me/rank-card.png?t=${Date.now()}`;
+                cardImg.src = `/dashboard/guild/${GUILD_ID}/me/rank-card.png?${new URLSearchParams({ ...cardStyle(), t: Date.now() })}`;
                 showToast('success', 'Rank card saved.');
             } catch (e) {
                 showToast('error', e.message || 'Could not save the rank card.');

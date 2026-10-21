@@ -465,7 +465,7 @@
 
 /* Rank card: saved card first; the editor is a modal with pickers beside a live preview. */
 .rank-card-editor { display: grid; grid-template-columns: minmax(16rem, 22rem) 1fr; gap: 1.5rem; align-items: start; }
-.rank-card-dialog { width: min(64rem, calc(100vw - 2rem)); max-width: 64rem; padding: 1.25rem; border: 1px solid var(--box-border); border-radius: 12px; background: var(--box-bg, var(--bg, #1a1a1a)); color: inherit; }
+.rank-card-dialog { width: min(64rem, calc(100vw - 2rem)); max-width: 64rem; padding: 1.25rem; border: 1px solid var(--box-border); border-radius: 12px; background: var(--box); color: var(--foreground); }
 .rank-card-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .rank-card-dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 .rank-card-preview { margin: 0 0 1rem; }

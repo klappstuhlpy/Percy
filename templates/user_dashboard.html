@@ -140,7 +140,7 @@
         <h2>Rank card</h2>
         <p class="config-section-description">How your card looks when anyone runs <code>/level</code>. Your choice applies on every server that allows customizing; &ldquo;Server default&rdquo; follows this server's style.</p>
         <figure class="rank-card-preview">
-            <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Your rank card" width="1154" height="360">
+            <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png?{% for field in card_fields %}{% if !field.current.is_empty() %}{{ field.key }}={{ field.current }}&amp;{% endif %}{% endfor %}" alt="Your rank card" width="1154" height="360">
         </figure>
         {% if !card_fields.is_empty() %}
         <button type="button" id="rank-card-customize" class="button primary small">Customize</button>
