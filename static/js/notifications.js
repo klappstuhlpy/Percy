@@ -65,7 +65,7 @@
             showToast(res.ok ? 'success' : 'error', message);
             // Only a settled (or vanished) request retires the card; a refusal that leaves it pending,
             // a network error or a 5xx keeps the buttons so the click can be retried.
-            if (!['approved', 'denied', 'cancelled', 'failed', 'expired', 'not_found'].includes(res.status)) {
+            if (!['approved', 'denied', 'cancelled', 'failed', 'expired', 'unknown'].includes(res.status)) {
                 form.querySelectorAll('button').forEach((b) => { b.disabled = false; });
                 return;
             }
