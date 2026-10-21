@@ -55,11 +55,12 @@
                 {% if let Some(d) = row.duration %}for {{ d }}{% endif %}
             </div>
             <div class="notif-body">{% if row.r.reason.is_empty() %}No reason given.{% else %}{{ row.r.reason }}{% endif %}</div>
-            <div class="notif-meta">Requested <time datetime="{{ row.r.created_at }}">{{ row.created }}</time> &middot; expires <time datetime="{{ row.r.expires_at }}" data-future>{{ row.r.expires_at }}</time></div>
+            <div class="notif-meta">Requested <time datetime="{{ row.r.created_at }}">{{ row.created }}</time> &middot; expires <time datetime="{{ row.r.expires_at }}">{{ row.expires }}</time></div>
             <input type="text" name="note" class="config-input" maxlength="300" placeholder="Note to the requester (optional)" aria-label="Note to the requester">
+            {% if row.destructive %}<label class="notif-confirm"><input type="checkbox" name="confirm" value="1" required> I confirm this {{ row.r.action }}</label>{% endif %}
             <div class="notif-request-actions">
                 <button type="submit" name="decision" value="approve" class="button primary small">Approve</button>
-                <button type="submit" name="decision" value="deny" class="button small">Deny</button>
+                <button type="submit" name="decision" value="deny" formnovalidate class="button small">Deny</button>
             </div>
         </form>
         {% endfor %}

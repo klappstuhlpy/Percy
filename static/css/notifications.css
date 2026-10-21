@@ -24,3 +24,4 @@
 .notif-status-approved { color: var(--success-text); }
 .notif-status-denied, .notif-status-failed { color: var(--error-text); }
 .notif-status-expired { color: var(--text-muted); }
+.notif-confirm { font-size: .85rem; display: flex; gap: .4rem; align-items: center; }

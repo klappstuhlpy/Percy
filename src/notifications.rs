@@ -40,6 +40,7 @@ pub(crate) struct RequestRow {
     pub(crate) target: String,
     pub(crate) duration: Option<String>,
     pub(crate) created: String,
+    pub(crate) expires: String,
     /// Kick/ban/softban cannot be undone, so approving asks first (the JS reads this).
     pub(crate) destructive: bool,
 }
@@ -90,6 +91,16 @@ fn iso_days_ago(days: u64) -> String {
     )
 }
 
+/// The signed-in Discord id as a number; never 0.
+fn uid(session: &Session) -> Option<u64> {
+    session.discord_user_id.parse().ok().filter(|id| *id != 0)
+}
+
+fn bad_session() -> Response {
+    Json(serde_json::json!({"ok": false, "error": "Your session has no valid Discord id; sign in again."}))
+        .into_response()
+}
+
 fn safe_link(link: Option<&String>) -> Option<String> {
     link.filter(|l| l.starts_with('/') && !l.starts_with("//") && !l.contains('\\'))
         .cloned()
@@ -123,7 +134,9 @@ pub async fn guild_notifications(
         Err(response) => return response,
     };
     let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
-    let user_id: u64 = session.discord_user_id.parse().unwrap_or(0);
+    let Some(user_id) = uid(&session) else {
+        return Redirect::to("/dashboard").into_response();
+    };
     let since = iso_days_ago(7);
     let (feed, requests, settings, channels, roles, cases) = tokio::join!(
         percy.get_notifications(guild_id, user_id, 50, None),
@@ -144,6 +157,7 @@ pub async fn guild_notifications(
             target: r.target_name.clone().unwrap_or_else(|| r.target_id.clone()),
             duration: r.duration.map(duration_label),
             created: short_time(&r.created_at),
+            expires: short_time(&r.expires_at),
             destructive: matches!(r.action.as_str(), "ban" | "kick" | "softban"),
             r,
         })
@@ -209,7 +223,9 @@ pub async fn notifications_summary(
         Ok(p) => p,
         Err(r) => return r,
     };
-    let user_id: u64 = session.discord_user_id.parse().unwrap_or(0);
+    let Some(user_id) = uid(&session) else {
+        return bad_session();
+    };
     match percy.get_notification_summary(guild_id, user_id).await {
         Ok(s) => Json(serde_json::json!({"ok": true, "unread": s.unread, "pending_requests": s.pending_requests}))
             .into_response(),
@@ -255,7 +271,9 @@ pub async fn notifications_read(
             Redirect::to(&format!("/dashboard/guild/{guild_id}/notifications#feed")).into_response()
         };
     };
-    let user_id: u64 = session.discord_user_id.parse().unwrap_or(0);
+    let Some(user_id) = uid(&session) else {
+        return bad_session();
+    };
     let result = percy.mark_notifications_read(guild_id, user_id, &up_to).await;
     if json {
         return match result {
@@ -283,15 +301,15 @@ pub async fn request_decide(
 ) -> Response {
     let percy = match gate_json(&app, &session, guild_id).await {
         Ok(p) => p,
-        Err(r) => return r,
+        Err(r) if is_ajax(&headers) => return r,
+        Err(_) => return notice_redirect(guild_id, "You cannot decide requests on this server.", false),
     };
     let approve = form.decision == "approve";
     let valid = (approve || form.decision == "deny") && !rid.is_empty() && rid.bytes().all(|b| b.is_ascii_digit());
+    // The moderator is whoever is signed in, never a form field.
     let (ok, message, request) = if !valid {
         (false, "That is not a valid decision.".to_string(), None)
-    } else {
-        // The moderator is whoever is signed in, never a form field.
-        let moderator: u64 = session.discord_user_id.parse().unwrap_or(0);
+    } else if let Some(moderator) = uid(&session) {
         let note = form.note.trim();
         let note = (!note.is_empty()).then(|| note.chars().take(300).collect::<String>());
         match percy
@@ -301,14 +319,24 @@ pub async fn request_decide(
             Ok(d) => (d.ok, d.message, d.request),
             Err(e) => (false, percy_message(&e), None),
         }
+    } else {
+        (
+            false,
+            "Your session has no valid Discord id; sign in again.".to_string(),
+            None,
+        )
     };
     if is_ajax(&headers) {
         let key = if ok { "message" } else { "error" };
         return Json(serde_json::json!({"ok": ok, key: message, "request": request})).into_response();
     }
+    notice_redirect(guild_id, &message, ok)
+}
+
+fn notice_redirect(guild_id: u64, message: &str, ok: bool) -> Response {
     Redirect::to(&format!(
         "/dashboard/guild/{guild_id}/notifications?notice={}&ok={}#requests",
-        encode(&message),
+        encode(message),
         u8::from(ok)
     ))
     .into_response()

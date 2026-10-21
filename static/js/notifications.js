@@ -2,7 +2,7 @@
    Every control is a plain form first; this only upgrades them. */
 (function () {
     'use strict';
-    const guildId = (location.pathname.match(/guild/(d+)/) || [])[1];
+    const guildId = (location.pathname.match(/\/guild\/(\d+)/) || [])[1];
     const base = `/dashboard/guild/${guildId}`;
 
     // -- Relative times (the server renders an absolute fallback) -------------------------
@@ -33,6 +33,9 @@
         }).catch(() => {});
     }
 
+    // JS handles the destructive confirm with PercyConfirm; the native checkbox is the JS-off fallback.
+    document.querySelectorAll('.notif-confirm').forEach((l) => { l.hidden = true; l.querySelector('input').required = false; });
+
     // -- Approve / Deny --------------------------------------------------------------------
     document.querySelectorAll('form.notif-request').forEach((form) => {
         form.addEventListener('submit', async (e) => {
@@ -60,7 +63,11 @@
             }).then((r) => r.json()).catch(() => ({ ok: false, error: 'Network error.' }));
             const message = res.ok ? res.message : (res.error || 'Could not record the decision.');
             showToast(res.ok ? 'success' : 'error', message);
-            // Refused because it was already decided/expired: the card is stale either way.
+            // A network error or 5xx leaves the card alone so the click can be retried.
+            if (!res.ok && !res.request && !/already|expired|no longer|not found|pending/i.test(message)) {
+                form.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+                return;
+            }
             const p = document.createElement('p');
             p.className = 'notif-meta';
             p.textContent = message;
