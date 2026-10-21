@@ -146,8 +146,15 @@
         if (saving) return;
         setBusy(true);
         try {
+            const skipped = [];
+            let reverted = 0;
             for (let i = 0; i < sectionsToUndo.length; i++) {
                 const section = sectionsToUndo[i];
+                // Edited since the save: reverting would silently discard that newer work.
+                if (section.isDirty()) {
+                    skipped.push(section.label);
+                    continue;
+                }
                 const state = JSON.parse(baselines[i]);
                 section.write(state);
                 let result;
@@ -162,8 +169,12 @@
                     return;
                 }
                 section.baseline = snapshot(section);
+                reverted++;
             }
-            showToast('success', 'Change undone.');
+            if (skipped.length) {
+                const note = `Undo skipped for ${skipped.join(', ')}: you have newer edits.`;
+                showToast('warning', reverted ? `Change undone, except: ${note}` : note);
+            } else showToast('success', 'Change undone.');
         } finally {
             setBusy(false);
             refresh();

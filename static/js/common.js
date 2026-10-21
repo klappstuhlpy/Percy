@@ -25,6 +25,7 @@
                 btn.className = 'toast-action';
                 btn.textContent = action.label;
                 btn.addEventListener('click', () => {
+                    btn.disabled = true; // no second fire during the fade-out
                     dismiss();
                     action.onClick();
                 });
