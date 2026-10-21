@@ -248,7 +248,7 @@ main.percy-main:has(.dashboard-shell) {
 }
 /* Unread + pending count beside the Notifications link (notification_badge.js). */
 .dash-nav-badge { display: inline-block; min-width: 1.15rem; margin-left: .4rem; padding: 0 .35rem; border-radius: 999px;
-  background: var(--branding); color: var(--button-text); font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
+  background: #ed4245; color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
 .dash-nav-badge[hidden] { display: none; }
 .dash-nav-link-me {
     margin-top: 0.25rem;
