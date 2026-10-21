@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-21
+
+### Added
+
+- An AutoMod page on the dashboard: switch each of Percy's AutoMod presets (links, all-caps,
+  invite links, bad words) on or off, exempt roles and channels, and edit the bad-words list.
+  It warns when Percy lacks the Manage Server permission it needs to change AutoMod rules.
+- A one-step leveling setup on the dashboard's Leveling page: choose where level-ups are
+  announced and optionally create 12 milestone reward roles (levels 5 to 100).
+- A one-step Sentinel setup on the dashboard's Sentinel tab: Percy can create a `#verify`
+  channel and an `Unverified` role or use ones you pick, posts the captcha message, and can
+  start protecting new members right away.
+- "Send test" buttons next to the audit log, alerts, moderation, message and voice log and
+  poll channels post a harmless test message, so you can see where those messages land.
+- After saving settings on the dashboard, the confirmation offers Undo for a few seconds.
+
+### Fixed
+
+- Keywords and exemptions set in one server's AutoMod setup could show up as the defaults
+  in other servers' setup.
+- Removing the last exempt role or channel from an AutoMod rule did not stick.
+- Editing an AutoMod preset whose Discord rule had been deleted failed instead of creating
+  the rule again.
+
 ## [2.9.0] - 2026-10-21
 
 ### Added
