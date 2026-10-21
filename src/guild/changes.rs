@@ -7,13 +7,13 @@
 //! *names* of the fields the request carried — never their values, which can hold webhook URLs
 //! or message text. Rows older than [`RETENTION_DAYS`] are pruned on write.
 
-use crate::{db, guilds::gate_and_load_guild, session::Session, templates::ChangesTemplate, view::Viewer, AppState};
+use crate::{db, session::Session, AppState};
 use axum::{
     body::{to_bytes, Body},
     extract::{Path, Request, State},
     http::{header, Method},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 
 /// How long a change stays in the log.
@@ -185,25 +185,10 @@ async fn confirmed_success(response: Response) -> (Response, bool) {
     }
 }
 
-/// `GET /dashboard/guild/:guild_id/changes` — the last changes made on the dashboard.
-pub async fn guild_changes(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
-    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
-        Ok(guild) => guild,
-        Err(response) => return response,
-    };
-    let changes = db::recent_changes(&app.db, &guild_id.to_string(), 200)
-        .await
-        .unwrap_or_default();
-    ChangesTemplate {
-        account: Some(Viewer::from_session(&session)),
-        guild_id,
-        guild_name: guild.name,
-        nav_active: "changes",
-        page_title: "Change Log",
-        changes,
-        retention_days: RETENTION_DAYS,
-    }
-    .into_response()
+/// `GET /dashboard/guild/:guild_id/changes` — the change log now lives on the Notifications page;
+/// the old URL stays for bookmarks.
+pub async fn guild_changes(Path(guild_id): Path<u64>) -> Redirect {
+    Redirect::permanent(&format!("/dashboard/guild/{guild_id}/notifications#changes"))
 }
 
 #[cfg(test)]

@@ -5,6 +5,32 @@
     const guildId = (location.pathname.match(/\/guild\/(\d+)/) || [])[1];
     const base = `/dashboard/guild/${guildId}`;
 
+    // -- Tabs: anchor-driven; without JS every section is shown and the bar is plain links ---
+    const tabs = document.getElementById('notif-tabs');
+    if (tabs) {
+        const names = [...tabs.querySelectorAll('a[data-tab]')].map((a) => a.dataset.tab);
+        const show = (name) => {
+            document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
+            tabs.querySelectorAll('a[data-tab]').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
+        };
+        const fromHash = () => { const h = location.hash.slice(1); return names.includes(h) ? h : null; };
+        let saved = null;
+        try { saved = localStorage.getItem('percy.notif.tab'); } catch { /* storage unavailable */ }
+        const open = (name) => {
+            show(name);
+            try { localStorage.setItem('percy.notif.tab', name); } catch { /* ignore */ }
+        };
+        show(fromHash() || (names.includes(saved) ? saved : names[0]));
+        window.addEventListener('hashchange', () => { const n = fromHash(); if (n) open(n); });
+        tabs.addEventListener('click', (e) => {
+            const a = e.target.closest('a[data-tab]');
+            if (!a) return;
+            e.preventDefault();
+            history.replaceState(null, '', '#' + a.dataset.tab);
+            open(a.dataset.tab);
+        });
+    }
+
     // -- Relative times (the server renders an absolute fallback) -------------------------
     function rel(iso) {
         const secs = Math.round((new Date(iso).getTime() - Date.now()) / 1000);

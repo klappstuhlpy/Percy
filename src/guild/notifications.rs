@@ -167,6 +167,9 @@ pub async fn guild_notifications(
     cases.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     let settings_ok = settings.is_ok();
     let settings = settings.unwrap_or_default();
+    let changes = crate::db::recent_changes(&app.db, &guild_id.to_string(), 200)
+        .await
+        .unwrap_or_default();
     NotificationsTemplate {
         account: Some(Viewer::from_session(&session)),
         guild_id,
@@ -211,6 +214,8 @@ pub async fn guild_notifications(
             .collect(),
         notice: notice.notice.unwrap_or_default().chars().take(300).collect(),
         notice_ok: notice.ok.as_deref() == Some("1"),
+        changes,
+        retention_days: crate::changes::RETENTION_DAYS,
     }
     .into_response()
 }

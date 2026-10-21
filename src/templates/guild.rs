@@ -429,19 +429,6 @@ pub(crate) struct StarboardTemplate {
 
 #[allow(dead_code)]
 #[derive(Template)]
-#[template(path = "guild/changes.html")]
-pub(crate) struct ChangesTemplate {
-    pub(crate) account: Option<Viewer>,
-    pub(crate) guild_id: u64,
-    pub(crate) guild_name: String,
-    pub(crate) nav_active: &'static str,
-    pub(crate) page_title: &'static str,
-    pub(crate) changes: Vec<crate::db::Change>,
-    pub(crate) retention_days: u32,
-}
-
-#[allow(dead_code)]
-#[derive(Template)]
 #[template(path = "guild/notifications.html")]
 pub(crate) struct NotificationsTemplate {
     pub(crate) account: Option<Viewer>,
@@ -462,6 +449,8 @@ pub(crate) struct NotificationsTemplate {
     pub(crate) roles: Vec<Role>,
     pub(crate) notice: String,
     pub(crate) notice_ok: bool,
+    pub(crate) changes: Vec<crate::db::Change>,
+    pub(crate) retention_days: u32,
 }
 #[cfg(test)]
 mod tests {
