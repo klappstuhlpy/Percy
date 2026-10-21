@@ -6,16 +6,34 @@
     // -- Toast notifications ---------------------------------------------------
     // Single shared implementation; page scripts call window.showToast(...).
     if (typeof window.showToast === 'undefined') {
-        window.showToast = function(level, message) {
+        // options.action = { label, onClick } adds a button (e.g. Undo); clicking it runs
+        // onClick and dismisses the toast. A toast with an action stays 8 s.
+        window.showToast = function(level, message, options) {
+            const action = options && options.action;
             const toast = document.createElement('div');
             toast.className = 'toast toast-' + level;
             toast.textContent = message;
-            document.body.appendChild(toast);
-            requestAnimationFrame(() => toast.classList.add('visible'));
-            setTimeout(() => {
+            let timer;
+            const dismiss = () => {
+                clearTimeout(timer);
                 toast.classList.remove('visible');
                 setTimeout(() => toast.remove(), 300);
-            }, level === 'warning' ? 8000 : 3000); // advice needs reading time
+            };
+            if (action) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'toast-action';
+                btn.textContent = action.label;
+                btn.addEventListener('click', () => {
+                    dismiss();
+                    action.onClick();
+                });
+                toast.appendChild(btn);
+            }
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('visible'));
+            // advice needs reading time, and so does a chance to undo
+            timer = setTimeout(dismiss, level === 'warning' || action ? 8000 : 3000);
         };
     }
 

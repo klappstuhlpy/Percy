@@ -1197,6 +1197,20 @@ select.config-select[multiple] {
 .toast-warning {
     border-left: 3px solid var(--warning-text);
 }
+.toast-action {
+    margin-left: 0.75rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--box-border);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.toast-action:hover {
+    background: var(--box-border);
+}
 
 /* -- Sentinel status -- */
 

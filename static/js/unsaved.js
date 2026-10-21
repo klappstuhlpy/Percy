@@ -98,6 +98,8 @@
         setBusy(true);
         let reload = false;
         const warnings = [];
+        // Baselines before they are replaced: what Undo restores.
+        const previous = dirty.map(section => section.baseline);
         try {
             for (const section of dirty) {
                 if (section.beforeSave && !(await section.beforeSave())) return;
@@ -122,7 +124,11 @@
             const saved = dirty.length === 1 ? 'Settings saved.' : `Saved ${dirty.length} sections.`;
             // Toasts stack on one spot, so the advice rides in the same toast as the confirmation.
             if (warnings.length) showToast('warning', `${saved} ${warnings.join(' ')}`);
-            else showToast('success', saved);
+            // No Undo when a section reloads the page (the reload would wipe the toast before it
+            // could be used) or when there is advice to read in the same toast.
+            else if (!reload) {
+                showToast('success', saved, { action: { label: 'Undo', onClick: () => undo(dirty, previous) } });
+            } else showToast('success', saved);
             if (warnings.length) reload = false;
             refresh();
             // Some sections change what the page renders (feature flags gate whole cards),
@@ -130,6 +136,37 @@
             if (reload) setTimeout(() => location.reload(), 400);
         } finally {
             setBusy(false);
+        }
+    }
+
+    // Write each section's pre-save baseline back and save it through the normal path. On
+    // failure the form keeps the restored values, so it is dirty again and the banner offers
+    // a retry or a discard.
+    async function undo(sectionsToUndo, baselines) {
+        if (saving) return;
+        setBusy(true);
+        try {
+            for (let i = 0; i < sectionsToUndo.length; i++) {
+                const section = sectionsToUndo[i];
+                const state = JSON.parse(baselines[i]);
+                section.write(state);
+                let result;
+                try {
+                    result = await section.save(state);
+                } catch {
+                    showToast('error', `Network error while undoing ${section.label}.`);
+                    return;
+                }
+                if (!result || result.ok === false) {
+                    showToast('error', (result && result.error) || `Failed to undo ${section.label}.`);
+                    return;
+                }
+                section.baseline = snapshot(section);
+            }
+            showToast('success', 'Change undone.');
+        } finally {
+            setBusy(false);
+            refresh();
         }
     }
 
