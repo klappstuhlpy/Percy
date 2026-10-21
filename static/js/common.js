@@ -15,7 +15,7 @@
             setTimeout(() => {
                 toast.classList.remove('visible');
                 setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            }, level === 'warning' ? 8000 : 3000); // advice needs reading time
         };
     }
 

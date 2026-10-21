@@ -309,7 +309,10 @@ pub async fn guild_case_update(
         Ok(percy) => percy,
         Err(response) => return response,
     };
-    match percy.update_case_reason(guild_id, case_index, &body.reason).await {
+    match percy
+        .update_case_reason(guild_id, case_index, &body.reason, &session.discord_user_id)
+        .await
+    {
         Ok(resp) => Json(serde_json::json!(resp)).into_response(),
         Err(PercyError::NotFound) => Json(serde_json::json!({"error": "case not found"})).into_response(),
         Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
@@ -326,7 +329,7 @@ pub async fn guild_case_delete(
         Ok(percy) => percy,
         Err(response) => return response,
     };
-    match percy.delete_case(guild_id, case_index).await {
+    match percy.delete_case(guild_id, case_index, &session.discord_user_id).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(PercyError::NotFound) => Json(serde_json::json!({"error": "case not found"})).into_response(),
         Err(e) => Json(serde_json::json!({"error": percy_message(&e)})).into_response(),
