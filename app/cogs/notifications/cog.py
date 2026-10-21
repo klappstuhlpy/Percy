@@ -13,7 +13,7 @@ from typing import Literal
 import discord
 from discord.ext import commands, tasks
 
-from app.core import Bot, Cog, Context, describe, group
+from app.core import Bot, Cog, Context, cooldown, describe, group
 from app.services.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 __all__ = ('Notifications',)
 
-Action = Literal['kick', 'ban', 'unban', 'softban', 'warn', 'mute', 'unmute', 'timeout', 'untimeout']
+Action = Literal['kick', 'ban', 'softban', 'warn', 'mute', 'unmute', 'timeout', 'untimeout']
 assert set(Action.__args__) == REQUESTABLE_ACTIONS  # type: ignore[attr-defined]
 
 
@@ -79,6 +79,7 @@ class Notifications(Cog):
             await ctx.send_help(ctx.command)
 
     @request.command('create', description='Request a moderation action for approval.', guild_only=True)
+    @cooldown(1, 30)
     @describe(
         action='The action to request.',
         member='The member it applies to.',
@@ -135,7 +136,9 @@ class Notifications(Cog):
             await ctx.send_success(f'Request #{row["id"]} filed. Admins will see it on the dashboard.')
             return
         try:
-            message = await channel.send(embed=request_embed(row), view=request_view(row['id']))
+            message = await channel.send(
+                embed=request_embed(row), view=request_view(row['id']), allowed_mentions=discord.AllowedMentions.none()
+            )
         except discord.Forbidden:
             await config.alert_missing_permission('post action requests', channel=channel)
             await ctx.send_success(f'Request #{row["id"]} filed. Admins will see it on the dashboard.')
@@ -155,7 +158,7 @@ class Notifications(Cog):
             await ctx.send_info('You have not filed any requests.')
             return
         lines = [f'`#{r["id"]}` {r["action"]} <@{r["target_id"]}>: **{r["status"]}**' for r in rows]
-        await ctx.send('\n'.join(lines), ephemeral=True)
+        await ctx.send('\n'.join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @request.command('cancel', description='Cancels one of your pending requests.', guild_only=True)
     @describe(request_id='The request number.')

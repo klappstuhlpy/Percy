@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from app.cogs.moderation.member_actions import MemberActionError, apply_member_action
+from app.cogs.moderation.member_actions import HIERARCHY_ACTIONS, MemberActionError, apply_member_action
 from app.services.notifications import ACTION_PERMISSIONS
+from app.utils.checks import hierarchy_error
 
 from .ui import request_embed
 
@@ -66,6 +67,12 @@ async def decide_request(
     if not (perms.administrator or getattr(perms, permission, False)):
         label = permission.replace('_', ' ').title()
         return _fail('pending', f'You need the {label} permission to decide a {row["action"]} request.', 403, row)
+
+    if approve:  # rank is checked before the claim, or a too-low approver would burn the request to 'failed'
+        action = row['action']
+        target = guild.get_member(row['target_id']) or discord.Object(id=row['target_id'])
+        if error := hierarchy_error(decider, target, guild.me, action=action, check_bot=action in HIERARCHY_ACTIONS):
+            return _fail('pending', error, 403, row)
 
     claimed = await repo.claim_request(
         guild.id, request_id, status='approved' if approve else 'denied', decided_by=decider.id, note=note

@@ -47,8 +47,8 @@ ACTION_PERMISSIONS: dict[str, str] = {
     'untimeout': 'moderate_members',
     'purge': 'manage_messages',
 }
-# Purge reads live channel history and has no single target, so it cannot be queued.
-REQUESTABLE_ACTIONS = frozenset(ACTION_PERMISSIONS) - {'purge'}
+# Purge reads live channel history and has no single target; unban's target is no longer a member.
+REQUESTABLE_ACTIONS = frozenset(ACTION_PERMISSIONS) - {'purge', 'unban'}
 
 _TIMEOUT_MIN, _TIMEOUT_MAX = 60, 2_419_200  # Discord caps a timeout at 28 days
 

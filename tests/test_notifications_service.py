@@ -24,8 +24,9 @@ def test_check_request() -> None:
     assert check_request('kick', 60)
 
 
-def test_requestable_excludes_purge() -> None:
+def test_requestable_excludes_purge_and_unban() -> None:
     assert 'purge' not in REQUESTABLE_ACTIONS
+    assert 'unban' not in REQUESTABLE_ACTIONS
     assert len(ACTION_PERMISSIONS) == 10
 
 

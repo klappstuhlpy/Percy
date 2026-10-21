@@ -47,6 +47,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch, action: str = "ban", *, execute: Asy
     guild.get_member.return_value = None
     executor = execute or AsyncMock(return_value={})
     monkeypatch.setattr(decide, 'apply_member_action', executor)
+    monkeypatch.setattr(decide, 'hierarchy_error', lambda *a, **k: None)
     return bot, guild, repo, executor
 
 
@@ -67,6 +68,15 @@ async def test_missing_permission_is_403_and_status_unchanged(monkeypatch) -> No
     out = await decide.decide_request(bot, guild, 1, _mod(kick_members=True), approve=True)  # type: ignore[arg-type]
     assert out.http_status == 403
     assert 'Ban Members' in out.message
+    assert repo.row['status'] == 'pending'
+    executor.assert_not_called()
+
+
+async def test_lower_ranked_approver_is_403_and_request_stays_pending(monkeypatch) -> None:
+    bot, guild, repo, executor = _setup(monkeypatch)
+    monkeypatch.setattr(decide, 'hierarchy_error', lambda *a, **k: 'Your top role is not above the target.')
+    out = await decide.decide_request(bot, guild, 1, _mod(ban_members=True), approve=True)  # type: ignore[arg-type]
+    assert out.http_status == 403
     assert repo.row['status'] == 'pending'
     executor.assert_not_called()
 
