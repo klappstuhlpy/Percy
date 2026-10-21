@@ -29,7 +29,9 @@ async def test_claim_request_is_guarded(mock_db: MagicMock) -> None:
 
 async def test_mark_read_never_moves_backwards(mock_db: MagicMock) -> None:
     await NotificationsRepository(mock_db).mark_read(1, 2, 9)
-    assert 'GREATEST' in mock_db.execute.await_args.args[0]
+    query = mock_db.execute.await_args.args[0]
+    assert 'GREATEST' in query
+    assert 'LEAST($3::bigint' in query and 'MAX(id)' in query  # cursor clamped to the real max
 
 
 async def test_update_request_settings_invalidates(mock_db: MagicMock) -> None:

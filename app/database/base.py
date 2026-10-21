@@ -16,7 +16,6 @@ import dateutil.tz
 import discord
 from discord.utils import MISSING
 
-from app.core.permissions import CommandOverride
 from app.database.repositories import (
     AdminRepository,
     AniListRepository,
@@ -65,6 +64,7 @@ if TYPE_CHECKING:
     from typing import Self, TypeVar
 
     from app.core import Bot
+    from app.core.permissions import CommandOverride
 
     DatabaseT = TypeVar("DatabaseT", bound="_Database")
 
@@ -402,6 +402,9 @@ class Database(_Database):
         Consulted by :func:`app.core.permissions.command_permission_check` on every command
         invocation, so it is memoized and busted via the ``command_overrides_changed`` signal.
         """
+        # Local import: app.core imports app.database at load time, so a top-level one is a cycle.
+        from app.core.permissions import CommandOverride
+
         records = await self.guilds.get_command_permission_overrides(guild_id)
         return {
             record["command"]: CommandOverride(

@@ -90,7 +90,9 @@ class NotificationsRepository(BaseRepository):
     async def mark_read(self, guild_id: int, user_id: int, up_to_id: int) -> None:
         query = """
             INSERT INTO notification_reads (guild_id, user_id, last_read_id)
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, LEAST($3::bigint, (
+                SELECT COALESCE(MAX(id), 0) FROM guild_notifications WHERE guild_id = $1 OR guild_id IS NULL
+            )))
             ON CONFLICT (guild_id, user_id)
                 DO UPDATE SET last_read_id = GREATEST(notification_reads.last_read_id, EXCLUDED.last_read_id)
         """
