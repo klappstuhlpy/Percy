@@ -35,6 +35,7 @@
         <nav class="dash-nav" aria-label="Dashboard sections">
             <div class="dash-nav-group">
                 <span class="dash-nav-heading">Overview</span>
+                <a href="/dashboard/guild/{{ guild_id }}/notifications" class="dash-nav-link{% if nav_active == "notifications" %} active{% endif %}">Notifications<span class="dash-nav-badge" hidden></span></a>
                 <a href="/dashboard/guild/{{ guild_id }}" class="dash-nav-link{% if nav_active == "config" %} active{% endif %}">Configuration</a>
                 <a href="/dashboard/guild/{{ guild_id }}/members" class="dash-nav-link{% if nav_active == "members" %} active{% endif %}">Members</a>
                 <a href="/dashboard/guild/{{ guild_id }}/automod" class="dash-nav-link{% if nav_active == "automod" %} active{% endif %}">AutoMod</a>
@@ -112,5 +113,6 @@
 <script src="/static/js/test_send.js"></script>
 {% block page_js %}{% endblock %}
 <script>window.PERCY_DASH = { guildId: '{{ guild_id }}', guildName: {{ guild_name|json|safe }} };</script>
+<script src="/static/js/notification_badge.js"></script>
 <script src="/static/js/command_palette.js"></script>
 {% endblock %}

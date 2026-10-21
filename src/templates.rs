@@ -1497,3 +1497,26 @@ pub(crate) struct ChangesTemplate {
     pub(crate) changes: Vec<crate::db::Change>,
     pub(crate) retention_days: u32,
 }
+
+#[allow(dead_code)]
+#[derive(Template)]
+#[template(path = "notifications.html")]
+pub(crate) struct NotificationsTemplate {
+    pub(crate) account: Option<Viewer>,
+    pub(crate) guild_id: u64,
+    pub(crate) guild_name: String,
+    pub(crate) nav_active: &'static str,
+    pub(crate) page_title: &'static str,
+    pub(crate) unread: u32,
+    pub(crate) newest_id: String,
+    pub(crate) feed: Vec<crate::notifications::FeedRow>,
+    pub(crate) pending: Vec<crate::notifications::RequestRow>,
+    pub(crate) history: Vec<crate::notifications::RequestRow>,
+    pub(crate) cases: Vec<crate::notifications::CaseRow>,
+    pub(crate) selected_channel: String,
+    pub(crate) selected_roles: Vec<String>,
+    pub(crate) channels: Vec<Channel>,
+    pub(crate) roles: Vec<Role>,
+    pub(crate) notice: String,
+    pub(crate) notice_ok: bool,
+}

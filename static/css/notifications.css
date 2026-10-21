@@ -1,0 +1,26 @@
+/* Notifications page + sidebar badge. Tokens come from base.css. */
+.notif-list { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: .5rem; }
+.notif-item { display: flex; gap: .75rem; align-items: flex-start; padding: .7rem .85rem;
+  border: 1px solid var(--box-border); border-radius: 8px; background: var(--box); }
+.notif-unread { background: var(--box-shade); border-color: var(--branding); }
+.notif-sev { flex: none; width: 1.2rem; text-align: center; color: var(--info-text); }
+.notif-warning .notif-sev { color: var(--warning-text); }
+.notif-error .notif-sev { color: var(--error-text); }
+.notif-main { flex: 1; min-width: 0; }
+.notif-title { font-weight: 600; overflow-wrap: anywhere; }
+.notif-body { font-size: .88rem; color: var(--text-muted); overflow-wrap: anywhere; margin-top: .15rem; }
+.notif-meta { font-size: .78rem; color: var(--text-muted); margin-top: .25rem; }
+.notif-time { flex: none; font-size: .78rem; color: var(--text-muted); white-space: nowrap; }
+.notif-link { font-size: .82rem; color: var(--link-text); }
+.notif-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--branding); margin-right: .3rem; }
+.notif-sub { margin: 1.25rem 0 .5rem; font-size: .95rem; }
+.notif-requests { display: grid; gap: .75rem; margin-bottom: .5rem; }
+.notif-request { display: grid; gap: .45rem; padding: .85rem 1rem; border: 1px solid var(--box-border);
+  border-radius: 8px; background: var(--box); }
+.notif-request-actions { display: flex; gap: .5rem; }
+.notif-notice { padding: .6rem .85rem; border-radius: 8px; border: 1px solid var(--box-border); margin: 0 0 1rem; }
+.notif-notice-ok { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
+.notif-notice-err { color: var(--error-text); background: var(--error-bg); border-color: var(--error-border); }
+.notif-status-approved { color: var(--success-text); }
+.notif-status-denied, .notif-status-failed { color: var(--error-text); }
+.notif-status-expired { color: var(--text-muted); }

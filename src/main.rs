@@ -30,8 +30,8 @@ use crate::config::Config;
 mod actions;
 mod auth;
 mod changes;
-mod community;
 mod comics;
+mod community;
 mod config;
 mod crud;
 mod db;
@@ -44,6 +44,7 @@ mod migrations;
 mod moderation;
 mod mutations;
 mod news;
+mod notifications;
 mod pages;
 mod progress;
 mod releases;
@@ -456,6 +457,26 @@ fn build_router(state: AppState) -> Router {
             post(moderation::guild_custom_bot_reset),
         )
         .route("/dashboard/guild/:guild_id/changes", get(changes::guild_changes))
+        .route(
+            "/dashboard/guild/:guild_id/notifications",
+            get(notifications::guild_notifications),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/notifications/summary",
+            get(notifications::notifications_summary),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/notifications/read",
+            post(notifications::notifications_read),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/requests/:rid/decide",
+            post(notifications::request_decide),
+        )
+        .route(
+            "/dashboard/guild/:guild_id/request-settings",
+            patch(notifications::request_settings_update),
+        )
         .route(
             "/dashboard/guild/:guild_id/role-menus",
             get(community::guild_role_menus).post(community::guild_role_menu_create),

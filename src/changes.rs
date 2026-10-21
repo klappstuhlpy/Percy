@@ -32,6 +32,9 @@ const IGNORED: &[&str] = &[
     "changes",
     "leveling/test-message",
     "test-message",
+    // Reading the inbox and deciding a request are actions, not edits to settings.
+    "notifications",
+    "requests",
 ];
 
 /// What a request changed, in words: `("Leveling", "Updated")`, plus the guild id.
@@ -62,6 +65,7 @@ pub(crate) fn describe(method: &Method, path: &str) -> Option<Described> {
         ["members", "bulk-action"] => ("Members (bulk action)".to_string(), "Ran"),
         ["members", _, "action"] => ("Member action".to_string(), "Ran"),
         ["members", _, "roles"] => ("Member roles".to_string(), "Updated"),
+        ["request-settings"] => ("Action requests".to_string(), verb),
         [.., "delete"] => (title(&segments[..segments.len() - 1]), "Removed"),
         [.., "end"] => (title(&segments[..segments.len() - 1]), "Ended"),
         _ => (title(&segments), verb),
@@ -247,6 +251,16 @@ mod tests {
         assert_eq!(d(Method::POST, "/dashboard/guild/1/test-message"), None);
         assert_eq!(d(Method::POST, "/account/progress"), None);
         assert_eq!(d(Method::POST, "/dashboard/guild/notanid/config"), None);
+    }
+
+    #[test]
+    fn notification_actions_are_not_changes() {
+        assert_eq!(d(Method::POST, "/dashboard/guild/1/notifications/read"), None);
+        assert_eq!(d(Method::POST, "/dashboard/guild/1/requests/5/decide"), None);
+        assert_eq!(
+            d(Method::PATCH, "/dashboard/guild/1/request-settings"),
+            Some(("Action requests".into(), "Updated"))
+        );
     }
 
     #[test]
