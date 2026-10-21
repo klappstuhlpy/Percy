@@ -78,6 +78,14 @@
     });
 
     // -- Request settings ------------------------------------------------------------------
+    const roleFilter = document.getElementById('rq-roles-filter');
+    if (roleFilter) {
+        roleFilter.hidden = false; // JS-off keeps the plain list
+        roleFilter.addEventListener('input', () => {
+            const q = roleFilter.value.trim().toLowerCase();
+            document.querySelectorAll('#rq-roles .rq-role').forEach((l) => { l.hidden = !!q && !l.textContent.toLowerCase().includes(q); });
+        });
+    }
     const settings = document.getElementById('request-settings-form');
     if (settings) {
         PercyUnsaved.watchForm(settings, {
@@ -88,7 +96,7 @@
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({
                         channel_id: f.querySelector('[name="channel_id"]').value || null,
-                        role_ids: [...f.querySelector('[name="role_ids"]').selectedOptions].map((o) => o.value),
+                        role_ids: [...f.querySelectorAll('[data-role]:checked')].map((c) => c.value),
                     }),
                 });
                 return res.json();

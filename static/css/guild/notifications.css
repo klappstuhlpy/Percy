@@ -25,3 +25,9 @@
 .notif-status-denied, .notif-status-failed { color: var(--error-text); }
 .notif-status-expired { color: var(--text-muted); }
 .notif-confirm { font-size: .85rem; display: flex; gap: .4rem; align-items: center; }
+.rq-roles { max-height: 16rem; overflow: auto; display: grid; grid-template-columns: 1fr; gap: .15rem .75rem; padding: .4rem .6rem;
+  border: 1px solid var(--box-border); border-radius: 8px; background: var(--box); }
+@media (min-width: 700px) { .rq-roles { grid-template-columns: 1fr 1fr; } }
+.rq-role { display: flex; align-items: center; gap: .5rem; cursor: pointer; min-width: 0; }
+.rq-role[hidden] { display: none; }
+.rq-role span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

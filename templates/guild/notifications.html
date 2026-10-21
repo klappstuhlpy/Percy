@@ -122,11 +122,12 @@
                 </select>
             </div>
             <div class="config-field">
-                <label class="config-label" for="rq-roles">Requester roles</label>
-                <span class="config-description">Hold Ctrl / &#8984; to pick several</span>
-                <select id="rq-roles" name="role_ids" class="config-select" multiple size="6">
-                    {% for r in roles %}<option value="{{ r.id }}" {% if selected_roles.contains(r.id) %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
-                </select>
+                <label class="config-label" for="rq-roles-filter">Requester roles</label>
+                <span class="config-description">Members with any ticked role can file requests</span>
+                <input type="search" id="rq-roles-filter" class="config-input" placeholder="Filter roles" autocomplete="off" hidden>
+                <div class="rq-roles" id="rq-roles">
+                    {% for r in roles %}<label class="rq-role"><input type="checkbox" name="rq_role_{{ r.id }}" value="{{ r.id }}" data-role {% if selected_roles.contains(r.id) %}checked{% endif %}> <span>{{ r.name }}</span></label>{% endfor %}
+                </div>
             </div>
         </div>
         </fieldset>
