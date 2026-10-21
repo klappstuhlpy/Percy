@@ -10,6 +10,7 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from app.services.notifications import ACTION_PERMISSIONS
 from app.utils.checks import hierarchy_error
 
 from ..dependencies import BotDep, GuildDep, verify_token
@@ -26,20 +27,6 @@ MAX_SCAN_CONCURRENCY = 5
 # Discord refuses to bulk-delete messages older than two weeks.
 BULK_DELETE_MAX_AGE = datetime.timedelta(days=14)
 
-# Each action and the permission the acting moderator needs for it -- the same one the matching
-# command requires (warn mirrors the ``warn`` command's Kick Members).
-ACTION_PERMISSIONS: dict[str, str] = {
-    'kick': 'kick_members',
-    'ban': 'ban_members',
-    'unban': 'ban_members',
-    'softban': 'ban_members',
-    'warn': 'kick_members',
-    'mute': 'manage_roles',
-    'unmute': 'manage_roles',
-    'timeout': 'moderate_members',
-    'untimeout': 'moderate_members',
-    'purge': 'manage_messages',
-}
 ACTIONS = frozenset(ACTION_PERMISSIONS)
 # Actions Discord only lets Percy perform on a member it outranks. Every action also requires the
 # moderator to outrank the member; a mute only needs the mute role below Percy, not the member.

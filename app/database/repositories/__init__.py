@@ -19,6 +19,7 @@ from app.database.repositories.integrations import EventWebhooksRepository, Guil
 from app.database.repositories.moderation import CasesRepository, IncidentsRepository, ModerationRepository
 from app.database.repositories.music import MusicSessionsRepository
 from app.database.repositories.news import NewsRepository
+from app.database.repositories.notifications import NotificationsRepository
 from app.database.repositories.releases import ReleasesRepository
 from app.database.repositories.stats import EmojiStatsRepository, GameStatsRepository, StatsRepository
 from app.database.repositories.timers import TimersRepository
@@ -50,6 +51,7 @@ __all__ = (
     'ModerationRepository',
     'MusicSessionsRepository',
     'NewsRepository',
+    'NotificationsRepository',
     'PlaylistsRepository',
     'PollsRepository',
     'ReleasesRepository',

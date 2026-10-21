@@ -36,6 +36,7 @@ from app.database.repositories import (
     ModerationRepository,
     MusicSessionsRepository,
     NewsRepository,
+    NotificationsRepository,
     PlaylistsRepository,
     PollsRepository,
     ReleasesRepository,
@@ -347,6 +348,7 @@ class Database(_Database):
         self.watchlist = WatchlistRepository(self)
         self.releases = ReleasesRepository(self)
         self.news = NewsRepository(self)
+        self.notifications = NotificationsRepository(self)
         self.sentinel_roles = SentinelRoleQueue(bot)
 
         self._register_cache_signals()
@@ -1021,6 +1023,9 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
     muted_members: set[int]
     mute_role_id: int | None
 
+    request_channel_id: int | None
+    request_role_ids: list[int]
+
     alert_webhook_url: str | None
     alert_channel_id: int | None
 
@@ -1063,6 +1068,8 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         "poll_ping_role_id",
         "poll_reason_channel_id",
         "prefixes",
+        "request_channel_id",
+        "request_role_ids",
         "safe_automod_entity_ids",
         "use_music_panel",
         "voice_log_channel_id",
@@ -1076,6 +1083,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
         self.safe_automod_entity_ids = set(self.safe_automod_entity_ids or [])
         self.muted_members = set(self.muted_members or [])
         self.prefixes = set(self.prefixes or [])
+        self.request_role_ids = list(getattr(self, "request_role_ids", None) or [])
         self.linked_automod_rules = set(self.linked_automod_rules or [])
 
     @property
