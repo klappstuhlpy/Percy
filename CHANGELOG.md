@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-21
+
 ### Added
 
 - Percy's private log channel now gets a card when Percy starts (version, server and
