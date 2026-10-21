@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "dashboard"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "askama",
@@ -969,8 +969,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "percy-client"
-version = "0.6.0"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.8.0#83214cd0f6b105c1758713a01924c2b22c1aa853"
+version = "0.7.0"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.9.0#e2ade320d48dcad0dc4f6a956c1bba71fe961056"
 dependencies = [
  "reqwest",
  "serde",

@@ -1,6 +1,6 @@
 [package]
 name = "dashboard"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 license = "AGPL-v3"
 description = "Percy dashboard — standalone web binary built on the shared klappstuhl.me kernel."
@@ -22,7 +22,7 @@ dirs = "5.0.1"
 pulldown-cmark = "0.10"
 kls-ui = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
 kls-web-core = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.3.0" }
-percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.8.0" }
+percy-client = { git = "https://github.com/klappstuhlpy/kls-core", tag = "v0.9.0" }
 # rusqlite is pulled transitively by kls-web-core; declared directly (matching
 # its version + bundled feature) so the migrate() signature and the DB init
 # tests can name rusqlite::Connection. Feature unification keeps it one build.

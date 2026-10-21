@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-21
+
+### Added
+
+- An AutoMod page: one card per Percy preset with an on/off toggle, exempt roles and channels, and the keyword list where the preset uses one. It warns when Percy lacks Manage Server.
+- A one-step leveling setup on the Leveling page while leveling is off: where level-ups are announced, and optionally 12 milestone reward roles.
+- A one-step Sentinel setup on the Sentinel tab while Sentinel is not set up: create `#verify` and `Unverified` or pick your own, post the captcha message, and optionally start protection.
+- "Send test" buttons next to the log, alert and poll channels.
+- An Undo button on the "saved" message after saving settings, for 8 seconds.
+
 ## [0.10.0] - 2026-10-21
 
 ### Added
