@@ -31,6 +31,7 @@ const IGNORED: &[&str] = &[
     "music/lyrics",
     "changes",
     "leveling/test-message",
+    "test-message",
 ];
 
 /// What a request changed, in words: `("Leveling", "Updated")`, plus the guild id.
@@ -243,6 +244,7 @@ mod tests {
         assert_eq!(d(Method::POST, "/dashboard/guild/1/me/rank-card"), None);
         assert_eq!(d(Method::POST, "/dashboard/guild/1/music/control"), None);
         assert_eq!(d(Method::POST, "/dashboard/guild/1/ai/ask"), None);
+        assert_eq!(d(Method::POST, "/dashboard/guild/1/test-message"), None);
         assert_eq!(d(Method::POST, "/account/progress"), None);
         assert_eq!(d(Method::POST, "/dashboard/guild/notanid/config"), None);
     }

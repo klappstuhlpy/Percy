@@ -505,6 +505,31 @@ pub async fn guild_setup_logging(
     }
 }
 
+/// `POST /dashboard/guild/:guild_id/test-message` — a "Send test" button beside a posting feature's channel.
+/// Body: `{ "feature": "audit_log" | "alerts" | "mod_log" | "message_log" | "voice_log" | "polls" }`.
+pub async fn guild_test_message(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    match percy
+        .send_test_message(guild_id, body["feature"].as_str().unwrap_or_default())
+        .await
+    {
+        Ok(result) => Json(serde_json::json!({"ok": true, "message": result.message})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
 /// `POST /dashboard/guild/:guild_id/setup/leveling` — the Leveling tab's one-step setup.
 /// Body: `{ "level_up_channel": "0" | "1" | "2" | "<channel id>", "preset_roles": bool }`.
 pub async fn guild_setup_leveling(
