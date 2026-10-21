@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .analytics import router as analytics_router
+from .automod import router as automod_router
 from .backup import router as backup_router
 from .comics import router as comics_router
 from .content import router as content_router
@@ -45,4 +46,5 @@ ALL_ROUTERS = [
     news_router,
     rolemenus_router,
     starboard_router,
+    automod_router,
 ]

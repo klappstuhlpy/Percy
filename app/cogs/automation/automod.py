@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, Required, TypedDict
 
 import discord
@@ -190,6 +191,20 @@ class AutoModPresets:
         """
         return [cls.links, cls.capital_spam, cls.invites_spam, cls.bad_words]
 
+    #: URL-safe keys for the presets, in display order (the dashboard addresses presets by these).
+    KEYS: ClassVar[tuple[str, ...]] = ("links", "capital_spam", "invites_spam", "bad_words")
+
+    @classmethod
+    def fresh(cls, key: str) -> AutoModRulePreset | None:
+        """A private copy of the preset under ``key`` (``None`` if unknown).
+
+        The class-level presets are shared; editing one in place would leak a guild's keywords
+        or exemptions into every other guild's defaults.
+        """
+        if key not in cls.KEYS:
+            return None
+        return copy.deepcopy(getattr(cls, key))  # type: ignore[return-value]
+
     @classmethod
     def from_rules(cls, rules: list[AutoModRule], existing: set[str]) -> list[AutoModRulePreset]:
         """Convert the rules to presets.
@@ -206,7 +221,7 @@ class AutoModPresets:
         list[AutoModRulePreset]
             The presets.
         """
-        presets = [preset for preset in cls.to_list() if preset["name"] not in existing]
+        presets = [copy.deepcopy(preset) for preset in cls.to_list() if preset["name"] not in existing]
         return [  # type: ignore
             {
                 "id": rule.id,
@@ -220,6 +235,49 @@ class AutoModPresets:
             }
             for rule in rules
         ] + presets
+
+
+async def save_preset(bot: Any, guild_id: int, preset: AutoModRulePreset, *, actor: str) -> int:
+    """Create the preset's Discord AutoMod rule (``id == 0``) or edit the existing one.
+
+    The one save path for both the ``automod`` view and the dashboard. Keeps
+    ``linked_automod_rules`` in sync (``GuildConfig.update`` invalidates the cached config)
+    and returns the rule id, which is also written back into ``preset["id"]``.
+    """
+    exempt_roles = preset.get("exempt_roles") or []
+    exempt_channels = preset.get("exempt_channels") or []
+    payload: dict[str, Any] = {
+        "name": preset["name"],
+        "event_type": preset["event_type"].value,
+        "actions": [a.to_dict() for a in preset["actions"]],
+        "enabled": preset["enabled"],
+        # Always a list, never None: discord.py drops None keys, so clearing the last exemption
+        # would otherwise silently keep it on Discord.
+        "exempt_roles": [str(r.id) for r in exempt_roles],
+        "exempt_channels": [str(c.id) for c in exempt_channels],
+    }
+    if preset["id"]:
+        await bot.http.edit_auto_moderation_rule(
+            guild_id=guild_id,
+            rule_id=preset["id"],
+            reason=f"AutoMod Rule updated by {actor}.",
+            trigger_metadata=preset["trigger"].to_metadata_dict(),
+            **payload,
+        )
+    else:
+        rule = await bot.http.create_auto_moderation_rule(
+            guild_id=guild_id,
+            reason=f"AutoMod Rule created by {actor}.",
+            trigger_type=preset["trigger"].type.value,
+            trigger_metadata=preset["trigger"].to_metadata_dict() or None,
+            **payload,
+        )
+        preset["id"] = int(rule["id"])
+
+    config: GuildConfig = await bot.db.get_guild_config(guild_id=guild_id)
+    if preset["name"] not in config.linked_automod_rules:
+        await config.update(linked_automod_rules=sorted(config.linked_automod_rules | {preset["name"]}))
+    return preset["id"]
 
 
 class BasicTextInputModal(discord.ui.Modal, title="Text Input"):
@@ -502,48 +560,11 @@ class InteractiveAutoModRuleSetupView(View):
         """Finish the setup."""
         guild = interaction.guild
         assert guild is not None
-        for name in self.to_create:
+        actor = f"{interaction.user} (ID: {interaction.user.id})"
+        for name in self.to_create | self.to_update:
             preset = discord.utils.find(lambda x: x["name"] == name, self.presets)
             assert preset is not None
-            exempt_roles = preset.get("exempt_roles") or []
-            exempt_channels = preset.get("exempt_channels") or []
-            rule = await interaction.client.http.create_auto_moderation_rule(
-                guild_id=guild.id,
-                reason=f"AutoMod Rule created by {interaction.user} (ID: {interaction.user.id}).",
-                # payload
-                name=preset["name"],
-                event_type=preset["event_type"].value,
-                trigger_type=preset["trigger"].type.value,
-                trigger_metadata=preset["trigger"].to_metadata_dict() or None,
-                actions=[a.to_dict() for a in preset["actions"]],
-                enabled=preset["enabled"],
-                exempt_roles=[str(r.id) for r in exempt_roles] or None,
-                exempt_channels=[str(c.id) for c in exempt_channels] or None,
-            )
-            preset["id"] = rule["id"]
-
-        if self.to_create:
-            config: GuildConfig = await interaction.client.db.get_guild_config(guild_id=interaction.guild.id)
-            await config.update(linked_automod_rules=config.linked_automod_rules | self.to_create)
-
-        for name in self.to_update:
-            preset = discord.utils.find(lambda x: x["name"] == name, self.presets)
-            assert preset is not None
-            exempt_roles = preset.get("exempt_roles") or []
-            exempt_channels = preset.get("exempt_channels") or []
-            await interaction.client.http.edit_auto_moderation_rule(
-                guild_id=guild.id,
-                rule_id=preset["id"],
-                reason=f"AutoMod Rule updated by {interaction.user} (ID: {interaction.user.id}).",
-                # payload
-                name=preset["name"],
-                event_type=preset["event_type"].value,
-                trigger_metadata=preset["trigger"].to_metadata_dict(),
-                actions=[a.to_dict() for a in preset["actions"]],
-                enabled=preset["enabled"],
-                exempt_roles=[str(r.id) for r in exempt_roles] or None,
-                exempt_channels=[str(c.id) for c in exempt_channels] or None,
-            )
+            await save_preset(interaction.client, guild.id, preset, actor=actor)
 
         await interaction.response.send_message(
             f"{Emojis.success} AutoMod rules have been successfully updated.", ephemeral=True
