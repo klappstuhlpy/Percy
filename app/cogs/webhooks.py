@@ -188,6 +188,15 @@ class WebhookDispatcher(Cog, name="Webhooks"):
                 await self.bot.db.event_webhooks.update(sub["id"], sub["guild_id"], {"enabled": False})
                 self._active_loaded_at = 0.0  # force a refresh so we stop dispatching to it
                 log.warning("Auto-disabled webhook subscription %s after %d consecutive failures", sub["id"], failures)
+                await self.bot.db.notifications.add(
+                    sub["guild_id"],
+                    kind="webhook_disabled",
+                    severity="critical",
+                    title="Webhook subscription disabled",
+                    body=f"Subscription #{sub['id']} was switched off after {failures} consecutive failed deliveries.",
+                    link=f"/dashboard/guild/{sub['guild_id']}/webhooks",
+                    dedupe_key=f"webhook:{sub['id']}",
+                )
         except Exception:
             log.exception("Failed to record webhook delivery for subscription %s", sub["id"])
 

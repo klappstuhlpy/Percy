@@ -75,6 +75,9 @@ class NotificationsRepository(BaseRepository):
         """
         return await self.fetch(query, guild_id, before_id, limit)
 
+    async def delete(self, notification_id: int) -> bool:
+        return await self.fetchval('DELETE FROM guild_notifications WHERE id = $1 RETURNING true', notification_id) is True
+
     async def last_read(self, guild_id: int, user_id: int) -> int:
         query = 'SELECT last_read_id FROM notification_reads WHERE guild_id = $1 AND user_id = $2'
         return await self.fetchval(query, guild_id, user_id) or 0

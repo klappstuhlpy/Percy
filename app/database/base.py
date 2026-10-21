@@ -1249,11 +1249,22 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
             The channel the action targeted; mentioned in the alert when provided.
         """
         where = f" in {channel.mention}" if channel is not None else ""
-        await self.send_alert(
+        text = (
             f"{Emojis.warning} I don't have permission to **{feature}**{where}. "
-            f"Please check my channel permissions and try again.",
-            force=True,
+            f"Please check my channel permissions and try again."
         )
+        try:  # the dashboard feed gets the same text; a feed failure must never block the alert
+            await self.bot.db.notifications.add(
+                self.id,
+                kind="missing_permission",
+                severity="warning",
+                title=f"Missing permission to {feature}",
+                body=text,
+                dedupe_key=f"perm:{feature}:{channel.id if channel else 0}",
+            )
+        except Exception:
+            log.warning("Could not record a missing-permission notification for guild %s.", self.id, exc_info=True)
+        await self.send_alert(text, force=True)
 
 
 @dataclass(slots=True)
