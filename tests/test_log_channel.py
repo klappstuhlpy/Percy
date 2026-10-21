@@ -9,6 +9,7 @@ from app.services import (
     StartupFacts,
     daily_summary_fields,
     describe_health_change,
+    feed_is_healthy,
     format_duration,
     rewrite_gateway_line,
     startup_fields,
@@ -179,3 +180,20 @@ def test_daily_summary_partial_day_and_empty() -> None:
     assert fields["Guilds"].endswith("counted since the last restart")
     assert fields["Top commands"] == "none"
     assert fields["Avg latency"] == "n/a"
+
+
+def test_latency_alert_says_high_not_down() -> None:
+    health = HealthTracker()
+    health.observe("latency", True, now=0)
+    high = health.observe("latency", False, now=60, label="Gateway latency", detail="1500 ms", problem="high")
+    assert high is not None
+    assert describe_health_change(high) == "**Gateway latency** is high: 1500 ms"
+    back = health.observe("latency", True, now=360, label="Gateway latency", problem="high")
+    assert back is not None
+    assert describe_health_change(back) == "**Gateway latency** is back to normal after 5 min high"
+
+
+def test_feed_with_a_parse_error_is_not_healthy() -> None:
+    assert feed_is_healthy("200") and feed_is_healthy("304")
+    assert not feed_is_healthy("200 not a feed")
+    assert not feed_is_healthy("503") and not feed_is_healthy("timeout")

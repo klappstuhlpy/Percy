@@ -30,7 +30,7 @@ from app.utils import (
     timetools,
 )
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
-from app.utils.formats import join_lines_limited, truncate
+from app.utils.formats import append_lists, join_lines_limited, truncate
 from app.utils.lock import lock
 from config import Emojis
 
@@ -1959,10 +1959,9 @@ class Moderation(Cog):
                     await progress.tick(i, total, "Muting")
 
         message = f"Muted [`{total - failed - len(skipped) - len(blocked)}`/`{total}`] members."
-        if blocked:
-            message += "\nNot muted:\n" + join_lines_limited(blocked)
-        if skipped:
-            message += f"\nAlready muted (skipped): {human_join([f'`{m}`' for m in skipped], final='and')}."
+        message = append_lists(
+            message, ("Not muted:", blocked), ("Already muted (skipped):", [f"`{m}`" for m in skipped])
+        )
         await ctx.send_success(message)
 
     @command(

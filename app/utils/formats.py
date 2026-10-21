@@ -310,6 +310,19 @@ def join_lines_limited(lines: list[str], limit: int = 1500) -> str:
     return "\n".join(out)
 
 
+def append_lists(message: str, *sections: tuple[str, list[str]], limit: int = 1700) -> str:
+    """Append titled line lists to ``message`` so the result stays near ``limit`` characters.
+
+    The remaining budget is split evenly between the non-empty lists, so a long first list
+    cannot crowd out the rest. Each cut list ends in ``… and N more``.
+    """
+    pending = [(title, lines) for title, lines in sections if lines]
+    for i, (title, lines) in enumerate(pending):
+        share = max(limit - len(message), 0) // (len(pending) - i)
+        message += f"\n{title}\n" + join_lines_limited(lines, share)
+    return message
+
+
 def WrapList(list_: list, length: int) -> list[list]:
     """Wrap a list into sublists of a certain length."""
 

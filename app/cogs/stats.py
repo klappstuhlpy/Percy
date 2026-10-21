@@ -45,6 +45,7 @@ from app.services import (
     count_code_stats,
     daily_summary_fields,
     describe_health_change,
+    feed_is_healthy,
     parse_lavalink_metrics,
     rewrite_gateway_line,
     startup_fields,
@@ -324,7 +325,7 @@ class Stats(Cog):
             await self.report_health(self._health.observe(
                 "latency", latency < HIGH_LATENCY, now=now, label="Gateway latency",
                 detail=f"{latency * 1000:.0f} ms for the last {HIGH_LATENCY_CHECKS} minutes",
-                confirm=HIGH_LATENCY_CHECKS,
+                confirm=HIGH_LATENCY_CHECKS, problem="high",
             ))
 
         pool = self.bot.db.pool_stats()
@@ -354,7 +355,7 @@ class Stats(Cog):
                 continue
             kind = "Comic feed" if source["media"] == "comic" else "News feed"
             await self.report_health(self._health.observe(
-                f"feed:{source['slug']}", status[:1] in ("2", "3"), now=now,
+                f"feed:{source['slug']}", feed_is_healthy(status), now=now,
                 label=f"{kind} {source['name']}", detail=f"last poll returned `{status[:80]}`",
             ))
 

@@ -30,6 +30,7 @@ __all__ = (
     "StartupFacts",
     "daily_summary_fields",
     "describe_health_change",
+    "feed_is_healthy",
     "format_duration",
     "rewrite_gateway_line",
     "startup_fields",
@@ -148,6 +149,8 @@ class HealthChange:
     detail: str | None
     #: How long the component was down, on a recovery whose start was seen.
     down_for: float | None
+    #: What "not ok" means: "down" for an outage, "high" for a reading over its limit.
+    problem: str = "down"
 
 
 @dataclass(slots=True)
@@ -178,6 +181,7 @@ class HealthTracker:
         label: str | None = None,
         detail: str | None = None,
         confirm: int = 1,
+        problem: str = "down",
     ) -> HealthChange | None:
         state = self._states.get(key)
         if state is None:
@@ -191,17 +195,23 @@ class HealthTracker:
             return None
         down_for = now - state.since if ok else None
         self._states[key] = _State(ok=ok, since=now)
-        return HealthChange(key=key, label=label or key, ok=ok, detail=detail, down_for=down_for)
+        return HealthChange(key=key, label=label or key, ok=ok, detail=detail, down_for=down_for, problem=problem)
+
+
+def feed_is_healthy(status: str) -> bool:
+    """A feed is healthy only on a bare 2xx/3xx code; ``200 <parse error>`` is not."""
+    return status.isdigit() and status[0] in "23"
 
 
 def describe_health_change(change: HealthChange) -> str:
     """One line for a health change (the cog adds the emoji)."""
     if change.ok:
-        text = f"**{change.label}** recovered"
+        high = change.problem == "high"
+        text = f"**{change.label}** is back to normal" if high else f"**{change.label}** recovered"
         if change.down_for is not None:
-            text += f" after {format_duration(change.down_for)} down"
+            text += f" after {format_duration(change.down_for)} {'high' if high else 'down'}"
         return text
-    text = f"**{change.label}** is down"
+    text = f"**{change.label}** is {change.problem}"
     if change.detail:
         text += f": {change.detail}"
     return text

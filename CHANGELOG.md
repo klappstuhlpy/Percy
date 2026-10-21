@@ -35,7 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ending Sentinel any way other than **Stand Down** (Deactivate in the menu, the
   dashboard, or deleting the verification channel or message) left the released
   members marked as raiders, so chatting freely could still get them banned. Every
-  way of ending Sentinel now clears the mark, for everyone Sentinel flagged.
+  way of ending Sentinel now clears the mark, for everyone Sentinel flagged, and an
+  open Ban All Raiders alert no longer offers those members.
 - When raid or mention-spam protection tripped on the server owner, the alert asked
   you to check Percy's role position. It now says the server owner can never be
   banned.
@@ -52,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A dashboard save with an invalid Sentinel setting failed as a whole even though
   the settings saved before it in the same request had already been applied. The
   Sentinel part is now reported as failed on its own.
+- A dashboard save with an invalid config value (such as a bad mention count) now fails
+  before anything is applied, instead of after earlier changes were already saved.
 - Picking a new lockdown role on the dashboard while Percy was still loading the
   member list could let through a role members already wear. Percy now asks you to
   try again in a minute.
@@ -65,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is retried instead of dropped.
 - Shutting Percy down could hang while it waited on a database connection the
   timer loop kept open.
+- In Docker, every log line was printed twice. Each line now prints once, and numbers
+  in Docker now use thousands separators.
 - The AI moderation flag buttons now follow the same role rules as the commands, and
   Warn no longer requires Percy to outrank the member, as with the `warn` command.
 - Long lists of skipped members from `multiban`, `multimute` and `multiunmute` are now
@@ -78,8 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - On the dashboard, you can purge your own messages again.
 - Timing out an administrator from the dashboard now says Discord does not allow it,
   rather than claiming Percy lacks permissions.
-- A dashboard save with an invalid config value (such as a bad mention count) now fails
-  before anything is applied, instead of after earlier changes were already saved.
 
 ## [2.7.0] - 2026-10-20
 

@@ -263,3 +263,12 @@ def test_join_lines_limited_truncates_with_a_count() -> None:
     assert len(out) <= 520  # the limit covers the listed lines; the "and N more" note rides on top
     assert out.endswith(f"… and {100 - (len(out.splitlines()) - 1)} more")
     assert formats.join_lines_limited(["a", "b"]) == "a\nb"
+
+
+def test_append_lists_keeps_two_long_lists_under_the_message_limit() -> None:
+    blocked = [f"`member{i}`: they outrank you" for i in range(200)]
+    skipped = [f"`someone{i}`" for i in range(500)]
+    out = formats.append_lists("Muted [`1`/`701`] members.", ("Not muted:", blocked), ("Already muted:", skipped))
+    assert len(out) < 2000
+    assert "… and" in out.split("Already muted:")[0] and "… and" in out.split("Already muted:")[1]
+    assert formats.append_lists("hi", ("Empty:", [])) == "hi"
