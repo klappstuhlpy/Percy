@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-10-21
+
 ### Fixed
 
 - Every comic refresh logged a failed database query for each issue whose title clashed with
