@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-21
+
+### Added
+
+- A Notifications page: the server's notification feed, pending action requests with Approve and Deny, recent moderation cases, and the request channel and requester role settings. The sidebar shows a badge for unread items and pending requests.
+- A Discord-style preview of the level-up message, with clickable placeholders.
+- A Customize dialog for your rank card on the profile page, with a live preview.
+
+### Changed
+
+- The source is regrouped by domain (guild, account, catalogue, ...). No behaviour change.
+
+### Fixed
+
+- The members row menu opens upward when it would be clipped, and only when it fits above.
+- The sidebar keeps its scroll position between pages.
+- The music panel options and the starboard toggles are laid out more compactly.
+
 ## [0.11.0] - 2026-10-21
 
 ### Added
