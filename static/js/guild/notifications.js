@@ -13,7 +13,12 @@
             document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
             tabs.querySelectorAll('a[data-tab]').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
         };
-        const fromHash = () => { const h = location.hash.slice(1); return names.includes(h) ? h : null; };
+        const fromHash = () => {
+            const h = decodeURIComponent(location.hash.slice(1));
+            if (names.includes(h)) return h;
+            const pane = h && document.getElementById(h) && document.getElementById(h).closest('[data-pane]');
+            return pane ? pane.dataset.pane : null; // a section id inside a tab opens that tab
+        };
         let saved = null;
         try { saved = localStorage.getItem('percy.notif.tab'); } catch { /* storage unavailable */ }
         const open = (name) => {

@@ -2637,7 +2637,7 @@ th.th-sortable[aria-sort="descending"]::after {
 .modal-form .config-input,
 .modal-form .config-select,
 .modal-form textarea { margin-bottom: 0.75rem; }
-.modal-form .config-toggle { margin: 0.25rem 0 0.75rem; }
+.modal-form .config-toggle { margin-bottom: 0; }
 .modal-form > :last-child { margin-bottom: 0; }
 
 /* -- Modal width modifiers (compose with .modal-card) -- */
@@ -3319,6 +3319,7 @@ a.user-tag-chip:hover { border-color: var(--branding); }
 .dc-bot-tag { background: #5865f2; color: #fff; font-size: 0.6rem; font-weight: 600; padding: 0 0.3em; border-radius: 3px; align-self: center; }
 .dc-time { color: #949ba4; font-size: 0.75rem; }
 .dc-content { overflow-wrap: anywhere; }
+.dc-content.discord-markdown { background: none; border: 0; padding: 0; font-size: inherit; line-height: inherit; max-height: 50vh; overflow-y: auto; }
 .dc-content code, .dc-content pre { background: #2b2d31; border-radius: 4px; padding: 0.1em 0.3em; font-family: var(--font-mono, monospace); font-size: 0.85em; }
 .dc-content pre { padding: 0.5em; margin: 0.25em 0; white-space: pre-wrap; }
 .dc-quote { margin: 0; padding-left: 0.75rem; border-left: 4px solid #4e5058; }

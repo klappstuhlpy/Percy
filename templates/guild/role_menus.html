@@ -52,6 +52,7 @@
                 <label class="config-label" for="rm-desc-{{ menu.id }}">Description</label>
                 <input type="text" id="rm-desc-{{ menu.id }}" name="description" class="config-input" maxlength="1000" value="{{ menu.description.as_deref().unwrap_or("") }}" placeholder="Shown above the buttons">
             </div>
+            <div class="toggle-stack">
             <label class="config-toggle">
                 <div>
                     <span class="config-label">Single choice</span>
@@ -59,6 +60,7 @@
                 </div>
                 <input type="checkbox" name="unique" {% if menu.unique %}checked{% endif %}>
             </label>
+            </div>
         </div>
     </form>
 
@@ -111,10 +113,12 @@
             <input type="text" id="rm-new-title" class="config-input" maxlength="100" placeholder="Pick your roles">
             <label class="config-label" for="rm-new-desc">Description <span class="text-muted">(optional)</span></label>
             <input type="text" id="rm-new-desc" class="config-input" maxlength="1000" placeholder="Click a button to get or remove a role.">
+            <div class="toggle-stack">
             <label class="config-toggle">
                 <div><span class="config-label">Single choice</span><span class="config-description">Members can hold only one role from this menu</span></div>
                 <input type="checkbox" id="rm-new-unique">
             </label>
+            </div>
             <p class="config-description">Percy posts the menu right away; add roles to it afterwards.</p>
         </div>
         <div class="modal-actions">
