@@ -28,46 +28,81 @@
     }
 
     // -- Rank card ---------------------------------------------------------------
-    // The preview is the member's real card re-rendered by Percy for the draft; only the
-    // unsaved banner's Save stores it.
+    // The card shows first; Customize opens a modal whose preview is the member's real card
+    // re-rendered by Percy for the draft. The modal's Save/Cancel replaces the unsaved banner
+    // (an explicit exception to the no-Save-button rule), so the form is not PercyUnsaved-watched.
     const cardForm = document.getElementById('rank-card-form');
     const cardImg = document.getElementById('rank-card-img');
+    const cardDialog = document.getElementById('rank-card-dialog');
+    const cardLive = document.getElementById('rank-card-live');
     const cardStatus = document.getElementById('rank-card-status');
 
-    if (cardForm && cardImg) {
-        const cardStyle = () => Object.fromEntries(
-            [...cardForm.querySelectorAll('select')].map((el) => [el.name, el.value]));
-        let saved = JSON.stringify(cardStyle());
+    if (cardForm && cardDialog && cardLive) {
+        const selects = [...cardForm.querySelectorAll('select')];
+        const cardStyle = () => Object.fromEntries(selects.map((el) => [el.name, el.value]));
+        let snapshot = cardStyle();
         let timer = null;
-        const preview = () => {
-            const note = JSON.stringify(cardStyle()) === saved ? 'Your saved card.' : 'Preview only — save to keep it.';
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                cardImg.src = `/dashboard/guild/${GUILD_ID}/me/rank-card.png?${new URLSearchParams(cardStyle())}`;
-                if (cardStatus) cardStatus.textContent = note;
-            }, 600);
-        };
-        // Fires on edits and on the banner's Discard (which restores the form), so both re-render.
-        cardForm.addEventListener('change', preview);
-        cardImg.addEventListener('error', () => {
-            if (cardStatus) cardStatus.textContent = 'The preview could not be rendered right now.';
-        });
+        let ctrl = null;
+        let objUrl = null;
 
-        PercyUnsaved.watchForm(cardForm, {
-            label: 'Rank card',
-            save: async () => {
+        const render = async () => {
+            if (ctrl) ctrl.abort();
+            const mine = ctrl = new AbortController();
+            cardStatus.textContent = 'Rendering…';
+            try {
+                const res = await fetch(`/dashboard/guild/${GUILD_ID}/me/rank-card.png?${new URLSearchParams(cardStyle())}`, { signal: mine.signal });
+                if (!res.ok) throw new Error(res.status);
+                const url = URL.createObjectURL(await res.blob());
+                if (objUrl) URL.revokeObjectURL(objUrl);
+                objUrl = url;
+                cardLive.src = url;
+                cardStatus.textContent = JSON.stringify(cardStyle()) === JSON.stringify(snapshot)
+                    ? 'Your saved card.' : 'Preview only — save to keep it.';
+            } catch (e) {
+                if (e.name !== 'AbortError') cardStatus.textContent = 'The preview could not be rendered right now.';
+            }
+        };
+        cardForm.addEventListener('change', () => { clearTimeout(timer); timer = setTimeout(render, 250); });
+
+        // Drop pending work and the preview blob; shared by Cancel, Escape and Save.
+        const cleanup = () => {
+            clearTimeout(timer);
+            if (ctrl) ctrl.abort();
+            if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
+        };
+        const restore = () => selects.forEach((el) => { el.value = snapshot[el.name]; });
+
+        document.getElementById('rank-card-customize').addEventListener('click', () => {
+            snapshot = cardStyle();
+            cardLive.src = cardImg.src;
+            cardStatus.textContent = 'Your saved card.';
+            cardDialog.showModal();
+        });
+        document.getElementById('rank-card-cancel').addEventListener('click', () => { restore(); cleanup(); cardDialog.close(); });
+        // Escape fires `cancel` and then closes the dialog itself.
+        cardDialog.addEventListener('cancel', () => { restore(); cleanup(); });
+
+        const saveBtn = document.getElementById('rank-card-save');
+        saveBtn.addEventListener('click', async () => {
+            saveBtn.disabled = true;
+            try {
                 const res = await fetch(`/dashboard/guild/${GUILD_ID}/me/rank-card`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify(cardStyle()),
                 });
                 const data = await res.json();
-                if (data.ok) {
-                    saved = JSON.stringify(cardStyle());
-                    if (cardStatus) cardStatus.textContent = 'Your saved card.';
-                }
-                return data;
-            },
+                if (!data.ok) throw new Error(data.error || 'Could not save the rank card.');
+                snapshot = cardStyle();
+                cleanup();
+                cardDialog.close();
+                cardImg.src = `/dashboard/guild/${GUILD_ID}/me/rank-card.png?t=${Date.now()}`;
+                showToast('success', 'Rank card saved.');
+            } catch (e) {
+                showToast('error', e.message || 'Could not save the rank card.');
+            } finally {
+                saveBtn.disabled = false;
+            }
         });
     }
 

@@ -463,15 +463,19 @@
     }
 }
 
-/* Rank card editor: pickers beside a live preview, stacked on narrow screens. */
-.rank-card-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 1.5rem; align-items: start; }
-.rank-card-preview { margin: 0; }
-.rank-card-preview img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--box-border); }
+/* Rank card: saved card first; the editor is a modal with pickers beside a live preview. */
+.rank-card-editor { display: grid; grid-template-columns: minmax(16rem, 22rem) 1fr; gap: 1.5rem; align-items: start; }
+.rank-card-dialog { width: min(64rem, calc(100vw - 2rem)); max-width: 64rem; padding: 1.25rem; border: 1px solid var(--box-border); border-radius: 12px; background: var(--box-bg, var(--bg, #1a1a1a)); color: inherit; }
+.rank-card-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.rank-card-dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.rank-card-preview { margin: 0 0 1rem; }
+.rank-card-editor .rank-card-preview { margin: 0; }
+.rank-card-preview img { display: block; width: 100%; height: auto; aspect-ratio: 1154 / 360; border-radius: 8px; border: 1px solid var(--box-border); }
 .rank-card-preview figcaption { margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted); }
 .badge-soon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15em 0.6em; border-radius: 999px; border: 1px solid var(--box-border); color: var(--text-muted); }
-@media (max-width: 760px) {
+@media (max-width: 720px) {
     .rank-card-editor { grid-template-columns: minmax(0, 1fr); }
-    .rank-card-preview { order: -1; }
+    .rank-card-editor .rank-card-preview { order: -1; }
 }
 
 /* Reminders */

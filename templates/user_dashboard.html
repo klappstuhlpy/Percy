@@ -135,41 +135,51 @@
         </div>
     </section>
 
-    {# ─── Rank card (hidden when the server locks the style) ─────── #}
-    {% if !card_fields.is_empty() %}
+    {# ─── Rank card (always shown; Customize only when the server allows it) ─────── #}
     <section class="config-section dash-rise" style="--i:3">
         <h2>Rank card</h2>
         <p class="config-section-description">How your card looks when anyone runs <code>/level</code>. Your choice applies on every server that allows customizing; &ldquo;Server default&rdquo; follows this server's style.</p>
-        <div class="rank-card-editor">
-            <form class="rank-card-controls" id="rank-card-form">
-                {% for field in card_fields %}
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <label for="card-{{ field.key }}">{{ field.label }}</label>
+        <figure class="rank-card-preview">
+            <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Your rank card" width="1154" height="360">
+        </figure>
+        {% if !card_fields.is_empty() %}
+        <button type="button" id="rank-card-customize" class="button primary small">Customize</button>
+        <dialog id="rank-card-dialog" class="rank-card-dialog">
+            <div class="rank-card-editor">
+                <form class="rank-card-controls" id="rank-card-form" onsubmit="return false">
+                    {% for field in card_fields %}
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <label for="card-{{ field.key }}">{{ field.label }}</label>
+                        </div>
+                        <select id="card-{{ field.key }}" name="{{ field.key }}" class="config-select">
+                            <option value=""{% if field.current.is_empty() %} selected{% endif %}>{{ field.default_label }}</option>
+                            {% for opt in field.options %}
+                            <option value="{{ opt.value }}"{% if opt.value == field.current %} selected{% endif %}>{{ opt.label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    <select id="card-{{ field.key }}" name="{{ field.key }}" class="config-select">
-                        <option value=""{% if field.current.is_empty() %} selected{% endif %}>{{ field.default_label }}</option>
-                        {% for opt in field.options %}
-                        <option value="{{ opt.value }}"{% if opt.value == field.current %} selected{% endif %}>{{ opt.label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endfor %}
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <label>Custom background image</label>
-                        <span class="setting-hint">Coming soon &mdash; uploads need image moderation first.</span>
+                    {% endfor %}
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <label>Custom background image</label>
+                            <span class="setting-hint">Coming soon &mdash; uploads need image moderation first.</span>
+                        </div>
+                        <span class="badge-soon">Soon</span>
                     </div>
-                    <span class="badge-soon">Soon</span>
-                </div>
-            </form>
-            <figure class="rank-card-preview">
-                <img id="rank-card-img" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
-                <figcaption id="rank-card-status">Your saved card.</figcaption>
-            </figure>
-        </div>
+                </form>
+                <figure class="rank-card-preview">
+                    <img id="rank-card-live" src="/dashboard/guild/{{ guild_id }}/me/rank-card.png" alt="Preview of your rank card" width="1154" height="360">
+                    <figcaption id="rank-card-status">Your saved card.</figcaption>
+                </figure>
+            </div>
+            <div class="rank-card-dialog-footer">
+                <button type="button" id="rank-card-cancel" class="button small">Cancel</button>
+                <button type="button" id="rank-card-save" class="button primary small">Save</button>
+            </div>
+        </dialog>
+        {% endif %}
     </section>
-    {% endif %}
     {% when None %}
     {% endmatch %}
 
