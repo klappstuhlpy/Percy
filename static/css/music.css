@@ -68,9 +68,9 @@
 
 /* ── Music Panel: settings cards (toggle + dedicated-channel row) ─────── */
 .panel-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1rem;
     max-width: 680px;
 }
 /* Each row is a self-contained card. Overrides .config-toggle's compact
@@ -78,7 +78,9 @@
 .panel-item {
     margin: 0;
     gap: 1rem;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
     padding: 0.85rem 1rem;
     border-radius: 0.55rem;
     background: var(--box-shade);
@@ -106,17 +108,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-    justify-content: flex-end;
 }
-.panel-channel-select { min-width: 150px; max-width: 200px; }
-
-@media (max-width: 560px) {
-    .panel-item {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .panel-item-action { justify-content: stretch; }
-    .panel-channel-select { flex: 1; max-width: none; }
-}
+.panel-item > .panel-item-action { flex-direction: row; }
+.panel-channel-select { flex: 1; min-width: 0; }
+.panel-item > .button, .panel-item > input[type="checkbox"] { align-self: flex-start; }
