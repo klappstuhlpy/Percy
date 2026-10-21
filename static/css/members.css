@@ -141,6 +141,8 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
 }
 
+.member-menu--up { top: auto; bottom: calc(100% + 0.25rem); }
+
 .member-menu-item {
     padding: 0.45rem 0.65rem;
     font-size: 0.82rem;
