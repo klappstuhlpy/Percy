@@ -7,14 +7,13 @@ the owner-only global ``notice`` commands.
 
 from __future__ import annotations
 
-import datetime
 import logging
 from typing import Literal
 
 import discord
 from discord.ext import commands, tasks
 
-from app.core import Bot, Cog, Context, command, describe, group
+from app.core import Bot, Cog, Context, describe, group
 from app.services.notifications import ACTION_PERMISSIONS, REQUESTABLE_ACTIONS, SEVERITIES, check_request
 from app.utils import timetools  # noqa: TC001 -- discord.py evaluates the converter annotation
 
@@ -91,9 +90,11 @@ class Notifications(Cog):
         ctx: Context,
         action: Action,
         member: discord.Member,
-        reason: str,
         duration: timetools.FutureTime | None = None,
+        *,
+        reason: str,
     ) -> None:
+        """Usage: `request create timeout @member 1h spamming links` or `request create ban @member reason`."""
         assert ctx.guild is not None and isinstance(ctx.author, discord.Member)
         config = await self.bot.db.get_guild_config(ctx.guild.id)
         perms = ctx.author.guild_permissions

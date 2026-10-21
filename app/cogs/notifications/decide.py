@@ -71,7 +71,10 @@ async def decide_request(
         guild.id, request_id, status='approved' if approve else 'denied', decided_by=decider.id, note=note
     )
     if claimed is None:
-        return _fail('expired', 'This request was already decided or has expired.', 409, row)
+        latest = await repo.get_request(guild.id, request_id) or row
+        # Still 'pending' here means it lapsed (expires_at passed before the expiry loop ran).
+        status = latest['status'] if latest['status'] != 'pending' else 'expired'
+        return _fail(status, f'This request was already {status}.', 409, latest)
 
     status, result = claimed['status'], None
     if approve:
@@ -88,6 +91,9 @@ async def decide_request(
             status, result = 'approved', 'done'
         except MemberActionError as exc:
             status, result = 'failed', exc.detail
+        except Exception:
+            log.exception('Approved request %s failed unexpectedly.', request_id)
+            status, result = 'failed', 'unexpected error'
         await repo.finish_request(request_id, status=status, result=result)
 
     final = {**dict(claimed), 'status': status, 'result': result}

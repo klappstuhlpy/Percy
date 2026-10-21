@@ -49,8 +49,9 @@ def request_view(request_id: int) -> discord.ui.View:
 async def _decide(interaction: discord.Interaction[Bot], request_id: int, approve: bool, note: str | None) -> None:
     from .decide import decide_request  # decide imports this module
 
-    assert interaction.guild is not None
-    assert isinstance(interaction.user, discord.Member)
+    if interaction.guild is None or not isinstance(interaction.user, discord.Member):
+        await interaction.followup.send('Use this in the server.', ephemeral=True)
+        return
     decision = await decide_request(
         interaction.client, interaction.guild, request_id, interaction.user, approve=approve, note=note
     )

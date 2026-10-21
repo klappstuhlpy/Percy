@@ -109,3 +109,11 @@ async def test_notify_never_raises() -> None:
     bot = SimpleNamespace(db=SimpleNamespace(notifications=SimpleNamespace(add=AsyncMock(side_effect=RuntimeError))))
     await decide.notify(bot, 1, kind='notice', title='x')  # type: ignore[arg-type]
 
+
+
+async def test_unexpected_executor_error_marks_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot, guild, repo, _ = _setup(monkeypatch, execute=AsyncMock(side_effect=RuntimeError('boom')))
+    out = await decide.decide_request(bot, guild, 1, _mod(ban_members=True), approve=True)  # type: ignore[arg-type]
+    assert (out.ok, out.status) == (False, 'failed')
+    assert repo.row['status'] == 'failed'
+    assert repo.row['result'] == 'unexpected error'
