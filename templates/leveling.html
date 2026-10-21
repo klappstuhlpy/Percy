@@ -136,9 +136,12 @@
                         <button type="button" class="template-var" data-insert="{{ "{" }}{{ v.name }}{{ "}" }}" title="{{ v.description }}">{{ "{" }}{{ v.name }}{{ "}" }}</button>
                         {% endfor %}
                     </div>
-                    <div class="template-preview">
-                        <span class="template-preview-label">Preview</span>
-                        <span id="level-up-preview" data-guild-name="{{ guild_name }}">&mdash;</span>
+                    <div class="dc-message">
+                        <img class="dc-avatar" src="/static/img/logo.jpg" alt="" width="40" height="40">
+                        <div class="dc-body">
+                            <div class="dc-header"><span class="dc-name">Percy</span><span class="dc-bot-tag">APP</span><span class="dc-time" id="level-up-time"></span></div>
+                            <div id="level-up-preview" class="dc-content" data-guild-name="{{ guild_name }}">&mdash;</div>
+                        </div>
                     </div>
                     <div class="template-actions">
                         <button type="button" class="button small" id="level-up-test-btn">Send test message</button>
@@ -491,6 +494,7 @@
 const GUILD_ID = '{{ guild_id }}';
 const LEVEL_UP_CHANNEL = {{ config.level_up_channel }};
 </script>
+<script src="/static/js/discord_markdown.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
 <script src="/static/js/leveling.js"></script>
 {% endblock %}

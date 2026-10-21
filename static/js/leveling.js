@@ -81,9 +81,13 @@ if (configForm) {
     };
     const render = () => {
         const text = input.value || input.placeholder;
-        preview.textContent = text.replace(/\{\{|\}\}|\{([\w.]+)\}/g, (m, name) =>
+        const substituted = text.replace(/\{\{|\}\}|\{([\w.]+)\}/g, (m, name) =>
             m === '{{' ? '{' : m === '}}' ? '}' : (name in sample ? sample[name] : m));
+        preview.innerHTML = PercyDiscordMarkdown.render(substituted, { mentions: { '@percyfan': 'percyfan' } });
     };
+    const time = document.getElementById('level-up-time');
+    if (time) time.textContent = 'Today at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    preview.addEventListener('click', (e) => { const sp = e.target.closest('.dc-spoiler'); if (sp) sp.classList.toggle('dc-spoiler--open'); });
     input.addEventListener('input', render);
     render();
 
