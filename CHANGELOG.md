@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-21
+
+### Added
+
+- A setup status at the top of the server settings page: for every feature in use, whether Percy can post in the configured channels and give out the configured roles, with the exact missing permission and a link to the fix.
+- A one-step logging setup on the Moderation tab: pick the logs and one channel, or let Percy create a private `#percy-logs`.
+- A change log page: who changed what on the dashboard and when, for 90 days. Only the names of changed fields are kept.
+- Rank card customization on your profile page (theme, accent colour, progress bar, font) with a live preview, and a server default with a lock on the Leveling page.
+- The level-up message shows a live preview, clickable placeholders and a "Send test message" button.
+- Role menu, starboard and reminder pages: post and edit role menus, set up the starboard and see the most-starred messages, and cancel your own reminders from your profile.
+- Tags can be created and their content edited on the Tags page.
+- Channel and role pickers mark channels Percy can't post in and roles it can't give out, and long lists get a filter box.
+
+### Changed
+
+- Every confirmation says what will happen, to what, and whether it can be undone, instead of a browser "Are you sure?". Kicking or banning five or more members at once asks you to type the number.
+
+### Fixed
+
+- The changelog page showed only the first line of longer entries and printed `**` around bold words.
+
 ## [0.9.0] - 2026-08-20
 
 ### Added
