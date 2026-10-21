@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-21
+
+### Fixed
+
+- The level-up preview really is laid out like a Discord message now: Percy's avatar sits on the left, level with the name and the text. A form-field rule had been stacking it above.
+- The level-up placeholders are small inline buttons beneath the input instead of full-width bars.
+- The Notifications tabs use the same size, weight and active colour as the other tab bars.
+
+### Changed
+
+- Level-up and tag previews share one renderer that follows Discord's markdown: headings, subtext, lists, `>>>` quotes, code blocks, masked and bare links, timestamps, spoilers, mentions, custom emoji and backslash escapes, styled after Discord's dark theme.
+
 ## [0.12.1] - 2026-10-21
 
 ### Changed
