@@ -6,36 +6,19 @@ import datetime
 import discord
 from fastapi import HTTPException, status
 
-# Discord caps a timeout at 28 days; anything under a minute is not worth a round trip.
-MIN_TIMEOUT_SECONDS = 60
-MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60
-# A tempmute is lifted by a timer, so it has no Discord cap -- but past a year it is a permanent
-# mute in all but name, and an unbounded value overflows the expiry datetime.
-MAX_MUTE_SECONDS = 365 * 24 * 60 * 60
+from app.cogs.moderation.member_actions import MemberActionError
+from app.cogs.moderation.member_actions import validate_timeout_duration as _validate_timeout_duration
 
 # The largest value a Postgres BIGINT (every snowflake column) holds.
 _MAX_SNOWFLAKE = 2**63 - 1
 
 
 def validate_timeout_duration(duration: int | None) -> datetime.timedelta:
-    """Validates a timeout duration in seconds, returning it as a timedelta."""
-    if duration is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='timeout requires a duration')
-    if not MIN_TIMEOUT_SECONDS <= duration <= MAX_TIMEOUT_SECONDS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f'duration must be between {MIN_TIMEOUT_SECONDS} seconds and 28 days',
-        )
-    return datetime.timedelta(seconds=duration)
-
-
-def validate_mute_duration(duration: int | None) -> None:
-    """Refuses a tempmute duration outside one minute to one year (``None`` is a permanent mute)."""
-    if duration is not None and not MIN_TIMEOUT_SECONDS <= duration <= MAX_MUTE_SECONDS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f'duration must be between {MIN_TIMEOUT_SECONDS} seconds and 365 days',
-        )
+    """Validates a timeout duration in seconds, returning it as a timedelta (400 on a bad one)."""
+    try:
+        return _validate_timeout_duration(duration)
+    except MemberActionError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
 
 
 def parse_id(value: object, name: str) -> int:

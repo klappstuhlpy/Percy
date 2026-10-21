@@ -10,27 +10,15 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from app.cogs.moderation.member_actions import MemberActionError, apply_member_action, scan_member_messages
 from app.services.notifications import ACTION_PERMISSIONS
-from app.utils.checks import hierarchy_error
 
 from ..dependencies import BotDep, GuildDep, verify_token
-from ..helpers import parse_id, resolve_moderator, role_error, validate_mute_duration, validate_timeout_duration
+from ..helpers import parse_id, resolve_moderator, role_error
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Members"], dependencies=[Depends(verify_token)])
 
-# Percy keeps no message archive (the gateway cache holds 10 messages), so both the message
-# viewer and the purge action read live channel history. The scan is bounded on both axes:
-# only the most recently active channels are visited, and only a slice of each is read.
-MAX_SCAN_CHANNELS = 20
-MAX_SCAN_CONCURRENCY = 5
-
-# Discord refuses to bulk-delete messages older than two weeks.
-BULK_DELETE_MAX_AGE = datetime.timedelta(days=14)
-
 ACTIONS = frozenset(ACTION_PERMISSIONS)
-# Actions Discord only lets Percy perform on a member it outranks. Every action also requires the
-# moderator to outrank the member; a mute only needs the mute role below Percy, not the member.
-HIERARCHY_ACTIONS = frozenset({'kick', 'ban', 'softban', 'timeout', 'untimeout'})
 
 
 # ---------------------------------------------------------------------------
@@ -64,40 +52,6 @@ class MemberRolesBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def _scan_member_messages(
-    guild: discord.Guild,
-    user_id: int,
-    *,
-    limit: int,
-    per_channel: int = 100,
-) -> tuple[list[discord.Message], int]:
-    """Best-effort scan of recent channel history for one member's messages.
-
-    Returns the newest ``limit`` messages (across channels) plus the number of channels
-    actually read. Channels are visited newest-activity-first and capped at
-    :data:`MAX_SCAN_CHANNELS`, so a member who last spoke in a quiet channel long ago may
-    not show up — this is a recency view, not a complete history.
-    """
-    me = guild.me
-    readable = [c for c in guild.text_channels if c.permissions_for(me).read_message_history]
-    readable.sort(key=lambda c: c.last_message_id or 0, reverse=True)
-    targets = readable[:MAX_SCAN_CHANNELS]
-
-    semaphore = asyncio.Semaphore(MAX_SCAN_CONCURRENCY)
-
-    async def scan(channel: discord.TextChannel) -> list[discord.Message]:
-        async with semaphore:
-            try:
-                return [m async for m in channel.history(limit=per_channel) if m.author.id == user_id]
-            except discord.HTTPException:
-                return []
-
-    found = await asyncio.gather(*(scan(channel) for channel in targets))
-    messages = [message for chunk in found for message in chunk]
-    messages.sort(key=lambda m: m.created_at, reverse=True)
-    return messages[:limit], len(targets)
-
-
 def _message_payload(message: discord.Message) -> dict:
     return {
         'id': str(message.id),
@@ -110,84 +64,6 @@ def _message_payload(message: discord.Message) -> dict:
         'attachments': [a.url for a in message.attachments],
         'embed_count': len(message.embeds),
     }
-
-
-async def _purge_member_messages(guild: discord.Guild, user_id: int, limit: int, reason: str | None) -> int:
-    """Deletes up to ``limit`` of a member's recent messages. Returns how many were removed."""
-    messages, _ = await _scan_member_messages(guild, user_id, limit=limit)
-    cutoff = datetime.datetime.now(datetime.UTC) - BULK_DELETE_MAX_AGE
-
-    by_channel: dict[int, list[discord.Message]] = {}
-    for message in messages:
-        if message.created_at > cutoff:
-            by_channel.setdefault(message.channel.id, []).append(message)
-
-    deleted = 0
-    for channel_id, batch in by_channel.items():
-        channel = guild.get_channel(channel_id)
-        if channel is None or not channel.permissions_for(guild.me).manage_messages:
-            continue
-        # delete_messages chunks internally but caps at 100 per call.
-        for start in range(0, len(batch), 100):
-            chunk = batch[start:start + 100]
-            with suppress(discord.HTTPException):
-                await channel.delete_messages(chunk, reason=reason)
-                deleted += len(chunk)
-    return deleted
-
-
-async def _apply_mute(
-    bot, guild: discord.Guild, member: discord.Member, moderator: discord.Member, body: MemberActionBody
-) -> str:
-    """Adds the configured mute role, arming an expiry timer when a duration is given.
-
-    Returns the action recorded on the case (``mute`` or ``tempmute``).
-    """
-    config = await bot.db.get_guild_config(guild.id)
-    role_id = config.mute_role_id if config else None
-    if role_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='no mute role is configured for this server — set one in the Moderation tab',
-        )
-    role = guild.get_role(role_id)
-    if role is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='the configured mute role no longer exists')
-    if guild.me.top_role <= role:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='the mute role is equal to or above my highest role',
-        )
-    if moderator.id != guild.owner_id and moderator.top_role <= role:
-        # As the mute command's check: a moderator may not hand out a role they could not give.
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='your highest role must be above the mute role')
-    if member.get_role(role_id) is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is already muted')
-
-    # Not muted right now, so a tempmute timer left over (role removed by hand) is stale and
-    # would end this mute early.
-    await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
-    await member.add_roles(role, reason=body.reason)
-
-    if body.duration is None:
-        return 'mute'
-
-    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=body.duration)
-    await bot.timers.create(expires, 'tempmute', guild.id, moderator.id, member.id, role_id)
-    return 'tempmute'
-
-
-async def _lift_mute(bot, guild: discord.Guild, member: discord.Member, reason: str | None) -> None:
-    """Removes the mute role and cancels any pending tempmute expiry."""
-    config = await bot.db.get_guild_config(guild.id)
-    role_id = config.mute_role_id if config else None
-    if role_id is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no mute role is configured for this server')
-    if member.get_role(role_id) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not muted')
-
-    await member.remove_roles(discord.Object(id=role_id), reason=reason)
-    await bot.timers.delete_member_timer('tempmute', guild.id, member.id)
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +330,7 @@ async def member_action(
 
     Every action that changes a member's standing is recorded as a modlog case through the
     same ``mod_action`` dispatch the in-Discord commands use, so dashboard and bot actions
-    land in one history.
+    land in one history (see :func:`apply_member_action`).
 
     ``moderator_id`` is required: the acting moderator must hold the permission the matching
     command requires and outrank the member, by the same rule the commands use.
@@ -465,87 +341,20 @@ async def member_action(
             detail=f'action must be one of: {", ".join(sorted(ACTIONS))}',
         )
     moderator = await resolve_moderator(guild, body.moderator_id, ACTION_PERMISSIONS[body.action])
-    if body.action == 'mute':
-        # Before the role goes on, so a bad duration never leaves a permanent mute behind.
-        validate_mute_duration(body.duration)
-
-    # Unban and purge work on an id (the user may have left); the rest need the member.
-    member = guild.get_member(user_id)
-    if member is None and body.action not in ('unban', 'purge'):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='member not found')
-    target = member if member is not None else discord.Object(id=user_id)
-    # Purging your own messages is harmless, so self is the one target the rank rule lets through.
-    own_purge = body.action == 'purge' and user_id == moderator.id
-    if not own_purge and (
-        error := hierarchy_error(moderator, target, guild.me, action=body.action, check_bot=body.action in HIERARCHY_ACTIONS)
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
-    if body.action == 'timeout' and member is not None and member.guild_permissions.administrator:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail='Discord does not allow timing out administrators'
-        )
-
-    delete_days = max(0, min(7, body.delete_message_days))
-    extra: dict = {}
-    # The recorded case can differ from the requested action (a mute with a duration is a
-    # tempmute), so actions set this rather than assuming body.action.
-    case_action = body.action
-
     try:
-        if body.action == 'unban':
-            await guild.unban(discord.Object(id=user_id), reason=body.reason)
-            # As the unban command does: an early unban ends the tempban, so its timer must not lift a later ban.
-            await bot.timers.delete_member_timer('tempban', guild.id, user_id)
-        elif body.action == 'purge':
-            extra['deleted'] = await _purge_member_messages(guild, user_id, max(1, min(500, body.limit)), body.reason)
-        else:
-            assert member is not None
-            if body.action == 'kick':
-                await member.kick(reason=body.reason)
-            elif body.action == 'ban':
-                await member.ban(reason=body.reason, delete_message_seconds=delete_days * 86400)
-                # A permanent ban replaces any tempban, so its expiry must not lift this one later.
-                await bot.timers.delete_member_timer('tempban', guild.id, user_id)
-            elif body.action == 'softban':
-                from app.cogs.moderation.infractions import softban
-
-                wipe = (delete_days or 1) * 86400
-                if not await softban(bot, guild, member, reason=body.reason, delete_message_seconds=wipe):
-                    # The ban stands: record what happened, not a softban, and say so instead of failing.
-                    case_action = 'ban'
-                    extra['warning'] = 'banned, but lifting the ban again failed, so the member is still banned'
-            elif body.action == 'timeout':
-                delta = validate_timeout_duration(body.duration)
-                await member.timeout(delta, reason=body.reason)
-                extra['until'] = (datetime.datetime.now(datetime.UTC) + delta).isoformat()
-            elif body.action == 'untimeout':
-                if member.timed_out_until is None:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='member is not timed out')
-                await member.timeout(None, reason=body.reason)
-            elif body.action == 'mute':
-                case_action = await _apply_mute(bot, guild, member, moderator, body)
-            elif body.action == 'unmute':
-                await _lift_mute(bot, guild, member, body.reason)
-            elif body.action == 'warn':
-                if member.bot:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='cannot warn a bot')
-                # A warning is only a case plus a courtesy DM — closed DMs are not an error.
-                with suppress(discord.HTTPException):
-                    note = f': {body.reason[:1500]}' if body.reason else '.'
-                    await member.send(f'\N{WARNING SIGN} You were warned in **{guild.name}**{note}')
-    except discord.Forbidden:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f'I am missing the permissions to {body.action} this member',
-        ) from None
-    except discord.HTTPException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    # Purging messages is a cleanup, not a standing change — it gets no case.
-    if body.action != 'purge':
-        bot.dispatch('mod_action', guild.id, case_action, user_id, moderator.id, body.reason)
-
-    return {'ok': True, 'action': case_action, **extra}
+        return await apply_member_action(
+            bot,
+            guild,
+            moderator,
+            user_id,
+            action=body.action,
+            reason=body.reason,
+            duration=body.duration,
+            delete_message_days=body.delete_message_days,
+            limit=body.limit,
+        )
+    except MemberActionError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
 
 
 @router.get("/members/{user_id}/messages")
@@ -560,7 +369,7 @@ async def get_member_messages(
     Percy stores no message archive, so this is a bounded scan of the guild's most recently
     active channels (see :data:`MAX_SCAN_CHANNELS`) rather than a complete history.
     """
-    messages, scanned = await _scan_member_messages(guild, user_id, limit=limit, per_channel=per_channel)
+    messages, scanned = await scan_member_messages(guild, user_id, limit=limit, per_channel=per_channel)
     return {
         'messages': [_message_payload(m) for m in messages],
         'scanned_channels': scanned,

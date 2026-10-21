@@ -17,6 +17,7 @@ import discord
 import pytest
 from fastapi import HTTPException
 
+from app.cogs.moderation import member_actions
 from app.internal_api.routers import guild as guild_api
 from app.internal_api.routers import members as api
 from app.internal_api.routers import moderation as mod_api
@@ -205,7 +206,7 @@ async def test_out_of_range_mute_duration_is_refused_before_the_role_goes_on(dur
 async def test_purge_works_for_a_user_who_left(monkeypatch: pytest.MonkeyPatch) -> None:
     guild, _, _ = _setup(manage_messages=True)
     purge = AsyncMock(return_value=3)
-    monkeypatch.setattr(api, '_purge_member_messages', purge)
+    monkeypatch.setattr(member_actions, 'purge_member_messages', purge)
     result = await _act(guild, _bot(), 'purge', user_id=555)
     assert result['deleted'] == 3
 
@@ -344,7 +345,7 @@ async def test_an_uncached_moderator_is_fetched_not_refused() -> None:
 
 async def test_purging_your_own_messages_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     guild, _, _ = _setup(manage_messages=True)
-    monkeypatch.setattr(api, '_purge_member_messages', AsyncMock(return_value=2))
+    monkeypatch.setattr(member_actions, 'purge_member_messages', AsyncMock(return_value=2))
     result = await _act(guild, _bot(), 'purge', user_id=MOD)
     assert result['deleted'] == 2
 
