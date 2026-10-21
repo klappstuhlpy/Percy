@@ -8,7 +8,7 @@ use crate::{
     guilds::{gate_and_load_guild, user_is_member},
     mutations::{gate_json, ok_or_err},
     session::Session,
-    templates::{RoleMenusTemplate, StarboardTemplate},
+    templates::{AutoModTemplate, RoleMenusTemplate, StarboardTemplate},
     view::Viewer,
     AppState,
 };
@@ -206,6 +206,65 @@ pub async fn guild_starboard_update(
             .collect();
     }
     ok_or_err(percy.patch_starboard(guild_id, &body).await)
+}
+
+// -- AutoMod presets -----------------------------------------------------------------
+
+/// `GET /dashboard/guild/:guild_id/automod`
+pub async fn guild_automod(State(app): State<AppState>, session: Session, Path(guild_id): Path<u64>) -> Response {
+    let guild = match gate_and_load_guild(&app, &session, guild_id).await {
+        Ok(guild) => guild,
+        Err(response) => return response,
+    };
+    let percy = app.percy.as_ref().expect("gate ensured Percy is configured");
+    let (automod, roles, channels) = tokio::join!(
+        percy.get_automod(guild_id),
+        percy.get_guild_roles(guild_id),
+        percy.get_guild_channels(guild_id)
+    );
+    let everyone = guild_id.to_string();
+    AutoModTemplate {
+        account: Some(Viewer::from_session(&session)),
+        guild_id,
+        guild_name: guild.name,
+        nav_active: "automod",
+        page_title: "AutoMod",
+        automod: automod.unwrap_or_default(),
+        roles: roles
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|r| r.id != everyone)
+            .collect(),
+        channels: channels.unwrap_or_default(),
+    }
+    .into_response()
+}
+
+/// `POST /dashboard/guild/:guild_id/automod/:preset` — one preset card (JSON), forwarded as a `PUT`.
+pub async fn guild_automod_update(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, preset)): Path<(u64, String)>,
+    Json(mut body): Json<serde_json::Value>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    // The key lands in Percy's URL path; keep it to the preset alphabet.
+    if preset.is_empty() || !preset.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+        return Json(serde_json::json!({"ok": false, "error": "Unknown AutoMod preset."})).into_response();
+    }
+    for key in ["exempt_role_ids", "exempt_channel_ids"] {
+        if let Some(ids) = body.get(key).and_then(|v| v.as_array()).cloned() {
+            body[key] = ids
+                .iter()
+                .filter_map(|v| v.as_str()?.parse::<u64>().ok())
+                .map(serde_json::Value::from)
+                .collect();
+        }
+    }
+    ok_or_err(percy.put_automod_preset(guild_id, &preset, &body).await)
 }
 
 // -- Tags (write) ----------------------------------------------------------------------
