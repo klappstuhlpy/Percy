@@ -5,7 +5,7 @@ Pure parsing + validation only -- no network, no database. A seed pairs curation
 identifier per title; ``app/services/watchlist/ingest.py`` is the only place that fetches
 TMDB metadata and writes rows, using :class:`UniverseSeed` as its input.
 
-See ``.superpowers/sdd/CLAUDE_WATCHLIST_PLAN/task-4-brief.md`` for the authoritative field
+See ``.claude/ARCHIVE/sdd/CLAUDE_WATCHLIST_PLAN/task-4-brief.md`` for the authoritative field
 list and validation rules this module implements.
 """
 

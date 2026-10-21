@@ -24,7 +24,7 @@ Documentation search · and much more — all in a single, self-hostable package
 
 > The **recommended** way to use Percy is
 > to [invite the hosted instance](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands).
-> ** It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
+> It's always up-to-date, fully configured, and you can start using it immediately — no setup required.
 
 ## Documentation
 
@@ -38,8 +38,8 @@ update `percy-docs` to match.
 
 The **internal dashboard API** is not documented on the public site. Its always-current interactive reference is the
 self-hosted [Scalar](https://scalar.com/) page the bot serves at `http://127.0.0.1:8090/docs` when running with
-`INTERNAL_API_TOKEN` set. There is no third-party public API, and none is currently planned — the concept is parked
-in `PUBLIC_API_IDEA.md` in the workspace root.
+`INTERNAL_API_TOKEN` set. It backs the web dashboard at [percy.klappstuhl.me/dashboard](https://percy.klappstuhl.me/dashboard/)
+and the public release, news, watch-order and comic pages. There is no third-party public API.
 
 ---
 
@@ -73,6 +73,7 @@ in `PUBLIC_API_IDEA.md` in the workspace root.
 | **Sentinel**             | A captcha verification system: new members must solve a generated image captcha before they can participate; supports auto-trigger rate limits and `ban`/`kick` bypass actions. |
 | **Anti-spam**            | A global `SpamChecker` that throttles command abuse, flags mention spam, and detects rapid-join raids.                                                                          |
 | **Audit logging**        | Broadcast a configurable subset of server audit-log events to a channel/webhook.                                                                                                |
+| **Mod cases**            | `warn` and a queryable case log of every mod action, announced in a modlog channel; cases are editable from Discord or the dashboard.                                          |
 
 > Temporary bans, mutes and lockdowns are all backed by the persistent **timer system**, so they survive restarts and
 > fire exactly when due.
@@ -113,7 +114,7 @@ in `PUBLIC_API_IDEA.md` in the workspace root.
 | **Queue & controls** | Play, pause, skip, seek, loop, shuffle, an equalizer and a full queue.                                                                                                                                                                                                                                                                                                                     |
 | **24/7 always-on**   | `/music 247` keeps the bot permanently connected to a voice channel playing a radio/stream URL, a looping playlist (Spotify/Apple/SoundCloud links work directly), or endless autoplay. Ships curated radio presets (`/music radios`, e.g. `lofi`, `chill`, `antenne`) so no stream URL is needed. Sessions persist to PostgreSQL and auto-reconnect/resume after disconnects or restarts. |
 | **Resilience**       | Lavalink session resume + self-healing recovery: stuck/failed tracks are skipped instead of dropping the player, so playback doesn't cut off.                                                                                                                                                                                                                                              |
-| **Lyrics**           | Fetch song lyrics (Genius API) for the current track.                                                                                                                                                                                                                                                                                                                                      |
+| **Lyrics**           | Time-synced lyrics via [LRCLIB](https://lrclib.net), with Genius as a plain-text fallback.                                                                                                                                                                                                                                                                                                                                      |
 | **Playlists**        | Save, load and manage personal playlists (part of `Music` cog), persisted in PostgreSQL.                                                                                                                                                                                                                                                                                                   |
 | **Music panel**      | An optional persistent now-playing control panel pinned in a configured channel.                                                                                                                                                                                                                                                                                                           |
 
@@ -126,6 +127,8 @@ in `PUBLIC_API_IDEA.md` in the workspace root.
 | **Tags**           | Per-guild custom tags with aliases, fuzzy search, ownership transfer and usage stats.                                                                                     |
 | **Highlights**     | Get a DM when a word or phrase you subscribed to is mentioned.                                                                                                            |
 | **Autoresponders** | Canned replies that fire when a message matches a trigger (`contains`/`exact`/`startswith`/`regex`), with placeholders like `{user}` and `{count}` (`autoresponder …`).   |
+| **Starboard**      | Repost messages that gather enough star reactions into a dedicated channel.                                                                                              |
+| **Role menus**     | Self-assignable roles via persistent buttons (`rolemenu …`), optionally single-choice.                                                                                   |
 | **Gimmicks**       | Fun/flavour annotation commands.                                                                                                                                          |
 
 ### Utility & Productivity
@@ -149,8 +152,9 @@ in `PUBLIC_API_IDEA.md` in the workspace root.
 | **Documentation search** | Query and render docs (e.g. `docs`/`rtfm`/`rtfd`) for libraries from intersphinx inventories, with a local cache.                                                                                                                                   |
 | **Snekbox**              | Safely evaluate arbitrary Python in a sandboxed [Snekbox](https://github.com/python-discord/snekbox) container (run via Docker, see [Self-hosting](#self-hosting)).                                                                                 |
 | **AniList**              | Search anime & manga, with OAuth-linked account features.                                                                                                                                                                                           |
-| **Comics**               | Subscribe to weekly comic releases (Marvel/DC, via a self-hosted League of Comic Geeks API wrapper).                                                                                                                                                |
-| **AI assistant**         | `ask` the bot a question, answered by a self-hosted open model via [Ollama](https://ollama.com/); supports follow-ups by replying to its answers. Degrades gracefully when the AI host is unreachable (set `OLLAMA_ENABLED=false` to hard-disable). |
+| **Comics**               | Weekly comic releases pushed to a channel (Marvel/DC/manga), backed by a persisted catalogue.                                                                                                                                                       |
+| **Releases & news**      | `/subscribe` to brands, series, creators, characters, film universes or people; an hourly DM digest covers new comics, film/TV releases and tagged news from RSS feeds.                                                                       |
+| **AI layer**             | Optional, self-hosted via [Ollama](https://ollama.com/), off per guild by default: `ask` assistant, natural-language command routing, flag-for-review moderation (never auto-punishes), music `vibe`, NL polls/giveaways, semantic `tag find`. Falls back to the normal commands when the AI host is down (`OLLAMA_ENABLED=false` hard-disables). |
 | **Discord status feed**  | Relay Discord's own status-page incidents to a channel.                                                                                                                                                                                             |
 | **Bot stats & meta**     | Uptime, latency, command stats, source links, invite/about, and help. Owner tooling (`admin`) covers sync, hot-reload, an SQL console and task introspection.                                                                                       |
 | **Bot-list stats**       | Auto-posts the server count to discord.bots.gg, top.gg and discordbotlist.com when those tokens are configured.                                                                                                                                     |
@@ -160,7 +164,7 @@ in `PUBLIC_API_IDEA.md` in the workspace root.
 
 ## Commands
 
-Percy ships with **28 feature modules (cogs)**. Most commands are **hybrid** — available as both slash and prefix
+Percy ships with roughly **30 feature modules (cogs)**. Most commands are **hybrid** — available as both slash and prefix
 commands. The default prefix is `?` (configurable per guild), and the bot also responds to a mention.
 
 ---
@@ -173,7 +177,7 @@ commands. The default prefix is `?` (configurable per guild), and the bot also r
 > I'd strongly prefer you just [invite Percy](https://discord.com/api/oauth2/authorize?client_id=1070054930125176923&permissions=1480988813527&scope=bot%20applications.commands)
 > rather than self-hosting. No support is provided for self-hosted instances.
 
-If you still want to run your own instance, here's the short version:
+If you still want to run your own instance, see [`SELF_HOSTING_GUIDE.md`](SELF_HOSTING_GUIDE.md). Short version:
 
 **Requirements:** Python 3.12+, PostgreSQL 14+ (with `pg_trgm`), Poetry, a Lavalink server (for music).
 
@@ -207,10 +211,9 @@ for type checking (configured in `pyproject.toml`, targeting Python 3.12 with a 
 
 ### Tests
 
-The test suite lives in `tests/` and uses [pytest](https://docs.pytest.org/). It covers the pure helper modules (
-`formats`, `fuzzy`, `timetools`), the **service layer** (`bot_health`, `char_info`, `code_stats`, `gateway_stats`,
-`presence_stats`, `purge`), the **HTTP client** base, the **repository layer**, and the **pure poker engine** — and
-grows as more logic is extracted from the cogs.
+The test suite lives in `tests/` and uses [pytest](https://docs.pytest.org/). It covers the pure helpers, the
+**service layer** (AI, releases, news, analytics, backup, guild health, …), the **game engines**, the **HTTP clients**,
+**repositories**, **migrations** and the **internal API** routers — no live bot or Discord connection needed.
 
 `pytest` is configured with `asyncio_mode = "auto"`, so `async def` tests run without any extra decorator.
 
