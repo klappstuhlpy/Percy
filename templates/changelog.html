@@ -23,6 +23,9 @@
 .cl-entries { list-style: none; padding: 0; margin: 0 0 0.5rem; }
 .cl-entries li { position: relative; padding-left: 1.25rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; overflow-wrap: anywhere; }
 .cl-entries li::before { position: absolute; left: 0; font-weight: 600; }
+.cl-entries li strong { color: var(--foreground); }
+.cl-entries li code { font-size: 0.8rem; padding: 0.05em 0.35em; border-radius: 3px; background: var(--box-border); white-space: pre-wrap; }
+.cl-entries li a { color: var(--branding); }
 /* Category colors */
 .cl-added .cl-category { color: var(--success-text, #4ade80); background: var(--success-bg, rgba(74,222,128,0.1)); }
 .cl-added .cl-entries li::before { content: "+"; color: var(--success-text, #4ade80); }
@@ -70,7 +73,7 @@
             <h3 class="cl-category">{{ section.name }}</h3>
             <ul class="cl-entries">
                 {% for item in section.entries %}
-                <li>{{ item }}</li>
+                <li>{{ item|safe }}</li>
                 {% endfor %}
             </ul>
         </div>

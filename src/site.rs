@@ -128,6 +128,21 @@ fn render_markdown(markdown: &str) -> String {
     out
 }
 
+/// One changelog bullet's inline markdown (bold, code, links) as HTML. Raw HTML in the
+/// source is escaped rather than passed through, and the paragraph wrapper is dropped so
+/// the result sits inside an `<li>`.
+fn render_inline_markdown(markdown: &str) -> String {
+    use pulldown_cmark::{html, Event, Parser, Tag, TagEnd};
+    let events = Parser::new(markdown).filter_map(|event| match event {
+        Event::Start(Tag::Paragraph) | Event::End(TagEnd::Paragraph) => None,
+        Event::Html(raw) | Event::InlineHtml(raw) => Some(Event::Text(raw)),
+        other => Some(other),
+    });
+    let mut out = String::new();
+    html::push_html(&mut out, events);
+    out
+}
+
 /// Local markdown files are read once and cached for the process lifetime.
 fn md_files_cache() -> &'static MdFileCache {
     static CACHE: OnceLock<MdFileCache> = OnceLock::new();
@@ -212,7 +227,7 @@ pub async fn percy_changelog(State(app): State<AppState>, session: Option<Sessio
                             .map(|s| ChangelogSection {
                                 name: s.name,
                                 slug: s.slug,
-                                entries: s.entries,
+                                entries: s.entries.iter().map(|e| render_inline_markdown(e)).collect(),
                             })
                             .collect(),
                     })
@@ -244,4 +259,17 @@ pub async fn percy_bot_version(State(app): State<AppState>) -> Json<serde_json::
 /// `GET /support` — redirect to the support Discord server.
 pub async fn percy_support_server() -> Response {
     Redirect::to("https://discord.gg/3jSYQ9VNbA").into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_inline_markdown;
+
+    #[test]
+    fn changelog_entry_renders_inline_markdown_and_escapes_html() {
+        assert_eq!(
+            render_inline_markdown("Lost **Ban Members** via `ban` <script>x</script>"),
+            "Lost <strong>Ban Members</strong> via <code>ban</code> &lt;script&gt;x&lt;/script&gt;"
+        );
+    }
 }
