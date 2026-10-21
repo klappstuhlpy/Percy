@@ -505,6 +505,33 @@ pub async fn guild_setup_logging(
     }
 }
 
+/// `POST /dashboard/guild/:guild_id/setup/sentinel` — the Sentinel tab's one-step setup.
+/// Body: `{ "channel_id": "<id>" | null, "role_id": "<id>" | null, "start": bool }`; null means Percy creates it.
+pub async fn guild_setup_sentinel(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    let id = |key: &str| body[key].as_str().and_then(|s| s.parse::<u64>().ok());
+    let start = body["start"].as_bool().unwrap_or(false);
+    match percy
+        .setup_sentinel(guild_id, id("channel_id"), id("role_id"), start)
+        .await
+    {
+        Ok(result) => Json(serde_json::json!({"ok": true, "message": result.message})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
 /// `POST /dashboard/guild/:guild_id/test-message` — a "Send test" button beside a posting feature's channel.
 /// Body: `{ "feature": "audit_log" | "alerts" | "mod_log" | "message_log" | "voice_log" | "polls" }`.
 pub async fn guild_test_message(

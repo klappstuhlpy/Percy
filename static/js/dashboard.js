@@ -60,6 +60,44 @@
         });
     }
 
+    // -- Quick setup: sentinel (an action, like the logging one above) -------------------
+    const qsGk = document.getElementById('quick-setup-sentinel');
+    if (qsGk) {
+        const pick = (name, select) => {
+            qsGk.querySelectorAll(`[name="${name}"]`).forEach(r => r.addEventListener('change', () => {
+                select.disabled = qsGk.querySelector(`[name="${name}"]:checked`).value !== 'existing';
+            }));
+            return () => qsGk.querySelector(`[name="${name}"]:checked`).value === 'create' ? null : select;
+        };
+        const channelPick = pick('qs_gk_channel', document.getElementById('qs-gk-channel'));
+        const rolePick = pick('qs_gk_role', document.getElementById('qs-gk-role'));
+        document.getElementById('qs-sentinel-btn').addEventListener('click', async () => {
+            const channel = channelPick(), role = rolePick();
+            const start = document.getElementById('qs-gk-start').checked;
+            if (channel && !channel.value) { showToast('error', 'Pick a channel, or let Percy create #verify.'); return; }
+            if (role && !role.value) { showToast('error', 'Pick a role, or let Percy create Unverified.'); return; }
+            const label = s => s.selectedOptions[0].textContent.trim();
+            const where = channel ? label(channel) : 'a new #verify channel';
+            const who = role ? label(role) : 'a new Unverified role';
+            if (!(await PercyConfirm.ask({
+                title: start ? 'Set up and start Sentinel?' : 'Set up Sentinel?',
+                consequence: `New members will wait in ${where} with ${who}, which is hidden from every other channel. `
+                    + 'Percy posts the captcha message there.'
+                    + (start ? ' Protection starts now: every new member is held until they verify.' : ''),
+                undo: 'Stop Sentinel or pick other channels and roles below at any time.',
+                confirmLabel: start ? 'Set up and start' : 'Set up Sentinel',
+            }))) return;
+            const res = await fetch(`/dashboard/guild/${window.PERCY_DASH.guildId}/setup/sentinel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ channel_id: channel?.value ?? null, role_id: role?.value ?? null, start }),
+            }).then(r => r.json()).catch(() => ({ ok: false, error: 'Network error.' }));
+            showToast(res.ok ? 'success' : 'error', res.ok ? res.message : (res.error || 'Setup failed.'));
+            // A blocked start still set Sentinel up, so reload on that error too to show the new state.
+            if (res.ok || /Sentinel is set up/.test(res.error || '')) setTimeout(() => location.reload(), 1500);
+        });
+    }
+
     document.querySelectorAll('.gk-setup-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();

@@ -3293,6 +3293,7 @@ a.user-tag-chip:hover { border-color: var(--branding); }
 
 /* ─── Quick setup panels ─────────────────────────────────────────── */
 .quick-setup { border-color: var(--branding-dim, rgba(255,123,114,0.3)); }
+div.quick-setup { border: 1px solid var(--branding-dim, rgba(255,123,114,0.3)); border-radius: 8px; padding: 1rem; margin: 1rem 0 1.5rem; }
 .quick-setup-step { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.4rem; }
 .quick-setup-step legend { font-weight: 600; margin-bottom: 0.4rem; }
 .quick-check { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; }

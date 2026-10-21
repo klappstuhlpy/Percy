@@ -494,6 +494,7 @@ fn build_router(state: AppState) -> Router {
         .route("/dashboard/guild/:guild_id/setup/logging", post(actions::guild_setup_logging))
         .route("/dashboard/guild/:guild_id/test-message", post(actions::guild_test_message))
         .route("/dashboard/guild/:guild_id/setup/leveling", post(actions::guild_setup_leveling))
+        .route("/dashboard/guild/:guild_id/setup/sentinel", post(actions::guild_setup_sentinel))
         .route("/dashboard/guild/:guild_id/pickers.json", get(guilds::guild_pickers))
         // The signed-in member's own self / history / data pages.
         .route("/dashboard/guild/:guild_id/me", get(userpages::guild_user_self))

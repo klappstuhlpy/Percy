@@ -680,6 +680,40 @@
                 images. Members type their answer directly in chat within 90 seconds.</p>
         </div>
 
+        {% if sentinel.is_none() || sentinel.as_ref().unwrap().needs_setup %}
+        {# ─── Quick setup: channel, role and captcha message in one step ─ #}
+        <div class="quick-setup" id="quick-setup-sentinel">
+            <h3>Quick setup</h3>
+            <p class="config-section-description">Set up the verification channel, the lockdown role and the captcha message in one step.</p>
+            <fieldset class="quick-setup-step">
+                <legend>1. Verification channel</legend>
+                <label class="quick-check"><input type="radio" name="qs_gk_channel" value="create" checked> Create a <code>#verify</code> channel <span class="config-description">hidden from everyone except members waiting to verify</span></label>
+                <label class="quick-check"><input type="radio" name="qs_gk_channel" value="existing"> Use an existing channel</label>
+                <select id="qs-gk-channel" class="config-select" data-needs="post" disabled aria-label="Existing verification channel">
+                    <option value="">Pick a channel…</option>
+                    {% for ch in channels %}{% if ch.channel_type == "text" %}
+                    <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                    {% endif %}{% endfor %}
+                </select>
+            </fieldset>
+            <fieldset class="quick-setup-step">
+                <legend>2. Lockdown role</legend>
+                <label class="quick-check"><input type="radio" name="qs_gk_role" value="create" checked> Create an <code>Unverified</code> role</label>
+                <label class="quick-check"><input type="radio" name="qs_gk_role" value="existing"> Use an existing role <span class="config-description">one nobody has yet; it is hidden from every channel</span></label>
+                <select id="qs-gk-role" class="config-select" data-needs="assign" disabled aria-label="Existing lockdown role">
+                    <option value="">Pick a role…</option>
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">@{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </fieldset>
+            <label class="quick-check"><input type="checkbox" id="qs-gk-start"> Start protecting new members right away</label>
+            <div class="quick-setup-actions">
+                <button type="button" class="button primary small" id="qs-sentinel-btn">Set up Sentinel</button>
+            </div>
+        </div>
+        {% endif %}
+
         {% match sentinel %}
         {% when Some with (gk) %}
         {% match gk.started_at %}
