@@ -3336,9 +3336,14 @@ a.user-tag-chip:hover { border-color: var(--branding); }
 div.quick-setup { border: 1px solid var(--branding-dim, rgba(255,123,114,0.3)); border-radius: 8px; padding: 1rem; margin: 1rem 0 1.5rem; }
 .quick-setup-step { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.4rem; }
 .quick-setup-step legend { font-weight: 600; margin-bottom: 0.4rem; }
-.quick-check { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; }
-.quick-check .config-description { font-size: 0.78rem; }
-.quick-setup-step select { max-width: 360px; margin-left: 1.6rem; }
+.quick-check { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; padding: 0.55rem 0.75rem;
+    border: 1px solid var(--box-border); border-radius: 8px; background: var(--box-shade); }
+.quick-check:hover, .quick-check:has(input:checked) { border-color: var(--branding); }
+.quick-check .quick-title { font-weight: 600; }
+.quick-check .config-description { font-size: 0.78rem; flex-basis: 100%; padding-left: 1.6rem; }
+.quick-grid { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.quick-grid legend { grid-column: 1 / -1; }
+.quick-setup-step select { width: 100%; }
 .quick-setup-actions { display: flex; gap: 0.75rem; }
 
 /* ─── Role menus ─────────────────────────────────────────────────── */

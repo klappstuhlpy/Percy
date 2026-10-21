@@ -42,7 +42,7 @@
             if (!logs.length) { showToast('error', 'Pick at least one log.'); return; }
             if (!create && !select.value) { showToast('error', 'Pick a channel, or let Percy create one.'); return; }
             const names = [...qs.querySelectorAll('[name="qs_log"]:checked')]
-                .map(c => c.parentElement.firstChild.nextSibling.textContent.trim()).join(', ');
+                .map(c => c.closest('label').querySelector('.quick-title').textContent.trim()).join(', ');
             const where = create ? 'a new private #percy-logs channel' : select.selectedOptions[0].textContent.trim();
             if (!(await PercyConfirm.ask({
                 title: 'Set up logging?',
