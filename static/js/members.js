@@ -177,7 +177,8 @@
         // The table wrapper scrolls (and so clips) on desktop; flip up when the menu would be cut off.
         const clip = (menu.closest('.members-table-wrap') || document.documentElement).getBoundingClientRect();
         const m = menu.getBoundingClientRect(), b = btn.getBoundingClientRect();
-        if (m.bottom > clip.bottom && b.top - clip.top > clip.bottom - b.bottom) menu.classList.add('member-menu--up');
+        const above = b.top - clip.top;
+        if (m.bottom > clip.bottom && above >= m.height + 4 && above > clip.bottom - b.bottom) menu.classList.add('member-menu--up');
         btn.setAttribute('aria-expanded', 'true');
         openMenu = menu;
     }
