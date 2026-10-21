@@ -221,7 +221,58 @@ async def post_leveling_roles(guild: GuildDep, bot: BotDep, body: PostLevelingRo
 
 @router.post("/leveling/roles/preset")
 async def create_leveling_role_preset(guild: GuildDep, bot: BotDep) -> dict:
-    """Create the preset milestone reward roles (levels 5-100) and register them.
+    """Create the preset milestone reward roles (levels 5-100) and register them."""
+    return {'ok': True, 'created': await _create_preset_roles(guild, bot)}
+
+
+class SetupLevelingBody(BaseModel):
+    #: 0 = no messages, 1 = where they talked, 2 = DM, otherwise a text channel id.
+    level_up_channel: int
+    preset_roles: bool = False
+
+
+@router.post("/setup/leveling")
+async def setup_leveling(guild: GuildDep, bot: BotDep, body: SetupLevelingBody) -> dict:
+    """Turn leveling on in one step: announcement channel, optionally the milestone roles."""
+    target = body.level_up_channel
+    if target < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Pick a level-up destination.')
+    if target > 2:
+        channel = guild.get_channel(target)
+        if not isinstance(channel, discord.TextChannel):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Pick a text channel.')
+        perms = channel.permissions_for(guild.me)
+        missing = [p for p in ('view_channel', 'send_messages', 'attach_files') if not getattr(perms, p)]
+        if missing:
+            names = ', '.join(p.replace('_', ' ').title() for p in missing)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f'Percy is missing {names} in #{channel.name}.'
+            )
+        text = f'Level-ups are announced in #{channel.name}'
+    else:
+        text = ('No level-up messages', 'Level-ups are announced where members talked', 'Level-ups are sent by DM')[target]
+    if body.preset_roles and not guild.me.guild_permissions.manage_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Percy needs Manage Roles to create the milestone roles. Turn that option off or grant it.',
+        )
+
+    if await bot.db.leveling.get_guild_config_record(guild.id) is None:
+        await bot.db.leveling.create_guild_config(guild.id, True)
+    await bot.db.leveling.update_guild_config(guild.id, {'enabled': True, 'level_up_channel': target})
+    created = await _create_preset_roles(guild, bot) if body.preset_roles else 0
+
+    cog = bot.get_cog('Leveling')
+    if cog is not None:
+        cog.get_guild_level_config.invalidate(guild.id)
+    message = f'Leveling is on. {text}.'
+    if body.preset_roles:
+        message += f' {created} milestone role{"s" if created != 1 else ""} created, the rest already existed.'
+    return {'ok': True, 'message': message}
+
+
+async def _create_preset_roles(guild: discord.Guild, bot: BotDep) -> int:
+    """Create the preset milestone reward roles (levels 5-100) and register them; returns how many were new.
 
     Idempotent by role name: an existing role with the same name is reused
     rather than duplicated, so re-running only fills in what's missing.
@@ -252,7 +303,7 @@ async def create_leveling_role_preset(guild: GuildDep, bot: BotDep) -> dict:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'failed to create roles: {exc}')
 
     await bot.db.leveling.update_guild_config(guild.id, {'level_roles': level_roles})
-    return {'ok': True, 'created': created}
+    return created
 
 
 @router.post("/leveling/multipliers")
