@@ -7,6 +7,7 @@ import enum
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 import asyncpg
 import discord
 from discord.ext import tasks
@@ -232,11 +233,15 @@ class DiscordStatusMixin:
             The latest not 'resolved' incidents.
         """
 
-        async with self.bot.session.get(DS_ENDPOINT) as resp:
-            if resp.status != 200:
-                return None
+        try:
+            async with self.bot.session.get(DS_ENDPOINT) as resp:
+                if resp.status != 200:
+                    return None
 
-            data = await resp.json()
+                data = await resp.json()
+        except (aiohttp.ClientError, TimeoutError):
+            # Transient DNS/network blips: skip this tick instead of a traceback every time.
+            return None
 
         if not data:
             return None

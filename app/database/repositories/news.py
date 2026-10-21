@@ -133,6 +133,13 @@ class NewsRepository(BaseRepository):
         duplicate under the new URL, the conflict is resolved by updating the row that guid
         already owns -- which is the one case where a story's ``url`` legitimately changes.
         """
+        # Route a rewritten link straight to its guid's row: letting the upsert hit the
+        # (source_slug, external_id) index works, but the pool logs every such violation as an ERROR.
+        moved = await self.fetchval(
+            'SELECT 1 FROM news_items WHERE source_slug = $1 AND external_id = $2 AND url <> $3;',
+            row.get('source_slug'), row.get('external_id'), row.get('url'))
+        if moved:
+            return await self._update_by_external_id(row)
         try:
             return await self._upsert_item(row)
         except asyncpg.UniqueViolationError:

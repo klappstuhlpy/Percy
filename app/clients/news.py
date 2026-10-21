@@ -102,9 +102,10 @@ class NewsClient(BaseHTTPClient):
 
         The base implementation hands the payload to :class:`discord.HTTPException`, which
         expects a dict or a string -- and :meth:`_read` returns neither, so the wrapper is
-        unwrapped here rather than left to the base class's fallback.
+        unwrapped here rather than left to the base class's fallback. The body is dropped: an
+        error page (e.g. Cloudflare's 429 HTML) would otherwise flood the log and ``last_status``.
         """
-        return super()._build_error(response, payload.text if isinstance(payload, _Body) else payload)
+        return super()._build_error(response, '')
 
     @staticmethod
     def _status_of(exc: HTTPClientError) -> str:

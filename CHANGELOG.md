@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A news story whose feed changed its link no longer logs a failed database query on every poll.
+- A failing news feed's status and log line no longer contain the site's whole HTML error page.
+- A short network outage no longer prints a traceback from the Discord status check; that check
+  is skipped until the next run.
+
 ## [2.10.0] - 2026-10-21
 
 ### Added
