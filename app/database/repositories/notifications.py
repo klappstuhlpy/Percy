@@ -129,10 +129,11 @@ class NotificationsRepository(BaseRepository):
         query = """
             SELECT * FROM action_requests
             WHERE guild_id = $1 AND ($2::text IS NULL OR status = $2)
+              AND ($2::text IS DISTINCT FROM 'pending' OR expires_at > $4)
             ORDER BY id DESC
             LIMIT $3
         """
-        return await self.fetch(query, guild_id, status, limit)
+        return await self.fetch(query, guild_id, status, limit, _now())
 
     async def pending_count(self, guild_id: int) -> int:
         query = "SELECT COUNT(*) FROM action_requests WHERE guild_id = $1 AND status = 'pending' AND expires_at > $2"

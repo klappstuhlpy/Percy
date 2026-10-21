@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -38,6 +39,14 @@ class RequestSettingsBody(BaseModel):
 def _name(guild, user_id: int | None) -> str | None:
     member = guild.get_member(user_id) if user_id is not None else None
     return member.display_name if member else None
+
+
+def _enriched(guild, row) -> dict:
+    item = request_payload(row)
+    item["requester_name"] = _name(guild, row["requester_id"])
+    item["target_name"] = _name(guild, row["target_id"])
+    item["decided_by_name"] = _name(guild, row.get("decided_by"))
+    return item
 
 
 @router.get("/notifications")
@@ -80,14 +89,7 @@ async def list_requests(
     rows = await bot.db.notifications.list_requests(
         guild.id, status=None if status_filter == 'all' else 'pending', limit=limit
     )
-    items = []
-    for row in rows:
-        item = request_payload(row)
-        item["requester_name"] = _name(guild, row['requester_id'])
-        item["target_name"] = _name(guild, row['target_id'])
-        item["decided_by_name"] = _name(guild, row['decided_by'])
-        items.append(item)
-    return {"items": items}
+    return {"items": [_enriched(guild, row) for row in rows]}
 
 
 async def _settings(guild, bot) -> dict:
@@ -108,8 +110,10 @@ async def get_request_settings(guild: GuildDep, bot: BotDep) -> dict:
 
 @router.patch("/requests/settings")
 async def patch_request_settings(guild: GuildDep, bot: BotDep, body: RequestSettingsBody) -> dict:
-    if body.channel_id is not None and guild.get_channel(body.channel_id) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown channel")
+    if body.channel_id is not None:
+        channel = guild.get_channel(body.channel_id)
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="channel must be a text channel")
     if any(guild.get_role(r) is None for r in body.role_ids):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown role")
     # The repository fires the guild_config cache invalidation.
@@ -125,7 +129,7 @@ async def decide(guild: GuildDep, bot: BotDep, request_id: int, body: DecideBody
     decision = await decide_request(
         bot, guild, request_id, moderator, approve=body.decision == 'approve', note=body.note
     )
-    request = request_payload(decision.request) if decision.request else None
+    request = _enriched(guild, decision.request) if decision.request else None
     return JSONResponse(
         {"ok": decision.ok, "status": decision.status, "message": decision.message, "request": request},
         status_code=decision.http_status,

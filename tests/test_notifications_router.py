@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 from fastapi import HTTPException
 
@@ -66,3 +67,26 @@ async def test_patch_settings_unknown_role_is_400(env: tuple[MagicMock, MagicMoc
         await api.patch_request_settings(guild, bot, api.RequestSettingsBody(role_ids=[99]))
     assert exc.value.status_code == 400
     repo.update_request_settings.assert_not_awaited()
+
+
+async def test_patch_settings_rejects_non_text_channel(env: tuple[MagicMock, MagicMock, MagicMock]) -> None:
+    bot, guild, repo = env
+    guild.get_channel = MagicMock(return_value=MagicMock(spec=discord.VoiceChannel))
+    with pytest.raises(HTTPException) as exc:
+        await api.patch_request_settings(guild, bot, api.RequestSettingsBody(channel_id=5))
+    assert exc.value.status_code == 400
+    assert exc.value.detail == 'channel must be a text channel'
+    repo.update_request_settings.assert_not_awaited()
+
+
+async def test_decide_request_carries_names(env: tuple[MagicMock, MagicMock, MagicMock], monkeypatch: pytest.MonkeyPatch) -> None:
+    bot, guild, _ = env
+    row = {
+        'id': 7, 'guild_id': 1, 'requester_id': 11, 'target_id': 20, 'action': 'kick', 'reason': 'r', 'duration': None,
+        'status': 'approved', 'decided_by': 10, 'decision_note': None, 'result': 'done', 'channel_id': None,
+        'message_id': None, 'created_at': None, 'decided_at': None, 'expires_at': None,
+    }
+    monkeypatch.setattr(api, 'decide_request', AsyncMock(return_value=RequestDecision(True, 'approved', 'ok', row, 200)))
+    resp = await api.decide(guild, bot, 7, api.DecideBody(moderator_id=10, decision='approve'))
+    req = json.loads(resp.body)['request']
+    assert (req['requester_name'], req['target_name'], req['decided_by_name']) == ('user11', None, 'user10')
