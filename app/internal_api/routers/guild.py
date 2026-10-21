@@ -16,6 +16,7 @@ from app.services import ModelTier, build_dashboard_assistant_system
 from app.services.guild_health import ChannelState, FeatureFacts, RoleState, summarize
 from app.utils import truncate
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
+from app.utils.webhooks import send_webhook
 
 from ..dependencies import BotDep, GuildDep, verify_token
 from ..helpers import resolve_channel, resolve_entity, resolve_role
@@ -1092,3 +1093,60 @@ async def setup_logging(guild: GuildDep, bot: BotDep, body: SetupLoggingBody) ->
         "created": created,
         "message": f"{len(body.logs)} log{'s' if len(body.logs) != 1 else ''} now go to #{channel.name}.",
     }
+
+
+_TEST_FEATURES = {
+    "audit_log": ("the audit log", None),
+    "alerts": ("alerts", None),
+    "mod_log": ("the mod log", "mod_log_channel_id"),
+    "message_log": ("the message log", "message_log_channel_id"),
+    "voice_log": ("the voice log", "voice_log_channel_id"),
+    "polls": ("polls", "poll_channel_id"),
+}
+
+
+class TestMessageBody(BaseModel):
+    feature: str
+
+
+@router.post("/test-message")
+async def send_test_message(guild: GuildDep, bot: BotDep, body: TestMessageBody) -> dict:
+    """Post one harmless embed to a feature's saved destination, so the user can see where it lands."""
+    if body.feature not in _TEST_FEATURES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"choose a feature from: {', '.join(_TEST_FEATURES)}")
+    label, field = _TEST_FEATURES[body.feature]
+    guild_config = await bot.db.get_guild_config(guild.id)
+    embed = discord.Embed(
+        title="Test message from the dashboard",
+        description=f"This is a test for {label}. Nothing happened; it only shows where those messages will appear.",
+        colour=discord.Colour.blurple(),
+    )
+
+    def refuse(detail: str) -> HTTPException:
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+    if field is None:
+        webhook = guild_config.audit_log_webhook if body.feature == "audit_log" else guild_config.alert_webhook
+        if webhook is None:
+            raise refuse(f"No channel is set for {label}.")
+        try:
+            await send_webhook(webhook, embed=embed)
+        except (discord.Forbidden, discord.NotFound):
+            raise refuse(f"The webhook for {label} no longer works. Set the channel again.") from None
+        except discord.HTTPException:
+            raise refuse("Discord refused the test message.") from None
+        return {"ok": True, "message": f"Test message sent for {label}."}
+
+    channel_id = getattr(guild_config, field, None)
+    if not channel_id:
+        raise refuse(f"No channel is set for {label}.")
+    channel = guild.get_channel(channel_id)
+    if not isinstance(channel, discord.abc.Messageable):
+        raise refuse(f"The channel for {label} no longer exists. Pick another one.")
+    try:
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.Forbidden:
+        raise refuse(f"Percy cannot post in #{channel.name}.") from None
+    except discord.HTTPException:
+        raise refuse("Discord refused the test message.") from None
+    return {"ok": True, "message": f"Test message sent to #{channel.name}."}
