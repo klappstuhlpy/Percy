@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-21
+
+### Changed
+
+- The level-up preview now matches a Discord message: Percy's avatar sits beside the name and text, in Discord's font, and the placeholder buttons are small inline chips.
+- Tag previews render as a Discord message, keeping headings, lists and spoilers.
+- The Change Log moved into the Notifications page, which now has tabs: Feed, Requests, Change log and Settings. The old Change Log address redirects there.
+- The setup status card folds away, opening by itself only when something needs attention.
+- The logging quick setup uses selectable cards and the same channel picker as the other pages.
+- Requester roles are picked from a filterable checkbox list instead of a cramped multi-select.
+- The Notifications nav item shows a red count for unread notifications and pending requests.
+
+### Fixed
+
+- The role menu "Single choice" toggle is framed like the other toggles.
+
 ## [0.12.0] - 2026-10-21
 
 ### Added
