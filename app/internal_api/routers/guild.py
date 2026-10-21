@@ -1095,6 +1095,83 @@ async def setup_logging(guild: GuildDep, bot: BotDep, body: SetupLoggingBody) ->
     }
 
 
+class SetupSentinelBody(BaseModel):
+    #: An existing text channel / role, or ``None`` to have Percy create ``#verify`` / ``Unverified``.
+    channel_id: int | None = None
+    role_id: int | None = None
+    start: bool = False
+
+
+@router.post("/setup/sentinel")
+async def setup_sentinel(guild: GuildDep, bot: BotDep, body: SetupSentinelBody) -> dict:
+    """Verification channel, lockdown role and verify message in one step, optionally started.
+
+    The same paths as the Sentinel tab: ``_apply_sentinel_settings`` (validation + permission
+    sync), ``send_sentinel_message`` (the card) and ``_sentinel_start_problem`` (starting).
+    """
+    perms = guild.me.guild_permissions
+    if not perms.manage_roles:
+        raise _bad_request("Percy needs Manage Roles to give and take the Sentinel lockdown role.")
+    if body.channel_id is None and not perms.manage_channels:
+        raise _bad_request("Percy needs Manage Channels to create #verify. Pick an existing channel instead.")
+
+    sentinel = await _get_or_create_sentinel(guild, bot)
+    if sentinel.started_at is not None:
+        raise _bad_request("Sentinel is already running. Stop it before setting it up again.")
+    # Check the picked channel/role before creating anything, so a bad pick leaves nothing behind.
+    if body.channel_id is not None:
+        _check_sentinel_channel(guild, body.channel_id)
+    if body.role_id is not None:
+        _check_sentinel_role(guild, body.role_id, other=sentinel.starter_role_id)
+    # Also run for a role still to be created: its "member list not loaded" refusal would
+    # otherwise only come from ``_apply_sentinel_settings``, after the role and channel exist.
+    _check_lockdown_role_unworn(guild, body.role_id or 0, sentinel.members)
+
+    reason = "Sentinel set up from the Percy dashboard"
+    role_id = body.role_id
+    if role_id is None:
+        try:
+            role_id = (await guild.create_role(name="Unverified", reason=reason)).id
+        except discord.HTTPException:
+            raise _bad_request("Discord refused to create the Unverified role.") from None
+    channel_id = body.channel_id
+    if channel_id is None:
+        # Percy made this channel, so hiding it from @everyone cannot hide a busy channel by mistake.
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, embed_links=True),
+        }
+        try:
+            channel_id = (await guild.create_text_channel("verify", overwrites=overwrites, reason=reason)).id
+        except discord.HTTPException:
+            raise _bad_request("Discord refused to create the #verify channel.") from None
+
+    applied = await _apply_sentinel_settings(guild, bot, {"channel_id": channel_id, "role_id": role_id})
+    posted = await send_sentinel_message(guild, bot, SendSentinelMessageBody(channel_id=channel_id))
+    bot.db.get_guild_sentinel.invalidate(guild.id)
+
+    channel, role = guild.get_channel(channel_id), guild.get_role(role_id)
+    done = (
+        f"Sentinel is set up: members wait in #{channel.name if channel else channel_id} "
+        f"with the {role.name if role else role_id} role, and the verify message is posted."
+    )
+    warnings = list(dict.fromkeys(applied["warnings"] + posted["warnings"]))
+    # Warnings ride in the message too: the dashboard shows only ``message``.
+    note = "".join(f" {w}" for w in warnings)
+    if not body.start:
+        return {"ok": True, "message": done + note, "started": False, "warnings": warnings}
+
+    guild_config = await bot.db.get_guild_config(guild.id)
+    if not guild_config.flags.sentinel:
+        await _apply_config_updates(bot, guild, guild_config, {"flags": guild_config.flags.value | _FLAG_MAP["sentinel"]})
+    sentinel = await _get_or_create_sentinel(guild, bot)
+    problem = await _sentinel_start_problem(guild, bot, sentinel)
+    if problem is not None:
+        raise _bad_request(f"{done} It could not start yet: {problem}.")
+    await sentinel.enable()
+    return {"ok": True, "message": f"{done} New members are now held until they verify.{note}", "started": True, "warnings": warnings}
+
+
 _TEST_FEATURES = {
     "audit_log": ("the audit log", None),
     "alerts": ("alerts", None),
