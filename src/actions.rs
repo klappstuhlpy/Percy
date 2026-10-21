@@ -505,6 +505,34 @@ pub async fn guild_setup_logging(
     }
 }
 
+/// `POST /dashboard/guild/:guild_id/setup/leveling` — the Leveling tab's one-step setup.
+/// Body: `{ "level_up_channel": "0" | "1" | "2" | "<channel id>", "preset_roles": bool }`.
+pub async fn guild_setup_leveling(
+    State(app): State<AppState>,
+    session: Session,
+    Path(guild_id): Path<u64>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let percy = match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => percy,
+        Err(response) => return response,
+    };
+    let target = &body["level_up_channel"];
+    let channel = target
+        .as_i64()
+        .or_else(|| target.as_str().and_then(|s| s.parse::<i64>().ok()))
+        .unwrap_or(1);
+    let preset = body["preset_roles"].as_bool().unwrap_or(false);
+    match percy.setup_leveling(guild_id, channel, preset).await {
+        Ok(result) => Json(serde_json::json!({"ok": true, "message": result.message})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": percy_message(&e)})),
+        )
+            .into_response(),
+    }
+}
+
 /// `POST /dashboard/guild/:guild_id/leveling/roles`
 pub async fn guild_leveling_roles(
     State(app): State<AppState>,

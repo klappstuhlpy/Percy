@@ -317,3 +317,37 @@ document.getElementById('level-save-btn').addEventListener('click', async () => 
         resizeTimer = setTimeout(() => chart.setSize(size()), 150);
     });
 })();
+
+// ─── Quick setup (an action, not a tracked edit: it saves on its own) ─────────
+(function quickSetupLeveling() {
+    const qs = document.getElementById('quick-setup-leveling');
+    if (!qs) return;
+    const select = document.getElementById('qsl-channel');
+    const checked = () => qs.querySelector('[name="qsl_where"]:checked').value;
+    qs.querySelectorAll('[name="qsl_where"]').forEach(r => r.addEventListener('change', () => {
+        select.disabled = checked() !== 'channel';
+    }));
+    document.getElementById('qsl-btn').addEventListener('click', async () => {
+        const where = checked();
+        if (where === 'channel' && !select.value) { showToast('error', 'Pick a channel for level-ups.'); return; }
+        const roles = document.getElementById('qsl-roles').checked;
+        const announce = {
+            '0': 'Level-ups will not be announced',
+            '1': 'Level-ups will be announced where the member talked',
+            '2': 'Level-ups will be sent to the member by DM',
+            'channel': `Level-ups will be announced in ${select.selectedOptions[0].textContent.trim()}`,
+        }[where];
+        if (!(await PercyConfirm.ask({
+            title: 'Turn on leveling?',
+            consequence: `${announce}. ${roles ? 'Percy also creates 12 milestone roles for levels 5–100 and makes them level rewards.' : 'No reward roles are created.'}`,
+            undo: 'Turn leveling off or change any of this below at any time.',
+            confirmLabel: 'Turn on leveling',
+        }))) return;
+        const res = await postJSON('/setup/leveling', {
+            level_up_channel: where === 'channel' ? select.value : where,
+            preset_roles: roles,
+        }).catch(() => ({ ok: false, error: 'Network error.' }));
+        showToast(res.ok ? 'success' : 'error', res.ok ? res.message : (res.error || 'Setup failed.'));
+        if (res.ok) setTimeout(() => location.reload(), 900);
+    });
+})();

@@ -21,6 +21,34 @@
         </div>
     </div>
 
+    {% if !config.enabled %}
+    {# ─── Quick setup: turn leveling on in one step ─────────────────── #}
+    <section class="config-section quick-setup" id="quick-setup-leveling">
+        <h2>Quick setup: leveling</h2>
+        <p class="config-section-description">Turn leveling on in one step. You can change every option below afterwards.</p>
+        <fieldset class="quick-setup-step">
+            <legend>1. Where are level-ups announced?</legend>
+            <label class="quick-check"><input type="radio" name="qsl_where" value="0"> Don't announce them</label>
+            <label class="quick-check"><input type="radio" name="qsl_where" value="1" checked> Where the member talked</label>
+            <label class="quick-check"><input type="radio" name="qsl_where" value="2"> In a DM to the member</label>
+            <label class="quick-check"><input type="radio" name="qsl_where" value="channel"> In one channel</label>
+            <select id="qsl-channel" class="config-select" data-needs="post" disabled aria-label="Level-up channel">
+                <option value="">Pick a channel…</option>
+                {% for ch in text_channels %}
+                <option value="{{ ch.id }}">#{{ ch.name }}</option>
+                {% endfor %}
+            </select>
+        </fieldset>
+        <fieldset class="quick-setup-step">
+            <legend>2. Reward roles</legend>
+            <label class="quick-check"><input type="checkbox" id="qsl-roles"> Create 12 milestone reward roles (levels 5–100) <span class="config-description">needs the Manage Roles permission</span></label>
+        </fieldset>
+        <div class="quick-setup-actions">
+            <button type="button" class="button primary small" id="qsl-btn">Turn on leveling</button>
+        </div>
+    </section>
+    {% endif %}
+
     {# ─── Configuration ──────────────────────────────────────────── #}
     <section class="config-section">
         <h2>Configuration</h2>
