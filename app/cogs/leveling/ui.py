@@ -6,11 +6,13 @@ import discord
 
 from app.cogs.leveling.models import _MAX_LEVEL
 from app.core import LayoutView
+from app.rendering.card_style import CardStyle, resolve_style, style_options
 from app.utils import get_asset_url
 from app.utils.helpers import Colour
 from config import Emojis
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from typing import Any
 
     from app.cogs.leveling.models import GuildLevelConfig
@@ -21,6 +23,7 @@ __all__ = (
     "AddMultiplierRoleModal",
     "InteractiveLevelRolesView",
     "InteractiveMultiplierView",
+    "RankCardEditor",
     "RemoveLevelRolesSelect",
     "RemoveMultiplierRolesSelect",
 )
@@ -397,3 +400,101 @@ class InteractiveMultiplierView(LayoutView):
 
     async def on_timeout(self) -> None:
         await self.config.update(multiplier_roles=self._multipliers)
+
+
+_CARD_FIELDS: tuple[tuple[str, str], ...] = (
+    ("theme", "Background theme"),
+    ("accent", "Accent colour"),
+    ("bar", "Progress bar"),
+    ("font", "Name font"),
+)
+
+
+class _CardFieldSelect(discord.ui.Select["RankCardEditor"]):
+    """One preset picker; choosing an option only changes the preview."""
+
+    def __init__(self, field: str, placeholder: str, current: str) -> None:
+        options = style_options()[field]
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(label=f"{placeholder}: {o['label']}", value=o["value"], default=o["value"] == current)
+                for o in options
+            ],
+        )
+        self.field = field
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        self.view.draft[self.field] = self.values[0]
+        await self.view.refresh(interaction)
+
+
+class RankCardEditor(LayoutView):
+    """Live rank card editor: pick presets, watch the preview, then Save.
+
+    Nothing is stored until **Save** -- the preview is a draft, which the header says.
+    """
+
+    def __init__(
+        self,
+        *,
+        member: discord.Member,
+        render: Callable[[CardStyle], Awaitable[discord.File]],
+        save: Callable[[dict[str, str]], Awaitable[None]],
+        guild_default: dict[str, str],
+        current: dict[str, str],
+    ) -> None:
+        super().__init__(timeout=600.0, members=member, disable_on_timeout=True)
+        self.member = member
+        self._render = render
+        self._save = save
+        self.guild_default = guild_default
+        self.saved = dict(current)
+        self.draft = dict(current)
+        self.message: discord.Message | None = None
+
+    @property
+    def style(self) -> CardStyle:
+        return resolve_style(self.guild_default, self.draft)
+
+    async def build(self, *, note: str | None = None) -> discord.File:
+        """(Re)build the layout around a freshly rendered preview and return its file."""
+        file = await self._render(self.style)
+        dirty = self.draft != self.saved
+        status = note or ("-# Preview only — press **Save** to keep it." if dirty else "-# This is your saved card.")
+
+        container = discord.ui.Container(accent_colour=Colour.brand())
+        container.add_item(discord.ui.TextDisplay(f"### Rank card\n{status}"))
+        container.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{file.filename}")))
+        container.add_item(discord.ui.Separator())
+        style = self.style.to_dict()
+        for field, label in _CARD_FIELDS:
+            container.add_item(discord.ui.ActionRow(_CardFieldSelect(field, label, style[field])))
+        container.add_item(
+            discord.ui.TextDisplay("-# Custom background images: coming soon. Your style applies on every server that allows it.")
+        )
+
+        save = discord.ui.Button(label="Save", style=discord.ButtonStyle.success, disabled=not dirty)
+        save.callback = self._on_save
+        reset = discord.ui.Button(label="Use server default", style=discord.ButtonStyle.secondary, disabled=not self.draft)
+        reset.callback = self._on_reset
+        container.add_item(discord.ui.ActionRow(save, reset))
+
+        self.clear_items()
+        self.add_item(container)
+        return file
+
+    async def refresh(self, interaction: discord.Interaction, *, note: str | None = None) -> None:
+        await interaction.response.defer()
+        file = await self.build(note=note)
+        await interaction.edit_original_response(view=self, attachments=[file])
+
+    async def _on_save(self, interaction: discord.Interaction) -> None:
+        await self._save(self.draft)
+        self.saved = dict(self.draft)
+        await self.refresh(interaction, note=f"-# {Emojis.success} Saved. `/level` now shows this card.")
+
+    async def _on_reset(self, interaction: discord.Interaction) -> None:
+        self.draft = {}
+        await self.refresh(interaction)

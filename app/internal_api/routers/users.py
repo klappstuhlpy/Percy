@@ -3,13 +3,21 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 import zoneinfo
+from typing import TYPE_CHECKING, Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
+from app.rendering.card_style import clean_style, resolve_style, style_options
+
 from ..dependencies import BotDep, verify_token
+
+if TYPE_CHECKING:
+    from app.cogs.leveling.cog import Leveling
+    from app.core import Bot
 
 router = APIRouter(prefix="/users/{discord_id}", tags=["Users"], dependencies=[Depends(verify_token)])
 
@@ -25,6 +33,15 @@ class PatchUserSettingsBody(BaseModel):
     track_history: bool | None = None
 
     model_config = {"extra": "ignore"}
+
+
+class RankCardBody(BaseModel):
+    style: dict[str, Any]
+
+
+class RankCardPreviewBody(BaseModel):
+    guild_id: int
+    style: dict[str, Any] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -149,4 +166,115 @@ async def get_data_export(discord_id: int, bot: BotDep) -> Response:
 async def delete_personal_data(discord_id: int, bot: BotDep) -> dict:
     """Erase tracked history (presence, avatar, name/nickname changes)."""
     await bot.db.users.delete_personal_data(discord_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Rank card style (the same store `/level card` writes)
+# ---------------------------------------------------------------------------
+
+# ponytail: in-process per-user throttle on previews (a render is ~50 ms of CPU); move to a
+# shared limiter if the API ever runs as more than one process.
+_PREVIEW_INTERVAL = 0.5
+_last_preview: dict[int, float] = {}
+
+
+def _leveling(bot: Bot) -> Leveling:
+    cog = bot.get_cog('Leveling')
+    if cog is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="leveling is not loaded")
+    return cog  # type: ignore[return-value]
+
+
+def _member(bot: Bot, guild_id: int, discord_id: int) -> discord.Member:
+    guild = bot.get_guild(guild_id)
+    member = guild.get_member(discord_id) if guild else None
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="member not found on that server")
+    return member
+
+
+def _clean(style: dict[str, Any]) -> dict[str, str]:
+    try:
+        return clean_style(style)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
+
+
+@router.get("/rank-card")
+async def get_rank_card(discord_id: int, bot: BotDep, guild_id: int = Query(...)) -> dict:
+    """The member's own style, the server default, the effective result and every preset.
+
+    ``locked`` means the server fixes the style: clients hide the editor entirely.
+    """
+    guild_default, user_style, locked = await _leveling(bot).card_layers(_member(bot, guild_id, discord_id))
+    return {
+        "style": user_style,
+        "guild_default": guild_default,
+        "locked": locked,
+        "effective": resolve_style(guild_default, user_style, locked=locked).to_dict(),
+        "options": style_options(),
+    }
+
+
+@router.put("/rank-card")
+async def put_rank_card(discord_id: int, bot: BotDep, body: RankCardBody) -> dict:
+    """Replace the member's style with a validated partial style (``{}`` = follow the server)."""
+    style = _clean(body.style)
+    config = await bot.db.get_user_config(discord_id)
+    await config.update(rank_card=style)
+    return {"ok": True, "style": style}
+
+
+@router.post("/rank-card/preview")
+async def preview_rank_card(discord_id: int, bot: BotDep, body: RankCardPreviewBody) -> Response:
+    """Render the member's real card in a draft style, as PNG. Nothing is stored."""
+    now = time.monotonic()
+    if now - _last_preview.get(discord_id, 0.0) < _PREVIEW_INTERVAL:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="previewing too fast")
+    _last_preview[discord_id] = now
+
+    cog = _leveling(bot)
+    member = _member(bot, body.guild_id, discord_id)
+    level = await cog.get_level_config(member.id, member.guild.id)
+    if level is None or level.xp == 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="earn some XP on this server first")
+
+    guild_default, _, locked = await cog.card_layers(member)
+    style = resolve_style(guild_default, _clean(body.style), locked=locked)
+    file = await bot.render.level_card(member, level, style=style, boosts=await cog.active_boosts(member))
+    return Response(content=file.fp.read(), media_type="image/png")
+
+
+# ---------------------------------------------------------------------------
+# Reminders (the member's own; the same rows `reminder list` shows)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reminders")
+async def get_user_reminders(discord_id: int, bot: BotDep) -> dict:
+    rows = await bot.db.timers.get_user_reminders(discord_id)
+    return {
+        "reminders": [
+            {
+                "id": row[0],
+                "expires": row[1].isoformat() + "Z",
+                "message": row[2] or "",
+                "repeats": row[3],
+                "shared_with": row[4],
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.delete("/reminders/{reminder_id}")
+async def delete_user_reminder(discord_id: int, reminder_id: int, bot: BotDep) -> dict:
+    """Cancel one reminder the member owns; someone else's id is a 404, never a delete."""
+    status_tag = await bot.db.timers.delete_reminder(reminder_id, discord_id)
+    if status_tag == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="reminder not found")
+    timers = bot.timers
+    if timers and timers._loaded_timer and timers._loaded_timer.id == reminder_id:
+        timers.reset_task()
     return {"ok": True}

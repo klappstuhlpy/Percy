@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands
 
 from app.database import BaseRecord
+from app.services.level_message import level_up_values, render_level_up
 from app.utils import fnumb, sanitize_snowflakes
 
 if TYPE_CHECKING:
@@ -272,10 +273,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
                     return
                 func = channel.send
 
-        content = self.config.special_level_up_messages.get(
-            level,
-            self.config.level_up_message,
-        ).format(user=self.user, level=level)
+        template = self.config.special_level_up_messages.get(level, self.config.level_up_message)
+        content = render_level_up(template, level_up_values(self.user, level))
         with suppress(discord.HTTPException):
             await func(content)
 
@@ -358,9 +357,8 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
                     return
                 func = target.send
 
-        content = self.config.special_level_up_messages.get(
-            level, self.config.level_up_message
-        ).format(user=self.user, level=level)
+        template = self.config.special_level_up_messages.get(level, self.config.level_up_message)
+        content = render_level_up(template, level_up_values(self.user, level))
         with suppress(discord.HTTPException):
             await func(content)
 
@@ -431,4 +429,3 @@ class LevelConfig(BaseRecord, table="levels", pk=("user_id", "guild_id")):
             The rank of the user in the guild.
         """
         return await self.cog.bot.db.leveling.get_rank(self.user_id, self.guild_id, connection=connection)
-

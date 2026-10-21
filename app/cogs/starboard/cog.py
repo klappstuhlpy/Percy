@@ -43,7 +43,7 @@ class Starboard(Cog):
         self._config_cache[guild_id] = config
         return config
 
-    async def _update_config(self, guild_id: int, **columns: object) -> StarboardConfig:
+    async def update_config(self, guild_id: int, **columns: object) -> StarboardConfig:
         record = await self.bot.db.starboard.upsert_config(guild_id, **columns)
         config = StarboardConfig.from_record(record)
         self._config_cache[guild_id] = config
@@ -264,7 +264,7 @@ class Starboard(Cog):
     async def starboard_channel(self, ctx: Context, channel: discord.TextChannel) -> None:
         """Set the starboard destination channel."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, channel_id=channel.id)
+        await self.update_config(ctx.guild.id, channel_id=channel.id)
         await ctx.send_success(f'Starboard channel set to {channel.mention}.')
 
     @starboard.command(
@@ -276,7 +276,7 @@ class Starboard(Cog):
     async def starboard_threshold(self, ctx: Context, amount: commands.Range[int, 1, 100]) -> None:
         """Set the star threshold."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, threshold=amount)
+        await self.update_config(ctx.guild.id, threshold=amount)
         await ctx.send_success(f'Messages now need **{amount}** stars to reach the starboard.')
 
     @starboard.command(
@@ -292,7 +292,7 @@ class Starboard(Cog):
         if not emoji or len(emoji) > 64:
             await ctx.send_error('That does not look like a valid emoji.')
             return
-        await self._update_config(ctx.guild.id, emoji=emoji)
+        await self.update_config(ctx.guild.id, emoji=emoji)
         await ctx.send_success(f'Star emoji set to {emoji}.')
 
     @starboard.command(
@@ -304,7 +304,7 @@ class Starboard(Cog):
     async def starboard_selfstar(self, ctx: Context, allowed: bool) -> None:
         """Toggle self-starring."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, self_star=allowed)
+        await self.update_config(ctx.guild.id, self_star=allowed)
         verb = 'now' if allowed else 'no longer'
         await ctx.send_success(f'Members can {verb} star their own messages.')
 
@@ -317,7 +317,7 @@ class Starboard(Cog):
     async def starboard_toggle(self, ctx: Context, enabled: bool) -> None:
         """Enable or disable the starboard."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, enabled=enabled)
+        await self.update_config(ctx.guild.id, enabled=enabled)
         await ctx.send_success(f"Starboard {'enabled' if enabled else 'disabled'}.")
 
     @starboard.command(
@@ -335,7 +335,7 @@ class Starboard(Cog):
             await ctx.send_error(f'{channel.mention} is already ignored.')
             return
         ignored.add(channel.id)
-        await self._update_config(ctx.guild.id, ignored_channel_ids=list(ignored))
+        await self.update_config(ctx.guild.id, ignored_channel_ids=list(ignored))
         await ctx.send_success(f'{channel.mention} will no longer contribute to the starboard.')
 
     @starboard.command(
@@ -353,7 +353,7 @@ class Starboard(Cog):
             await ctx.send_error(f'{channel.mention} is not currently ignored.')
             return
         ignored.discard(channel.id)
-        await self._update_config(ctx.guild.id, ignored_channel_ids=list(ignored))
+        await self.update_config(ctx.guild.id, ignored_channel_ids=list(ignored))
         await ctx.send_success(f'{channel.mention} can contribute to the starboard again.')
 
     @starboard.command(
@@ -365,7 +365,7 @@ class Starboard(Cog):
     async def starboard_maxage(self, ctx: Context, hours: commands.Range[int, 0, 8760]) -> None:
         """Set the maximum age a message can be to reach the starboard."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, max_age_hours=hours)
+        await self.update_config(ctx.guild.id, max_age_hours=hours)
         if hours == 0:
             await ctx.send_success('Messages of any age can now reach the starboard.')
         else:
@@ -380,7 +380,7 @@ class Starboard(Cog):
     async def starboard_nsfw(self, ctx: Context, allowed: bool) -> None:
         """Toggle whether NSFW-channel messages may reach the starboard."""
         assert ctx.guild is not None
-        await self._update_config(ctx.guild.id, allow_nsfw=allowed)
+        await self.update_config(ctx.guild.id, allow_nsfw=allowed)
         verb = 'can now' if allowed else 'can no longer'
         await ctx.send_success(f'Messages from NSFW channels {verb} reach the starboard.')
 

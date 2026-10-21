@@ -54,6 +54,7 @@ from app.database.sentinel_roles import SentinelRoleQueue
 from app.utils import BaseFlags, cache, flag_value
 from app.utils.query_tracker import QueryTracker
 from app.utils.signals import CacheSignalHub
+from app.utils.webhooks import send_webhook
 from config import DatabaseConfig, Emojis
 
 from .migrations import MigrationRunner
@@ -1208,7 +1209,7 @@ class GuildConfig(BaseRecord, table="guild_config", pk="id", changed_signal="gui
                 return await guild.system_channel.send(content, **kwargs)
             if self.alert_webhook is None:
                 return None
-            return await self.alert_webhook.send(content, **kwargs)
+            return await send_webhook(self.alert_webhook, content, **kwargs)
         except discord.HTTPException:
             return None
 
@@ -1280,7 +1281,9 @@ class UserConfig(BaseRecord, table="user_settings", pk="id", changed_signal="use
     track_presence: bool
     track_history: bool
 
-    __slots__ = ("bot", "id", "timezone", "track_history", "track_presence")
+    rank_card: dict[str, str]
+
+    __slots__ = ("bot", "id", "rank_card", "timezone", "track_history", "track_presence")
 
     @property
     def tzinfo(self) -> datetime.tzinfo:

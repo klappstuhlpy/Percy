@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 import config
 from app.services import ModelTier, build_dashboard_assistant_system
+from app.services.guild_health import ChannelState, FeatureFacts, RoleState, summarize
 from app.utils import truncate
 from app.utils.constants import MAX_MENTION_COUNT, MIN_MENTION_COUNT
 
@@ -276,9 +277,17 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no valid fields to update")
 
-    # Alert / audit-log channels only work with a backing webhook (send_alert / audit logging
-    # use the webhook, not the channel id). The dashboard sends just a channel id, so create
-    # or delete the webhook here. Skip if the channel is unchanged and already has a webhook.
+    await _apply_config_updates(bot, guild, guild_config, updates)
+    return {"ok": True}
+
+
+async def _apply_config_updates(bot, guild, guild_config, updates: dict[str, object]) -> None:
+    """Store config updates, creating/deleting the webhooks the alert and audit-log channels need.
+
+    Alert / audit-log channels only work with a backing webhook (send_alert / audit logging
+    use the webhook, not the channel id). The dashboard sends just a channel id, so create
+    or delete the webhook here. Skip if the channel is unchanged and already has a webhook.
+    """
     for channel_field, url_field, hook_name in (
         ("alert_channel_id", "alert_webhook_url", "Moderation Alerts"),
         ("audit_log_channel_id", "audit_log_webhook_url", "Audit Log"),
@@ -289,11 +298,9 @@ async def patch_guild_config(guild: GuildDep, bot: BotDep, body: PatchGuildConfi
         if new_channel_id == getattr(guild_config, channel_field, None) and getattr(guild_config, url_field, None):
             continue
         updates[url_field] = await _rotate_log_webhook(
-            bot, guild, getattr(guild_config, url_field, None), new_channel_id, hook_name
+            bot, guild, getattr(guild_config, url_field, None), new_channel_id, hook_name  # type: ignore[arg-type]
         )
-
     await guild_config.update(**updates)
-    return {"ok": True}
 
 
 @router.get("/ai")
@@ -488,7 +495,8 @@ async def batch_guild_config(guild: GuildDep, bot: BotDep, body: BatchGuildConfi
             guild_config = await bot.db.get_guild_config(guild.id)
             updates = _build_config_updates(data, guild_config)
             if updates:
-                await guild_config.update(**updates)
+                # Same path as PATCH, so a log/alert channel saved here also gets its webhook.
+                await _apply_config_updates(bot, guild, guild_config, updates)
             results.append({"type": "config", "ok": True})
 
         elif op_type == "sentinel":
@@ -578,9 +586,15 @@ async def get_guild_roles(guild: GuildDep) -> list[dict]:
             "managed": role.managed,
             "hoist": role.hoist,
             "icon_url": role.icon.url if role.icon else None,
+            # Percy can give it out: below its top role and not owned by an integration.
+            "assignable": role < guild.me.top_role and not role.managed and not role.is_default(),
         }
         for role in sorted(guild.roles, key=lambda r: r.position, reverse=True)
     ]
+
+
+def _can_post(perms: discord.Permissions) -> bool:
+    return perms.view_channel and perms.send_messages and perms.embed_links
 
 
 @router.get("/channels")
@@ -592,6 +606,8 @@ async def get_guild_channels(guild: GuildDep) -> list[dict]:
             "type": str(ch.type),
             "position": ch.position,
             "category_id": str(ch.category_id) if ch.category_id else None,
+            # Percy can post an embed there right now (what every logging/announce feature needs).
+            "can_post": _can_post(ch.permissions_for(guild.me)),
         }
         for ch in sorted(guild.channels, key=lambda c: (c.position, c.name))
     ]
@@ -903,3 +919,176 @@ async def toggle_sentinel(guild: GuildDep, bot: BotDep, body: ToggleSentinelBody
         await sentinel.disable()
 
     return {"ok": True, "status": "enabled" if body.enabled else "disabled"}
+
+
+# ---------------------------------------------------------------------------
+# Health: can Percy do what this server configured?
+# ---------------------------------------------------------------------------
+
+_POST = ('view_channel', 'send_messages', 'embed_links')
+
+
+def _channel_state(guild: discord.Guild, purpose: str, channel_id: int, needs: tuple[str, ...] = _POST) -> ChannelState:
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        return ChannelState(purpose, channel_id, None)
+    perms = channel.permissions_for(guild.me)
+    return ChannelState(purpose, channel_id, channel.name, tuple(p for p in needs if not getattr(perms, p)))
+
+
+def _role_state(guild: discord.Guild, purpose: str, role_id: int) -> RoleState:
+    role = guild.get_role(role_id)
+    if role is None:
+        return RoleState(purpose, role_id, None)
+    return RoleState(purpose, role_id, role.name, role < guild.me.top_role and not role.managed)
+
+
+def _guild_missing(guild: discord.Guild, *needs: str) -> tuple[str, ...]:
+    perms = guild.me.guild_permissions
+    return tuple(p for p in needs if not getattr(perms, p))
+
+
+@router.get("/health")
+async def get_guild_health(guild: GuildDep, bot: BotDep) -> dict:
+    """Per feature: ``ok`` / ``attention`` / ``off``, with each problem in plain language.
+
+    Read live from Discord on every call (never cached): the answer to "can Percy post there
+    *now*" goes stale the moment someone edits a channel's permissions.
+    """
+    cfg = await bot.db.get_guild_config(guild.id)
+    facts: list[FeatureFacts] = []
+
+    audit = FeatureFacts('audit_log', 'Audit log', cfg.audit_log_channel_id is not None)
+    if cfg.audit_log_channel_id:
+        audit.channels.append(_channel_state(guild, 'audit log', cfg.audit_log_channel_id, ('view_channel', 'manage_webhooks')))
+        audit.guild_missing = _guild_missing(guild, 'view_audit_log')
+        if not cfg.audit_log_webhook_url:
+            audit.notes.append('The audit log webhook is missing. Pick the channel again so Percy recreates it.')
+    facts.append(audit)
+
+    for key, label, attr in (
+        ('mod_log', 'Moderation log', 'mod_log_channel_id'),
+        ('message_log', 'Message log', 'message_log_channel_id'),
+        ('voice_log', 'Voice log', 'voice_log_channel_id'),
+        ('alerts', 'Alerts', 'alert_channel_id'),
+        ('polls', 'Polls', 'poll_channel_id'),
+    ):
+        channel_id = getattr(cfg, attr, None)
+        feature = FeatureFacts(key, label, channel_id is not None)
+        if channel_id:
+            feature.channels.append(_channel_state(guild, label.lower(), channel_id))
+        facts.append(feature)
+
+    mute = FeatureFacts('mute_role', 'Mute role', cfg.mute_role_id is not None)
+    if cfg.mute_role_id:
+        mute.roles.append(_role_state(guild, 'mute', cfg.mute_role_id))
+        mute.guild_missing = _guild_missing(guild, 'manage_roles')
+    facts.append(mute)
+
+    level_record = await bot.db.leveling.get_guild_config_record(guild.id)
+    leveling = FeatureFacts('leveling', 'Leveling', bool(level_record and level_record['enabled']))
+    if level_record:
+        channel = int(level_record.get('level_up_channel') or 1)
+        if channel > 2:  # 0 = off, 1 = where they talked, 2 = DM
+            leveling.channels.append(_channel_state(guild, 'level-up', channel, (*_POST, 'attach_files')))
+        reward_roles = level_record.get('level_roles') or {}
+        leveling.roles.extend(_role_state(guild, 'level reward', int(role_id)) for role_id in reward_roles)
+        if reward_roles:
+            leveling.guild_missing = _guild_missing(guild, 'manage_roles')
+    facts.append(leveling)
+
+    music = FeatureFacts('music_panel', 'Music panel', bool(cfg.use_music_panel and cfg.music_panel_channel_id))
+    if cfg.music_panel_channel_id:
+        music.channels.append(_channel_state(guild, 'music panel', cfg.music_panel_channel_id))
+    facts.append(music)
+
+    sentinel = await bot.db.get_guild_sentinel(guild.id)
+    gate = FeatureFacts('sentinel', 'Sentinel verification', sentinel is not None and sentinel.started_at is not None)
+    if sentinel is not None:
+        if sentinel.requires_setup:
+            gate.notes.append('Sentinel is on but not fully set up: it needs a channel, a role and its verify message.')
+        if sentinel.channel_id:
+            gate.channels.append(_channel_state(guild, 'verification', sentinel.channel_id, (*_POST, 'attach_files')))
+        if sentinel.role_id:
+            gate.roles.append(_role_state(guild, 'verified', sentinel.role_id))
+        gate.guild_missing = _guild_missing(guild, 'manage_roles')
+    facts.append(gate)
+
+    return summarize(facts)
+
+
+# ---------------------------------------------------------------------------
+# Guided setup: one step instead of five settings
+# ---------------------------------------------------------------------------
+
+#: log key -> (config field, feature flag to switch on with it, or None)
+_SETUP_LOGS = {
+    "audit": ("audit_log_channel_id", "audit_log"),
+    "mod": ("mod_log_channel_id", None),
+    "message": ("message_log_channel_id", None),
+    "voice": ("voice_log_channel_id", None),
+    "alerts": ("alert_channel_id", "alerts"),
+}
+_LOG_CHANNEL_PERMS = discord.PermissionOverwrite(
+    view_channel=True, send_messages=True, embed_links=True, attach_files=True, manage_webhooks=True
+)
+
+
+class SetupLoggingBody(BaseModel):
+    #: An existing text channel, or ``None`` to have Percy create a private ``#percy-logs``.
+    channel_id: int | None = None
+    logs: list[str]
+
+
+@router.post("/setup/logging")
+async def setup_logging(guild: GuildDep, bot: BotDep, body: SetupLoggingBody) -> dict:
+    """Send the chosen logs to one channel, creating it (visible to admins only) when asked.
+
+    Equivalent to picking the same channel in each logging setting and switching the audit
+    log / alert features on -- in one step, with the webhooks created as part of it.
+    """
+    unknown = sorted(set(body.logs) - set(_SETUP_LOGS))
+    if unknown or not body.logs:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"choose logs from: {', '.join(_SETUP_LOGS)}")
+
+    created = False
+    if body.channel_id is None:
+        if not guild.me.guild_permissions.manage_channels:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Percy needs Manage Channels to create the log channel. Pick an existing channel instead.",
+            )
+        overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), guild.me: _LOG_CHANNEL_PERMS}
+        try:
+            channel = await guild.create_text_channel(
+                "percy-logs", overwrites=overwrites, reason="Logging set up from the Percy dashboard"
+            )
+        except discord.HTTPException:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Discord refused to create the channel.") from None
+        created = True
+    else:
+        channel = guild.get_channel(body.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a text channel.")
+        missing = [p for p in ("view_channel", "send_messages", "embed_links", "manage_webhooks")
+                   if not getattr(channel.permissions_for(guild.me), p)]
+        if missing:
+            names = ", ".join(p.replace("_", " ").title() for p in missing)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Percy is missing {names} in #{channel.name}.")
+
+    guild_config = await bot.db.get_guild_config(guild.id)
+    updates: dict[str, object] = {}
+    flags = guild_config.flags.value
+    for key in body.logs:
+        field, flag = _SETUP_LOGS[key]
+        updates[field] = channel.id
+        if flag:
+            flags |= _FLAG_MAP[flag]
+    updates["flags"] = flags
+    await _apply_config_updates(bot, guild, guild_config, updates)
+    return {
+        "ok": True,
+        "channel": resolve_channel(guild, channel.id),
+        "created": created,
+        "message": f"{len(body.logs)} log{'s' if len(body.logs) != 1 else ''} now go to #{channel.name}.",
+    }

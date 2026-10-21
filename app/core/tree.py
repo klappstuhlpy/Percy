@@ -12,6 +12,7 @@ from app.core.command import assign_native_permissions
 from app.core.models import AppBadArgument
 from app.utils import helpers
 from app.utils.lock import LockedResourceError
+from app.utils.webhooks import send_webhook
 from config import Emojis
 
 __all__ = ("CommandTree",)
@@ -95,4 +96,4 @@ class CommandTree(app_commands.CommandTree):
         embed.set_footer(text="occurred at")
 
         with suppress(discord.HTTPException, ValueError):
-            await interaction.client.stats_webhook.send(embed=embed)  # type: ignore[attr-defined]
+            await send_webhook(interaction.client.stats_webhook, embed=embed)  # type: ignore[attr-defined]

@@ -15,6 +15,8 @@ from .music import router as music_router
 from .news import router as news_router
 from .profile import router as profile_router
 from .releases import router as releases_router
+from .rolemenus import router as rolemenus_router
+from .starboard import router as starboard_router
 from .stats import router as stats_router
 from .subscriptions import router as subscriptions_router
 from .users import router as users_router
@@ -41,4 +43,6 @@ ALL_ROUTERS = [
     comics_router,
     releases_router,
     news_router,
+    rolemenus_router,
+    starboard_router,
 ]

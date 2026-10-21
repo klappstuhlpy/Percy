@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.rendering.card_style import DEFAULT_STYLE, CardStyle
 from app.rendering.primitives import Font
 
 __all__ = (
@@ -44,7 +45,7 @@ class LevelCardData:
     xp: int
     max_xp: int
     messages: int
-    font: Font = Font.RUBIK
+    style: CardStyle = DEFAULT_STYLE
     boosts: list[ActiveBoost] = field(default_factory=list)
 
 

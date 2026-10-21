@@ -55,6 +55,7 @@ from app.utils import (
 from app.utils.lock import LockedResourceError
 from app.utils.metrics import MetricsCollector
 from app.utils.types import RPCAppInfo, RPCAppInfoPayload
+from app.utils.webhooks import send_webhook
 from config import (
     Emojis,
     allowed_mentions,
@@ -566,7 +567,7 @@ class Bot(commands.Bot):
                 await send(embed=embed)
                 return
 
-            await self.stats_webhook.send(embed=embed)
+            await send_webhook(self.stats_webhook, embed=embed)
 
     #: Minimum fuzzy ``ratio`` (0-100) for a mistyped command to earn a "did you mean?"
     #: suggestion. Tuned so a clear typo of a real command (``balanace`` -> ``balance``)
@@ -728,7 +729,7 @@ class Bot(commands.Bot):
         if interaction.guild:
             embed.add_field(name="Guild", value=f"{interaction.guild} (ID: {interaction.guild.id})")
         with suppress(discord.HTTPException, ValueError):
-            await self.stats_webhook.send(embed=embed)
+            await send_webhook(self.stats_webhook, embed=embed)
 
     async def on_command_error(self, ctx: Context, error: commands.CommandError) -> None:
         """|coro|
@@ -1212,7 +1213,7 @@ class Bot(commands.Bot):
             embed.add_field(name='Uptime', value=format_duration(uptime))
             embed.add_field(name='Version', value=f'`{get_full_version()}`')
             with suppress(Exception):
-                await asyncio.wait_for(self.stats_webhook.send(embed=embed), timeout=5)
+                await asyncio.wait_for(send_webhook(self.stats_webhook, embed=embed), timeout=5)
 
         # Cogs unload inside super().close(), and their cog_unload may still write (the pending
         # muted members), so the session and pool close only after it.

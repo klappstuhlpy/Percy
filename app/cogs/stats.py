@@ -65,6 +65,7 @@ from app.utils import (
 )
 from app.utils.tasks import executor
 from app.utils.timetools import human_timedelta
+from app.utils.webhooks import send_webhook
 from config import Emojis, beta, get_full_version, path
 
 log = logging.getLogger(__name__)
@@ -236,7 +237,7 @@ class Stats(Cog):
         if beta:
             return
         try:
-            await self.bot.stats_webhook.send(content or MISSING, embed=embed or MISSING, **kwargs)
+            await send_webhook(self.bot.stats_webhook, content or MISSING, embed=embed or MISSING, **kwargs)
         except (discord.HTTPException, aiohttp.ClientError, TimeoutError) as exc:
             log.warning("Could not post to the log channel: %s", exc)
 
@@ -1271,7 +1272,7 @@ class Stats(Cog):
         if guild.me:
             embed.timestamp = guild.me.joined_at
 
-        await self.bot.stats_webhook.send(embed=embed)
+        await send_webhook(self.bot.stats_webhook, embed=embed)
 
     async def get_presence_history(self, user_id: int, /, *, days: int = 30) -> list[asyncpg.Record]:
         return await self.bot.db.stats.get_presence_history(user_id, days=days)
@@ -1576,7 +1577,7 @@ class Stats(Cog):
         embed.description = f"```py\n{exc}\n```"
         embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text="occurred at")
-        await self.bot.stats_webhook.send(embed=embed)
+        await send_webhook(self.bot.stats_webhook, embed=embed)
 
     def add_record(self, record: logging.LogRecord) -> None:
         self._logging_queue.put_nowait(record)

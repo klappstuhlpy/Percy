@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import discord
 
 from app.rendering import templates
+from app.rendering.card_style import DEFAULT_STYLE, CardStyle
 from app.rendering.models import ActiveBoost, BarChartData, ColorSwatchData, LevelCardData, PresenceData, QuoteData
 from app.rendering.primitives import Font, FontManager, get_dominant_color
 
@@ -49,7 +50,7 @@ class RenderingService:
         member: discord.Member,
         level_config: LevelConfig,
         *,
-        font: Font = Font.RUBIK,
+        style: CardStyle = DEFAULT_STYLE,
         boosts: list[ActiveBoost] | None = None,
     ) -> discord.File:
         """Render a member's rank card."""
@@ -63,7 +64,7 @@ class RenderingService:
             xp=level_config.xp,
             max_xp=level_config.max_xp,
             messages=level_config.messages,
-            font=font,
+            style=style,
             boosts=boosts or [],
         )
         buffer = await asyncio.to_thread(templates.draw_level_card, data, self._fonts)

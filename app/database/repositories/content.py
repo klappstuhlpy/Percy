@@ -280,6 +280,16 @@ class RoleMenusRepository(BaseRepository):
         """Toggles radio-style (single-choice) behaviour for a menu."""
         await self.execute('UPDATE role_menus SET unique_roles = $2 WHERE id = $1;', menu_id, unique)
 
+    async def set_text(self, menu_id: int, title: str | None, description: str | None) -> None:
+        """Changes a menu's title and/or description; ``None`` keeps a field, ``''`` clears the description."""
+        query = """
+            UPDATE role_menus
+            SET title = COALESCE($2, title),
+                description = CASE WHEN $3::TEXT IS NULL THEN description ELSE NULLIF($3::TEXT, '') END
+            WHERE id = $1;
+        """
+        await self.execute(query, menu_id, title, description)
+
     async def get_menu(self, menu_id: int) -> asyncpg.Record | None:
         """Fetches a single menu by id."""
         return await self.fetchrow('SELECT * FROM role_menus WHERE id = $1;', menu_id)

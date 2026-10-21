@@ -8,10 +8,11 @@ from discord.ext import commands, tasks
 from discord.ext.commands import Range  # noqa: TC002 -- flag/command param annotations are evaluated at runtime
 
 from app.cogs.leveling.models import _MAX_LEVEL, _MAX_XP, GuildLevelConfig, LevelConfig
-from app.cogs.leveling.ui import InteractiveLevelRolesView, InteractiveMultiplierView
+from app.cogs.leveling.ui import InteractiveLevelRolesView, InteractiveMultiplierView, RankCardEditor
 from app.core import Bot, Cog, Flags, converter, flag
 from app.core.converter import IgnoreableEntity, IgnoreEntity
 from app.core.models import Context, PermissionTemplate, describe, group
+from app.rendering.card_style import CardStyle, resolve_style
 from app.rendering.models import ActiveBoost
 from app.utils import cache, fnumb, get_asset_url, helpers, humanize_duration, medal_emoji, truncate
 from config import Emojis
@@ -213,14 +214,56 @@ class Leveling(Cog):
             await ctx.send_error(f"**{user}** has not gained any XP yet.")
             return
 
-        boost_rows = await self.bot.db.economy.get_active_boosts(user.id, ctx.guild.id)
-        boosts = [
-            ActiveBoost(kind=row['kind'], percent=round((row['multiplier'] - 1.0) * 100))
-            for row in boost_rows
-        ]
-
-        image = await self.bot.render.level_card(user, config, boosts=boosts)
+        boosts = await self.active_boosts(user)
+        guild_default, user_style, locked = await self.card_layers(user)
+        style = resolve_style(guild_default, user_style, locked=locked)
+        image = await self.bot.render.level_card(user, config, style=style, boosts=boosts)
         await ctx.send(file=image)
+
+    async def active_boosts(self, member: discord.Member) -> list[ActiveBoost]:
+        rows = await self.bot.db.economy.get_active_boosts(member.id, member.guild.id)
+        return [ActiveBoost(kind=row['kind'], percent=round((row['multiplier'] - 1.0) * 100)) for row in rows]
+
+    async def card_layers(self, member: discord.Member) -> tuple[dict[str, str], dict[str, str], bool]:
+        """The server's default card style, the member's own, and whether the server locks it.
+
+        Read uncached: the dashboard writes ``level_config`` through the internal API, and a
+        lock must take effect on the next ``/level``.
+        """
+        record = await self.bot.db.leveling.get_guild_config_record(member.guild.id)
+        guild_default = (record.get('card_style') if record else None) or {}
+        locked = bool(record and record.get('card_locked'))
+        user_config = await self.bot.db.get_user_config(member.id)
+        return guild_default, getattr(user_config, 'rank_card', None) or {}, locked
+
+    @level.command(name="card", description="Customize how your rank card looks.", guild_only=True)
+    async def level_card(self, ctx: Context) -> None:
+        """Pick your rank card's theme, accent colour, progress bar and font with a live preview."""
+        assert isinstance(ctx.author, discord.Member)
+        member = ctx.author
+        guild_default, user_style, locked = await self.card_layers(member)
+        if locked:
+            await ctx.send_info("This server uses a fixed rank card style, so it can't be customized here.")
+            return
+
+        config: LevelConfig | None = await self.get_level_config(member.id, member.guild.id)
+        if config is None or config.xp == 0:
+            await ctx.send_error("Earn some XP on this server first, then your card can be previewed here.")
+            return
+
+        await ctx.defer()
+        boosts = await self.active_boosts(member)
+        user_config = await self.bot.db.get_user_config(member.id)
+
+        async def render(style: CardStyle) -> discord.File:
+            return await self.bot.render.level_card(member, config, style=style, boosts=boosts)
+
+        async def save(style: dict[str, str]) -> None:
+            await user_config.update(rank_card=style)
+
+        editor = RankCardEditor(member=member, render=render, save=save, guild_default=guild_default, current=user_style)
+        file = await editor.build()
+        editor.message = await ctx.send(view=editor, file=file)
 
     @level.command(aliases=["top"], description="View the server leaderboard.", guild_only=True)
     async def leaderboard(self, ctx: Context) -> None:

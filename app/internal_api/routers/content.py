@@ -525,6 +525,61 @@ async def export_tags(guild: GuildDep, bot: BotDep) -> dict:
     return {'tags': tags}
 
 
+def _tag_problem(name: str, content: str, reserved: set[str]) -> str | None:
+    """Why a tag cannot be stored as given, or ``None``; shared by create, edit and import."""
+    if not name or not content:
+        return 'name and content are required'
+    if len(name) > 100:
+        return 'name exceeds 100 characters'
+    if len(content) > 2000:
+        return 'content exceeds 2000 characters'
+    if name.lower().partition(' ')[0] in reserved:
+        return 'that name is reserved for a tag subcommand'
+    return None
+
+
+def _reserved_tag_names(bot) -> set[str]:
+    root = bot.get_command('tag')
+    return set(root.all_commands) if root else set()
+
+
+class CreateTagBody(BaseModel):
+    name: str
+    content: str
+    #: The dashboard user creating it; they own the tag like one made with ``tag create``.
+    owner_id: int
+
+
+class PatchTagBody(BaseModel):
+    content: str
+
+
+@router.post("/tags")
+async def create_tag(guild: GuildDep, bot: BotDep, body: CreateTagBody) -> dict:
+    name, content = body.name.strip(), body.content.strip()
+    error = _tag_problem(name, content, _reserved_tag_names(bot))
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.capitalize() + '.')
+    if await bot.db.tags.get_tag_record(name, location_id=guild.id) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f'A tag named "{name}" already exists.')
+    await bot.db.tags.create_tag(name, content, body.owner_id, guild.id)
+    return {'ok': True, 'message': f'Tag "{name}" created.'}
+
+
+@router.patch("/tags/{tag_id}")
+async def edit_tag(guild: GuildDep, bot: BotDep, tag_id: int, body: PatchTagBody) -> dict:
+    """Replace a tag's content (its name, aliases, owner and uses stay)."""
+    record = await bot.db.tags.get_tag_record(tag_id, location_id=guild.id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='tag not found')
+    content = body.content.strip()
+    error = _tag_problem(record['name'], content, set())
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.capitalize() + '.')
+    await bot.db.tags.update_tag(record['id'], {'content': content})
+    return {'ok': True, 'message': f'Tag "{record["name"]}" updated.'}
+
+
 @router.post("/tags/import")
 async def import_tags(guild: GuildDep, bot: BotDep, body: ImportTagsBody) -> dict:
     """Bulk-create tags from a parsed (name, content) list.
@@ -543,8 +598,7 @@ async def import_tags(guild: GuildDep, bot: BotDep, body: ImportTagsBody) -> dic
     except (TypeError, ValueError):
         owner_id = bot.user.id
 
-    root = bot.get_command('tag')
-    reserved = set(root.all_commands) if root else set()
+    reserved = _reserved_tag_names(bot)
 
     created = 0
     skipped = 0
@@ -556,20 +610,12 @@ async def import_tags(guild: GuildDep, bot: BotDep, body: ImportTagsBody) -> dic
             continue
         name = (item.get('name') or '').strip()
         content = (item.get('content') or '').strip()
-        if not name or not content:
-            failed.append({'name': name or '(empty)', 'error': 'name and content are required'})
-            continue
-        if len(name) > 100:
-            failed.append({'name': name[:60], 'error': 'name exceeds 100 characters'})
-            continue
-        if len(content) > 2000:
-            failed.append({'name': name, 'error': 'content exceeds 2000 characters'})
+        error = _tag_problem(name, content, reserved)
+        if error:
+            failed.append({'name': name[:60] or '(empty)', 'error': error})
             continue
 
         lname = name.lower()
-        if lname.partition(' ')[0] in reserved:
-            failed.append({'name': name, 'error': 'reserved tag name'})
-            continue
         if lname in seen:
             skipped += 1
             continue

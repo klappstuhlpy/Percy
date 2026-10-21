@@ -17,8 +17,16 @@ if TYPE_CHECKING:
 MAX_ROLES = 25
 
 
+class RoleMenuError(Exception):
+    """A role-menu operation was refused; the message is shown to the user as is."""
+
+
 class RoleMenus(Cog):
-    """Self-assignable roles via persistent buttons."""
+    """Self-assignable roles via persistent buttons.
+
+    The operations below are shared by the commands and the dashboard (internal API), so both
+    enforce the same rules; each raises :class:`RoleMenuError` with a user-facing message.
+    """
 
     emoji = '\N{LABEL}'
 
@@ -43,6 +51,83 @@ class RoleMenus(Cog):
             await message.edit(view=view)
         except discord.HTTPException:
             pass
+
+    # -- operations (commands + dashboard) ------------------------------------
+
+    async def get_menu(self, guild: discord.Guild, menu_id: int) -> asyncpg.Record:
+        menu = await self.bot.db.rolemenu.get_guild_menu(guild.id, menu_id)
+        if menu is None:
+            raise RoleMenuError(f'Role menu #{menu_id} does not exist.')
+        return menu
+
+    async def create_menu(
+        self, channel: discord.TextChannel, title: str, description: str | None, *, unique: bool = False
+    ) -> asyncpg.Record:
+        """Create a menu and post its (initially empty) message."""
+        record = await self.bot.db.rolemenu.create_menu(channel.guild.id, channel.id, title, description)
+        if unique:
+            await self.bot.db.rolemenu.set_unique(record['id'], True)
+        view = ui.build_menu_view(record['id'], title, description, [], channel.guild, unique=unique)
+        try:
+            message = await channel.send(view=view)
+        except discord.HTTPException:
+            await self.bot.db.rolemenu.delete_menu(record['id'])
+            raise RoleMenuError(f"I couldn't post a message in #{channel.name}.") from None
+        await self.bot.db.rolemenu.set_message(record['id'], message.id)
+        return await self.get_menu(channel.guild, record['id'])
+
+    async def add_role(
+        self, guild: discord.Guild, menu_id: int, role: discord.Role, emoji: str | None, label: str | None
+    ) -> None:
+        menu = await self.get_menu(guild, menu_id)
+        if role.is_default():
+            raise RoleMenuError('You cannot add the @​everyone role.')
+        if role >= guild.me.top_role or role.managed:
+            raise RoleMenuError(f"I can't assign @{role.name}: it's above my highest role or managed by an integration.")
+        count = await self.bot.db.rolemenu.count_entries(menu_id)
+        if count >= MAX_ROLES:
+            raise RoleMenuError(f'A role menu can hold at most {MAX_ROLES} roles.')
+        if await self.bot.db.rolemenu.add_entry(menu_id, role.id, emoji or None, label or None, count) is None:
+            raise RoleMenuError(f'@{role.name} is already in menu #{menu_id}.')
+        await self._render_menu(menu)
+
+    async def remove_role(self, guild: discord.Guild, menu_id: int, role_id: int) -> None:
+        menu = await self.get_menu(guild, menu_id)
+        if await self.bot.db.rolemenu.remove_entry(menu_id, role_id) is None:
+            raise RoleMenuError(f'That role is not in menu #{menu_id}.')
+        await self._render_menu(menu)
+
+    async def edit_menu(
+        self,
+        guild: discord.Guild,
+        menu_id: int,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        unique: bool | None = None,
+    ) -> None:
+        """Change a menu's text or single-choice mode; ``description=''`` clears it."""
+        await self.get_menu(guild, menu_id)
+        if title is not None or description is not None:
+            if title is not None and not title.strip():
+                raise RoleMenuError('A role menu needs a title.')
+            await self.bot.db.rolemenu.set_text(menu_id, title, description)
+        if unique is not None:
+            await self.bot.db.rolemenu.set_unique(menu_id, unique)
+        await self._render_menu(await self.get_menu(guild, menu_id))
+
+    async def delete_menu(self, guild: discord.Guild, menu_id: int) -> None:
+        menu = await self.get_menu(guild, menu_id)
+        await self.bot.db.rolemenu.delete_menu(menu_id)
+        channel = self.bot.get_channel(menu['channel_id'])
+        if isinstance(channel, (discord.TextChannel, discord.Thread)) and menu['message_id'] is not None:
+            try:
+                message = await channel.fetch_message(menu['message_id'])
+                await message.delete()
+            except discord.HTTPException:
+                pass
+
+    # -- commands ---------------------------------------------------------------
 
     @group(
         'rolemenu',
@@ -79,18 +164,11 @@ class RoleMenus(Cog):
         self, ctx: Context, channel: discord.TextChannel, title: str, *, description: str | None = None
     ) -> None:
         """Create a role menu (initially empty — add roles with `rolemenu add`)."""
-        assert ctx.guild is not None
-        record = await self.bot.db.rolemenu.create_menu(ctx.guild.id, channel.id, title, description)
-
-        view = ui.build_menu_view(record['id'], title, description, [], channel.guild, unique=False)
         try:
-            message = await channel.send(view=view)
-        except discord.HTTPException:
-            await self.bot.db.rolemenu.delete_menu(record['id'])
-            await ctx.send_error(f"I couldn't post a message in {channel.mention}.")
+            record = await self.create_menu(channel, title, description)
+        except RoleMenuError as exc:
+            await ctx.send_error(str(exc))
             return
-
-        await self.bot.db.rolemenu.set_message(record['id'], message.id)
         await ctx.send_success(
             f"Created role menu **#{record['id']}** in {channel.mention}. "
             f"Add roles with `rolemenu add {record['id']} <role>`."
@@ -118,30 +196,11 @@ class RoleMenus(Cog):
     ) -> None:
         """Add a role to an existing menu."""
         assert ctx.guild is not None
-        menu = await self.bot.db.rolemenu.get_guild_menu(ctx.guild.id, menu_id)
-        if menu is None:
-            await ctx.send_error(f'Role menu **#{menu_id}** does not exist.')
+        try:
+            await self.add_role(ctx.guild, menu_id, role, emoji, label)
+        except RoleMenuError as exc:
+            await ctx.send_error(str(exc))
             return
-        if role.is_default():
-            await ctx.send_error('You cannot add the @​everyone role.')
-            return
-        if role >= ctx.guild.me.top_role or role.managed:
-            await ctx.send_error(
-                f"I can't assign {role.mention} — it's above my highest role or managed by an integration."
-            )
-            return
-
-        if await self.bot.db.rolemenu.count_entries(menu_id) >= MAX_ROLES:
-            await ctx.send_error(f'A role menu can hold at most {MAX_ROLES} roles.')
-            return
-
-        position = await self.bot.db.rolemenu.count_entries(menu_id)
-        record = await self.bot.db.rolemenu.add_entry(menu_id, role.id, emoji, label, position)
-        if record is None:
-            await ctx.send_error(f'{role.mention} is already in menu **#{menu_id}**.')
-            return
-
-        await self._render_menu(menu)
         await ctx.send_success(f'Added {role.mention} to menu **#{menu_id}**.')
 
     @rolemenu.command(
@@ -154,17 +213,11 @@ class RoleMenus(Cog):
     async def rolemenu_remove(self, ctx: Context, menu_id: int, role: discord.Role) -> None:
         """Remove a role from a menu."""
         assert ctx.guild is not None
-        menu = await self.bot.db.rolemenu.get_guild_menu(ctx.guild.id, menu_id)
-        if menu is None:
-            await ctx.send_error(f'Role menu **#{menu_id}** does not exist.')
+        try:
+            await self.remove_role(ctx.guild, menu_id, role.id)
+        except RoleMenuError as exc:
+            await ctx.send_error(str(exc))
             return
-
-        record = await self.bot.db.rolemenu.remove_entry(menu_id, role.id)
-        if record is None:
-            await ctx.send_error(f'{role.mention} is not in menu **#{menu_id}**.')
-            return
-
-        await self._render_menu(menu)
         await ctx.send_success(f'Removed {role.mention} from menu **#{menu_id}**.')
 
     @rolemenu.command(
@@ -176,15 +229,11 @@ class RoleMenus(Cog):
     async def rolemenu_unique(self, ctx: Context, menu_id: int, enabled: bool) -> None:
         """Toggle radio-style (single-choice) behaviour for a menu."""
         assert ctx.guild is not None
-        menu = await self.bot.db.rolemenu.get_guild_menu(ctx.guild.id, menu_id)
-        if menu is None:
-            await ctx.send_error(f'Role menu **#{menu_id}** does not exist.')
+        try:
+            await self.edit_menu(ctx.guild, menu_id, unique=enabled)
+        except RoleMenuError as exc:
+            await ctx.send_error(str(exc))
             return
-
-        await self.bot.db.rolemenu.set_unique(menu_id, enabled)
-        refreshed = await self.bot.db.rolemenu.get_guild_menu(ctx.guild.id, menu_id)
-        if refreshed is not None:
-            await self._render_menu(refreshed)
         mode = 'single-choice' if enabled else 'multi-choice'
         await ctx.send_success(f'Menu **#{menu_id}** is now **{mode}**.')
 
@@ -197,21 +246,11 @@ class RoleMenus(Cog):
     async def rolemenu_delete(self, ctx: Context, menu_id: int) -> None:
         """Delete a role menu entirely."""
         assert ctx.guild is not None
-        menu = await self.bot.db.rolemenu.get_guild_menu(ctx.guild.id, menu_id)
-        if menu is None:
-            await ctx.send_error(f'Role menu **#{menu_id}** does not exist.')
+        try:
+            await self.delete_menu(ctx.guild, menu_id)
+        except RoleMenuError as exc:
+            await ctx.send_error(str(exc))
             return
-
-        await self.bot.db.rolemenu.delete_menu(menu_id)
-
-        channel = self.bot.get_channel(menu['channel_id'])
-        if isinstance(channel, (discord.TextChannel, discord.Thread)) and menu['message_id'] is not None:
-            try:
-                message = await channel.fetch_message(menu['message_id'])
-                await message.delete()
-            except discord.HTTPException:
-                pass
-
         await ctx.send_success(f'Deleted role menu **#{menu_id}**.')
 
 

@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from app.services.spam_penalty import LOOKBACK_WINDOW, compute_spam_penalty
 from app.utils import helpers
+from app.utils.webhooks import send_webhook
 
 if TYPE_CHECKING:
     from app.core.bot import Bot
@@ -65,7 +66,7 @@ class SpamControl:
         embed.add_field(name="Guild Info", value=f"{guild_name} (ID: {guild_id})", inline=False)
         embed.add_field(name="Channel Info", value=f"{message.channel} (ID: {message.channel.id})", inline=False)
         embed.timestamp = discord.utils.utcnow()
-        await self.bot.stats_webhook.send(embed=embed, username="Bot Spam Control")
+        await send_webhook(self.bot.stats_webhook, embed=embed, username="Bot Spam Control")
 
     def _record_offense(self, user_id: int, timestamp: float) -> None:
         """Logs a spam offense, pruning entries outside the lookback window.

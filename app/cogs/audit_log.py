@@ -5,6 +5,7 @@ import discord
 
 from app.core import Cog
 from app.utils import get_asset_url
+from app.utils.webhooks import send_webhook
 
 PossibleTarget = (
     discord.TextChannel
@@ -164,7 +165,7 @@ class AuditLog(Cog):
         if config.audit_log_webhook is None:
             return
 
-        await config.audit_log_webhook.send(embed=embed)
+        await send_webhook(config.audit_log_webhook, embed=embed)
 
 
 async def setup(bot) -> None:

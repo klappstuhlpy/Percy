@@ -16,8 +16,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image, ImageColor, ImageDraw
 
-from app.rendering.primitives import ASSETS, FONT_MAPPING, FontManager, mask_to_circle, rounded_mask
-from app.rendering.templates.theme import BRAND, BRAND_BRIGHT, FOREGROUND, MUTED, PANEL_BG, PANEL_BORDER, TRACK_BG
+from app.rendering.primitives import ASSETS, FONT_MAPPING, Font, FontManager, mask_to_circle, rounded_mask
 from app.utils import shorten_number
 
 if TYPE_CHECKING:
@@ -54,10 +53,10 @@ def _ring(diameter: int, thickness: int, color: str, *, quality: int = 4) -> Ima
     return image.resize((diameter, diameter), Image.Resampling.LANCZOS)
 
 
-def _gradient_pill(width: int, height: int) -> tuple[Image.Image, Image.Image]:
-    """A coral->bright-coral gradient bar and its pill mask (matches the charts)."""
-    start = np.asarray(ImageColor.getrgb(BRAND), dtype=float)
-    end = np.asarray(ImageColor.getrgb(BRAND_BRIGHT), dtype=float)
+def _gradient_pill(width: int, height: int, start_color: str, end_color: str) -> tuple[Image.Image, Image.Image]:
+    """An accent gradient bar and its pill mask (matches the charts); equal colours = solid."""
+    start = np.asarray(ImageColor.getrgb(start_color), dtype=float)
+    end = np.asarray(ImageColor.getrgb(end_color), dtype=float)
     t = np.linspace(0.0, 1.0, max(width, 1))[:, None]
     row = (start[None, :] * (1 - t) + end[None, :] * t).astype(np.uint8)  # (width, 3)
     gradient = Image.fromarray(np.broadcast_to(row[None, :, :], (height, max(width, 1), 3)).copy())
@@ -66,17 +65,19 @@ def _gradient_pill(width: int, height: int) -> tuple[Image.Image, Image.Image]:
 
 def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     """Draws a rank card for the given prepared data and returns a PNG buffer."""
-    name_font_path = str(ASSETS / FONT_MAPPING[data.font.value])
+    name_font_path = str(ASSETS / FONT_MAPPING[Font[data.style.font.upper()].value])
+    background, border, track, foreground, muted = data.style.palette
+    accent, accent_end = data.style.accent_colors
     rubik = str(ASSETS / 'fonts/rubik.ttf')
     poppins = str(ASSETS / 'fonts/poppins.ttf')
 
-    base = Image.new('RGB', (WIDTH, HEIGHT), PANEL_BG)
+    base = Image.new('RGB', (WIDTH, HEIGHT), background)
     draw = ImageDraw.Draw(base)
-    draw.rectangle((0, 0, WIDTH - 1, HEIGHT - 1), outline=PANEL_BORDER, width=2)
+    draw.rectangle((0, 0, WIDTH - 1, HEIGHT - 1), outline=border, width=2)
 
     # Avatar with a coral ring.
     ring_gap = 7
-    ring = _ring(AVATAR_SIZE + 2 * ring_gap, 3, BRAND)
+    ring = _ring(AVATAR_SIZE + 2 * ring_gap, 3, accent)
     base.paste(ring, (AVATAR_POS[0] - ring_gap, AVATAR_POS[1] - ring_gap), ring)
     avatar = _round_avatar(data.avatar, AVATAR_SIZE)
     base.paste(avatar, AVATAR_POS, avatar)
@@ -84,9 +85,9 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     # Rank block, right-aligned (drawn first so the name knows where to stop).
     right = WIDTH - PAD
     rank_text = f'#{data.rank}'
-    draw.text((right, 46), 'RANK', font=fonts.get(poppins, 18), fill=MUTED, anchor='ra')
-    draw.text((right, 72), rank_text, font=fonts.get(rubik, 46), fill=FOREGROUND, anchor='ra')
-    draw.text((right, 130), f'of {shorten_number(data.member_count)}', font=fonts.get(rubik, 20), fill=MUTED, anchor='ra')
+    draw.text((right, 46), 'RANK', font=fonts.get(poppins, 18), fill=muted, anchor='ra')
+    draw.text((right, 72), rank_text, font=fonts.get(rubik, 46), fill=foreground, anchor='ra')
+    draw.text((right, 130), f'of {shorten_number(data.member_count)}', font=fonts.get(rubik, 20), fill=muted, anchor='ra')
 
     rank_left = right - max(
         draw.textlength('RANK', font=fonts.get(poppins, 18)),
@@ -102,8 +103,8 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
         name = name[:-1]
     if name != data.name:
         name = f'{name}…'
-    draw.text((CONTENT_X, 46), name, font=name_font, fill=FOREGROUND)
-    draw.text((CONTENT_X, 106), f'{data.total_xp:,} XP total', font=fonts.get(rubik, 22), fill=MUTED)
+    draw.text((CONTENT_X, 46), name, font=name_font, fill=foreground)
+    draw.text((CONTENT_X, 106), f'{data.total_xp:,} XP total', font=fonts.get(rubik, 22), fill=muted)
 
     # Stats row, metric-tile style: muted uppercase label over a foreground value.
     label_font = fonts.get(poppins, 17)
@@ -111,14 +112,14 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
     label_y, value_y = 212, 240
     xp_text = f'{shorten_number(data.xp)} / {shorten_number(data.max_xp)} XP'
 
-    draw.text((PAD, label_y), 'LEVEL', font=label_font, fill=MUTED)
-    draw.text((PAD, value_y), str(data.level), font=value_font, fill=FOREGROUND)
+    draw.text((PAD, label_y), 'LEVEL', font=label_font, fill=muted)
+    draw.text((PAD, value_y), str(data.level), font=value_font, fill=foreground)
 
-    draw.text((WIDTH / 2, label_y), 'XP', font=label_font, fill=MUTED, anchor='ma')
-    draw.text((WIDTH / 2, value_y), xp_text, font=value_font, fill=FOREGROUND, anchor='ma')
+    draw.text((WIDTH / 2, label_y), 'XP', font=label_font, fill=muted, anchor='ma')
+    draw.text((WIDTH / 2, value_y), xp_text, font=value_font, fill=foreground, anchor='ma')
 
-    draw.text((right, label_y), 'MESSAGES', font=label_font, fill=MUTED, anchor='ra')
-    draw.text((right, value_y), shorten_number(data.messages), font=value_font, fill=FOREGROUND, anchor='ra')
+    draw.text((right, label_y), 'MESSAGES', font=label_font, fill=muted, anchor='ra')
+    draw.text((right, value_y), shorten_number(data.messages), font=value_font, fill=foreground, anchor='ra')
 
     # Active boost badges below the avatar.
     if data.boosts:
@@ -131,20 +132,21 @@ def draw_level_card(data: LevelCardData, fonts: FontManager) -> BytesIO:
             bw, bh = tw + 16, 22
             badge = Image.new('RGBA', (bw, bh), (0, 0, 0, 0))
             badge_draw = ImageDraw.Draw(badge)
-            badge_draw.rounded_rectangle((0, 0, bw - 1, bh - 1), radius=bh // 2, fill=BRAND, outline=BRAND_BRIGHT)
-            badge_draw.text((bw // 2, bh // 2), label, font=boost_font, fill=FOREGROUND, anchor='mm')
+            badge_draw.rounded_rectangle((0, 0, bw - 1, bh - 1), radius=bh // 2, fill=accent, outline=accent_end)
+            badge_draw.text((bw // 2, bh // 2), label, font=boost_font, fill=foreground, anchor='mm')
             base.paste(badge, (badge_x, badge_y), badge)
             badge_x += bw + 6
 
     # Progress bar: full-width track rail with a gradient pill, like the bar charts.
     bar_width = WIDTH - 2 * PAD
-    track = Image.new('RGB', (bar_width, BAR_HEIGHT), TRACK_BG)
+    track = Image.new('RGB', (bar_width, BAR_HEIGHT), track)
     base.paste(track, (PAD, BAR_Y), rounded_mask((bar_width, BAR_HEIGHT), BAR_HEIGHT // 2))
 
     ratio = min(max(data.xp / data.max_xp, 0.0), 1.0) if data.max_xp else 0.0
     if ratio > 0:
         fill_width = max(int(bar_width * ratio), BAR_HEIGHT)
-        gradient, mask = _gradient_pill(fill_width, BAR_HEIGHT)
+        end = accent_end if data.style.bar == 'gradient' else accent
+        gradient, mask = _gradient_pill(fill_width, BAR_HEIGHT, accent, end)
         base.paste(gradient, (PAD, BAR_Y), mask)
 
     buffer = BytesIO()

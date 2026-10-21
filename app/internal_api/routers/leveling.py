@@ -5,6 +5,9 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from app.rendering.card_style import clean_style, style_options
+from app.services.level_message import LEVEL_UP_VARIABLES, level_up_values, render_level_up
+
 from ..dependencies import BotDep, GuildDep, verify_token
 
 router = APIRouter(prefix="/guilds/{guild_id}", tags=["Leveling"], dependencies=[Depends(verify_token)])
@@ -51,8 +54,14 @@ class PatchLevelingConfigBody(BaseModel):
     max_gain: int | None = None
     cooldown_per: int | None = None
     special_level_up_messages: dict | None = None
+    card_style: dict | None = None
+    card_locked: bool | None = None
 
     model_config = {"extra": "ignore"}
+
+
+class LevelUpTestBody(BaseModel):
+    user_id: int
 
 
 class PostLevelingRolesBody(BaseModel):
@@ -104,6 +113,10 @@ async def get_leveling_config(guild: GuildDep, bot: BotDep) -> dict:
         'min_gain': record.get('min_gain', 8),
         'max_gain': record.get('max_gain', 15),
         'cooldown_per': record.get('cooldown_per', 40),
+        'card_style': record.get('card_style') or {},
+        'card_locked': record.get('card_locked', False),
+        'card_options': style_options(),
+        'level_up_variables': [{'name': k, 'description': v} for k, v in LEVEL_UP_VARIABLES.items()],
     }
 
 
@@ -175,6 +188,11 @@ async def patch_leveling_config(guild: GuildDep, bot: BotDep, body: PatchLevelin
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no valid fields to update')
+    if 'card_style' in updates:
+        try:
+            updates['card_style'] = clean_style(updates['card_style'])  # type: ignore[arg-type]
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
     record = await bot.db.leveling.get_guild_config_record(guild.id)
     if record is None:
@@ -284,3 +302,38 @@ async def post_leveling_blacklist(guild: GuildDep, bot: BotDep, body: PostLeveli
 
     await bot.db.leveling.update_guild_config(guild.id, {field: list(current)})
     return {'ok': True}
+
+
+@router.post("/leveling/test-message")
+async def send_level_up_test(guild: GuildDep, bot: BotDep, body: LevelUpTestBody) -> dict:
+    """Post the level-up message once, as it would look for ``user_id`` reaching level 5.
+
+    A configured channel gets it there; "where they talked" and "DM" modes send it to the
+    requesting member's DMs, since there is no message to reply to. Marked as a test.
+    """
+    record = await bot.db.leveling.get_guild_config_record(guild.id)
+    template = record.get('level_up_message') if record else None
+    if not template:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Set a level-up message first.')
+    mode = int(record.get('level_up_channel') or 1)
+    if mode == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Level-up messages are turned off.')
+
+    member = guild.get_member(body.user_id)
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='You are not a member of this server.')
+    preview = render_level_up(template, level_up_values(member, 5))
+    content = f'-# Test from the dashboard: this is how level-up messages look.\n{preview}'
+
+    channel = guild.get_channel(mode) if mode > 2 else None
+    try:
+        if isinstance(channel, discord.abc.Messageable):
+            await channel.send(content, allowed_mentions=discord.AllowedMentions.none())
+            return {'ok': True, 'message': f'Test message sent to #{channel.name}.'}  # type: ignore[union-attr]
+        if mode > 2:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='The level-up channel was deleted. Pick a new one.')
+        await member.send(content)
+        return {'ok': True, 'message': 'Test message sent to your DMs.'}
+    except discord.Forbidden:
+        where = f'#{channel.name}' if channel is not None else 'your DMs'  # type: ignore[union-attr]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Percy can't send messages to {where}.") from None
