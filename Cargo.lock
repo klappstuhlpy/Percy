@@ -969,8 +969,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "percy-client"
-version = "0.5.1"
-source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.7.2#adf5af41a95f13f82fa768432dbf716233e93f47"
+version = "0.5.2"
+source = "git+https://github.com/klappstuhlpy/kls-core?tag=v0.7.3#acd6731b4d230e354f99c1a92b69f339cc7abfc0"
 dependencies = [
  "reqwest",
  "serde",
