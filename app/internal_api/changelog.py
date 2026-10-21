@@ -88,6 +88,9 @@ def parse(source: str) -> list[Release]:
         bullet_match = _BULLET_RE.match(line_stripped)
         if bullet_match and current_section is not None:
             current_section.entries.append(bullet_match.group(1))
+        elif line[:1].isspace() and line_stripped and current_section is not None and current_section.entries:
+            # A bullet hard-wrapped onto indented lines is still one entry.
+            current_section.entries[-1] += ' ' + line_stripped
 
     return releases
 
