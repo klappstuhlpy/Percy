@@ -307,8 +307,8 @@ pub async fn request_decide(
     let approve = form.decision == "approve";
     let valid = (approve || form.decision == "deny") && !rid.is_empty() && rid.bytes().all(|b| b.is_ascii_digit());
     // The moderator is whoever is signed in, never a form field.
-    let (ok, message, request) = if !valid {
-        (false, "That is not a valid decision.".to_string(), None)
+    let (ok, message, request, status) = if !valid {
+        (false, "That is not a valid decision.".to_string(), None, String::new())
     } else if let Some(moderator) = uid(&session) {
         let note = form.note.trim();
         let note = (!note.is_empty()).then(|| note.chars().take(300).collect::<String>());
@@ -316,19 +316,20 @@ pub async fn request_decide(
             .decide_action_request(guild_id, &rid, moderator, approve, note.as_deref())
             .await
         {
-            Ok(d) => (d.ok, d.message, d.request),
-            Err(e) => (false, percy_message(&e), None),
+            Ok(d) => (d.ok, d.message, d.request, d.status),
+            Err(e) => (false, percy_message(&e), None, String::new()),
         }
     } else {
         (
             false,
             "Your session has no valid Discord id; sign in again.".to_string(),
             None,
+            String::new(),
         )
     };
     if is_ajax(&headers) {
         let key = if ok { "message" } else { "error" };
-        return Json(serde_json::json!({"ok": ok, key: message, "request": request})).into_response();
+        return Json(serde_json::json!({"ok": ok, key: message, "status": status, "request": request})).into_response();
     }
     notice_redirect(guild_id, &message, ok)
 }
