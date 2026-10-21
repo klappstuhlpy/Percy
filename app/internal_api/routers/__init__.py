@@ -14,6 +14,7 @@ from .members import router as members_router
 from .moderation import router as moderation_router
 from .music import router as music_router
 from .news import router as news_router
+from .notifications import router as notifications_router
 from .profile import router as profile_router
 from .releases import router as releases_router
 from .rolemenus import router as rolemenus_router
@@ -47,4 +48,5 @@ ALL_ROUTERS = [
     rolemenus_router,
     starboard_router,
     automod_router,
+    notifications_router,
 ]
