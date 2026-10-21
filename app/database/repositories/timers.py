@@ -63,6 +63,10 @@ class TimersRepository(BaseRepository):
         query = f"DELETE FROM timers WHERE event = $1 AND {self._kwargs_filter(kwargs)} RETURNING id;"
         return await self.fetchval(query, event, *map(str, kwargs.values()))
 
+    async def count_pending(self) -> int:
+        """How many timers are waiting to fire."""
+        return await self.fetchval("SELECT COUNT(*) FROM timers;")
+
     async def delete_timer(self, timer_id: int) -> None:
         """Deletes a single timer by its id."""
         await self.delete_where("timers", ("id",), (timer_id,))

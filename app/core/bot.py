@@ -39,7 +39,7 @@ from app.database.base import Database
 from app.i18n import I18n
 from app.internal_api import InternalAPI
 from app.rendering import RenderingService
-from app.services import AIService, CommandRouter, ModelTier, RouteCommand
+from app.services import AIService, CommandRouter, ModelTier, RouteCommand, format_duration
 from app.services.klappstuhl_me import KlappstuhlClient, KlappstuhlInternalClient
 from app.utils import (
     GUILD_FEATURES,
@@ -122,6 +122,8 @@ class Bot(commands.Bot):
     #: Whether application-command IDs have been resolved onto command objects (for
     #: ``Command.mention``). Set by :meth:`resolve_app_command_ids`, cleared on re-sync.
     _app_command_ids_resolved: bool = False
+    #: Whether the log channel's startup card went out (once per process, not per cog reload).
+    startup_card_sent: bool = False
 
     if TYPE_CHECKING:
         blacklist: Config[int, bool]
@@ -1199,6 +1201,19 @@ class Bot(commands.Bot):
 
     async def close(self) -> None:
         """Closes this bot and it's aiohttp ClientSession."""
+        if not beta and not self.is_closed() and hasattr(self, 'startup_timestamp') and hasattr(self, 'session'):
+            # The shutdown card goes out first, while the session is still open.
+            uptime = (discord.utils.utcnow() - self.startup_timestamp).total_seconds()
+            embed = discord.Embed(
+                title=f'{Emojis.leave} Percy is shutting down',
+                colour=helpers.Colour.light_orange(),
+                timestamp=discord.utils.utcnow(),
+            )
+            embed.add_field(name='Uptime', value=format_duration(uptime))
+            embed.add_field(name='Version', value=f'`{get_full_version()}`')
+            with suppress(Exception):
+                await asyncio.wait_for(self.stats_webhook.send(embed=embed), timeout=5)
+
         # Cogs unload inside super().close(), and their cog_unload may still write (the pending
         # muted members), so the session and pool close only after it.
         await super().close()

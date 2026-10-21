@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Percy's private log channel now gets a card when Percy starts (version, server and
+  member counts, latency, startup time, and whether music, AI and the database are up)
+  and when it shuts down (uptime), plus a daily summary at 08:00 UTC: servers joined
+  and left, commands run and failed, the five most used commands, moderation cases,
+  uptime, average latency and memory/CPU use. Counts only, never who.
+- The log channel says once when music (Lavalink), the AI engine, the database or a
+  news or comic feed goes down or the gateway latency stays high, and once when it
+  recovers. Nothing repeats while the state stays the same.
+
+### Changed
+
+- Gateway messages in the log channel are short readable lines such as
+  "Reconnected after 12 s" instead of raw log lines with the session id, and a burst of
+  reconnects is folded into one line a minute with a count.
+
 ### Fixed
 
 - After Percy lost the **Ban Members** permission, got it back and lost it again,

@@ -116,6 +116,10 @@ class StatsRepository(BaseRepository):
         query = "SELECT COUNT(*), MIN(used) FROM commands WHERE guild_id=$1 AND author_id=$2;"
         return await self.fetchrow(query, guild_id, author_id)
 
+    async def get_schema_version(self) -> int | None:
+        """The newest applied migration version (doubles as the log channel's DB probe)."""
+        return await self.fetchval("SELECT MAX(version) FROM schema_migrations;")
+
     async def count_all_commands(self) -> int:
         """Returns the total number of commands ever used."""
         return await self.fetchval("SELECT COUNT(*) FROM commands;")

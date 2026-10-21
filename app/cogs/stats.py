@@ -5,7 +5,9 @@ import datetime
 import io
 import itertools
 import logging
+import math
 import textwrap
+import time
 import traceback
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -31,12 +33,21 @@ from app.core.pagination import FilePaginator
 from app.core.views import LayoutView, UserInfoView
 from app.rendering import resize_to_limit
 from app.services import (
+    BurstCollapser,
     ConnectionState,
+    DailyNumbers,
+    HealthChange,
     HealthLevel,
+    HealthTracker,
     LavalinkMetrics,
+    StartupFacts,
     assess_bot_health,
     count_code_stats,
+    daily_summary_fields,
+    describe_health_change,
     parse_lavalink_metrics,
+    rewrite_gateway_line,
+    startup_fields,
     summarize_gateway_traffic,
     summarize_presence,
 )
@@ -56,6 +67,14 @@ from app.utils.timetools import human_timedelta
 from config import Emojis, beta, get_full_version, path
 
 log = logging.getLogger(__name__)
+
+#: When the daily summary lands in the log channel.
+DAILY_SUMMARY_TIME = datetime.time(hour=8, tzinfo=datetime.UTC)
+#: Gateway latency above this (seconds) for HIGH_LATENCY_CHECKS checks in a row is reported.
+HIGH_LATENCY = 1.0
+HIGH_LATENCY_CHECKS = 3
+#: At most one gateway line per this many seconds; the rest are folded into a count.
+GATEWAY_WINDOW = 60.0
 
 
 def _make_presence_key(member: discord.Member) -> str:
@@ -102,10 +121,16 @@ class LoggingHandler(logging.Handler):
         super().__init__(logging.INFO)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return record.name in ("discord.gateway", "bot")
+        # Only discord.py's connection lines, and those are rewritten before they are posted:
+        # a raw line would carry the gateway session id.
+        return record.name in ("discord.gateway", "discord.client")
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.cog.add_record(record)
+        # The heartbeat thread logs too, and an asyncio.Queue is not thread-safe.
+        try:
+            self.cog.bot.loop.call_soon_threadsafe(self.cog.add_record, record)
+        except RuntimeError:  # the loop is already closed during shutdown
+            pass
 
 
 class Stats(Cog):
@@ -130,7 +155,23 @@ class Stats(Cog):
         self._logging_queue = asyncio.Queue()
         self.__loging_worker_task: asyncio.Task | None = None
 
-        self.__LOOPS: list[Any] = [self.cleanup_presence_history, self.command_insert, self.avatar_insert]
+        self.__LOOPS: list[Any] = [
+            self.cleanup_presence_history,
+            self.command_insert,
+            self.avatar_insert,
+            self.health_check,
+            self.daily_summary,
+        ]
+
+        # What the private log channel posts: see app/services/log_channel.py.
+        self._gateway_burst = BurstCollapser(window=GATEWAY_WINDOW)
+        self._disconnected_at: float | None = None
+        self._health = HealthTracker()
+        self._latency_samples: list[float] = []
+        self._guilds_joined = 0
+        self._guilds_left = 0
+        self._startup_card_task: asyncio.Task | None = None
+        self.process.cpu_percent()  # prime it: the first call always reads 0.0
 
         # if we're on our beta instance, we don't want to start those tasks
         if not beta:
@@ -139,6 +180,7 @@ class Stats(Cog):
                 _task.start()
 
             self.__loging_worker_task = self.bot.loop.create_task(self.logging_worker())
+            self._startup_card_task = self.bot.loop.create_task(self.send_startup_card())
 
         self._presence_cache = ExpiringDict(max_len=1000, max_age_seconds=30)
 
@@ -183,6 +225,208 @@ class Stats(Cog):
 
         if self.__loging_worker_task:
             self.__loging_worker_task.cancel()
+        if self._startup_card_task:
+            self._startup_card_task.cancel()
+
+    # LOG CHANNEL
+
+    async def _post(self, content: str | None = None, *, embed: discord.Embed | None = None, **kwargs: Any) -> None:
+        """Sends to the log channel; never raises, never on beta."""
+        if beta:
+            return
+        try:
+            await self.bot.stats_webhook.send(content or MISSING, embed=embed or MISSING, **kwargs)
+        except (discord.HTTPException, aiohttp.ClientError, TimeoutError) as exc:
+            log.warning("Could not post to the log channel: %s", exc)
+
+    async def report_health(self, change: HealthChange | None) -> None:
+        if change is None:
+            return
+        emoji = Emojis.success if change.ok else Emojis.error
+        await self._post(f"{emoji} {describe_health_change(change)}", username="Health")
+
+    async def send_startup_card(self) -> None:
+        """|coro|
+
+        Posts the startup card once per process, after the first READY (never on a RESUME
+        or a cog reload).
+        """
+        await self.bot.wait_until_ready()
+        await self.bot.wait_until_setup_finished()
+        if self.bot.startup_card_sent:
+            return
+        self.bot.startup_card_sent = True
+
+        now = time.monotonic()
+        nodes = list(wavelink.Pool.nodes.values())
+        lavalink = any(node.status is wavelink.NodeStatus.CONNECTED for node in nodes)
+        for node in nodes:
+            self._health.observe(
+                f"lavalink:{node.identifier}", node.status is wavelink.NodeStatus.CONNECTED, now=now)
+
+        ai: bool | None = None
+        if self.bot.ai.enabled:
+            ai = (await self.bot.ai.health(max_age=300)).reachable
+            self._health.observe("ai", ai, now=now)
+
+        schema_version: int | None = None
+        pending_timers: int | None = None
+        try:
+            schema_version = await self.bot.db.stats.get_schema_version()
+            pending_timers = await self.bot.db.timers.count_pending()
+            db_ok = True
+        except Exception as exc:
+            log.warning("Startup card: database check failed: %s", exc)
+            db_ok = False
+        self._health.observe("database", db_ok, now=now)
+
+        facts = StartupFacts(
+            version=get_full_version(),
+            guilds=len(self.bot.guilds),
+            members=sum(guild.member_count or 0 for guild in self.bot.guilds),
+            shards=self.bot.shard_count or 1,
+            latency=self.bot.latency,
+            startup_seconds=self.bot.startup_timestamp.timestamp() - self.process.create_time(),
+            lavalink=lavalink,
+            ai=ai,
+            db_ok=db_ok,
+            schema_version=schema_version,
+            pending_timers=pending_timers,
+        )
+        embed = discord.Embed(
+            title=f"{Emojis.success} Percy is online",
+            colour=helpers.Colour.lime_green(),
+            timestamp=self.bot.startup_timestamp,
+        )
+        for name, value in startup_fields(facts):
+            embed.add_field(name=name, value=value)
+        await self._post(embed=embed)
+
+    @tasks.loop(seconds=60.0)
+    async def health_check(self) -> None:
+        """|coro|
+
+        Posts when a component goes down or comes back. Lavalink is reported from its own
+        events; this covers gateway latency, the database, the AI engine and the feeds.
+        """
+        try:
+            await self._check_health()
+        except Exception:
+            # A loop that raises stops for good.
+            log.exception("Log channel health check failed.")
+
+    async def _check_health(self) -> None:
+        now = time.monotonic()
+
+        latency = self.bot.latency
+        if math.isfinite(latency):
+            self._latency_samples.append(latency)
+            await self.report_health(self._health.observe(
+                "latency", latency < HIGH_LATENCY, now=now, label="Gateway latency",
+                detail=f"{latency * 1000:.0f} ms for the last {HIGH_LATENCY_CHECKS} minutes",
+                confirm=HIGH_LATENCY_CHECKS,
+            ))
+
+        pool = self.bot.db.pool_stats()
+        if pool.waiting and pool.in_use >= pool.max_size:
+            db_ok, detail = False, f"connection pool exhausted ({pool.waiting} waiting for {pool.max_size})"
+        else:
+            try:
+                await asyncio.wait_for(self.bot.db.stats.get_schema_version(), timeout=10)
+                db_ok, detail = True, None
+            except Exception as exc:
+                db_ok, detail = False, f"not reachable ({type(exc).__name__})"
+        await self.report_health(self._health.observe(
+            "database", db_ok, now=now, label="Database", detail=detail, confirm=2))
+
+        if self.bot.ai.enabled:
+            report = await self.bot.ai.health(max_age=55)
+            await self.report_health(self._health.observe(
+                "ai", report.reachable, now=now, label="AI engine", detail="not reachable", confirm=2))
+
+        try:
+            sources = await self.bot.db.news.list_sources()
+        except asyncpg.UndefinedTableError:  # V43 not applied yet
+            sources = []
+        for source in sources:
+            status = source["last_status"]
+            if status is None:
+                continue
+            kind = "Comic feed" if source["media"] == "comic" else "News feed"
+            await self.report_health(self._health.observe(
+                f"feed:{source['slug']}", status[:1] in ("2", "3"), now=now,
+                label=f"{kind} {source['name']}", detail=f"last poll returned `{status[:80]}`",
+            ))
+
+    @health_check.before_loop
+    async def _before_health_check(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(time=DAILY_SUMMARY_TIME)
+    async def daily_summary(self) -> None:
+        """|coro|
+
+        Posts the day's aggregates: guild changes, commands, mod cases, uptime, latency and
+        process load. Counts only, never who.
+        """
+        try:
+            await self._send_daily_summary()
+        except Exception:
+            log.exception("Daily summary failed.")
+
+    async def _send_daily_summary(self) -> None:
+        now = discord.utils.utcnow()
+        day_ago = now - datetime.timedelta(days=1)
+
+        status_counts = await self.bot.db.stats.get_daily_status_counts()
+        top = await self.bot.db.stats.get_command_usage(days=1, limit=5)
+        cases = await self.bot.db.cases.count_created_since(day_ago)
+
+        numbers = DailyNumbers(
+            guilds_joined=self._guilds_joined,
+            guilds_left=self._guilds_left,
+            guilds_total=len(self.bot.guilds),
+            guilds_full_day=self.bot.startup_timestamp <= day_ago,
+            commands_run=sum(count for _, count in status_counts),
+            command_errors=sum(count for failed, count in status_counts if failed is True),
+            top_commands=[(record["command"], record["uses"]) for record in top],
+            mod_cases=cases,
+            uptime_seconds=(now - self.bot.startup_timestamp).total_seconds(),
+            latency_samples=self._latency_samples,
+            memory_mib=self.process.memory_full_info().uss / 1024**2,
+            cpu_percent=self.process.cpu_percent() / (psutil.cpu_count() or 1),
+        )
+        embed = discord.Embed(title=f"{Emojis.info} Daily summary", colour=helpers.Colour.white(), timestamp=now)
+        for name, value in daily_summary_fields(numbers):
+            embed.add_field(name=name, value=value)
+        embed.set_footer(text="Last 24 hours")
+        await self._post(embed=embed)
+
+        self._guilds_joined = self._guilds_left = 0
+        self._latency_samples.clear()
+
+    @daily_summary.before_loop
+    async def _before_daily_summary(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @Cog.listener()
+    async def on_disconnect(self) -> None:
+        # Wall clock, to compare against LogRecord.created for "Reconnected after 12 s".
+        self._disconnected_at = time.time()
+
+    @Cog.listener()
+    async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
+        await self._observe_lavalink(payload.node, True)
+
+    @Cog.listener()
+    async def on_wavelink_node_disconnected(self, payload: wavelink.NodeDisconnectedEventPayload) -> None:
+        await self._observe_lavalink(payload.node, False)
+
+    async def _observe_lavalink(self, node: wavelink.Node, ok: bool) -> None:
+        await self.report_health(self._health.observe(
+            f"lavalink:{node.identifier}", ok, now=time.monotonic(), label="Lavalink",
+            detail="node disconnected, music is unavailable",
+        ))
 
     # LOGGING
 
@@ -195,7 +439,12 @@ class Stats(Cog):
         """
         try:
             while True:
-                record = await self._logging_queue.get()
+                try:
+                    record = await asyncio.wait_for(self._logging_queue.get(), timeout=5.0)
+                except TimeoutError:
+                    if line := self._gateway_burst.flush(time.monotonic()):
+                        await self._send_gateway_line(line, time.time())
+                    continue
                 await self.send_log_record(record)
         except asyncio.CancelledError:
             pass
@@ -284,6 +533,7 @@ class Stats(Cog):
             The guild that joined.
         """
         await self.bot.wait_until_ready()
+        self._guilds_joined += 1
         embed = discord.Embed(colour=helpers.Colour.lime_green(), title="New Guild")
         await self.send_guild_stats(embed, guild)
 
@@ -380,6 +630,7 @@ class Stats(Cog):
     @Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         await self.bot.wait_until_ready()
+        self._guilds_left += 1
         embed = discord.Embed(colour=helpers.Colour.light_red(), title="Left Guild")
         await self.send_guild_stats(embed, guild)
 
@@ -1330,21 +1581,26 @@ class Stats(Cog):
         self._logging_queue.put_nowait(record)
 
     async def send_log_record(self, record: logging.LogRecord) -> None:
-        attributes = {"INFO": Emojis.info, "WARNING": Emojis.warning}
+        """Posts a gateway record as a short human line, collapsing bursts."""
+        downtime = None
+        if self._disconnected_at is not None and self._disconnected_at <= record.created:
+            downtime = record.created - self._disconnected_at
+        line = rewrite_gateway_line(record.getMessage(), downtime=downtime)
+        if line is None:
+            return
+        if downtime is not None and line.startswith(("Reconnected", "New gateway session")):
+            self._disconnected_at = None
+        if line := self._gateway_burst.push(line, time.monotonic()):
+            await self._send_gateway_line(line, record.created)
 
-        emoji = attributes.get(record.levelname, "\N{CROSS MARK}")
-        dt = datetime.datetime.fromtimestamp(record.created, datetime.UTC)
-        msg = textwrap.shorten(f"{emoji} {discord.utils.format_dt(dt, style='F')} {record.message}", width=1990)
-        silent: bool = False
-        if record.name == "discord.gateway":
-            username = "Gateway"
-            avatar_url = "https://klappstuhl.me/gallery/raw/xNZqq.png"
-            silent = True
-        else:
-            username = f"{record.name} Logger"
-            avatar_url = discord.utils.MISSING
-
-        await self.bot.stats_webhook.send(msg, username=username, avatar_url=avatar_url, silent=silent)
+    async def _send_gateway_line(self, line: str, created: float) -> None:
+        dt = datetime.datetime.fromtimestamp(created, datetime.UTC)
+        await self._post(
+            f"{Emojis.info} {discord.utils.format_dt(dt, style='T')} {line}",
+            username="Gateway",
+            avatar_url="https://klappstuhl.me/gallery/raw/xNZqq.png",
+            silent=True,
+        )
 
     async def _fetch_lavalink_metrics(self) -> LavalinkMetrics | None:
         """Scrape the connected Lavalink node's Prometheus ``/metrics`` endpoint.
@@ -1750,10 +2006,13 @@ async def setup(bot: Bot) -> None:
     cog = Stats(bot)
     await bot.add_cog(cog)
 
-    bot.log_handler = handler = LoggingHandler(cog)
-    logging.getLogger().addHandler(handler)
+    # Beta has no log-channel worker; a handler there would only fill the queue.
+    if not beta:
+        bot.log_handler = handler = LoggingHandler(cog)
+        logging.getLogger().addHandler(handler)
 
 
 async def teardown(bot: Bot) -> None:
-    logging.getLogger().removeHandler(bot.log_handler)
-    del bot.log_handler
+    if hasattr(bot, 'log_handler'):
+        logging.getLogger().removeHandler(bot.log_handler)
+        del bot.log_handler

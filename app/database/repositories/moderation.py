@@ -447,6 +447,11 @@ class CasesRepository(BaseRepository):
         query = f"SELECT COUNT(*) FROM mod_cases WHERE {where};"
         return await self.fetchval(query, *args)
 
+    async def count_created_since(self, since: datetime.datetime) -> int:
+        """Counts cases created after ``since`` across every guild (the daily summary)."""
+        return await self.fetchval(
+            'SELECT COUNT(*) FROM mod_cases WHERE created_at >= $1;', ensure_utc(since).replace(tzinfo=None))
+
     async def get_recent_cases(self, guild_id: int, *, since: datetime.datetime) -> list[asyncpg.Record]:
         """Fetches cases created strictly after a timestamp, oldest first (for event streaming).
 
