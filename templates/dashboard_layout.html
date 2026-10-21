@@ -72,6 +72,19 @@
                 <a href="/dashboard/guild/{{ guild_id }}/me" class="dash-nav-link dash-nav-link-me{% if nav_active == "me" %} active{% endif %}">My Profile</a>
             </div>
         </nav>
+        {# Inline so it runs before first paint: .dash-sidebar is what scrolls, and a full page load would reset it to the top. #}
+        <script>
+        (function () {
+            var side = document.currentScript.parentElement, KEY = 'percy:sidebar-scroll';
+            function save() { try { sessionStorage.setItem(KEY, side.scrollTop); } catch (e) {} }
+            var saved = null;
+            try { saved = sessionStorage.getItem(KEY); } catch (e) {}
+            if (saved !== null) side.scrollTop = +saved;
+            else { var a = side.querySelector('.dash-nav-link.active'); if (a) a.scrollIntoView({ block: 'nearest' }); }
+            addEventListener('pagehide', save);
+            side.addEventListener('click', function (e) { if (e.target.closest('.dash-nav-link')) save(); });
+        })();
+        </script>
     </aside>
 
     <div class="dashboard-content">
