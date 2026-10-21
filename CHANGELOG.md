@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-21
+
+### Added
+
+- Action requests: a member with a requester role (or Manage Messages) can ask for a moderation action with `/request create`, and a moderator with the matching permission approves or denies it from buttons in a channel you choose. `/request list` and `/request cancel` manage your own requests. Pending requests expire after 24 hours.
+- A notification feed per server: warnings when Percy lacks a permission or a webhook is disabled, request outcomes, and notices from the Percy team. Entries are removed after 90 days.
+- Internal API endpoints for the notification feed, action requests and request settings.
+- Database migration V50 (notifications and requests). It is written but not yet applied.
+
 ### Fixed
 
 - A news story whose feed changed its link no longer logs a failed database query on every poll.
