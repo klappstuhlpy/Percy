@@ -46,11 +46,11 @@
 {# ─── Setup status: can Percy do what this server configured? ──── #}
 {% match health %}
 {% when Some with (h) %}
-<section class="config-section health-card" aria-labelledby="health-title">
-    <h2 id="health-title">Setup status
+<details class="config-section health-card" id="health-card"{% if h.attention > 0 %} open{% endif %}>
+    <summary><h2 id="health-title">Setup status
         {% if h.attention > 0 %}<span class="health-count">{{ h.attention }} need{% if h.attention == 1 %}s{% endif %} attention</span>
         {% else %}<span class="health-count ok">All good</span>{% endif %}
-    </h2>
+    </h2></summary>
     <p class="config-section-description">Checked live against Discord: whether Percy can post in the channels and give out the roles you configured.</p>
     <ul class="health-list">
         {% for f in h.features %}{% if f.status != "off" %}
@@ -77,7 +77,7 @@
             {% endif %}{% endfor %}
         </ul>
     </details>
-</section>
+</details>
 {% when None %}
 {% endmatch %}
 

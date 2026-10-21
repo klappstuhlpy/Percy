@@ -406,3 +406,16 @@
         });
     }
 })();
+
+// Setup status is foldable: open by default only when something needs attention; the visitor's own choice wins.
+(function () {
+    const card = document.getElementById('health-card');
+    if (!card) return;
+    try {
+        const saved = localStorage.getItem('percy.health.open');
+        if (saved !== null) card.open = saved === '1';
+    } catch { /* storage unavailable */ }
+    card.addEventListener('toggle', () => {
+        try { localStorage.setItem('percy.health.open', card.open ? '1' : '0'); } catch { /* ignore */ }
+    });
+})();
