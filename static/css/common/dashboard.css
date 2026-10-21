@@ -2637,7 +2637,7 @@ th.th-sortable[aria-sort="descending"]::after {
 .modal-form .config-input,
 .modal-form .config-select,
 .modal-form textarea { margin-bottom: 0.75rem; }
-.modal-form .config-toggle { margin-bottom: 0; }
+.modal-form .config-toggle { margin: 0.25rem 0 0.75rem; }
 .modal-form > :last-child { margin-bottom: 0; }
 
 /* -- Modal width modifiers (compose with .modal-card) -- */
