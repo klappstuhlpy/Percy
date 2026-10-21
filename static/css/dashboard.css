@@ -838,6 +838,22 @@ a.invite-percy-btn:hover {
     margin-bottom: 1rem;
 }
 
+/* Compact list of switches: one bordered box, label left, switch right, 1px dividers. */
+.toggle-stack {
+    border: 1px solid var(--box-border);
+    border-radius: 0.375rem;
+    background: var(--box-shade);
+    margin-bottom: 1rem;
+}
+.toggle-stack > .config-toggle {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+.toggle-stack > .config-toggle + .config-toggle {
+    border-top: 1px solid var(--box-border);
+}
+
 .config-toggle > div,
 .config-field > div {
     display: flex;

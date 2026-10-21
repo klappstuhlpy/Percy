@@ -8,7 +8,7 @@
     <h2>Settings</h2>
     <p class="config-section-description">When a message reaches the threshold of {{ starboard.emoji }} reactions, Percy reposts it to the starboard channel and keeps the count up to date.</p>
     <form id="starboard-form">
-        <div class="config-grid">
+        <div class="toggle-stack">
             <label class="config-toggle">
                 <div>
                     <span class="config-label">Starboard on</span>
@@ -16,6 +16,22 @@
                 </div>
                 <input type="checkbox" name="enabled" {% if starboard.enabled %}checked{% endif %}>
             </label>
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Count self-stars</span>
+                    <span class="config-description">Authors starring their own message count towards the threshold</span>
+                </div>
+                <input type="checkbox" name="self_star" {% if starboard.self_star %}checked{% endif %}>
+            </label>
+            <label class="config-toggle">
+                <div>
+                    <span class="config-label">Allow NSFW channels</span>
+                    <span class="config-description">Repost from age-restricted channels into a non-restricted starboard</span>
+                </div>
+                <input type="checkbox" name="allow_nsfw" {% if starboard.allow_nsfw %}checked{% endif %}>
+            </label>
+        </div>
+        <div class="config-grid">
             <div class="config-field">
                 <label class="config-label" for="sb-channel">Starboard channel</label>
                 <span class="config-description">Where starred messages are reposted</span>
@@ -39,20 +55,6 @@
                 <span class="config-description">Hours, 0 = no limit</span>
                 <input type="number" id="sb-age" name="max_age_hours" class="config-input" min="0" max="8760" value="{{ starboard.max_age_hours }}">
             </div>
-            <label class="config-toggle">
-                <div>
-                    <span class="config-label">Count self-stars</span>
-                    <span class="config-description">Authors starring their own message count towards the threshold</span>
-                </div>
-                <input type="checkbox" name="self_star" {% if starboard.self_star %}checked{% endif %}>
-            </label>
-            <label class="config-toggle">
-                <div>
-                    <span class="config-label">Allow NSFW channels</span>
-                    <span class="config-description">Repost from age-restricted channels into a non-restricted starboard</span>
-                </div>
-                <input type="checkbox" name="allow_nsfw" {% if starboard.allow_nsfw %}checked{% endif %}>
-            </label>
             <div class="config-field grid-col-full">
                 <label class="config-label" for="sb-ignored">Ignored channels</label>
                 <span class="config-description">Stars in these channels never count. Hold Ctrl / ⌘ to pick several.</span>
