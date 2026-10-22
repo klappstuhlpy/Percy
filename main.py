@@ -24,12 +24,12 @@ from app.services.news import NewsIngest, load_vocabulary, seed_sources
 from app.services.watchlist import SeedError, UniverseSeed, WatchlistIngest, load_seed
 from config import DatabaseConfig, locg_api_url, logs_path
 
+# Opt-in: uvloop is used when installed, never declared. The event loop policy API is
+# deprecated since 3.14, so it is handed to asyncio.run as a loop factory instead.
 try:
-    import uvloop  # type: ignore[import-not-found]
+    from uvloop import new_event_loop as loop_factory  # type: ignore[import-not-found]
 except ImportError:
-    pass
-else:
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    loop_factory = None
 
 
 __all__ = (
@@ -96,7 +96,7 @@ class _ColourFormatter(logging.Formatter):
 
 
 @contextlib.contextmanager
-def setup_logging() -> Generator[None, Any, None]:
+def setup_logging() -> Generator[None, Any]:
     root_log = logging.getLogger()
 
     try:
@@ -155,7 +155,7 @@ def main(ctx: click.Context) -> None:
     """Launches the bot."""
     if ctx.invoked_subcommand is None:
         with setup_logging():
-            asyncio.run(run_bot())
+            asyncio.run(run_bot(), loop_factory=loop_factory)
 
 
 @main.group(short_help='Database configuration', options_metavar='[options]')

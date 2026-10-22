@@ -87,7 +87,7 @@ class AnsiChunk(NamedTuple):
     bold: bool = INHERIT
     underline: bool = INHERIT
 
-    def to_text(self, previous_specs: AnsiChunkSpecs, /) -> Generator[str | AnsiChunkSpecs, None, None]:
+    def to_text(self, previous_specs: AnsiChunkSpecs, /) -> Generator[str | AnsiChunkSpecs]:
         """Returns a version of the text with ANSI formatting.
 
         This method is used to format the text inline with other text.

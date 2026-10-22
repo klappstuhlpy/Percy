@@ -989,7 +989,7 @@ class Bot(commands.Bot):
     @staticmethod
     def get_guild_features(
             features: list[GuildFeatureT], *, only_current: bool = False, emojize: bool = True
-    ) -> Generator[tuple[str, Any] | tuple[GuildFeatureT, Any], Any, None]:
+    ) -> Generator[tuple[str, Any] | tuple[GuildFeatureT, Any], Any]:
         """Returns a list of tuples containing all guild features if ``only_current`` is False or enabled features if True.
 
         Parameters

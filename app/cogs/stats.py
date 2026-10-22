@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import datetime
 import io
-import itertools
 import logging
 import math
+import subprocess
 import textwrap
 import time
 import traceback
@@ -17,7 +17,6 @@ import aiohttp
 import asyncpg
 import discord
 import psutil
-import pygit2
 import wavelink
 from discord import app_commands
 from discord.app_commands import Choice
@@ -719,19 +718,18 @@ class Stats(Cog):
         return human_timedelta(self.bot.startup_timestamp, accuracy=None, brief=brief, suffix=False)
 
     @staticmethod
-    def _format_commit(commit: pygit2.Commit) -> str:
-        short, _, _ = commit.message.partition("\n")
-        short_sha2 = str(commit.id)[0:6]
-        commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
-        commit_time = datetime.datetime.fromtimestamp(commit.commit_time).astimezone(commit_tz)
-
-        offset = discord.utils.format_dt(commit_time.astimezone(datetime.UTC), "R")
-        return f"[`{short_sha2}`]({config.repo_url}commit/{commit.id!s}) {short} ({offset})"
+    def _format_commit(line: str) -> str:
+        sha, timestamp, short = line.split("\x1f", 2)
+        commit_time = datetime.datetime.fromtimestamp(int(timestamp), datetime.UTC)
+        offset = discord.utils.format_dt(commit_time, "R")
+        return f"[`{sha[:6]}`]({config.repo_url}commit/{sha}) {short} ({offset})"
 
     def get_last_commits(self, count: int = 4, repo_path: str = str(path)) -> str:
-        repo = pygit2.Repository(Path(repo_path, ".git"))
-        commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))  # type: ignore[arg-type]
-        return "\n".join(self._format_commit(c) for c in commits)
+        out = subprocess.run(
+            ["git", "log", f"-{count}", "--topo-order", "--format=%H%x1f%ct%x1f%s"],
+            cwd=repo_path, capture_output=True, text=True, encoding="utf-8", timeout=5, check=True,
+        ).stdout
+        return "\n".join(self._format_commit(line) for line in out.splitlines())
 
     @executor
     def project_stats_counter(self) -> str:
@@ -820,7 +818,7 @@ class Stats(Cog):
 
         try:
             revision = self.get_last_commits()
-        except pygit2.GitError:
+        except (OSError, subprocess.SubprocessError):
             revision = "*Not available.*"
 
         assert ctx.bot.user is not None

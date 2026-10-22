@@ -145,7 +145,7 @@ def _extraction_generator(
     choices: Sequence[str],
     scorer: Callable[[str, str], int] = ...,
     score_cutoff: int = ...,
-) -> Generator[tuple[str, int], None, None]: ...
+) -> Generator[tuple[str, int]]: ...
 
 
 @overload
@@ -154,7 +154,7 @@ def _extraction_generator[T](
     choices: dict[str, T],
     scorer: Callable[[str, str], int] = ...,
     score_cutoff: int = ...,
-) -> Generator[tuple[str, int, T], None, None]: ...
+) -> Generator[tuple[str, int, T]]: ...
 
 
 def _extraction_generator[T](
@@ -162,7 +162,7 @@ def _extraction_generator[T](
     choices: Sequence[str] | dict[str, T],
     scorer: Callable[[str, str], int] = quick_ratio,
     score_cutoff: int = 0,
-) -> Generator[tuple[str, int, T] | tuple[str, int], None, None]:
+) -> Generator[tuple[str, int, T] | tuple[str, int]]:
     if isinstance(choices, dict):
         for key, value in choices.items():
             score = scorer(query, key)

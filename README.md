@@ -4,13 +4,13 @@
 
 # Percy v2
 
-**A feature-rich, multipurpose Discord bot built with Python 3.12+
+**A feature-rich, multipurpose Discord bot built with Python 3.13+
 and [discord.py](https://github.com/Rapptz/discord.py).**
 
 Moderation · Auto-moderation · Economy · Casino games · Leveling · Music · Polls · Giveaways · Tags · Reminders ·
 Documentation search · and much more — all in a single, self-hostable package.
 
-[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![discord.py](https://img.shields.io/badge/discord.py-2.7+-5865F2.svg)](https://github.com/Rapptz/discord.py)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://docs.astral.sh/ruff/)
@@ -179,7 +179,7 @@ commands. The default prefix is `?` (configurable per guild), and the bot also r
 
 If you still want to run your own instance, see [`SELF_HOSTING_GUIDE.md`](SELF_HOSTING_GUIDE.md). Short version:
 
-**Requirements:** Python 3.12+, PostgreSQL 14+ (with `pg_trgm`), Poetry, a Lavalink server (for music).
+**Requirements:** Python 3.13+ (dev and production run 3.15), PostgreSQL 14+ (with `pg_trgm`), Poetry, a Lavalink server (for music).
 
 ```bash
 git clone https://github.com/klappstuhlpy/Percy-v2.git && cd Percy-v2
@@ -207,7 +207,7 @@ production data — useful for local development. Run `python main.py db upgrade
 ### Code quality
 
 The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and [Pyright](https://github.com/microsoft/pyright)
-for type checking (configured in `pyproject.toml`, targeting Python 3.12 with a 125-char line length).
+for type checking (configured in `pyproject.toml`, targeting Python 3.13 with a 125-char line length).
 
 ### Tests
 

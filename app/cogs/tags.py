@@ -865,7 +865,7 @@ class Tags(Cog):
         self._tag_finder: TagFinder = TagFinder(bot.ai)
 
     @contextlib.contextmanager
-    def reserve_tag(self, guild_id: int, name: str, /) -> Generator[None, None, None]:
+    def reserve_tag(self, guild_id: int, name: str, /) -> Generator[None]:
         """Reserves a tag name for a guild."""
         name = name.lower()
 

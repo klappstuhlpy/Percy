@@ -127,7 +127,7 @@ class BaseHTTPClient:
     # -- circuit breaker -------------------------------------------------
 
     def _now(self) -> float:
-        return asyncio.get_event_loop().time()
+        return asyncio.get_running_loop().time()
 
     @property
     def breaker_open(self) -> bool:

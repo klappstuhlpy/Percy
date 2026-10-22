@@ -162,7 +162,7 @@ class SlotMachine(LayoutView):
         parts.append(f"{start}`{one:^{middle}}{two:^{middle - self.columns - 1}}{three:^{middle - 1}}`{Emojis.empty}")
         return "\n".join(parts)
 
-    async def walk_build(self) -> AsyncGenerator[str, None]:
+    async def walk_build(self) -> AsyncGenerator[str]:
         """Dynamically returns the next column of the slot machine with the actual emojis and not placeholders."""
         if self.slots is None:
             self.roll()

@@ -69,7 +69,7 @@ def executor[**P, T](
         sync_function.__executor__ = True
         sync_function.__partial_async__ = True
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         internal_function = functools.partial(sync_function, *args, **kwargs)
         return await loop.run_in_executor(None, internal_function)  # type: ignore
 
@@ -335,7 +335,7 @@ class Scheduler(ABC):
         for task_id, _ in self.walk_tasks():
             self.cancel(task_id)
 
-    def walk_tasks(self) -> Generator[tuple[Hashable, asyncio.Task], None, None]:
+    def walk_tasks(self) -> Generator[tuple[Hashable, asyncio.Task]]:
         """Safely walk through all tasks and yield them."""
         yield from self._scheduled_tasks.copy().items()
 

@@ -42,28 +42,16 @@ def get_full_version() -> str:
     """
     base = str(version)
     try:
-        import pygit2
+        import subprocess
 
-        repo = pygit2.Repository(str(Path(__file__).parent))
-        head = repo.head.target
-        short_sha = str(head)[:7]
-
-        # Count commits since the latest version tag
-        tag_prefix = f'v{version.semver}'
-        distance = 0
-        for tag_ref in repo.references:
-            if tag_ref.startswith('refs/tags/') and tag_ref.removeprefix('refs/tags/') == tag_prefix:
-                tag_oid = repo.references[tag_ref].resolve().target
-                # Peel annotated tags to the commit
-                tag_obj = repo.get(tag_oid)
-                if hasattr(tag_obj, 'target'):
-                    tag_oid = tag_obj.target
-                ahead, _ = repo.ahead_behind(head, tag_oid)
-                distance = ahead
-                break
-
-        if distance > 0:
-            return f'{base}+{distance}.{short_sha}'
+        # 'v2.1.0-14-ga3f2c1d': commits since the version tag, then the abbreviated HEAD sha
+        described = subprocess.run(
+            ['git', 'describe', '--tags', '--long', '--abbrev=7', '--match', f'v{version.semver}'],
+            cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5, check=True,
+        ).stdout.strip()
+        _, distance, sha = described.rsplit('-', 2)
+        if int(distance) > 0:
+            return f'{base}+{distance}.{sha.removeprefix("g")[:7]}'
     except Exception:
         pass
     return base

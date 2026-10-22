@@ -144,7 +144,7 @@ class View(discord.ui.View):
                 item.style = discord.ButtonStyle.blurple
             item.disabled = False
 
-    def walk_children(self) -> Generator[discord.ui.Item, None, None]:
+    def walk_children(self) -> Generator[discord.ui.Item]:
         """Walks the children of the view."""
         yield from self._children
 

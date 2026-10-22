@@ -65,7 +65,7 @@ class PokerSession:
         self.view: TableView = TableView(session=self)
 
         # Event Loop
-        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+        self.loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
         self.running_autoplay_loop: asyncio.Task | None = None
 
         # Guards :meth:`settle_round_stats` so each finished round is recorded once.

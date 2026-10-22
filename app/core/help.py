@@ -43,7 +43,7 @@ def create_prefixes(cmd: AnyCommand) -> list[str]:
     return prefixes
 
 
-def iter_help_notes(is_any_locked: bool, any_has_more_help: bool, prefix: str) -> Generator[str, Any, None]:
+def iter_help_notes(is_any_locked: bool, any_has_more_help: bool, prefix: str) -> Generator[str, Any]:
     """The explanatory footnotes shown under a category's command list."""
     if is_any_locked:
         yield f"{Emojis.Command.locked} » This command expects certain permissions from the user to be run."

@@ -216,7 +216,7 @@ class _Database:
             await self._ready.wait()
 
     @contextlib.contextmanager
-    def _observe(self, query: str) -> Generator[None, None, None]:
+    def _observe(self, query: str) -> Generator[None]:
         """Times a query into the tracker and logs the statement if it errors."""
         start = time.perf_counter()
         try:

@@ -1,4 +1,4 @@
-ARG PYTHON_BASE=3.13-slim
+ARG PYTHON_BASE=3.15-slim
 
 # ---- Stage 1: Builder ----
 FROM python:${PYTHON_BASE} AS builder
@@ -63,8 +63,9 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 # The locale must exist in the image that runs the bot, not only in the builder:
-# app/utils/formats.py formats numbers with en_US grouping.
-RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y locales \
+# app/utils/formats.py formats numbers with en_US grouping. git reads the copied
+# .git for the version string (config.get_full_version) and the `about` commit list.
+RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y locales git \
     && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

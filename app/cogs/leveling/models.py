@@ -170,7 +170,7 @@ class GuildLevelConfig(BaseRecord, table="level_config", pk="id"):
         self.cog.get_guild_level_config.invalidate(self.id)
         return self
 
-    async def walk_users(self) -> AsyncGenerator[LevelConfig, None]:
+    async def walk_users(self) -> AsyncGenerator[LevelConfig]:
         records = await self.bot.db.leveling.get_user_levels(self.id)
         for record in records:
             yield LevelConfig(cog=self.cog, config=self, record=record)

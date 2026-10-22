@@ -1,3 +1,7 @@
+# PEP 810: on 3.15+ dateparser (~120 ms) loads on first parse instead of at boot; older versions ignore this.
+# Bound with an underscore so `from .formats import *` in app/utils/__init__.py does not reify it.
+__lazy_modules__ = ["dateparser"]
+
 import datetime
 import locale
 import logging
@@ -8,7 +12,7 @@ from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, It
 from pathlib import Path
 from typing import Any, BinaryIO, TypeVar
 
-import dateparser
+import dateparser as _dateparser
 import discord
 
 T = TypeVar("T")
@@ -481,10 +485,9 @@ def tail(f: BinaryIO, n: int = 10) -> list[Any] | None:
         except OSError:
             print("Some problem reading/seeking the file")
             return []
-        finally:
-            lines = f.readlines()
-            if isFileSmall:
-                break
+        lines = f.readlines()
+        if isFileSmall:
+            break
 
         pos *= 2
 
@@ -556,7 +559,7 @@ def utcparse(timestring: str | None, tz: datetime.timezone = datetime.UTC) -> da
     if not timestring:
         return None
 
-    parsed = dateparser.parse(timestring)
+    parsed = _dateparser.parse(timestring)
 
     if not parsed:
         raise ValueError(f"Could not parse `{timestring}` as a datetime object.")

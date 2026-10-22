@@ -159,7 +159,7 @@ class Highlights(Cog):
     @staticmethod
     def find_highlight(
         highlights: list[HighlightConfig], message: discord.Message, /
-    ) -> Generator[MessagedHighlight, None, None]:
+    ) -> Generator[MessagedHighlight]:
         """|coro|
 
         Find a highlight in a list of highlights.
