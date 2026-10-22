@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-22
+
+### Changed
+
+- Percy now runs on Python 3.15 (the Docker image is built on `python:3.15-slim`) and
+  requires at least Python 3.13. Self-hosters on 3.12 must upgrade before updating.
+- `pygit2` is no longer a dependency. The version string and the commit list in `about`
+  now read the repository with the `git` command, which the Docker image now includes;
+  a bare-metal install needs `git` on the `PATH` for them (without it, both fall back as
+  before).
+- Startup is slightly faster on Python 3.15: date parsing loads on first use instead of
+  at boot.
+
 ### Fixed
 
 - A Lavalink node that reconnects within 60 seconds no longer posts "down" and "recovered"
