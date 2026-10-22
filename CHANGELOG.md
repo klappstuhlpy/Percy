@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A Lavalink node that reconnects within 60 seconds no longer posts "down" and "recovered"
+  lines to the log channel; only an outage that lasts longer is reported.
+
 ## [2.11.0] - 2026-10-21
 
 ### Added

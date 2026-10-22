@@ -77,6 +77,9 @@ HIGH_LATENCY = 1.0
 HIGH_LATENCY_CHECKS = 3
 #: At most one gateway line per this many seconds; the rest are folded into a count.
 GATEWAY_WINDOW = 60.0
+#: A Lavalink node must stay disconnected this long (seconds) before it is reported; a
+#: reconnect within it posts nothing.
+LAVALINK_GRACE = 60.0
 
 
 def _make_presence_key(member: discord.Member) -> str:
@@ -169,6 +172,7 @@ class Stats(Cog):
         self._gateway_burst = BurstCollapser(window=GATEWAY_WINDOW)
         self._disconnected_at: float | None = None
         self._health = HealthTracker()
+        self._lavalink_pending: dict[str, asyncio.Task] = {}
         self._latency_samples: list[float] = []
         self._guilds_joined = 0
         self._guilds_left = 0
@@ -229,6 +233,8 @@ class Stats(Cog):
             self.__loging_worker_task.cancel()
         if self._startup_card_task:
             self._startup_card_task.cancel()
+        for pending in self._lavalink_pending.values():
+            pending.cancel()
 
     # LOG CHANNEL
 
@@ -418,11 +424,22 @@ class Stats(Cog):
 
     @Cog.listener()
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
+        pending = self._lavalink_pending.pop(payload.node.identifier, None)
+        if pending:
+            pending.cancel()
         await self._observe_lavalink(payload.node, True)
 
     @Cog.listener()
     async def on_wavelink_node_disconnected(self, payload: wavelink.NodeDisconnectedEventPayload) -> None:
-        await self._observe_lavalink(payload.node, False)
+        node = payload.node
+        if node.identifier not in self._lavalink_pending:
+            self._lavalink_pending[node.identifier] = asyncio.create_task(self._report_lavalink_down(node))
+
+    async def _report_lavalink_down(self, node: wavelink.Node) -> None:
+        await asyncio.sleep(LAVALINK_GRACE)
+        self._lavalink_pending.pop(node.identifier, None)
+        if node.status is not wavelink.NodeStatus.CONNECTED:
+            await self._observe_lavalink(node, False)
 
     async def _observe_lavalink(self, node: wavelink.Node, ok: bool) -> None:
         await self.report_health(self._health.observe(
