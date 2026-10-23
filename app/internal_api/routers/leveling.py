@@ -147,6 +147,21 @@ async def get_leveling_leaderboard(
     return {'entries': entries, 'total': total}
 
 
+@router.get("/leveling/users/{user_id}")
+async def get_leveling_user(guild: GuildDep, bot: BotDep, user_id: int) -> dict:
+    """One member's level row (read-only; a member with no XP is level 0, no row is created)."""
+    record = await bot.db.leveling.get_user_level(user_id, guild.id)
+    if record is None:
+        return {'user_id': str(user_id), 'level': 0, 'xp': 0, 'messages': 0, 'rank': 0}
+    return {
+        'user_id': str(user_id),
+        'level': record['level'],
+        'xp': record['xp'],
+        'messages': record['messages'],
+        'rank': await bot.db.leveling.get_rank(user_id, guild.id),
+    }
+
+
 @router.get("/leveling/xp-history")
 async def get_leveling_xp_history(
     guild: GuildDep,

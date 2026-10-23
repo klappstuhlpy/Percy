@@ -247,6 +247,10 @@ class UsersRepository(BaseRepository):
                 user_id, guild_id)
         return record
 
+    async def find_balance_record(self, user_id: int, guild_id: int) -> asyncpg.Record | None:
+        """Fetches a balance row without creating one (a read must not mint rows)."""
+        return await self.fetchrow("SELECT * FROM economy WHERE user_id = $1 AND guild_id = $2;", user_id, guild_id)
+
     async def get_guild_balance_records(self, guild_id: int) -> list[asyncpg.Record]:
         """Fetches every balance row for a guild."""
         return await self.fetch("SELECT * FROM economy WHERE guild_id = $1;", guild_id)
@@ -261,6 +265,20 @@ class UsersRepository(BaseRepository):
             "SELECT user_id, cash, bank, (cash + bank) AS total FROM economy "
             "WHERE guild_id = $1 AND (cash + bank) > 0 ORDER BY total DESC LIMIT $2;",
             guild_id, limit)
+
+    async def adjust_balance(
+        self, user_id: int, guild_id: int, cash: int = 0, bank: int = 0
+    ) -> asyncpg.Record | None:
+        """Atomically adds signed deltas to cash and bank in one statement.
+
+        Returns the new row, or ``None`` when either column would go negative (nothing is written).
+        The wallet row is created first, so adjusting a brand-new member works.
+        """
+        await self.get_balance_record(user_id, guild_id)
+        return await self.fetchrow(
+            "UPDATE economy SET cash = cash + $3, bank = bank + $4 "
+            "WHERE user_id = $1 AND guild_id = $2 AND cash + $3 >= 0 AND bank + $4 >= 0 RETURNING *;",
+            user_id, guild_id, cash, bank)
 
     async def add_cash(self, user_id: int, guild_id: int, amount: int) -> None:
         """Adds (or, with a negative ``amount``, removes) cash from a user's balance."""
