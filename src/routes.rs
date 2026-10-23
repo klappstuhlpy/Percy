@@ -1,6 +1,5 @@
 //! The router table, plus the handful of root routes (`/`, `/health`, `/api-info`).
 
-use askama::Template;
 use axum::{
     extract::State,
     routing::{delete, get, patch, post},
@@ -13,7 +12,7 @@ use crate::*;
 /// conflicts (mirrors klappstuhl_me's `full_router_builds`).
 pub(crate) fn build_router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(index))
+        .route("/", get(site::percy_home))
         .route("/watchlist", get(watchlist::watchlist_index))
         .route("/watchlist/:slug", get(watchlist::watch_order))
         .route("/watchlist/:universe/:slug", get(watchlist::watch_title))
@@ -315,6 +314,13 @@ pub(crate) fn build_router(state: AppState) -> Router {
             post(moderation::guild_custom_bot_reset),
         )
         .route("/dashboard/guild/:guild_id/changes", get(changes::guild_changes))
+        // Developers tab: API token create / list / revoke (the API itself is `api::routes`).
+        .route("/dashboard/guild/:guild_id/developers", get(api::developers_page))
+        .route("/dashboard/guild/:guild_id/developers/tokens", post(api::token_create))
+        .route(
+            "/dashboard/guild/:guild_id/developers/tokens/:token_id",
+            delete(api::token_revoke),
+        )
         .route(
             "/dashboard/guild/:guild_id/notifications",
             get(notifications::guild_notifications),
@@ -529,6 +535,8 @@ pub(crate) fn build_router(state: AppState) -> Router {
         )
         .route("/account/progress/remove", post(progress::progress_unmark))
         .route("/api-info", get(api_info))
+        // The public developer API (`/api/v1/*`) and its docs (`/api`).
+        .merge(api::routes(state.clone()))
         .nest("/kls", kls_ui::routes())
         // The dashboard's own app-specific assets (percy CSS/JS/img), shipped as a
         // `static/` dir next to the binary. The shared design system lives at /kls.
@@ -536,25 +544,6 @@ pub(crate) fn build_router(state: AppState) -> Router {
         // Every successful guild-scoped mutation lands in the change log (src/changes.rs).
         .layer(axum::middleware::from_fn_with_state(state.clone(), changes::record))
         .with_state(state)
-}
-
-/// The public landing page (ported verbatim from the monolith), shown to
-/// logged-out visitors.
-#[derive(Template)]
-#[template(path = "site/landing.html")]
-struct LandingTemplate {
-    account: Option<view::Viewer>,
-}
-
-async fn index(session: Option<session::Session>) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    // Always render the landing/home page — even for signed-in visitors — so there
-    // is a viewable home distinct from /dashboard (reachable via the nav "Home"
-    // link and by visiting "/" directly). The header reflects auth state: signed-in
-    // users see their account menu, everyone else the login link. `Option<Session>`
-    // yields `None` when the cookie is absent or invalid.
-    let account = session.as_ref().map(view::Viewer::from_session);
-    LandingTemplate { account }.into_response()
 }
 
 /// Liveness probe that also confirms the kernel database is serving queries.
@@ -604,24 +593,5 @@ mod tests {
             "migrated schema not present"
         );
         assert!(state.percy.is_none(), "no Percy client without a configured URL");
-    }
-
-    /// The verbatim landing page compiles and renders for a logged-out visitor.
-    #[test]
-    fn landing_template_renders() {
-        let html = LandingTemplate { account: None }.render().expect("render");
-        assert!(html.contains("Percy"));
-        // Logged-out hero prompts a login.
-        assert!(html.contains("Log in to continue"));
-    }
-
-    /// The landing page also renders for a signed-in visitor, swapping the hero
-    /// CTA for a dashboard link (so "/" is a viewable home even when logged in).
-    #[test]
-    fn landing_template_renders_when_signed_in() {
-        let viewer = view::Viewer::from_session(&session::Session::new("1", "ferris"));
-        let html = LandingTemplate { account: Some(viewer) }.render().expect("render");
-        assert!(html.contains("Go to your dashboard"));
-        assert!(!html.contains("Log in to continue"));
     }
 }

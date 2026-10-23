@@ -22,6 +22,7 @@ use kls_web_core::Database;
 use crate::config::Config;
 
 mod account;
+mod api;
 mod catalogue;
 mod core;
 mod guild;
@@ -48,6 +49,8 @@ struct AppState {
     percy: Option<Arc<percy_client::PercyClient>>,
     /// Endpoint for the external malware scan service (klappstuhl.me).
     scan_endpoint: String,
+    /// In-memory rate-limit buckets for the public API (`/api/v1`).
+    limiter: Arc<api::limit::Limiter>,
 }
 
 #[tokio::main]
@@ -130,6 +133,7 @@ async fn build_state_with(config: Config, path: &Path) -> anyhow::Result<AppStat
         db: Arc::new(db),
         percy,
         scan_endpoint,
+        limiter: Arc::default(),
     })
 }
 

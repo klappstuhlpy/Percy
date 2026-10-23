@@ -21,8 +21,8 @@ use percy_client::CommandInfo;
 use crate::{
     session::Session,
     templates::{
-        ChangelogRelease, ChangelogSection, CommandCategory, PercyChangelogTemplate, PercyCommandsTemplate,
-        PercyLegalTemplate, PublicCommand,
+        ChangelogRelease, ChangelogSection, CommandCategory, HomeModule, HomeStats, HomeTemplate,
+        PercyChangelogTemplate, PercyCommandsTemplate, PercyLegalTemplate, PublicCommand,
     },
     view::Viewer,
     AppState,
@@ -159,6 +159,129 @@ fn cached_md_file(path: &str) -> Result<Arc<String>, std::io::Error> {
     Ok(html)
 }
 
+/// Screenshots the landing page can show; each is rendered only if `static/img/home/<name>.webp` exists.
+const HOME_SHOTS: [&str; 12] = [
+    "1-inventory",
+    "2-item",
+    "3-shop",
+    "4-economy-hub",
+    "5-rank-card",
+    "6-level-up",
+    "7-music",
+    "8-modlog",
+    "9-request",
+    "10-ai",
+    "11-dashboard-overview",
+    "12-dashboard-leveling",
+];
+
+/// Stats and module tiles are cached this long; a Percy outage is cached briefly so a down bot
+/// does not make every page view wait on a failing call.
+const HOME_TTL: Duration = Duration::from_secs(300);
+const HOME_FAIL_TTL: Duration = Duration::from_secs(30);
+
+#[derive(Clone)]
+struct HomeData {
+    stats: Option<HomeStats>,
+    modules: Vec<HomeModule>,
+    shots: Vec<&'static str>,
+}
+
+type HomeCache = Mutex<Option<(Instant, Duration, HomeData)>>;
+static HOME_CACHE: HomeCache = Mutex::new(None);
+
+/// `12345` -> `12.3k`. Truncates rather than rounds up, so the figure never overstates.
+fn short_number(n: u64) -> String {
+    let (div, suffix) = match n {
+        0..=999 => return n.to_string(),
+        1_000..=999_999 => (1_000, "k"),
+        _ => (1_000_000, "M"),
+    };
+    let tenths = n * 10 / div;
+    if tenths >= 100 || tenths.is_multiple_of(10) {
+        format!("{}{suffix}", tenths / 10)
+    } else {
+        format!("{}.{}{suffix}", tenths / 10, tenths % 10)
+    }
+}
+
+fn uptime_label(secs: f64) -> String {
+    let s = secs.max(0.0) as u64;
+    match (s / 86_400, s / 3_600) {
+        (0, 0) => format!("{}m", s / 60),
+        (0, h) => format!("{h}h"),
+        (d, _) => format!("{d}d"),
+    }
+}
+
+async fn load_home(app: &AppState) -> HomeData {
+    let shots = HOME_SHOTS
+        .into_iter()
+        .filter(|n| {
+            std::path::Path::new("static/img/home")
+                .join(format!("{n}.webp"))
+                .is_file()
+        })
+        .collect();
+    let Some(percy) = &app.percy else {
+        return HomeData {
+            stats: None,
+            modules: Vec::new(),
+            shots,
+        };
+    };
+    let (stats, commands) = tokio::join!(percy.get_bot_stats(), percy.get_bot_commands());
+    let categories = commands.map(group_commands_by_category).unwrap_or_default();
+    let commands_total: usize = categories.iter().map(|c| c.count).sum();
+    let stats = stats.ok().map(|s| HomeStats {
+        servers: short_number(s.guild_count.into()),
+        members: short_number(s.user_count.into()),
+        commands: if commands_total > 0 {
+            commands_total.to_string()
+        } else {
+            String::new()
+        },
+        uptime: uptime_label(s.uptime_seconds),
+    });
+    let modules = categories
+        .into_iter()
+        .map(|c| HomeModule {
+            name: c.name,
+            slug: c.slug,
+            count: c.count,
+        })
+        .collect();
+    HomeData { stats, modules, shots }
+}
+
+/// `GET /` — the landing page: hero, live stats, showcases and the module directory.
+pub async fn percy_home(State(app): State<AppState>, session: Option<Session>) -> Response {
+    let cached = {
+        let guard = HOME_CACHE.lock().unwrap();
+        guard
+            .as_ref()
+            .filter(|(at, ttl, _)| at.elapsed() < *ttl)
+            .map(|(_, _, d)| d.clone())
+    };
+    let data = match cached {
+        Some(d) => d,
+        None => {
+            let d = load_home(&app).await;
+            let ttl = if d.stats.is_some() { HOME_TTL } else { HOME_FAIL_TTL };
+            *HOME_CACHE.lock().unwrap() = Some((Instant::now(), ttl, d.clone()));
+            d
+        }
+    };
+    HomeTemplate {
+        account: viewer(&session),
+        invite_url: crate::guilds::build_invite_url(&app.config.invite_client_id(), None),
+        stats: data.stats,
+        modules: data.modules,
+        shots: data.shots,
+    }
+    .into_response()
+}
+
 /// `GET /commands` — public commands catalogue, grouped by category.
 pub async fn percy_commands(State(app): State<AppState>, session: Option<Session>) -> Response {
     let flags_md = match cached_md_file("static/discord_command_syntax_guide.md") {
@@ -178,34 +301,195 @@ pub async fn percy_commands(State(app): State<AppState>, session: Option<Session
         Vec::new()
     };
 
+    let total = categories.iter().map(|c| c.count).sum();
+    let json_ld = commands_json_ld(&categories);
     PercyCommandsTemplate {
         account: viewer(&session),
         categories,
         flags_md,
+        total,
+        json_ld,
     }
     .into_response()
 }
 
-/// Groups a flat list of [`CommandInfo`] into sorted categories for display.
+/// Bot permissions every command needs (Percy's default `PermissionTemplate.bot`); listing them on
+/// every row would be noise, so only the extras are shown.
+const BASELINE_BOT_PERMISSIONS: [&str; 5] = [
+    "view_channel",
+    "send_messages",
+    "embed_links",
+    "read_message_history",
+    "use_external_emojis",
+];
+
+/// `economy shop add` -> `economy-shop-add`; also used for category ids.
+fn slugify(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+/// `manage_roles` -> `Manage Roles`.
+fn permission_label(flag: &str) -> String {
+    flag.split('_')
+        .map(|w| {
+            let mut c = w.chars();
+            c.next()
+                .map(|f| f.to_uppercase().chain(c).collect::<String>())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn duration_label(secs: f64) -> String {
+    let s = secs.round() as u64;
+    // Largest unit that divides evenly, so 90 s stays "90s" rather than rounding to "1m".
+    for (unit, size) in [("d", 86400), ("h", 3600), ("m", 60)] {
+        if s >= size && s.is_multiple_of(size) {
+            return format!("{}{unit}", s / size);
+        }
+    }
+    format!("{s}s")
+}
+
+fn public_command(cmd: &CommandInfo) -> PublicCommand {
+    let search = format!("{} {} {}", cmd.name, cmd.aliases.join(" "), cmd.description).to_lowercase();
+    let help = cmd
+        .help
+        .as_deref()
+        .map(str::trim)
+        // The first docstring line is already shown as the description.
+        .filter(|h| !h.is_empty() && *h != cmd.description.trim())
+        .map(str::to_string);
+    PublicCommand {
+        name: cmd.name.clone(),
+        slug: slugify(&cmd.name),
+        description: cmd.description.clone(),
+        help,
+        usage: cmd.signature.clone().filter(|s| !s.is_empty()),
+        example: cmd.example.clone().filter(|s| !s.is_empty()),
+        aliases: cmd.aliases.clone(),
+        slash: cmd.slash,
+        user_permissions: cmd.user_permissions.iter().map(|p| permission_label(p)).collect(),
+        bot_permissions: cmd
+            .bot_permissions
+            .iter()
+            .filter(|p| !BASELINE_BOT_PERMISSIONS.contains(&p.as_str()))
+            .map(|p| permission_label(p))
+            .collect(),
+        cooldown: cmd.cooldown.as_ref().map(|c| {
+            let uses = if c.rate == 1 {
+                "use".to_string()
+            } else {
+                "uses".to_string()
+            };
+            format!("{} {uses} per {}", c.rate, duration_label(c.per))
+        }),
+        search,
+        subs: Vec::new(),
+    }
+}
+
+fn count_commands(cmds: &[PublicCommand]) -> usize {
+    cmds.iter().map(|c| 1 + c.subs.len()).sum()
+}
+
+/// Groups a flat list of [`CommandInfo`] into sorted categories, nesting subcommands under the
+/// group that owns them.
 fn group_commands_by_category(commands: Vec<CommandInfo>) -> Vec<CommandCategory> {
-    let mut map: HashMap<String, Vec<PublicCommand>> = HashMap::new();
+    let mut map: HashMap<String, Vec<CommandInfo>> = HashMap::new();
     for cmd in commands {
-        let category = cmd.cog.unwrap_or(cmd.category);
-        map.entry(category).or_default().push(PublicCommand {
-            name: cmd.name,
-            description: cmd.description,
-            usage: cmd.signature,
-        });
+        let category = cmd.cog.clone().unwrap_or_else(|| cmd.category.clone());
+        map.entry(category).or_default().push(cmd);
     }
     let mut categories: Vec<CommandCategory> = map
         .into_iter()
-        .map(|(name, mut commands)| {
-            commands.sort_by(|a, b| a.name.cmp(&b.name));
-            CommandCategory { name, commands }
+        .map(|(name, cmds)| {
+            // name -> parent, to find the root group of a (possibly deeply nested) subcommand.
+            let parents: HashMap<&str, &str> = cmds
+                .iter()
+                .filter_map(|c| c.parent.as_deref().map(|p| (c.name.as_str(), p)))
+                .collect();
+            let names: std::collections::HashSet<&str> = cmds.iter().map(|c| c.name.as_str()).collect();
+            let root_of = |name: &str| -> String {
+                let mut n = name.to_string();
+                while let Some(p) = parents.get(n.as_str()) {
+                    if !names.contains(p) {
+                        break;
+                    }
+                    n = (*p).to_string();
+                }
+                n
+            };
+            let mut roots: Vec<PublicCommand> = Vec::new();
+            let mut subs: Vec<(String, PublicCommand)> = Vec::new();
+            for c in &cmds {
+                let pc = public_command(c);
+                let root = root_of(&c.name);
+                if root == c.name {
+                    roots.push(pc);
+                } else {
+                    subs.push((root, pc));
+                }
+            }
+            roots.sort_by(|a, b| a.name.cmp(&b.name));
+            subs.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+            for (root, sub) in subs {
+                if let Some(r) = roots.iter_mut().find(|r| r.name == root) {
+                    r.subs.push(sub);
+                }
+            }
+            CommandCategory {
+                slug: format!("cat-{}", slugify(&name)),
+                name,
+                count: count_commands(&roots),
+                commands: roots,
+            }
         })
         .collect();
     categories.sort_by(|a, b| a.name.cmp(&b.name));
     categories
+}
+
+/// schema.org `ItemList` of every command, safe to embed inside `<script type="application/ld+json">`.
+fn commands_json_ld(categories: &[CommandCategory]) -> String {
+    let base = crate::config::public_base_url();
+    let items: Vec<serde_json::Value> = categories
+        .iter()
+        .flat_map(|c| {
+            c.commands
+                .iter()
+                .flat_map(|cmd| std::iter::once(cmd).chain(cmd.subs.iter()))
+        })
+        .enumerate()
+        .map(|(i, cmd)| {
+            serde_json::json!({
+                "@type": "ListItem",
+                "position": i + 1,
+                "name": cmd.name,
+                "description": cmd.description,
+                "url": format!("{base}/commands#{}", cmd.slug),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Percy commands",
+        "numberOfItems": items.len(),
+        "itemListElement": items,
+    })
+    .to_string()
+    // A `</script>` inside a string value must not close the tag.
+    .replace("</", "<\\/")
 }
 
 /// `GET /changelog` — version history from Percy's CHANGELOG.md via internal API.
@@ -263,7 +547,126 @@ pub async fn percy_support_server() -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::render_inline_markdown;
+    use super::{group_commands_by_category, render_inline_markdown};
+    use crate::templates::PercyCommandsTemplate;
+    use askama::Template;
+    use percy_client::CommandInfo;
+
+    #[test]
+    fn commands_page_renders_groups_subcommands_and_json_ld() {
+        let commands: Vec<CommandInfo> = serde_json::from_value(serde_json::json!([
+            {"name": "shop", "cog": "Economy", "description": "Browse.", "signature": null, "slash": true,
+             "aliases": ["store"], "example": "shop", "help": "Browse the shop.
+        More detail.", "parent": null,
+             "user_permissions": [], "bot_permissions": ["send_messages", "manage_roles"], "cooldown": null},
+            {"name": "shop add", "cog": "Economy", "description": "Add an item.", "signature": "<name> <price>",
+             "slash": true, "parent": "shop", "user_permissions": ["administrator"], "bot_permissions": [],
+             "cooldown": {"rate": 1, "per": 90.0}, "example": null, "help": null, "aliases": []},
+            {"name": "ping", "cog": "Meta", "description": "Pong </script>.", "slash": false}
+        ]))
+        .unwrap();
+        let categories = group_commands_by_category(commands);
+        assert_eq!(categories.len(), 2);
+        let eco = &categories[0];
+        assert_eq!((eco.count, eco.commands.len(), eco.commands[0].subs.len()), (2, 1, 1));
+        assert_eq!(eco.commands[0].subs[0].slug, "shop-add");
+        assert_eq!(eco.commands[0].subs[0].cooldown.as_deref(), Some("1 use per 90s"));
+        assert_eq!(eco.commands[0].bot_permissions, vec!["Manage Roles"]);
+
+        let json_ld = super::commands_json_ld(&categories);
+        assert!(!json_ld.contains("</"));
+        let html = PercyCommandsTemplate {
+            account: None,
+            categories,
+            flags_md: String::new(),
+            total: 3,
+            json_ld,
+        }
+        .render()
+        .unwrap();
+        for needle in [
+            "id=\"shop-add\"",
+            "Manage Roles",
+            "1 use per 90s",
+            "cat-economy",
+            "application/ld+json",
+            "store",
+        ] {
+            assert!(html.contains(needle), "missing {needle}");
+        }
+    }
+
+    #[test]
+    fn short_numbers_truncate() {
+        for (n, want) in [
+            (0, "0"),
+            (999, "999"),
+            (1_000, "1k"),
+            (1_299, "1.2k"),
+            (12_999, "12k"),
+            (2_500_000, "2.5M"),
+        ] {
+            assert_eq!(super::short_number(n), want);
+        }
+    }
+
+    fn home(stats: Option<crate::templates::HomeStats>) -> String {
+        crate::templates::HomeTemplate {
+            account: None,
+            invite_url: "https://discord.com/oauth2/authorize?client_id=1".into(),
+            stats,
+            modules: vec![crate::templates::HomeModule {
+                name: "Economy".into(),
+                slug: "cat-economy".into(),
+                count: 7,
+            }],
+            shots: vec!["1-inventory"],
+        }
+        .render()
+        .unwrap()
+    }
+
+    #[test]
+    fn landing_renders_with_and_without_stats() {
+        let with = home(Some(crate::templates::HomeStats {
+            servers: "1.2k".into(),
+            members: "300k".into(),
+            commands: "250".into(),
+            uptime: "12d".into(),
+        }));
+        for needle in [
+            "1.2k",
+            "Add to Discord",
+            "Log in",
+            "/commands#cat-economy",
+            "/static/img/home/1-inventory.webp",
+            "Screenshot coming soon",
+        ] {
+            assert!(with.contains(needle), "missing {needle}");
+        }
+        let without = home(None);
+        assert!(
+            !without.contains("home-stats"),
+            "stats bar must vanish when Percy is down"
+        );
+        assert!(without.contains("Add to Discord"));
+    }
+
+    #[test]
+    fn landing_renders_when_signed_in() {
+        let viewer = crate::view::Viewer::from_session(&crate::session::Session::new("1", "ferris"));
+        let html = crate::templates::HomeTemplate {
+            account: Some(viewer),
+            invite_url: String::new(),
+            stats: None,
+            modules: Vec::new(),
+            shots: Vec::new(),
+        }
+        .render()
+        .unwrap();
+        assert!(html.contains("Go to your dashboard"));
+        assert!(!html.contains("Log in"));
+    }
 
     #[test]
     fn changelog_entry_renders_inline_markdown_and_escapes_html() {

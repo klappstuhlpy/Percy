@@ -2,63 +2,179 @@
 
 {% block nav_home_active %} active{% endblock %}
 
-{% block title %}Percy Dashboard{% endblock %}
+{% block title %}Percy: economy, leveling, moderation and music for Discord{% endblock %}
 
 {% block css %}
 <link rel="stylesheet" href="/static/css/common/dashboard.css" type="text/css"/>
 {% endblock %}
 
+{# A screenshot, or a captioned placeholder when the file has not been added yet. The box keeps its
+   aspect ratio either way, so the layout never depends on the image. #}
+{% macro shot(file, alt, w, h, present) %}
+{% if present %}
+<img class="home-shot" src="/static/img/home/{{ file }}.webp" alt="{{ alt }}" width="{{ w }}" height="{{ h }}" loading="lazy" decoding="async">
+{% else %}
+<div class="home-shot home-shot-ph" style="aspect-ratio: {{ w }} / {{ h }}" role="img" aria-label="{{ alt }}">
+    <span>Screenshot coming soon</span>
+</div>
+{% endif %}
+{% endmacro %}
+
 {% block body %}
-<div class="dashboard-container">
+<div class="dashboard-container home">
     <section class="percy-hero dash-rise">
         <span class="percy-hero-badge"><span class="spark" aria-hidden="true">✻</span> Discord Bot</span>
         <h1 class="percy-hero-title">Meet <span class="branding">Percy</span></h1>
         <p class="percy-hero-lead">
-            Percy is the Discord bot that powers leveling, economy, moderation, autoresponders,
-            temporary voice channels and more across your server — all configurable from one place.
+            Economy with items, leveling with rank cards, moderation, music and more for your server,
+            all configurable from a web dashboard or with commands.
         </p>
-        <p class="percy-hero-sub">
-            This is the <strong>Klappstuhl.me</strong> control panel: a web dashboard for configuring
-            every part of Percy without touching a single command. Manage members, set up reward roles,
-            tune the economy, browse polls and giveaways, and watch live server stats.
-        </p>
-
         <div class="percy-hero-actions">
+            <a href="{{ invite_url }}" class="invite-percy-btn" rel="noopener">Add to Discord</a>
             {% match account %}
             {% when Some with (viewer) %}
-            <a href="/dashboard" class="invite-percy-btn">Go to your dashboard</a>
+            <a href="/dashboard" class="percy-hero-secondary">Go to your dashboard</a>
             {% when None %}
-            <a href="/login?next=/dashboard" class="invite-percy-btn">Log in to continue</a>
-            <a href="/signup?next=/dashboard" class="percy-hero-secondary">Create an account</a>
+            <a href="/login?next=/dashboard" class="percy-hero-secondary">Log in to the dashboard</a>
             {% endmatch %}
         </div>
-        {% match account %}
-        {% when None %}
-        <p class="percy-hero-note">You need to be signed in to manage your servers.</p>
-        {% when Some with (viewer) %}
-        {% endmatch %}
     </section>
 
-    <section class="percy-feature-grid">
-        <div class="percy-feature dash-rise" style="--i:0">
-            <span class="percy-feature-glyph" aria-hidden="true">⬆</span>
-            <h3>Leveling &amp; Economy</h3>
-            <p>Configure XP curves, reward roles, multipliers, shops and lotteries — then watch the leaderboard.</p>
+    {% match stats %}
+    {% when Some with (s) %}
+    <section class="home-stats dash-rise" aria-label="Percy in numbers">
+        <div><strong>{{ s.servers }}</strong><span>servers</span></div>
+        <div><strong>{{ s.members }}</strong><span>members</span></div>
+        {% if !s.commands.is_empty() %}
+        <div><strong>{{ s.commands }}</strong><span>commands</span></div>
+        {% endif %}
+        <div><strong>{{ s.uptime }}</strong><span>uptime</span></div>
+    </section>
+    {% when None %}
+    {% endmatch %}
+
+    <section class="home-row">
+        <div class="home-copy">
+            <h2>Economy &amp; items</h2>
+            <p>A server economy members actually use: items with effects, a shop and an inventory.</p>
+            <ul>
+                <li>Items with effects, rarity and optional stock limits or role requirements.</li>
+                <li>A shop and an inventory members browse in Discord, with trading between members.</li>
+                <li>Balances, daily rewards and games, all adjustable from the dashboard.</li>
+            </ul>
+            <a class="home-more" href="/commands#cat-economy">See economy commands</a>
         </div>
-        <div class="percy-feature dash-rise" style="--i:1">
-            <span class="percy-feature-glyph" aria-hidden="true">🛡</span>
-            <h3>Moderation &amp; Sentinel</h3>
-            <p>Kick, ban and manage members, set up the sentinel, and handle lockdowns from the browser.</p>
+        <div class="home-media home-media-grid">
+            {% call shot("1-inventory", "Percy's inventory card listing items grouped by category", 1600, 900, self.has("1-inventory")) %}
+            {% call shot("2-item", "An item detail card showing rarity and effect", 1600, 900, self.has("2-item")) %}
+            {% call shot("3-shop", "The shop card with stock-limited and role-gated items", 1600, 900, self.has("3-shop")) %}
+            {% call shot("4-economy-hub", "The economy hub overview", 1600, 900, self.has("4-economy-hub")) %}
         </div>
-        <div class="percy-feature dash-rise" style="--i:2">
-            <span class="percy-feature-glyph" aria-hidden="true">⚡</span>
-            <h3>Automation</h3>
-            <p>Autoresponders, comic feeds, status feeds and temporary voice channels, all point-and-click.</p>
+    </section>
+
+    <section class="home-row home-row-flip">
+        <div class="home-copy">
+            <h2>Leveling &amp; rank cards</h2>
+            <p>XP from chatting, rewards for climbing, and a rank card members can make their own.</p>
+            <ul>
+                <li>Reward roles, XP multipliers and blacklists per server.</li>
+                <li>Rank cards with theme, accent, bar and font presets; admins can set a default or lock it.</li>
+                <li>Level-up messages with your own template and a leaderboard on the dashboard.</li>
+            </ul>
+            <a class="home-more" href="/commands#cat-leveling">See leveling commands</a>
         </div>
-        <div class="percy-feature dash-rise" style="--i:3">
-            <span class="percy-feature-glyph" aria-hidden="true">📊</span>
-            <h3>Insights</h3>
-            <p>Browse polls, giveaways, tags and highlights, with live server and bot statistics.</p>
+        <div class="home-media home-media-grid">
+            {% call shot("5-rank-card", "A Percy rank card with a custom style", 1600, 900, self.has("5-rank-card")) %}
+            {% call shot("6-level-up", "A level-up message in a Discord channel", 1600, 900, self.has("6-level-up")) %}
+        </div>
+    </section>
+
+    <section class="home-row">
+        <div class="home-copy">
+            <h2>Moderation &amp; notifications</h2>
+            <p>Keep a record of every action, and let your helpers ask instead of guessing.</p>
+            <ul>
+                <li>Kick, ban, timeout, warn and purge, each recorded as a case with a reason.</li>
+                <li>AutoMod presets and a verification gate for new members.</li>
+                <li>Helpers file action requests that a moderator approves or denies with one button.</li>
+            </ul>
+            <a class="home-more" href="/commands#cat-moderation">See moderation commands</a>
+        </div>
+        <div class="home-media home-media-grid">
+            {% call shot("8-modlog", "A moderation case entry with the reason", 1600, 900, self.has("8-modlog")) %}
+            {% call shot("9-request", "An action request with Approve and Deny buttons", 1600, 900, self.has("9-request")) %}
+        </div>
+    </section>
+
+    <section class="home-row home-row-flip">
+        <div class="home-copy">
+            <h2>Music</h2>
+            <p>A player panel in your channel, with controls that work from Discord and the dashboard.</p>
+            <ul>
+                <li>Queue, loop, shuffle, seek and volume from the panel buttons.</li>
+                <li>Equalizer and filters, plus an always-on mode for a voice channel.</li>
+                <li>Time-synced lyrics for the track that is playing.</li>
+            </ul>
+            <a class="home-more" href="/commands#cat-music">See music commands</a>
+        </div>
+        <div class="home-media">
+            {% call shot("7-music", "The music player panel while a track plays", 1600, 900, self.has("7-music")) %}
+        </div>
+    </section>
+
+    <section class="home-row">
+        <div class="home-copy">
+            <h2>AI assistant <span class="home-tag">optional</span></h2>
+            <p>Percy can answer questions about itself using a self-hosted model. It is off by default.</p>
+            <ul>
+                <li>Each AI feature is a per-server switch, with per-channel overrides.</li>
+                <li>Ask how to set something up and get an answer based on Percy's real command list.</li>
+                <li>When it is off or unavailable, every command behaves exactly as it always did.</li>
+            </ul>
+            <a class="home-more" href="/commands#cat-automation">See assistant commands</a>
+        </div>
+        <div class="home-media">
+            {% call shot("10-ai", "The assistant answering how to set up leveling", 1600, 900, self.has("10-ai")) %}
+        </div>
+    </section>
+
+    <section class="home-wide">
+        <h2>Configure everything without a command</h2>
+        <p>The dashboard covers every setting, member action and live statistic.</p>
+        <div class="home-media-grid home-media-wide">
+            {% call shot("11-dashboard-overview", "The dashboard's server overview page", 1600, 1000, self.has("11-dashboard-overview")) %}
+            {% call shot("12-dashboard-leveling", "The dashboard's leveling page with its XP chart", 1600, 1000, self.has("12-dashboard-leveling")) %}
+        </div>
+    </section>
+
+    <section class="home-steps">
+        <h2>Start in 3 steps</h2>
+        <ol>
+            <li><strong>Invite Percy.</strong> Pick your server and approve the permissions.</li>
+            <li><strong>Open the dashboard.</strong> Sign in with Discord and choose the server.</li>
+            <li><strong>Pick features.</strong> Guided setup turns on logging, verification or leveling in a click.</li>
+        </ol>
+    </section>
+
+    {% if !modules.is_empty() %}
+    <section class="home-modules">
+        <h2>Everything Percy does</h2>
+        <div class="home-module-grid">
+            {% for m in modules %}
+            <a class="home-module" href="/commands#{{ m.slug }}">
+                <strong>{{ m.name }}</strong>
+                <span>{{ m.count }} command{% if m.count != 1 %}s{% endif %}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="home-final">
+        <h2>Ready when you are</h2>
+        <div class="percy-hero-actions">
+            <a href="{{ invite_url }}" class="invite-percy-btn" rel="noopener">Add to Discord</a>
+            <a href="/commands" class="percy-hero-secondary">Browse all commands</a>
         </div>
     </section>
 </div>

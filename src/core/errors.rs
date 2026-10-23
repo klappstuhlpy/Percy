@@ -39,6 +39,7 @@ pub(crate) fn percy_message(e: &PercyError) -> String {
             "Could not reach Percy. It may be restarting — please try again in a moment.".to_string()
         }
         PercyError::Api(body) => sentence(&unwrap_envelope(body)),
+        PercyError::Rejected { detail, .. } => sentence(detail),
     }
 }
 
