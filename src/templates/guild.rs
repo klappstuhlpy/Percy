@@ -242,6 +242,25 @@ pub(crate) struct EconomyTemplate {
     pub(crate) roles: Vec<Role>,
 }
 
+impl EconomyTemplate {
+    /// Stock as the shop shows it: unlimited, remaining, or gone.
+    fn stock_label(&self, item: &ShopItem) -> String {
+        match item.stock {
+            None => "\u{221e}".to_string(),
+            Some(n) if n <= 0 => "sold out".to_string(),
+            Some(n) => format!("{n} left"),
+        }
+    }
+
+    /// A role gate by name; a deleted role keeps its slot visible rather than vanishing.
+    fn role_name(&self, id: &str) -> String {
+        self.roles
+            .iter()
+            .find(|r| r.id == id)
+            .map_or_else(|| "deleted role".to_string(), |r| format!("@{}", r.name))
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Template)]
 #[template(path = "guild/music.html")]
@@ -483,6 +502,61 @@ mod tests {
         assert!(html.contains("Top commands"));
         assert!(html.contains("ping"));
         assert!(html.contains("analytics/series") || html.contains("analytics.js"));
+    }
+
+    /// The shop section lists custom items with edit controls and Percy's own items without.
+    #[test]
+    fn economy_shop_renders_items() {
+        let item = |id, name: &str, builtin: Option<&str>, stock| ShopItem {
+            id,
+            name: name.into(),
+            description: Some("desc".into()),
+            price: 500,
+            effect: Some("none".into()),
+            effect_value: None,
+            duration_minutes: None,
+            emoji: Some("\u{1f381}".into()),
+            rarity: Some("epic".into()),
+            category: Some("collectible".into()),
+            stock,
+            max_per_user: Some(3),
+            required_role_id: Some("7".into()),
+            available_until: Some("2026-12-01T00:00:00".into()),
+            remove_role_id: None,
+            reply_message: None,
+            builtin_key: builtin.map(Into::into),
+            for_sale: true,
+        };
+        let html = EconomyTemplate {
+            account: Some(Viewer { name: "ferris".into() }),
+            guild_id: 42,
+            guild_name: "Test".into(),
+            nav_active: "economy",
+            page_title: "Economy",
+            economy: EconomyInfo {
+                items: vec![
+                    item(1, "Custom Crate", None, Some(0)),
+                    item(2, "Padlock", Some("padlock"), None),
+                ],
+                lottery: None,
+                settings: None,
+            },
+            eco_settings: EconomySettings::default(),
+            balances: BalancesResponse {
+                entries: Vec::new(),
+                total: 0,
+            },
+            channels: Vec::new(),
+            roles: Vec::new(),
+        }
+        .render()
+        .expect("render economy");
+        assert!(html.contains("Custom Crate") && html.contains("Padlock"));
+        assert!(html.contains("sold out") && html.contains("\u{221e}"));
+        assert!(html.contains("Percy item"));
+        // Exactly one row (the custom item) carries edit/delete controls.
+        assert_eq!(html.matches("edit-item-btn\"").count(), 1);
+        assert_eq!(html.matches("delete-item-btn\"").count(), 1);
     }
 
     /// The webhooks page renders a subscription row + the event checkboxes.

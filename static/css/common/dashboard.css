@@ -1746,6 +1746,11 @@ th.th-sortable[aria-sort="descending"]::after {
 .badge-muted { background: var(--box-shade); color: var(--text-muted); }
 .badge-info { background: rgba(88, 101, 242, 0.18); color: #8b93f8; }
 .badge-success { background: rgba(67, 181, 129, 0.18); color: #57d99a; }
+.rarity-common { background: rgba(154, 160, 166, 0.18); color: #9aa0a6; text-transform: capitalize; }
+.rarity-uncommon { background: rgba(87, 242, 135, 0.15); color: #57f287; text-transform: capitalize; }
+.rarity-rare { background: rgba(59, 130, 246, 0.18); color: #6ea0f8; text-transform: capitalize; }
+.rarity-epic { background: rgba(168, 85, 247, 0.18); color: #c08af9; text-transform: capitalize; }
+.rarity-legendary { background: rgba(245, 158, 11, 0.18); color: #f5ae2d; text-transform: capitalize; }
 .badge-danger { background: rgba(240, 71, 71, 0.18); color: #f87171; }
 
 /* -- Comic feed cards -- */

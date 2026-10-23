@@ -68,8 +68,8 @@ pub(crate) fn build_router(state: AppState) -> Router {
             post(crud::guild_economy_items_create),
         )
         .route(
-            "/dashboard/guild/:guild_id/economy/items/:name",
-            delete(crud::guild_economy_item_delete),
+            "/dashboard/guild/:guild_id/economy/items/:item_id",
+            patch(crud::guild_economy_item_patch).delete(crud::guild_economy_item_delete),
         )
         .route(
             "/dashboard/guild/:guild_id/economy/settings",

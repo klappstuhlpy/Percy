@@ -65,30 +65,40 @@
         <p class="text-muted">No shop items configured.</p>
         {% else %}
         <table class="data-table">
-            <thead><tr><th>Name</th><th>Price</th><th>Effect</th><th>Description</th><th></th></tr></thead>
+            <thead><tr><th>Item</th><th>Rarity</th><th>Category</th><th>Price</th><th>Stock</th><th>Limit</th><th>Role gate</th><th>Sale ends</th><th></th></tr></thead>
             <tbody>
                 {% for item in economy.items %}
                 <tr>
-                    <td data-label="Name"><strong>{{ item.name }}</strong></td>
-                    <td data-label="Price">{{ item.price }}</td>
-                    <td data-label="Effect">
-                        {% match item.effect.as_deref() %}
-                        {% when Some with ("cash") %}
-                            <span class="badge badge-info">Cash {{ item.effect_value.unwrap_or(0) }}</span>
-                        {% when Some with ("lootbox") %}
-                            <span class="badge badge-info">Lootbox ~{{ item.effect_value.unwrap_or(0) }}</span>
-                        {% when Some with ("role") %}
-                            <span class="badge badge-info">Role Grant</span>
-                        {% when Some with ("xp_boost") %}
-                            <span class="badge badge-info">+{{ item.effect_value.unwrap_or(0) }}% XP / {{ item.duration_minutes.unwrap_or(0) }}m</span>
-                        {% when Some with ("loot_boost") %}
-                            <span class="badge badge-info">+{{ item.effect_value.unwrap_or(0) }}% Loot / {{ item.duration_minutes.unwrap_or(0) }}m</span>
-                        {% when _ %}
-                            <span class="text-muted">None</span>
-                        {% endmatch %}
+                    <td data-label="Item">
+                        {% if let Some(e) = item.emoji %}{{ e }} {% endif %}<strong>{{ item.name }}</strong>
+                        {% if item.builtin_key.is_some() %}<span class="badge badge-info">Percy item</span>{% endif %}
+                        {% if !item.for_sale %}<span class="badge badge-muted">Not for sale</span>{% endif %}
+                        <div class="text-muted">{{ item.description.as_deref().unwrap_or("-") }}</div>
                     </td>
-                    <td class="text-muted" data-label="Description">{{ item.description.as_deref().unwrap_or("-") }}</td>
-                    <td><button class="button small danger delete-item-btn" data-name="{{ item.name }}">Delete</button></td>
+                    <td data-label="Rarity"><span class="badge rarity-{{ item.rarity.as_deref().unwrap_or("common") }}">{{ item.rarity.as_deref().unwrap_or("common") }}</span></td>
+                    <td data-label="Category">{{ item.category.as_deref().unwrap_or("-") }}</td>
+                    <td data-label="Price">{{ item.price }}</td>
+                    <td data-label="Stock">{{ self.stock_label(item) }}</td>
+                    <td data-label="Limit">{% match item.max_per_user %}{% when Some with (n) %}{{ n }} each{% when None %}-{% endmatch %}</td>
+                    <td data-label="Role gate">{% match item.required_role_id.as_deref() %}{% when Some with (rid) %}{{ self.role_name(rid) }}{% when None %}-{% endmatch %}</td>
+                    <td data-label="Sale ends">{% match item.available_until.as_deref() %}{% when Some with (t) %}{{ t }} UTC{% when None %}-{% endmatch %}</td>
+                    <td>
+                        {% if item.builtin_key.is_none() %}
+                        <button type="button" class="button small edit-item-btn"
+                            data-id="{{ item.id }}" data-name="{{ item.name }}" data-price="{{ item.price }}"
+                            data-description="{{ item.description.as_deref().unwrap_or("") }}"
+                            data-emoji="{{ item.emoji.as_deref().unwrap_or("") }}"
+                            data-rarity="{{ item.rarity.as_deref().unwrap_or("common") }}"
+                            data-effect="{{ item.effect.as_deref().unwrap_or("none") }}"
+                            data-stock="{% if let Some(n) = item.stock %}{{ n }}{% endif %}"
+                            data-max-per-user="{% if let Some(n) = item.max_per_user %}{{ n }}{% endif %}"
+                            data-required-role="{{ item.required_role_id.as_deref().unwrap_or("") }}"
+                            data-remove-role="{{ item.remove_role_id.as_deref().unwrap_or("") }}"
+                            data-available-until="{{ item.available_until.as_deref().unwrap_or("") }}"
+                            data-reply="{{ item.reply_message.as_deref().unwrap_or("") }}">Edit</button>
+                        <button type="button" class="button small danger delete-item-btn" data-id="{{ item.id }}" data-name="{{ item.name }}">Delete</button>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -158,10 +168,10 @@
     </div>
 </div>
 
-<!-- Add Item Modal -->
+<!-- Add / Edit Item Modal (one modal; the effect is create-only) -->
 <div class="modal-overlay" id="add-item-modal" hidden>
     <div class="modal-card">
-        <h3>Add Shop Item</h3>
+        <h3 id="item-modal-title">Add Shop Item</h3>
         <div class="modal-form">
             <label class="config-label">Name</label>
             <input type="text" id="item_name" class="config-input" maxlength="64">
@@ -169,7 +179,17 @@
             <input type="number" id="item_price" class="config-input" min="1">
             <label class="config-label">Description</label>
             <input type="text" id="item_desc" class="config-input" maxlength="256">
-            <label class="config-label">Effect</label>
+            <label class="config-label">Emoji</label>
+            <input type="text" id="item_emoji" class="config-input" maxlength="64">
+            <label class="config-label">Rarity</label>
+            <select id="item_rarity" class="config-select">
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare">Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+            </select>
+            <label class="config-label">Effect <span class="text-muted" id="effect-fixed-note" hidden>(cannot be changed)</span></label>
             <select id="item_effect" class="config-select">
                 <option value="none">None (collectible)</option>
                 <option value="cash">Cash Voucher</option>
@@ -184,7 +204,7 @@
             </div>
             <div id="effect-role-group" hidden>
                 <label class="config-label">Role to Grant</label>
-                <select id="item_effect_role" class="config-select">
+                <select id="item_effect_role" class="config-select" data-needs="assign">
                     <option value="">Select a role…</option>
                     {% for role in roles %}
                     {% if !role.managed && role.name != "@everyone" %}
@@ -197,6 +217,32 @@
                 <label class="config-label">Duration (minutes)</label>
                 <input type="number" id="item_duration" class="config-input" min="1" max="10080">
             </div>
+            <label class="config-label">Stock (empty = unlimited)</label>
+            <input type="number" id="item_stock" class="config-input" min="0">
+            <label class="config-label">Per-member limit (empty = none)</label>
+            <input type="number" id="item_max_per_user" class="config-input" min="1">
+            <label class="config-label">Required role</label>
+            <select id="item_required_role" class="config-select">
+                <option value="">None</option>
+                {% for role in roles %}
+                {% if !role.managed && role.name != "@everyone" %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            <label class="config-label">Remove this role on use</label>
+            <select id="item_remove_role" class="config-select" data-needs="assign">
+                <option value="">None</option>
+                {% for role in roles %}
+                {% if !role.managed && role.name != "@everyone" %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            <label class="config-label">Available until (UTC)</label>
+            <input type="datetime-local" id="item_available_until" class="config-input">
+            <label class="config-label">Reply message (max 500)</label>
+            <textarea id="item_reply" class="config-input" maxlength="500" rows="2"></textarea>
         </div>
         <div class="modal-actions">
             <button type="button" class="button small" id="item-modal-cancel">Cancel</button>

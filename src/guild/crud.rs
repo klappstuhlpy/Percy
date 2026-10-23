@@ -64,14 +64,43 @@ pub async fn guild_autoresponder_delete(
     }
 }
 
-/// `DELETE /dashboard/guild/:guild_id/economy/items/:name`
+/// Role ids arrive as strings (JS numbers lose snowflake precision); Percy takes integers and a
+/// blank or unparseable one means "none".
+fn item_snowflakes(mut body: serde_json::Value) -> serde_json::Value {
+    for key in ["required_role_id", "remove_role_id", "effect_value"] {
+        if let Some(raw) = body.get(key).and_then(|v| v.as_str()).map(str::to_owned) {
+            body[key] = raw.parse::<u64>().map(serde_json::Value::from).unwrap_or_default();
+        }
+    }
+    body
+}
+
+/// `DELETE /dashboard/guild/:guild_id/economy/items/:item_id`
 pub async fn guild_economy_item_delete(
     State(app): State<AppState>,
     session: Session,
-    Path((guild_id, name)): Path<(u64, String)>,
+    Path((guild_id, item_id)): Path<(u64, u64)>,
 ) -> Response {
     match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => ok_or_err(percy.delete_economy_item(guild_id, &name).await),
+        Ok(percy) => ok_or_err(percy.delete_economy_item_by_id(guild_id, item_id).await.map(|_| ())),
+        Err(response) => response,
+    }
+}
+
+/// `PATCH /dashboard/guild/:guild_id/economy/items/:item_id` — partial update; `null` clears.
+pub async fn guild_economy_item_patch(
+    State(app): State<AppState>,
+    session: Session,
+    Path((guild_id, item_id)): Path<(u64, u64)>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    match gate_json(&app, &session, guild_id).await {
+        Ok(percy) => ok_or_err(
+            percy
+                .patch_economy_item(guild_id, item_id, &item_snowflakes(body))
+                .await
+                .map(|_| ()),
+        ),
         Err(response) => response,
     }
 }
@@ -84,7 +113,12 @@ pub async fn guild_economy_items_create(
     Json(body): Json<serde_json::Value>,
 ) -> Response {
     match gate_json(&app, &session, guild_id).await {
-        Ok(percy) => ok_or_err(percy.create_economy_item(guild_id, &body).await),
+        Ok(percy) => ok_or_err(
+            percy
+                .create_economy_item_api(guild_id, &item_snowflakes(body))
+                .await
+                .map(|_| ()),
+        ),
         Err(response) => response,
     }
 }
@@ -250,5 +284,20 @@ pub async fn guild_highlight_delete(
     match gate_json(&app, &session, guild_id).await {
         Ok(percy) => ok_or_err(percy.delete_highlight(guild_id, &user_id).await),
         Err(response) => response,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::item_snowflakes;
+
+    #[test]
+    fn item_role_ids_become_integers_and_blank_becomes_null() {
+        let body = item_snowflakes(serde_json::json!({
+            "required_role_id": "1234567890123456789", "remove_role_id": "", "effect_value": 25, "name": "x"
+        }));
+        assert_eq!(body["required_role_id"], 1234567890123456789u64);
+        assert!(body["remove_role_id"].is_null());
+        assert_eq!(body["effect_value"], 25);
     }
 }
