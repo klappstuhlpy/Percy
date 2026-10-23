@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-23
+
+### Added
+
+- A new homepage: live stats (servers, users, commands, uptime) that disappear instead of showing zeros when Percy is unreachable, feature showcases with screenshots, a three-step start and a directory of every module linking into the commands page.
+- The commands page has a category sidebar with counts, search, a slash/prefix filter, expandable entries with copyable usage and examples, aliases, required permissions, cooldowns, nested subcommands and a link per command. It works without JavaScript.
+- Public API at `/api/v1` (economy, items, inventory, leveling) with per-server tokens, scopes, rate limits and idempotency keys; reference at `/api`. Tokens are managed on the new **Developers** tab (Manage Server).
+
 ## [0.12.2] - 2026-10-21
 
 ### Fixed
