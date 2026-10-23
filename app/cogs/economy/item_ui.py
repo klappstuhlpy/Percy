@@ -19,9 +19,11 @@ import discord
 from app.cogs.economy.ui import boost_display_line
 from app.core import LayoutView
 from app.services.economy import (
+    CATALOGUE,
     CATEGORIES,
     daily_sale,
     filter_items,
+    get_catalogue_item,
     get_rarity,
     item_category,
     item_emoji,
@@ -138,7 +140,9 @@ class ItemBrowser(LayoutView):
     async def _rows(self) -> list[Any]:
         db = self.cog.bot.db.economy
         if self.mode == 'shop':
-            return await db.get_items(self.guild.id)
+            # Tools are only rows once materialized; make sure the shop always lists them.
+            await db.ensure_builtins(self.guild.id, [i for i in CATALOGUE if i.for_sale])
+            return await db.get_items(self.guild.id, for_sale_only=True)
         return await db.get_inventory(self.target.id, self.guild.id)
 
     @staticmethod
@@ -229,6 +233,11 @@ class ItemBrowser(LayoutView):
         if self.mode == 'shop':
             return get_asset_url(self.guild)  # type: ignore[arg-type]
         return get_asset_url(self.target)
+
+    async def _durability(self, item_id: int) -> int | None:
+        """Uses left on the target's current unit of a tool (``None`` = a fresh unit)."""
+        rows = await self.cog.bot.db.economy.get_inventory(self.target.id, self.guild.id)
+        return next((r['durability'] for r in rows if r['item_id'] == item_id), None)
 
     async def _owned_map(self) -> dict[int, int]:
         rows = await self.cog.bot.db.economy.get_inventory(self.viewer.id, self.guild.id)
@@ -329,7 +338,8 @@ class ItemBrowser(LayoutView):
 
         heading = (
             f'## {item_emoji(item)} {item["name"]}\n'
-            f'{rarity.emoji} **{rarity.name}** • {category.emoji} {category.name}\n'
+            f'{rarity.emoji} **{rarity.name}** • {category.emoji} {category.name}'
+            f'{" • \N{ROBOT FACE} Percy item" if item.get("builtin_key") else ""}\n'
             f'{item.get("description") or "*No description.*"}'
         )
         emoji = discord.PartialEmoji.from_str(item['emoji']) if item.get('emoji') else None
@@ -351,6 +361,12 @@ class ItemBrowser(LayoutView):
         ]
         if effect := self.cog._effect_line(self.guild, item):
             facts.append(f'\N{SMALL BLUE DIAMOND} {effect}')
+        built_in = get_catalogue_item(item.get('builtin_key'))
+        if built_in is not None and built_in.tool_for and built_in.durability:
+            if self.target.id == self.viewer.id and owned:
+                left = await self._durability(item_id) or built_in.durability
+                facts.append(f'\N{WRENCH} Uses left on current: **{left}/{built_in.durability}**')
+            facts.append(f'\N{WRENCH} Tool for `{built_in.tool_for}` • lasts **{built_in.durability}** uses per unit')
         expired = shop_row is not None and self._expired(shop_row)
         if shop_row is not None:
             if shop_row['stock'] is not None:

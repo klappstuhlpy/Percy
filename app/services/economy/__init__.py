@@ -8,6 +8,7 @@
 - :mod:`~app.services.economy.quests` — deterministic daily quest boards.
 - :mod:`~app.services.economy.achievements` — milestone badges.
 - :mod:`~app.services.economy.items` — item rarity, categories, listing limits, purchase outcomes, daily sale.
+- :mod:`~app.services.economy.catalogue` — built-in drop/tool items and the drop roll.
 - :mod:`~app.services.economy.trade` — one side's trade offer and its checks.
 
 Everything is re-exported here so callers keep importing from
@@ -35,6 +36,19 @@ from app.services.economy.activities import (
     SearchOutcome,
     pick_search_options,
     resolve_search,
+)
+from app.services.economy.catalogue import (
+    ACTIVITIES,
+    CATALOGUE,
+    DROP_CHANCE,
+    NO_TOOL_PAYOUT,
+    CatalogueItem,
+    builtin_error,
+    drops_for,
+    get_catalogue_item,
+    name_reserved_error,
+    roll_drop,
+    tool_for_activity,
 )
 from app.services.economy.core import (
     BOOST_MAX_DURATION_MINUTES,
@@ -134,6 +148,7 @@ from app.services.economy.trade import (
 
 __all__ = (
     'ACHIEVEMENTS',
+    'ACTIVITIES',
     'BEG_COOLDOWN',
     'BEG_DONORS',
     'BEG_FAIL_LINES',
@@ -141,6 +156,7 @@ __all__ = (
     'BEG_TABLE',
     'BOOST_MAX_DURATION_MINUTES',
     'BOOST_MAX_PERCENT',
+    'CATALOGUE',
     'CATEGORIES',
     'DAILY_BASE',
     'DAILY_COOLDOWN',
@@ -150,6 +166,7 @@ __all__ = (
     'DAILY_STREAK_CAP',
     'DIG_COOLDOWN',
     'DIG_TABLE',
+    'DROP_CHANCE',
     'FISHING_COOLDOWN',
     'FISHING_TABLE',
     'HUNGRY_AFTER_HOURS',
@@ -163,6 +180,7 @@ __all__ = (
     'MAX_TRADE_LINES',
     'MONTHLY_AMOUNT',
     'MONTHLY_COOLDOWN',
+    'NO_TOOL_PAYOUT',
     'PET_SPECIES',
     'PRESTIGE_BASE_REQUIREMENT',
     'PRESTIGE_MAX_LEVEL',
@@ -179,6 +197,7 @@ __all__ = (
     'WEEKLY_COOLDOWN',
     'WORK_COOLDOWN',
     'Achievement',
+    'CatalogueItem',
     'Catch',
     'Category',
     'DailyResult',
@@ -201,16 +220,19 @@ __all__ = (
     'TradeOffer',
     'available_jobs',
     'boost_multiplier',
+    'builtin_error',
     'compute_daily',
     'compute_periodic',
     'compute_pet_claim',
     'compute_shift',
     'daily_sale',
     'describe_effect',
+    'drops_for',
     'evaluate_achievements',
     'filter_items',
     'generate_daily_quests',
     'get_achievement',
+    'get_catalogue_item',
     'get_job',
     'get_rarity',
     'get_species',
@@ -218,6 +240,7 @@ __all__ = (
     'item_category',
     'item_emoji',
     'item_expired',
+    'name_reserved_error',
     'next_unlock',
     'pick_search_options',
     'pick_weighted_winner',
@@ -225,11 +248,13 @@ __all__ = (
     'prestige_requirement',
     'purchase_error',
     'resolve_search',
+    'roll_drop',
     'roll_loot',
     'roll_lootbox',
     'sale_price',
     'sell_price',
     'summarize_offer',
+    'tool_for_activity',
     'trade_error',
     'trade_failure_message',
     'validate_item_effect',

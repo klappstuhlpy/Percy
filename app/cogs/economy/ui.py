@@ -262,10 +262,12 @@ class EconomyHub(LayoutView):
             f'Everything about your standing on **{self.ctx.guild.name}** in one card.'  # type: ignore[union-attr]
         )
         container.add_item(discord.ui.Separator())
+        items = await db.economy.inventory_value(self.user.id, guild_id)
         container.add_item(discord.ui.TextDisplay(
             f'**Cash** {Emojis.Economy.cash} **{fnumb(balance.cash)}** • '
             f'**Bank** {Emojis.Economy.cash} **{fnumb(balance.bank)}** • '
-            f'**Net worth** {Emojis.Economy.cash} **{fnumb(balance.total)}**'
+            f'**Items** {Emojis.Economy.cash} **{fnumb(items)}** • '
+            f'**Net worth** {Emojis.Economy.cash} **{fnumb(balance.total + items)}**'
         ))
         container.add_item(discord.ui.TextDisplay(
             f'{scale_line}'

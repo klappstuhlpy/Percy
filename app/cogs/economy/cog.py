@@ -33,6 +33,7 @@ from app.services.economy import (
     MAX_ITEM_STOCK,
     MONTHLY_AMOUNT,
     MONTHLY_COOLDOWN,
+    NO_TOOL_PAYOUT,
     PET_SPECIES,
     PRESTIGE_STEP,
     REPLY_LIMIT,
@@ -46,6 +47,7 @@ from app.services.economy import (
     SearchLocation,
     TradeOffer,
     boost_multiplier,
+    builtin_error,
     compute_daily,
     compute_periodic,
     compute_pet_claim,
@@ -58,16 +60,19 @@ from app.services.economy import (
     get_job,
     get_species,
     item_emoji,
+    name_reserved_error,
     pick_search_options,
     pick_weighted_winner,
     prestige_multiplier,
     prestige_requirement,
     purchase_error,
     resolve_search,
+    roll_drop,
     roll_loot,
     roll_lootbox,
     sale_price,
     sell_price,
+    tool_for_activity,
     trade_error,
     trade_failure_message,
     validate_item_effect,
@@ -108,6 +113,25 @@ class Economy(Cog):
         settings = settings or await self._settings(guild_id)
         prestige = await self.bot.db.economy.get_prestige(user_id, guild_id)
         return settings.payout_multiplier * prestige_multiplier(prestige)
+
+    async def _gear(self, user_id: int, guild_id: int, activity: str) -> tuple[float, str]:
+        """Spend a use of the activity's tool; returns ``(payout factor, text appended to the result)``.
+
+        With the tool: full payout, a wear tick and a chance at an item drop (added to the inventory).
+        Without it: :data:`NO_TOOL_PAYOUT` of the cash and a tip pointing at the shop.
+        """
+        db = self.bot.db.economy
+        tool = tool_for_activity(activity)
+        assert tool is not None and tool.durability is not None
+        row = await db.get_builtin(guild_id, tool.key)
+        if row is None or not await db.use_tool(user_id, guild_id, row['id'], tool.durability):
+            return NO_TOOL_PAYOUT, f'\n-# Buy a {tool.name} in the shop for full payouts and item drops.'
+        drop = roll_drop(activity)
+        if drop is None:
+            return 1.0, ''
+        item = await db.ensure_builtin(guild_id, drop)
+        await db.add_to_inventory(user_id, guild_id, item['id'], 1)
+        return 1.0, f'\n…and found {drop.emoji} **{item["name"]}**!'
 
     @staticmethod
     def _scale_suffix(scale: float) -> str:
@@ -161,7 +185,7 @@ class Economy(Cog):
         daily = await db.economy.get_daily(user_id, guild_id)
         job_row = await db.economy.get_job(user_id, guild_id)
         snapshot = EconomySnapshot(
-            net_worth=balance.total,
+            net_worth=balance.total + await db.economy.inventory_value(user_id, guild_id),
             daily_streak=daily['streak'] if daily else 0,
             shifts=job_row['shifts'] if job_row else 0,
             job_id=job_row['job_id'] if job_row else None,
@@ -203,9 +227,9 @@ class Economy(Cog):
     async def shop_item_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[Choice[str | int | float]]:
-        """Autocomplete over every item in the guild's shop."""
+        """Autocomplete over every item sold in the guild's shop."""
         assert interaction.guild_id is not None
-        items = await self.bot.db.economy.get_items(interaction.guild_id)
+        items = await self.bot.db.economy.get_items(interaction.guild_id, for_sale_only=True)
         results = fuzzy.finder(current, items, key=lambda r: r['name'])
         return [
             app_commands.Choice(name=f"{r['name'][:80]} • {fnumb(r['price'])}", value=r['name'][:100])
@@ -410,13 +434,15 @@ class Economy(Cog):
         user = member or ctx.author
         balance = await ctx.db.get_user_balance(user.id, ctx.guild.id)  # type: ignore[union-attr]
         everyone = await ctx.db.get_guild_balances(ctx.guild.id)  # type: ignore[union-attr]
+        items = await ctx.db.economy.inventory_value(user.id, ctx.guild.id)  # type: ignore[union-attr]
         richer = sum(1 for other in everyone if other.user_id != user.id and other.total > balance.total)
         rank = f'**#{richer + 1:,}** of {max(len(everyone), 1):,}'
         cash = Emojis.Economy.cash
         await ctx.send(view=make_notice(
             f"{user.display_name}'s Balance",
             f'{cash} **Cash** {fnumb(balance.cash)}\n{cash} **Bank** {fnumb(balance.bank)}\n'
-            f'{cash} **Net worth** {fnumb(balance.total)}\n\N{TROPHY} Server rank {rank}',
+            f'{cash} **Items** {fnumb(items)}\n{cash} **Net worth** {fnumb(balance.total + items)}\n'
+            f'\N{TROPHY} Server rank {rank}',
             thumbnail=get_asset_url(user),
         ))
 
@@ -564,6 +590,8 @@ class Economy(Cog):
         item = await self.bot.db.economy.get_item_by_id(guild_id, item_id)
         if item is None:
             return False, 'That item is no longer in the shop.'
+        if not item['for_sale']:
+            return False, f'**{item["name"]}** is not sold in the shop - it can only be found.'
         if item['required_role_id'] and not member.get_role(item['required_role_id']):
             return False, f'**{item["name"]}** is reserved for members with <@&{item["required_role_id"]}>.'
 
@@ -750,7 +778,8 @@ class Economy(Cog):
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists in the shop.")
             return
-        await self._send_browser(ctx, ItemBrowser(self, ctx.author, mode='shop', item_id=item['id']))
+        mode = 'shop' if item['for_sale'] else 'inventory'  # drops have no shop card, only the owner's
+        await self._send_browser(ctx, ItemBrowser(self, ctx.author, mode=mode, item_id=item['id']))
 
     @shop.command(
         "add",
@@ -823,7 +852,7 @@ class Economy(Cog):
                 return
             effect_value = role.id
 
-        error = validate_item_effect(effect, effect_value, duration) or validate_item_meta(
+        error = name_reserved_error(name) or validate_item_effect(effect, effect_value, duration) or validate_item_meta(
             name, rarity=rarity, reply_message=reply_message
         )
         until = None
@@ -906,6 +935,9 @@ class Economy(Cog):
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists.")
             return
+        if error := builtin_error(item, "edit"):
+            await ctx.send_error(error)
+            return
 
         values: dict[str, Any] = {}
         if new_name is not None:
@@ -941,7 +973,7 @@ class Economy(Cog):
         if not values:
             await ctx.send_error("Nothing to change — pass at least one field.")
             return
-        if error := validate_item_meta(
+        if error := (name_reserved_error(values["name"]) if "name" in values else None) or validate_item_meta(
             values.get("name"), rarity=values.get("rarity"), reply_message=values.get("reply_message")
         ):
             await ctx.send_error(error)
@@ -969,6 +1001,9 @@ class Economy(Cog):
         item = await self.bot.db.economy.get_item(ctx.guild.id, name)
         if item is None:
             await ctx.send_error(f"No item named **{name}** exists.")
+            return
+        if error := builtin_error(item, "remove"):
+            await ctx.send_error(error)
             return
         confirm = await ctx.confirm(
             f"Remove **{item['name']}** from the shop? Every copy members own is deleted too. "
@@ -1055,17 +1090,18 @@ class Economy(Cog):
         catch = roll_loot(FISHING_TABLE)
         boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(catch.amount * boost * scale)
+        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "fish")
+        amount = round(catch.amount * boost * scale * factor)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
 
         if catch.amount <= 5:
-            await ctx.send_info(f"{catch.emoji} You reeled in **{catch.name}** — barely worth it.")
+            await ctx.send_info(f"{catch.emoji} You reeled in **{catch.name}** — barely worth it.{extra}")
         else:
             suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
             await ctx.send_success(
                 f"{catch.emoji} You caught **{catch.name}** and sold it for "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}"
+                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
             )
         await self._bump_quests(ctx, "fish")
 
@@ -1077,17 +1113,18 @@ class Economy(Cog):
         catch = roll_loot(HUNTING_TABLE)
         boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(catch.amount * boost * scale)
+        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "hunt")
+        amount = round(catch.amount * boost * scale * factor)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
 
         if catch.amount <= 10:
-            await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.")
+            await ctx.send_info(f"{catch.emoji} You found **{catch.name}** and came back empty-handed.{extra}")
         else:
             suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
             await ctx.send_success(
                 f"{catch.emoji} You bagged **{catch.name}** worth "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}"
+                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
             )
         await self._bump_quests(ctx, "hunt")
 
@@ -1119,17 +1156,18 @@ class Economy(Cog):
         catch = roll_loot(DIG_TABLE)
         boost = await self.bot.db.economy.get_boost_multiplier(ctx.author.id, ctx.guild.id, "loot")
         scale = await self._payout_scale(ctx.author.id, ctx.guild.id)
-        amount = round(catch.amount * boost * scale)
+        factor, extra = await self._gear(ctx.author.id, ctx.guild.id, "dig")
+        amount = round(catch.amount * boost * scale * factor)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
         await balance.add(cash=amount)
 
         if catch.amount <= 8:
-            await ctx.send_info(f"{catch.emoji} You dug up **{catch.name}** — hardly a treasure.")
+            await ctx.send_info(f"{catch.emoji} You dug up **{catch.name}** — hardly a treasure.{extra}")
         else:
             suffix = f" *(+{boost - 1.0:.0%} loot boost)*" if boost > 1.0 else ""
             await ctx.send_success(
                 f"{catch.emoji} You unearthed **{catch.name}** worth "
-                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}"
+                f"{Emojis.Economy.cash} **{fnumb(amount)}**!{suffix}{self._scale_suffix(scale)}{extra}"
             )
         await self._bump_quests(ctx, "dig")
 
@@ -1467,6 +1505,8 @@ class Economy(Cog):
         level = await self.bot.db.economy.get_prestige(ctx.author.id, ctx.guild.id)
         requirement = prestige_requirement(level)
         balance = await ctx.db.get_user_balance(ctx.author.id, ctx.guild.id)
+        # Deliberately cash + bank only (not item value): prestige resets exactly these two, so the requirement
+        # must be something the member actually gives up; items are kept and would let them re-qualify instantly.
 
         if balance.total < requirement:
             await ctx.send_info(

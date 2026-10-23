@@ -9,7 +9,9 @@ from app.database.repositories.base import BaseRepository
 from app.utils.timetools import ensure_utc
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
+
+    from app.services.economy import CatalogueItem
 
 __all__ = (
     'EconomyRepository',
@@ -39,10 +41,74 @@ class EconomyRepository(BaseRepository):
 
     # -- shop items -------------------------------------------------------
 
-    async def get_items(self, guild_id: int) -> list[asyncpg.Record]:
-        """Fetches a guild's shop items, cheapest first."""
+    async def get_items(self, guild_id: int, *, for_sale_only: bool = False) -> list[asyncpg.Record]:
+        """Fetches a guild's items, cheapest first; ``for_sale_only`` hides activity drops (the shop view)."""
         return await self.fetch(
-            'SELECT * FROM economy_items WHERE guild_id = $1 ORDER BY price, name;', guild_id)
+            'SELECT * FROM economy_items WHERE guild_id = $1 AND (for_sale OR NOT $2) ORDER BY price, name;',
+            guild_id, for_sale_only)
+
+    async def ensure_builtin(self, guild_id: int, item: CatalogueItem) -> asyncpg.Record:
+        """Materialize (or refresh) the guild row for a built-in item and return it.
+
+        Name, price, emoji, rarity and ``for_sale`` are overwritten from the code-defined ``item`` on every
+        call. If an admin already uses the name, the built-in is stored as ``"<name> ✦"`` instead.
+        """
+        query = """
+            INSERT INTO economy_items (guild_id, name, description, price, effect, emoji, rarity, builtin_key, for_sale)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (guild_id, builtin_key) WHERE builtin_key IS NOT NULL DO UPDATE SET
+                name = EXCLUDED.name, description = EXCLUDED.description, price = EXCLUDED.price,
+                emoji = EXCLUDED.emoji, rarity = EXCLUDED.rarity, for_sale = EXCLUDED.for_sale
+            RETURNING *;
+        """
+        for name in (item.name, f'{item.name} ✦'):
+            try:
+                return await self.fetchrow(
+                    query, guild_id, name, item.description or None, item.price, item.effect, item.emoji,
+                    item.rarity, item.key, item.for_sale,
+                )
+            except asyncpg.UniqueViolationError:
+                continue
+        raise RuntimeError(f'could not materialize built-in item {item.key!r} for guild {guild_id}')
+
+    async def ensure_builtins(self, guild_id: int, items: Iterable[CatalogueItem]) -> None:
+        """:meth:`ensure_builtin` for each of ``items`` (used so the shop always lists the tools)."""
+        for item in items:
+            await self.ensure_builtin(guild_id, item)
+
+    async def get_builtin(self, guild_id: int, key: str) -> asyncpg.Record | None:
+        """The guild's materialized row for built-in ``key`` (``None`` until first needed)."""
+        return await self.fetchrow(
+            'SELECT * FROM economy_items WHERE guild_id = $1 AND builtin_key = $2;', guild_id, key)
+
+    async def use_tool(self, user_id: int, guild_id: int, item_id: int, max_durability: int) -> bool:
+        """Spend one use of a tool the member owns; ``False`` when they own none.
+
+        One atomic statement: a fresh unit (``durability`` NULL) starts at ``max_durability``; when the last use
+        is spent the unit is consumed and ``durability`` resets to NULL for the next one.
+        """
+        used = await self.fetchval(
+            """
+            UPDATE economy_inventory SET
+                quantity = CASE WHEN COALESCE(durability, $4) <= 1 THEN quantity - 1 ELSE quantity END,
+                durability = CASE WHEN COALESCE(durability, $4) <= 1 THEN NULL ELSE COALESCE(durability, $4) - 1 END
+            WHERE user_id = $1 AND guild_id = $2 AND item_id = $3 AND quantity >= 1
+            RETURNING 1;
+            """,
+            user_id, guild_id, item_id, max_durability,
+        )
+        return used is not None
+
+    async def inventory_value(self, user_id: int, guild_id: int) -> int:
+        """What a member's whole inventory sells for (``sell_price`` = floor(price x 0.5), mirrored in SQL)."""
+        return await self.fetchval(
+            """
+            SELECT COALESCE(SUM((e.price / 2) * i.quantity), 0)::BIGINT
+            FROM economy_inventory i JOIN economy_items e ON e.id = i.item_id
+            WHERE i.user_id = $1 AND i.guild_id = $2 AND i.quantity > 0;
+            """,
+            user_id, guild_id,
+        )
 
     async def get_item(self, guild_id: int, name: str) -> asyncpg.Record | None:
         """Fetches a single shop item by case-insensitive name."""
@@ -100,7 +166,8 @@ class EconomyRepository(BaseRepository):
         """Fetches a member's owned items joined with their shop metadata."""
         query = """
             SELECT i.item_id, i.quantity, e.name, e.description, e.price,
-                   e.effect, e.effect_value, e.duration_minutes, e.emoji, e.rarity
+                   e.effect, e.effect_value, e.duration_minutes, e.emoji, e.rarity,
+                   e.builtin_key, e.for_sale, i.durability
             FROM economy_inventory i
             JOIN economy_items e ON e.id = i.item_id
             WHERE i.user_id = $1 AND i.guild_id = $2 AND i.quantity > 0

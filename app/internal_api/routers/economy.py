@@ -7,7 +7,15 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.services.economy import GuildEconomySettings, item_category, validate_item_effect, validate_item_meta
+from app.services.economy import (
+    CATALOGUE,
+    GuildEconomySettings,
+    builtin_error,
+    item_category,
+    name_reserved_error,
+    validate_item_effect,
+    validate_item_meta,
+)
 from app.utils import fnumb, get_asset_url
 from config import Emojis
 
@@ -120,6 +128,7 @@ def _settings_payload(settings: GuildEconomySettings) -> dict:
 
 @router.get("/economy")
 async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
+    await bot.db.economy.ensure_builtins(guild.id, [i for i in CATALOGUE if i.for_sale])
     items = await bot.db.economy.get_items(guild.id)
     lottery = await bot.db.economy.get_lottery(guild.id)
     settings = GuildEconomySettings.from_record(await bot.db.economy.get_settings(guild.id))
@@ -142,6 +151,8 @@ async def get_economy(guild: GuildDep, bot: BotDep) -> dict:
             'available_until': r['available_until'].isoformat() if r.get('available_until') else None,
             'remove_role_id': str(r['remove_role_id']) if r.get('remove_role_id') else None,
             'reply_message': r.get('reply_message'),
+            'builtin_key': r.get('builtin_key'),
+            'for_sale': r.get('for_sale', True),
         }
         for r in items
     ]
@@ -204,7 +215,7 @@ async def create_economy_item(guild: GuildDep, bot: BotDep, body: CreateItemBody
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='name is required')
 
-    error = validate_item_effect(effect, effect_value, duration_minutes) or validate_item_meta(
+    error = name_reserved_error(name) or validate_item_effect(effect, effect_value, duration_minutes) or validate_item_meta(
         name, rarity=body.rarity, stock=body.stock, max_per_user=body.max_per_user, price=body.price,
         reply_message=body.reply_message,
     )
@@ -242,8 +253,11 @@ async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: int, body: P
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
-    if await bot.db.economy.get_item_by_id(guild.id, item_id) is None:
+    existing = await bot.db.economy.get_item_by_id(guild.id, item_id)
+    if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
+    if error := builtin_error(existing, 'edit') or (name_reserved_error(values['name']) if values.get('name') else None):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     if await bot.db.economy.update_item(guild.id, item_id, values) is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='an item with that name already exists')
     return {'ok': True}
@@ -251,6 +265,9 @@ async def patch_economy_item(guild: GuildDep, bot: BotDep, item_id: int, body: P
 
 @router.delete("/economy/items/{name}")
 async def delete_economy_item(guild: GuildDep, bot: BotDep, name: str) -> dict:
+    existing = await bot.db.economy.get_item(guild.id, name)
+    if existing is not None and (error := builtin_error(existing, 'remove')):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     result = await bot.db.economy.delete_item(guild.id, name)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
@@ -420,6 +437,9 @@ async def take_economy_item(
 
 @router.delete("/economy/items/by-id/{item_id}")
 async def delete_economy_item_by_id(guild: GuildDep, bot: BotDep, item_id: int) -> dict:
+    existing = await bot.db.economy.get_item_by_id(guild.id, item_id)
+    if existing is not None and (error := builtin_error(existing, 'remove')):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     if await bot.db.economy.delete_item_by_id(guild.id, item_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='item not found')
     return {'ok': True}

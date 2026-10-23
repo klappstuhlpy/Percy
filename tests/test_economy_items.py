@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import random
 from types import SimpleNamespace
 from typing import Any
 
@@ -12,20 +13,26 @@ import pytest
 from app.cogs.economy import item_ui
 from app.cogs.economy.item_ui import PAGE_SIZE, ItemBrowser
 from app.services.economy import (
+    CATALOGUE,
     CATEGORIES,
     ITEM_EFFECTS,
     RARITIES,
     PurchaseStatus,
     TradeOffer,
+    builtin_error,
     daily_sale,
     filter_items,
     get_rarity,
     item_category,
     item_emoji,
     item_expired,
+    name_reserved_error,
     purchase_error,
+    roll_drop,
     sale_price,
+    sell_price,
     summarize_offer,
+    tool_for_activity,
     trade_error,
     validate_item_meta,
 )
@@ -107,8 +114,11 @@ class _FakeEconomyRepo:
     def __init__(self, items: list[dict[str, Any]], owned: dict[int, int]) -> None:
         self.items, self.owned = items, owned
 
-    async def get_items(self, _guild_id: int) -> list[dict[str, Any]]:
-        return self.items
+    async def get_items(self, _guild_id: int, *, for_sale_only: bool = False) -> list[dict[str, Any]]:
+        return [i for i in self.items if i.get('for_sale', True) or not for_sale_only]
+
+    async def ensure_builtins(self, *_a: Any) -> None:
+        return None
 
     async def get_item_by_id(self, _guild_id: int, item_id: int) -> dict[str, Any] | None:
         return next((i for i in self.items if i['id'] == item_id), None)
@@ -215,6 +225,9 @@ def _hub(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> Any:
             return []
 
         async def get_prestige(self, *_a: Any) -> int:
+            return 0
+
+        async def inventory_value(self, *_a: Any) -> int:
             return 0
 
     async def get_user_balance(_user_id: int, _guild_id: int) -> Any:
@@ -379,3 +392,67 @@ async def test_trade_card_renders_within_limits(monkeypatch: pytest.MonkeyPatch)
     assert 'confirmed' in _text(view)
     view._changed()
     assert not any(o.confirmed for o in view.offers.values())
+
+
+# -- built-in catalogue (phase 2) ----------------------------------------------------
+
+
+def test_catalogue_integrity() -> None:
+    keys = [i.key for i in CATALOGUE]
+    assert len(keys) == len(set(keys))
+    assert len({i.name.lower() for i in CATALOGUE}) == len(CATALOGUE)
+    rarities = {r.id for r in RARITIES}
+    for item in CATALOGUE:
+        assert item.price > 0 and item.rarity in rarities and item.effect in ITEM_EFFECTS
+        assert (item.tool_for is None) != (item.drop_from is None)  # a tool or a drop, never both
+        if item.tool_for:
+            assert item.for_sale and (item.durability or 0) > 0
+        else:
+            assert not item.for_sale and item.durability is None
+        assert sell_price(item.price) >= 0
+    for activity in ('fish', 'hunt', 'dig'):
+        assert tool_for_activity(activity) is not None
+
+
+def test_roll_drop_is_seeded_and_bounded() -> None:
+    first = [roll_drop('fish', random.Random(7)) for _ in range(3)]
+    assert first == [roll_drop('fish', random.Random(7)) for _ in range(3)]
+    rng = random.Random(1)
+    rolls = [roll_drop('dig', rng) for _ in range(2_000)]
+    hits = [r for r in rolls if r is not None]
+    assert all(r.drop_from == 'dig' for r in hits)
+    assert 0.28 < len(hits) / len(rolls) < 0.42
+    assert roll_drop('beg') is None
+
+
+async def test_shop_list_hides_non_for_sale(monkeypatch: pytest.MonkeyPatch) -> None:
+    items = [_item(1, name='Rod', for_sale=True), _item(2, name='Sardine', for_sale=False)]
+    shop = _browser(monkeypatch, items, {2: 1}, mode='shop')
+    await shop.build()
+    assert 'Rod' in _text(shop) and 'Sardine' not in _text(shop)
+    inv = _browser(monkeypatch, items, {2: 1}, mode='inventory')
+    await inv.build()
+    assert 'Sardine' in _text(inv)
+
+
+async def test_tool_detail_shows_durability_and_badge(monkeypatch: pytest.MonkeyPatch) -> None:
+    rod = _item(1, name='Fishing Rod', builtin_key='fishing_rod', for_sale=True)
+    browser = _browser(monkeypatch, [rod], {1: 1}, mode='inventory', item_id=1)
+    browser.cog.bot.db.economy.get_inventory = lambda *_a: _async([{**rod, 'item_id': 1, 'quantity': 1, 'durability': 7}])
+    await browser.build()
+    text = _text(browser)
+    assert 'Percy item' in text and 'Uses left on current: **7/25**' in text
+
+
+async def _async(value: Any) -> Any:
+    return value
+
+
+def test_builtin_refusals() -> None:
+    assert builtin_error({'name': 'Shovel', 'builtin_key': 'shovel'}, 'edit') == (
+        '**Shovel** is a built-in Percy item and cannot be edited. Its name, price and drops are managed by Percy.'
+    )
+    assert 'removed' in (builtin_error({'name': 'Shovel', 'builtin_key': 'shovel'}, 'remove') or '')
+    assert builtin_error({'name': 'Cookie', 'builtin_key': None}, 'edit') is None
+    assert name_reserved_error('  fishing ROD ') is not None
+    assert name_reserved_error('Cookie') is None
